@@ -90,6 +90,9 @@ export default function Dashboard() {
   const router = useRouter()
 
   // Read ?mode=eom from URL to default to EOM view (used by estimator iframe)
+  // Read ?embed=true to hide nav when loaded inside an iframe
+  const isEmbed = router.query.embed === 'true'
+
   useEffect(() => {
     if (router.query.mode === 'eom') setEomMode(true)
   }, [router.query])
@@ -306,7 +309,24 @@ export default function Dashboard() {
       <Head><title>Rock Roofing — Budget Tracker</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
 
-        {/* Nav */}
+        {/* Nav — slim version when embedded in iframe */}
+        {isEmbed ? (
+        <div style={{ background: '#1a1a2e', padding: '0 16px', position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, height: 48, borderBottom: '1px solid #2a2a28' }}>
+          <span style={{ color: '#888', fontSize: 12 }}>Month:</span>
+          <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
+            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid #444', background: '#2a2a28', color: '#fff', cursor: 'pointer' }}>
+            {monthOptions.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+          </select>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
+            <span style={{ color: eomMode ? '#888' : '#fff', fontSize: 12 }}>Budget Tracker</span>
+            <div onClick={() => setEomMode(!eomMode)}
+              style={{ width: 36, height: 20, background: eomMode ? '#e63946' : '#444', borderRadius: 10, cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+              <div style={{ width: 16, height: 16, background: '#fff', borderRadius: 8, position: 'absolute', top: 2, left: eomMode ? 18 : 2, transition: 'left 0.2s' }} />
+            </div>
+            <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
+          </div>
+        </div>
+        ) : (
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -342,6 +362,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        )}
 
         <div style={{ padding: '24px' }}>
 

@@ -23,7 +23,7 @@ export default function ProjectFinancials() {
 
         {/* Iframe filling remaining height */}
         <iframe
-          src="/commercial?mode=eom"
+          src="/commercial?mode=eom&embed=true"
           style={{
             width: '100%',
             height: height,
