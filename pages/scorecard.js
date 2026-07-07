@@ -90,8 +90,8 @@ const DEFAULT_TARGETS = {
   }
 }
 
-// Drill-down modal component — handles both deal objects and value change events
-function DrillModal({ title, projects, isValueChange, onClose }) {
+// Drill-down modal component — handles deal objects, value change events, and GP margin projects
+function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
   if (!projects || projects.length === 0) return null
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12, verticalAlign: 'middle' }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
@@ -103,7 +103,7 @@ function DrillModal({ title, projects, isValueChange, onClose }) {
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e1e0d9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
-            <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>{projects.length} {isValueChange ? 'event' : 'project'}{projects.length !== 1 ? 's' : ''}</span>
+            <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>{projects.length} {isGpMargin ? 'live project' : isValueChange ? 'event' : 'project'}{projects.length !== 1 ? 's' : ''}</span>
           </div>
           <button onClick={onClose} style={{ fontSize: 18, border: 'none', background: 'none', cursor: 'pointer', color: '#888', lineHeight: 1 }}>×</button>
         </div>
@@ -111,7 +111,20 @@ function DrillModal({ title, projects, isValueChange, onClose }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
               <tr>
-                {isValueChange ? (
+                {isGpMargin ? (
+                  <>
+                    <th style={thS}>Job No</th>
+                    <th style={thS}>Project</th>
+                    <th style={thS}>Estimator</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>AFA</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Gross Invoiced</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Labour</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Materials</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Total Costs</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Profit £</th>
+                    <th style={{ ...thS, textAlign: 'right' }}>Profit %</th>
+                  </>
+                ) : isValueChange ? (
                   <>
                     <th style={thS}>Project</th>
                     <th style={thS}>Organisation</th>
@@ -139,7 +152,26 @@ function DrillModal({ title, projects, isValueChange, onClose }) {
               </tr>
             </thead>
             <tbody>
-              {isValueChange ? projects.map((v, i) => (
+              {isGpMargin ? projects.map((p, i) => {
+                const profit = (p.grossInvoiced || 0) - (p.totalCosts || 0)
+                const profitPct = p.grossInvoiced > 0 ? profit / p.grossInvoiced : null
+                return (
+                  <tr key={p.xeroId || i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
+                    <td style={tdS}>{p.jobNo || '—'}</td>
+                    <td style={tdS}>{p.name || '—'}</td>
+                    <td style={tdS}>{p.estimator || '—'}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.afa)}</td>
+                    <td style={{ ...tdS, textAlign: 'right', fontWeight: 500 }}>{fmtGBP(p.grossInvoiced)}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.labourSpend)}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.materialsSpend)}</td>
+                    <td style={{ ...tdS, textAlign: 'right' }}>{fmtGBP(p.totalCosts)}</td>
+                    <td style={{ ...tdS, textAlign: 'right', fontWeight: 500, color: profit >= 0 ? '#16a34a' : '#e63946' }}>{fmtGBP(profit)}</td>
+                    <td style={{ ...tdS, textAlign: 'right', fontWeight: 500, color: profitPct == null ? '#aaa' : profitPct >= 0.25 ? '#16a34a' : profitPct >= 0.2 ? '#ca8a04' : '#e63946' }}>
+                      {profitPct != null ? (profitPct * 100).toFixed(1) + '%' : '—'}
+                    </td>
+                  </tr>
+                )
+              }) : isValueChange ? projects.map((v, i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
                   <td style={tdS}>{v.dealTitle || v.dealId || '—'}</td>
                   <td style={tdS}>{v.orgName || '—'}</td>
@@ -189,6 +221,7 @@ export default function Scorecard() {
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [modal, setModal] = useState(null) // { title, projects }
+  const [xeroProjects, setXeroProjects] = useState([])
 
   const lastFullMonth = getLastFullMonth()
   const currentMonth = getCurrentMonth()
@@ -222,6 +255,12 @@ export default function Scorecard() {
       setValueChanges(vcd.changes || [])
       const td = await tr.json()
       setTargets(td.targets || DEFAULT_TARGETS)
+      // Load Xero project data for GP margin cards
+      try {
+        const xr = await fetch('/api/dashboard')
+        const xd = await xr.json()
+        setXeroProjects(xd.projects || [])
+      } catch(e) { console.error('Xero projects failed:', e) }
     } catch(e) {
       console.error(e)
       setTargets(DEFAULT_TARGETS)
@@ -298,10 +337,25 @@ export default function Scorecard() {
     const dealsOver200kRolling3List = personDeals.filter(d => d.status === 'won' && d.over200k && d.wonTime >= threeMonthsAgo && d.wonTime <= mEnd)
     const dealsOver200kRolling3 = dealsOver200kRolling3List.length
 
+    // GP Margin — live/in-progress projects for this estimator only
+    const liveProjects = xeroProjects.filter(p =>
+      p.status === 'INPROGRESS' &&
+      p.estimator &&
+      p.estimator.toLowerCase().includes(person.toLowerCase())
+    )
+    const totalGrossInvoiced = liveProjects.reduce((s, p) => s + (p.grossInvoiced || 0), 0)
+    const totalCostsAll = liveProjects.reduce((s, p) => s + (p.totalCosts || 0), 0)
+    const totalLabour = liveProjects.reduce((s, p) => s + (p.labourSpend || 0), 0)
+    const totalMaterials = liveProjects.reduce((s, p) => s + (p.materialsSpend || 0), 0)
+    const totalProfit = totalGrossInvoiced - totalCostsAll
+    const gpMargin = totalGrossInvoiced > 0 ? totalProfit / totalGrossInvoiced : null
+
     return {
       strikeRateOverall, strikeRateMCSecured, valuePricedExisting, totalValuePriced,
       totalValueSecured, dealsSecuredOver200k: dealsOver200kMonth,
-      dealsSecuredOver200kRolling3: dealsOver200kRolling3, gpMargin: null,
+      dealsSecuredOver200kRolling3: dealsOver200kRolling3, gpMargin,
+      _gpMarginProjects: liveProjects,
+      _gpMarginTotals: { totalGrossInvoiced, totalCostsAll, totalLabour, totalMaterials, totalProfit, count: liveProjects.length },
       // drill-down project sets
       _rolling6Projects: rolling6,
       _mcRollingProjects: mcRolling,
@@ -398,7 +452,7 @@ export default function Scorecard() {
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'Value change data', format: fmt, targetKey: 'totalValuePriced', showAvg: true },
     { key: 'totalValueSecured', label: 'Total value of work secured', format: fmt, targetKey: 'totalValueSecured', drillKey: '_monthWonProjects', showAvg: true },
     { key: 'dealsSecuredOver200k', label: 'Deals secured ≥£200K', sub: 'Per month, target 1/quarter', format: v => v, targetKey: 'dealsSecuredOver200k', mode: 'binary', useRolling3: true, drillKey: '_dealsOver200kList' },
-    { key: 'gpMargin', label: 'GP margin — own projects', sub: 'Coming soon — Xero integration', format: () => '—', targetKey: 'gpMargin' },
+    { key: 'gpMargin', label: 'GP margin — own projects', sub: 'Live & in-progress projects only', format: pct, targetKey: 'gpMargin', drillKey: '_gpMarginProjects', isGpMargin: true },
   ]
 
   const salesMetricDefs = [
@@ -428,13 +482,13 @@ export default function Scorecard() {
   const lastFullMonthMetrics = getMetrics(lastFullMonth)
   const currentMonthMetrics = getMetrics(currentMonth)
 
-  const CARD_HEIGHT = 190
+  const CARD_HEIGHT = 210
 
   function openDrill(m, metrics, monthStr) {
     if (!m.drillKey) return
     const projects = metrics[m.drillKey] || []
     if (projects.length === 0) return
-    setModal({ title: `${m.label} — ${monthLabel(monthStr)}`, projects, isValueChange: !!m.isValueChange })
+    setModal({ title: `${m.label} — ${monthLabel(monthStr)}`, projects, isValueChange: !!m.isValueChange, isGpMargin: !!m.isGpMargin })
   }
 
   function renderCard(m, metrics, label, withGraph, monthStr) {
@@ -472,6 +526,16 @@ export default function Scorecard() {
             {m.sub && <div style={{ color: '#bbb', fontSize: 13 }}>({m.sub})</div>}
           </div>
           <div style={{ fontSize: 29, fontWeight: 600, color: '#1a1a19', marginBottom: 2 }}>{actual != null ? m.format(actual) : '—'}</div>
+          {m.isGpMargin && metrics._gpMarginTotals && (() => {
+            const t = metrics._gpMarginTotals
+            return (
+              <div style={{ fontSize: 12, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
+                <div>Profit: <strong>{t.totalProfit != null ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalProfit) : '—'}</strong></div>
+                <div style={{ color: '#aaa', fontSize: 11 }}>Invoiced: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalGrossInvoiced)} · Costs: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalCostsAll)}</div>
+                <div style={{ color: '#aaa', fontSize: 11 }}>{t.count} live project{t.count !== 1 ? 's' : ''}</div>
+              </div>
+            )
+          })()}
           {withGraph && m.showAvg && (() => {
             const vals = allMonthMetrics.map(mm => mm[m.key]).filter(v => v != null && !isNaN(v))
             const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
@@ -519,7 +583,7 @@ export default function Scorecard() {
     <>
       <Head><title>Rock Roofing — Scorecards</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
-        {modal && <DrillModal title={modal.title} projects={modal.projects} isValueChange={modal.isValueChange} onClose={() => setModal(null)} />}
+        {modal && <DrillModal title={modal.title} projects={modal.projects} isValueChange={modal.isValueChange} isGpMargin={modal.isGpMargin} onClose={() => setModal(null)} />}
 
         <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
           <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
