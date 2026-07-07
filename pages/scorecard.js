@@ -512,7 +512,7 @@ export default function Scorecard() {
           background: '#fff', borderRadius: 10, padding: '14px 16px',
           border: `1px solid #e1e0d9`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           display: 'grid', gridTemplateColumns: withGraph ? '160px 1fr' : '1fr',
-          gap: 16, alignItems: 'center', height: CARD_HEIGHT, boxSizing: 'border-box',
+          gap: 16, alignItems: 'center', height: m.isGpMargin ? CARD_HEIGHT + 60 : CARD_HEIGHT, boxSizing: 'border-box',
           cursor: hasDrill ? 'pointer' : 'default',
           transition: 'box-shadow 0.15s',
         }}
@@ -529,10 +529,10 @@ export default function Scorecard() {
           {m.isGpMargin && metrics._gpMarginTotals && (() => {
             const t = metrics._gpMarginTotals
             return (
-              <div style={{ fontSize: 12, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
+              <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.5 }}>
                 <div>Profit: <strong>{t.totalProfit != null ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalProfit) : '—'}</strong></div>
-                <div style={{ color: '#aaa', fontSize: 11 }}>Invoiced: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalGrossInvoiced)} · Costs: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalCostsAll)}</div>
-                <div style={{ color: '#aaa', fontSize: 11 }}>{t.count} live project{t.count !== 1 ? 's' : ''}</div>
+                <div style={{ color: '#aaa', fontSize: 10 }}>Invoiced: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalGrossInvoiced)} · Costs: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalCostsAll)}</div>
+                <div style={{ color: '#aaa', fontSize: 10 }}>{t.count} live project{t.count !== 1 ? 's' : ''}</div>
               </div>
             )
           })()}
