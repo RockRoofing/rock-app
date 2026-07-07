@@ -527,9 +527,9 @@ export default function Scorecard() {
           <span style={{ color: '#444' }}>|</span>
           <a href="/sales" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Sales Dashboard</a>
           <span style={{ color: '#444' }}>|</span>
-          <a href="/project-financials" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</a>
-          <span style={{ color: '#444' }}>|</span>
           <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Scorecards</span>
+          <span style={{ color: '#444' }}>|</span>
+          <a href="/project-financials" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</a>
           <div style={{ flex: 1 }} />
           {lastSync && <span style={{ color: '#555', fontSize: 12 }}>Last sync: {new Date(lastSync).toLocaleDateString('en-GB')}</span>}
           <button onClick={doSync} disabled={syncing} style={{ fontSize: 12, padding: '5px 12px', border: '0.5px solid #444', borderRadius: 6, background: 'transparent', color: '#ccc', cursor: 'pointer', fontFamily: 'inherit' }}>{syncing ? 'Syncing…' : 'Sync now'}</button>
