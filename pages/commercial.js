@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 
@@ -85,6 +86,13 @@ export default function Dashboard() {
     return { key, label }
   })
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[1].key)
+
+  const router = useRouter()
+
+  // Read ?mode=eom from URL to default to EOM view (used by estimator iframe)
+  useEffect(() => {
+    if (router.query.mode === 'eom') setEomMode(true)
+  }, [router.query])
 
   useEffect(() => { loadDashboard() }, [])
 
