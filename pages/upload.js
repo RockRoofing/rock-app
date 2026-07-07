@@ -37,10 +37,10 @@ export default function UploadPage() {
         <div style={{ background: '#1a1a2e', padding: '0 24px' }}>
           <div style={{ maxWidth: 800, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 32, height: 32, background: '#e63946', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 14 }}>RR</div>
+              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
               <span style={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>Rock Roofing Ltd</span>
             </div>
-            <Link href="/" style={{ color: '#aaa', fontSize: 13 }}>← Back to dashboard</Link>
+            <Link href="/commercial" style={{ color: '#aaa', fontSize: 13 }}>← Budget Tracker</Link>
           </div>
         </div>
 

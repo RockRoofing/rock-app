@@ -194,7 +194,7 @@ export default function ProjectPage() {
         <div style={{ background: '#1a1a2e', padding: '0 24px' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <Link href="/" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
+              <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
               <span style={{ color: '#444' }}>|</span>
               <span style={{ color: '#fff', fontWeight: 600 }}>{p.jobNo} — {p.name}</span>
               <span style={{ background: p.status === 'INPROGRESS' ? '#16a34a' : '#888', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>
@@ -249,7 +249,7 @@ export default function ProjectPage() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: editMode ? '1fr 400px' : '1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
             <div>
               <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#fff', borderRadius: 8, padding: 4, width: 'fit-content', border: '1px solid #eee' }}>
                 {['overview', 'costs', 'income', 'wip', 'retention'].map(t => (
@@ -264,12 +264,17 @@ export default function ProjectPage() {
             </div>
 
             {editMode && (
-              <div style={{ background: '#fff', borderRadius: 10, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', height: 'fit-content' }}>
-                <h3 style={{ margin: '0 0 20px', fontSize: 15 }}>Project Details</h3>
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }} onClick={() => setEditMode(false)}>
+              <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: '100%', maxWidth: 1100, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', marginTop: 20 }} onClick={e => e.stopPropagation()}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                  <h3 style={{ margin: 0, fontSize: 16 }}>Project Details</h3>
+                  <button onClick={() => setEditMode(false)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888', lineHeight: 1 }}>×</button>
+                </div>
                 <DetailsForm form={form} setForm={setForm} addVariation={addVariation} updateVariation={updateVariation} removeVariation={removeVariation} afa={afa} currentMargin={atDate.margin} teamMembers={teamMembers} onAddMember={() => setShowAddMember(true)} onRemoveMember={removeTeamMember} />
                 <button onClick={save} disabled={saving} style={{ marginTop: 20, width: '100%', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 14 }}>
                   {saving ? 'Saving...' : 'Save Project Details'}
                 </button>
+              </div>
               </div>
             )}
           </div>

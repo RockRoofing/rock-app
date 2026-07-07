@@ -233,8 +233,8 @@ export default function RetentionPage() {
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 32, height: 32, background: '#e63946', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 14 }}>RR</div>
-              <Link href="/" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
+              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
+              <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
               <span style={{ color: '#444' }}>|</span>
               <span style={{ color: '#fff', fontWeight: 600 }}>Retention Tracker</span>
             </div>

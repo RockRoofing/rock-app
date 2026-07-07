@@ -302,7 +302,7 @@ export default function Dashboard() {
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 32, height: 32, background: '#e63946', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 14 }}>RR</div>
+              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
               <span style={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>Rock Roofing Ltd</span>
               <span style={{ color: '#666', marginLeft: 8 }}>Budget Tracker</span>
               <a href="/" style={{ color: '#aaa', fontSize: 12, textDecoration: 'none', marginLeft: 16, padding: '3px 8px', borderRadius: 4, border: '1px solid #333' }}>← Portal</a>
