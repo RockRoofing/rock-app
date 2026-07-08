@@ -5,7 +5,7 @@ import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn }
 // Roles align with IHM meeting attendees + common ops roles.
 export const TEAM_ROLES = [
   'Estimator', 'Contracts Manager', 'Operations Manager', 'Design Manager',
-  'Quantity Surveyor', 'Site Supervisor', 'Director', 'Other',
+  'Quantity Surveyor', 'Site Supervisor', 'Sales Manager', 'Director', 'Other',
 ]
 
 const fullName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || '—'
