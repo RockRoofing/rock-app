@@ -26,7 +26,7 @@ export default function Handover() {
   const [status, setStatus] = useState('draft')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [openSection, setOpenSection] = useState('project')
+  const [openSection, setOpenSection] = useState('meeting')
   const [err, setErr] = useState('')
   const [team, setTeam] = useState([])
   const [mfrBook, setMfrBook] = useState([])
@@ -176,14 +176,13 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
   if (f.type === 'files') return <FilesField label={f.label} value={value || []} onChange={onChange} />
 
   if (f.type === 'team') {
-    const opts = (team || []).filter(m => !f.role || m.role === f.role)
+    // Every team member is selectable for every role.
     return (
       <div style={{ margin: '14px 0' }}>
         <Lbl>{f.label}</Lbl>
         <input list={`team_${f.id}`} value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} placeholder="Select or type…" />
         <datalist id={`team_${f.id}`}>
-          {opts.map(m => <option key={m.id} value={tmName(m)} />)}
-          {(team || []).filter(m => f.role && m.role !== f.role).map(m => <option key={m.id} value={tmName(m)} />)}
+          {(team || []).map(m => <option key={m.id} value={tmName(m)} />)}
         </datalist>
       </div>
     )
