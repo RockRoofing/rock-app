@@ -329,11 +329,12 @@ export default function Dashboard() {
         ) : (
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-              <span style={{ color: '#fff', fontWeight: 600, fontSize: 16 }}>Rock Roofing Ltd</span>
-              <span style={{ color: '#666', marginLeft: 8 }}>Budget Tracker</span>
-              <a href="/" style={{ color: '#aaa', fontSize: 12, textDecoration: 'none', marginLeft: 16, padding: '3px 8px', borderRadius: 4, border: '1px solid #333' }}>← Portal</a>
+              <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</a>
+              <span style={{ color: '#444' }}>|</span>
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Project Financials</span>
+              <span style={{ color: '#444' }}>|</span>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               {eomMode && (
@@ -353,10 +354,10 @@ export default function Dashboard() {
                 </div>
                 <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
               </div>
-              <Link href="/upload-transactions" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Upload</Link>
-              <Link href="/retention" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Retention</Link>
-              <Link href="/variations" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Variations</Link>
-              <Link href="/connect" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Xero</Link>
+              <Link href="/upload-transactions" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Upload</Link>
+              <Link href="/retention" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Retention</Link>
+              <Link href="/variations" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Variations</Link>
+              <Link href="/connect" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Xero</Link>
               <button onClick={syncXero} disabled={syncing} style={{ background: syncing ? '#333' : '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 {syncing ? 'Syncing...' : 'Sync Xero'}
               </button>

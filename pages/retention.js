@@ -232,13 +232,15 @@ export default function RetentionPage() {
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-              <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
+              <Link href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</Link>
               <span style={{ color: '#444' }}>|</span>
-              <span style={{ color: '#fff', fontWeight: 600 }}>Retention Tracker</span>
+              <Link href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</Link>
               <span style={{ color: '#444' }}>|</span>
-              <Link href="/variations" style={{ color: '#aaa', fontSize: 13, textDecoration: 'none', padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Variations</Link>
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Retention</span>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
             </div>
             <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
               style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>

@@ -37,7 +37,7 @@ export default function VariationTracker() {
   async function loadProjects() {
     setLoading(true)
     try {
-      const res = await fetch('/api/dashboard')
+      const res = await fetch('/api/dashboard?sync=true')
       const data = await res.json()
       // Only live/in-progress projects
       setProjects((data.projects || []).filter(p => p.status === 'INPROGRESS'))
@@ -143,12 +143,15 @@ export default function VariationTracker() {
         {/* Nav */}
         <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-              <Link href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none' }}>← Budget Tracker</Link>
+              <Link href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</Link>
               <span style={{ color: '#444' }}>|</span>
-              <Link href="/retention" style={{ color: '#aaa', fontSize: 13, textDecoration: 'none', padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Retention</Link>
-              <span style={{ color: '#fff', fontWeight: 600, fontSize: 13, padding: '6px 12px', borderRadius: 6, background: '#e63946' }}>Variations</span>
+              <Link href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/retention" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Retention</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Variations</span>
             </div>
             <button
               onClick={() => { setShowAdd(true); setAddForm({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' }); setAddProjectId('') }}
@@ -217,7 +220,7 @@ export default function VariationTracker() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      {['Var No', 'Project No', 'Project Name', 'Customer', 'Estimator', 'CM', 'Description', 'Instructed?', 'Materials £', 'Labour £', 'Profit £', 'Total £'].map(h => (
+                      {['Variation Number', 'Project No', 'Project Name', 'Customer', 'Estimator', 'CM', 'Description', 'Instructed?', 'Materials £', 'Labour £', 'Profit £', 'Total £'].map(h => (
                         <th key={h} style={{ ...thS, textAlign: ['Materials £', 'Labour £', 'Profit £', 'Total £'].includes(h) ? 'right' : 'left' }}>{h}</th>
                       ))}
                     </tr>
@@ -225,7 +228,7 @@ export default function VariationTracker() {
                   <tbody>
                     {filtered.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                        <td style={{ ...tdS, fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{r.varNumber}</td>
+                        <td style={{ ...tdS, fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{r.varNumber || '—'}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
                           <Link href={`/project/${r.projectId}`} style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{r.jobNo}</Link>
                         </td>
