@@ -12,7 +12,11 @@ export default async function handler(req, res) {
   }
   if (req.method === 'POST') {
     const { member } = req.body || {}
-    if (!member || !member.name) return res.status(400).json({ error: 'Name is required' })
+    // Accept either the new first/last name shape or a partial update (id only).
+    const hasName = member && (member.firstName || member.lastName || member.name)
+    if (!member || (!member.id && !hasName)) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
     let members = await getTeamMembers()
     if (!member.id) {
       member.id = `tm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
