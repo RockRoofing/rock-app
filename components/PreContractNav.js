@@ -7,9 +7,10 @@ export default function PreContractNav({ active, children }) {
     { key: 'scorecard', label: 'Scorecards', href: '/scorecard' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },
+    { key: 'handover', label: 'Internal Handover Minutes', href: '/handover' },
   ]
   return (
-    <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 52 }}>
+    <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 52, overflowX: 'auto' }}>
       <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4, marginRight: 8 }} />
       <a href="/" style={linkStyle}>← Portal</a>
       <Divider />
