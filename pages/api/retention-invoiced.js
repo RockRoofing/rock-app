@@ -1,4 +1,4 @@
-import { get, set } from '../../../lib/db'
+import { get, set } from '../../lib/db'
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {

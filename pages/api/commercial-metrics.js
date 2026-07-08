@@ -1,4 +1,4 @@
-import { getCachedProjects } from '../../../lib/db'
+import { getCachedProjects } from '../../lib/db'
 
 async function getRedis() {
   try {
