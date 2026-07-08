@@ -178,7 +178,10 @@ function FormsList({ user }) {
       try {
         const r = await fetch('/api/forms')
         const d = await r.json()
-        setForms((d.forms || []).filter(f => f.category === 'project'))
+        // Contracts Manager Site Report is completed by managers via the portal
+        // Project Report, not by operatives — hide it from the Forms App.
+        const HIDDEN = ['contracts-manager-report']
+        setForms((d.forms || []).filter(f => f.category === 'project' && !HIDDEN.includes(f.id)))
       } catch {}
       setLoading(false)
     })()
@@ -186,8 +189,8 @@ function FormsList({ user }) {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
-      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Choose a form to complete</p>
+      <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Project Forms</h2>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋 — choose a form to complete</p>
       {loading ? (
         <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading forms…</div>
       ) : !forms.length ? (
@@ -228,20 +231,20 @@ export function Shell({ children, onLogout, user }) {
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: BG }}>
         <div style={{
           background: INK, height: 56, display: 'flex', alignItems: 'center',
-          padding: '0 16px', gap: 10, position: 'sticky', top: 0, zIndex: 10,
+          padding: '0 16px', gap: 8, position: 'sticky', top: 0, zIndex: 10, overflowX: 'auto',
         }}>
           <img src="/rock-logo.jpg" alt="" style={{ height: 32, width: 32, borderRadius: 6 }} />
           <span style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>Forms</span>
           <div style={{ flex: 1 }} />
           {user && (
             <>
-              <a href="/forms/browse?cat=company" title="Company Information"
-                style={navLink}>Company</a>
-              <a href="/forms/browse?cat=guidance" title="Operative Guidance Documents"
-                style={navLink}>Guidance</a>
+              <a href="/forms/browse?cat=company" style={navLink}>Company Information</a>
+              <span style={navDivider}>|</span>
+              <a href="/forms/browse?cat=guidance" style={navLink}>Operative Guidance Docs</a>
+              <span style={navDivider}>|</span>
               <button onClick={onLogout} style={{
-                background: 'transparent', border: '1px solid #3a3a38', color: '#bbb',
-                borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer',
+                background: 'transparent', border: 'none', color: '#bbb',
+                padding: '6px 8px', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
               }}>Log out</button>
             </>
           )}
@@ -264,3 +267,4 @@ const navLink = {
   color: '#bbb', textDecoration: 'none', fontSize: 13,
   padding: '6px 8px', whiteSpace: 'nowrap',
 }
+const navDivider = { color: '#3a3a38', fontSize: 14 }
