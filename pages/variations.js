@@ -41,7 +41,89 @@ export default function VariationTracker() {
   const [addProjectId, setAddProjectId] = useState('')
   const [addForm, setAddForm] = useState({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' })
 
+  // Edit variation modal
+  const [editModal, setEditModal] = useState(null) // { projectId, varIndex, form }
+  const [editSaving, setEditSaving] = useState(false)
+
   useEffect(() => { loadProjects() }, [])
+
+  function openEdit(r) {
+    // Find the project and variation index
+    const project = projects.find(p => p.xeroId === r.projectId)
+    if (!project) return
+    const vars = project.variations || project.settings?.variations || []
+    // Find by varNumber + description match
+    const varIndex = vars.findIndex(v =>
+      (v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) &&
+      v.description === r.description
+    )
+    if (varIndex === -1) return
+    const v = vars[varIndex]
+    setEditModal({
+      projectId: r.projectId,
+      varIndex,
+      project,
+      form: {
+        varNumber: v.varNumber || '',
+        description: v.description || '',
+        instructed: v.instructed ? 'yes' : 'no',
+        materials: v.materials || '',
+        labour: v.labour || '',
+        profit: v.profit || '',
+      }
+    })
+  }
+
+  async function saveEdit() {
+    if (!editModal) return
+    setEditSaving(true)
+    try {
+      const { projectId, varIndex, form } = editModal
+      const res = await fetch(`/api/project/${projectId}`)
+      const data = await res.json()
+      const settings = data.settings || {}
+      const vars = [...(settings.variations || [])]
+      vars[varIndex] = {
+        ...vars[varIndex],
+        varNumber: form.varNumber,
+        description: form.description,
+        instructed: form.instructed === 'yes',
+        materials: form.materials || '0',
+        labour: form.labour || '0',
+        profit: form.profit || '0',
+      }
+      await fetch(`/api/project/${projectId}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings, variations: vars }),
+      })
+      await loadProjects()
+      setEditModal(null)
+    } catch (e) { console.error(e) }
+    setEditSaving(false)
+  }
+
+  async function deleteVariation(r) {
+    if (!confirm(`Delete variation ${r.varNumber} — ${r.description}?`)) return
+    try {
+      const project = projects.find(p => p.xeroId === r.projectId)
+      if (!project) return
+      const res = await fetch(`/api/project/${r.projectId}`)
+      const data = await res.json()
+      const settings = data.settings || {}
+      const vars = (settings.variations || []).filter((v, i) => {
+        const matchNum = v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')
+        const matchDesc = v.description === r.description
+        return !(matchNum && matchDesc)
+      })
+      await fetch(`/api/project/${r.projectId}/settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings, variations: vars }),
+      })
+      await loadProjects()
+    } catch (e) { console.error(e) }
+  }
 
   async function loadProjects() {
     setLoading(true)
@@ -260,6 +342,7 @@ export default function VariationTracker() {
                         { label: 'Labour £', col: 'labour' },
                         { label: 'Profit £', col: 'profit' },
                         { label: 'Total £', col: 'total' },
+                        { label: '', col: 'actions' },
                       ].map(({ label, col }) => (
                         <th key={col} onClick={() => toggleSort(col)}
                           style={{ ...thS, textAlign: ['materials', 'labour', 'profit', 'total'].includes(col) ? 'right' : 'left', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
@@ -289,6 +372,12 @@ export default function VariationTracker() {
                         <td style={{ ...tdS, textAlign: 'right' }}>{fmt(r.labour)}</td>
                         <td style={{ ...tdS, textAlign: 'right', color: r.profit >= 0 ? '#16a34a' : '#e63946' }}>{fmt(r.profit)}</td>
                         <td style={{ ...tdS, textAlign: 'right', fontWeight: 600 }}>{fmt(r.total)}</td>
+                        <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
+                          <button onClick={e => { e.stopPropagation(); openEdit(r) }}
+                            style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #e5e5e5', borderRadius: 4, background: '#f8f9fa', cursor: 'pointer', marginRight: 4, color: '#555' }}>Edit</button>
+                          <button onClick={e => { e.stopPropagation(); deleteVariation(r) }}
+                            style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #fecaca', borderRadius: 4, background: '#fef2f2', cursor: 'pointer', color: '#e63946' }}>Delete</button>
+                        </td>
                       </tr>
                     ))}
                     {/* Totals row */}
@@ -305,6 +394,69 @@ export default function VariationTracker() {
             )}
           </div>
         </div>
+
+        {/* Edit Variation Modal */}
+        {editModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+            onClick={() => setEditModal(null)}>
+            <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: '100%', maxWidth: 620, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>Edit Variation — {editModal.project?.jobNo}</h3>
+                <button onClick={() => setEditModal(null)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 12, marginBottom: 14 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Variation Number</label>
+                  <input value={editModal.form.varNumber} onChange={e => setEditModal(m => ({ ...m, form: { ...m.form, varNumber: e.target.value } }))}
+                    style={inputS} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Description</label>
+                  <input value={editModal.form.description} onChange={e => setEditModal(m => ({ ...m, form: { ...m.form, description: e.target.value } }))}
+                    style={inputS} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Instructed?</label>
+                <select value={editModal.form.instructed} onChange={e => setEditModal(m => ({ ...m, form: { ...m.form, instructed: e.target.value } }))} style={inputS}>
+                  <option value="yes">Instructed</option>
+                  <option value="no">Not Instructed</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 24 }}>
+                {[['materials', 'Materials (£)'], ['labour', 'Labour / Lodge (£)'], ['profit', 'Profit (£)']].map(([key, label]) => (
+                  <div key={key}>
+                    <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>{label}</label>
+                    <input type="number" value={editModal.form[key]}
+                      onChange={e => setEditModal(m => ({ ...m, form: { ...m.form, [key]: e.target.value } }))}
+                      placeholder="0.00" style={inputS} />
+                  </div>
+                ))}
+              </div>
+
+              {(editModal.form.materials || editModal.form.labour || editModal.form.profit) ? (
+                <div style={{ background: '#f0fdf4', borderRadius: 8, padding: '10px 14px', marginBottom: 20, fontSize: 13 }}>
+                  Total: <strong style={{ color: '#16a34a' }}>{fmt(fmtN(editModal.form.materials) + fmtN(editModal.form.labour) + fmtN(editModal.form.profit))}</strong>
+                </div>
+              ) : null}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={saveEdit} disabled={editSaving}
+                  style={{ flex: 1, background: editSaving ? '#ccc' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: editSaving ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 500 }}>
+                  {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button onClick={() => setEditModal(null)}
+                  style={{ padding: '10px 20px', border: '1px solid #e5e5e5', borderRadius: 8, background: '#fff', cursor: 'pointer', fontSize: 14, color: '#555' }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Add Variation Modal */}
         {showAdd && (
