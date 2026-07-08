@@ -340,6 +340,8 @@ export default function Dashboard() {
               <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
               <span style={{ color: '#444' }}>|</span>
               <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               {eomMode && (

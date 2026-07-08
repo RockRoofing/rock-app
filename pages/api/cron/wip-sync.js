@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         console.error(`Cost sync failed for ${cp.jobNo}:`, e.message)
       }
 
-      // ── Sync invoice totals ───────────────────────────────────────────
+      // ── Sync invoice totals + detail for commercial metrics ─────────
       try {
         const invoices = await getInvoicesByCategory(tokens.access_token, tenantId, projectId, catId)
         const totalInvoiced = invoices.reduce((s, inv) => s + (inv.Total || 0), 0)
@@ -72,6 +72,23 @@ export default async function handler(req, res) {
           invoiceCount: invoices.length,
           calculatedAt: now.toISOString()
         })
+        // Cache invoice details for payless notice and payment time calculations
+        const invoiceDetails = invoices.map(inv => ({
+          invoiceId: inv.InvoiceID,
+          invoiceNumber: inv.InvoiceNumber,
+          date: inv.DateString || inv.Date,
+          dueDate: inv.DueDateString || inv.DueDate,
+          total: inv.Total || 0,
+          amountPaid: inv.AmountPaid || 0,
+          amountDue: inv.AmountDue || 0,
+          fullyPaidOnDate: inv.FullyPaidOnDate || null,
+          status: inv.Status,
+          hasCreditNote: (inv.CreditNotes || []).length > 0,
+          creditNoteTotal: (inv.CreditNotes || []).reduce((s, cn) => s + (cn.Total || 0), 0),
+          jobNo: cp.jobNo,
+          projectId,
+        }))
+        await redis.set(`invoiced:lines:${projectId}`, invoiceDetails)
       } catch (e) {
         console.error(`Invoice sync failed for ${cp.jobNo}:`, e.message)
       }

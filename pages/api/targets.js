@@ -1,6 +1,12 @@
 import { get, set } from '../../lib/db'
 
 const DEFAULT_TARGETS = {
+  commercial: {
+    gpMargin: 0.20,
+    paylessNotices: 0,
+    avgPaymentDays: 30,
+    retentionInvoiced: 1,
+  },
   estimator: {
     strikeRateOverall: 0.25,
     strikeRateMCSecured: 0.30,
