@@ -198,7 +198,7 @@ export default function ProjectPage() {
         <div style={{ background: '#1a1a2e', padding: '0 24px' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
+              <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Project Financials</Link>
               <span style={{ color: '#444' }}>|</span>
               <span style={{ color: '#fff', fontWeight: 600 }}>{p.jobNo} — {p.name}</span>
               <span style={{ background: p.status === 'INPROGRESS' ? '#16a34a' : '#888', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>
