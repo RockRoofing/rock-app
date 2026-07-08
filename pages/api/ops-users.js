@@ -26,6 +26,9 @@ export default async function handler(req, res) {
       const user = users.find(u => String(u.pin) === String(body.pin) && u.active !== false)
       if (!user) return res.json({ ok: false })
       const { pin, ...safe } = user
+      // Provide a computed display name for the Forms App (works whether the
+      // record has firstName/lastName or a legacy single name field).
+      safe.name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.name || ''
       return res.json({ ok: true, user: safe })
     }
 

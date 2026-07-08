@@ -89,7 +89,7 @@ export default function FormsHome() {
   return (
     <Shell onLogout={logout} user={user}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Hi {user.name.split(' ')[0]} 👋</h2>
+        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What do you need?</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {doors.map(d => (

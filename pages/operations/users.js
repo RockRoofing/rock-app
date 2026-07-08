@@ -2,6 +2,11 @@ import { useState, useEffect } from 'react'
 import OperationsShell, { PageHeading } from '../../components/OperationsShell'
 import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
+const ROLES = ['Operative', 'Contracts Manager', 'Quantity Surveyor', 'Operations Manager', 'Estimator', 'Director', 'Other']
+
+// Works for both new records (firstName/lastName) and any legacy record (name).
+const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '—'
+
 export default function UsersPage() {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -28,7 +33,7 @@ export default function UsersPage() {
   return (
     <OperationsShell active="users" title="Users">
       <PageHeading title="Forms Users" sub="Operatives who can log into the Forms App"
-        action={<button onClick={() => setForm({ name: '', role: '', pin: '', active: true })} style={primaryBtn}>+ Add user</button>} />
+        action={<button onClick={() => setForm({ firstName: '', lastName: '', role: 'Operative', pin: '', active: true })} style={primaryBtn}>+ Add user</button>} />
 
       {loading ? <Loading /> : (
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
@@ -39,7 +44,7 @@ export default function UsersPage() {
             <tbody>
               {users.map(u => (
                 <tr key={u.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                  <td style={td}><strong>{u.name}</strong></td>
+                  <td style={td}><strong>{fullName(u)}</strong></td>
                   <td style={td}>{u.role || '—'}</td>
                   <td style={td}>{u.active === false ? <span style={{ color: '#bbb' }}>Inactive</span> : <span style={{ color: '#16a34a' }}>Active</span>}</td>
                   <td style={{ ...td, textAlign: 'right' }}>
@@ -56,10 +61,14 @@ export default function UsersPage() {
 
       {form && (
         <Modal onClose={() => setForm(null)} title={form.id ? 'Edit user' : 'Add user'}>
-          <Lbl>Full name</Lbl>
-          <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inp2} />
-          <Lbl>Role (optional)</Lbl>
-          <input value={form.role || ''} onChange={e => setForm({ ...form, role: e.target.value })} style={inp2} placeholder="e.g. Installer, Contracts Manager" />
+          <Lbl>First name</Lbl>
+          <input value={form.firstName || ''} onChange={e => setForm({ ...form, firstName: e.target.value })} style={inp2} />
+          <Lbl>Last name</Lbl>
+          <input value={form.lastName || ''} onChange={e => setForm({ ...form, lastName: e.target.value })} style={inp2} />
+          <Lbl>Role</Lbl>
+          <select value={form.role || 'Operative'} onChange={e => setForm({ ...form, role: e.target.value })} style={inp2}>
+            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
           <Lbl>{form.id ? 'New PIN (leave blank to keep current)' : 'PIN (4–6 digits)'}</Lbl>
           <input value={form.pin || ''} onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} style={inp2} inputMode="numeric" placeholder="••••" />
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 14 }}>
