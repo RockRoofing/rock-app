@@ -1,5 +1,5 @@
-import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../lib/db'
-import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
+import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../lib/db'
+import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -31,27 +31,46 @@ export default async function handler(req, res) {
 
     const redis = await getRedis()
 
-    // Get project identity from dashboard cache or API
+    // Get project identity — try dashboard cache first, then Xero API
     let cp = null
+
     if (redis) {
       try {
         const cached = await redis.get('dashboard:cache')
-        if (cached) {
-          const found = cached.find(p => p.xeroId === id)
-          if (found) cp = { trackingOptionId: id, name: found.name, jobNo: found.jobNo, status: found.status === 'CLOSED' ? 'ARCHIVED' : 'ACTIVE', trackingCategoryId: found.trackingCategoryId }
+        if (cached && Array.isArray(cached)) {
+          const found = cached.find(p => p.xeroId === id || p.trackingOptionId === id)
+          if (found) {
+            cp = {
+              trackingOptionId: id,
+              name: found.name,
+              jobNo: found.jobNo,
+              status: found.status === 'CLOSED' ? 'ARCHIVED' : 'ACTIVE',
+              trackingCategoryId: found.trackingCategoryId
+            }
+          }
         }
-      } catch {}
+      } catch (e) {
+        console.error('Cache lookup failed:', e.message)
+      }
     }
+
+    // Fallback: fetch tracking categories from Xero
     if (!cp) {
-      const categoryProjects = await getProjectsFromCategories(tokens.access_token, tenantId)
-      cp = categoryProjects.find(p => p.trackingOptionId === id)
+      try {
+        const categoryProjects = await getProjectsFromCategories(tokens.access_token, tenantId)
+        const found = categoryProjects.find(p => p.trackingOptionId === id)
+        if (found) cp = found
+      } catch (e) {
+        console.error('Xero category lookup failed:', e.message)
+      }
     }
+
     if (!cp) return res.status(404).json({ error: 'Project not found' })
 
     const settings = await getProject(id) || {}
     const vDate = getEffectiveValuationDate(settings)
 
-    // ── Read costs from Redis cache (populated by upload or deep sync) ──
+    // Read costs from Redis cache
     let labourSpend = 0
     let materialsSpend = 0
     let costLines = []
@@ -68,7 +87,7 @@ export default async function handler(req, res) {
       } catch {}
     }
 
-    // ── Post-valuation costs from cost lines ──────────────────────────
+    // Post-valuation costs
     let costsAfterDate = 0
     let postValCostLines = []
 
@@ -78,7 +97,7 @@ export default async function handler(req, res) {
       costsAfterDate = postValCostLines.reduce((s, l) => s + (l.amount || 0), 0)
     }
 
-    // ── Read invoices from Redis cache ────────────────────────────────
+    // Read invoices from Redis cache
     let invoices = []
     let totalInvoiced = 0
 
@@ -91,7 +110,7 @@ export default async function handler(req, res) {
       } catch {}
     }
 
-    // ── Calculations ──────────────────────────────────────────────────
+    // Calculations
     const contractValue = parseFloat(settings.contractValue || 0)
     const instructedVars = (settings.variations || [])
       .filter(v => v.instructed)
@@ -117,8 +136,8 @@ export default async function handler(req, res) {
       ? costsAfterDate / (1 - effectiveMargin)
       : 0
 
-res.json({
-      costLines: costLines,
+    res.json({
+      costLines,
       invoiceLines: invoices,
       project: {
         xeroId: id,
