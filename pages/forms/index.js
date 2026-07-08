@@ -160,38 +160,59 @@ export default function FormsHome() {
     )
   }
 
-  // ── Logged-in home: three doors ───────────────────────────────────────────
-  const doors = [
-    { key: 'company', label: 'Company Information', desc: 'Policies, insurances & standard documents', icon: '📄' },
-    { key: 'guidance', label: 'Operative Guidance Documents', desc: 'How-to guides & best practice', icon: '📘' },
-    { key: 'project', label: 'Project Forms', desc: 'Site diaries, reports & handovers', icon: '📝' },
-  ]
-
   return (
     <Shell onLogout={logout} user={user}>
-      <div style={{ maxWidth: 560, margin: '0 auto' }}>
-        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
-        <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What do you need?</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {doors.map(d => (
-            <button key={d.key}
-              onClick={() => router.push(`/forms/browse?cat=${d.key}`)}
+      <FormsList user={user} />
+    </Shell>
+  )
+}
+
+// ── Forms list shown immediately after login ────────────────────────────────
+function FormsList({ user }) {
+  const router = useRouter()
+  const [forms, setForms] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/forms')
+        const d = await r.json()
+        setForms((d.forms || []).filter(f => f.category === 'project'))
+      } catch {}
+      setLoading(false)
+    })()
+  }, [])
+
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Choose a form to complete</p>
+      {loading ? (
+        <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading forms…</div>
+      ) : !forms.length ? (
+        <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No forms available yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {forms.map(f => (
+            <button key={f.id}
+              onClick={() => router.push(`/forms/fill?form=${f.id}`)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
                 background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16,
-                padding: '20px 18px', cursor: 'pointer', width: '100%',
+                padding: '18px 18px', cursor: 'pointer', width: '100%',
               }}>
-              <div style={{ fontSize: 30 }}>{d.icon}</div>
+              <div style={{ fontSize: 26 }}>📝</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{d.label}</div>
-                <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{d.desc}</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{f.title}</div>
+                {f.short && <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{f.short}</div>}
               </div>
               <div style={{ color: BRAND, fontSize: 22 }}>›</div>
             </button>
           ))}
         </div>
-      </div>
-    </Shell>
+      )}
+    </div>
   )
 }
 
@@ -210,13 +231,19 @@ export function Shell({ children, onLogout, user }) {
           padding: '0 16px', gap: 10, position: 'sticky', top: 0, zIndex: 10,
         }}>
           <img src="/rock-logo.jpg" alt="" style={{ height: 32, width: 32, borderRadius: 6 }} />
-          <span style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>Rock Roofing Forms</span>
+          <span style={{ color: '#fff', fontWeight: 600, fontSize: 15 }}>Forms</span>
           <div style={{ flex: 1 }} />
           {user && (
-            <button onClick={onLogout} style={{
-              background: 'transparent', border: '1px solid #3a3a38', color: '#bbb',
-              borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer',
-            }}>Log out</button>
+            <>
+              <a href="/forms/browse?cat=company" title="Company Information"
+                style={navLink}>Company</a>
+              <a href="/forms/browse?cat=guidance" title="Operative Guidance Documents"
+                style={navLink}>Guidance</a>
+              <button onClick={onLogout} style={{
+                background: 'transparent', border: '1px solid #3a3a38', color: '#bbb',
+                borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer',
+              }}>Log out</button>
+            </>
           )}
         </div>
         <div style={{ padding: '24px 16px 64px' }}>{children}</div>
@@ -231,4 +258,9 @@ export function bigBtn(disabled) {
     color: '#fff', background: disabled ? '#c9c4ba' : '#ca8a04',
     border: 'none', borderRadius: 14, cursor: disabled ? 'default' : 'pointer',
   }
+}
+
+const navLink = {
+  color: '#bbb', textDecoration: 'none', fontSize: 13,
+  padding: '6px 8px', whiteSpace: 'nowrap',
 }

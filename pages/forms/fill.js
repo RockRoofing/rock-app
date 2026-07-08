@@ -6,7 +6,7 @@ const INK = '#1a1a19', BRAND = '#ca8a04'
 
 export default function Fill() {
   const router = useRouter()
-  const { form: formId, project, pname } = router.query
+  const { form: formId } = router.query
   const [user, setUser] = useState(null)
   const [form, setForm] = useState(null)
   const [answers, setAnswers] = useState({})
@@ -14,6 +14,8 @@ export default function Fill() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [errors, setErrors] = useState({})
+  const [projects, setProjects] = useState([])
+  const [projectId, setProjectId] = useState('')
 
   useEffect(() => {
     try {
@@ -28,13 +30,24 @@ export default function Fill() {
     ;(async () => {
       setLoading(true)
       try {
-        const r = await fetch(`/api/forms?id=${formId}`)
-        const d = await r.json()
+        const [rf, rp] = await Promise.all([
+          fetch(`/api/forms?id=${formId}`),
+          fetch('/api/dashboard'),
+        ])
+        const d = await rf.json()
         setForm(d.form)
+        const dp = await rp.json()
+        setProjects((dp.projects || [])
+          .filter(p => p.status === 'INPROGRESS')
+          .map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name }))
+          .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '')))
       } catch (e) { console.error(e) }
       setLoading(false)
     })()
   }, [formId])
+
+  const selectedProject = projects.find(p => p.id === projectId)
+  const projectLabel = selectedProject ? `${selectedProject.jobNo ? selectedProject.jobNo + ' — ' : ''}${selectedProject.name}` : ''
 
   function set(id, val) {
     setAnswers(a => ({ ...a, [id]: val }))
@@ -54,6 +67,7 @@ export default function Fill() {
 
   function validate() {
     const errs = {}
+    if (!projectId) errs.__project = 'Required'
     for (const f of form.fields) {
       if (f.type === 'section' || f.type === 'note') continue
       if (!f.required) continue
@@ -68,8 +82,8 @@ export default function Fill() {
 
   async function submit() {
     if (!validate()) {
-      // Scroll to first error
-      const firstId = Object.keys(errors)[0] || form.fields.find(f => errors[f.id])?.id
+      // Scroll to first error (project first if missing)
+      const firstId = !projectId ? '__project' : (Object.keys(errors)[0] || form.fields.find(f => errors[f.id])?.id)
       const el = firstId && document.getElementById('f_' + firstId)
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
@@ -82,7 +96,7 @@ export default function Fill() {
         body: JSON.stringify({
           submission: {
             formId: form.id, formTitle: form.title,
-            projectId: project || '', projectName: pname ? decodeURIComponent(pname) : '',
+            projectId: projectId, projectName: projectLabel,
             operative: user?.name || '', answers, flags,
           },
         }),
@@ -125,9 +139,26 @@ export default function Fill() {
   return (
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
-        <button onClick={() => router.back()} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back</button>
-        <h1 style={{ fontSize: 21, color: INK, margin: '10px 0 2px' }}>{form.title}</h1>
-        {pname && <div style={{ color: '#999', fontSize: 14, marginBottom: 16 }}>{decodeURIComponent(pname)}</div>}
+        <button onClick={() => router.push('/forms')} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back to forms</button>
+        <h1 style={{ fontSize: 21, color: INK, margin: '10px 0 16px' }}>{form.title}</h1>
+
+        {/* Built-in first question: which project is this form for? */}
+        <div id="f___project" style={{ margin: '16px 0' }}>
+          <label style={{ display: 'block', fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>
+            Project <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <select value={projectId} onChange={e => { setProjectId(e.target.value); setErrors(er => { const n = { ...er }; delete n.__project; return n }) }}
+            style={{
+              width: '100%', boxSizing: 'border-box', padding: '13px 14px', fontSize: 15,
+              border: `2px solid ${errors.__project ? '#dc2626' : '#e3e0d9'}`, borderRadius: 12, background: '#fff', outline: 'none',
+            }}>
+            <option value="">Select the project…</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>{p.jobNo ? p.jobNo + ' — ' : ''}{p.name}</option>
+            ))}
+          </select>
+          {errors.__project && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>Please select the project</div>}
+        </div>
 
         {form.fields.map(f => (
           <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} />
