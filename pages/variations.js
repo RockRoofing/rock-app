@@ -27,6 +27,15 @@ export default function VariationTracker() {
   const [filterEstimator, setFilterEstimator] = useState('All')
   const [filterInstructed, setFilterInstructed] = useState('All')
 
+  // Sort
+  const [sortCol, setSortCol] = useState('varNumber')
+  const [sortDir, setSortDir] = useState('asc')
+
+  function toggleSort(col) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
   // Add variation modal
   const [showAdd, setShowAdd] = useState(false)
   const [addProjectId, setAddProjectId] = useState('')
@@ -109,8 +118,11 @@ export default function VariationTracker() {
   // Filter options
   const uniq = (arr, key) => ['All', ...new Set(arr.map(r => r[key]).filter(Boolean))].sort((a, b) => a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b))
 
+  // For project filter: show "J228 — J228-Farmstead Drive" style options
+  const projectOptions = ['All', ...new Set(allRows.map(r => `${r.jobNo} — ${r.projectName}`).filter(Boolean))].sort((a, b) => a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b))
+
   const filtered = allRows.filter(r => {
-    if (filterProject !== 'All' && r.jobNo !== filterProject) return false
+    if (filterProject !== 'All' && `${r.jobNo} — ${r.projectName}` !== filterProject) return false
     if (filterCustomer !== 'All' && r.customer !== filterCustomer) return false
     if (filterCM !== 'All' && r.cm !== filterCM) return false
     if (filterEstimator !== 'All' && r.estimator !== filterEstimator) return false
@@ -119,6 +131,17 @@ export default function VariationTracker() {
       if (filterInstructed === 'Not Instructed' && r.instructed) return false
     }
     return true
+  })
+
+  const sorted = [...filtered].sort((a, b) => {
+    let av = a[sortCol], bv = b[sortCol]
+    if (typeof av === 'string') av = av.toLowerCase()
+    if (typeof bv === 'string') bv = bv.toLowerCase()
+    if (av == null) return 1
+    if (bv == null) return -1
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
   })
 
   const totalMaterials = filtered.reduce((s, r) => s + r.materials, 0)
@@ -170,7 +193,7 @@ export default function VariationTracker() {
           {/* Filters */}
           <div style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             {[
-              { label: 'Project', value: filterProject, set: setFilterProject, opts: uniq(allRows, 'jobNo') },
+              { label: 'Project', value: filterProject, set: setFilterProject, opts: projectOptions },
               { label: 'Customer', value: filterCustomer, set: setFilterCustomer, opts: uniq(allRows, 'customer') },
               { label: 'CM', value: filterCM, set: setFilterCM, opts: uniq(allRows, 'cm') },
               { label: 'Estimator', value: filterEstimator, set: setFilterEstimator, opts: uniq(allRows, 'estimator') },
@@ -220,13 +243,29 @@ export default function VariationTracker() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      {['Variation Number', 'Project No', 'Project Name', 'Customer', 'Estimator', 'CM', 'Description', 'Instructed?', 'Materials £', 'Labour £', 'Profit £', 'Total £'].map(h => (
-                        <th key={h} style={{ ...thS, textAlign: ['Materials £', 'Labour £', 'Profit £', 'Total £'].includes(h) ? 'right' : 'left' }}>{h}</th>
+                      {[
+                        { label: 'Variation Number', col: 'varNumber' },
+                        { label: 'Project No', col: 'jobNo' },
+                        { label: 'Project Name', col: 'projectName' },
+                        { label: 'Customer', col: 'customer' },
+                        { label: 'Estimator', col: 'estimator' },
+                        { label: 'CM', col: 'cm' },
+                        { label: 'Description', col: 'description' },
+                        { label: 'Instructed?', col: 'instructed' },
+                        { label: 'Materials £', col: 'materials' },
+                        { label: 'Labour £', col: 'labour' },
+                        { label: 'Profit £', col: 'profit' },
+                        { label: 'Total £', col: 'total' },
+                      ].map(({ label, col }) => (
+                        <th key={col} onClick={() => toggleSort(col)}
+                          style={{ ...thS, textAlign: ['materials', 'labour', 'profit', 'total'].includes(col) ? 'right' : 'left', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                          {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : <span style={{ color: '#ccc' }}>↕</span>}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((r, i) => (
+                    {sorted.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                         <td style={{ ...tdS, fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{r.varNumber || '—'}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
