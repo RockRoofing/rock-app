@@ -1228,6 +1228,7 @@ function RetentionTab({ p, settings, atDate }) {
 
 function DetailsForm({ form, setForm, addVariation, updateVariation, removeVariation, afa, currentMargin, teamMembers, onAddMember, onRemoveMember }) {
   const f = (field) => (e) => setForm({ ...form, [field]: e.target.value })
+  const [showDateOverrides, setShowDateOverrides] = React.useState(false)
   const inputStyle = { width: '100%', padding: '7px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }
   const labelStyle = { fontSize: 11, color: '#888', marginBottom: 2, display: 'block' }
   const sectionStyle = { marginBottom: 20 }
@@ -1238,10 +1239,66 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
     <div style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 8 }}>
       <div style={sectionStyle}>
         <div style={headingStyle}>Financial</div>
-        <label style={labelStyle}>Default valuation day of month</label>
-        <input type="number" min="1" max="31" value={form.valuationDay || ''} onChange={f('valuationDay')} style={inputStyle} placeholder="e.g. 28" />
-        <label style={labelStyle}>This month's override date (optional)</label>
-        <input type="date" value={form.valuationDateOverride || ''} onChange={f('valuationDateOverride')} style={inputStyle} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 8 }}>
+          <div>
+            <label style={labelStyle}>Application day of month</label>
+            <input type="number" min="1" max="31" value={form.applicationDay || ''} onChange={f('applicationDay')} style={inputStyle} placeholder="e.g. 25" />
+          </div>
+          <div>
+            <label style={labelStyle}>Valuation day of month</label>
+            <input type="number" min="1" max="31" value={form.valuationDay || ''} onChange={f('valuationDay')} style={inputStyle} placeholder="e.g. 28" />
+          </div>
+          <div>
+            <label style={labelStyle}>Payment day of month</label>
+            <input type="number" min="1" max="31" value={form.paymentDay || ''} onChange={f('paymentDay')} style={inputStyle} placeholder="e.g. 14" />
+          </div>
+        </div>
+        <button type="button" onClick={() => setShowDateOverrides(!showDateOverrides)}
+          style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#f8f9fa', cursor: 'pointer', marginBottom: 12, fontFamily: 'inherit', color: '#555' }}>
+          {showDateOverrides ? '▲ Hide' : '▼ Show'} monthly date overrides (12 months ahead)
+        </button>
+        {showDateOverrides && (
+          <div style={{ marginBottom: 12, border: '1px solid #e5e5e5', borderRadius: 8, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8f9fa' }}>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Month</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Application Date</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Valuation Date</th>
+                  <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Payment Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const d = new Date()
+                  d.setDate(1)
+                  d.setMonth(d.getMonth() + i)
+                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                  const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+                  const overrides = form.dateOverrides || {}
+                  const row = overrides[key] || {}
+                  return (
+                    <tr key={key} style={{ borderBottom: '0.5px solid #f0f0f0' }}>
+                      <td style={{ padding: '6px 10px', fontWeight: 500, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{label}</td>
+                      {['applicationDate', 'valuationDate', 'paymentDate'].map(field => (
+                        <td key={field} style={{ padding: '4px 8px' }}>
+                          <input type="date" value={row[field] || ''}
+                            onChange={e => {
+                              const newOverrides = { ...overrides, [key]: { ...row, [field]: e.target.value || undefined } }
+                              // Clean up empty rows
+                              if (!newOverrides[key].applicationDate && !newOverrides[key].valuationDate && !newOverrides[key].paymentDate) delete newOverrides[key]
+                              setForm({ ...form, dateOverrides: newOverrides })
+                            }}
+                            style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #e5e5e5', borderRadius: 4, fontFamily: 'inherit', width: '100%' }} />
+                        </td>
+                      ))}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         <label style={labelStyle}>Original contract value (£)</label>
         <input type="number" value={form.contractValue || ''} onChange={f('contractValue')} style={inputStyle} placeholder="0.00" />
         <label style={labelStyle}>Labour budget (£)</label>

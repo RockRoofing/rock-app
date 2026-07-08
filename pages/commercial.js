@@ -338,6 +338,8 @@ export default function Dashboard() {
               <Link href="/retention" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Retention</Link>
               <span style={{ color: '#444' }}>|</span>
               <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               {eomMode && (

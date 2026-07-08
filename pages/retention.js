@@ -241,6 +241,8 @@ export default function RetentionPage() {
               <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Retention</span>
               <span style={{ color: '#444' }}>|</span>
               <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
             </div>
             <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
               style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
