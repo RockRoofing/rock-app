@@ -63,7 +63,7 @@ export default function NegotiatingTable({ accent = '#ca8a04' }) {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 1500 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 1400 }}>
           <thead>
             <tr style={{ background: '#faf9f7', color: '#888', textAlign: 'left' }}>
               {cols.map(c => (

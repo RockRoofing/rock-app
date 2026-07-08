@@ -50,7 +50,7 @@ export default function Operations() {
           ))}
         </div>
 
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
+        <div style={{ maxWidth: tab === 'negotiating' ? 1800 : 1100, margin: '0 auto', padding: tab === 'negotiating' ? '24px 32px' : '24px' }}>
           {tab === 'submissions' && <Submissions />}
           {tab === 'negotiating' && <div><H title="Projects in Negotiating" sub="Live from Pipedrive" /><NegotiatingTable accent={GOLD} /></div>}
           {tab === 'users' && <Users />}

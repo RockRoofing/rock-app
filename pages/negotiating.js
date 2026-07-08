@@ -11,7 +11,7 @@ export default function Negotiating() {
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#fafaf9' }}>
         <PreContractNav active="negotiating" />
 
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: 24 }}>
+        <div style={{ maxWidth: 1800, margin: '0 auto', padding: '24px 32px' }}>
           <div style={{ marginBottom: 16 }}>
             <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Projects in Negotiating</h1>
             <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Live from Pipedrive — deals currently at the Negotiating stage</div>
