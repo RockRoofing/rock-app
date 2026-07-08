@@ -237,6 +237,8 @@ export default function RetentionPage() {
               <Link href="/commercial" style={{ color: '#888', fontSize: 13 }}>← Budget Tracker</Link>
               <span style={{ color: '#444' }}>|</span>
               <span style={{ color: '#fff', fontWeight: 600 }}>Retention Tracker</span>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/variations" style={{ color: '#aaa', fontSize: 13, textDecoration: 'none', padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Variations</Link>
             </div>
             <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
               style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>

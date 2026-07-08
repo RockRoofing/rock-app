@@ -159,7 +159,11 @@ export default function ProjectPage() {
   }
 
   function addVariation() {
-    setForm({ ...form, variations: [...(form.variations || []), { description: '', instructed: true }] })
+    const existing = form.variations || []
+    const nums = existing.map(v => v.varNumber || '').filter(Boolean).map(n => parseInt(n.replace(/[^0-9]/g, ''))).filter(n => !isNaN(n))
+    const max = nums.length ? Math.max(...nums) : 0
+    const nextNum = `V${String(max + 1).padStart(2, '0')}`
+    setForm({ ...form, variations: [...existing, { varNumber: nextNum, description: '', instructed: true }] })
   }
 
   function updateVariation(i, field, value) {
@@ -1254,6 +1258,7 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
           return (
             <div key={i} style={{ background: '#f8f8f8', borderRadius: 8, padding: '10px 12px', marginBottom: 10, border: '1px solid #eee' }}>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center' }}>
+                <input value={v.varNumber || ''} onChange={e => updateVariation(i, 'varNumber', e.target.value)} placeholder="V01" style={{ ...inputStyle, marginBottom: 0, width: 70, flexShrink: 0 }} />
                 <input value={v.description || ''} onChange={e => updateVariation(i, 'description', e.target.value)} placeholder="Variation description" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
                 <select value={v.instructed ? 'yes' : 'no'} onChange={e => updateVariation(i, 'instructed', e.target.value === 'yes')} style={{ ...inputStyle, marginBottom: 0, width: 130 }}>
                   <option value="yes">Instructed</option>

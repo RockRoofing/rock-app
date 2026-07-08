@@ -355,6 +355,7 @@ export default function Dashboard() {
               </div>
               <Link href="/upload-transactions" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Upload</Link>
               <Link href="/retention" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Retention</Link>
+              <Link href="/variations" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Variations</Link>
               <Link href="/connect" style={{ color: '#aaa', fontSize: 13, padding: '6px 12px', borderRadius: 6, border: '1px solid #333' }}>Xero</Link>
               <button onClick={syncXero} disabled={syncing} style={{ background: syncing ? '#333' : '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 {syncing ? 'Syncing...' : 'Sync Xero'}

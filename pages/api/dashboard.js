@@ -138,6 +138,7 @@ export default async function handler(req, res) {
         customer: settings.customerName || '',
         contractsManager: settings.contractsManager || '',
         estimator: settings.estimator || '',
+        variations: settings.variations || [],
         valuationDay: settings.valuationDay || null,
         contractValue,
         afa,
