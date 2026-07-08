@@ -5,6 +5,8 @@ import PreContractNav from '../../components/PreContractNav'
 import { INK, GOLD, Lbl, inp2, primaryBtn, ghostBtn, Loading } from '../../components/opsUI'
 import { IHM_SECTIONS, CONTACT_ROLES, emptyRoofType } from '../../lib/ihmSchema'
 
+const tmName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || ''
+
 function Wrap({ children }) {
   return (
     <>
@@ -180,8 +182,8 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
         <Lbl>{f.label}</Lbl>
         <input list={`team_${f.id}`} value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} placeholder="Select or type…" />
         <datalist id={`team_${f.id}`}>
-          {opts.map(m => <option key={m.id} value={m.name} />)}
-          {(team || []).filter(m => f.role && m.role !== f.role).map(m => <option key={m.id} value={m.name} />)}
+          {opts.map(m => <option key={m.id} value={tmName(m)} />)}
+          {(team || []).filter(m => f.role && m.role !== f.role).map(m => <option key={m.id} value={tmName(m)} />)}
         </datalist>
       </div>
     )
@@ -290,7 +292,7 @@ function RiskLogField({ value, onChange, team }) {
           <textarea value={r.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>
       ))}
-      <datalist id="riskTeam">{(team || []).map(m => <option key={m.id} value={m.name} />)}</datalist>
+      <datalist id="riskTeam">{(team || []).map(m => <option key={m.id} value={tmName(m)} />)}</datalist>
       <button onClick={addRow} style={addBtn}>+ Add risk</button>
     </div>
   )
@@ -319,7 +321,7 @@ function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
           <textarea value={t.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>
       ))}
-      <datalist id="taskTeam">{(team || []).map(m => <option key={m.id} value={m.name} />)}</datalist>
+      <datalist id="taskTeam">{(team || []).map(m => <option key={m.id} value={tmName(m)} />)}</datalist>
       <button onClick={addRow} style={addBtn}>+ Add task</button>
     </div>
   )
