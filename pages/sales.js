@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import PreContractNav from '../components/PreContractNav'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
@@ -1265,20 +1266,10 @@ export default function Dashboard() {
     <>
       <Head><title>Rock Roofing — Sales Dashboard</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
-        <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
-          <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-          <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</a>
-          <span style={{ color: '#444' }}>|</span>
-          <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Sales Dashboard</span>
-          <span style={{ color: '#444' }}>|</span>
-          <a href="/scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Scorecards</a>
-          <a href="/negotiating" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Negotiating</a>
-          <span style={{ color: '#444' }}>|</span>
-          <a href="/project-financials" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</a>
-          <div style={{ flex: 1 }} />
+        <PreContractNav active="sales">
           {lastSync && <span style={{ color: '#555', fontSize: 12 }}>Last sync: {shortDate(lastSync)}</span>}
-          <button onClick={doSync} disabled={syncing} style={{ fontSize: 12, padding: '5px 12px', border: '0.5px solid #444', borderRadius: 6, background: 'transparent', color: '#ccc', cursor: 'pointer', fontFamily: 'inherit' }}>{syncing ? 'Syncing…' : 'Sync now'}</button>
-        </div>
+          <button onClick={doSync} disabled={syncing} style={{ fontSize: 12, padding: '5px 12px', border: '0.5px solid #444', borderRadius: 6, background: 'transparent', color: '#ccc', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 12 }}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+        </PreContractNav>
         <div style={{ borderBottom: '0.5px solid #e1e0d9', background: '#fff', padding: '0 24px', overflowX: 'auto', display: 'flex' }}>
           {NAV.map(n => (
             <button key={n} onClick={() => navigateTo(n)} style={{ padding: '12px 16px', border: 'none', borderBottom: page === n ? '2px solid #1a1a19' : '2px solid transparent', background: 'transparent', fontSize: 13, fontWeight: page === n ? 500 : 400, color: page === n ? '#1a1a19' : '#888', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{n}</button>

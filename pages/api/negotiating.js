@@ -24,6 +24,12 @@ export default async function handler(req, res) {
         estimator: d.estimator || '',
         region: d.region || '',
         projectType: d.projectType || '',
+        siteLocation: d.siteLocation || '',
+        sizeM2: d.sizeM2 || null,
+        creditScore: d.creditScore || null,
+        creditLimit: d.creditLimit || null,
+        insuredCreditLimit: d.insuredCreditLimit || null,
+        scopeOfWorks: d.scopeOfWorks || '',
       }))
       // Soonest on-site date first; nulls last.
       .sort((a, b) => {

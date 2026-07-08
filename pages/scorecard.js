@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import PreContractNav from '../components/PreContractNav'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
@@ -585,19 +586,10 @@ export default function Scorecard() {
       <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
         {modal && <DrillModal title={modal.title} projects={modal.projects} isValueChange={modal.isValueChange} isGpMargin={modal.isGpMargin} onClose={() => setModal(null)} />}
 
-        <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
-          <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-          <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</a>
-          <span style={{ color: '#444' }}>|</span>
-          <a href="/sales" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Sales Dashboard</a>
-          <span style={{ color: '#444' }}>|</span>
-          <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Scorecards</span>
-          <span style={{ color: '#444' }}>|</span>
-          <a href="/project-financials" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</a>
-          <div style={{ flex: 1 }} />
+        <PreContractNav active="scorecard">
           {lastSync && <span style={{ color: '#555', fontSize: 12 }}>Last sync: {new Date(lastSync).toLocaleDateString('en-GB')}</span>}
-          <button onClick={doSync} disabled={syncing} style={{ fontSize: 12, padding: '5px 12px', border: '0.5px solid #444', borderRadius: 6, background: 'transparent', color: '#ccc', cursor: 'pointer', fontFamily: 'inherit' }}>{syncing ? 'Syncing…' : 'Sync now'}</button>
-        </div>
+          <button onClick={doSync} disabled={syncing} style={{ fontSize: 12, padding: '5px 12px', border: '0.5px solid #444', borderRadius: 6, background: 'transparent', color: '#ccc', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 12 }}>{syncing ? 'Syncing…' : 'Sync now'}</button>
+        </PreContractNav>
 
         <div style={{ borderBottom: '0.5px solid #e1e0d9', background: '#fff', padding: '0 24px', display: 'flex' }}>
           {['Roman', 'Niall', 'James', 'Edita'].map(p => (
