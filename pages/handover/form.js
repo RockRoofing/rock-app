@@ -20,12 +20,22 @@ function Wrap({ children }) {
 export default function Handover() {
   const router = useRouter()
   const { no } = router.query   // editing an existing project?
-  const [data, setData] = useState({ siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [] })
+  const [data, setData] = useState({ siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], scopeFiles: [] })
   const [status, setStatus] = useState('draft')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [openSection, setOpenSection] = useState('project')
   const [err, setErr] = useState('')
+  const [team, setTeam] = useState([])
+  const [mfrBook, setMfrBook] = useState([])
+
+  // Load team members + manufacturer address book (shared context for fields)
+  useEffect(() => {
+    ;(async () => {
+      try { const r = await fetch('/api/team'); const d = await r.json(); setTeam((d.members || []).filter(m => m.active !== false)) } catch {}
+      try { const r = await fetch('/api/manufacturers'); const d = await r.json(); setMfrBook(d.contacts || []) } catch {}
+    })()
+  }, [])
 
   useEffect(() => {
     if (!no) {
@@ -52,7 +62,7 @@ export default function Handover() {
         const d = await r.json()
         if (d.project) {
           setData({
-            siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [],
+            siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], scopeFiles: [],
             ...d.project.data,
           })
           setStatus(d.project.status || 'active')
@@ -79,6 +89,27 @@ export default function Handover() {
       })
       const d = await r.json()
       if (!r.ok) { setErr(d.error || 'Could not save'); setSaving(false); return }
+
+      // On Meeting Complete (finalise): create tasks, risks, save manufacturer contacts
+      if (finalise) {
+        // Sync live tasks
+        await fetch('/api/tasks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync-ihm', projectNo: data.projectNo, projectName: data.projectName, tasks: data.liveTasks || [] }),
+        })
+        // Sync risks
+        await fetch('/api/risks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync-ihm', projectNo: data.projectNo, projectName: data.projectName,
+            risks: (data.risks || []).map(r => ({ description: r.risk, mitigation: r.mitigation, assignee: r.assignee, closeOutDate: r.closeOutDate, closed: r.closed, comments: r.comments })) }),
+        })
+        // Save manufacturer contacts to the address book for reuse
+        for (const c of (data.manufacturerContacts || [])) {
+          if (c && c.name) {
+            try { await fetch('/api/manufacturers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contact: c }) }) } catch {}
+          }
+        }
+      }
       router.push("/handover")
     } catch { setErr('Could not save'); setSaving(false) }
   }
@@ -112,7 +143,8 @@ export default function Handover() {
               {isOpen && (
                 <div style={{ padding: '4px 18px 20px' }}>
                   {section.fields.map(f => (
-                    <FieldRenderer key={f.id} f={f} value={data[f.id]} onChange={v => set(f.id, v)} />
+                    <FieldRenderer key={f.id} f={f} value={data[f.id]} onChange={v => set(f.id, v)}
+                      team={team} mfrBook={mfrBook} projectNo={data.projectNo} projectName={data.projectName} />
                   ))}
                 </div>
               )}
@@ -124,7 +156,7 @@ export default function Handover() {
       {err && <div style={{ color: '#dc2626', fontSize: 14, marginTop: 16 }}>{err}</div>}
 
       <div style={{ display: 'flex', gap: 10, marginTop: 24, position: 'sticky', bottom: 0, background: '#fafaf9', padding: '12px 0' }}>
-        <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : (no ? 'Save changes' : 'Create project')}</button>
+        <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Meeting Complete'}</button>
         <button onClick={() => save(false)} disabled={saving} style={ghostBtn}>Save as draft</button>
         <button onClick={() => router.push("/handover")} style={ghostBtn}>Cancel</button>
       </div>
@@ -133,10 +165,27 @@ export default function Handover() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function FieldRenderer({ f, value, onChange }) {
+function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectName }) {
   if (f.type === 'contacts') return <ContactsField value={value || []} onChange={onChange} />
+  if (f.type === 'mfrcontacts') return <MfrContactsField value={value || []} onChange={onChange} book={mfrBook || []} />
   if (f.type === 'rooftypes') return <RoofTypesField value={value || []} onChange={onChange} />
-  if (f.type === 'risklog') return <RiskLogField value={value || []} onChange={onChange} />
+  if (f.type === 'risklog') return <RiskLogField value={value || []} onChange={onChange} team={team} />
+  if (f.type === 'livetasks') return <LiveTasksField value={value || []} onChange={onChange} team={team} projectNo={projectNo} projectName={projectName} />
+  if (f.type === 'files') return <FilesField label={f.label} value={value || []} onChange={onChange} />
+
+  if (f.type === 'team') {
+    const opts = (team || []).filter(m => !f.role || m.role === f.role)
+    return (
+      <div style={{ margin: '14px 0' }}>
+        <Lbl>{f.label}</Lbl>
+        <input list={`team_${f.id}`} value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} placeholder="Select or type…" />
+        <datalist id={`team_${f.id}`}>
+          {opts.map(m => <option key={m.id} value={m.name} />)}
+          {(team || []).filter(m => f.role && m.role !== f.role).map(m => <option key={m.id} value={m.name} />)}
+        </datalist>
+      </div>
+    )
+  }
 
   return (
     <div style={{ margin: '14px 0' }}>
@@ -217,21 +266,140 @@ function RoofTypesField({ value, onChange }) {
   )
 }
 
-// Repeatable risk / mitigation rows
-function RiskLogField({ value, onChange }) {
-  function addRow() { onChange([...value, { risk: '', mitigation: '' }]) }
+// Repeatable risk rows — now with assignee, close-out, closed, comments
+function RiskLogField({ value, onChange, team }) {
+  function addRow() { onChange([...value, { risk: '', mitigation: '', assignee: '', closeOutDate: '', closed: false, comments: '' }]) }
   function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
   function remove(i) { onChange(value.filter((_, j) => j !== i)) }
   return (
     <div style={{ margin: '8px 0' }}>
       {value.map((r, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr auto', gap: 8, marginBottom: 8, alignItems: 'start' }}>
-          <textarea value={r.risk} onChange={e => update(i, 'risk', e.target.value)} placeholder="Risk" rows={2} style={{ ...inpSm, resize: 'vertical' }} />
-          <textarea value={r.mitigation} onChange={e => update(i, 'mitigation', e.target.value)} placeholder="Mitigation" rows={2} style={{ ...inpSm, resize: 'vertical' }} />
-          <button onClick={() => remove(i)} style={removeBtn}>×</button>
+        <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr auto', gap: 8, marginBottom: 8, alignItems: 'start' }}>
+            <textarea value={r.risk} onChange={e => update(i, 'risk', e.target.value)} placeholder="Risk" rows={2} style={{ ...inpSm, resize: 'vertical' }} />
+            <textarea value={r.mitigation} onChange={e => update(i, 'mitigation', e.target.value)} placeholder="Mitigation" rows={2} style={{ ...inpSm, resize: 'vertical' }} />
+            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+            <input list="riskTeam" value={r.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} placeholder="Assigned to" style={inpSm} />
+            <input type="date" value={r.closeOutDate || ''} onChange={e => update(i, 'closeOutDate', e.target.value)} style={inpSm} />
+            <label style={{ fontSize: 12, color: '#555', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={!!r.closed} onChange={e => update(i, 'closed', e.target.checked)} /> Closed
+            </label>
+          </div>
+          <textarea value={r.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>
       ))}
+      <datalist id="riskTeam">{(team || []).map(m => <option key={m.id} value={m.name} />)}</datalist>
       <button onClick={addRow} style={addBtn}>+ Add risk</button>
+    </div>
+  )
+}
+
+// Live Project Tasks rows — project no/name auto from the handover
+function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
+  function addRow() { onChange([...value, { description: '', assignee: '', status: 'Open', comments: '' }]) }
+  function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
+  function remove(i) { onChange(value.filter((_, j) => j !== i)) }
+  return (
+    <div style={{ margin: '8px 0' }}>
+      <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
+        Project auto-filled: <strong>{projectNo || '—'}</strong> {projectName ? `· ${projectName}` : ''}. Added to Live Project Tasks on Meeting Complete.
+      </div>
+      {value.map((t, i) => (
+        <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.8fr auto', gap: 8, alignItems: 'center' }}>
+            <input value={t.description} onChange={e => update(i, 'description', e.target.value)} placeholder="Task description" style={inpSm} />
+            <input list="taskTeam" value={t.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} placeholder="Responsible" style={inpSm} />
+            <select value={t.status || 'Open'} onChange={e => update(i, 'status', e.target.value)} style={inpSm}>
+              <option>Open</option><option>Complete</option>
+            </select>
+            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+          </div>
+          <textarea value={t.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
+        </div>
+      ))}
+      <datalist id="taskTeam">{(team || []).map(m => <option key={m.id} value={m.name} />)}</datalist>
+      <button onClick={addRow} style={addBtn}>+ Add task</button>
+    </div>
+  )
+}
+
+// Manufacturer contacts — reusable address book: search existing or add new
+function MfrContactsField({ value, onChange, book }) {
+  function addRow() { onChange([...value, { title: '', name: '', company: '', email: '', phone: '' }]) }
+  function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
+  function pick(i, contact) { const n = [...value]; n[i] = { ...contact }; onChange(n) }
+  function remove(i) { onChange(value.filter((_, j) => j !== i)) }
+  return (
+    <div style={{ margin: '8px 0' }}>
+      {value.map((c, i) => (
+        <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input list="mfrBook" value={c.name} placeholder="Search saved or type new name…"
+              onChange={e => {
+                const match = (book || []).find(b => b.name === e.target.value)
+                if (match) pick(i, match); else update(i, 'name', e.target.value)
+              }} style={{ ...inpSm, flex: 1 }} />
+            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <input value={c.title || ''} onChange={e => update(i, 'title', e.target.value)} placeholder="Role (e.g. Sales Rep)" style={inpSm} />
+            <input value={c.company || ''} onChange={e => update(i, 'company', e.target.value)} placeholder="Company" style={inpSm} />
+            <input value={c.email || ''} onChange={e => update(i, 'email', e.target.value)} placeholder="Email" style={inpSm} />
+            <input value={c.phone || ''} onChange={e => update(i, 'phone', e.target.value)} placeholder="Phone" style={inpSm} />
+          </div>
+        </div>
+      ))}
+      <datalist id="mfrBook">{(book || []).map(b => <option key={b.id} value={b.name}>{b.company ? `${b.name} — ${b.company}` : b.name}</option>)}</datalist>
+      <button onClick={addRow} style={addBtn}>+ Add manufacturer contact</button>
+    </div>
+  )
+}
+
+// File uploads (PDF / image) with fullscreen view
+function FilesField({ label, value, onChange }) {
+  const [uploading, setUploading] = useState(false)
+  const [viewer, setViewer] = useState(null)
+  async function handle(files) {
+    setUploading(true)
+    const next = [...value]
+    for (const file of Array.from(files)) {
+      try {
+        const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) })
+        const r = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, dataUrl }) })
+        const d = await r.json()
+        if (d.url) next.push({ url: d.url, name: file.name, type: file.type })
+      } catch {}
+    }
+    onChange(next); setUploading(false)
+  }
+  const isImg = (f) => (f.type || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(f.name || f.url || '')
+  return (
+    <div style={{ margin: '14px 0' }}>
+      <Lbl>{label}</Lbl>
+      <label style={{ ...addBtn, display: 'inline-block' }}>
+        {uploading ? 'Uploading…' : '+ Upload PDF / image'}
+        <input type="file" accept="application/pdf,image/*" multiple style={{ display: 'none' }} onChange={e => handle(e.target.files)} />
+      </label>
+      {value.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(120px,1fr))', gap: 10, marginTop: 10 }}>
+          {value.map((f, i) => (
+            <div key={i} style={{ border: '1px solid #eee', borderRadius: 8, padding: 6, textAlign: 'center' }}>
+              {isImg(f)
+                ? <img src={f.url} alt={f.name} onClick={() => setViewer(f)} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }} />
+                : <a href={f.url} target="_blank" rel="noreferrer" style={{ display: 'block', padding: '20px 0', fontSize: 28 }}>📄</a>}
+              <div style={{ fontSize: 11, color: '#666', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+              <button onClick={() => onChange(value.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {viewer && (
+        <div onClick={() => setViewer(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 20 }}>
+          <img src={viewer.url} alt={viewer.name} style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }} />
+        </div>
+      )}
     </div>
   )
 }

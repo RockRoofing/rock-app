@@ -12,6 +12,7 @@ export default function OperationsNav({ active }) {
     { key: 'planning', label: 'Project Planning', href: '/operations/planning' },
     { key: 'srats', label: 'SRATs', href: '/operations/srats' },
     { key: 'tasks', label: 'Live Project Tasks', href: '/operations/tasks' },
+    { key: 'risks', label: 'Risk Log', href: '/operations/risks' },
     { key: 'report', label: 'Project Report', href: '/operations/report' },
     { key: 'training', label: 'H&S Training Matrix', href: '/operations/training' },
     { key: 'rams', label: 'RAMS', href: '/operations/rams' },
@@ -31,6 +32,10 @@ export default function OperationsNav({ active }) {
         </span>
       ))}
       <div style={{ flex: 1, minWidth: 16 }} />
+      {active === 'team'
+        ? <span style={activeStyle}>Team Members</span>
+        : <a href="/operations/team" style={linkStyle}>Team Members</a>}
+      <Divider />
       {active === 'users'
         ? <span style={activeStyle}>Users</span>
         : <a href="/operations/users" style={linkStyle}>Users</a>}
