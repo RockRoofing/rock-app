@@ -176,14 +176,22 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
   if (f.type === 'files') return <FilesField label={f.label} value={value || []} onChange={onChange} />
 
   if (f.type === 'team') {
-    // Every team member is selectable for every role.
+    // Every team member selectable for every role. Use a real <select> so it
+    // opens on click and clearly lists everyone (datalists render unreliably).
+    const list = team || []
     return (
       <div style={{ margin: '14px 0' }}>
         <Lbl>{f.label}</Lbl>
-        <input list={`team_${f.id}`} value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} placeholder="Select or type…" />
-        <datalist id={`team_${f.id}`}>
-          {(team || []).map(m => <option key={m.id} value={tmName(m)} />)}
-        </datalist>
+        {list.length > 0 ? (
+          <select value={value || ''} onChange={e => onChange(e.target.value)} style={inp2}>
+            <option value="">Select…</option>
+            {list.map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}{m.role ? ` — ${m.role}` : ''}</option>)}
+            {value && !list.some(m => tmName(m) === value) && <option value={value}>{value}</option>}
+          </select>
+        ) : (
+          <input value={value || ''} onChange={e => onChange(e.target.value)} style={inp2}
+            placeholder="No team members yet — add them in Operations → Team Members" />
+        )}
       </div>
     )
   }
@@ -282,7 +290,11 @@ function RiskLogField({ value, onChange, team }) {
             <button onClick={() => remove(i)} style={removeBtn}>×</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-            <input list="riskTeam" value={r.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} placeholder="Assigned to" style={inpSm} />
+            <select value={r.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} style={inpSm}>
+              <option value="">Assigned to…</option>
+              {(team || []).map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}</option>)}
+              {r.assignee && !(team || []).some(m => tmName(m) === r.assignee) && <option value={r.assignee}>{r.assignee}</option>}
+            </select>
             <input type="date" value={r.closeOutDate || ''} onChange={e => update(i, 'closeOutDate', e.target.value)} style={inpSm} />
             <label style={{ fontSize: 12, color: '#555', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={!!r.closed} onChange={e => update(i, 'closed', e.target.checked)} /> Closed
@@ -291,7 +303,6 @@ function RiskLogField({ value, onChange, team }) {
           <textarea value={r.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>
       ))}
-      <datalist id="riskTeam">{(team || []).map(m => <option key={m.id} value={tmName(m)} />)}</datalist>
       <button onClick={addRow} style={addBtn}>+ Add risk</button>
     </div>
   )
@@ -311,7 +322,11 @@ function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
         <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.8fr auto', gap: 8, alignItems: 'center' }}>
             <input value={t.description} onChange={e => update(i, 'description', e.target.value)} placeholder="Task description" style={inpSm} />
-            <input list="taskTeam" value={t.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} placeholder="Responsible" style={inpSm} />
+            <select value={t.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} style={inpSm}>
+              <option value="">Responsible…</option>
+              {(team || []).map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}</option>)}
+              {t.assignee && !(team || []).some(m => tmName(m) === t.assignee) && <option value={t.assignee}>{t.assignee}</option>}
+            </select>
             <select value={t.status || 'Open'} onChange={e => update(i, 'status', e.target.value)} style={inpSm}>
               <option>Open</option><option>Complete</option>
             </select>
@@ -320,7 +335,6 @@ function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
           <textarea value={t.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>
       ))}
-      <datalist id="taskTeam">{(team || []).map(m => <option key={m.id} value={tmName(m)} />)}</datalist>
       <button onClick={addRow} style={addBtn}>+ Add task</button>
     </div>
   )
