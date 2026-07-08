@@ -101,11 +101,15 @@ export default function Fill() {
           },
         }),
       })
-      if (!r.ok) throw new Error('save failed')
+      if (!r.ok) {
+        let detail = `Error ${r.status}`
+        try { const e = await r.json(); if (e?.error) detail = e.error } catch {}
+        throw new Error(detail)
+      }
       setDone(true)
       window.scrollTo(0, 0)
     } catch (e) {
-      alert('Could not submit — check your signal and try again.')
+      alert(`Could not submit: ${e.message || 'unknown error'}. If this keeps happening, screenshot this and send to the office.`)
     }
     setSubmitting(false)
   }

@@ -3,6 +3,9 @@ import {
   getSubmission, saveSubmission,
 } from '../../lib/db'
 
+// Allow larger bodies (photos are URLs, but signatures/answers can add up).
+export const config = { api: { bodyParser: { sizeLimit: '4mb' } } }
+
 // GET    /api/submissions              -> { submissions: [index] }
 // GET    /api/submissions?id=...       -> { submission }
 // POST   /api/submissions { submission } -> save, returns { submission }
@@ -25,36 +28,41 @@ export default async function handler(req, res) {
     if (!submission || !submission.formId) {
       return res.status(400).json({ error: 'Missing submission' })
     }
-    const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-    const now = Date.now()
-    const full = {
-      id,
-      formId: submission.formId,
-      formTitle: submission.formTitle || '',
-      projectId: submission.projectId || '',
-      projectName: submission.projectName || '',
-      operative: submission.operative || '',
-      answers: submission.answers || {},
-      flags: submission.flags || [],   // manager-notify triggers captured at fill time
-      submittedAt: now,
+    try {
+      const id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      const now = Date.now()
+      const full = {
+        id,
+        formId: submission.formId,
+        formTitle: submission.formTitle || '',
+        projectId: submission.projectId || '',
+        projectName: submission.projectName || '',
+        operative: submission.operative || '',
+        answers: submission.answers || {},
+        flags: submission.flags || [],   // manager-notify triggers captured at fill time
+        submittedAt: now,
+      }
+      await saveSubmission(id, full)
+
+      // Lightweight index entry (no answers) so listing is cheap.
+      const idx = await getSubmissionIndex()
+      idx.push({
+        id,
+        formId: full.formId,
+        formTitle: full.formTitle,
+        projectId: full.projectId,
+        projectName: full.projectName,
+        operative: full.operative,
+        flagCount: (full.flags || []).length,
+        submittedAt: now,
+      })
+      await saveSubmissionIndex(idx)
+
+      return res.json({ submission: full })
+    } catch (e) {
+      console.error('submission save failed:', e)
+      return res.status(500).json({ error: `Save failed: ${e.message || 'server error'}` })
     }
-    await saveSubmission(id, full)
-
-    // Lightweight index entry (no answers) so listing is cheap.
-    const idx = await getSubmissionIndex()
-    idx.push({
-      id,
-      formId: full.formId,
-      formTitle: full.formTitle,
-      projectId: full.projectId,
-      projectName: full.projectName,
-      operative: full.operative,
-      flagCount: (full.flags || []).length,
-      submittedAt: now,
-    })
-    await saveSubmissionIndex(idx)
-
-    return res.json({ submission: full })
   }
 
   res.status(405).end()
