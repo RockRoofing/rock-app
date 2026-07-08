@@ -42,8 +42,8 @@ const departments = [
   {
     key: 'operations',
     label: 'Operations',
-    description: 'Coming soon',
-    href: null,
+    description: 'Forms, users, site submissions & planning',
+    href: '/operations',
     color: '#ca8a04',
     lightColor: '#fffbeb',
     borderColor: '#fde68a',

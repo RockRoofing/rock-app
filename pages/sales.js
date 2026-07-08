@@ -1272,6 +1272,7 @@ export default function Dashboard() {
           <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Sales Dashboard</span>
           <span style={{ color: '#444' }}>|</span>
           <a href="/scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Scorecards</a>
+          <a href="/negotiating" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Negotiating</a>
           <span style={{ color: '#444' }}>|</span>
           <a href="/project-financials" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</a>
           <div style={{ flex: 1 }} />
