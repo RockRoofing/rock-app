@@ -1,5 +1,5 @@
-import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../lib/db'
-import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
+import { getTokens, saveTokens, getProject, getEffectiveValuationDate } from '../../../lib/db'
+import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 
 async function getRedis() {
   try {
