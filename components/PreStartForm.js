@@ -130,7 +130,7 @@ export default function PreStartForm({ projectNo }) {
       {data && (
         isSent ? (
           <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#065f46', fontSize: 13.5 }}>
-            <strong>Sent{data.sentManually ? ' (marked manually)' : ''}</strong> — {data.sentAt ? fmtDateTime(data.sentAt) : ''}{Array.isArray(data.recipients) && data.recipients.length ? ` · to ${data.recipients.join(', ')}` : ''}. This document is locked and cannot be edited.
+            <strong>Complete{data.sentManually ? ' (marked manually)' : ' — sent'}</strong>{data.sentAt ? ` ${fmtDateTime(data.sentAt)}` : ''}{Array.isArray(data.recipients) && data.recipients.length ? ` · to ${data.recipients.join(', ')}` : ''}. This document is locked and cannot be edited.
           </div>
         ) : (
           <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#92400e', fontSize: 13.5 }}>
@@ -166,14 +166,22 @@ export default function PreStartForm({ projectNo }) {
 
               {sec.fields.map(f => (
                 <FieldRow key={f.id} field={f} value={src?.[f.id]} editing={editing} team={team}
-                  ihmDocs={f.id === 'scopeFiles' ? scopeFilesIHM : null}
+                  ihmDocs={f.id === 'scopeFiles' ? scopeFilesIHM.filter(d => !(src?.dismissedIhmDocs || []).includes(d.url)) : null}
                   onView={setDoc}
+                  onDismissIhm={f.id === 'scopeFiles' ? (remaining => {
+                    // remaining = the IHM docs still shown; anything missing is dismissed
+                    const remainingUrls = remaining.map(d => d.url)
+                    const dismissed = scopeFilesIHM.filter(d => !remainingUrls.includes(d.url)).map(d => d.url)
+                    setField('dismissedIhmDocs', [...new Set([...(src?.dismissedIhmDocs || []), ...dismissed])])
+                  }) : null}
                   onChange={nv => setField(f.id, nv)} />
               ))}
 
               {/* Custom user-added rows for this section */}
-              <CustomRows sectionId={sec.id} rows={extraSections[sec.id] || (src?.customRows?.[sec.id]) || []} editing={editing}
-                onChange={rows => setExtraSections(prev => ({ ...prev, [sec.id]: rows }))} />
+              {!sec.noCustom && (
+                <CustomRows sectionId={sec.id} rows={extraSections[sec.id] || (src?.customRows?.[sec.id]) || []} editing={editing}
+                  onChange={rows => setExtraSections(prev => ({ ...prev, [sec.id]: rows }))} />
+              )}
             </div>
           ))}
         </div>
@@ -230,7 +238,7 @@ function ResolvedRow({ resolved, comments }) {
   )
 }
 
-function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange }) {
+function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange, onDismissIhm }) {
   const { type, label, help } = field
 
   if (type === 'qrow') {
@@ -261,7 +269,7 @@ function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange }) {
         {ihm.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>From Internal Handover Minutes:</div>
-            <FileGrid files={ihm} editing={false} onView={onView} onChange={() => {}} readOnly />
+            <FileGrid files={ihm} editing={editing} onView={onView} onChange={onDismissIhm} allowRemoveOnly />
           </div>
         )}
       </div>
@@ -350,7 +358,7 @@ function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange }) {
   )
 }
 
-function FileGrid({ files, editing, onView, onChange, readOnly }) {
+function FileGrid({ files, editing, onView, onChange, readOnly, allowRemoveOnly }) {
   const [uploading, setUploading] = useState(false)
   async function add(fileList) {
     if (!fileList?.length) return
@@ -380,13 +388,14 @@ function FileGrid({ files, editing, onView, onChange, readOnly }) {
                   <button onClick={() => onView(f)} style={{ ...linkBtn, padding: 0 }}>View</button>
                   <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, padding: 0, textDecoration: 'none' }}>Download</a>
                   {editing && !readOnly && <button onClick={() => onChange(files.filter((_, j) => j !== i))} style={{ ...linkBtn, padding: 0, color: '#dc2626' }}>Remove</button>}
+                  {editing && allowRemoveOnly && <button onClick={() => onChange(files.filter((_, j) => j !== i))} style={{ ...linkBtn, padding: 0, color: '#dc2626' }}>Remove</button>}
                 </div>
               </div>
             </div>
           ))}
         </div>
       )}
-      {editing && !readOnly && (
+      {editing && !readOnly && !allowRemoveOnly && (
         <div style={{ marginTop: files.length ? 10 : 0 }}>
           <label style={{ ...ghostBtn, display: 'inline-block' }}>
             {uploading ? 'Uploading…' : '+ Upload file'}

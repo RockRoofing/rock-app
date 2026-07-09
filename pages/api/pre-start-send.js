@@ -33,8 +33,17 @@ export default async function handler(req, res) {
     const sentAt = Date.now()
     const origin = `https://${req.headers.host}`
 
-    // Build PDF (without proof page first; proof is added to the stored/download copy after).
-    const bytes = await buildPreStartPDF({ project: project?.data || {}, data, logoUrl: `${origin}/rock-logo.jpg`, proof: null })
+    // Build the proof page into the EMAILED copy too. Status is "Sent" at this
+    // point. Crucially, render the PDF from a record already flipped to 'sent'
+    // so the header shows COMPLETE (not DRAFT) on the emailed copy.
+    const proof = {
+      sentAt,
+      sentBy: data.completedBy || '',
+      recipients: recips,
+      statuses: recips.reduce((acc, r) => { acc[r.email] = 'Sent'; return acc }, {}),
+    }
+    const sentData = { ...data, stage: 'sent', sentAt }
+    const bytes = await buildPreStartPDF({ project: project?.data || {}, data: sentData, logoUrl: `${origin}/rock-logo.jpg`, proof })
     const base64 = Buffer.from(bytes).toString('base64')
     const projName = project?.data?.projectName || projectNo
     const filename = `Pre-Start Minutes - ${projName}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
