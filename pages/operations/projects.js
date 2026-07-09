@@ -73,10 +73,25 @@ export default function ProjectsPage() {
   }
   async function saveManual() {
     if (!manual.projectNo?.trim() || !manual.projectName?.trim()) { alert('Project number and name are required.'); return }
-    const r = await fetch('/api/ops-projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'manual-add', project: manual }) })
+    const isEdit = !!manual.__edit
+    const r = await fetch('/api/ops-projects', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isEdit
+        ? { action: 'set-details', projectNo: manual.projectNo, project: manual }
+        : { action: 'manual-add', project: manual }),
+    })
     const d = await r.json()
-    if (!r.ok) { alert(d.error || 'Could not add'); return }
+    if (!r.ok) { alert(d.error || 'Could not save'); return }
     setManual(null); load()
+  }
+  function editProject(p) {
+    setManual({
+      __edit: true, __manual: p.manual,
+      projectNo: p.projectNo, projectName: p.projectName,
+      contractsManager: p.contractsManager, estimator: p.estimator,
+      quantitySurveyor: p.quantitySurveyor, designManager: p.designManager,
+      location: p.location, status: p.status,
+    })
   }
   async function delProject(projectNo) {
     if (!confirm(`Delete project ${projectNo}? This removes the operations record.`)) return
@@ -116,7 +131,7 @@ export default function ProjectsPage() {
   return (
     <OperationsShell active="projects" title="Projects" wide>
       <PageHeading title="Projects" sub="Created from Internal Handover Minutes"
-        action={<button onClick={() => setManual({ projectNo: '', projectName: '', contractsManager: '', estimator: '', quantitySurveyor: '', designManager: '', location: '', status: 'active' })} style={ghostBtn}>+ Add old project</button>} />
+        action={<button onClick={() => setManual({ projectNo: '', projectName: '', contractsManager: '', estimator: '', quantitySurveyor: '', designManager: '', location: '', status: 'active' })} style={ghostBtn}>+ Add Project</button>} />
 
       {/* Filters */}
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -162,7 +177,8 @@ export default function ProjectsPage() {
                         </select>}
                   </td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {p.manual && <button onClick={() => delProject(p.projectNo)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
+                    <button onClick={() => editProject(p)} style={linkBtn}>Edit</button>
+                    {p.manual && <button onClick={() => delProject(p.projectNo)} style={{ ...linkBtn, color: '#dc2626', marginLeft: 10 }}>Delete</button>}
                   </td>
                 </tr>
               ))}
@@ -172,10 +188,11 @@ export default function ProjectsPage() {
       )}
 
       {manual && (
-        <Modal onClose={() => setManual(null)} title="Add old project (temporary)">
-          <div style={{ fontSize: 12.5, color: '#888', marginBottom: 10 }}>For projects already handed over before the app. You can delete these later once all IHMs are in.</div>
+        <Modal onClose={() => setManual(null)} title={manual.__edit ? 'Edit Project' : 'Add Project'}>
+          {!manual.__edit && <div style={{ fontSize: 12.5, color: '#888', marginBottom: 10 }}>Projects will be automatically added when Internal Handover Minutes are complete. Only add projects where an Internal Handover Meeting is not required.</div>}
+          {manual.__edit && !manual.__manual && <div style={{ fontSize: 12.5, color: '#92400e', background: '#fef3c7', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>This project came from an Internal Handover. Edits here may be overwritten if that IHM is re-completed.</div>}
           <Lbl>Project number</Lbl>
-          <input value={manual.projectNo} onChange={e => setManual({ ...manual, projectNo: e.target.value })} style={inp2} placeholder="e.g. J240" />
+          <input value={manual.projectNo} onChange={e => setManual({ ...manual, projectNo: e.target.value })} style={{ ...inp2, ...(manual.__edit ? { background: '#f5f5f4', color: '#888' } : {}) }} placeholder="e.g. J240" disabled={manual.__edit} />
           <Lbl>Project name</Lbl>
           <input value={manual.projectName} onChange={e => setManual({ ...manual, projectName: e.target.value })} style={inp2} />
           <Lbl>Contracts Manager</Lbl>
@@ -191,7 +208,7 @@ export default function ProjectsPage() {
           <Lbl>Status</Lbl>
           <select value={manual.status} onChange={e => setManual({ ...manual, status: e.target.value })} style={inp2}><option value="active">Live</option><option value="complete">Complete</option></select>
           <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-            <button onClick={saveManual} style={primaryBtn}>Add project</button>
+            <button onClick={saveManual} style={primaryBtn}>{manual.__edit ? 'Save changes' : 'Add project'}</button>
             <button onClick={() => setManual(null)} style={ghostBtn}>Cancel</button>
           </div>
         </Modal>

@@ -54,6 +54,27 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
+    // Edit project detail fields in place (works for IHM or manual projects).
+    // For IHM projects these fields may be overwritten if the IHM is re-completed.
+    if (body.action === 'set-details') {
+      const p = body.project || {}
+      const idx = projects.findIndex(x => x.projectNo === body.projectNo)
+      if (idx < 0) return res.status(404).json({ error: 'Not found' })
+      projects[idx].data = {
+        ...(projects[idx].data || {}),
+        projectName: p.projectName,
+        contractsManager: p.contractsManager || '',
+        estimator: p.estimator || '',
+        quantitySurveyor: p.quantitySurveyor || '',
+        designManager: p.designManager || '',
+        projectAddress: p.location || '',
+      }
+      if (p.status) projects[idx].status = p.status
+      projects[idx].updatedAt = now
+      await saveOpsProjects(projects)
+      return res.json({ ok: true })
+    }
+
     // Quick-add an old project manually (temporary record)
     if (body.action === 'manual-add') {
       const p = body.project || {}
