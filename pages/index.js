@@ -1,5 +1,8 @@
 import Head from 'next/head'
 import { useRouter } from 'next/router'
+import { useEffect, useState } from 'react'
+
+const ROLE_RANK = { standard: 1, management: 2, admin: 3 }
 
 const departments = [
   {
@@ -59,6 +62,38 @@ const departments = [
     ),
   },
   {
+    key: 'lessons-learnt',
+    label: 'Lessons Learnt',
+    description: 'Shared learnings and continuous improvement',
+    href: '/lessons-learnt',
+    minRole: 'standard',
+    color: '#0891b2',
+    lightColor: '#ecfeff',
+    borderColor: '#a5f3fc',
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <path d="M20 6l3 8h8l-6.5 5 2.5 8-7-5-7 5 2.5-8L5 14h8z" stroke="#0891b2" strokeWidth="2" strokeLinejoin="round" fill="none"/>
+      </svg>
+    ),
+  },
+  {
+    key: 'management',
+    label: 'Management',
+    description: 'Management reporting & oversight',
+    href: '/management',
+    minRole: 'management',
+    color: '#be123c',
+    lightColor: '#fff1f2',
+    borderColor: '#fecdd3',
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <rect x="7" y="16" width="26" height="18" rx="2" stroke="#be123c" strokeWidth="2" fill="none"/>
+        <path d="M15 16v-3a5 5 0 0110 0v3" stroke="#be123c" strokeWidth="2" fill="none"/>
+        <circle cx="20" cy="25" r="2.5" fill="#be123c"/>
+      </svg>
+    ),
+  },
+  {
     key: 'hr',
     label: 'HR',
     description: 'Coming soon',
@@ -77,6 +112,22 @@ const departments = [
 
 export default function Portal() {
   const router = useRouter()
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
+      if (!d.user) { router.replace('/login'); return }
+      setUser(d.user)
+    }).catch(() => router.replace('/login'))
+  }, [])
+
+  async function logout() {
+    await fetch('/api/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout' }) })
+    router.replace('/login')
+  }
+
+  const rank = user ? (ROLE_RANK[user.role] || 1) : 0
+  const visible = departments.filter(d => !d.minRole || rank >= (ROLE_RANK[d.minRole] || 1))
 
   return (
     <>
@@ -103,6 +154,14 @@ export default function Portal() {
             <div style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Rock Roofing</div>
             <div style={{ color: '#555', fontSize: 11 }}>Company Portal</div>
           </div>
+          <div style={{ flex: 1 }} />
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              {user.role === 'admin' && <a href="/admin" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
+              <span style={{ color: '#888', fontSize: 13 }}>{user.name} · {user.role}</span>
+              <button onClick={logout} style={{ background: '#2a2a28', color: '#ccc', border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>Log out</button>
+            </div>
+          )}
         </div>
 
         {/* Main content */}
@@ -131,7 +190,7 @@ export default function Portal() {
             maxWidth: 640,
             width: '100%',
           }}>
-            {departments.map(dept => {
+            {visible.map(dept => {
               const isComingSoon = !dept.href
               return (
                 <div
