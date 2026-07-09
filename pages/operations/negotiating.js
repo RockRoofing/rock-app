@@ -6,7 +6,7 @@ import NegotiatingTable from '../../components/NegotiatingTable'
 // component appear in both places.
 export default function OperationsNegotiating() {
   return (
-    <OperationsShell active="negotiating" section="negotiating" title="Negotiating" wide>
+    <OperationsShell active="pm:negotiating" section="pm" title="Negotiating" wide>
       <PageHeading title="Projects in Negotiating" sub="Live from Pipedrive — deals currently at the Negotiating stage" />
       <NegotiatingTable accent="#ca8a04" />
     </OperationsShell>

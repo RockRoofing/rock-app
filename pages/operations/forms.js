@@ -19,6 +19,7 @@ export default function SubmissionsPage() {
   const [page, setPage] = useState(0)
   const [sel, setSel] = useState({})
   const [downloading, setDownloading] = useState(false)
+  const [selNote, setSelNote] = useState('')
 
   useEffect(() => { (async () => {
     try { const r = await fetch('/api/submissions'); const d = await r.json(); setSubs(d.submissions || []) } catch {}
@@ -61,7 +62,8 @@ export default function SubmissionsPage() {
   const hasFilters = fProject || fType || fFrom || fTo
   const selIds = Object.keys(sel).filter(k => sel[k])
   async function downloadSelected() {
-    if (!selIds.length) return
+    if (!selIds.length) { setSelNote('Select the forms you want to download first.'); return }
+    setSelNote('')
     setDownloading(true)
     try {
       const fulls = await Promise.all(selIds.map(id => fetch(`/api/submissions?id=${id}`).then(r => r.json()).then(d => d.submission)))
@@ -101,11 +103,12 @@ export default function SubmissionsPage() {
           </button>
         )}
         <div style={{ flex: 1 }} />
-        {selIds.length > 0 && <button onClick={downloadSelected} disabled={downloading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{downloading ? 'Preparing…' : `Download ${selIds.length} PDF`}</button>}
+        <button onClick={downloadSelected} disabled={downloading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{downloading ? 'Preparing…' : selIds.length ? `Download ${selIds.length} PDF` : 'Download as PDF'}</button>
         <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>
           {filtered.length} {filtered.length === 1 ? 'submission' : 'submissions'}{hasFilters ? ' (filtered)' : ''}
         </div>
       </div>
+      {selNote && <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>{selNote}</div>}
 
       {loading ? <Loading /> : !filtered.length ? (
         <EmptyCard title={hasFilters ? 'No submissions match your filters' : 'No submissions yet'}
@@ -115,13 +118,13 @@ export default function SubmissionsPage() {
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ background: '#faf9f7' }}>
-                <th style={{ ...th, width: 40 }}><input type="checkbox" checked={pageRows.length > 0 && pageRows.every(r => sel[r.id])} onChange={e => { const n = { ...sel }; pageRows.forEach(r => { if (e.target.checked) n[r.id] = true; else delete n[r.id] }); setSel(n) }} /></th>
+                <th style={{ ...th, width: 40 }}><input type="checkbox" checked={pageRows.length > 0 && pageRows.every(r => sel[r.id])} onChange={e => { setSelNote(''); const n = { ...sel }; pageRows.forEach(r => { if (e.target.checked) n[r.id] = true; else delete n[r.id] }); setSel(n) }} /></th>
                 {['Form', 'Project', 'Operative', 'Submitted', 'Flags', ''].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {pageRows.map(s => (
                   <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                    <td style={td}><input type="checkbox" checked={!!sel[s.id]} onChange={() => setSel(p => ({ ...p, [s.id]: !p[s.id] }))} /></td>
+                    <td style={td}><input type="checkbox" checked={!!sel[s.id]} onChange={() => { setSelNote(''); setSel(p => ({ ...p, [s.id]: !p[s.id] })) }} /></td>
                     <td style={td}><strong style={{ color: INK }}>{s.formTitle}</strong></td>
                     <td style={td}>{s.projectName || '—'}</td>
                     <td style={td}>{s.operative || '—'}</td>
