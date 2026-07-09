@@ -18,6 +18,7 @@ export default function ProjectsPage() {
   const [openNo, setOpenNo] = useState(null)   // project detail open
   const [sub, setSub] = useState('handover')
   const [manual, setManual] = useState(null)   // manual-add modal
+  const [team, setTeam] = useState([])
 
   // filters
   const [q, setQ] = useState('')
@@ -31,6 +32,11 @@ export default function ProjectsPage() {
   useEffect(() => { load() }, [])
   async function load() {
     try { const r = await fetch('/api/ops-projects'); const d = await r.json(); setProjects(d.projects || []) } catch {}
+    try {
+      const rt = await fetch('/api/team'); const dt = await rt.json()
+      setTeam((dt.members || []).filter(m => m.active !== false)
+        .map(m => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || '').filter(Boolean).sort())
+    } catch {}
     setLoading(false)
   }
 
@@ -173,13 +179,13 @@ export default function ProjectsPage() {
           <Lbl>Project name</Lbl>
           <input value={manual.projectName} onChange={e => setManual({ ...manual, projectName: e.target.value })} style={inp2} />
           <Lbl>Contracts Manager</Lbl>
-          <input value={manual.contractsManager} onChange={e => setManual({ ...manual, contractsManager: e.target.value })} style={inp2} />
+          <select value={manual.contractsManager} onChange={e => setManual({ ...manual, contractsManager: e.target.value })} style={inp2}><option value="">— Select —</option>{team.map(n => <option key={n}>{n}</option>)}</select>
           <Lbl>Estimator</Lbl>
-          <input value={manual.estimator} onChange={e => setManual({ ...manual, estimator: e.target.value })} style={inp2} />
+          <select value={manual.estimator} onChange={e => setManual({ ...manual, estimator: e.target.value })} style={inp2}><option value="">— Select —</option>{team.map(n => <option key={n}>{n}</option>)}</select>
           <Lbl>Quantity Surveyor</Lbl>
-          <input value={manual.quantitySurveyor} onChange={e => setManual({ ...manual, quantitySurveyor: e.target.value })} style={inp2} />
+          <select value={manual.quantitySurveyor} onChange={e => setManual({ ...manual, quantitySurveyor: e.target.value })} style={inp2}><option value="">— Select —</option>{team.map(n => <option key={n}>{n}</option>)}</select>
           <Lbl>Design Manager</Lbl>
-          <input value={manual.designManager} onChange={e => setManual({ ...manual, designManager: e.target.value })} style={inp2} />
+          <select value={manual.designManager} onChange={e => setManual({ ...manual, designManager: e.target.value })} style={inp2}><option value="">— Select —</option>{team.map(n => <option key={n}>{n}</option>)}</select>
           <Lbl>Location</Lbl>
           <input value={manual.location} onChange={e => setManual({ ...manual, location: e.target.value })} style={inp2} />
           <Lbl>Status</Lbl>
