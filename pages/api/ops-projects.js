@@ -1,12 +1,17 @@
 import { getOpsProjects, saveOpsProjects } from '../../lib/db'
 
-// Operations projects, created/edited via the Internal Handover Minutes.
-// Keyed by RR Project Number (projectNo).
+// Operations projects. Created via the Internal Handover Minutes (IHM), or added
+// manually as a temporary record for pre-existing projects. Keyed by RR Project
+// Number (projectNo).
+//
+// status values: 'draft' (IHM not finalised), 'active' (Live), 'complete'
 //
 // GET    /api/ops-projects                 -> { projects: [summaries] }
 // GET    /api/ops-projects?no=J247         -> { project }
-// POST   /api/ops-projects { project, status } -> create/update (status: draft|active)
-// DELETE /api/ops-projects { projectNo }   -> remove
+// POST   { project, status }               -> create/update from IHM
+// POST   { action:'manual-add', project }  -> quick-add an old project (manual)
+// POST   { action:'set-status', projectNo, status } -> Live <-> Complete
+// DELETE { projectNo }                     -> remove
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const projects = await getOpsProjects()
@@ -16,15 +21,18 @@ export default async function handler(req, res) {
       if (!project) return res.status(404).json({ error: 'Not found' })
       return res.json({ project })
     }
-    // Lightweight summaries for the list
     const summaries = projects.map(p => ({
       projectNo: p.projectNo,
       projectName: p.data?.projectName || '',
-      customer: p.data?.customerCompany || '',
-      address: p.data?.projectAddress || '',
-      status: p.status || 'active',
       contractsManager: p.data?.contractsManager || '',
+      estimator: p.data?.estimator || '',
+      quantitySurveyor: p.data?.quantitySurveyor || '',
+      designManager: p.data?.designManager || '',
       operationsManager: p.data?.operationsManager || '',
+      location: p.data?.projectAddress || p.data?.siteLocation || '',
+      customer: p.data?.customerCompany || '',
+      status: p.status || 'active',
+      manual: !!p.manual,
       updatedAt: p.updatedAt || p.createdAt || 0,
     }))
     summaries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
@@ -32,17 +40,53 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { project, status } = req.body || {}
+    const body = req.body || {}
+    let projects = await getOpsProjects()
+    const now = Date.now()
+
+    // Change Live <-> Complete
+    if (body.action === 'set-status') {
+      const idx = projects.findIndex(p => p.projectNo === body.projectNo)
+      if (idx < 0) return res.status(404).json({ error: 'Not found' })
+      projects[idx].status = body.status
+      projects[idx].updatedAt = now
+      await saveOpsProjects(projects)
+      return res.json({ ok: true })
+    }
+
+    // Quick-add an old project manually (temporary record)
+    if (body.action === 'manual-add') {
+      const p = body.project || {}
+      const projectNo = String(p.projectNo || '').trim()
+      if (!projectNo || !p.projectName) return res.status(400).json({ error: 'Project number and name are required.' })
+      if (projects.some(x => x.projectNo === projectNo)) return res.status(409).json({ error: 'That project number already exists.' })
+      projects.push({
+        projectNo,
+        manual: true,
+        status: p.status || 'active',
+        data: {
+          projectName: p.projectName,
+          contractsManager: p.contractsManager || '',
+          estimator: p.estimator || '',
+          quantitySurveyor: p.quantitySurveyor || '',
+          designManager: p.designManager || '',
+          projectAddress: p.location || '',
+        },
+        createdAt: now,
+        updatedAt: now,
+      })
+      await saveOpsProjects(projects)
+      return res.json({ ok: true, projectNo })
+    }
+
+    // Create / update from IHM
+    const { project, status } = body
     if (!project || !project.projectNo) {
       return res.status(400).json({ error: 'RR Project Number is required.' })
     }
     const projectNo = String(project.projectNo).trim()
-    let projects = await getOpsProjects()
     const idx = projects.findIndex(p => p.projectNo === projectNo)
-    const now = Date.now()
-
     if (idx >= 0) {
-      // Update existing
       projects[idx] = {
         ...projects[idx],
         projectNo,
@@ -51,14 +95,7 @@ export default async function handler(req, res) {
         updatedAt: now,
       }
     } else {
-      // Create new — guard against duplicate project number
-      projects.push({
-        projectNo,
-        data: project,
-        status: status || 'active',
-        createdAt: now,
-        updatedAt: now,
-      })
+      projects.push({ projectNo, data: project, status: status || 'active', createdAt: now, updatedAt: now })
     }
     await saveOpsProjects(projects)
     return res.json({ ok: true, projectNo, status: status || 'active' })

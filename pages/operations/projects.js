@@ -1,149 +1,232 @@
 import { useState, useEffect, useMemo } from 'react'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
-import { INK, GOLD, fmtDateTime, th, td, Loading, EmptyCard, linkBtn } from '../../components/opsUI'
+import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
 const SUB_TABS = [
+  { key: 'handover', label: 'Handover' },
   { key: 'drawings', label: 'Drawings' },
   { key: 'rams', label: 'RAMS' },
   { key: 'submissions', label: 'Forms Submissions' },
   { key: 'images', label: 'Project Images' },
 ]
 
+const STATUS_LABEL = { active: 'Live', complete: 'Complete', draft: 'Draft' }
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
-  const [project, setProject] = useState(null)
-  const [sub, setSub] = useState('drawings')
+  const [openNo, setOpenNo] = useState(null)   // project detail open
+  const [sub, setSub] = useState('handover')
+  const [manual, setManual] = useState(null)   // manual-add modal
 
-  useEffect(() => { (async () => {
-    try {
-      const r = await fetch('/api/dashboard'); const d = await r.json()
-      setProjects((d.projects || [])
-        .filter(p => p.status === 'INPROGRESS')
-        .map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name, customer: p.customer })))
-    } catch {}
+  // filters
+  const [q, setQ] = useState('')
+  const [fCM, setFCM] = useState('')
+  const [fEst, setFEst] = useState('')
+  const [fQS, setFQS] = useState('')
+  const [fDM, setFDM] = useState('')
+  const [fStatus, setFStatus] = useState('active')  // default: Live only
+  const [sort, setSort] = useState({ key: 'projectNo', dir: 'asc' })
+
+  useEffect(() => { load() }, [])
+  async function load() {
+    try { const r = await fetch('/api/ops-projects'); const d = await r.json(); setProjects(d.projects || []) } catch {}
     setLoading(false)
-  })() }, [])
+  }
 
-  if (loading) return <OperationsShell active="projects" title="Projects"><Loading /></OperationsShell>
+  const uniq = (k) => [...new Set(projects.map(p => p[k]).filter(Boolean))].sort()
 
-  // Project picker
-  if (!project) {
+  const filtered = useMemo(() => {
+    let out = projects.filter(p => {
+      if (fStatus && p.status !== fStatus) return false
+      if (fCM && p.contractsManager !== fCM) return false
+      if (fEst && p.estimator !== fEst) return false
+      if (fQS && p.quantitySurveyor !== fQS) return false
+      if (fDM && p.designManager !== fDM) return false
+      if (q) {
+        const s = q.toLowerCase()
+        if (!(`${p.projectNo} ${p.projectName}`.toLowerCase().includes(s))) return false
+      }
+      return true
+    })
+    const { key, dir } = sort
+    out = [...out].sort((a, b) => {
+      const av = (a[key] ?? '').toString().toLowerCase(), bv = (b[key] ?? '').toString().toLowerCase()
+      if (av < bv) return dir === 'asc' ? -1 : 1
+      if (av > bv) return dir === 'asc' ? 1 : -1
+      return 0
+    })
+    return out
+  }, [projects, q, fCM, fEst, fQS, fDM, fStatus, sort])
+
+  function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
+
+  async function setStatus(projectNo, status) {
+    await fetch('/api/ops-projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-status', projectNo, status }) })
+    load()
+  }
+  async function saveManual() {
+    if (!manual.projectNo?.trim() || !manual.projectName?.trim()) { alert('Project number and name are required.'); return }
+    const r = await fetch('/api/ops-projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'manual-add', project: manual }) })
+    const d = await r.json()
+    if (!r.ok) { alert(d.error || 'Could not add'); return }
+    setManual(null); load()
+  }
+  async function delProject(projectNo) {
+    if (!confirm(`Delete project ${projectNo}? This removes the operations record.`)) return
+    await fetch('/api/ops-projects', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo }) })
+    load()
+  }
+
+  // ── Detail view ───────────────────────────────────────────────────────────
+  if (openNo) {
+    const p = projects.find(x => x.projectNo === openNo)
     return (
-      <OperationsShell active="projects" title="Projects">
-        <PageHeading title="Projects" sub="Select a project to view its drawings, RAMS, submissions and images" />
-        {!projects.length ? <EmptyCard title="No live projects found" /> : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
-            {projects.map(p => (
-              <button key={p.id} onClick={() => { setProject(p); setSub('drawings') }} style={{
-                textAlign: 'left', background: '#fff', border: '1px solid #ececec', borderRadius: 14,
-                padding: 18, cursor: 'pointer',
-              }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{p.jobNo ? p.jobNo + ' — ' : ''}{p.name}</div>
-                <div style={{ fontSize: 13, color: '#999', marginTop: 4 }}>{p.customer || ''}</div>
-              </button>
-            ))}
-          </div>
-        )}
+      <OperationsShell active="projects" title="Projects" wide>
+        <button onClick={() => setOpenNo(null)} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 8 }}>‹ All projects</button>
+        <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
+        <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
+        {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
+        {sub === 'drawings' && <ComingSoon title="Drawings" note="Project drawings — managed here, viewable on the Forms App. To be wired to file links/uploads." />}
+        {sub === 'rams' && <ComingSoon title="RAMS" note="Project RAMS — to be wired next." />}
+        {sub === 'submissions' && <ComingSoon title="Forms Submissions" note="Filtered submissions for this project — to be wired to the submissions list." />}
+        {sub === 'images' && <ComingSoon title="Project Images" note="Photo timeline pulled from form submissions — to be wired next." />}
       </OperationsShell>
     )
   }
 
+  const hasFilters = q || fCM || fEst || fQS || fDM || fStatus !== 'active'
+  const cols = [
+    { key: 'projectNo', label: 'Project No.' },
+    { key: 'projectName', label: 'Project Name' },
+    { key: 'contractsManager', label: 'CM' },
+    { key: 'estimator', label: 'Estimator' },
+    { key: 'quantitySurveyor', label: 'QS' },
+    { key: 'designManager', label: 'Design Manager' },
+    { key: 'location', label: 'Location' },
+    { key: 'status', label: 'Status' },
+  ]
+
   return (
     <OperationsShell active="projects" title="Projects" wide>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <button onClick={() => setProject(null)} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ All projects</button>
-      </div>
-      <PageHeading title={`${project.jobNo ? project.jobNo + ' — ' : ''}${project.name}`} sub={project.customer} />
-      <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
+      <PageHeading title="Projects" sub="Created from Internal Handover Minutes"
+        action={<button onClick={() => setManual({ projectNo: '', projectName: '', contractsManager: '', estimator: '', quantitySurveyor: '', designManager: '', location: '', status: 'active' })} style={ghostBtn}>+ Add old project</button>} />
 
-      {sub === 'drawings' && <ComingSoon title="Drawings" note="Project drawings — viewable on phone via the Forms App, managed here. We'll wire this to SharePoint/OneDrive links or uploads next." />}
-      {sub === 'rams' && <ComingSoon title="RAMS" note="RAMS for this project — generated in the RAMS Builder and stored against the project." />}
-      {sub === 'submissions' && <ProjectSubmissions project={project} />}
-      {sub === 'images' && <ProjectImages project={project} />}
+      {/* Filters */}
+      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <F label="Search no. / name"><input value={q} onChange={e => setQ(e.target.value)} placeholder="J247 or name…" style={sel} /></F>
+        <F label="CM"><select value={fCM} onChange={e => setFCM(e.target.value)} style={sel}><option value="">All</option>{uniq('contractsManager').map(v => <option key={v}>{v}</option>)}</select></F>
+        <F label="Estimator"><select value={fEst} onChange={e => setFEst(e.target.value)} style={sel}><option value="">All</option>{uniq('estimator').map(v => <option key={v}>{v}</option>)}</select></F>
+        <F label="QS"><select value={fQS} onChange={e => setFQS(e.target.value)} style={sel}><option value="">All</option>{uniq('quantitySurveyor').map(v => <option key={v}>{v}</option>)}</select></F>
+        <F label="Design Manager"><select value={fDM} onChange={e => setFDM(e.target.value)} style={sel}><option value="">All</option>{uniq('designManager').map(v => <option key={v}>{v}</option>)}</select></F>
+        <F label="Status"><select value={fStatus} onChange={e => setFStatus(e.target.value)} style={sel}><option value="active">Live</option><option value="complete">Complete</option><option value="draft">Draft</option><option value="">All</option></select></F>
+        {hasFilters && <button onClick={() => { setQ(''); setFCM(''); setFEst(''); setFQS(''); setFDM(''); setFStatus('active') }} style={{ background: '#f2f2f0', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: '#555', cursor: 'pointer' }}>Reset</button>}
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} projects</div>
+      </div>
+
+      {loading ? <Loading /> : !filtered.length ? (
+        <EmptyCard title={hasFilters ? 'No projects match' : 'No projects yet'}
+          body={hasFilters ? 'Try clearing filters.' : 'Complete an Internal Handover to create a project, or add an old one.'} />
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
+            <thead><tr style={{ background: '#faf9f7' }}>
+              {cols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
+              <th style={th}></th>
+            </tr></thead>
+            <tbody>
+              {filtered.map(p => (
+                <tr key={p.projectNo} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>{p.projectNo}</strong>{p.manual && <span title="Manually added" style={{ marginLeft: 6, fontSize: 10, color: '#aaa' }}>manual</span>}</td>
+                  <td style={td}><button onClick={() => { setOpenNo(p.projectNo); setSub('handover') }} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontWeight: 600, padding: 0, textAlign: 'left' }}>{p.projectName || '—'}</button></td>
+                  <td style={td}>{p.contractsManager || '—'}</td>
+                  <td style={td}>{p.estimator || '—'}</td>
+                  <td style={td}>{p.quantitySurveyor || '—'}</td>
+                  <td style={td}>{p.designManager || '—'}</td>
+                  <td style={{ ...td, maxWidth: 220 }}>{p.location || '—'}</td>
+                  <td style={td}>
+                    {p.status === 'draft'
+                      ? <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Draft</span>
+                      : <select value={p.status} onChange={e => setStatus(p.projectNo, e.target.value)}
+                          style={{ border: '1px solid #e0e0e0', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            background: p.status === 'complete' ? '#eef2ff' : '#ecfdf5', color: p.status === 'complete' ? '#3730a3' : '#065f46' }}>
+                          <option value="active">Live</option>
+                          <option value="complete">Complete</option>
+                        </select>}
+                  </td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {p.manual && <button onClick={() => delProject(p.projectNo)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {manual && (
+        <Modal onClose={() => setManual(null)} title="Add old project (temporary)">
+          <div style={{ fontSize: 12.5, color: '#888', marginBottom: 10 }}>For projects already handed over before the app. You can delete these later once all IHMs are in.</div>
+          <Lbl>Project number</Lbl>
+          <input value={manual.projectNo} onChange={e => setManual({ ...manual, projectNo: e.target.value })} style={inp2} placeholder="e.g. J240" />
+          <Lbl>Project name</Lbl>
+          <input value={manual.projectName} onChange={e => setManual({ ...manual, projectName: e.target.value })} style={inp2} />
+          <Lbl>Contracts Manager</Lbl>
+          <input value={manual.contractsManager} onChange={e => setManual({ ...manual, contractsManager: e.target.value })} style={inp2} />
+          <Lbl>Estimator</Lbl>
+          <input value={manual.estimator} onChange={e => setManual({ ...manual, estimator: e.target.value })} style={inp2} />
+          <Lbl>Quantity Surveyor</Lbl>
+          <input value={manual.quantitySurveyor} onChange={e => setManual({ ...manual, quantitySurveyor: e.target.value })} style={inp2} />
+          <Lbl>Design Manager</Lbl>
+          <input value={manual.designManager} onChange={e => setManual({ ...manual, designManager: e.target.value })} style={inp2} />
+          <Lbl>Location</Lbl>
+          <input value={manual.location} onChange={e => setManual({ ...manual, location: e.target.value })} style={inp2} />
+          <Lbl>Status</Lbl>
+          <select value={manual.status} onChange={e => setManual({ ...manual, status: e.target.value })} style={inp2}><option value="active">Live</option><option value="complete">Complete</option></select>
+          <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+            <button onClick={saveManual} style={primaryBtn}>Add project</button>
+            <button onClick={() => setManual(null)} style={ghostBtn}>Cancel</button>
+          </div>
+        </Modal>
+      )}
     </OperationsShell>
   )
 }
 
-// Forms submissions filtered to this project
-function ProjectSubmissions({ project }) {
-  const [subs, setSubs] = useState([]); const [loading, setLoading] = useState(true)
+// Read-only handover view inside a project
+function HandoverReadOnly({ projectNo }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
   useEffect(() => { (async () => {
-    try {
-      const r = await fetch('/api/submissions'); const d = await r.json()
-      setSubs((d.submissions || []).filter(s => s.projectId === project.id || s.projectName?.includes(project.name)))
-    } catch {}
+    try { const r = await fetch(`/api/ops-projects?no=${projectNo}`); const d = await r.json(); setData(d.project?.data || null) } catch {}
     setLoading(false)
-  })() }, [project])
-
+  })() }, [projectNo])
   if (loading) return <Loading />
-  if (!subs.length) return <EmptyCard title="No submissions for this project yet" />
+  if (!data) return <EmptyCard title="No handover data" body="This project has no stored handover details." />
+  const row = (label, val) => val ? (
+    <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+      <div style={{ width: 220, color: '#888', fontSize: 13, flexShrink: 0 }}>{label}</div>
+      <div style={{ fontSize: 14, color: INK, whiteSpace: 'pre-wrap' }}>{val}</div>
+    </div>
+  ) : null
   return (
-    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr style={{ background: '#faf9f7' }}>{['Form', 'Operative', 'Submitted', 'Flags'].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
-        <tbody>
-          {subs.map(s => (
-            <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-              <td style={td}><strong>{s.formTitle}</strong></td>
-              <td style={td}>{s.operative || '—'}</td>
-              <td style={{ ...td, color: '#999' }}>{fmtDateTime(s.submittedAt)}</td>
-              <td style={td}>{s.flagCount > 0 ? <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>⚠ {s.flagCount}</span> : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20 }}>
+      {row('Project Name', data.projectName)}
+      {row('Project Number', data.projectNo)}
+      {row('Contracts Manager', data.contractsManager)}
+      {row('Estimator', data.estimator)}
+      {row('Quantity Surveyor', data.quantitySurveyor)}
+      {row('Design Manager', data.designManager)}
+      {row('Operations Manager', data.operationsManager)}
+      {row('Address', data.projectAddress)}
+      {row('Customer', data.customerCompany)}
+      {row('Contract Value', data.contractValue)}
+      {row('Scope of Works', data.scopeOfWorks)}
+      <div style={{ marginTop: 12, fontSize: 12, color: '#aaa' }}>Read-only. Edit via Pre-Contract → Internal Handover Minutes.</div>
     </div>
   )
 }
 
-// Gallery timeline of all photos from this project's submissions, newest first,
-// each downloadable.
-function ProjectImages({ project }) {
-  const [images, setImages] = useState([]); const [loading, setLoading] = useState(true)
-
-  useEffect(() => { (async () => {
-    try {
-      const r = await fetch('/api/submissions'); const d = await r.json()
-      const mine = (d.submissions || []).filter(s => s.projectId === project.id || s.projectName?.includes(project.name))
-      // Fetch full submissions to get photo URLs
-      const full = await Promise.all(mine.map(async s => {
-        try { const rr = await fetch(`/api/submissions?id=${s.id}`); const dd = await rr.json(); return dd.submission } catch { return null }
-      }))
-      const imgs = []
-      for (const sub of full.filter(Boolean)) {
-        for (const [, v] of Object.entries(sub.answers || {})) {
-          if (Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])) {
-            v.forEach(url => imgs.push({ url, formTitle: sub.formTitle, operative: sub.operative, at: sub.submittedAt }))
-          }
-        }
-      }
-      imgs.sort((a, b) => b.at - a.at)  // newest first
-      setImages(imgs)
-    } catch {}
-    setLoading(false)
-  })() }, [project])
-
-  if (loading) return <Loading />
-  if (!images.length) return <EmptyCard title="No images for this project yet" body="Photos uploaded within forms for this project will appear here as a timeline." />
-
-  return (
-    <div>
-      <div style={{ fontSize: 13, color: '#999', marginBottom: 12 }}>{images.length} images · newest first</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 14 }}>
-        {images.map((img, i) => (
-          <div key={i} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
-            <a href={img.url} target="_blank" rel="noreferrer">
-              <img src={img.url} alt="" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />
-            </a>
-            <div style={{ padding: '8px 10px' }}>
-              <div style={{ fontSize: 12, color: INK, fontWeight: 500 }}>{img.formTitle}</div>
-              <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{img.operative} · {fmtDateTime(img.at)}</div>
-              <a href={img.url} download target="_blank" rel="noreferrer" style={{ ...linkBtn, padding: 0, fontSize: 12, display: 'inline-block', marginTop: 4 }}>Download</a>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+const F = ({ label, children }) => (<div><div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>{label}</div>{children}</div>)
+const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 130 }

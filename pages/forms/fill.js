@@ -33,14 +33,14 @@ export default function Fill() {
       try {
         const [rf, rp] = await Promise.all([
           fetch(`/api/forms?id=${formId}`),
-          fetch('/api/dashboard'),
+          fetch('/api/ops-projects'),
         ])
         const d = await rf.json()
         setForm(d.form)
         const dp = await rp.json()
         setProjects((dp.projects || [])
-          .filter(p => p.status === 'INPROGRESS')
-          .map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name }))
+          .filter(p => p.status === 'active')   // Live only — Complete projects can't be selected
+          .map(p => ({ id: p.projectNo, jobNo: p.projectNo, name: p.projectName }))
           .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '')))
         try {
           const rt = await fetch('/api/team'); const dt = await rt.json()
