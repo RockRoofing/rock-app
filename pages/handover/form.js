@@ -381,9 +381,9 @@ function FilesField({ label, value, onChange }) {
     const next = [...value]
     for (const file of Array.from(files)) {
       try {
-        const { upload } = await import('@vercel/blob/client')
-        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/upload-file', contentType: file.type || undefined })
-        if (blob?.url) next.push({ url: blob.url, name: file.name, type: file.type })
+        const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
+        const d = await up.json()
+        if (up.ok && d.url) next.push({ url: d.url, name: file.name, type: file.type })
       } catch (e) { console.error(e) }
     }
     onChange(next); setUploading(false)

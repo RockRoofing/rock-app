@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { upload } from '@vercel/blob/client'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, linkBtn } from './opsUI'
 
 // Reusable file manager for a project + category (drawing | rams | handover).
@@ -29,15 +28,16 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
     let lastErr = ''
     for (const file of Array.from(fileList)) {
       try {
-        // Upload bytes directly to Blob (bypasses the 4.5MB function limit)
-        const blob = await upload(file.name, file, {
-          access: 'public',
-          handleUploadUrl: '/api/upload-file',
-          contentType: file.type || undefined,
+        const up = await fetch('/api/upload-file', {
+          method: 'POST',
+          headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' },
+          body: file,
         })
+        const ud = await up.json()
+        if (!up.ok || !ud.url) { failed++; lastErr = ud.error || `HTTP ${up.status}`; continue }
         await fetch('/api/project-files', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectNo, file: { category, name: file.name, url: blob.url, contentType: file.type, size: file.size } }),
+          body: JSON.stringify({ projectNo, file: { category, name: file.name, url: ud.url, contentType: ud.contentType, size: ud.size } }),
         })
       } catch (e) { console.error(e); failed++; lastErr = e?.message || String(e) }
     }

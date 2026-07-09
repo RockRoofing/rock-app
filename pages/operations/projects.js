@@ -528,17 +528,18 @@ function RamsTable({ projectNo }) {
   async function handleFiles(list) {
     if (!list || !list.length) return
     setErr(''); setUploading(true)
-    let failed = 0
-    const { upload } = await import('@vercel/blob/client')
+    let failed = 0, lastErr = ''
     for (const file of Array.from(list)) {
       try {
-        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/upload-file', contentType: file.type || undefined })
-        await fetch('/api/project-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, file: { category: 'rams', name: file.name, url: blob.url, contentType: file.type, size: file.size } }) })
-      } catch (e) { console.error(e); failed++ }
+        const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
+        const ud = await up.json()
+        if (!up.ok || !ud.url) { failed++; lastErr = ud.error || `HTTP ${up.status}`; continue }
+        await fetch('/api/project-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, file: { category: 'rams', name: file.name, url: ud.url, contentType: ud.contentType, size: ud.size } }) })
+      } catch (e) { console.error(e); failed++; lastErr = e?.message || String(e) }
     }
     if (inputRef.current) inputRef.current.value = ''
     setUploading(false)
-    if (failed) setErr(`${failed} file(s) failed to upload.`)
+    if (failed) setErr(`${failed} file(s) failed to upload. ${lastErr}`)
     load()
   }
   async function del(id) {
