@@ -306,14 +306,28 @@ function ProjectSubmissions({ projectNo }) {
   const [fFrom, setFFrom] = useState('')
   const [fTo, setFTo] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [formDefs, setFormDefs] = useState({})   // formId -> { id: label }
 
   useEffect(() => { (async () => {
     try {
       const r = await fetch('/api/submissions'); const d = await r.json()
       setSubs((d.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo))
     } catch {}
+    // Load all form definitions once, build id->label maps for showing questions
+    try {
+      const rf = await fetch('/api/forms'); const df = await rf.json()
+      const map = {}
+      for (const f of (df.forms || [])) {
+        const lm = {}
+        for (const fld of (f.fields || [])) if (fld.id) lm[fld.id] = fld.label || fld.id
+        map[f.id] = lm
+      }
+      setFormDefs(map)
+    } catch {}
     setLoading(false)
   })() }, [projectNo])
+
+  const labelFor = (formId, key) => (formDefs[formId] && formDefs[formId][key]) || key
 
   const types = useMemo(() => [...new Set(subs.map(s => s.formTitle).filter(Boolean))].sort(), [subs])
   const rows = useMemo(() => subs.filter(s => {
@@ -336,7 +350,7 @@ function ProjectSubmissions({ projectNo }) {
     setDownloading(true)
     try {
       const fulls = await Promise.all(ids.map(id => fetch(`/api/submissions?id=${id}`).then(r => r.json()).then(d => d.submission)))
-      openPrintView(fulls.filter(Boolean))
+      openPrintView(fulls.filter(Boolean), labelFor)
     } catch (e) { alert('Could not prepare download') }
     setDownloading(false)
   }
@@ -377,13 +391,13 @@ function ProjectSubmissions({ projectNo }) {
           <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{open.projectName} · {open.operative} · {fmtDateTime(open.submittedAt)}</div>
           {!full ? <Loading /> : (
             <>
-              <div style={{ marginBottom: 14 }}><button onClick={() => openPrintView([full])} style={ghostBtn}>Download PDF</button></div>
+              <div style={{ marginBottom: 14 }}><button onClick={() => openPrintView([full], labelFor)} style={ghostBtn}>Download PDF</button></div>
               {Object.entries(full.answers || {}).map(([k, v]) => {
                 if (v == null || v === '' || (Array.isArray(v) && !v.length)) return null
                 const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
                 return (
                   <div key={k} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f2f2f2' }}>
-                    <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: 0.4 }}>{k}</div>
+                    <div style={{ fontSize: 12, color: '#888', marginBottom: 3 }}>{labelFor(full.formId, k)}</div>
                     {isPhotos
                       ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{v.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} style={{ height: 90, borderRadius: 6 }} /></a>)}</div>
                       : <div style={{ fontSize: 14, color: INK, marginTop: 2 }}>{typeof v === 'object' ? (v.name ? `${v.name} (${v.date})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
@@ -442,10 +456,11 @@ function ProjectImages({ projectNo }) {
 const sel2 = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 130 }
 
 // Branded print-to-PDF view for one or more submissions
-function openPrintView(subs) {
+function openPrintView(subs, labelFor) {
   const logo = `${window.location.origin}/rock-logo.jpg`
   const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
   const fmt = ts => new Date(ts).toLocaleString('en-GB')
+  const lbl = (formId, k) => (labelFor ? labelFor(formId, k) : k)
   const answerHtml = (v) => {
     if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '<em style="color:#999">—</em>'
     const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
@@ -465,8 +480,10 @@ function openPrintView(subs) {
           <div>Submitted: ${esc(fmt(sub.submittedAt))}</div>
         </div>
       </header>
-      ${Object.entries(sub.answers || {}).map(([k, v]) => `
-        <div class="row"><div class="q">${esc(k)}</div><div class="a">${answerHtml(v)}</div></div>
+      ${Object.entries(sub.answers || {})
+        .filter(([, v]) => !(v == null || v === '' || (Array.isArray(v) && !v.length)))
+        .map(([k, v]) => `
+        <div class="row"><div class="q">${esc(lbl(sub.formId, k))}</div><div class="a">${answerHtml(v)}</div></div>
       `).join('')}
     </section>`).join('')
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rock Roofing — Submission</title>

@@ -26,6 +26,7 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
     if (!fileList || !fileList.length) return
     setErr(''); setUploading(true)
     let failed = 0
+    let lastErr = ''
     for (const file of Array.from(fileList)) {
       try {
         // Upload bytes directly to Blob (bypasses the 4.5MB function limit)
@@ -38,11 +39,11 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectNo, file: { category, name: file.name, url: blob.url, contentType: file.type, size: file.size } }),
         })
-      } catch (e) { console.error(e); failed++ }
+      } catch (e) { console.error(e); failed++; lastErr = e?.message || String(e) }
     }
     if (inputRef.current) inputRef.current.value = ''
     setUploading(false)
-    if (failed) setErr(`${failed} file${failed > 1 ? 's' : ''} failed to upload.`)
+    if (failed) setErr(`${failed} file${failed > 1 ? 's' : ''} failed to upload. ${lastErr}`)
     load()
   }
 
