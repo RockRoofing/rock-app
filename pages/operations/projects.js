@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
 import ProjectFiles from '../../components/ProjectFiles'
+import PreStartForm from '../../components/PreStartForm'
 import SubmissionModal from '../../components/SubmissionModal'
 
 const SUB_TABS = [
@@ -113,7 +114,7 @@ export default function ProjectsPage() {
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
         {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
-        {sub === 'prestart' && <ComingSoon title="Pre-Start" note="Pre-Start details for this project — coming soon." />}
+        {sub === 'prestart' && <PreStartForm projectNo={openNo} />}
         {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Site App." />}
         {sub === 'rams' && <RamsTable projectNo={openNo} />}
         {sub === 'ramsbuilder' && <ComingSoon title="RAMS Builder" note="A guided builder to generate branded RAMS from templates — coming soon." />}
