@@ -38,6 +38,13 @@ export default function FormsBuilder() {
   function newForm() {
     setEditing({ id: '', title: '', short: '', category: 'project', fields: [] })
   }
+  async function reseed() {
+    if (!confirm('Reset all forms to the latest built-in defaults? This replaces the current form set (any manual edits to forms will be lost).')) return
+    try {
+      const r = await fetch('/api/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reseed' }) })
+      if (r.ok) load()
+    } catch {}
+  }
   function editForm(f) {
     setEditing(JSON.parse(JSON.stringify(f)))  // deep copy so cancel is safe
   }
@@ -63,9 +70,12 @@ export default function FormsBuilder() {
   }
 
   return (
-    <OperationsShell active="forms-builder" title="Forms Builder">
-      <PageHeading title="Forms Builder" sub="Create and edit the forms operatives fill in the Forms App"
-        action={<button onClick={newForm} style={primaryBtn}>+ New form</button>} />
+    <OperationsShell active="forms-builder" title="Form Builder">
+      <PageHeading title="Form Builder" sub="Create and edit the forms operatives fill in the Forms App"
+        action={<div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={reseed} style={ghostBtn}>Reset to latest defaults</button>
+          <button onClick={newForm} style={primaryBtn}>+ New form</button>
+        </div>} />
       {loading ? <Loading /> : !forms.length ? <EmptyCard title="No forms yet" body="Create your first form." /> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
           {forms.map(f => {
@@ -117,7 +127,7 @@ function Editor({ form, setForm, onSave, onCancel, saving }) {
   }
 
   return (
-    <OperationsShell active="forms-builder" title="Forms Builder">
+    <OperationsShell active="forms-builder" title="Form Builder">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={onCancel} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ All forms</button>
       </div>

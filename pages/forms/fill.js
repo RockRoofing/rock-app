@@ -16,6 +16,7 @@ export default function Fill() {
   const [errors, setErrors] = useState({})
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
+  const [team, setTeam] = useState([])
 
   useEffect(() => {
     try {
@@ -41,6 +42,11 @@ export default function Fill() {
           .filter(p => p.status === 'INPROGRESS')
           .map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name }))
           .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '')))
+        try {
+          const rt = await fetch('/api/team'); const dt = await rt.json()
+          setTeam((dt.members || []).filter(m => m.active !== false)
+            .map(m => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || '').filter(Boolean))
+        } catch {}
       } catch (e) { console.error(e) }
       setLoading(false)
     })()
@@ -165,7 +171,7 @@ export default function Fill() {
         </div>
 
         {form.fields.map(f => (
-          <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} />
+          <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} />
         ))}
 
         <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
@@ -178,7 +184,7 @@ export default function Fill() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function Field({ f, value, onChange, error }) {
+function Field({ f, value, onChange, error, team }) {
   if (f.type === 'section') {
     return <div style={{ margin: '26px 0 4px', paddingBottom: 6, borderBottom: '2px solid #ece8df' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND }}>{f.label}</div>
@@ -221,6 +227,18 @@ function Field({ f, value, onChange, error }) {
 
       {f.type === 'photos' && <PhotoField value={value} onChange={onChange} />}
       {f.type === 'signature' && <Signature value={value} onChange={onChange} />}
+
+      {f.type === 'members' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(team || []).length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No team members yet — add them in Operations → Team Members.</div>}
+          {(team || []).map(nm => {
+            const arr = Array.isArray(value) ? value : (value ? [value] : [])
+            const on = arr.includes(nm)
+            return <Choice key={nm} label={nm} selected={on} check
+              onClick={() => onChange(on ? arr.filter(x => x !== nm) : [...arr, nm])} />
+          })}
+        </div>
+      )}
 
       {notify && (
         <div style={{ marginTop: 8, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#92400e', fontWeight: 600 }}>

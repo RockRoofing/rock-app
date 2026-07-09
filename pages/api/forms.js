@@ -23,7 +23,14 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { form } = req.body || {}
+    const body = req.body || {}
+    // One-time / on-demand: replace all forms with the current seed definitions.
+    // Use when the seeded forms have been updated in code and you want them live.
+    if (body.action === 'reseed') {
+      await saveForms([...SEED_FORMS])
+      return res.json({ ok: true, forms: SEED_FORMS })
+    }
+    const { form } = body
     if (!form || !form.title) return res.status(400).json({ error: 'Missing form' })
     let forms = await getForms()
     if (!forms || !forms.length) forms = [...SEED_FORMS]

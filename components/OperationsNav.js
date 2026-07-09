@@ -37,12 +37,12 @@ export default function OperationsNav({ active }) {
         : <a href="/operations/team" style={linkStyle}>Team Members</a>}
       <Divider />
       {active === 'users'
-        ? <span style={activeStyle}>Users</span>
-        : <a href="/operations/users" style={linkStyle}>Users</a>}
+        ? <span style={activeStyle}>Forms Users</span>
+        : <a href="/operations/users" style={linkStyle}>Forms Users</a>}
       <Divider />
       {active === 'forms-builder'
-        ? <span style={activeStyle}>Forms Builder</span>
-        : <a href="/operations/forms-builder" style={linkStyle}>Forms Builder</a>}
+        ? <span style={activeStyle}>Form Builder</span>
+        : <a href="/operations/forms-builder" style={linkStyle}>Form Builder</a>}
       <Divider />
       <a href="https://forms.rockroofing.co.uk" target="_blank" rel="noreferrer"
         style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap' }}>Open Forms App ↗</a>
