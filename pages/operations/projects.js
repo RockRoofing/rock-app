@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
-import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
+import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
+import ProjectFiles from '../../components/ProjectFiles'
 
 const SUB_TABS = [
   { key: 'handover', label: 'Handover' },
   { key: 'drawings', label: 'Drawings' },
   { key: 'rams', label: 'RAMS' },
+  { key: 'ramsbuilder', label: 'RAMS Builder' },
   { key: 'submissions', label: 'Forms Submissions' },
   { key: 'images', label: 'Project Images' },
 ]
@@ -107,11 +109,12 @@ export default function ProjectsPage() {
         <button onClick={() => setOpenNo(null)} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 8 }}>‹ All projects</button>
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
-        {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
-        {sub === 'drawings' && <ComingSoon title="Drawings" note="Project drawings — managed here, viewable on the Forms App. To be wired to file links/uploads." />}
-        {sub === 'rams' && <ComingSoon title="RAMS" note="Project RAMS — to be wired next." />}
-        {sub === 'submissions' && <ComingSoon title="Forms Submissions" note="Filtered submissions for this project — to be wired to the submissions list." />}
-        {sub === 'images' && <ComingSoon title="Project Images" note="Photo timeline pulled from form submissions — to be wired next." />}
+        {sub === 'handover' && <><HandoverReadOnly projectNo={openNo} /><div style={{ marginTop: 20 }}><ProjectFiles projectNo={openNo} category="handover" title="Handover documents" note="Uploaded PDFs and images for this handover." /></div></>}
+        {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Forms App." />}
+        {sub === 'rams' && <ProjectFiles projectNo={openNo} category="rams" title="RAMS" note="Upload RAMS documents. These are visible to operatives in the Forms App." />}
+        {sub === 'ramsbuilder' && <ComingSoon title="RAMS Builder" note="A guided builder to generate branded RAMS from templates — coming soon." />}
+        {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
+        {sub === 'images' && <ProjectImages projectNo={openNo} />}
       </OperationsShell>
     )
   }
@@ -253,3 +256,201 @@ function HandoverReadOnly({ projectNo }) {
 
 const F = ({ label, children }) => (<div><div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>{label}</div>{children}</div>)
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 130 }
+
+// ── Project-specific form submissions (like the Submissions page, no project filter) ──
+function ProjectSubmissions({ projectNo }) {
+  const [subs, setSubs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(null)
+  const [full, setFull] = useState(null)
+  const [sel, setSel] = useState({})   // id -> true
+  const [fType, setFType] = useState('')
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
+  const [downloading, setDownloading] = useState(false)
+
+  useEffect(() => { (async () => {
+    try {
+      const r = await fetch('/api/submissions'); const d = await r.json()
+      setSubs((d.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo))
+    } catch {}
+    setLoading(false)
+  })() }, [projectNo])
+
+  const types = useMemo(() => [...new Set(subs.map(s => s.formTitle).filter(Boolean))].sort(), [subs])
+  const rows = useMemo(() => subs.filter(s => {
+    if (fType && s.formTitle !== fType) return false
+    if (fFrom && s.submittedAt < new Date(fFrom).getTime()) return false
+    if (fTo && s.submittedAt > new Date(fTo).getTime() + 86400000) return false
+    return true
+  }), [subs, fType, fFrom, fTo])
+
+  async function openSub(s) {
+    setOpen(s); setFull(null)
+    try { const r = await fetch(`/api/submissions?id=${s.id}`); const d = await r.json(); setFull(d.submission) } catch {}
+  }
+  function toggle(id) { setSel(p => ({ ...p, [id]: !p[id] })) }
+  const selIds = Object.keys(sel).filter(k => sel[k])
+
+  async function downloadSelected() {
+    const ids = selIds.length ? selIds : rows.map(r => r.id)
+    if (!ids.length) return
+    setDownloading(true)
+    try {
+      const fulls = await Promise.all(ids.map(id => fetch(`/api/submissions?id=${id}`).then(r => r.json()).then(d => d.submission)))
+      openPrintView(fulls.filter(Boolean))
+    } catch (e) { alert('Could not prepare download') }
+    setDownloading(false)
+  }
+
+  if (loading) return <Loading />
+  return (
+    <div>
+      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <F label="Form type"><select value={fType} onChange={e => setFType(e.target.value)} style={sel2}><option value="">All</option>{types.map(t => <option key={t}>{t}</option>)}</select></F>
+        <F label="From"><input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} style={sel2} /></F>
+        <F label="To"><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} style={sel2} /></F>
+        <div style={{ flex: 1 }} />
+        <button onClick={downloadSelected} disabled={downloading} style={primaryBtn}>{downloading ? 'Preparing…' : selIds.length ? `Download ${selIds.length} PDF` : 'Download all as PDF'}</button>
+      </div>
+      {!rows.length ? <EmptyCard title="No submissions" body="No forms have been submitted for this project yet." /> : (
+        <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
+            <thead><tr style={{ background: '#faf9f7' }}>
+              <th style={{ ...th, width: 40 }}><input type="checkbox" checked={selIds.length === rows.length && rows.length > 0} onChange={e => setSel(e.target.checked ? Object.fromEntries(rows.map(r => [r.id, true])) : {})} /></th>
+              {['Form', 'Operative', 'Submitted', ''].map(h => <th key={h} style={th}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {rows.map(s => (
+                <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <td style={td}><input type="checkbox" checked={!!sel[s.id]} onChange={() => toggle(s.id)} /></td>
+                  <td style={td}><strong style={{ color: INK }}>{s.formTitle}</strong></td>
+                  <td style={td}>{s.operative || '—'}</td>
+                  <td style={{ ...td, color: '#999', whiteSpace: 'nowrap' }}>{fmtDateTime(s.submittedAt)}</td>
+                  <td style={{ ...td, textAlign: 'right' }}><button onClick={() => openSub(s)} style={linkBtn}>View</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {open && (
+        <Modal onClose={() => setOpen(null)} title={open.formTitle} wide>
+          <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{open.projectName} · {open.operative} · {fmtDateTime(open.submittedAt)}</div>
+          {!full ? <Loading /> : (
+            <>
+              <div style={{ marginBottom: 14 }}><button onClick={() => openPrintView([full])} style={ghostBtn}>Download PDF</button></div>
+              {Object.entries(full.answers || {}).map(([k, v]) => {
+                if (v == null || v === '' || (Array.isArray(v) && !v.length)) return null
+                const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
+                return (
+                  <div key={k} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f2f2f2' }}>
+                    <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: 0.4 }}>{k}</div>
+                    {isPhotos
+                      ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{v.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} style={{ height: 90, borderRadius: 6 }} /></a>)}</div>
+                      : <div style={{ fontSize: 14, color: INK, marginTop: 2 }}>{typeof v === 'object' ? (v.name ? `${v.name} (${v.date})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ── Project images pulled from all form submissions ──
+function ProjectImages({ projectNo }) {
+  const [images, setImages] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => { (async () => {
+    try {
+      const r = await fetch('/api/submissions'); const d = await r.json()
+      const mine = (d.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo)
+      const fulls = await Promise.all(mine.map(s => fetch(`/api/submissions?id=${s.id}`).then(r => r.json()).then(d => d.submission).catch(() => null)))
+      const imgs = []
+      for (const sub of fulls.filter(Boolean)) {
+        for (const v of Object.values(sub.answers || {})) {
+          if (Array.isArray(v)) for (const u of v) {
+            if (typeof u === 'string' && /^https?:|^data:/.test(u)) imgs.push({ url: u, formTitle: sub.formTitle, submittedAt: sub.submittedAt, subId: sub.id })
+          }
+        }
+      }
+      imgs.sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))
+      setImages(imgs)
+    } catch {}
+    setLoading(false)
+  })() }, [projectNo])
+
+  if (loading) return <Loading />
+  if (!images.length) return <EmptyCard title="No images yet" body="Images added to form submissions for this project will appear here." />
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
+      {images.map((img, i) => (
+        <div key={i} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
+          <a href={img.url} target="_blank" rel="noreferrer"><img src={img.url} alt="" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} /></a>
+          <div style={{ padding: '10px 12px' }}>
+            <div style={{ fontSize: 12, color: '#999' }}>{new Date(img.submittedAt).toLocaleString('en-GB')}</div>
+            <div style={{ fontSize: 13, color: INK, fontWeight: 600, marginTop: 2 }}>{img.formTitle}</div>
+            <a href={`/operations/submissions?open=${img.subId}`} style={{ ...linkBtn, display: 'inline-block', marginTop: 4 }}>View form ›</a>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const sel2 = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 130 }
+
+// Branded print-to-PDF view for one or more submissions
+function openPrintView(subs) {
+  const logo = `${window.location.origin}/rock-logo.jpg`
+  const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+  const fmt = ts => new Date(ts).toLocaleString('en-GB')
+  const answerHtml = (v) => {
+    if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '<em style="color:#999">—</em>'
+    const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
+    if (isPhotos) return `<div class="imgs">${v.map(u => `<img src="${esc(u)}" />`).join('')}</div>`
+    if (typeof v === 'object' && !Array.isArray(v)) return esc(v.name ? `${v.name} (${v.date || ''})` : JSON.stringify(v))
+    if (Array.isArray(v)) return v.map(esc).join(', ')
+    return esc(v)
+  }
+  const body = subs.map(sub => `
+    <section class="doc">
+      <header>
+        <img class="logo" src="${logo}" />
+        <div class="meta">
+          <h1>${esc(sub.formTitle)}</h1>
+          <div>${esc(sub.projectName || '')}</div>
+          <div>Operative: ${esc(sub.operative || '—')}</div>
+          <div>Submitted: ${esc(fmt(sub.submittedAt))}</div>
+        </div>
+      </header>
+      ${Object.entries(sub.answers || {}).map(([k, v]) => `
+        <div class="row"><div class="q">${esc(k)}</div><div class="a">${answerHtml(v)}</div></div>
+      `).join('')}
+    </section>`).join('')
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rock Roofing — Submission</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font-family: system-ui, Arial, sans-serif; color: #1a1a19; margin: 0; padding: 0; }
+      .doc { padding: 32px 36px; page-break-after: always; }
+      .doc:last-child { page-break-after: auto; }
+      header { display: flex; align-items: center; gap: 20px; border-bottom: 3px solid #ca8a04; padding-bottom: 16px; margin-bottom: 20px; }
+      .logo { height: 60px; width: auto; }
+      .meta h1 { margin: 0 0 4px; font-size: 20px; }
+      .meta div { font-size: 12.5px; color: #555; }
+      .row { display: flex; gap: 16px; padding: 9px 0; border-bottom: 1px solid #eee; }
+      .q { width: 34%; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #888; }
+      .a { flex: 1; font-size: 13.5px; }
+      .imgs { display: flex; flex-wrap: wrap; gap: 6px; }
+      .imgs img { height: 130px; border-radius: 6px; border: 1px solid #ddd; }
+      @media print { .doc { padding: 16px; } }
+    </style></head><body>${body}
+    <script>window.onload = () => { setTimeout(() => window.print(), 400); };</script>
+    </body></html>`
+  const w = window.open('', '_blank')
+  if (!w) { alert('Please allow pop-ups to download the PDF.'); return }
+  w.document.write(html); w.document.close()
+}

@@ -271,12 +271,17 @@ function Choice({ label, selected, onClick, check }) {
 
 function PhotoField({ value, onChange }) {
   const [uploading, setUploading] = useState(false)
-  const inputRef = useRef()
+  const [err, setErr] = useState('')
+  const galleryRef = useRef()
+  const cameraRef = useRef()
   const photos = Array.isArray(value) ? value : []
 
   async function handleFiles(files) {
+    if (!files || !files.length) return
+    setErr('')
     setUploading(true)
     const next = [...photos]
+    let failed = 0
     for (const file of Array.from(files)) {
       try {
         const dataUrl = await readAsDataURL(file)
@@ -285,28 +290,45 @@ function PhotoField({ value, onChange }) {
           body: JSON.stringify({ filename: file.name, dataUrl }),
         })
         const d = await r.json()
-        if (d.url) next.push(d.url)
-      } catch (e) { console.error(e) }
+        if (r.ok && d.url) next.push(d.url)
+        else failed++
+      } catch (e) { console.error(e); failed++ }
     }
     onChange(next)
     setUploading(false)
+    if (failed) setErr(`${failed} photo${failed > 1 ? 's' : ''} failed to upload — please try again.`)
+    // reset inputs so the same file can be re-picked if needed
+    if (galleryRef.current) galleryRef.current.value = ''
+    if (cameraRef.current) cameraRef.current.value = ''
+  }
+
+  const btn = {
+    flex: 1, padding: '14px', border: '2px dashed #d9d5cc', borderRadius: 12,
+    background: '#fff', cursor: 'pointer', color: '#666', fontSize: 15,
   }
 
   return (
     <div>
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple
+      {/* Gallery: no capture attr → opens photo library / file picker */}
+      <input ref={galleryRef} type="file" accept="image/*" multiple
         style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
-      <button onClick={() => inputRef.current?.click()} disabled={uploading} style={{
-        width: '100%', padding: '14px', border: '2px dashed #d9d5cc', borderRadius: 12,
-        background: '#fff', cursor: 'pointer', color: '#666', fontSize: 15,
-      }}>
-        {uploading ? 'Uploading…' : '📷 Add photos'}
-      </button>
+      {/* Camera: capture attr → opens camera directly on mobile */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment"
+        style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => cameraRef.current?.click()} disabled={uploading} style={btn}>📷 Take photo</button>
+        <button onClick={() => galleryRef.current?.click()} disabled={uploading} style={btn}>🖼️ Choose from gallery</button>
+      </div>
+
+      {uploading && <div style={{ fontSize: 13, color: '#888', marginTop: 8 }}>Uploading…</div>}
+      {err && <div style={{ fontSize: 13, color: '#dc2626', marginTop: 8 }}>{err}</div>}
+
       {photos.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 10 }}>
           {photos.map((url, i) => (
             <div key={i} style={{ position: 'relative' }}>
-              <img src={url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8 }} />
+              <img src={url} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', borderRadius: 8, background: '#f0f0f0' }} />
               <button onClick={() => onChange(photos.filter((_, j) => j !== i))} style={{
                 position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.6)', color: '#fff',
                 border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12,
@@ -315,6 +337,7 @@ function PhotoField({ value, onChange }) {
           ))}
         </div>
       )}
+      {photos.length > 0 && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 6 }}>✓ {photos.length} photo{photos.length > 1 ? 's' : ''} added</div>}
     </div>
   )
 }

@@ -23,6 +23,7 @@ export function middleware(req) {
     pathname.startsWith('/api/ops-users') ||
     pathname.startsWith('/api/ops-docs') ||
     pathname.startsWith('/api/ops-projects') ||
+    pathname.startsWith('/api/project-files') ||
     pathname.startsWith('/api/team') ||
     pathname.startsWith('/api/upload-photo') ||
     pathname.startsWith('/api/dashboard')

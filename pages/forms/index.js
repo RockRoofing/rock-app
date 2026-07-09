@@ -162,13 +162,133 @@ export default function FormsHome() {
 
   return (
     <Shell onLogout={logout} user={user}>
-      <FormsList user={user} />
+      <FormsHomeMenu user={user} />
     </Shell>
   )
 }
 
+// ── Home: choose Complete a Form or View Project Details ─────────────────────
+function FormsHomeMenu({ user }) {
+  const [mode, setMode] = useState('menu')  // menu | forms | details
+  if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
+  if (mode === 'details') return <ProjectDetailsView onBack={() => setMode('menu')} />
+  return (
+    <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      <h2 style={{ fontSize: 20, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What would you like to do?</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <button onClick={() => setMode('forms')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>📝</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Complete a Form</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Site diaries, checklists, reports</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
+        <button onClick={() => setMode('details')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>📁</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>View Project Details</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings & RAMS for your project</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Project details for operatives: pick a live project, view Drawings & RAMS ──
+function ProjectDetailsView({ onBack }) {
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [proj, setProj] = useState(null)
+  const [tab, setTab] = useState('drawings')
+  const [files, setFiles] = useState([])
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [viewer, setViewer] = useState(null)
+
+  useEffect(() => { (async () => {
+    try {
+      const r = await fetch('/api/ops-projects'); const d = await r.json()
+      setProjects((d.projects || []).filter(p => p.status === 'active').sort((a, b) => (a.projectNo || '').localeCompare(b.projectNo || '')))
+    } catch {}
+    setLoading(false)
+  })() }, [])
+
+  useEffect(() => {
+    if (!proj) return
+    setFilesLoading(true)
+    ;(async () => {
+      try {
+        const cat = tab === 'drawings' ? 'drawing' : 'rams'
+        const r = await fetch(`/api/project-files?no=${encodeURIComponent(proj.projectNo)}&cat=${cat}`)
+        const d = await r.json(); setFiles(d.files || [])
+      } catch {}
+      setFilesLoading(false)
+    })()
+  }, [proj, tab])
+
+  const isImage = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.name)
+
+  if (loading) return <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading…</div>
+
+  if (!proj) {
+    return (
+      <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        <button onClick={onBack} style={backLink}>‹ Back</button>
+        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 16px' }}>Select a project</h2>
+        {!projects.length ? <div style={{ color: '#999', fontSize: 14 }}>No live projects.</div> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {projects.map(p => (
+              <button key={p.projectNo} onClick={() => { setProj(p); setTab('drawings') }} style={homeCard}>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{p.projectNo}</div><div style={{ fontSize: 13, color: '#888' }}>{p.projectName}</div></div>
+                <div style={{ color: BRAND, fontSize: 22 }}>›</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <button onClick={() => setProj(null)} style={backLink}>‹ All projects</button>
+      <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 2px' }}>{proj.projectNo} — {proj.projectName}</h2>
+      <div style={{ display: 'flex', gap: 8, margin: '14px 0' }}>
+        {[['drawings', 'Drawings'], ['rams', 'RAMS']].map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid ' + (tab === k ? BRAND : '#e3e0d9'), background: tab === k ? BRAND : '#fff', color: tab === k ? '#fff' : INK, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{label}</button>
+        ))}
+      </div>
+      {filesLoading ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading…</div>
+        : !files.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No {tab === 'drawings' ? 'drawings' : 'RAMS'} uploaded for this project yet.</div>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {files.map(f => (
+              <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div></div>
+                <button onClick={() => setViewer(f)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
+                <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
+              </div>
+            ))}
+          </div>
+        )}
+      {viewer && (
+        <div onClick={() => setViewer(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewer.name}</div>
+            <button onClick={() => setViewer(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer' }}>×</button>
+          </div>
+          <div onClick={e => e.stopPropagation()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
+            {isImage(viewer) ? <img src={viewer.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <iframe src={viewer.url} title={viewer.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const homeCard = { display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: '18px', cursor: 'pointer', width: '100%' }
+const backLink = { background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }
+
 // ── Forms list shown immediately after login ────────────────────────────────
-function FormsList({ user }) {
+function FormsList({ user, onBack }) {
   const router = useRouter()
   const [forms, setForms] = useState([])
   const [loading, setLoading] = useState(true)
@@ -189,8 +309,9 @@ function FormsList({ user }) {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
+      {onBack && <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back</button>}
       <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Project Forms</h2>
-      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋 — choose a form to complete</p>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Choose a form to complete</p>
       {loading ? (
         <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading forms…</div>
       ) : !forms.length ? (

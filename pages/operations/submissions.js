@@ -21,6 +21,15 @@ export default function SubmissionsPage() {
     setLoading(false)
   })() }, [])
 
+  // Deep link from Project Images: /operations/submissions?open=<id>
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('open')
+    if (!id) return
+    ;(async () => {
+      try { const r = await fetch(`/api/submissions?id=${id}`); const d = await r.json(); if (d.submission) setOpen(d.submission) } catch {}
+    })()
+  }, [])
+
   // filter option lists
   const projects = useMemo(() => [...new Set(subs.map(s => s.projectName).filter(Boolean))].sort(), [subs])
   const types = useMemo(() => [...new Set(subs.map(s => s.formTitle).filter(Boolean))].sort(), [subs])
