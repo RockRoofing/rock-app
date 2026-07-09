@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
 import ProjectFiles from '../../components/ProjectFiles'
@@ -109,9 +109,9 @@ export default function ProjectsPage() {
         <button onClick={() => setOpenNo(null)} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 8 }}>‹ All projects</button>
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
-        {sub === 'handover' && <><HandoverReadOnly projectNo={openNo} /><div style={{ marginTop: 20 }}><ProjectFiles projectNo={openNo} category="handover" title="Handover documents" note="Uploaded PDFs and images for this handover." /></div></>}
+        {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
         {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Forms App." />}
-        {sub === 'rams' && <ProjectFiles projectNo={openNo} category="rams" title="RAMS" note="Upload RAMS documents. These are visible to operatives in the Forms App." />}
+        {sub === 'rams' && <RamsTable projectNo={openNo} />}
         {sub === 'ramsbuilder' && <ComingSoon title="RAMS Builder" note="A guided builder to generate branded RAMS from templates — coming soon." />}
         {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
         {sub === 'images' && <ProjectImages projectNo={openNo} />}
@@ -224,6 +224,7 @@ export default function ProjectsPage() {
 function HandoverReadOnly({ projectNo }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [doc, setDoc] = useState(null)
   useEffect(() => { (async () => {
     try { const r = await fetch(`/api/ops-projects?no=${projectNo}`); const d = await r.json(); setData(d.project?.data || null) } catch {}
     setLoading(false)
@@ -249,7 +250,44 @@ function HandoverReadOnly({ projectNo }) {
       {row('Customer', data.customerCompany)}
       {row('Contract Value', data.contractValue)}
       {row('Scope of Works', data.scopeOfWorks)}
+      {Array.isArray(data.scopeFiles) && data.scopeFiles.length > 0 && (
+        <div style={{ marginTop: 18 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>Handover documents</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
+            {data.scopeFiles.map((f, i) => {
+              const img = (f.type || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(f.name || f.url || '')
+              return (
+                <div key={i} style={{ border: '1px solid #ececec', borderRadius: 10, overflow: 'hidden' }}>
+                  <div onClick={() => setDoc(f)} style={{ height: 100, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {img ? <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ fontSize: 30, color: '#bbb' }}>📄</div>}
+                  </div>
+                  <div style={{ padding: '8px 10px' }}>
+                    <div style={{ fontSize: 12, color: INK, fontWeight: 600, wordBreak: 'break-word' }}>{f.name}</div>
+                    <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                      <button onClick={() => setDoc(f)} style={linkBtn}>View</button>
+                      <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, textDecoration: 'none' }}>Download</a>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 12, fontSize: 12, color: '#aaa' }}>Read-only. Edit via Pre-Contract → Internal Handover Minutes.</div>
+      {doc && (
+        <div onClick={() => setDoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff' }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{doc.name}</div>
+            <button onClick={() => setDoc(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer' }}>×</button>
+          </div>
+          <div onClick={e => e.stopPropagation()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+            {((doc.type || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(doc.name || doc.url || ''))
+              ? <img src={doc.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              : <iframe src={doc.url} title={doc.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -311,7 +349,7 @@ function ProjectSubmissions({ projectNo }) {
         <F label="From"><input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} style={sel2} /></F>
         <F label="To"><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} style={sel2} /></F>
         <div style={{ flex: 1 }} />
-        <button onClick={downloadSelected} disabled={downloading} style={primaryBtn}>{downloading ? 'Preparing…' : selIds.length ? `Download ${selIds.length} PDF` : 'Download all as PDF'}</button>
+        <button onClick={downloadSelected} disabled={downloading} style={primaryBtn}>{downloading ? 'Preparing…' : selIds.length ? `Download ${selIds.length} PDF` : 'Download as PDF'}</button>
       </div>
       {!rows.length ? <EmptyCard title="No submissions" body="No forms have been submitted for this project yet." /> : (
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
@@ -453,4 +491,95 @@ function openPrintView(subs) {
   const w = window.open('', '_blank')
   if (!w) { alert('Please allow pop-ups to download the PDF.'); return }
   w.document.write(html); w.document.close()
+}
+
+// ── RAMS as a revisions table (latest at top) ──
+function RamsTable({ projectNo }) {
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState('')
+  const [viewer, setViewer] = useState(null)
+  const inputRef = useRef()
+
+  useEffect(() => { load() }, [projectNo])
+  async function load() {
+    setLoading(true)
+    try { const r = await fetch(`/api/project-files?no=${encodeURIComponent(projectNo)}&cat=rams`); const d = await r.json(); setFiles(d.files || []) } catch {}
+    setLoading(false)
+  }
+  async function handleFiles(list) {
+    if (!list || !list.length) return
+    setErr(''); setUploading(true)
+    let failed = 0
+    const { upload } = await import('@vercel/blob/client')
+    for (const file of Array.from(list)) {
+      try {
+        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/upload-file', contentType: file.type || undefined })
+        await fetch('/api/project-files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, file: { category: 'rams', name: file.name, url: blob.url, contentType: file.type, size: file.size } }) })
+      } catch (e) { console.error(e); failed++ }
+    }
+    if (inputRef.current) inputRef.current.value = ''
+    setUploading(false)
+    if (failed) setErr(`${failed} file(s) failed to upload.`)
+    load()
+  }
+  async function del(id) {
+    if (!confirm('Delete this RAMS revision?')) return
+    await fetch('/api/project-files', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, id }) })
+    load()
+  }
+  // Newest first; revision number = count so latest has the highest rev
+  const sorted = [...files].sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))
+  const total = sorted.length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+        <div><div style={{ fontSize: 16, fontWeight: 700, color: INK }}>RAMS</div><div style={{ fontSize: 13, color: '#999', marginTop: 2 }}>Revisions listed newest first. Visible to operatives in the Forms App.</div></div>
+        <div>
+          <input ref={inputRef} type="file" accept="application/pdf,image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+          <button onClick={() => inputRef.current?.click()} disabled={uploading} style={primaryBtn}>{uploading ? 'Uploading…' : '+ Upload RAMS'}</button>
+        </div>
+      </div>
+      {err && <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{err}</div>}
+      {loading ? <Loading /> : !sorted.length ? <EmptyCard title="No RAMS yet" body="Upload a RAMS document using the button above." /> : (
+        <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+            <thead><tr style={{ background: '#faf9f7' }}>{['Revision', 'Document', 'Uploaded', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {sorted.map((f, i) => (
+                <tr key={f.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>Rev {total - i}</strong>{i === 0 && <span style={{ marginLeft: 8, fontSize: 11, background: '#ecfdf5', color: '#065f46', borderRadius: 20, padding: '2px 8px', fontWeight: 600 }}>Latest</span>}</td>
+                  <td style={td}>{f.name}</td>
+                  <td style={{ ...td, color: '#999', whiteSpace: 'nowrap' }}>{new Date(f.uploadedAt).toLocaleString('en-GB')}</td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => setViewer(f)} style={linkBtn}>View</button>
+                    <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, textDecoration: 'none', marginLeft: 10 }}>Download</a>
+                    <button onClick={() => del(f.id)} style={{ ...linkBtn, color: '#dc2626', marginLeft: 10 }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {viewer && (
+        <div onClick={() => setViewer(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff' }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{viewer.name}</div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <a href={viewer.url} download={viewer.name} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: 14 }} onClick={e => e.stopPropagation()}>Download</a>
+              <button onClick={() => setViewer(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer' }}>×</button>
+            </div>
+          </div>
+          <div onClick={e => e.stopPropagation()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, overflow: 'auto' }}>
+            {((viewer.contentType || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(viewer.name))
+              ? <img src={viewer.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              : <iframe src={viewer.url} title={viewer.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

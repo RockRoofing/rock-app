@@ -381,11 +381,10 @@ function FilesField({ label, value, onChange }) {
     const next = [...value]
     for (const file of Array.from(files)) {
       try {
-        const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) })
-        const r = await fetch('/api/upload-photo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file.name, dataUrl }) })
-        const d = await r.json()
-        if (d.url) next.push({ url: d.url, name: file.name, type: file.type })
-      } catch {}
+        const { upload } = await import('@vercel/blob/client')
+        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/upload-file', contentType: file.type || undefined })
+        if (blob?.url) next.push({ url: blob.url, name: file.name, type: file.type })
+      } catch (e) { console.error(e) }
     }
     onChange(next); setUploading(false)
   }

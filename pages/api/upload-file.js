@@ -1,31 +1,27 @@
-// Generic file upload (PDFs and images) for project documents — drawings,
-// RAMS, handover docs. Stores on Vercel Blob and returns a permanent URL.
-export const config = {
-  api: { bodyParser: { sizeLimit: '25mb' } },
-}
+import { handleUpload } from '@vercel/blob/client'
 
+// Client-direct upload handler. The browser uploads file bytes STRAIGHT to
+// Vercel Blob (up to 5GB) — this endpoint only issues a short-lived signed
+// token, so we never route large files through the serverless function and
+// avoid Vercel's 4.5MB request-body limit (the cause of 413 / "failed to upload").
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
-  const { filename, dataUrl } = req.body || {}
-  if (!dataUrl) return res.status(400).json({ error: 'Missing file data' })
-
-  const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl)
-  if (!m) return res.status(400).json({ error: 'Invalid file data' })
-  const contentType = m[1]
-  const buffer = Buffer.from(m[2], 'base64')
-
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) {
-    return res.status(500).json({ error: 'File storage is not configured (BLOB_READ_WRITE_TOKEN missing).' })
-  }
   try {
-    const { put } = await import('@vercel/blob')
-    const safeName = (filename || `file-${Date.now()}`).replace(/[^a-zA-Z0-9._-]/g, '_')
-    const key = `project-files/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
-    const blob = await put(key, buffer, { access: 'public', contentType, token })
-    return res.json({ url: blob.url, contentType, size: buffer.length })
+    const body = req.body
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      onBeforeGenerateToken: async () => ({
+        allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/*'],
+        maximumSizeInBytes: 50 * 1024 * 1024, // 50MB per file
+        addRandomSuffix: true,
+      }),
+      onUploadCompleted: async () => {},
+    })
+    return res.status(200).json(jsonResponse)
   } catch (e) {
-    console.error('File upload failed:', e)
-    return res.status(500).json({ error: 'Upload failed. Please try again.' })
+    console.error('upload token error:', e)
+    return res.status(400).json({ error: e.message || 'Upload failed' })
   }
 }

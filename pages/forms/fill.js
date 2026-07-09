@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
 
@@ -284,13 +285,12 @@ function PhotoField({ value, onChange }) {
     let failed = 0
     for (const file of Array.from(files)) {
       try {
-        const dataUrl = await readAsDataURL(file)
-        const r = await fetch('/api/upload-photo', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, dataUrl }),
+        const blob = await upload(file.name || `photo-${Date.now()}.jpg`, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-file',
+          contentType: file.type || undefined,
         })
-        const d = await r.json()
-        if (r.ok && d.url) next.push(d.url)
+        if (blob?.url) next.push(blob.url)
         else failed++
       } catch (e) { console.error(e); failed++ }
     }
