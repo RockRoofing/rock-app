@@ -8,6 +8,7 @@ export default function SubmissionsPage() {
   const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(null)
+  const [labels, setLabels] = useState({})   // formId -> { fieldId: label }
 
   // filters
   const [fProject, setFProject] = useState('')
@@ -18,6 +19,12 @@ export default function SubmissionsPage() {
 
   useEffect(() => { (async () => {
     try { const r = await fetch('/api/submissions'); const d = await r.json(); setSubs(d.submissions || []) } catch {}
+    try {
+      const rf = await fetch('/api/forms'); const df = await rf.json()
+      const map = {}
+      for (const f of (df.forms || [])) { const lm = {}; for (const fld of (f.fields || [])) if (fld.id) lm[fld.id] = fld.label || fld.id; map[f.id] = lm }
+      setLabels(map)
+    } catch {}
     setLoading(false)
   })() }, [])
 
@@ -123,7 +130,7 @@ export default function SubmissionsPage() {
         </>
       )}
 
-      {open && <SubModal sub={open} onClose={() => setOpen(null)} />}
+      {open && <SubModal sub={open} labels={labels} onClose={() => setOpen(null)} />}
     </OperationsShell>
   )
 }
@@ -132,12 +139,14 @@ async function openSub(id, setOpen) {
   try { const r = await fetch(`/api/submissions?id=${id}`); const d = await r.json(); setOpen(d.submission) } catch {}
 }
 
-function SubModal({ sub, onClose }) {
+function SubModal({ sub, labels, onClose }) {
+  const lbl = (k) => (labels && labels[sub.formId] && labels[sub.formId][k]) || k
   return (
     <Modal onClose={onClose} title={sub.formTitle} wide>
       <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
         {sub.projectName} · {sub.operative} · {fmtDateTime(sub.submittedAt)}
       </div>
+      <div style={{ marginBottom: 14 }}><button onClick={() => printSubmissions([sub], labels)} style={{ background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: INK }}>Download PDF</button></div>
       {sub.flags?.length > 0 && (
         <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: 12, marginBottom: 16 }}>
           <strong style={{ color: '#92400e' }}>⚠️ Flags:</strong>
@@ -151,7 +160,7 @@ function SubModal({ sub, onClose }) {
         const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
         return (
           <div key={k} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f2f2f2' }}>
-            <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: 0.4 }}>{k}</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 3 }}>{lbl(k)}</div>
             {isPhotos
               ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                   {v.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} style={{ height: 90, borderRadius: 6 }} /></a>)}
@@ -164,6 +173,42 @@ function SubModal({ sub, onClose }) {
       })}
     </Modal>
   )
+}
+
+// Branded print-to-PDF for submissions (shared shape with the project view)
+function printSubmissions(subs, labels) {
+  const logo = `${window.location.origin}/rock-logo.jpg`
+  const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+  const fmt = ts => new Date(ts).toLocaleString('en-GB')
+  const lbl = (formId, k) => (labels && labels[formId] && labels[formId][k]) || k
+  const answerHtml = (v) => {
+    if (v == null || v === '' || (Array.isArray(v) && !v.length)) return '<em style="color:#999">—</em>'
+    const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
+    if (isPhotos) return `<div class="imgs">${v.map(u => `<img src="${esc(u)}" />`).join('')}</div>`
+    if (typeof v === 'object' && !Array.isArray(v)) return esc(v.name ? `${v.name} (${v.date || ''})` : JSON.stringify(v))
+    if (Array.isArray(v)) return v.map(esc).join(', ')
+    return esc(v)
+  }
+  const body = subs.map(sub => `
+    <section class="doc">
+      <header><img class="logo" src="${logo}" /><div class="meta">
+        <h1>${esc(sub.formTitle)}</h1><div>${esc(sub.projectName || '')}</div>
+        <div>Operative: ${esc(sub.operative || '—')}</div><div>Submitted: ${esc(fmt(sub.submittedAt))}</div>
+      </div></header>
+      ${Object.entries(sub.answers || {}).filter(([, v]) => !(v == null || v === '' || (Array.isArray(v) && !v.length)))
+        .map(([k, v]) => `<div class="row"><div class="q">${esc(lbl(sub.formId, k))}</div><div class="a">${answerHtml(v)}</div></div>`).join('')}
+    </section>`).join('')
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Rock Roofing — Submission</title><style>
+    *{box-sizing:border-box}body{font-family:system-ui,Arial,sans-serif;color:#1a1a19;margin:0}
+    .doc{padding:32px 36px;page-break-after:always}.doc:last-child{page-break-after:auto}
+    header{display:flex;align-items:center;gap:20px;border-bottom:3px solid #ca8a04;padding-bottom:16px;margin-bottom:20px}
+    .logo{height:60px}.meta h1{margin:0 0 4px;font-size:20px}.meta div{font-size:12.5px;color:#555}
+    .row{display:flex;gap:16px;padding:9px 0;border-bottom:1px solid #eee}
+    .q{width:34%;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#888}
+    .a{flex:1;font-size:13.5px}.imgs{display:flex;flex-wrap:wrap;gap:6px}.imgs img{height:130px;border-radius:6px;border:1px solid #ddd}
+    </style></head><body>${body}<script>window.onload=()=>{setTimeout(()=>window.print(),400)}</script></body></html>`
+  const w = window.open('', '_blank'); if (!w) { alert('Please allow pop-ups to download the PDF.'); return }
+  w.document.write(html); w.document.close()
 }
 
 const Filter = ({ label, children }) => (

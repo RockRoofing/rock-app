@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 
@@ -217,7 +217,12 @@ function ProjectDetailsView({ onBack }) {
       try {
         const cat = tab === 'drawings' ? 'drawing' : 'rams'
         const r = await fetch(`/api/project-files?no=${encodeURIComponent(proj.projectNo)}&cat=${cat}`)
-        const d = await r.json(); setFiles(d.files || [])
+        const d = await r.json()
+        let list = d.files || []
+        // API returns newest-first. RAMS: operatives only ever see the CURRENT
+        // revision, so keep just the most recent.
+        if (tab === 'rams' && list.length > 1) list = [list[0]]
+        setFiles(list)
       } catch {}
       setFilesLoading(false)
     })()
@@ -257,12 +262,29 @@ function ProjectDetailsView({ onBack }) {
       </div>
       {filesLoading ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading…</div>
         : !files.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No {tab === 'drawings' ? 'drawings' : 'RAMS'} uploaded for this project yet.</div>
-        : (
+        : tab === 'drawings' ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
+            {files.map(f => (
+              <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div onClick={() => setViewer(f)} style={{ height: 120, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                  {isImage(f) ? <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <SitePdfThumb url={f.url} />}
+                </div>
+                <div style={{ padding: '10px 12px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: INK, wordBreak: 'break-word', lineHeight: 1.3 }}>{f.name}</div>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
+                    <button onClick={() => setViewer(f)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 }}>View</button>
+                    <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 13, textDecoration: 'none' }}>Download</a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {files.map(f => (
               <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div></div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div><div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>Current revision</div></div>
                 <button onClick={() => setViewer(f)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
                 <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
               </div>
@@ -286,6 +308,38 @@ function ProjectDetailsView({ onBack }) {
 
 const homeCard = { display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: '18px', cursor: 'pointer', width: '100%' }
 const backLink = { background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }
+
+// First-page PDF thumbnail for drawing tiles (pdf.js from CDN)
+function SitePdfThumb({ url }) {
+  const canvasRef = useRef()
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+            s.onload = resolve; s.onerror = reject; document.body.appendChild(s)
+          })
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        }
+        const pdf = await window.pdfjsLib.getDocument(url).promise
+        const page = await pdf.getPage(1)
+        if (cancelled) return
+        const canvas = canvasRef.current; if (!canvas) return
+        const vp0 = page.getViewport({ scale: 1 })
+        const viewport = page.getViewport({ scale: 220 / vp0.width })
+        canvas.width = viewport.width; canvas.height = viewport.height
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+      } catch { if (!cancelled) setFailed(true) }
+    })()
+    return () => { cancelled = true }
+  }, [url])
+  if (failed) return <div style={{ fontSize: 34, color: '#bbb' }}>📄</div>
+  return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+}
 
 // ── Forms list shown immediately after login ────────────────────────────────
 function FormsList({ user, onBack }) {

@@ -44,8 +44,8 @@ export default function OperationsNav({ active }) {
         ? <span style={activeStyle}>Form Builder</span>
         : <a href="/operations/forms-builder" style={linkStyle}>Form Builder</a>}
       <Divider />
-      <a href="https://forms.rockroofing.co.uk" target="_blank" rel="noreferrer"
-        style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap' }}>Open Forms App ↗</a>
+      <a href="https://siteapp.rockroofing.co.uk" target="_blank" rel="noreferrer"
+        style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap' }}>Open Site App ↗</a>
     </div>
   )
 }

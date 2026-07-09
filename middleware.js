@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
 
-// Operative Forms app lives on forms.rockroofing.co.uk.
+// Operative Site App lives on siteapp.rockroofing.co.uk (formerly forms.).
 // This middleware is the single source of truth for that subdomain:
 //   1. Rewrites the subdomain root and paths into the /forms app.
 //   2. Keeps the subdomain isolated from the rest of the portal.
 // (The old next.config.js rewrite was removed to avoid double-handling.)
 export function middleware(req) {
   const host = (req.headers.get('host') || '').toLowerCase()
-  const isForms = host.startsWith('forms.')
+  // siteapp. is the live subdomain. forms. kept as a fallback so old links/
+  // bookmarks still resolve during the transition.
+  const isForms = host.startsWith('siteapp.') || host.startsWith('forms.')
   if (!isForms) return NextResponse.next()
 
   const url = req.nextUrl.clone()

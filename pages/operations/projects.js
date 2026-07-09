@@ -156,12 +156,14 @@ export default function ProjectsPage() {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
             <thead><tr style={{ background: '#faf9f7' }}>
+              <th style={th}></th>
               {cols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
               <th style={th}></th>
             </tr></thead>
             <tbody>
               {filtered.map(p => (
                 <tr key={p.projectNo} style={{ borderTop: '1px solid #f0f0f0' }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => { setOpenNo(p.projectNo); setSub('handover') }} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>View</button></td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>{p.projectNo}</strong>{p.manual && <span title="Manually added" style={{ marginLeft: 6, fontSize: 10, color: '#aaa' }}>manual</span>}</td>
                   <td style={td}><button onClick={() => { setOpenNo(p.projectNo); setSub('handover') }} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontWeight: 600, padding: 0, textAlign: 'left' }}>{p.projectName || '—'}</button></td>
                   <td style={td}>{p.contractsManager || '—'}</td>
@@ -567,9 +569,14 @@ function RamsTable({ projectNo }) {
             <thead><tr style={{ background: '#faf9f7' }}>{['Revision', 'Document', 'Uploaded', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>
               {sorted.map((f, i) => (
-                <tr key={f.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>Rev {total - i}</strong>{i === 0 && <span style={{ marginLeft: 8, fontSize: 11, background: '#ecfdf5', color: '#065f46', borderRadius: 20, padding: '2px 8px', fontWeight: 600 }}>Latest</span>}</td>
-                  <td style={td}>{f.name}</td>
+                <tr key={f.id} style={{ borderTop: '1px solid #f0f0f0', background: i === 0 ? '#fafefb' : '#fff' }}>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                    <strong>Rev {total - i}</strong>
+                    {i === 0
+                      ? <span style={{ marginLeft: 8, fontSize: 11, background: '#065f46', color: '#fff', borderRadius: 20, padding: '2px 10px', fontWeight: 700, letterSpacing: 0.3 }}>CURRENT</span>
+                      : <span style={{ marginLeft: 8, fontSize: 11, background: '#f1f1ef', color: '#999', borderRadius: 20, padding: '2px 10px', fontWeight: 600 }}>Superseded</span>}
+                  </td>
+                  <td style={{ ...td, color: i === 0 ? INK : '#999' }}>{f.name}</td>
                   <td style={{ ...td, color: '#999', whiteSpace: 'nowrap' }}>{new Date(f.uploadedAt).toLocaleString('en-GB')}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => setViewer(f)} style={linkBtn}>View</button>
