@@ -185,6 +185,7 @@ export default async function handler(req, res) {
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role || '',
+      accessLevel: user.accessLevel === 'contracts-manager' ? 'contracts-manager' : 'operative',
       phone: user.phone || '',
       email: user.email || '',
       active: user.active !== false,
