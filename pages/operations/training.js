@@ -1,10 +1,7 @@
-import OperationsShell, { PageHeading, ComingSoon } from '../../components/OperationsShell'
-
-export default function Page() {
-  return (
-    <OperationsShell active="training" title="H&S Training Matrix">
-      <PageHeading title="H&S Training Matrix" />
-      <ComingSoon title="H&S Training Matrix" note="Who holds which tickets and certifications, with expiry tracking and renewal flags." />
-    </OperationsShell>
-  )
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+export default function Redirect() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/operations/hs/hs-matrix') }, [])
+  return null
 }

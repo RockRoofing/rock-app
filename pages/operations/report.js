@@ -1,10 +1,7 @@
-import OperationsShell, { PageHeading, ComingSoon } from '../../components/OperationsShell'
-
-export default function Page() {
-  return (
-    <OperationsShell active="report" title="Project Report">
-      <PageHeading title="Project Report" />
-      <ComingSoon title="Project Report" note="The weekly report, assembled from SRATs, forms submissions, variations and procurement. Editable before it goes out." />
-    </OperationsShell>
-  )
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+export default function Redirect() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/operations/project-management/report') }, [])
+  return null
 }

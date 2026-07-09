@@ -5,12 +5,12 @@ const INK = '#1a1a19'
 
 // Standard chrome for every Operations page: title tag, nav, and a content
 // container. Pass `wide` for full-width pages (tables, planning grids).
-export default function OperationsShell({ active, title, children, wide }) {
+export default function OperationsShell({ active, section, title, children, wide }) {
   return (
     <>
       <Head><title>Rock Roofing — {title || 'Operations'}</title></Head>
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#fafaf9' }}>
-        <OperationsNav active={active} />
+        <OperationsNav active={active} section={section} />
         <div style={{ maxWidth: wide ? 1800 : 1100, margin: '0 auto', padding: wide ? '24px 32px' : '24px' }}>
           {children}
         </div>

@@ -2,14 +2,17 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
 import ProjectFiles from '../../components/ProjectFiles'
+import SubmissionModal from '../../components/SubmissionModal'
 
 const SUB_TABS = [
   { key: 'handover', label: 'Handover' },
+  { key: 'prestart', label: 'Pre-Start' },
   { key: 'drawings', label: 'Drawings' },
   { key: 'rams', label: 'RAMS' },
   { key: 'ramsbuilder', label: 'RAMS Builder' },
-  { key: 'submissions', label: 'Forms Submissions' },
+  { key: 'submissions', label: 'Project Forms' },
   { key: 'images', label: 'Project Images' },
+  { key: 'concerns', label: 'Project Concerns' },
 ]
 
 const STATUS_LABEL = { active: 'Live', complete: 'Complete', draft: 'Draft' }
@@ -110,11 +113,13 @@ export default function ProjectsPage() {
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
         {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
-        {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Forms App." />}
+        {sub === 'prestart' && <ComingSoon title="Pre-Start" note="Pre-Start details for this project — coming soon." />}
+        {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Site App." />}
         {sub === 'rams' && <RamsTable projectNo={openNo} />}
         {sub === 'ramsbuilder' && <ComingSoon title="RAMS Builder" note="A guided builder to generate branded RAMS from templates — coming soon." />}
         {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
         {sub === 'images' && <ProjectImages projectNo={openNo} />}
+        {sub === 'concerns' && <ComingSoon title="Project Concerns" note="Concerns raised against this project — coming soon." />}
       </OperationsShell>
     )
   }
@@ -388,28 +393,11 @@ function ProjectSubmissions({ projectNo }) {
           </table>
         </div>
       )}
-      {open && (
-        <Modal onClose={() => setOpen(null)} title={open.formTitle} wide>
-          <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{open.projectName} · {open.operative} · {fmtDateTime(open.submittedAt)}</div>
-          {!full ? <Loading /> : (
-            <>
-              <div style={{ marginBottom: 14 }}><button onClick={() => openPrintView([full], labelFor)} style={ghostBtn}>Download PDF</button></div>
-              {Object.entries(full.answers || {}).map(([k, v]) => {
-                if (v == null || v === '' || (Array.isArray(v) && !v.length)) return null
-                const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
-                return (
-                  <div key={k} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f2f2f2' }}>
-                    <div style={{ fontSize: 12, color: '#888', marginBottom: 3 }}>{labelFor(full.formId, k)}</div>
-                    {isPhotos
-                      ? <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>{v.map((u, i) => <a key={i} href={u} target="_blank" rel="noreferrer"><img src={u} style={{ height: 90, borderRadius: 6 }} /></a>)}</div>
-                      : <div style={{ fontSize: 14, color: INK, marginTop: 2 }}>{typeof v === 'object' ? (v.name ? `${v.name} (${v.date})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
-                  </div>
-                )
-              })}
-            </>
-          )}
-        </Modal>
+      {open && full && (
+        <SubmissionModal sub={full} labels={formDefs} onClose={() => setOpen(null)}
+          onSaved={(s) => setFull(s)} onDownload={(s) => openPrintView([s], labelFor)} />
       )}
+      {open && !full && <Modal onClose={() => setOpen(null)} title={open.formTitle} wide><Loading /></Modal>}
     </div>
   )
 }
@@ -447,7 +435,7 @@ function ProjectImages({ projectNo }) {
           <div style={{ padding: '10px 12px' }}>
             <div style={{ fontSize: 12, color: '#999' }}>{new Date(img.submittedAt).toLocaleString('en-GB')}</div>
             <div style={{ fontSize: 13, color: INK, fontWeight: 600, marginTop: 2 }}>{img.formTitle}</div>
-            <a href={`/operations/submissions?open=${img.subId}`} style={{ ...linkBtn, display: 'inline-block', marginTop: 4 }}>View form ›</a>
+            <a href={`/operations/forms?open=${img.subId}`} style={{ ...linkBtn, display: 'inline-block', marginTop: 4 }}>View form ›</a>
           </div>
         </div>
       ))}

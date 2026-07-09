@@ -1,10 +1,7 @@
-import OperationsShell, { PageHeading, ComingSoon } from '../../components/OperationsShell'
-
-export default function Page() {
-  return (
-    <OperationsShell active="planning" title="Project Planning">
-      <PageHeading title="Project Planning" />
-      <ComingSoon title="Project Planning" note="Combined Gantt programme view and Weekly Labour Allocation. We'll build this next \u2014 it links the project programme (headcount per project per day) with the per-person weekly allocation." />
-    </OperationsShell>
-  )
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+export default function Redirect() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/operations/project-management/planning') }, [])
+  return null
 }

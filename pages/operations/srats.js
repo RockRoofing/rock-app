@@ -1,10 +1,7 @@
-import OperationsShell, { PageHeading, ComingSoon } from '../../components/OperationsShell'
-
-export default function Page() {
-  return (
-    <OperationsShell active="srats" title="SRATs">
-      <PageHeading title="SRATs" />
-      <ComingSoon title="SRATs" note="Situation, Roadblocks, Actions, Timeline \u2014 weekly per project, carried over week to week. Editable in the portal and completable from the Forms App." />
-    </OperationsShell>
-  )
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+export default function Redirect() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/operations/project-management/srat') }, [])
+  return null
 }
