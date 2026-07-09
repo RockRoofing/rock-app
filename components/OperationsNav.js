@@ -15,6 +15,7 @@ export const NAV = [
       { key: 'pm:risks', label: 'Risk Log', href: '/operations/project-management/risks' },
       { key: 'pm:procurement', label: 'Procurement', href: '/operations/project-management/procurement' },
       { key: 'pm:variations', label: 'Variations', href: '/operations/project-management/variations' },
+      { key: 'pm:negotiating', label: 'Negotiating', href: '/operations/negotiating' },
     ],
   },
   {
@@ -27,7 +28,7 @@ export const NAV = [
       { key: 'hs:pqqs', label: 'PQQs', href: '/operations/hs/pqqs' },
     ],
   },
-  { key: 'negotiating', label: 'Negotiating', href: '/operations/negotiating' },
+  { key: 'negotiating', label: 'Negotiating', href: '/operations/negotiating', hidden: true },
   { key: 'scorecards', label: 'Scorecards', href: '/operations/scorecards' },
 ]
 
@@ -45,7 +46,7 @@ export default function OperationsNav({ active, section }) {
         <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 30, width: 30, borderRadius: 4, marginRight: 8, flexShrink: 0 }} />
         <a href="/" style={linkStyle}>← Portal</a>
         <Divider />
-        {NAV.map((item) => {
+        {NAV.filter(n => !n.hidden).map((item) => {
           const isActive = section === item.key || active === item.key
           return (
             <span key={item.key} style={{ display: 'flex', alignItems: 'center' }}>
