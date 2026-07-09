@@ -44,6 +44,9 @@ function genPin(existing) {
 async function sendInviteEmail({ to, firstName, pin, isReset }) {
   const RESEND_KEY = process.env.RESEND_API_KEY
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  // Replies to invite emails land in this real inbox (from-address is a
+  // send-only subdomain). Override with FORMS_REPLY_TO if it ever changes.
+  const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
   if (!RESEND_KEY) return { sent: false, error: 'Email not configured' }
   const subject = isReset ? 'Your new Rock Roofing Forms PIN' : 'Welcome to Rock Roofing Forms'
   const html = `
@@ -64,7 +67,7 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: FROM, to, subject, html }),
+      body: JSON.stringify({ from: FROM, to, reply_to: REPLY_TO, subject, html }),
     })
     const data = await r.json()
     return { sent: r.ok, error: r.ok ? null : (data?.message || 'Send failed') }
