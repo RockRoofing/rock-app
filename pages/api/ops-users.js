@@ -52,7 +52,7 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
       <p>${isReset ? 'Your PIN has been reset.' : 'You can now complete Rock Roofing forms from your phone.'}</p>
       <p style="font-size:15px">Your temporary PIN is:</p>
       <div style="font-size:32px;font-weight:700;letter-spacing:6px;background:#faf9f7;border:1px solid #eee;border-radius:12px;padding:16px;text-align:center;margin:12px 0">${pin}</div>
-      <p>Open the Forms App and log in with your <strong>mobile number</strong> and this PIN. You'll be asked to choose your own PIN the first time.</p>
+      <p>Open the Site App and log in with your <strong>mobile number</strong> and this PIN. You'll be asked to choose your own PIN the first time.</p>
       <p style="text-align:center;margin:24px 0">
         <a href="${FORMS_URL}" style="background:#ca8a04;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;display:inline-block">Open Rock Roofing Forms</a>
       </p>

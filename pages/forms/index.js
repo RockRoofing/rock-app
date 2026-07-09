@@ -170,12 +170,13 @@ export default function FormsHome() {
 // ── Home: choose Complete a Form or View Project Details ─────────────────────
 function FormsHomeMenu({ user }) {
   const [mode, setMode] = useState('menu')  // menu | forms | details
+  const isCM = user?.accessLevel === 'contracts-manager'
   if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
   if (mode === 'details') return <ProjectDetailsView onBack={() => setMode('menu')} />
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h2 style={{ fontSize: 20, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
-      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What would you like to do?</p>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What would you like to do?{isCM && <span style={{ marginLeft: 8, background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <button onClick={() => setMode('forms')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📝</div>
@@ -187,6 +188,7 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>View Project Details</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings & RAMS for your project</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
+        {/* Contracts Manager-only options appear here. */}
       </div>
     </div>
   )

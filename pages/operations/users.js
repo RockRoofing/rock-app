@@ -57,9 +57,9 @@ export default function UsersPage() {
   }
 
   return (
-    <OperationsShell active="users" title="Users">
-      <PageHeading title="Forms Users" sub="Operatives who can log into the Forms App"
-        action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', phone: '', email: '', active: true }) }} style={primaryBtn}>+ Add user</button>} />
+    <OperationsShell active="users" title="Site App Users">
+      <PageHeading title="Site App Users" sub="People who can log into the Site App"
+        action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', active: true }) }} style={primaryBtn}>+ Add user</button>} />
 
       {notice && (
         <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13.5, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -72,13 +72,16 @@ export default function UsersPage() {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#faf9f7' }}>
-              {['Name', 'Role', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
+              {['Name', 'Role', 'Access', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {users.map(u => (
                 <tr key={u.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                   <td style={td}><strong>{fullName(u)}</strong></td>
                   <td style={td}>{u.role || '—'}</td>
+                  <td style={td}>{u.accessLevel === 'contracts-manager'
+                    ? <span style={{ background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>
+                    : <span style={{ color: '#666', fontSize: 13 }}>Operative</span>}</td>
                   <td style={td}>{u.phone || '—'}</td>
                   <td style={td}>{u.email || '—'}</td>
                   <td style={td}>{u.mustResetPin
@@ -92,7 +95,7 @@ export default function UsersPage() {
                   </td>
                 </tr>
               ))}
-              {!users.length && <tr><td colSpan={7} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 30 }}>No users yet.</td></tr>}
+              {!users.length && <tr><td colSpan={8} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 30 }}>No users yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -110,13 +113,19 @@ export default function UsersPage() {
             <option value="">Select role…</option>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
+          <Lbl>Access level</Lbl>
+          <select value={form.accessLevel || 'operative'} onChange={e => setForm({ ...form, accessLevel: e.target.value })} style={inp2}>
+            <option value="operative">Operative</option>
+            <option value="contracts-manager">Contracts Manager</option>
+          </select>
+          <div style={{ fontSize: 12, color: '#999', marginTop: -6, marginBottom: 4 }}>Contracts Managers see additional features in the Site App.</div>
           <Lbl>Mobile number</Lbl>
           <input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp2} inputMode="tel" placeholder="07…" />
           <Lbl>Email address</Lbl>
           <input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp2} inputMode="email" placeholder="name@example.com" />
           {!form.id && (
             <div style={{ background: '#f2efe8', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: '#666', marginTop: 14 }}>
-              A temporary PIN will be generated and emailed to the user with a link to the Forms App.
+              A temporary PIN will be generated and emailed to the user with a link to the Site App.
               They'll be asked to set their own PIN the first time they log in.
             </div>
           )}
