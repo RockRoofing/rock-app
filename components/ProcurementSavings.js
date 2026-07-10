@@ -1,27 +1,51 @@
 import { useState, useEffect, useMemo } from 'react'
 import { INK, th, td, Loading, primaryBtn, ghostBtn, linkBtn } from './opsUI'
+import RowAttachments from './RowAttachments'
+import ExpandableText from './ExpandableText'
+import ContactPicker from './ContactPicker'
 
 // Shared, editable Procurement Savings grid for a single project.
-// Used by the Projects tab (per-project) and the Pre-Contract page.
-// Both read/write the same data via /api/procurement-savings, so edits mirror.
-const gbp = (n) => (n == null || n === '' || isNaN(n)) ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 }).format(Number(n))
+// Used by the Projects tab and the Pre-Contract page — same data via
+// /api/procurement-savings, so edits mirror across both.
+//   Tendered Total = Qty x Tendered Rate
+//   Buying Total   = Qty x Buying Rate
+//   Total Savings  = Tendered Total - Buying Total
+const gbp = (n) => (n == null || n === '' || isNaN(n)) ? '' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 }).format(Number(n))
+const gbpOrDash = (n) => gbp(n) || '—'
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 const hasVal = (v) => v !== '' && v != null
-const blankRow = () => ({ supplier: '', qty: '', unit: '', tenderedRate: '', dateProvided: '', buyingRate: '', jmComments: '', buyerComments: '', supplierContact: '' })
+const UNITS = ['m2', 'm', 'item', 'nr']
+const blankRow = () => ({ packageName: '', supplier: '', dateProvided: '', qty: '', unit: '', tenderedRate: '', buyingRate: '', budgetComments: '', buyerComments: '', contactId: '', attachments: [] })
 
-export default function ProcurementSavings({ projectNo, projectName }) {
+// Currency input: shows formatted £ when not focused, raw number when editing.
+function MoneyInput({ value, onChange }) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <input
+      value={focused ? (value ?? '') : (hasVal(value) ? gbp(value) : '')}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={e => onChange(e.target.value.replace(/[£,\s]/g, ''))}
+      inputMode="decimal"
+      style={{ ...cell, textAlign: 'right' }}
+    />
+  )
+}
+
+export default function ProcurementSavings({ projectNo }) {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [notice, setNotice] = useState('')
+  const [sort, setSort] = useState({ key: null, dir: 'asc' })
 
   useEffect(() => { if (projectNo) load() }, [projectNo])
   async function load() {
     setLoading(true); setDirty(false); setNotice('')
     try {
       const d = await fetch(`/api/procurement-savings?projectNo=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setRows(d.rows && d.rows.length ? d.rows : [blankRow()])
+      setRows(d.rows && d.rows.length ? d.rows.map(r => ({ ...blankRow(), ...r })) : [blankRow()])
     } catch { setRows([blankRow()]) }
     setLoading(false)
   }
@@ -33,7 +57,7 @@ export default function ProcurementSavings({ projectNo, projectName }) {
   async function save() {
     setSaving(true)
     try {
-      const clean = rows.filter(r => Object.values(r).some(hasVal))
+      const clean = rows.filter(r => Object.entries(r).some(([k, v]) => k !== 'attachments' && hasVal(v)) || (r.attachments || []).length)
       await fetch('/api/procurement-savings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, rows: clean }) })
       setRows(clean.length ? clean : [blankRow()])
       setDirty(false); setNotice('Saved.'); setTimeout(() => setNotice(''), 2500)
@@ -54,12 +78,43 @@ export default function ProcurementSavings({ projectNo, projectName }) {
 
   const outstanding = rows.filter(r => (hasVal(r.tenderedRate) || hasVal(r.qty)) && !hasVal(r.buyingRate)).length
 
+  // Sorting: returns display order (indices) so edits still map to real rows.
+  const order = useMemo(() => {
+    const idx = rows.map((_, i) => i)
+    if (!sort.key) return idx
+    const val = (r) => {
+      if (sort.key === 'tenderedTotal') return num(r.qty) * num(r.tenderedRate)
+      if (sort.key === 'buyingTotal') return num(r.qty) * num(r.buyingRate)
+      if (sort.key === 'savings') return hasVal(r.buyingRate) ? num(r.qty) * num(r.tenderedRate) - num(r.qty) * num(r.buyingRate) : -Infinity
+      const v = r[sort.key]
+      return isNaN(parseFloat(v)) ? (v || '').toString().toLowerCase() : parseFloat(v)
+    }
+    return idx.sort((a, b) => {
+      const av = val(rows[a]), bv = val(rows[b])
+      if (av < bv) return sort.dir === 'asc' ? -1 : 1
+      if (av > bv) return sort.dir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [rows, sort])
+
+  function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
+  const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  const H = ({ k, label, w, min }) => <th onClick={() => toggleSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap', ...(w ? { width: w } : {}), ...(min ? { minWidth: min } : {}) }}>{label}{arrow(k)}</th>
+
   if (loading) return <Loading />
+
+  const AddRowBar = (
+    <div style={{ padding: '8px 0' }}>
+      <button onClick={addRow} style={ghostBtn}>+ Add row</button>
+      {dirty && <button onClick={save} disabled={saving} style={{ ...primaryBtn, marginLeft: 10 }}>{saving ? 'Saving…' : 'Save changes'}</button>}
+      {dirty && <span style={{ fontSize: 12, color: '#dc2626', marginLeft: 10 }}>Unsaved changes</span>}
+    </div>
+  )
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, color: '#666' }}>
+        <div style={{ fontSize: 13 }}>
           {outstanding > 0
             ? <span style={{ color: '#b45309', fontWeight: 600 }}>⚠ {outstanding} line{outstanding === 1 ? '' : 's'} awaiting a confirmed buying rate</span>
             : <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ All lines have a confirmed buying rate</span>}
@@ -70,66 +125,74 @@ export default function ProcurementSavings({ projectNo, projectName }) {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1700 }}>
           <thead>
             <tr style={{ background: '#faf9f7' }}>
-              <th style={{ ...th, minWidth: 200 }}>Key Supplier / Rate</th>
-              <th style={{ ...th, width: 80 }}>Qty</th>
-              <th style={{ ...th, width: 70 }}>Unit</th>
-              <th style={{ ...th, width: 120 }}>Tendered Rate</th>
-              <th style={{ ...th, width: 120 }}>Tendered Total</th>
-              <th style={{ ...th, width: 130 }}>Date Rate Provided</th>
-              <th style={{ ...th, width: 120 }}>Buying Rate</th>
-              <th style={{ ...th, width: 120 }}>Buying Total</th>
-              <th style={{ ...th, width: 120 }}>Total Savings</th>
-              <th style={{ ...th, minWidth: 160 }}>JM Comments</th>
-              <th style={{ ...th, minWidth: 160 }}>Buyer Comments</th>
+              <H k="packageName" label="Package Name" min={160} />
+              <H k="supplier" label="Supplier" min={180} />
+              <H k="dateProvided" label="Tender Rate Provided" w={150} />
+              <H k="qty" label="Qty" w={80} />
+              <H k="unit" label="Unit" w={90} />
+              <H k="tenderedRate" label="Tendered Rate" w={130} />
+              <H k="tenderedTotal" label="Tendered Total" w={130} />
+              <H k="buyingRate" label="Buying Rate" w={130} />
+              <H k="buyingTotal" label="Buying Total" w={130} />
+              <H k="savings" label="Total Savings" w={130} />
+              <th style={{ ...th, minWidth: 140 }}>Budget Comments</th>
+              <th style={{ ...th, minWidth: 140 }}>Buyer Comments</th>
               <th style={{ ...th, minWidth: 180 }}>Supplier Contact</th>
+              <th style={{ ...th, width: 60 }}>Files</th>
               <th style={{ ...th, width: 50 }}></th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
+            {rows.length === 0 && (
+              <tr><td colSpan={15} style={{ ...td, padding: 0 }}>{AddRowBar}</td></tr>
+            )}
+            {order.map((ri, displayIdx) => {
+              const r = rows[ri]
               const tTotal = num(r.qty) * num(r.tenderedRate)
               const hasBuying = hasVal(r.buyingRate)
               const bTotal = num(r.qty) * num(r.buyingRate)
               const savings = hasBuying ? tTotal - bTotal : null
               const needsBuying = (hasVal(r.tenderedRate) || hasVal(r.qty)) && !hasBuying
-              return (
-                <tr key={i} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle', background: needsBuying ? '#fffbeb' : '#fff' }}>
-                  <td style={td}><input value={r.supplier || ''} onChange={e => updateCell(i, 'supplier', e.target.value)} style={cell} placeholder="Supplier / rate" /></td>
-                  <td style={td}><input value={r.qty ?? ''} onChange={e => updateCell(i, 'qty', e.target.value)} style={{ ...cell, textAlign: 'right' }} inputMode="decimal" /></td>
-                  <td style={td}><input value={r.unit || ''} onChange={e => updateCell(i, 'unit', e.target.value)} style={cell} placeholder="item / m2" /></td>
-                  <td style={td}><input value={r.tenderedRate ?? ''} onChange={e => updateCell(i, 'tenderedRate', e.target.value)} style={{ ...cell, textAlign: 'right' }} inputMode="decimal" /></td>
-                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{gbp(tTotal)}</td>
-                  <td style={td}><input type="date" value={r.dateProvided || ''} onChange={e => updateCell(i, 'dateProvided', e.target.value)} style={cell} /></td>
-                  <td style={td}><input value={r.buyingRate ?? ''} onChange={e => updateCell(i, 'buyingRate', e.target.value)} style={{ ...cell, textAlign: 'right' }} inputMode="decimal" placeholder={needsBuying ? 'needed' : ''} /></td>
-                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{hasBuying ? gbp(bTotal) : '—'}</td>
-                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: savings == null ? '#bbb' : savings >= 0 ? '#16a34a' : '#dc2626' }}>{savings == null ? '—' : gbp(savings)}</td>
-                  <td style={td}><textarea value={r.jmComments || ''} onChange={e => updateCell(i, 'jmComments', e.target.value)} style={{ ...cell, minHeight: 34, resize: 'vertical' }} /></td>
-                  <td style={td}><textarea value={r.buyerComments || ''} onChange={e => updateCell(i, 'buyerComments', e.target.value)} style={{ ...cell, minHeight: 34, resize: 'vertical' }} /></td>
-                  <td style={td}><textarea value={r.supplierContact || ''} onChange={e => updateCell(i, 'supplierContact', e.target.value)} style={{ ...cell, minHeight: 34, resize: 'vertical' }} /></td>
-                  <td style={{ ...td, textAlign: 'center' }}><button onClick={() => removeRow(i)} style={{ ...linkBtn, color: '#dc2626' }} title="Remove row">×</button></td>
-                </tr>
-              )
+              const isLast = displayIdx === order.length - 1
+              return [
+                  <tr key={ri} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle', background: needsBuying ? '#fffbeb' : '#fff' }}>
+                    <td style={td}><input value={r.packageName || ''} onChange={e => updateCell(ri, 'packageName', e.target.value)} style={cell} placeholder="Package" /></td>
+                    <td style={td}><input value={r.supplier || ''} onChange={e => updateCell(ri, 'supplier', e.target.value)} style={cell} placeholder="Supplier" /></td>
+                    <td style={td}><input type="date" value={r.dateProvided || ''} onChange={e => updateCell(ri, 'dateProvided', e.target.value)} style={cell} /></td>
+                    <td style={td}><input value={r.qty ?? ''} onChange={e => updateCell(ri, 'qty', e.target.value)} style={{ ...cell, textAlign: 'right' }} inputMode="decimal" /></td>
+                    <td style={td}>
+                      <select value={r.unit || ''} onChange={e => updateCell(ri, 'unit', e.target.value)} style={{ ...cell, cursor: 'pointer' }}>
+                        <option value="">—</option>
+                        {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </td>
+                    <td style={td}><MoneyInput value={r.tenderedRate} onChange={v => updateCell(ri, 'tenderedRate', v)} /></td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{gbpOrDash(tTotal)}</td>
+                    <td style={td}><MoneyInput value={r.buyingRate} onChange={v => updateCell(ri, 'buyingRate', v)} /></td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{hasBuying ? gbpOrDash(bTotal) : '—'}</td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: savings == null ? '#bbb' : savings >= 0 ? '#16a34a' : '#dc2626' }}>{savings == null ? '—' : gbpOrDash(savings)}</td>
+                    <td style={td}><ExpandableText value={r.budgetComments} onSave={v => updateCell(ri, 'budgetComments', v)} label="Budget Comments" width="100%" /></td>
+                    <td style={td}><ExpandableText value={r.buyerComments} onSave={v => updateCell(ri, 'buyerComments', v)} label="Buyer Comments" width="100%" /></td>
+                    <td style={td}><ContactPicker value={r.contactId || ''} onChange={(id) => updateCell(ri, 'contactId', id || '')} /></td>
+                    <td style={{ ...td, textAlign: 'center' }}><RowAttachments files={r.attachments || []} onChange={files => updateCell(ri, 'attachments', files)} /></td>
+                    <td style={{ ...td, textAlign: 'center' }}><button onClick={() => removeRow(ri)} style={{ ...linkBtn, color: '#dc2626' }} title="Remove row">×</button></td>
+                  </tr>,
+                  isLast ? <tr key="addbar"><td colSpan={15} style={{ ...td, padding: 0, borderTop: '1px solid #f0f0f0' }}>{AddRowBar}</td></tr> : null
+              ]
             })}
             <tr style={{ background: '#faf9f7', borderTop: '2px solid #e5e5e5' }}>
-              <td style={{ ...td, fontWeight: 700, color: INK }} colSpan={4}>TOTALS</td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{gbp(totals.tendered)}</td>
+              <td style={{ ...td, fontWeight: 700, color: INK }} colSpan={6}>TOTALS</td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{gbpOrDash(totals.tendered)}</td>
               <td style={td}></td>
-              <td style={td}></td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{gbp(totals.buying)}</td>
-              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: totals.savings >= 0 ? '#16a34a' : '#dc2626' }}>{gbp(totals.savings)}</td>
-              <td style={td} colSpan={4}></td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{gbpOrDash(totals.buying)}</td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: totals.savings >= 0 ? '#16a34a' : '#dc2626' }}>{gbpOrDash(totals.savings)}</td>
+              <td style={td} colSpan={5}></td>
             </tr>
           </tbody>
         </table>
-      </div>
-
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
-        <button onClick={addRow} style={ghostBtn}>+ Add row</button>
-        {dirty && <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save changes'}</button>}
-        {dirty && <span style={{ fontSize: 12, color: '#dc2626' }}>Unsaved changes</span>}
       </div>
     </div>
   )

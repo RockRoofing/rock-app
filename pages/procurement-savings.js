@@ -26,15 +26,11 @@ export default function ProcurementSavingsPage() {
     setLoading(false)
   }
 
-  // "Needs finalising": any project that either (a) has started rows with an
-  // outstanding buying rate, or (b) has no savings document started at all.
+  // "Needs finalising": projects with NO procurement savings document started
+  // at all. Shown with a warning. (Started-but-unfinished ones are not listed
+  // here — the amber row highlighting inside each doc flags those.)
   const needsFinalising = useMemo(() => {
-    return projects.map(p => {
-      const s = summary[p.no]
-      if (!s) return { ...p, reason: 'Not started', incomplete: 0 }
-      if (s.incomplete > 0) return { ...p, reason: `${s.incomplete} line${s.incomplete === 1 ? '' : 's'} awaiting buying rate`, incomplete: s.incomplete }
-      return null
-    }).filter(Boolean)
+    return projects.filter(p => !summary[p.no]).map(p => ({ ...p }))
   }, [projects, summary])
 
   function pick(no) {
@@ -51,19 +47,19 @@ export default function ProcurementSavingsPage() {
           <h1 style={{ fontSize: 24, fontWeight: 700, color: INK, margin: '0 0 4px' }}>Procurement Savings</h1>
           <p style={{ fontSize: 14, color: '#777', margin: '0 0 22px' }}>Tendered vs buying rates and resulting savings, per project. Also available under each project in the Projects area.</p>
 
-          {/* Needs finalising worklist */}
+          {/* Needs finalising worklist — projects with no savings doc started */}
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 18, marginBottom: 22 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 4 }}>Needs finalising</div>
-            <div style={{ fontSize: 12.5, color: '#999', marginBottom: 12 }}>Projects with a budget inserted but no confirmed buying rate, or no savings document started yet.</div>
+            <div style={{ fontSize: 12.5, color: '#999', marginBottom: 12 }}>Projects with no procurement savings document started yet.</div>
             {loading ? <div style={{ color: '#999', fontSize: 13 }}>Loading…</div>
-              : needsFinalising.length === 0 ? <div style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>✓ All projects’ procurement savings are finalised.</div>
+              : needsFinalising.length === 0 ? <div style={{ color: '#16a34a', fontSize: 13, fontWeight: 600 }}>✓ Every project has a procurement savings document started.</div>
               : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                   {needsFinalising.map(p => (
                     <button key={p.no} onClick={() => pick(p.no)}
-                      style={{ textAlign: 'left', background: p.reason === 'Not started' ? '#f3f4f6' : '#fffbeb', border: `1px solid ${p.reason === 'Not started' ? '#e5e7eb' : '#fde68a'}`, borderRadius: 10, padding: '10px 14px', cursor: 'pointer', minWidth: 220 }}>
+                      style={{ textAlign: 'left', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', minWidth: 220 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>{[p.no, p.name].filter(Boolean).join(' — ')}</div>
-                      <div style={{ fontSize: 11.5, color: p.reason === 'Not started' ? '#6b7280' : '#b45309', marginTop: 2 }}>{p.reason}</div>
+                      <div style={{ fontSize: 11.5, color: '#dc2626', marginTop: 2, fontWeight: 600 }}>⚠ Not started</div>
                     </button>
                   ))}
                 </div>

@@ -1,16 +1,13 @@
-PROCUREMENT SAVINGS (corrected placement)
+PROCUREMENT SAVINGS v3 — grid changes + contacts
 
-DEPLOY these files (mirror into your repo, overwriting):
-  pages/api/procurement-savings.js          (updated: adds ?summary=true)
-  components/ProcurementSavings.js          (NEW shared editable grid)
-  components/PreContractNav.js              (adds Procurement Savings tab after IHM)
-  components/OperationsNav.js               (removes the earlier wrong Ops nav entry)
-  pages/procurement-savings.js             (NEW Pre-Contract page w/ needs-finalising list)
-  pages/operations/projects.js             (adds Procurement Savings sub-tab after Handover)
+DEPLOY (mirror into repo, overwrite):
+  pages/api/contacts.js               (NEW — global contacts directory)
+  pages/api/procurement-savings.js    (unchanged from v2, included for safety)
+  components/ContactPicker.js         (NEW — searchable add/select contact)
+  components/ProcurementSavings.js    (rewritten grid — all the changes)
+  pages/procurement-savings.js        (needs-finalising now: not-started only, warning)
 
-DELETE this file from your repo if you deployed the earlier version:
-  pages/operations/project-management/procurement-savings.js   (wrong location - remove)
-
-HOUSEKEEPING (separate, safe to also delete):
-  pages/api/po-check.js
-  pages/api/blob-check.js
+NOTE: this builds on procurement-savings-v2. If you haven't deployed v2 yet,
+also deploy from that batch: components/PreContractNav.js, components/OperationsNav.js,
+pages/operations/projects.js  (they add the tabs/sub-tab and remove the old Ops page).
+And delete pages/operations/project-management/procurement-savings.js if it exists.
