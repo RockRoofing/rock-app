@@ -170,9 +170,9 @@ export default function ProcurementSavings({ projectNo }) {
                     <td style={td}><input value={r.packageName || ''} onChange={e => updateCell(ri, 'packageName', e.target.value)} style={cell} placeholder="Package" /></td>
                     <td style={td}><input value={r.supplier || ''} onChange={e => updateCell(ri, 'supplier', e.target.value)} style={cell} placeholder="Supplier" /></td>
                     <td style={td}><input type="date" value={r.dateProvided || ''} onChange={e => updateCell(ri, 'dateProvided', e.target.value)} style={cell} /></td>
-                    <td style={td}><input value={r.qty ?? ''} onChange={e => updateCell(ri, 'qty', e.target.value)} style={{ ...cell, textAlign: 'right' }} inputMode="decimal" /></td>
+                    <td style={td}><input value={r.qty ?? ''} onChange={e => updateCell(ri, 'qty', e.target.value)} style={{ ...cell, textAlign: 'right', minWidth: 76 }} inputMode="decimal" /></td>
                     <td style={td}>
-                      <select value={r.unit || ''} onChange={e => updateCell(ri, 'unit', e.target.value)} style={{ ...cell, cursor: 'pointer' }}>
+                      <select value={r.unit || ''} onChange={e => updateCell(ri, 'unit', e.target.value)} style={{ ...cell, cursor: 'pointer', minWidth: 72 }}>
                         <option value="">—</option>
                         {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>

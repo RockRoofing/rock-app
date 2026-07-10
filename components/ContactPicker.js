@@ -11,16 +11,33 @@ export default function ContactPicker({ value, onChange, compact }) {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState({ firstName: '', lastName: '', company: '', phone: '', email: '' })
   const [saving, setSaving] = useState(false)
+  const [pos, setPos] = useState(null)   // {top,left,width} for fixed overlay
   const boxRef = useRef(null)
+  const btnRef = useRef(null)
 
   useEffect(() => { load() }, [])
   useEffect(() => {
     function onDoc(e) { if (boxRef.current && !boxRef.current.contains(e.target)) { setOpen(false); setAdding(false) } }
-    document.addEventListener('mousedown', onDoc); return () => document.removeEventListener('mousedown', onDoc)
-  }, [])
+    function onScroll() { if (open) place() }
+    document.addEventListener('mousedown', onDoc)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
+    return () => { document.removeEventListener('mousedown', onDoc); window.removeEventListener('scroll', onScroll, true); window.removeEventListener('resize', onScroll) }
+  }, [open])
   async function load() {
     try { const d = await fetch('/api/contacts').then(r => r.json()); setContacts(d.contacts || []) } catch {}
   }
+
+  function place() {
+    const el = btnRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const width = 280
+    let left = r.left
+    if (left + width > window.innerWidth - 12) left = Math.max(12, window.innerWidth - width - 12)
+    setPos({ top: r.bottom + 4, left, width })
+  }
+  function toggle() { if (!open) place(); setOpen(o => !o) }
 
   const selected = contacts.find(c => c.id === value)
   const label = selected ? `${selected.firstName || ''} ${selected.lastName || ''}${selected.company ? ` · ${selected.company}` : ''}`.trim() : ''
@@ -43,16 +60,16 @@ export default function ContactPicker({ value, onChange, compact }) {
   }
 
   return (
-    <div ref={boxRef} style={{ position: 'relative', width: '100%' }}>
-      <button onClick={() => setOpen(o => !o)} style={{ ...cellBtn, color: selected ? INK : '#bbb' }}>
+    <div ref={boxRef} style={{ width: '100%' }}>
+      <button ref={btnRef} onClick={toggle} style={{ ...cellBtn, color: selected ? INK : '#bbb' }}>
         {selected ? label : 'Select contact…'}
       </button>
-      {open && (
-        <div style={dropdown}>
+      {open && pos && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1000, width: pos.width, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.16)' }}>
           {!adding ? (
             <>
               <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search contacts…" style={search} />
-              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+              <div style={{ maxHeight: 220, overflowY: 'auto' }}>
                 {selected && <div onClick={() => { onChange(null, null); setOpen(false) }} style={{ ...opt, color: '#dc2626' }}>✕ Clear selection</div>}
                 {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: '#999' }}>No matches.</div>}
                 {filtered.map(c => (

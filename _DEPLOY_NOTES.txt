@@ -1,13 +1,8 @@
-PROCUREMENT SAVINGS v3 — grid changes + contacts
+PROCUREMENT SAVINGS v5 — fixes
+  components/ProcurementSavings.js  (Qty/Unit inputs given firm min-widths)
+  components/ContactPicker.js       (dropdown now fixed-position so it isn't clipped by the table scroll)
 
-DEPLOY (mirror into repo, overwrite):
-  pages/api/contacts.js               (NEW — global contacts directory)
-  pages/api/procurement-savings.js    (unchanged from v2, included for safety)
-  components/ContactPicker.js         (NEW — searchable add/select contact)
-  components/ProcurementSavings.js    (rewritten grid — all the changes)
-  pages/procurement-savings.js        (needs-finalising now: not-started only, warning)
-
-NOTE: this builds on procurement-savings-v2. If you haven't deployed v2 yet,
-also deploy from that batch: components/PreContractNav.js, components/OperationsNav.js,
-pages/operations/projects.js  (they add the tabs/sub-tab and remove the old Ops page).
-And delete pages/operations/project-management/procurement-savings.js if it exists.
+NOTE: The earlier screenshot showed NO "Package Name" column, which means the v3/v4
+component wasn't deployed yet. Make sure THIS ProcurementSavings.js (with Package Name
+as the first column) actually deploys. If Package Name still doesn't show after deploy,
+the file didn't update on the live site.
