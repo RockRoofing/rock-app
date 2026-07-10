@@ -36,6 +36,7 @@ const emptyMeeting = (projectNo, projectName) => ({
   riskIds: [],
   anotherMeeting: 'no',
   nextMeetingDate: '',
+  nextMeetingTime: '09:00',
   nextMeetingDismissed: false,
 })
 
@@ -89,10 +90,31 @@ export default function ProjectConcerns({ projectNo, projectName }) {
   async function saveMeeting(meeting) {
     setSaving(true)
     try {
-      await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectNo, meeting }) })
+      const prev = meetings.find(m => m.id === meeting.id) || {}
+      const resp = await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectNo, meeting }) }).then(r => r.json())
+      const meetingId = meeting.id || resp.id
+
+      // Decide calendar invite action:
+      //  - now wants a meeting with a date, and none sent yet OR date/time changed -> REQUEST (send/update)
+      //  - previously sent an invite but now no meeting/date -> CANCEL
+      const wantsMeeting = meeting.anotherMeeting === 'yes' && meeting.nextMeetingDate
+      const hadInvite = !!prev.inviteUid
+      const changed = prev.inviteSentDate !== meeting.nextMeetingDate || prev.inviteSentTime !== (meeting.nextMeetingTime || '09:00')
+      let inviteMsg = ''
+      if (wantsMeeting && (!hadInvite || changed)) {
+        const r = await fetch('/api/concern-invite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectNo, meetingId, method: 'REQUEST' }) }).then(x => x.json()).catch(() => ({}))
+        if (r.sent) inviteMsg = hadInvite ? `Updated invite sent to ${r.sent} attendee(s).` : `Invite sent to ${r.sent} attendee(s).`
+        else if (r.error) inviteMsg = `Meeting saved, but invite not sent: ${r.error}.`
+      } else if (!wantsMeeting && hadInvite) {
+        await fetch('/api/concern-invite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectNo, meetingId, method: 'CANCEL' }) }).catch(() => {})
+        inviteMsg = 'Meeting saved; previous invite cancelled.'
+      }
       await load()
       setOpen(null)
+      if (inviteMsg) setTimeout(() => alert(inviteMsg), 100)
     } catch { alert('Could not save meeting.') }
     setSaving(false)
   }
@@ -385,10 +407,11 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
           </select>
           {f.anotherMeeting === 'yes' && (
             <div style={{ marginTop: 12 }}>
-              <L>Date of next meeting</L>
-              <div style={grey}>A calendar invite to the meeting attendees will be set up here (coming soon).</div>
+              <L>Date & time of next meeting</L>
+              <div style={grey}>Saving with a date & time automatically sends a calendar invite to the meeting attendees (listing the risks, mitigations and actions). Changing the date/time later sends an updated invite; attendees can then edit it in their own calendar.</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="date" value={f.nextMeetingDate || ''} onChange={e => set({ nextMeetingDate: e.target.value, nextMeetingDismissed: false })} style={{ ...input, maxWidth: 200 }} />
+                <input type="date" value={f.nextMeetingDate || ''} onChange={e => set({ nextMeetingDate: e.target.value, nextMeetingDismissed: false })} style={{ ...input, maxWidth: 180 }} />
+                <input type="time" value={f.nextMeetingTime || '09:00'} onChange={e => set({ nextMeetingTime: e.target.value })} style={{ ...input, maxWidth: 130 }} />
                 {f.nextMeetingDate && <button onClick={() => set({ nextMeetingDate: '' })} style={linkBtn}>Clear</button>}
               </div>
             </div>
