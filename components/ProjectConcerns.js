@@ -17,7 +17,11 @@ const ISSUE_OPTIONS = [
 ]
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
-const isPast = (d) => d && new Date(d) < new Date(new Date().toDateString())
+// Parse an ISO date (YYYY-MM-DD) as a LOCAL calendar date, not UTC, so it never
+// shifts by a day across timezones.
+const parseLocal = (d) => { if (!d) return null; const [y, m, day] = d.split('-').map(Number); return new Date(y, (m || 1) - 1, day || 1) }
+const isPast = (d) => { const dt = parseLocal(d); if (!dt) return false; const t = new Date(); return dt < new Date(t.getFullYear(), t.getMonth(), t.getDate()) }
+const fmtLocal = (d) => { const dt = parseLocal(d); return dt ? dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }
 
 const emptyMeeting = (projectNo, projectName) => ({
   projectNo, projectName,
@@ -62,12 +66,15 @@ export default function ProjectConcerns({ projectNo, projectName }) {
   }, [projectNo])
   useEffect(() => { if (projectNo) load() }, [projectNo, load])
 
-  // Banner: soonest upcoming/scheduled next meeting that isn't dismissed.
+  // Banner: only ever reflects the MOST RECENTLY ADDED meeting. Older meetings'
+  // next-dates are superseded and ignored. (meetings[] is newest-first.)
   const banner = useMemo(() => {
-    const withNext = meetings.filter(m => m.anotherMeeting === 'yes' && m.nextMeetingDate && !m.nextMeetingDismissed)
-    if (!withNext.length) return null
-    withNext.sort((a, b) => new Date(a.nextMeetingDate) - new Date(b.nextMeetingDate))
-    return withNext[0]
+    const latest = meetings[0]
+    if (!latest) return null
+    if (latest.anotherMeeting !== 'yes') return null
+    if (!latest.nextMeetingDate) return null
+    if (latest.nextMeetingDismissed) return null
+    return latest
   }, [meetings])
 
   async function dismissBanner(m) {
@@ -110,8 +117,8 @@ export default function ProjectConcerns({ projectNo, projectName }) {
         }}>
           <span style={{ fontSize: 14, color: isPast(banner.nextMeetingDate) ? '#b91c1c' : '#1e40af', fontWeight: 600 }}>
             {isPast(banner.nextMeetingDate)
-              ? <>⚠ Project Concern scheduled for {fmtDate(banner.nextMeetingDate)}. This has now passed.</>
-              : <>Next Project Concern meeting: {fmtDate(banner.nextMeetingDate)}</>}
+              ? <>⚠ Project Concern scheduled for {fmtLocal(banner.nextMeetingDate)}. This has now passed.</>
+              : <>Next Project Concern meeting: {fmtLocal(banner.nextMeetingDate)}</>}
           </span>
           <div style={{ flex: 1 }} />
           <button onClick={() => dismissBanner(banner)} title="Dismiss" style={{ ...linkBtn, color: '#888', fontSize: 18, lineHeight: 1 }}>×</button>
@@ -140,7 +147,7 @@ export default function ProjectConcerns({ projectNo, projectName }) {
                 <tr key={m.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                   <td style={td}>{m.projectName || projectName || '—'}</td>
                   <td style={td}>{m.projectNo || projectNo}</td>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}>{m.date ? fmtDate(m.date) : '—'}</td>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}>{m.date ? fmtLocal(m.date) : "—"}</td>
                   <td style={td}>{(m.issues || []).length + (m.issueOther ? 1 : 0)} noted</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => openView(m)} style={linkBtn}>View</button>
