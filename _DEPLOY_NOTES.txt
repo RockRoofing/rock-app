@@ -1,16 +1,5 @@
-OPS PROJECT FINANCIALS — clean embed (no double nav)
-
-  pages/commercial.js
-   PROBLEM: the Ops Project Financials embed was showing the WHOLE Commercial portal,
-   including its own dark nav bar (Portal | Project Financials | Retention | Variations |
-   Application Calendar | Commercial Scorecard) — stacked under the Ops main nav.
-   FIX:
-   - Embed detection made robust (query param OR url OR being inside an iframe), so the
-     embedded page reliably renders its SLIM bar, not the full portal nav.
-   - The slim embed bar now shows EXACTLY: Budget Tracker/EOM toggle, Month selector (EOM
-     mode only), Upload, Xero, Sync Xero. No portal navigation links.
-   - The standalone Commercial page (opened directly) is unchanged — full nav as before.
-   - The Ops main nav is untouched (it's outside the iframe).
-
-Applies to BOTH embeds of this page: Ops Project Financials AND the Pre-Contract Project
-Financials page (both now show the clean slim bar).
+OPS PROJECT FINANCIALS — full-bleed (no longer looks "inserted")
+  pages/operations/project-financials.js
+   - Removed the padded card container + rounded corners around the embed.
+   - The embed now sits edge-to-edge directly under the Ops nav (single 52px bar),
+     filling the window, so it reads as one continuous native page.
