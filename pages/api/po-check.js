@@ -1,9 +1,9 @@
 import { get, getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, fetchPurchaseOrders } from '../../lib/xero'
 
-// TEMPORARY diagnostic: explains why POs are / aren't appearing on the
-// Delivery Schedule. Shows go-live, and for each recent AUTHORISED PO whether
-// it qualifies (order date >= go-live) and whether it's already imported.
+// TEMPORARY diagnostic for the ID-based Deliveries sync.
+// Shows: baseline size, imported rows, and for each recent AUTHORISED PO
+// whether its id is already "seen" (baseline/backlog) or would be added.
 // GET /api/po-check   — delete after use.
 export default async function handler(req, res) {
   try {
@@ -12,8 +12,8 @@ export default async function handler(req, res) {
     try { const nt = await refreshXeroToken(tokens.refresh_token); tokens = { ...tokens, ...nt }; await saveTokens(tokens) }
     catch (e) { return res.json({ error: 'Token refresh failed — reconnect Xero.', detail: String(e) }) }
 
-    const goLive = await get('ops:deliveries:golive')
-    const goLiveDay = goLive ? new Date(goLive).toISOString().slice(0, 10) : null
+    const seen = (await get('ops:deliveries:seenPoIds')) || []
+    const seenSet = new Set(seen)
     const deliveries = (await get('ops:deliveries')) || []
     const importedIds = new Set(deliveries.filter(d => d.purchaseOrderId).map(d => d.purchaseOrderId))
 
@@ -21,27 +21,24 @@ export default async function handler(req, res) {
     try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) }
     catch (e) { return res.json({ error: 'PO fetch failed', detail: e.message }) }
 
-    // Show the 15 most recent AUTHORISED POs and why each does/doesn't qualify
     const recent = pos.slice(0, 15).map(po => ({
       poNumber: po.poNumber,
-      status: po.status,
-      orderDate: po.orderDate,
+      poId: po.purchaseOrderId,
+      inBaseline_seen: seenSet.has(po.purchaseOrderId),
       alreadyImported: importedIds.has(po.purchaseOrderId),
-      qualifies: !!(po.orderDate && goLiveDay && po.orderDate >= goLiveDay && !importedIds.has(po.purchaseOrderId)),
-      reasonIfNot: !po.orderDate ? 'no order date on PO'
-        : !goLiveDay ? 'go-live not set (run a sync once to set it)'
-        : po.orderDate < goLiveDay ? `order date ${po.orderDate} is BEFORE go-live ${goLiveDay}`
-        : importedIds.has(po.purchaseOrderId) ? 'already imported'
-        : 'qualifies — should appear on next sync',
+      wouldBeAddedOnNextSync: !seenSet.has(po.purchaseOrderId) && !importedIds.has(po.purchaseOrderId),
     }))
 
     return res.json({
-      goLiveTimestamp: goLive || null,
-      goLiveDay,
+      baselineExists: seen.length > 0,
+      baselineSize: seen.length,
+      importedRowCount: deliveries.filter(d => d.source === 'xero').length,
       totalAuthorisedReturned: pos.length,
-      alreadyImportedCount: deliveries.filter(d => d.source === 'xero').length,
+      firstSyncWillBaselineEverything: seen.length === 0,
       recentAuthorisedPOs: recent,
-      note: 'If your PO shows "order date ... is BEFORE go-live", that is why it is not appearing. Tell me and I can adjust the cutoff.',
+      note: seen.length === 0
+        ? 'No baseline yet. The NEXT sync will set the baseline (record all current POs, add none). Approve a PO AFTER that sync to see it come in.'
+        : 'If your PO shows inBaseline_seen:true, it was approved before the baseline sync and is treated as backlog. Approve a NEW one to test, or tell me its PO number to force-add it.',
     })
   } catch (e) {
     return res.status(500).json({ error: String(e) })
