@@ -116,13 +116,16 @@ export default function ProjectConcerns({ projectNo, projectName }) {
       //  - previously sent an invite but now no meeting/date -> CANCEL
       const wantsMeeting = meeting.anotherMeeting === 'yes' && meeting.nextMeetingDate
       const hadInvite = !!prev.inviteUid
-      const changed = prev.inviteSentDate !== meeting.nextMeetingDate || prev.inviteSentTime !== (meeting.nextMeetingTime || '09:00')
+      const dateChanged = prev.inviteSentDate !== meeting.nextMeetingDate || prev.inviteSentTime !== (meeting.nextMeetingTime || '09:00')
+      // New attendees added since the last invite?
+      const prevInvited = prev.invitedAttendees || []
+      const newAttendees = (meeting.attendees || []).some(id => !prevInvited.includes(id))
       let inviteMsg = ''
-      if (wantsMeeting && (!hadInvite || changed)) {
+      if (wantsMeeting && (!hadInvite || dateChanged || newAttendees)) {
         const r = await fetch('/api/concern-invite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectNo, meetingId, method: 'REQUEST' }) }).then(x => x.json()).catch(() => ({}))
-        if (r.sent) inviteMsg = hadInvite ? `Updated invite sent to ${r.sent} attendee(s).` : `Invite sent to ${r.sent} attendee(s).`
-        else if (r.error) inviteMsg = `Meeting saved, but invite not sent: ${r.error}.`
+        if (r.sent) inviteMsg = hadInvite ? `Invite update sent to ${r.sent} attendee(s).` : `Invite sent to ${r.sent} attendee(s).`
+        else if (r.error && r.error !== 'No new attendees to invite') inviteMsg = `Meeting saved, but invite not sent: ${r.error}.`
       } else if (!wantsMeeting && hadInvite) {
         await fetch('/api/concern-invite', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ projectNo, meetingId, method: 'CANCEL' }) }).catch(() => {})

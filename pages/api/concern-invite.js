@@ -53,18 +53,31 @@ export default async function handler(req, res) {
   const attendeeEmails = (m.attendees || [])
     .map(id => users.find(u => u.id === id))
     .filter(Boolean)
-    .map(u => ({ email: u.email, name: u.name }))
+    .map(u => ({ id: u.id, email: u.email, name: u.name }))
     .filter(a => a.email)
 
   if (method === 'REQUEST' && (!m.nextMeetingDate || !attendeeEmails.length)) {
     return res.status(200).json({ sent: false, error: !attendeeEmails.length ? 'No attendee emails' : 'No date' })
   }
 
+  // Decide recipients:
+  //  - date/time changed (dateChanged=true) OR cancel -> send to ALL current attendees
+  //  - otherwise (just added attendees to an existing invite) -> only NEW attendees
+  const alreadyInvited = m.invitedAttendees || []
+  const dateChanged = m.inviteSentDate && (m.inviteSentDate !== m.nextMeetingDate || (m.inviteSentTime || '09:00') !== (m.nextMeetingTime || '09:00'))
+  let recipients = attendeeEmails
+  if (method === 'REQUEST' && m.inviteUid && !dateChanged) {
+    recipients = attendeeEmails.filter(a => !alreadyInvited.includes(a.id))
+  }
+  if (method === 'REQUEST' && !recipients.length) {
+    return res.status(200).json({ sent: 0, error: 'No new attendees to invite' })
+  }
+
   // Stable UID + sequence for update/cancel semantics
   const uid = m.inviteUid || `concern-${projectNo}-${meetingId}@rockroofing.co.uk`
   const sequence = (m.inviteSequence || 0) + 1
 
-  // Build description: risks, mitigations, meeting actions (direct DB reads)
+  // Build a full description covering all meeting information.
   let tasks = [], risks = []
   try {
     const allTasks = await getLiveTasks()
@@ -73,14 +86,22 @@ export default async function handler(req, res) {
     risks = allRisks.filter(r => r.projectNo === projectNo)
   } catch {}
 
+  const attendeeNames = attendeeEmails.map(a => a.name || a.email)
+  const issues = [...(m.issues || []), ...(m.issueOther ? [m.issueOther] : [])]
+
   const lines = []
-  lines.push(`Project Concern follow-up meeting`)
-  lines.push(`Project: ${m.projectName || ''} (${projectNo})`)
+  lines.push('PROJECT CONCERN — FOLLOW-UP MEETING')
   lines.push('')
-  if (m.description) { lines.push('Current / potential issues:'); lines.push(m.description); lines.push('') }
-  if (m.mitigation) { lines.push('Mitigation plan:'); lines.push(m.mitigation); lines.push('') }
-  if (risks.length) { lines.push('Risks:'); risks.forEach(r => lines.push(`- ${r.description || ''}${r.mitigation ? ` (mitigation: ${r.mitigation})` : ''}`)); lines.push('') }
-  if (tasks.length) { lines.push('Meeting actions:'); tasks.forEach(t => lines.push(`- ${t.description || ''}${t.assignee ? ` [${t.assignee}]` : ''}`)); lines.push('') }
+  lines.push(`Project: ${m.projectName || ''} (${projectNo})`)
+  if (m.date) lines.push(`Original meeting date: ${m.date}`)
+  if (attendeeNames.length) lines.push(`Attendees: ${attendeeNames.join(', ')}`)
+  if (m.recordingLink) lines.push(`Recording: ${m.recordingLink}`)
+  lines.push('')
+  if (issues.length) { lines.push('Issues faced:'); issues.forEach(i => lines.push(`  • ${i}`)); lines.push('') }
+  if (m.description) { lines.push('Current / potential issue(s):'); lines.push(m.description); lines.push('') }
+  if (m.mitigation) { lines.push('How we plan to mitigate / remove the risk:'); lines.push(m.mitigation); lines.push('') }
+  if (risks.length) { lines.push('Risk log:'); risks.forEach(r => lines.push(`  • ${r.description || ''}${r.mitigation ? ` — mitigation: ${r.mitigation}` : ''}${r.closed ? ' (resolved)' : ''}`)); lines.push('') }
+  if (tasks.length) { lines.push('Meeting actions:'); tasks.forEach(t => lines.push(`  • ${t.description || ''}${t.assignee ? ` — ${t.assignee}` : ''}${t.closed ? ' (done)' : ''}`)); lines.push('') }
   const description = lines.join('\n')
 
   const dtStart = icsDateTime(m.nextMeetingDate, m.nextMeetingTime)
@@ -105,7 +126,7 @@ export default async function handler(req, res) {
   const subject = `${subjectPrefix}Project Concern meeting — ${m.projectName || projectNo}`
 
   let sentCount = 0
-  for (const a of attendeeEmails) {
+  for (const a of recipients) {
     try {
       const resp = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -121,9 +142,15 @@ export default async function handler(req, res) {
     } catch {}
   }
 
-  // Persist UID + sequence so future changes update the same event
-  meetings[idx] = { ...m, inviteUid: uid, inviteSequence: sequence, inviteSentDate: m.nextMeetingDate, inviteSentTime: m.nextMeetingTime || '09:00' }
-  await set(keyFor(projectNo), meetings)
+  // Persist invite metadata WITHOUT touching any other meeting fields (attendees etc.).
+  // Track everyone who now holds an invite so future "add attendee" updates only email the new ones.
+  const invitedAttendees = method === 'CANCEL' ? [] : Array.from(new Set([...(m.invitedAttendees || []), ...attendeeEmails.map(a => a.id)]))
+  const fresh = (await get(keyFor(projectNo))) || meetings
+  const i2 = fresh.findIndex(x => x.id === meetingId)
+  if (i2 >= 0) {
+    fresh[i2] = { ...fresh[i2], inviteUid: uid, inviteSequence: sequence, inviteSentDate: m.nextMeetingDate, inviteSentTime: m.nextMeetingTime || '09:00', invitedAttendees }
+    await set(keyFor(projectNo), fresh)
+  }
 
   return res.json({ ok: true, sent: sentCount, method })
 }

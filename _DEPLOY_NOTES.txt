@@ -1,8 +1,14 @@
-SRATs v2
-  pages/operations/project-management/srat.js
-   - Even column widths (fixed table layout + colgroup).
-   - New Date column; table auto-sorts by Date (newest first). Date field added to the
-     add/edit modal (defaults to today) and shown in the large View.
-   - Situation / Roadblocks / Actions / Timeline cells are clickable -> open the full text
-     in a larger pop-up window (view-only).
-   - Pagination: max 50 SRATs per page.
+PROJECT CONCERNS — attendee persistence + richer invite + invite-only-new-attendees
+
+  components/ProjectConcerns.js
+   - Saving no longer risks losing attendees (invite metadata is now saved by the invite API
+     WITHOUT overwriting attendees or other fields — it re-reads fresh and patches only invite fields).
+   - Adding attendees to an already-invited meeting now sends an invite to ONLY the new attendees.
+   - Date/time change still sends an update to everyone.
+
+  pages/api/concern-invite.js
+   - Only-new-attendees logic: tracks invitedAttendees[]; on an existing invite with no date change,
+     emails only attendees who haven't been invited yet. Date/time change -> emails everyone (update).
+   - Invite now includes ALL meeting info: attendees, recording link, issues (+ if other),
+     description, mitigation, full risk log, and meeting actions.
+   - Save-back re-reads the record and patches only invite fields (fixes attendee clobber).
