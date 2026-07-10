@@ -1,8 +1,13 @@
-PROCUREMENT SAVINGS v5 — fixes
-  components/ProcurementSavings.js  (Qty/Unit inputs given firm min-widths)
-  components/ContactPicker.js       (dropdown now fixed-position so it isn't clipped by the table scroll)
+PROJECT FINANCIALS MIRROR + EDITABLE VARIATIONS MIRROR
 
-NOTE: The earlier screenshot showed NO "Package Name" column, which means the v3/v4
-component wasn't deployed yet. Make sure THIS ProcurementSavings.js (with Package Name
-as the first column) actually deploys. If Package Name still doesn't show after deploy,
-the file didn't update on the live site.
+DEPLOY (mirror into repo, overwrite):
+  pages/variations.js                                  (adds ?embed=true support: hides its own nav, keeps Add Variation)
+  pages/operations/project-management/variations.js    (now EMBEDS /variations?embed=true — exact editable mirror)
+  pages/operations/project-financials.js               (NEW — Ops Project Financials, embeds /commercial?mode=eom&embed=true)
+  components/OperationsNav.js                           (adds "Project Financials" top-level nav, right of Project Management)
+
+RESULT:
+  - Operations now has a top-level "Project Financials" tab (right of Project Management)
+    showing the exact same financials view as the Pre-Contract page. Editable, always in sync.
+  - Operations > Project Management > Variations is now the exact same editable Variation
+    Tracker as the Commercial one. Edit in either place; both update (same data).

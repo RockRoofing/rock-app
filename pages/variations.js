@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 
 const fmt = (n) => n == null || n === '' || isNaN(n) ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(parseFloat(n))
 const fmtN = (n) => n == null || n === '' ? 0 : parseFloat(n) || 0
@@ -16,6 +17,8 @@ function nextVarNumber(variations) {
 }
 
 export default function VariationTracker() {
+  const router = useRouter()
+  const isEmbed = router.query.embed === 'true'
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -246,7 +249,7 @@ export default function VariationTracker() {
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f0f2f5' }}>
 
         {/* Nav */}
-        <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
+        <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20, display: isEmbed ? 'none' : 'block' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
@@ -273,7 +276,16 @@ export default function VariationTracker() {
         <div style={{ padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Variation Tracker</h1>
-            <span style={{ fontSize: 12, color: '#888' }}>Live & in-progress projects only · {filtered.length} variation{filtered.length !== 1 ? 's' : ''}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>Live & in-progress projects only · {filtered.length} variation{filtered.length !== 1 ? 's' : ''}</span>
+              {isEmbed && (
+                <button
+                  onClick={() => { setShowAdd(true); setAddForm({ varNumber: '', description: '', instructed: 'yes', materials: '', labour: '', profit: '' }); setAddProjectId('') }}
+                  style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                  + Add Variation
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filters */}

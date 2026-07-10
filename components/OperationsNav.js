@@ -19,6 +19,7 @@ export const NAV = [
       { key: 'pm:negotiating', label: 'Negotiating', href: '/operations/negotiating' },
     ],
   },
+  { key: 'financials', label: 'Project Financials', href: '/operations/project-financials' },
   {
     key: 'hs', label: 'H&S', href: '/operations/hs/rams-matrix',
     children: [
