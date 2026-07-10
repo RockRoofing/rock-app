@@ -94,7 +94,7 @@ export default function Procurement() {
     load()
   }
 
-  const emptyItem = { projectNo: '', projectName: '', package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', orderPlaced: false, supplierContact: '', comments: '', attachments: [] }
+  const emptyItem = { projectNo: '', projectName: '', package: '', supplier: '', assignee: '', designBy: '', designComplete: false, designApproved: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', orderPlaced: false, supplierContact: '', comments: '', attachments: [] }
 
   const sortableCols = [
     { key: 'projectNo', label: 'Project' },
@@ -137,6 +137,7 @@ export default function Procurement() {
                 {sortableCols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
                 <th style={th}>Design By</th>
                 <th style={th}>Design Complete?</th>
+                <th style={th}>Design Approved?</th>
                 <th style={th}>Order By</th>
                 <th style={th}>Lead-in (wks)</th>
                 <th style={th}>Required On Site</th>
@@ -147,49 +148,60 @@ export default function Procurement() {
               </tr></thead>
               <tbody>
                 {pageRows.map(r => {
-                  // Two independent green timelines:
-                  //  - Design Complete? = Yes greens cells up to & including "Design By"
-                  //  - Order Placed?    = Yes greens cells up to & including "Order By"
-                  const designGreen = !!r.designComplete
+                  // Green timeline. Order Placed = Yes greens the WHOLE row.
+                  // Otherwise green extends left-to-right up to & including the
+                  // right-most "Yes" among Design Complete / Design Approved.
                   const orderGreen = !!r.orderPlaced
-                  // Left block (project..responsible) greens once design is complete,
-                  // and stays green (order also implies design stage passed).
-                  const leftGreen = (designGreen || orderGreen) ? GREEN : {}
+                  const designGreen = !!r.designComplete
+                  const approvedGreen = !!r.designApproved
+                  const rowGreen = orderGreen ? GREEN : {}
+                  // left block + Design By go green if any design stage passed
+                  const leftGreen = (orderGreen || designGreen || approvedGreen) ? GREEN : {}
+                  const designByGreen = leftGreen
+                  const designCompleteGreen = (orderGreen || designGreen || approvedGreen) ? GREEN : {}
+                  const designApprovedGreen = (orderGreen || approvedGreen) ? GREEN : {}
                   const late = !orderGreen && procurementLate(r.requiredOnSite, r.leadInWeeks)
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top', ...rowGreen }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
                       <td style={{ ...td, ...leftGreen }}><ExpandableText value={r.package} onSave={v => patchItem(r.id, { package: v })} label="Activity / Package" width={200} /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.supplier || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.assignee || '—'}</td>
-                      {/* Design By — green if design complete, else traffic light */}
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(designGreen || orderGreen ? GREEN : dateCellStyle(r.designBy)) }}>{r.designBy ? fmtDate(r.designBy) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(designGreen || orderGreen ? GREEN : {}) }}>
+                      {/* Design By */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...(Object.keys(designByGreen).length ? designByGreen : dateCellStyle(r.designBy)) }}>{r.designBy ? fmtDate(r.designBy) : '—'}</td>
+                      {/* Design Complete? */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...designCompleteGreen }}>
                         <select value={r.designComplete ? 'yes' : 'no'} onChange={e => patchItem(r.id, { designComplete: e.target.value === 'yes' })} style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
+                          <option value="no">No</option><option value="yes">Yes</option>
+                        </select>
+                      </td>
+                      {/* Design Approved? */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...designApprovedGreen }}>
+                        <select value={r.designApproved ? 'yes' : 'no'} onChange={e => patchItem(r.id, { designApproved: e.target.value === 'yes' })} style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
                       </td>
                       {/* Order By — green if order placed, else traffic light */}
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(orderGreen ? GREEN : dateCellStyle(r.orderBy)) }}>{r.orderBy ? fmtDate(r.orderBy) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', textAlign: 'center', ...rowGreen }}>
                         <input type="number" min="0" step="1" value={r.leadInWeeks ?? ''} onChange={e => patchItem(r.id, { leadInWeeks: e.target.value.replace(/[^0-9]/g, '') })} style={{ width: 56, padding: '6px 6px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 13, textAlign: 'center' }} />
                       </td>
                       {/* Required On Site — with lead-in shortage flag */}
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span>{r.requiredOnSite ? fmtDate(r.requiredOnSite) : '—'}</span>
                           {late && <span title="Not enough lead-in time to procure before this date" style={{ background: '#dc2626', color: '#fff', fontSize: 10.5, fontWeight: 700, borderRadius: 5, padding: '2px 6px', whiteSpace: 'nowrap' }}>⚠ SHORT</span>}
                         </div>
                         {late && <div style={{ fontSize: 10.5, color: '#dc2626', marginTop: 3 }}>Not enough lead-in time</div>}
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
                         <select value={r.orderPlaced ? 'yes' : 'no'} onChange={e => patchItem(r.id, { orderPlaced: e.target.value === 'yes' })} style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
                       </td>
-                      <td style={{ ...td }}><ExpandableText value={r.supplierContact} onSave={v => patchItem(r.id, { supplierContact: v })} label="Supplier contact details" width={180} /></td>
-                      <td style={{ ...td }}><ExpandableText value={r.comments} onSave={v => patchItem(r.id, { comments: v })} label="Comments" width={200} /></td>
-                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.supplierContact} onSave={v => patchItem(r.id, { supplierContact: v })} label="Supplier contact details" width={180} /></td>
+                      <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.comments} onSave={v => patchItem(r.id, { comments: v })} label="Comments" width={200} /></td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', ...rowGreen }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patchItem(r.id, { attachments: files })} />
                           <button onClick={() => setEdit(r)} style={linkBtn}>Edit</button>
@@ -237,6 +249,7 @@ function ProcModal({ item, team, projectOptions, onClose, onSave }) {
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}><Lbl>Design completed by</Lbl><input type="date" value={f.designBy || ''} onChange={e => setF({ ...f, designBy: e.target.value })} style={inp2} /></div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end' }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, paddingBottom: 10 }}><input type="checkbox" checked={!!f.designComplete} onChange={e => setF({ ...f, designComplete: e.target.checked })} /> Design complete</label></div>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end' }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, paddingBottom: 10 }}><input type="checkbox" checked={!!f.designApproved} onChange={e => setF({ ...f, designApproved: e.target.checked })} /> Design approved</label></div>
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}><Lbl>Order placed by</Lbl><input type="date" value={f.orderBy || ''} onChange={e => setF({ ...f, orderBy: e.target.value })} style={inp2} /></div>

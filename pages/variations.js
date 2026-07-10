@@ -106,8 +106,17 @@ export default function VariationTracker() {
     setEditSaving(false)
   }
 
-  // Toggle Instructed/Not Instructed inline from the row, saving immediately.
-  async function toggleInstructed(r) {
+  // Set Instructed/Not Instructed inline from the row's dropdown, saving immediately.
+  async function setInstructed(r, value) {
+    // optimistic local update so the change is instant and obvious
+    setProjects(prev => prev.map(p => {
+      if (p.xeroId !== r.projectId) return p
+      const vars = (p.settings?.variations || p.variations || []).map(v =>
+        ((v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) && v.description === r.description)
+          ? { ...v, instructed: value } : v)
+      const settings = { ...(p.settings || {}), variations: vars }
+      return { ...p, settings, variations: vars }
+    }))
     try {
       const res = await fetch(`/api/project/${r.projectId}`)
       const data = await res.json()
@@ -115,13 +124,12 @@ export default function VariationTracker() {
       const vars = [...(settings.variations || [])]
       const idx = vars.findIndex(v => (v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) && v.description === r.description)
       if (idx < 0) return
-      vars[idx] = { ...vars[idx], instructed: !vars[idx].instructed }
+      vars[idx] = { ...vars[idx], instructed: value }
       await fetch(`/api/project/${r.projectId}/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...settings, variations: vars }),
       })
-      await loadProjects()
-    } catch (e) { console.error(e) }
+    } catch (e) { console.error(e); loadProjects() }
   }
 
   // Inline add-row (persistent, below the header). Same save path as the modal.
@@ -458,10 +466,11 @@ export default function VariationTracker() {
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>{r.cm}</td>
                         <td style={{ ...tdS, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</td>
                         <td style={{ ...tdS, textAlign: 'center' }}>
-                          <button onClick={e => { e.stopPropagation(); toggleInstructed(r) }} title="Click to toggle"
-                            style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: r.instructed ? '#dcfce7' : '#fee2e2', color: r.instructed ? '#16a34a' : '#e63946' }}>
-                            {r.instructed ? 'Instructed' : 'Not Instructed'}
-                          </button>
+                          <select value={r.instructed ? 'yes' : 'no'} onClick={e => e.stopPropagation()} onChange={e => { e.stopPropagation(); setInstructed(r, e.target.value === 'yes') }}
+                            style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 8, cursor: 'pointer', border: '1px solid ' + (r.instructed ? '#bbf7d0' : '#fecaca'), background: r.instructed ? '#dcfce7' : '#fee2e2', color: r.instructed ? '#16a34a' : '#e63946' }}>
+                            <option value="yes">Instructed</option>
+                            <option value="no">Not Instructed</option>
+                          </select>
                         </td>
                         <td style={{ ...tdS, textAlign: 'right' }}>{fmt(r.materials)}</td>
                         <td style={{ ...tdS, textAlign: 'right' }}>{fmt(r.labour)}</td>

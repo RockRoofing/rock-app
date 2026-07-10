@@ -145,44 +145,51 @@ export default function Deliveries() {
               <tbody>
                 {pageRows.map(r => {
                   const delivered = !!r.actualDeliveryDate
-                  const green = delivered ? { background: '#ecfdf5' } : {}
                   const GREENC = { background: '#ecfdf5' }
-                  // Stage timeline: PO Sent -> Supplier Confirmed -> 2nd Check.
-                  // Green everything up to & including the right-most "Yes".
-                  const stages = [!!r.poSent, !!r.supplierConfirmedDate, !!r.secondCheck]
-                  let lastYes = -1
-                  stages.forEach((v, i) => { if (v) lastYes = i })
-                  const stageGreen = (i) => (delivered || i <= lastYes) ? GREENC : {}
+                  // Progressive green timeline. Column stages, left to right:
+                  //  0 Required Delivery (green once a required date is set)
+                  //  1 PO Sent, 2 Supplier Confirmed, 3 2nd Check (each Yes extends)
+                  // Everything LEFT of Required Delivery greens with stage 0.
+                  // Actual Delivery date set -> whole row green.
+                  let lastGreen = -1
+                  if (r.requiredDeliveryDate) lastGreen = 0
+                  if (r.poSent) lastGreen = Math.max(lastGreen, 1)
+                  if (r.supplierConfirmedDate) lastGreen = Math.max(lastGreen, 2)
+                  if (r.secondCheck) lastGreen = Math.max(lastGreen, 3)
+                  const rowGreen = delivered ? GREENC : {}
+                  // left block (project..items) greens as soon as stage 0 reached
+                  const leftGreen = (delivered || lastGreen >= 0) ? GREENC : {}
+                  const stageGreen = (i) => (delivered || i <= lastGreen) ? GREENC : {}
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle', ...rowGreen }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>
                         {r.projectName || r.projectNo ? <><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</>
                           : <button onClick={() => setEdit(r)} style={{ ...linkBtn, padding: 0, color: '#ca8a04' }}>Assign project</button>}
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.poNumber || '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.supplier || '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.orderDate ? fmtDate(r.orderDate) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.poNumber || '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.supplier || '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.orderDate ? fmtDate(r.orderDate) : '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>
                         {r.deliveryAddress
                           ? <button onClick={() => setAddr(r)} style={{ ...linkBtn, padding: 0 }}>View</button>
                           : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>
                         {(r.lineItems || []).length
                           ? <button onClick={() => setItems(r)} style={{ ...linkBtn, padding: 0 }}>View items ({r.lineItems.length})</button>
                           : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(delivered ? green : dateCellStyle(r.requiredDeliveryDate)) }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...((delivered || lastGreen >= 0) ? GREENC : dateCellStyle(r.requiredDeliveryDate)) }}>
                         <input type="date" value={r.requiredDeliveryDate || ''} onChange={e => patch(r.id, { requiredDeliveryDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
                       </td>
-                      <td style={{ ...td, ...stageGreen(0) }}>{yn(r, 'poSent')}</td>
-                      <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'supplierConfirmedDate')}</td>
-                      <td style={{ ...td, ...stageGreen(2) }}>{yn(r, 'secondCheck')}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'poSent')}</td>
+                      <td style={{ ...td, ...stageGreen(2) }}>{yn(r, 'supplierConfirmedDate')}</td>
+                      <td style={{ ...td, ...stageGreen(3) }}>{yn(r, 'secondCheck')}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
                         <input type="date" value={r.actualDeliveryDate || ''} onChange={e => setActualDate(r, e.target.value)} style={{ ...sel, minWidth: 140, padding: '5px 8px' }} />
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}><ExpandableText value={r.comments} onSave={v => patch(r.id, { comments: v })} label="Comments" width={200} /></td>
-                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}><ExpandableText value={r.comments} onSave={v => patch(r.id, { comments: v })} label="Comments" width={200} /></td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', ...rowGreen }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patch(r.id, { attachments: files })} />
                           <button onClick={() => setEdit(r)} style={linkBtn}>Edit</button>

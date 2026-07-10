@@ -128,18 +128,18 @@ export default function LiveTasks() {
                   const resolved = !!r.closed
                   const greenCell = resolved ? { background: '#ecfdf5' } : {}
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top', ...greenCell }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
                       <td style={{ ...td, ...greenCell, minWidth: 260 }}><ExpandableText value={r.description} onSave={v => patchTask(r.id, { description: v })} label="Task" width="100%" /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
                         <select value={resolved ? 'yes' : 'no'} onChange={e => patchTask(r.id, { closed: e.target.value === 'yes' })} style={{ ...sel, minWidth: 80, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
                       </td>
-                      <td style={{ ...td, minWidth: 260 }}><ExpandableText value={r.comments} onSave={v => patchTask(r.id, { comments: v })} label="Comments" width="100%" /></td>
-                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, minWidth: 260, ...greenCell }}><ExpandableText value={r.comments} onSave={v => patchTask(r.id, { comments: v })} label="Comments" width="100%" /></td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', ...greenCell }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patchTask(r.id, { attachments: files })} />
                           <button onClick={() => setEdit(r)} style={linkBtn}>Edit</button>

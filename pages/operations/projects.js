@@ -12,7 +12,6 @@ const SUB_TABS = [
   { key: 'prestart', label: 'Pre-Start' },
   { key: 'drawings', label: 'Drawings' },
   { key: 'rams', label: 'RAMS' },
-  { key: 'ramsbuilder', label: 'RAMS Builder' },
   { key: 'submissions', label: 'Project Forms' },
   { key: 'images', label: 'Project Images' },
   { key: 'concerns', label: 'Project Concerns' },
@@ -120,7 +119,6 @@ export default function ProjectsPage() {
         {sub === 'prestart' && <PreStartForm projectNo={openNo} />}
         {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Site App." />}
         {sub === 'rams' && <RamsTable projectNo={openNo} />}
-        {sub === 'ramsbuilder' && <ComingSoon title="RAMS Builder" note="A guided builder to generate branded RAMS from templates — coming soon." />}
         {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
         {sub === 'images' && <ProjectImages projectNo={openNo} />}
         {sub === 'concerns' && <ComingSoon title="Project Concerns" note="Concerns raised against this project — coming soon." />}

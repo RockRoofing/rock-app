@@ -1,15 +1,11 @@
-OPS FULL-WIDTH TABLES + PORTAL RENAME
+TABLES GREEN LOGIC + DESIGN APPROVED + RAMS BUILDER MOVE
 
-  components/OperationsShell.js  — 'wide' Ops pages are now full browser width
-                                   (was capped at 1800px). This gives ALL Ops table
-                                   pages (Procurement, Deliveries, Tasks, Risks,
-                                   Procurement Savings, Project Financials, Variations)
-                                   the same room as the Commercial/Project Financials
-                                   page, so they stop scrolling too much.
-  pages/index.js                 — main portal entry "Project Financials" renamed to
-                                   "Commercial" (page titles inside stay as they were).
-
-NOTE: Procurement already has a zoom control. Deliveries/Procurement Savings use fixed
-minWidths so they scroll when narrower than content — now that the page is full width,
-that scrolling is greatly reduced. If you want the exact Commercial zoom behaviour on a
-specific table, say which and I'll match it.
+  pages/variations.js                                   Instructed is now a dropdown (Instructed/Not Instructed), instant, no reload
+  pages/operations/project-management/procurement.js    NEW "Design Approved?" column after Design Complete; green timeline; Order Placed=Yes greens whole row
+  pages/operations/project-management/risks.js          Resolved=Yes greens the whole row
+  pages/operations/project-management/tasks.js          Resolved=Yes greens the whole row
+  pages/operations/project-management/deliveries.js     Progressive green: Required Delivery + PO Sent/Supplier Confirmed/2nd Check; Actual Delivery=whole row
+  pages/operations/projects.js                          RAMS Builder removed from project sub-tabs
+  pages/operations/hs/rams-matrix.js                    RAMS Builder tab removed (matrix only)
+  pages/operations/hs/rams-builder.js                   NEW — RAMS Builder as its own H&S tab
+  components/OperationsNav.js                            RAMS Builder added to H&S nav (before RAMS Matrix)

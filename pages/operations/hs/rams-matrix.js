@@ -1,19 +1,11 @@
-import { useState } from 'react'
-import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../../components/OperationsShell'
+import OperationsShell, { PageHeading, ComingSoon } from '../../../components/OperationsShell'
 
-const SUB_TABS = [
-  { key: 'builder', label: 'RAMS Builder' },
-  { key: 'matrix', label: 'RAMS Matrix' },
-]
-
-export default function RamsPage() {
-  const [sub, setSub] = useState('builder')
+// RAMS Matrix only. RAMS Builder now lives as its own H&S tab.
+export default function RamsMatrixPage() {
   return (
-    <OperationsShell active="hs:rams-matrix" section="hs" title="RAMS">
-      <PageHeading title="RAMS" sub="Risk Assessments & Method Statements" />
-      <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
-      {sub === 'builder' && <ComingSoon title="RAMS Builder" note="Auto-generate RAMS from your library of previous RAMS and task data, then edit before issuing. We'll build this once your RAMS library is uploaded." />}
-      {sub === 'matrix' && <ComingSoon title="RAMS Matrix" note="Overview of which RAMS exist per project, their version, and sign-off status." />}
+    <OperationsShell active="hs:rams-matrix" section="hs" title="RAMS Matrix">
+      <PageHeading title="RAMS Matrix" sub="Overview of which RAMS exist per project, their version, and sign-off status." />
+      <ComingSoon title="RAMS Matrix" note="Overview of which RAMS exist per project, their version, and sign-off status." />
     </OperationsShell>
   )
 }
