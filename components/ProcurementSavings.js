@@ -27,7 +27,7 @@ function MoneyInput({ value, onChange }) {
       onBlur={() => setFocused(false)}
       onChange={e => onChange(e.target.value.replace(/[£,\s]/g, ''))}
       inputMode="decimal"
-      style={{ ...cell, textAlign: 'right' }}
+      style={{ ...cell, textAlign: 'right', minWidth: 120 }}
     />
   )
 }
@@ -133,7 +133,7 @@ export default function ProcurementSavings({ projectNo }) {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1700 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1850 }}>
           <thead>
             <tr style={{ background: '#faf9f7' }}>
               <H k="packageName" label="Package Name" min={160} />
@@ -141,11 +141,11 @@ export default function ProcurementSavings({ projectNo }) {
               <H k="dateProvided" label="Tender Rate Provided" w={150} />
               <H k="qty" label="Qty" w={110} />
               <H k="unit" label="Unit" w={90} />
-              <H k="tenderedRate" label="Tendered Rate" w={130} />
-              <H k="tenderedTotal" label="Tendered Total" w={130} />
-              <H k="buyingRate" label="Buying Rate" w={130} />
-              <H k="buyingTotal" label="Buying Total" w={130} />
-              <H k="savings" label="Total Savings" w={130} />
+              <H k="tenderedRate" label="Tendered Rate" w={150} />
+              <H k="tenderedTotal" label="Tendered Total" w={150} />
+              <H k="buyingRate" label="Buying Rate" w={150} />
+              <H k="buyingTotal" label="Buying Total" w={150} />
+              <H k="savings" label="Total Savings" w={150} />
               <th style={{ ...th, minWidth: 140 }}>Budget Comments</th>
               <th style={{ ...th, minWidth: 140 }}>Buyer Comments</th>
               <th style={{ ...th, minWidth: 180 }}>Supplier Contact</th>
