@@ -1,15 +1,16 @@
-FIX: SRAT & Project Concern task/risk linking wasn't persisting
+OPS PROJECT FINANCIALS — clean embed (no double nav)
 
-ROOT CAUSE: "+ Add Task" / "+ Add Risk" created the row with an EMPTY description, but the
-tasks/risks APIs REJECT creation when description is empty (400). So the new task/risk never
-actually saved to Live Project Tasks / the Risk Log — it looked half-wired.
+  pages/commercial.js
+   PROBLEM: the Ops Project Financials embed was showing the WHOLE Commercial portal,
+   including its own dark nav bar (Portal | Project Financials | Retention | Variations |
+   Application Calendar | Commercial Scorecard) — stacked under the Ops main nav.
+   FIX:
+   - Embed detection made robust (query param OR url OR being inside an iframe), so the
+     embedded page reliably renders its SLIM bar, not the full portal nav.
+   - The slim embed bar now shows EXACTLY: Budget Tracker/EOM toggle, Month selector (EOM
+     mode only), Upload, Xero, Sync Xero. No portal navigation links.
+   - The standalone Commercial page (opened directly) is unchanged — full nav as before.
+   - The Ops main nav is untouched (it's outside the iframe).
 
-FIX:
-  pages/api/tasks.js            require description only on CREATE (new), allow updates with any value
-                                 (so inline-editing to empty mid-type doesn't fail).
-  components/ProjectConcerns.js  Add Action / Add Risk now create with a placeholder ("New action" /
-                                 "New risk") so they persist immediately; edit to rename. Alerts on failure.
-  pages/operations/project-management/srat.js  Add Task creates with "New task" placeholder; alerts on failure.
-
-RESULT: adding an action/risk in a Concern or SRAT now immediately creates the linked record on
-the Live Project Tasks / Risk Log pages (Concern = two-way, SRAT = one-way), as intended.
+Applies to BOTH embeds of this page: Ops Project Financials AND the Pre-Contract Project
+Financials page (both now show the clean slim bar).
