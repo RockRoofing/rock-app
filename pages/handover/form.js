@@ -315,9 +315,8 @@ function RiskLogField({ value, onChange, team }) {
   )
 }
 
-// Live Project Tasks rows — project no/name auto from the handover
 function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
-  function addRow() { onChange([...value, { description: '', assignee: '', status: 'Open', comments: '' }]) }
+  function addRow() { onChange([...value, { description: '', assignee: '', closeOutDate: '', closed: false, comments: '' }]) }
   function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
   function remove(i) { onChange(value.filter((_, j) => j !== i)) }
   return (
@@ -327,17 +326,20 @@ function LiveTasksField({ value, onChange, team, projectNo, projectName }) {
       </div>
       {value.map((t, i) => (
         <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 0.8fr auto', gap: 8, alignItems: 'center' }}>
-            <input value={t.description} onChange={e => update(i, 'description', e.target.value)} placeholder="Task description" style={inpSm} />
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr auto', gap: 8, alignItems: 'start', marginBottom: 8 }}>
+            <textarea value={t.description} onChange={e => update(i, 'description', e.target.value)} placeholder="Task description" rows={2} style={{ ...inpSm, resize: 'vertical' }} />
+            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
             <select value={t.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} style={inpSm}>
               <option value="">Responsible…</option>
               {(team || []).map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}</option>)}
               {t.assignee && !(team || []).some(m => tmName(m) === t.assignee) && <option value={t.assignee}>{t.assignee}</option>}
             </select>
-            <select value={t.status || 'Open'} onChange={e => update(i, 'status', e.target.value)} style={inpSm}>
-              <option>Open</option><option>Complete</option>
-            </select>
-            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+            <input type="date" value={t.closeOutDate || ''} onChange={e => update(i, 'closeOutDate', e.target.value)} title="Target completion date" style={inpSm} />
+            <label style={{ fontSize: 12, color: '#555', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={!!t.closed} onChange={e => update(i, 'closed', e.target.checked)} /> Resolved
+            </label>
           </div>
           <textarea value={t.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginTop: 8 }} />
         </div>

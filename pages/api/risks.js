@@ -25,15 +25,14 @@ export default async function handler(req, res) {
     if (body.action === 'sync-ihm') {
       const { projectNo, projectName, risks: incoming } = body
       let risks = await getRisks()
-      // Preserve edits made to existing IHM risks for this project (assignee,
-      // closeOutDate, closed, comments) by matching on index-stable id.
-      const prevById = {}
-      for (const r of risks) if (r.sourceIhm === projectNo) prevById[r.id] = r
-      risks = risks.filter(r => r.sourceIhm !== projectNo)
+      // COPY ONCE: only add IHM rows not already copied. Existing rows (whether
+      // edited on the live page or not) are never overwritten — the live page
+      // is master once an item has been copied across.
+      const existingIds = new Set(risks.map(r => r.id))
       ;(incoming || []).forEach((r, i) => {
         if (!r || (!r.risk && !r.description)) return
         const id = `ihmrisk_${projectNo}_${i}`
-        const prev = prevById[id] || {}
+        if (existingIds.has(id)) return   // already copied — leave the live version alone
         risks.push({
           id,
           sourceIhm: projectNo,
@@ -41,11 +40,12 @@ export default async function handler(req, res) {
           projectName: projectName || '',
           description: r.description || r.risk || '',
           mitigation: r.mitigation || '',
-          assignee: r.assignee !== undefined ? r.assignee : (prev.assignee || ''),
-          closeOutDate: r.closeOutDate !== undefined ? r.closeOutDate : (prev.closeOutDate || ''),
-          closed: r.closed !== undefined ? !!r.closed : !!prev.closed,
-          comments: r.comments !== undefined ? r.comments : (prev.comments || ''),
-          createdAt: prev.createdAt || Date.now(),
+          assignee: r.assignee || '',
+          closeOutDate: r.closeOutDate || '',
+          closed: !!r.closed,
+          comments: r.comments || '',
+          attachments: [],
+          createdAt: Date.now(),
         })
       })
       await saveRisks(risks)

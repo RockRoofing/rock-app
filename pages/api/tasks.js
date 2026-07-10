@@ -19,23 +19,28 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const body = req.body || {}
 
-    // Sync a project's IHM-derived tasks (called on "Meeting Complete")
+    // Sync a project's IHM-derived tasks (called on "Meeting Complete").
+    // COPY ONCE: only add tasks not already copied; never overwrite the live
+    // version once it exists (the live page is master).
     if (body.action === 'sync-ihm') {
       const { projectNo, projectName, tasks: incoming } = body
       let tasks = await getLiveTasks()
-      // Drop existing IHM tasks for this project, re-add fresh
-      tasks = tasks.filter(t => !(t.sourceIhm === projectNo))
+      const existingIds = new Set(tasks.map(t => t.id))
       ;(incoming || []).forEach((t, i) => {
         if (!t || !t.description) return
+        const id = `ihmtask_${projectNo}_${i}`
+        if (existingIds.has(id)) return
         tasks.push({
-          id: `ihmtask_${projectNo}_${i}`,
+          id,
           sourceIhm: projectNo,
           projectNo,
           projectName: projectName || '',
           description: t.description || '',
           assignee: t.assignee || '',
-          status: t.status || 'Open',
+          closeOutDate: t.closeOutDate || '',
+          closed: !!t.closed,
           comments: t.comments || '',
+          attachments: [],
           createdAt: Date.now(),
         })
       })
