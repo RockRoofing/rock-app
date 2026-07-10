@@ -21,12 +21,16 @@ const uid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}
 export default function TemplatesAdmin() {
   const router = useRouter()
   const [me, setMe] = useState(null)
-  const [key, setKey] = useState('prestart')
+  const [key, setKey] = useState(null)             // null = show card list
   const [sections, setSections] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [original, setOriginal] = useState('[]')   // snapshot for dirty check
+  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [isCustom, setIsCustom] = useState(false)
+  const [customFlags, setCustomFlags] = useState({}) // key -> isCustom for cards
+
+  const dirty = JSON.stringify(sections) !== original
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -36,30 +40,48 @@ export default function TemplatesAdmin() {
     })
   }, [])
 
-  useEffect(() => { if (me) loadTemplate(key) }, [me, key])
-  async function loadTemplate(k) {
-    setLoading(true); setNotice('')
+  // Load custom flags for the card list
+  useEffect(() => {
+    if (!me) return
+    Promise.all(TEMPLATES.map(t => fetch(`/api/templates?key=${t.key}`).then(r => r.json()).then(d => [t.key, !!d.isCustom]).catch(() => [t.key, false])))
+      .then(pairs => setCustomFlags(Object.fromEntries(pairs)))
+  }, [me])
+
+  async function openTemplate(k) {
+    setLoading(true); setNotice(''); setKey(k)
     try {
       const r = await fetch(`/api/templates?key=${k}`); const d = await r.json()
-      setSections(JSON.parse(JSON.stringify(d.sections || [])))
-      setIsCustom(!!d.isCustom)
+      const secs = JSON.parse(JSON.stringify(d.sections || []))
+      setSections(secs); setOriginal(JSON.stringify(secs)); setIsCustom(!!d.isCustom)
     } catch {}
     setLoading(false)
   }
 
+  function backToList() {
+    if (dirty && !confirm('You have unsaved changes. Leave without saving?')) return
+    setKey(null); setSections([]); setOriginal('[]'); setNotice('')
+  }
+
+  function discard() {
+    if (!confirm('Discard all unsaved changes and revert to the last saved version?')) return
+    setSections(JSON.parse(original)); setNotice('')
+  }
+
   async function save() {
+    if (!confirm('Save this template? The previous version will be replaced and cannot be recovered. New forms will use this version. Are you sure?')) return
     setSaving(true); setNotice('')
     try {
       const r = await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, sections }) })
       const d = await r.json()
-      if (r.ok) { setNotice('Template saved. This applies to new forms from now on.'); setIsCustom(true) }
-      else setNotice(d.error || 'Save failed')
+      if (r.ok) {
+        setNotice('Template saved. This applies to new forms from now on.')
+        setIsCustom(true); setOriginal(JSON.stringify(sections))
+        setCustomFlags(f => ({ ...f, [key]: true }))
+      } else setNotice(d.error || 'Save failed')
     } catch (e) { setNotice(e?.message || 'Save failed') }
     setSaving(false)
   }
-  async function resetDefault() {
-    if (!confirm('Reset this template to the built-in default? Your customisations will be removed.')) return
-    // Saving the code default = fetch default by asking API without stored (can't) — simplest: reload page default via a flag.
+  async function _unusedReset() {
     // We approximate by clearing: POST an empty marker isn't supported, so we reload from a fresh GET after deleting is not built.
     // Instead: just reload the current default sections by re-fetching (still returns custom). So we warn this needs redeploy-free reset:
     setNotice('To fully reset to default, contact your developer — or overwrite sections manually. (Reset endpoint can be added.)')
@@ -103,23 +125,49 @@ export default function TemplatesAdmin() {
         </div>
 
         <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Templates</h1>
-              <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Edit the structure of company forms. Changes apply to <strong>new forms only</strong>.</div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select value={key} onChange={e => setKey(e.target.value)} style={inp}>
-                {TEMPLATES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-              </select>
-              <button onClick={save} disabled={saving} style={btn}>{saving ? 'Saving…' : 'Save template'}</button>
-            </div>
-          </div>
+          {!key ? (
+            // ── Card list to choose a template ──
+            <>
+              <div style={{ marginBottom: 18 }}>
+                <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Templates</h1>
+                <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Edit the structure of company forms. Changes apply to <strong>new forms only</strong>.</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 16 }}>
+                {TEMPLATES.map(t => (
+                  <div key={t.key} onClick={() => openTemplate(t.key)} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20, cursor: 'pointer' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#ca8a04'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#ececec'; e.currentTarget.style.boxShadow = 'none' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a19' }}>{t.label}</div>
+                    <div style={{ marginTop: 8 }}>
+                      {customFlags[t.key]
+                        ? <span style={{ fontSize: 11, background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a', borderRadius: 20, padding: '2px 10px', fontWeight: 600 }}>Customised</span>
+                        : <span style={{ fontSize: 11, background: '#f3f4f6', color: '#888', borderRadius: 20, padding: '2px 10px' }}>Default</span>}
+                    </div>
+                    <div style={{ marginTop: 14, color: '#ca8a04', fontSize: 13, fontWeight: 600 }}>Edit template →</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            // ── Editor for the selected template ──
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <button onClick={backToList} style={{ background: 'none', border: 'none', color: '#888', fontSize: 13, cursor: 'pointer', padding: 0, marginBottom: 4 }}>‹ All templates</button>
+                  <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>{TEMPLATES.find(t => t.key === key)?.label}</h1>
+                  <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Changes apply to <strong>new forms only</strong>.</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {dirty && <button onClick={discard} disabled={saving} style={ghost}>Discard changes</button>}
+                  <button onClick={save} disabled={saving || !dirty} style={{ ...btn, opacity: (!dirty && !saving) ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save template'}</button>
+                </div>
+              </div>
 
-          {isCustom && <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>This template has been customised from the built-in default.</div>}
-          {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>{notice}</div>}
+              {isCustom && <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>This template has been customised from the built-in default.</div>}
+              {dirty && <div style={{ fontSize: 12, color: '#3730a3', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>You have unsaved changes.</div>}
+              {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>{notice}</div>}
 
-          {loading ? <div style={{ color: '#999', padding: 30 }}>Loading…</div> : (
+              {loading ? <div style={{ color: '#999', padding: 30 }}>Loading…</div> : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {sections.map((sec, si) => (
                 <div key={sec.id || si} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16 }}>
@@ -141,10 +189,15 @@ export default function TemplatesAdmin() {
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <select value={f.type || 'qrow'} onChange={e => editField(si, fi, { type: e.target.value })} style={{ ...inp, width: 'auto', fontSize: 12 }}>
-                            {ADDABLE_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
-                            {!ADDABLE_TYPES.some(t => t.v === f.type) && <option value={f.type}>{f.type} (structural)</option>}
-                          </select>
+                          {ADDABLE_TYPES.some(t => t.v === f.type) ? (
+                            <select value={f.type || 'qrow'} onChange={e => editField(si, fi, { type: e.target.value })} style={{ ...inp, width: 'auto', fontSize: 12 }}>
+                              {ADDABLE_TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                            </select>
+                          ) : (
+                            <span title="This is a special field wired to the app. Its type can't be changed here, but you can edit its label and reorder it." style={{ fontSize: 12, fontWeight: 600, color: '#3730a3', background: '#eef2ff', borderRadius: 20, padding: '4px 12px' }}>
+                              {f.type} · structural (locked)
+                            </span>
+                          )}
                           {(f.type === 'qrow') && (
                             <input value={f.default || ''} onChange={e => editField(si, fi, { default: e.target.value })} placeholder="Default guidance text (optional)" style={{ ...inp, flex: 1, minWidth: 200, fontSize: 12 }} />
                           )}
@@ -157,6 +210,8 @@ export default function TemplatesAdmin() {
               ))}
               <button onClick={addSection} style={{ ...btn, alignSelf: 'flex-start' }}>+ Add section</button>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import OperationsShell, { PageHeading } from '../../components/OperationsShell'
+import OperationsShell from '../../components/AdminShell'
+import { PageHeading } from '../../components/OperationsShell'
 import { INK, GOLD, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
 const CATEGORIES = [
@@ -70,7 +71,7 @@ export default function FormsBuilder() {
   }
 
   return (
-    <OperationsShell active="forms-builder" title="Form Builder">
+    <OperationsShell active="/operations/forms-builder" title="Form Builder">
       <PageHeading title="Form Builder" sub="Create and edit the forms operatives fill in the Forms App"
         action={<div style={{ display: 'flex', gap: 8 }}>
           <button onClick={reseed} style={ghostBtn}>Reset to latest defaults</button>
@@ -127,7 +128,7 @@ function Editor({ form, setForm, onSave, onCancel, saving }) {
   }
 
   return (
-    <OperationsShell active="forms-builder" title="Form Builder">
+    <OperationsShell active="/operations/forms-builder" title="Form Builder">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={onCancel} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ All forms</button>
       </div>

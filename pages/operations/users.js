@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import OperationsShell, { PageHeading } from '../../components/OperationsShell'
+import OperationsShell from '../../components/AdminShell'
+import { PageHeading } from '../../components/OperationsShell'
 import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
 const ROLES = ['Operative', 'Contracts Manager', 'Quantity Surveyor', 'Operations Manager', 'Estimator', 'Director', 'Other']
@@ -57,7 +58,7 @@ export default function UsersPage() {
   }
 
   return (
-    <OperationsShell active="users" title="Site App Users">
+    <OperationsShell active="/operations/users" title="Site App Users">
       <PageHeading title="Site App Users" sub="People who can log into the Site App"
         action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', active: true }) }} style={primaryBtn}>+ Add user</button>} />
 
