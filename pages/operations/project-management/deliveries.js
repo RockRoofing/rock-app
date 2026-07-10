@@ -15,13 +15,18 @@ export default function Deliveries() {
   const [notice, setNotice] = useState('')
   const [edit, setEdit] = useState(null)
   const [items, setItems] = useState(null)     // line-items pop-out
+  const [addr, setAddr] = useState(null)       // address pop-out
   const [page, setPage] = useState(0)
 
   const [fProject, setFProject] = useState('')
   const [fStatus, setFStatus] = useState('open')   // open = not delivered
   const [sort, setSort] = useState({ key: 'requiredDeliveryDate', dir: 'asc' })
 
-  useEffect(() => { load(true) }, [])   // auto-sync with Xero on open
+  useEffect(() => {
+    // Show data fast (no sync), then sync in the background so the page isn't
+    // blocked by paginating all POs. New POs appear a moment after load.
+    load(false).then(() => load(true))
+  }, [])
   async function load(sync) {
     if (sync) setSyncing(true)
     try {
@@ -33,7 +38,7 @@ export default function Deliveries() {
           : d.syncInfo.firstRun ? `Baseline set (${d.syncInfo.baseline || 0} existing POs noted). New POs approved from now on will appear here on the next sync.`
           : (d.syncInfo.added ? `Synced — ${d.syncInfo.added} new PO(s) added.` : 'Synced — no new POs.'))
       }
-    } catch (e) { setNotice('Could not load deliveries.') }
+    } catch (e) { if (!sync) setNotice('Could not load deliveries.') }
     setLoading(false)
     setSyncing(false)
   }
@@ -138,8 +143,11 @@ export default function Deliveries() {
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 }}>
               <thead><tr style={{ background: '#faf9f7' }}>
-                {[['projectNo', 'Project'], ['deliveryAddress', 'Address'], ['poNumber', 'PO No'], ['orderDate', 'Order Date']].map(([k, l]) =>
-                  <th key={k} onClick={() => toggleSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{l}{sort.key === k ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
+                <th onClick={() => toggleSort('projectNo')} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>Project{sort.key === 'projectNo' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('poNumber')} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>PO No{sort.key === 'poNumber' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('supplier')} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>Supplier{sort.key === 'supplier' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th onClick={() => toggleSort('orderDate')} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>Order Date{sort.key === 'orderDate' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th style={th}>Address</th>
                 <th style={th}>Items</th>
                 <th style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort('requiredDeliveryDate')}>Required Delivery{sort.key === 'requiredDeliveryDate' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th style={th}>PO Sent</th><th style={th}>Supplier Confirmed</th><th style={th}>2nd Check</th>
@@ -158,14 +166,19 @@ export default function Deliveries() {
                   stages.forEach((v, i) => { if (v) lastYes = i })
                   const stageGreen = (i) => (delivered || i <= lastYes) ? GREENC : {}
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle' }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
                         {r.projectName || r.projectNo ? <><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</>
                           : <button onClick={() => setEdit(r)} style={{ ...linkBtn, padding: 0, color: '#ca8a04' }}>Assign project</button>}
                       </td>
-                      <td style={{ ...td, ...green, minWidth: 160, fontSize: 12, whiteSpace: 'pre-wrap' }}>{r.deliveryAddress || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.poNumber || '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.supplier || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>{r.orderDate ? fmtDate(r.orderDate) : '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
+                        {r.deliveryAddress
+                          ? <button onClick={() => setAddr(r)} style={{ ...linkBtn, padding: 0 }}>View</button>
+                          : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
+                      </td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
                         {(r.lineItems || []).length
                           ? <button onClick={() => setItems(r)} style={{ ...linkBtn, padding: 0 }}>View items ({r.lineItems.length})</button>
@@ -180,7 +193,7 @@ export default function Deliveries() {
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>
                         <input type="date" value={r.actualDeliveryDate || ''} onChange={e => setActualDate(r, e.target.value)} style={{ ...sel, minWidth: 140, padding: '5px 8px' }} />
                       </td>
-                      <td style={{ ...td, minWidth: 200 }}><ExpandableText value={r.comments} onSave={v => patch(r.id, { comments: v })} label="Comments" width="100%" /></td>
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}><ExpandableText value={r.comments} onSave={v => patch(r.id, { comments: v })} label="Comments" width={200} /></td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patch(r.id, { attachments: files })} />
@@ -205,8 +218,20 @@ export default function Deliveries() {
       )}
 
       {items && <ItemsModal row={items} onClose={() => setItems(null)} />}
+      {addr && <AddressModal row={addr} onClose={() => setAddr(null)} />}
       {edit && <DeliveryModal row={edit} projectOptions={projectOptions} onClose={() => setEdit(null)} onSave={saveRow} />}
     </OperationsShell>
+  )
+}
+
+function AddressModal({ row, onClose }) {
+  return (
+    <Modal onClose={onClose} title={`Delivery address — ${row.poNumber || 'PO'}`}>
+      <div style={{ fontSize: 15, color: INK, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{row.deliveryAddress || '—'}</div>
+      {(row.projectName || row.projectNo) && (
+        <div style={{ marginTop: 14, fontSize: 13, color: '#999' }}>{[row.projectNo, row.projectName].filter(Boolean).join(' — ')}</div>
+      )}
+    </Modal>
   )
 }
 
