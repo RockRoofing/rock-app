@@ -104,6 +104,22 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const body = req.body || {}
 
+    // One-time cleanup: capture ALL current AUTHORISED PO ids as baseline and
+    // remove xero-synced rows, so the schedule restarts cleanly from now.
+    // (Fixes an earlier gap where only the first 100 POs were baselined.)
+    if (body.action === 'rebaseline') {
+      const tokens = await xeroCtx()
+      if (!tokens) return res.status(400).json({ error: 'Not connected to Xero' })
+      let pos = []
+      try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) }
+      catch (e) { return res.status(502).json({ error: e.message }) }
+      await setSeenIds(pos.map(p => p.purchaseOrderId))
+      let deliveries = await getDeliveries()
+      const kept = deliveries.filter(d => d.source !== 'xero')
+      await saveDeliveries(kept)
+      return res.json({ ok: true, baselineSize: pos.length, removedRows: deliveries.length - kept.length })
+    }
+
     // Clean-up: remove all Xero-synced rows and reset go-live to now, so the
     // schedule starts fresh from this moment. Manual rows are kept.
     if (body.action === 'reset-synced') {
