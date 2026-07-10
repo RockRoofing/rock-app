@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { PRESTART_SECTIONS } from '../lib/preStartSchema'
+import { PRESTART_SECTIONS as DEFAULT_SECTIONS } from '../lib/preStartSchema'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, inp2, fmtDateTime } from './opsUI'
 
 const teamName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || ''
@@ -17,8 +17,15 @@ export default function PreStartForm({ projectNo }) {
   const [editing, setEditing] = useState(false)
   const [doc, setDoc] = useState(null)
   const [extraSections, setExtraSections] = useState({}) // sectionId -> [customRows]
+  const [SECTIONS, setSECTIONS] = useState(DEFAULT_SECTIONS)
 
   useEffect(() => { load() }, [projectNo])
+  useEffect(() => {
+    // Load the (possibly admin-edited) template. Applies to new forms.
+    fetch('/api/templates?key=prestart').then(r => r.json()).then(d => {
+      if (Array.isArray(d.sections) && d.sections.length) setSECTIONS(d.sections)
+    }).catch(() => {})
+  }, [])
   async function load() {
     setLoading(true)
     try {
@@ -40,7 +47,7 @@ export default function PreStartForm({ projectNo }) {
   function startEdit() {
     if (isSent) return
     const seed = JSON.parse(JSON.stringify(data || {}))
-    for (const sec of PRESTART_SECTIONS) {
+    for (const sec of SECTIONS) {
       for (const f of sec.fields) {
         if (f.type === 'qrow') {
           if (!seed[f.id]) seed[f.id] = { resolved: '', comments: f.default || '' }
@@ -160,7 +167,7 @@ export default function PreStartForm({ projectNo }) {
         <EmptyCard title="No Pre-Start Minutes yet" body="Click “Complete Pre-Start Minutes” to fill them in." />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {PRESTART_SECTIONS.map(sec => (
+          {SECTIONS.map(sec => (
             <div key={sec.id} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 18 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>{sec.title}</div>
 
@@ -342,6 +349,14 @@ function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange, onDi
             {team.map(m => <option key={m.id} value={teamName(m)}>{teamName(m)}</option>)}
           </select>
         ) : <div style={{ fontSize: 14, color: value ? INK : '#bbb' }}>{value || '—'}</div>}
+      </div>
+    )
+  }
+
+  if (type === 'note') {
+    return (
+      <div style={{ padding: '10px 0' }}>
+        <div style={{ fontSize: 13, color: '#666', background: '#f7f6f4', borderRadius: 8, padding: '10px 12px', whiteSpace: 'pre-wrap' }}>{label}</div>
       </div>
     )
   }

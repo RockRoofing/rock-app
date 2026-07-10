@@ -31,11 +31,13 @@ export default function AdminPage() {
 
   async function save() {
     setErr('')
-    if (!form.name?.trim() || !form.email?.trim()) { setErr('Name and email are required.'); return }
+    const derivedName = form.name || [form.firstName, form.lastName].filter(Boolean).join(' ')
+    if (!derivedName.trim() || !form.email?.trim()) { setErr('Name and email are required.'); return }
     setSaving(true)
     try {
       const action = form.id ? 'update' : 'create'
-      const r = await fetch('/api/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, user: form }) })
+      const payload = { ...form, name: derivedName }
+      const r = await fetch('/api/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, user: payload }) })
       const d = await r.json()
       if (!r.ok) { setErr(d.error || 'Save failed'); setSaving(false); return }
       setUsers(d.users || users)
@@ -73,7 +75,12 @@ export default function AdminPage() {
         <div style={{ background: '#1a1a19', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', gap: 12 }}>
           <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none' }}>← Portal</a>
           <span style={{ color: '#3a3a38' }}>|</span>
-          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Admin — Portal Users</span>
+          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Admin</span>
+        </div>
+        <div style={{ background: '#232321', padding: '0 24px', display: 'flex', gap: 4, height: 44, alignItems: 'center', overflowX: 'auto' }}>
+          {[['Portal Users', '/admin'], ['Templates', '/admin/templates'], ['Form Builder', '/operations/forms-builder'], ['Site App Users', '/operations/users']].map(([label, href]) => (
+            <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: href === '/admin' ? '#fff' : '#bbb', fontWeight: href === '/admin' ? 600 : 400, borderBottom: href === '/admin' ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
+          ))}
         </div>
 
         <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
@@ -82,7 +89,7 @@ export default function AdminPage() {
               <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Portal Users</h1>
               <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Standard · Management · Admin.</div>
             </div>
-            <button onClick={() => { setNotice(''); setErr(''); setForm({ name: '', email: '', role: 'standard', active: true }) }} style={btn}>+ Add user</button>
+            <button onClick={() => { setNotice(''); setErr(''); setForm({ firstName: '', lastName: '', email: '', phone: '', jobRole: '', role: 'standard', active: true }) }} style={btn}>+ Add user</button>
           </div>
 
           {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14, display: 'flex', justifyContent: 'space-between' }}><span>{notice}</span><button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065f46' }}>×</button></div>}
@@ -90,12 +97,14 @@ export default function AdminPage() {
           {loading ? <div style={{ color: '#999', padding: 30 }}>Loading…</div> : (
             <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ background: '#faf9f7' }}>{['Name', 'Email', 'Role', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <thead><tr style={{ background: '#faf9f7' }}>{['Name', 'Email', 'Mobile', 'Job role', 'Access', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                      <td style={td}><strong>{u.name}</strong></td>
+                      <td style={td}><strong>{[u.firstName, u.lastName].filter(Boolean).join(' ') || u.name}</strong></td>
                       <td style={td}>{u.email}</td>
+                      <td style={td}>{u.phone || '—'}</td>
+                      <td style={td}>{u.jobRole || '—'}</td>
                       <td style={td}><span style={{ background: u.role === 'admin' ? '#fef3c7' : u.role === 'management' ? '#fff1f2' : '#f3f4f6', color: u.role === 'admin' ? '#92400e' : u.role === 'management' ? '#be123c' : '#555', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>{roleLabel[u.role] || u.role}</span>{u.mustResetPassword && <span style={{ marginLeft: 6, fontSize: 11, color: '#ca8a04' }}>temp pw</span>}</td>
                       <td style={td}>{u.active === false ? <span style={{ color: '#bbb' }}>Inactive</span> : <span style={{ color: '#16a34a' }}>Active</span>}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -105,7 +114,7 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ))}
-                  {!users.length && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 30 }}>No users yet.</td></tr>}
+                  {!users.length && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 30 }}>No users yet.</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -116,9 +125,14 @@ export default function AdminPage() {
           <div onClick={() => setForm(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
             <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: 420, maxWidth: '90vw' }}>
               <h2 style={{ margin: '0 0 16px', fontSize: 18 }}>{form.id ? 'Edit user' : 'Add user'}</h2>
-              <Lbl>Full name</Lbl><input value={form.name || ''} onChange={e => setForm({ ...form, name: e.target.value })} style={inp} />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}><Lbl>First name</Lbl><input value={form.firstName || ''} onChange={e => setForm({ ...form, firstName: e.target.value })} style={inp} /></div>
+                <div style={{ flex: 1 }}><Lbl>Last name</Lbl><input value={form.lastName || ''} onChange={e => setForm({ ...form, lastName: e.target.value })} style={inp} /></div>
+              </div>
               <Lbl>Email</Lbl><input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp} type="email" />
-              <Lbl>Role</Lbl>
+              <Lbl>Mobile number</Lbl><input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp} inputMode="tel" placeholder="07…" />
+              <Lbl>Job role (e.g. Contracts Manager, Estimator, QS)</Lbl><input value={form.jobRole || ''} onChange={e => setForm({ ...form, jobRole: e.target.value })} style={inp} placeholder="Used for project role dropdowns" />
+              <Lbl>Access level</Lbl>
               <select value={form.role || 'standard'} onChange={e => setForm({ ...form, role: e.target.value })} style={inp}>
                 {ROLES.map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
               </select>

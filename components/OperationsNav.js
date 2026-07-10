@@ -32,11 +32,7 @@ export const NAV = [
   { key: 'scorecards', label: 'Scorecards', href: '/operations/scorecards' },
 ]
 
-const RIGHT = [
-  { key: 'team', label: 'Team Members', href: '/operations/team' },
-  { key: 'users', label: 'Site App Users', href: '/operations/users' },
-  { key: 'forms-builder', label: 'Form Builder', href: '/operations/forms-builder' },
-]
+const RIGHT = []
 
 export default function OperationsNav({ active, section }) {
   return (

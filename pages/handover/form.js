@@ -3,7 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import PreContractNav from '../../components/PreContractNav'
 import { INK, GOLD, Lbl, inp2, primaryBtn, ghostBtn, Loading } from '../../components/opsUI'
-import { IHM_SECTIONS, CONTACT_ROLES, emptyRoofType } from '../../lib/ihmSchema'
+import { IHM_SECTIONS as IHM_DEFAULT, CONTACT_ROLES, emptyRoofType } from '../../lib/ihmSchema'
 
 const tmName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || ''
 
@@ -30,6 +30,13 @@ export default function Handover() {
   const [err, setErr] = useState('')
   const [team, setTeam] = useState([])
   const [mfrBook, setMfrBook] = useState([])
+  const [IHM_SECTIONS, setIhmSections] = useState(IHM_DEFAULT)
+
+  useEffect(() => {
+    fetch('/api/templates?key=ihm').then(r => r.json()).then(d => {
+      if (Array.isArray(d.sections) && d.sections.length) setIhmSections(d.sections)
+    }).catch(() => {})
+  }, [])
 
   // Load team members + manufacturer address book (shared context for fields)
   useEffect(() => {

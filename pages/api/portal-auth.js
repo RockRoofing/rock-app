@@ -147,12 +147,17 @@ export default async function handler(req, res) {
     if (action === 'create') {
       const u = body.user || {}
       const email = String(u.email || '').toLowerCase().trim()
+      if (!u.name && (u.firstName || u.lastName)) u.name = [u.firstName, u.lastName].filter(Boolean).join(' ')
       if (!u.name || !email) return res.status(400).json({ error: 'Name and email are required.' })
       if (users.some(x => x.email === email)) return res.status(409).json({ error: 'That email already has an account.' })
       const tempPw = u.password && u.password.length >= 8 ? u.password : Math.random().toString(36).slice(2, 10) + 'A1!'
       const newUser = {
         id: `pu_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
         name: u.name, email,
+        firstName: u.firstName || '',
+        lastName: u.lastName || '',
+        phone: u.phone || '',
+        jobRole: u.jobRole || '',   // descriptive role (Estimator, CM, QS…) — separate from access role
         role: ['standard', 'management', 'admin'].includes(u.role) ? u.role : 'standard',
         active: u.active !== false,
         passwordHash: hashPassword(tempPw),
@@ -173,6 +178,10 @@ export default async function handler(req, res) {
       const { password, passwordHash, ...editable } = u
       if (editable.role && !['standard', 'management', 'admin'].includes(editable.role)) delete editable.role
       if (editable.email) editable.email = String(editable.email).toLowerCase().trim()
+      // Keep display name in sync when first/last provided
+      if (editable.firstName || editable.lastName) {
+        editable.name = [editable.firstName ?? users[idx].firstName, editable.lastName ?? users[idx].lastName].filter(Boolean).join(' ') || users[idx].name
+      }
       users[idx] = { ...users[idx], ...editable }
       await savePortalUsers(users)
       return res.json({ ok: true, users: users.map(strip) })

@@ -1,4 +1,4 @@
-import { getPreStart, getOpsProject } from '../../lib/db'
+import { getPreStart, getOpsProject, getTemplate } from '../../lib/db'
 import { buildPreStartPDF } from '../../lib/preStartPdf'
 
 // GET /api/pre-start-pdf?no=J247 -> downloads the branded PDF
@@ -15,7 +15,8 @@ export default async function handler(req, res) {
       recipients: data.recipientsDetailed || (data.recipients || []).map(e => ({ email: e })),
       statuses: data.statuses || {},
     } : null
-    const bytes = await buildPreStartPDF({ project: project?.data || {}, data, logoUrl: `${origin}/rock-logo.jpg`, proof })
+    const tpl = await getTemplate('prestart')
+    const bytes = await buildPreStartPDF({ project: project?.data || {}, data, logoUrl: `${origin}/rock-logo.jpg`, proof, sections: tpl?.sections })
     const fname = `Pre-Start Minutes - ${(project?.data?.projectName || no)}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `inline; filename="${fname}"`)

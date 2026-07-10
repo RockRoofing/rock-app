@@ -1,4 +1,4 @@
-import { getPreStart, savePreStart, getOpsProject } from '../../lib/db'
+import { getPreStart, savePreStart, getOpsProject, getTemplate } from '../../lib/db'
 import { buildPreStartPDF } from '../../lib/preStartPdf'
 
 // POST /api/pre-start-send { projectNo }
@@ -43,7 +43,8 @@ export default async function handler(req, res) {
       statuses: recips.reduce((acc, r) => { acc[r.email] = 'Sent'; return acc }, {}),
     }
     const sentData = { ...data, stage: 'sent', sentAt }
-    const bytes = await buildPreStartPDF({ project: project?.data || {}, data: sentData, logoUrl: `${origin}/rock-logo.jpg`, proof })
+    const tpl = await getTemplate('prestart')
+    const bytes = await buildPreStartPDF({ project: project?.data || {}, data: sentData, logoUrl: `${origin}/rock-logo.jpg`, proof, sections: tpl?.sections })
     const base64 = Buffer.from(bytes).toString('base64')
     const projName = project?.data?.projectName || projectNo
     const filename = `Pre-Start Minutes - ${projName}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')

@@ -1,41 +1,29 @@
-import { getTeamMembers, saveTeamMembers } from '../../lib/db'
+import { getPortalUsers } from '../../lib/db'
 
-// Internal team members, by role. Feeds IHM attendee dropdowns and Project
-// Financials. Roles align with the IHM meeting attendee fields.
+// Team members now come from Portal Users (the single people list).
+// This endpoint maps portal users into the legacy member shape so all existing
+// consumers (IHM, Pre-Start, projects, Site App member picker) keep working
+// unchanged. Management of people happens in Admin → Portal Users.
 //
-// GET    /api/team                -> { members }
-// POST   /api/team { member }     -> add/update, returns { members }
-// DELETE /api/team { id }         -> remove
+// GET /api/team -> { members: [{ id, firstName, lastName, name, email, phone, role, active }] }
 export default async function handler(req, res) {
   if (req.method === 'GET') {
-    return res.json({ members: await getTeamMembers() })
-  }
-  if (req.method === 'POST') {
-    const { member } = req.body || {}
-    // Accept either the new first/last name shape or a partial update (id only).
-    const hasName = member && (member.firstName || member.lastName || member.name)
-    if (!member || (!member.id && !hasName)) {
-      return res.status(400).json({ error: 'Name is required' })
-    }
-    let members = await getTeamMembers()
-    if (!member.id) {
-      member.id = `tm_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
-      member.active = member.active !== false
-      members.push(member)
-    } else {
-      const idx = members.findIndex(m => m.id === member.id)
-      if (idx >= 0) members[idx] = { ...members[idx], ...member }
-      else members.push(member)
-    }
-    await saveTeamMembers(members)
+    const users = await getPortalUsers()
+    const members = users.map(u => ({
+      id: u.id,
+      firstName: u.firstName || '',
+      lastName: u.lastName || '',
+      name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '',
+      email: u.email || '',
+      phone: u.phone || '',
+      role: u.jobRole || '',        // descriptive job role for dropdowns
+      active: u.active !== false,
+    }))
     return res.json({ members })
   }
-  if (req.method === 'DELETE') {
-    const { id } = req.body || {}
-    let members = await getTeamMembers()
-    members = members.filter(m => m.id !== id)
-    await saveTeamMembers(members)
-    return res.json({ members })
+  // Writes are no longer accepted here — people are managed in Admin → Portal Users.
+  if (req.method === 'POST' || req.method === 'DELETE') {
+    return res.status(410).json({ error: 'Team members are now managed under Admin → Portal Users.' })
   }
   res.status(405).end()
 }
