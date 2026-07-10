@@ -76,7 +76,17 @@ export default function ProcurementSavings({ projectNo }) {
     return { tendered, buying, savings }
   }, [rows])
 
-  const outstanding = rows.filter(r => (hasVal(r.tenderedRate) || hasVal(r.qty)) && !hasVal(r.buyingRate)).length
+  // Completeness status (three states):
+  //  - no tendered/budget rates anywhere      -> "Budget rates must be inserted"
+  //  - a budget row exists without buying rate -> "Buying rates still needed"
+  //  - every budget row has a buying rate      -> "All lines confirmed"
+  const budgetRows = rows.filter(r => hasVal(r.tenderedRate))
+  const awaitingBuying = budgetRows.filter(r => !hasVal(r.buyingRate)).length
+  const status = budgetRows.length === 0
+    ? { tone: '#b45309', text: '⚠ Budget rates must be inserted' }
+    : awaitingBuying > 0
+      ? { tone: '#b45309', text: `⚠ Buying rates still needed (${awaitingBuying} line${awaitingBuying === 1 ? '' : 's'})` }
+      : { tone: '#16a34a', text: '✓ All lines have a confirmed buying rate' }
 
   // Sorting: returns display order (indices) so edits still map to real rows.
   const order = useMemo(() => {
@@ -115,9 +125,7 @@ export default function ProcurementSavings({ projectNo }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13 }}>
-          {outstanding > 0
-            ? <span style={{ color: '#b45309', fontWeight: 600 }}>⚠ {outstanding} line{outstanding === 1 ? '' : 's'} awaiting a confirmed buying rate</span>
-            : <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ All lines have a confirmed buying rate</span>}
+          <span style={{ color: status.tone, fontWeight: 600 }}>{status.text}</span>
         </div>
         <div style={{ flex: 1 }} />
         {notice && <span style={{ fontSize: 13, color: notice === 'Saved.' ? '#16a34a' : '#dc2626' }}>{notice}</span>}
@@ -131,7 +139,7 @@ export default function ProcurementSavings({ projectNo }) {
               <H k="packageName" label="Package Name" min={160} />
               <H k="supplier" label="Supplier" min={180} />
               <H k="dateProvided" label="Tender Rate Provided" w={150} />
-              <H k="qty" label="Qty" w={80} />
+              <H k="qty" label="Qty" w={110} />
               <H k="unit" label="Unit" w={90} />
               <H k="tenderedRate" label="Tendered Rate" w={130} />
               <H k="tenderedTotal" label="Tendered Total" w={130} />
@@ -155,7 +163,7 @@ export default function ProcurementSavings({ projectNo }) {
               const hasBuying = hasVal(r.buyingRate)
               const bTotal = num(r.qty) * num(r.buyingRate)
               const savings = hasBuying ? tTotal - bTotal : null
-              const needsBuying = (hasVal(r.tenderedRate) || hasVal(r.qty)) && !hasBuying
+              const needsBuying = hasVal(r.tenderedRate) && !hasBuying
               const isLast = displayIdx === order.length - 1
               return [
                   <tr key={ri} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'middle', background: needsBuying ? '#fffbeb' : '#fff' }}>
