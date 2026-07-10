@@ -5,6 +5,7 @@ import ProjectFiles from '../../components/ProjectFiles'
 import PreStartForm from '../../components/PreStartForm'
 import SubmissionModal from '../../components/SubmissionModal'
 import ProcurementSavings from '../../components/ProcurementSavings'
+import ProjectConcerns from '../../components/ProjectConcerns'
 
 const SUB_TABS = [
   { key: 'handover', label: 'Handover' },
@@ -121,7 +122,7 @@ export default function ProjectsPage() {
         {sub === 'rams' && <RamsTable projectNo={openNo} />}
         {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
         {sub === 'images' && <ProjectImages projectNo={openNo} />}
-        {sub === 'concerns' && <ComingSoon title="Project Concerns" note="Concerns raised against this project — coming soon." />}
+        {sub === 'concerns' && <ProjectConcerns projectNo={openNo} projectName={p?.projectName || ''} />}
       </OperationsShell>
     )
   }

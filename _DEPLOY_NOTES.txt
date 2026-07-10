@@ -1,11 +1,24 @@
-TABLES GREEN LOGIC + DESIGN APPROVED + RAMS BUILDER MOVE
+PROJECT CONCERNS (per-project, inside each project)
 
-  pages/variations.js                                   Instructed is now a dropdown (Instructed/Not Instructed), instant, no reload
-  pages/operations/project-management/procurement.js    NEW "Design Approved?" column after Design Complete; green timeline; Order Placed=Yes greens whole row
-  pages/operations/project-management/risks.js          Resolved=Yes greens the whole row
-  pages/operations/project-management/tasks.js          Resolved=Yes greens the whole row
-  pages/operations/project-management/deliveries.js     Progressive green: Required Delivery + PO Sent/Supplier Confirmed/2nd Check; Actual Delivery=whole row
-  pages/operations/projects.js                          RAMS Builder removed from project sub-tabs
-  pages/operations/hs/rams-matrix.js                    RAMS Builder tab removed (matrix only)
-  pages/operations/hs/rams-builder.js                   NEW — RAMS Builder as its own H&S tab
-  components/OperationsNav.js                            RAMS Builder added to H&S nav (before RAMS Matrix)
+DEPLOY (mirror into repo, overwrite):
+  pages/api/project-concerns.js     NEW — stores concern meetings per project
+  components/ProjectConcerns.js     NEW — table + large meeting modal
+  pages/operations/projects.js      wires the real component into the "Project Concerns" sub-tab
+
+FEATURES
+  - Per-project: only shows that project's concern meetings.
+  - Main view: table (Project, Number, Date, Issues) with View + Delete; "+ Add new".
+  - Large modal to hold/record a meeting: auto Project Name/Number, attendees (multi-select
+    from Portal Users), Teams recording link, today's date, multi-select issues (+ "if other"),
+    describe issues, mitigation.
+  - Meeting Actions <-> Live Project Tasks: TWO-WAY. Adding/editing/removing an action
+    creates/updates/deletes the same record on the Live Tasks page (and vice versa).
+  - Risk Log: shows this project's live Risk Log; Add Risk creates a real Risk Log entry
+    (two-way). Editing risk/mitigation/resolved syncs to the Risk Log page.
+  - "Do we require another meeting?" Yes -> next-meeting date field (with Clear).
+  - Banner at top: upcoming meeting -> blue "Next Project Concern meeting: DATE".
+    Past date -> red "⚠ Project Concern scheduled for DATE. This has now passed."
+    Dismiss with X (permanent) OR it clears when a new meeting supersedes it.
+  - No meetings for a project -> blank table with Add new, no banner.
+
+DEFERRED (next task): auto calendar invite to attendees when next-meeting date is set.
