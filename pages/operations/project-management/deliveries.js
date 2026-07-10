@@ -84,17 +84,6 @@ export default function Deliveries() {
     load(false)
   }
 
-  async function resetSynced() {
-    if (!confirm('Remove all POs that were synced from Xero and restart the schedule from now?\n\nManually-added rows are kept. Newly-approved POs raised from this point will come in on the next sync.')) return
-    setSyncing(true)
-    try {
-      const d = await fetch('/api/deliveries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reset-synced' }) }).then(r => r.json())
-      setNotice(`Cleared ${d.removed || 0} synced PO row(s). The schedule will now only bring in POs raised from now on.`)
-      load(false)
-    } catch { setNotice('Could not reset.') }
-    setSyncing(false)
-  }
-
   // Setting an actual delivery date marks it complete — warn if no attachment.
   function setActualDate(r, date) {
     if (date && !(r.attachments || []).length) {
@@ -114,7 +103,6 @@ export default function Deliveries() {
       <PageHeading title="Delivery Schedule" sub="One row per Purchase Order. Approved POs (from go-live) sync from Xero; delivered items are hidden by default."
         action={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={resetSynced} disabled={syncing} style={{ ...ghostBtn, color: '#dc2626' }}>Clear synced POs</button>
             <button onClick={() => load(true)} disabled={syncing} style={ghostBtn}>{syncing ? 'Syncing…' : 'Sync with Xero'}</button>
             <button onClick={() => setEdit({ projectNo: '', projectName: '', deliveryAddress: '', poNumber: '', orderDate: '', requiredDeliveryDate: '', lineItems: [], poSent: false, supplierConfirmedDate: false, secondCheck: false, actualDeliveryDate: '', attachments: [], comments: '' })} style={primaryBtn}>+ Add delivery</button>
           </div>
