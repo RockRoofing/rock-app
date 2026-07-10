@@ -90,17 +90,6 @@ export default function Deliveries() {
     load(false)
   }
 
-  async function rebaseline() {
-    if (!confirm('Fix the schedule?\n\nThis captures ALL current approved POs as the baseline and removes Xero-synced rows (manual rows are kept). Use this once to clear old POs that shouldn\'t have appeared. After this, only genuinely new POs will come in.')) return
-    setSyncing(true)
-    try {
-      const d = await fetch('/api/deliveries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'rebaseline' }) }).then(r => r.json())
-      if (d.ok) { setNotice(`Rebaselined against ${d.baselineSize} POs; cleared ${d.removedRows} synced row(s). Only new POs will appear from now.`); load(false) }
-      else setNotice(d.error || 'Rebaseline failed')
-    } catch { setNotice('Rebaseline failed') }
-    setSyncing(false)
-  }
-
   // Setting an actual delivery date marks it complete — warn if no attachment.
   function setActualDate(r, date) {
     if (date && !(r.attachments || []).length) {
@@ -120,7 +109,6 @@ export default function Deliveries() {
       <PageHeading title="Delivery Schedule" sub="One row per Purchase Order. Approved POs (from go-live) sync from Xero; delivered items are hidden by default."
         action={
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={rebaseline} disabled={syncing} style={{ ...ghostBtn, color: '#dc2626' }}>Fix / rebaseline</button>
             <button onClick={() => load(true)} disabled={syncing} style={ghostBtn}>{syncing ? 'Syncing…' : 'Sync with Xero'}</button>
             <button onClick={() => setEdit({ projectNo: '', projectName: '', deliveryAddress: '', poNumber: '', orderDate: '', requiredDeliveryDate: '', lineItems: [], poSent: false, supplierConfirmedDate: false, secondCheck: false, actualDeliveryDate: '', attachments: [], comments: '' })} style={primaryBtn}>+ Add delivery</button>
           </div>
