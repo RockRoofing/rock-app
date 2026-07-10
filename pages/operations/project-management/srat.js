@@ -3,7 +3,12 @@ import OperationsShell, { PageHeading } from '../../../components/OperationsShel
 import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn } from '../../../components/opsUI'
 
 const clamp = (s, n = 80) => { if (!s) return '—'; const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t }
-const emptySrat = () => ({ projectNo: '', projectName: '', situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const parseLocal = (d) => { if (!d) return null; const [y, m, day] = d.split('-').map(Number); return new Date(y, (m || 1) - 1, day || 1) }
+const fmtLocal = (d) => { const dt = parseLocal(d); return dt ? dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }
+const emptySrat = () => ({ projectNo: '', projectName: '', date: todayISO(), situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
+const PAGE_SIZE = 50
+const cellTd = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f0f0f0', verticalAlign: 'top', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }
 
 export default function SratsPage() {
   const [srats, setSrats] = useState([])
@@ -13,7 +18,9 @@ export default function SratsPage() {
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState(null)    // read-only large view
   const [edit, setEdit] = useState(null)    // add/edit modal
-  const [sort, setSort] = useState({ key: 'createdAt', dir: 'desc' })
+  const [cell, setCell] = useState(null)    // { title, text } single-cell popout
+  const [page, setPage] = useState(0)
+  const [sort, setSort] = useState({ key: 'date', dir: 'desc' })
 
   async function load() {
     setLoading(true)
@@ -39,6 +46,7 @@ export default function SratsPage() {
     const arr = [...srats]
     const val = (s) => {
       if (sort.key === 'project') return `${s.projectNo || ''} ${s.projectName || ''}`.toLowerCase()
+      if (sort.key === 'date') return s.date || ''
       if (sort.key === 'situation') return (s.situation || '').toLowerCase()
       if (sort.key === 'roadblocks') return (s.roadblocks || '').toLowerCase()
       if (sort.key === 'timeline') return (s.timeline || '').toLowerCase()
@@ -47,6 +55,9 @@ export default function SratsPage() {
     arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
     return arr
   }, [srats, sort])
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+  const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+  useEffect(() => { if (page >= pageCount) setPage(0) }, [pageCount, page])
 
   async function deleteSrat(s) {
     if (!confirm('Delete this SRAT?')) return
@@ -62,10 +73,21 @@ export default function SratsPage() {
       {loading ? <Loading /> : srats.length === 0 ? (
         <EmptyCard title="No SRATs yet" body="Click “Add new” to create the first SRAT." />
       ) : (
+        <>
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
+            <colgroup>
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '10%' }} />
+            </colgroup>
             <thead><tr style={{ background: '#faf9f7' }}>
-              <th style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('situation')}>Situation{arrow('situation')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('roadblocks')}>Roadblocks{arrow('roadblocks')}</th>
               <th style={th}>Actions</th>
@@ -73,15 +95,16 @@ export default function SratsPage() {
               <th style={{ ...th, textAlign: 'right' }}></th>
             </tr></thead>
             <tbody>
-              {sorted.map(s => {
+              {pageRows.map(s => {
                 const nTasks = (s.actionTaskIds || []).length
                 return (
                   <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>{s.projectNo || '—'}</strong>{s.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{s.projectName}</div> : null}</td>
-                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.situation)}</td>
-                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.roadblocks)}</td>
-                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.actionsText)}{nTasks ? <div style={{ fontSize: 11, color: '#ca8a04', marginTop: 2 }}>{nTasks} task{nTasks === 1 ? '' : 's'}</div> : null}</td>
-                    <td style={{ ...td, maxWidth: 200 }}>{clamp(s.timeline, 50)}</td>
+                    <td style={{ ...td, overflow: 'hidden' }}><strong>{s.projectNo || '—'}</strong>{s.projectName ? <div style={{ fontSize: 11, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.projectName}</div> : null}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.date ? fmtLocal(s.date) : '—'}</td>
+                    <td style={cellTd} onClick={() => s.situation && setCell({ title: 'Situation', text: s.situation })}>{clamp(s.situation)}</td>
+                    <td style={cellTd} onClick={() => s.roadblocks && setCell({ title: 'Roadblocks', text: s.roadblocks })}>{clamp(s.roadblocks)}</td>
+                    <td style={cellTd} onClick={() => s.actionsText && setCell({ title: 'Actions', text: s.actionsText })}>{clamp(s.actionsText)}{nTasks ? <div style={{ fontSize: 11, color: '#ca8a04', marginTop: 2 }}>{nTasks} task{nTasks === 1 ? '' : 's'}</div> : null}</td>
+                    <td style={cellTd} onClick={() => s.timeline && setCell({ title: 'Timeline', text: s.timeline })}>{clamp(s.timeline, 50)}</td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={() => setView(s)} style={linkBtn}>View</button>
                       <button onClick={() => setEdit({ ...s })} style={linkBtn}>Edit</button>
@@ -93,8 +116,17 @@ export default function SratsPage() {
             </tbody>
           </table>
         </div>
+        {pageCount > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16, alignItems: 'center' }}>
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={ghostBtn}>‹ Prev</button>
+            <span style={{ fontSize: 13, color: '#666' }}>Page {page + 1} of {pageCount}</span>
+            <button disabled={page >= pageCount - 1} onClick={() => setPage(p => p + 1)} style={ghostBtn}>Next ›</button>
+          </div>
+        )}
+        </>
       )}
 
+      {cell && <Modal onClose={() => setCell(null)} title={cell.title}><div style={{ fontSize: 14, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{cell.text}</div></Modal>}
       {view && <ViewModal srat={view} tasks={tasks} onClose={() => setView(null)} />}
       {edit && <EditModal initial={edit} projects={projects} users={users} tasks={tasks} setTasks={setTasks} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load() }} />}
     </OperationsShell>
@@ -112,6 +144,7 @@ function ViewModal({ srat, tasks, onClose }) {
   )
   return (
     <Modal onClose={onClose} title={`SRAT — ${srat.projectNo || ''} ${srat.projectName || ''}`}>
+      <Row label="Date">{srat.date ? fmtLocal(srat.date) : '—'}</Row>
       <Row label="Situation">{srat.situation || '—'}</Row>
       <Row label="Roadblocks">{srat.roadblocks || '—'}</Row>
       <Row label="Actions">{srat.actionsText || '—'}</Row>
@@ -130,7 +163,7 @@ function ViewModal({ srat, tasks, onClose }) {
 
 // ---- Add / edit ----
 function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved }) {
-  const [f, setF] = useState(initial)
+  const [f, setF] = useState(() => ({ ...initial, date: initial.date || todayISO() }))
   const [saving, setSaving] = useState(false)
   const set = (patch) => setF(prev => ({ ...prev, ...patch }))
   const userName = (u) => u.name || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
@@ -180,6 +213,9 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
         <option value="">Select a project…</option>
         {projects.map(p => <option key={p.no} value={p.no}>{[p.no, p.name].filter(Boolean).join(' — ')}</option>)}
       </select>
+
+      <L>Date</L>
+      <input type="date" value={f.date || ''} onChange={e => set({ date: e.target.value })} style={{ ...input, maxWidth: 200 }} />
 
       <L>Situation</L>
       <textarea value={f.situation || ''} onChange={e => set({ situation: e.target.value })} style={{ ...input, minHeight: 80, resize: 'vertical' }} />

@@ -1,13 +1,8 @@
-CONCERN INVITE FIX — "no meeting attendees" bug
-
-  pages/api/concern-invite.js
-   ROOT CAUSE: the invite API was fetching /api/team, /api/tasks, /api/risks over HTTP.
-   On the main portal domain the login middleware requires auth for those endpoints, so the
-   server-to-server calls (which carry no login cookie) were bounced to the login page and
-   returned no data — hence "no attendee emails".
-   FIX: read portal users, live tasks and risks DIRECTLY from the database (getPortalUsers,
-   getLiveTasks, get('ops:risks')). No internal HTTP calls. Attendees now resolve correctly.
-
-STILL REQUIRED (unchanged):
-  - Your Portal User record must have an email address (the invite goes to attendee emails).
-  - RESEND_API_KEY set, and FORMS_FROM_EMAIL set to your send.rockroofing.co.uk sender.
+SRATs v2
+  pages/operations/project-management/srat.js
+   - Even column widths (fixed table layout + colgroup).
+   - New Date column; table auto-sorts by Date (newest first). Date field added to the
+     add/edit modal (defaults to today) and shown in the large View.
+   - Situation / Roadblocks / Actions / Timeline cells are clickable -> open the full text
+     in a larger pop-up window (view-only).
+   - Pagination: max 50 SRATs per page.
