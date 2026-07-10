@@ -6,7 +6,7 @@ const ROLES = ['standard', 'management', 'admin']
 const roleLabel = { standard: 'Standard', management: 'Management', admin: 'Admin' }
 // Fixed job roles (descriptive) — matches the old Team Members list plus the
 // roles the IHM/Pre-Start dropdowns need.
-const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Director', 'Other']
+const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Sales Manager', 'Director', 'Other']
 
 export default function AdminPage() {
   const router = useRouter()
