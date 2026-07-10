@@ -21,9 +21,9 @@ export default function Deliveries() {
   const [fStatus, setFStatus] = useState('open')   // open = not delivered
   const [sort, setSort] = useState({ key: 'requiredDeliveryDate', dir: 'asc' })
 
-  useEffect(() => { load(false) }, [])
+  useEffect(() => { load(true) }, [])   // auto-sync with Xero on open
   async function load(sync) {
-    sync ? setSyncing(true) : setLoading(true)
+    if (sync) setSyncing(true)
     try {
       const d = await fetch(`/api/deliveries${sync ? '?sync=true' : ''}`).then(r => r.json())
       setRows(d.deliveries || [])
@@ -34,7 +34,8 @@ export default function Deliveries() {
           : (d.syncInfo.added ? `Synced — ${d.syncInfo.added} new PO(s) added.` : 'Synced — no new POs.'))
       }
     } catch (e) { setNotice('Could not load deliveries.') }
-    sync ? setSyncing(false) : setLoading(false)
+    setLoading(false)
+    setSyncing(false)
   }
 
   const projectOptions = useMemo(() => {
@@ -137,6 +138,13 @@ export default function Deliveries() {
                 {pageRows.map(r => {
                   const delivered = !!r.actualDeliveryDate
                   const green = delivered ? { background: '#ecfdf5' } : {}
+                  const GREENC = { background: '#ecfdf5' }
+                  // Stage timeline: PO Sent -> Supplier Confirmed -> 2nd Check.
+                  // Green everything up to & including the right-most "Yes".
+                  const stages = [!!r.poSent, !!r.supplierConfirmedDate, !!r.secondCheck]
+                  let lastYes = -1
+                  stages.forEach((v, i) => { if (v) lastYes = i })
+                  const stageGreen = (i) => (delivered || i <= lastYes) ? GREENC : {}
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...green }}>
@@ -151,10 +159,12 @@ export default function Deliveries() {
                           ? <button onClick={() => setItems(r)} style={{ ...linkBtn, padding: 0 }}>View items ({r.lineItems.length})</button>
                           : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
                       </td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(delivered ? green : dateCellStyle(r.requiredDeliveryDate)) }}>{r.requiredDeliveryDate ? fmtDate(r.requiredDeliveryDate) : '—'}</td>
-                      <td style={{ ...td }}>{yn(r, 'poSent')}</td>
-                      <td style={{ ...td }}>{yn(r, 'supplierConfirmedDate')}</td>
-                      <td style={{ ...td }}>{yn(r, 'secondCheck')}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...(delivered ? green : dateCellStyle(r.requiredDeliveryDate)) }}>
+                        <input type="date" value={r.requiredDeliveryDate || ''} onChange={e => patch(r.id, { requiredDeliveryDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
+                      </td>
+                      <td style={{ ...td, ...stageGreen(0) }}>{yn(r, 'poSent')}</td>
+                      <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'supplierConfirmedDate')}</td>
+                      <td style={{ ...td, ...stageGreen(2) }}>{yn(r, 'secondCheck')}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>
                         <input type="date" value={r.actualDeliveryDate || ''} onChange={e => setActualDate(r, e.target.value)} style={{ ...sel, minWidth: 140, padding: '5px 8px' }} />
                       </td>
