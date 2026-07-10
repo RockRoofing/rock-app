@@ -1,10 +1,249 @@
-import OperationsShell, { PageHeading, ComingSoon } from '../../../components/OperationsShell'
+import { useState, useEffect, useMemo } from 'react'
+import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
+import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn } from '../../../components/opsUI'
 
-export default function Page() {
+const clamp = (s, n = 80) => { if (!s) return '—'; const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t }
+const emptySrat = () => ({ projectNo: '', projectName: '', situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
+
+export default function SratsPage() {
+  const [srats, setSrats] = useState([])
+  const [projects, setProjects] = useState([])
+  const [users, setUsers] = useState([])
+  const [tasks, setTasks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState(null)    // read-only large view
+  const [edit, setEdit] = useState(null)    // add/edit modal
+  const [sort, setSort] = useState({ key: 'createdAt', dir: 'desc' })
+
+  async function load() {
+    setLoading(true)
+    try {
+      const [s, p, t, tk] = await Promise.all([
+        fetch('/api/srats').then(r => r.json()).catch(() => ({})),
+        fetch('/api/ops-projects').then(r => r.json()).catch(() => ({})),
+        fetch('/api/team').then(r => r.json()).catch(() => ({})),
+        fetch('/api/tasks').then(r => r.json()).catch(() => ({})),
+      ])
+      setSrats(s.srats || [])
+      setProjects((p.projects || []).map(x => ({ no: x.projectNo, name: x.projectName || x.name || '' })).filter(x => x.no))
+      setUsers((t.members || []).filter(u => u.active !== false))
+      setTasks(tk.tasks || [])
+    } catch {}
+    setLoading(false)
+  }
+  useEffect(() => { load() }, [])
+
+  function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
+  const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  const sorted = useMemo(() => {
+    const arr = [...srats]
+    const val = (s) => {
+      if (sort.key === 'project') return `${s.projectNo || ''} ${s.projectName || ''}`.toLowerCase()
+      if (sort.key === 'situation') return (s.situation || '').toLowerCase()
+      if (sort.key === 'roadblocks') return (s.roadblocks || '').toLowerCase()
+      if (sort.key === 'timeline') return (s.timeline || '').toLowerCase()
+      return s.createdAt || 0
+    }
+    arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
+    return arr
+  }, [srats, sort])
+
+  async function deleteSrat(s) {
+    if (!confirm('Delete this SRAT?')) return
+    await fetch('/api/srats', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) })
+    load()
+  }
+
   return (
-    <OperationsShell active="pm:srat" section="pm" title="SRATs">
-      <PageHeading title="SRATs" />
-      <ComingSoon title="SRATs" note="Situation, Roadblocks, Actions, Timeline \u2014 weekly per project, carried over week to week. Editable in the portal and completable from the Forms App." />
+    <OperationsShell active="pm:srat" section="pm" title="SRATs" wide>
+      <PageHeading title="SRATs" sub="Situation, Roadblocks, Actions, Timeline — one per project update."
+        action={<button onClick={() => setEdit(emptySrat())} style={primaryBtn}>+ Add new</button>} />
+
+      {loading ? <Loading /> : srats.length === 0 ? (
+        <EmptyCard title="No SRATs yet" body="Click “Add new” to create the first SRAT." />
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+            <thead><tr style={{ background: '#faf9f7' }}>
+              <th style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('situation')}>Situation{arrow('situation')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('roadblocks')}>Roadblocks{arrow('roadblocks')}</th>
+              <th style={th}>Actions</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('timeline')}>Timeline{arrow('timeline')}</th>
+              <th style={{ ...th, textAlign: 'right' }}></th>
+            </tr></thead>
+            <tbody>
+              {sorted.map(s => {
+                const nTasks = (s.actionTaskIds || []).length
+                return (
+                  <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>{s.projectNo || '—'}</strong>{s.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{s.projectName}</div> : null}</td>
+                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.situation)}</td>
+                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.roadblocks)}</td>
+                    <td style={{ ...td, maxWidth: 240 }}>{clamp(s.actionsText)}{nTasks ? <div style={{ fontSize: 11, color: '#ca8a04', marginTop: 2 }}>{nTasks} task{nTasks === 1 ? '' : 's'}</div> : null}</td>
+                    <td style={{ ...td, maxWidth: 200 }}>{clamp(s.timeline, 50)}</td>
+                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => setView(s)} style={linkBtn}>View</button>
+                      <button onClick={() => setEdit({ ...s })} style={linkBtn}>Edit</button>
+                      <button onClick={() => deleteSrat(s)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view && <ViewModal srat={view} tasks={tasks} onClose={() => setView(null)} />}
+      {edit && <EditModal initial={edit} projects={projects} users={users} tasks={tasks} setTasks={setTasks} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load() }} />}
     </OperationsShell>
+  )
+}
+
+// ---- Large read-only view ----
+function ViewModal({ srat, tasks, onClose }) {
+  const myTasks = tasks.filter(t => (srat.actionTaskIds || []).includes(t.id))
+  const Row = ({ label, children }) => (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 13.5, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{children}</div>
+    </div>
+  )
+  return (
+    <Modal onClose={onClose} title={`SRAT — ${srat.projectNo || ''} ${srat.projectName || ''}`}>
+      <Row label="Situation">{srat.situation || '—'}</Row>
+      <Row label="Roadblocks">{srat.roadblocks || '—'}</Row>
+      <Row label="Actions">{srat.actionsText || '—'}</Row>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 6 }}>Action tasks</div>
+        {myTasks.length === 0 ? <div style={{ fontSize: 13, color: '#999' }}>No tasks.</div> : (
+          <ul style={{ margin: 0, paddingLeft: 18 }}>
+            {myTasks.map(t => <li key={t.id} style={{ fontSize: 13.5, color: t.closed ? '#16a34a' : '#333', marginBottom: 4 }}>{t.closed ? '✓ ' : ''}{t.description}{t.assignee ? ` — ${t.assignee}` : ''}</li>)}
+          </ul>
+        )}
+      </div>
+      <Row label="Timeline">{srat.timeline || '—'}</Row>
+    </Modal>
+  )
+}
+
+// ---- Add / edit ----
+function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved }) {
+  const [f, setF] = useState(initial)
+  const [saving, setSaving] = useState(false)
+  const set = (patch) => setF(prev => ({ ...prev, ...patch }))
+  const userName = (u) => u.name || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email
+  const myTasks = tasks.filter(t => (f.actionTaskIds || []).includes(t.id))
+
+  function pickProject(no) {
+    const p = projects.find(x => x.no === no)
+    set({ projectNo: no, projectName: p?.name || '' })
+  }
+
+  // One-way push to Live Project Tasks: create the task, keep its id, but no live sync.
+  async function addTask() {
+    const task = { projectNo: f.projectNo, projectName: f.projectName, description: '', assignee: '', closed: false, comments: '', attachments: [], sourceSrat: true }
+    const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) }).then(r => r.json())
+    if (res.id) {
+      setTasks(ts => [{ ...task, id: res.id, createdAt: Date.now() }, ...ts])
+      set({ actionTaskIds: [...(f.actionTaskIds || []), res.id] })
+    }
+  }
+  async function patchTask(id, patch) {
+    setTasks(ts => ts.map(t => t.id === id ? { ...t, ...patch } : t))
+    const current = tasks.find(t => t.id === id) || {}
+    await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task: { ...current, ...patch, id } }) })
+  }
+  function removeTaskLink(id) {
+    // one-way: just unlink from this SRAT (leave the Live Task in place)
+    set({ actionTaskIds: (f.actionTaskIds || []).filter(x => x !== id) })
+  }
+
+  async function save() {
+    if (!f.projectNo) { alert('Please select a project.'); return }
+    setSaving(true)
+    try {
+      await fetch('/api/srats', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ srat: f }) })
+      onSaved()
+    } catch { alert('Could not save.') }
+    setSaving(false)
+  }
+
+  const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+  const L = ({ children }) => <div style={{ fontSize: 12.5, fontWeight: 600, color: INK, margin: '16px 0 6px' }}>{children}</div>
+
+  return (
+    <Modal onClose={onClose} title={f.id ? 'Edit SRAT' : 'New SRAT'}>
+      <L>Project</L>
+      <select value={f.projectNo || ''} onChange={e => pickProject(e.target.value)} style={input}>
+        <option value="">Select a project…</option>
+        {projects.map(p => <option key={p.no} value={p.no}>{[p.no, p.name].filter(Boolean).join(' — ')}</option>)}
+      </select>
+
+      <L>Situation</L>
+      <textarea value={f.situation || ''} onChange={e => set({ situation: e.target.value })} style={{ ...input, minHeight: 80, resize: 'vertical' }} />
+
+      <L>Roadblocks</L>
+      <textarea value={f.roadblocks || ''} onChange={e => set({ roadblocks: e.target.value })} style={{ ...input, minHeight: 80, resize: 'vertical' }} />
+
+      <L>Actions</L>
+      <textarea value={f.actionsText || ''} onChange={e => set({ actionsText: e.target.value })} placeholder="Describe the actions" style={{ ...input, minHeight: 70, resize: 'vertical' }} />
+      <div style={{ fontSize: 11.5, color: '#9ca3af', margin: '10px 0 6px' }}>Action tasks below are added to Live Project Tasks (one-way — they won't sync back here after saving).</div>
+      <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead><tr style={{ background: '#faf9f7' }}>
+            <th style={{ ...th, fontSize: 11 }}>Task</th>
+            <th style={{ ...th, fontSize: 11, width: 190 }}>Assignee</th>
+            <th style={{ ...th, fontSize: 11, width: 90 }}>Resolved?</th>
+            <th style={{ ...th, width: 40 }}></th>
+          </tr></thead>
+          <tbody>
+            {myTasks.length === 0 && <tr><td colSpan={4} style={{ ...td, color: '#aaa', fontSize: 12 }}>No tasks yet.</td></tr>}
+            {myTasks.map(t => (
+              <tr key={t.id} style={{ borderTop: '1px solid #f2f2f2', background: t.closed ? '#ecfdf5' : '#fff' }}>
+                <td style={td}><input value={t.description || ''} onChange={e => patchTask(t.id, { description: e.target.value })} placeholder="Describe the task" style={{ ...input, padding: '6px 8px' }} /></td>
+                <td style={td}>
+                  <select value={t.assignee || ''} onChange={e => patchTask(t.id, { assignee: e.target.value })} style={{ ...input, padding: '6px 8px' }}>
+                    <option value="">—</option>
+                    {users.map(u => <option key={u.id} value={userName(u)}>{userName(u)}</option>)}
+                  </select>
+                </td>
+                <td style={{ ...td, textAlign: 'center' }}>
+                  <select value={t.closed ? 'yes' : 'no'} onChange={e => patchTask(t.id, { closed: e.target.value === 'yes' })} style={{ ...input, padding: '6px 8px' }}>
+                    <option value="no">No</option><option value="yes">Yes</option>
+                  </select>
+                </td>
+                <td style={{ ...td, textAlign: 'center' }}><button onClick={() => removeTaskLink(t.id)} title="Remove from this SRAT" style={{ ...linkBtn, color: '#dc2626' }}>×</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <button onClick={addTask} disabled={!f.projectNo} style={{ ...ghostBtn, marginTop: 8 }}>+ Add new</button>
+
+      <L>Timeline</L>
+      <textarea value={f.timeline || ''} onChange={e => set({ timeline: e.target.value })} style={{ ...input, minHeight: 60, resize: 'vertical' }} />
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24, borderTop: '1px solid #eee', paddingTop: 18 }}>
+        <button onClick={onClose} style={ghostBtn}>Cancel</button>
+        <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save SRAT'}</button>
+      </div>
+    </Modal>
+  )
+}
+
+// Shared large modal shell
+function Modal({ title, children, onClose }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 2vw', overflowY: 'auto' }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 900, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 2 }}>
+          <h2 style={{ margin: 0, fontSize: 18, color: INK }}>{title}</h2>
+          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: '8px 28px 28px' }}>{children}</div>
+      </div>
+    </div>
   )
 }

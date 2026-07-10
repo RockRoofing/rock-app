@@ -1,27 +1,15 @@
-PROJECT CONCERNS — AUTO CALENDAR INVITE
+SRATs PAGE + PROJECT CONCERNS SORTABLE
 
 DEPLOY (mirror into repo, overwrite):
-  pages/api/concern-invite.js    NEW — builds an .ics event and emails it via Resend
-  components/ProjectConcerns.js  adds a TIME field; auto-sends/updates/cancels the invite on save
+  components/ProjectConcerns.js                        Project Concerns table now sortable by column headers
+  pages/api/srats.js                                   NEW — SRATs storage
+  pages/operations/project-management/srat.js          NEW — SRATs page (replaces the coming-soon stub)
 
-HOW IT WORKS
-  - In a meeting, "Do we require another meeting?" = Yes reveals Date AND Time.
-  - On Save: if a date/time is set, a calendar invite (.ics) is emailed to all selected
-    attendees (their portal-user emails). The invite lists the project, issues, mitigation,
-    risks and meeting actions.
-  - Send-once: saving again won't resend unless the date/time changed. If it changed, an
-    UPDATED invite is sent (same event UID + higher SEQUENCE, so Outlook moves the existing
-    event rather than creating a duplicate).
-  - If "another meeting" is set back to No (or date cleared) after an invite was sent, a
-    CANCELLATION is sent.
-  - Attendees can edit/move/cancel the event in their own calendar afterwards — the portal
-    doesn't manage it after sending.
-
-REQUIREMENTS (already used elsewhere in the app)
-  - RESEND_API_KEY env var must be set (it is, for other emails).
-  - FORMS_FROM_EMAIL env var sets the "from"/organiser address (defaults to onboarding@resend.dev
-    if unset — set it to your send.rockroofing.co.uk sender for proper delivery).
-  - Attendees must have email addresses on their Portal User records.
-
-NOTE: if RESEND is not configured or attendees have no emails, the meeting still SAVES; it just
-reports that the invite wasn't sent (no crash).
+SRATs PAGE
+  - Table: Project (No + Name), Situation, Roadblocks, Actions, Timeline. Sortable headers. "+ Add new".
+  - Add/Edit modal (large): project dropdown (auto-fills name), Situation, Roadblocks,
+    Actions (a text box PLUS a Live Project Tasks list with "+ Add new"; tasks can be marked
+    resolved immediately). Timeline text box.
+  - Actions tasks push ONE-WAY into Live Project Tasks (created there); removing from the SRAT
+    just unlinks (leaves the Live Task in place). No live two-way sync.
+  - View opens a large read-only view of the full SRAT.

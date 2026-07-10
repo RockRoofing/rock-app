@@ -48,6 +48,7 @@ export default function ProjectConcerns({ projectNo, projectName }) {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(null)   // meeting being viewed/edited (object) or null
   const [saving, setSaving] = useState(false)
+  const [sort, setSort] = useState({ key: 'date', dir: 'desc' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -77,6 +78,21 @@ export default function ProjectConcerns({ projectNo, projectName }) {
     if (latest.nextMeetingDismissed) return null
     return latest
   }, [meetings])
+
+  function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
+  const sortedMeetings = useMemo(() => {
+    const arr = [...meetings]
+    const val = (m) => {
+      if (sort.key === 'issues') return (m.issues || []).length + (m.issueOther ? 1 : 0)
+      if (sort.key === 'project') return (m.projectName || projectName || '').toLowerCase()
+      if (sort.key === 'number') return (m.projectNo || projectNo || '').toLowerCase()
+      if (sort.key === 'date') return m.date || ''
+      return ''
+    }
+    arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
+    return arr
+  }, [meetings, sort, projectName, projectNo])
+  const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
 
   async function dismissBanner(m) {
     await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -158,14 +174,14 @@ export default function ProjectConcerns({ projectNo, projectName }) {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#faf9f7' }}>
-              <th style={th}>Project</th>
-              <th style={th}>Number</th>
-              <th style={th}>Date</th>
-              <th style={th}>Issues</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('number')}>Number{arrow('number')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('issues')}>Issues{arrow('issues')}</th>
               <th style={{ ...th, textAlign: 'right' }}></th>
             </tr></thead>
             <tbody>
-              {meetings.map(m => (
+              {sortedMeetings.map(m => (
                 <tr key={m.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                   <td style={td}>{m.projectName || projectName || '—'}</td>
                   <td style={td}>{m.projectNo || projectNo}</td>
