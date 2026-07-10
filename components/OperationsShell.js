@@ -11,7 +11,7 @@ export default function OperationsShell({ active, section, title, children, wide
       <Head><title>Rock Roofing — {title || 'Operations'}</title></Head>
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#fafaf9' }}>
         <OperationsNav active={active} section={section} />
-        <div style={{ maxWidth: wide ? 1800 : 1100, margin: '0 auto', padding: wide ? '24px 32px' : '24px' }}>
+        <div style={{ maxWidth: wide ? 'none' : 1100, margin: '0 auto', padding: wide ? '24px' : '24px' }}>
           {children}
         </div>
       </div>

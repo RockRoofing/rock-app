@@ -26,7 +26,7 @@ const departments = [
   },
   {
     key: 'commercial',
-    label: 'Project Financials',
+    label: 'Commercial',
     description: 'Budget tracker, project financials & Xero integration',
     href: '/commercial',
     color: '#16a34a',

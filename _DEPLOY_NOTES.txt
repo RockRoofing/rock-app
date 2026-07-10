@@ -1,13 +1,15 @@
-PROJECT FINANCIALS MIRROR + EDITABLE VARIATIONS MIRROR
+OPS FULL-WIDTH TABLES + PORTAL RENAME
 
-DEPLOY (mirror into repo, overwrite):
-  pages/variations.js                                  (adds ?embed=true support: hides its own nav, keeps Add Variation)
-  pages/operations/project-management/variations.js    (now EMBEDS /variations?embed=true — exact editable mirror)
-  pages/operations/project-financials.js               (NEW — Ops Project Financials, embeds /commercial?mode=eom&embed=true)
-  components/OperationsNav.js                           (adds "Project Financials" top-level nav, right of Project Management)
+  components/OperationsShell.js  — 'wide' Ops pages are now full browser width
+                                   (was capped at 1800px). This gives ALL Ops table
+                                   pages (Procurement, Deliveries, Tasks, Risks,
+                                   Procurement Savings, Project Financials, Variations)
+                                   the same room as the Commercial/Project Financials
+                                   page, so they stop scrolling too much.
+  pages/index.js                 — main portal entry "Project Financials" renamed to
+                                   "Commercial" (page titles inside stay as they were).
 
-RESULT:
-  - Operations now has a top-level "Project Financials" tab (right of Project Management)
-    showing the exact same financials view as the Pre-Contract page. Editable, always in sync.
-  - Operations > Project Management > Variations is now the exact same editable Variation
-    Tracker as the Commercial one. Edit in either place; both update (same data).
+NOTE: Procurement already has a zoom control. Deliveries/Procurement Savings use fixed
+minWidths so they scroll when narrower than content — now that the page is full width,
+that scrolling is greatly reduced. If you want the exact Commercial zoom behaviour on a
+specific table, say which and I'll match it.
