@@ -106,6 +106,55 @@ export default function VariationTracker() {
     setEditSaving(false)
   }
 
+  // Toggle Instructed/Not Instructed inline from the row, saving immediately.
+  async function toggleInstructed(r) {
+    try {
+      const res = await fetch(`/api/project/${r.projectId}`)
+      const data = await res.json()
+      const settings = data.settings || {}
+      const vars = [...(settings.variations || [])]
+      const idx = vars.findIndex(v => (v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) && v.description === r.description)
+      if (idx < 0) return
+      vars[idx] = { ...vars[idx], instructed: !vars[idx].instructed }
+      await fetch(`/api/project/${r.projectId}/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings, variations: vars }),
+      })
+      await loadProjects()
+    } catch (e) { console.error(e) }
+  }
+
+  // Inline add-row (persistent, below the header). Same save path as the modal.
+  const [inlineAdd, setInlineAdd] = useState({ projectId: '', varNumber: '', description: '', instructed: 'no', materials: '', labour: '', profit: '' })
+  const [inlineSaving, setInlineSaving] = useState(false)
+  const inlineProject = projects.find(p => p.xeroId === inlineAdd.projectId)
+
+  async function saveInlineAdd() {
+    if (!inlineAdd.projectId || !inlineAdd.description) { alert('Pick a project and enter a description.'); return }
+    setInlineSaving(true)
+    try {
+      const res = await fetch(`/api/project/${inlineAdd.projectId}`)
+      const data = await res.json()
+      const settings = data.settings || {}
+      const vars = settings.variations || []
+      const newVar = {
+        varNumber: inlineAdd.varNumber || nextVarNumber(vars),
+        description: inlineAdd.description,
+        instructed: inlineAdd.instructed === 'yes',
+        materials: inlineAdd.materials || '0',
+        labour: inlineAdd.labour || '0',
+        profit: inlineAdd.profit || '0',
+      }
+      await fetch(`/api/project/${inlineAdd.projectId}/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...settings, variations: [...vars, newVar] }),
+      })
+      await loadProjects()
+      setInlineAdd({ projectId: '', varNumber: '', description: '', instructed: 'no', materials: '', labour: '', profit: '' })
+    } catch (e) { console.error(e); alert('Could not add variation.') }
+    setInlineSaving(false)
+  }
+
   async function deleteVariation(r) {
     if (!confirm(`Delete variation ${r.varNumber} — ${r.description}?`)) return
     try {
@@ -237,6 +286,7 @@ export default function VariationTracker() {
   const thS = { padding: '8px 10px', fontWeight: 600, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '2px solid #e5e5e5', whiteSpace: 'nowrap', background: '#f8f9fa' }
   const tdS = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f0f0f0', verticalAlign: 'middle' }
   const selS = { fontSize: 12, padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', fontFamily: 'inherit', cursor: 'pointer' }
+  const inlineCell = { fontSize: 12, padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', fontFamily: 'inherit', boxSizing: 'border-box' }
   const inputS = { width: '100%', padding: '7px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit' }
 
   // For add modal: get selected project's existing variations to compute next var number
@@ -364,6 +414,38 @@ export default function VariationTracker() {
                     </tr>
                   </thead>
                   <tbody>
+                    {/* Persistent inline add-row */}
+                    <tr style={{ background: '#fffbeb', borderBottom: '2px solid #fde68a' }}>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
+                        <input value={inlineAdd.varNumber} onChange={e => setInlineAdd(a => ({ ...a, varNumber: e.target.value }))} placeholder="auto" style={{ ...inlineCell, width: 60 }} />
+                      </td>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap' }} colSpan={2}>
+                        <select value={inlineAdd.projectId} onChange={e => setInlineAdd(a => ({ ...a, projectId: e.target.value }))} style={{ ...inlineCell, minWidth: 220 }}>
+                          <option value="">Select project…</option>
+                          {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.customer || inlineProject.customerName || '—') : '—'}</td>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.estimator || '—') : '—'}</td>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.contractsManager || '—') : '—'}</td>
+                      <td style={tdS}>
+                        <input value={inlineAdd.description} onChange={e => setInlineAdd(a => ({ ...a, description: e.target.value }))} placeholder="Description" style={{ ...inlineCell, minWidth: 180 }} />
+                      </td>
+                      <td style={{ ...tdS, textAlign: 'center' }}>
+                        <button onClick={() => setInlineAdd(a => ({ ...a, instructed: a.instructed === 'yes' ? 'no' : 'yes' }))}
+                          style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: inlineAdd.instructed === 'yes' ? '#dcfce7' : '#fee2e2', color: inlineAdd.instructed === 'yes' ? '#16a34a' : '#e63946' }}>
+                          {inlineAdd.instructed === 'yes' ? 'Instructed' : 'Not Instructed'}
+                        </button>
+                      </td>
+                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.materials} onChange={e => setInlineAdd(a => ({ ...a, materials: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
+                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.labour} onChange={e => setInlineAdd(a => ({ ...a, labour: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
+                      <td style={{ ...tdS, textAlign: 'right' }}><input value={inlineAdd.profit} onChange={e => setInlineAdd(a => ({ ...a, profit: e.target.value }))} placeholder="0" style={{ ...inlineCell, width: 80, textAlign: 'right' }} inputMode="decimal" /></td>
+                      <td style={tdS}></td>
+                      <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
+                        <button onClick={saveInlineAdd} disabled={inlineSaving}
+                          style={{ fontSize: 11, padding: '4px 12px', border: 'none', borderRadius: 4, background: '#e63946', color: '#fff', cursor: 'pointer', fontWeight: 600 }}>{inlineSaving ? 'Adding…' : '+ Add'}</button>
+                      </td>
+                    </tr>
                     {sorted.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
                         <td style={{ ...tdS, fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{r.varNumber || '—'}</td>
@@ -376,9 +458,10 @@ export default function VariationTracker() {
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>{r.cm}</td>
                         <td style={{ ...tdS, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.description}</td>
                         <td style={{ ...tdS, textAlign: 'center' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: r.instructed ? '#dcfce7' : '#fee2e2', color: r.instructed ? '#16a34a' : '#e63946' }}>
+                          <button onClick={e => { e.stopPropagation(); toggleInstructed(r) }} title="Click to toggle"
+                            style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, border: 'none', cursor: 'pointer', background: r.instructed ? '#dcfce7' : '#fee2e2', color: r.instructed ? '#16a34a' : '#e63946' }}>
                             {r.instructed ? 'Instructed' : 'Not Instructed'}
-                          </span>
+                          </button>
                         </td>
                         <td style={{ ...tdS, textAlign: 'right' }}>{fmt(r.materials)}</td>
                         <td style={{ ...tdS, textAlign: 'right' }}>{fmt(r.labour)}</td>
