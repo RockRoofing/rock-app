@@ -176,11 +176,13 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
 
   // One-way push to Live Project Tasks: create the task, keep its id, but no live sync.
   async function addTask() {
-    const task = { projectNo: f.projectNo, projectName: f.projectName, description: '', assignee: '', closed: false, comments: '', attachments: [], sourceSrat: true }
+    const task = { projectNo: f.projectNo, projectName: f.projectName, description: 'New task', assignee: '', closed: false, comments: '', attachments: [], sourceSrat: true }
     const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) }).then(r => r.json())
     if (res.id) {
       setTasks(ts => [{ ...task, id: res.id, createdAt: Date.now() }, ...ts])
       set({ actionTaskIds: [...(f.actionTaskIds || []), res.id] })
+    } else {
+      alert('Could not add the task. Please try again.')
     }
   }
   async function patchTask(id, patch) {

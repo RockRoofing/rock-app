@@ -50,7 +50,8 @@ export default async function handler(req, res) {
 
     // Add / update a single task
     const { task } = body
-    if (!task || !task.description) return res.status(400).json({ error: 'Description required' })
+    if (!task) return res.status(400).json({ error: 'Missing task' })
+    if (!task.id && !task.description) return res.status(400).json({ error: 'Description required' })
     let tasks = await getLiveTasks()
     if (!task.id) {
       task.id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`

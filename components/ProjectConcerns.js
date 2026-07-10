@@ -244,12 +244,14 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
 
   // --- Meeting Actions <-> Live Tasks (two-way) ---
   async function addAction() {
-    const task = { projectNo, projectName, description: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
+    const task = { projectNo, projectName, description: 'New action', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
     const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) }).then(r => r.json())
     if (res.id) {
       const newTask = { ...task, id: res.id, createdAt: Date.now() }
       setTasks(ts => [newTask, ...ts])
       set({ actionTaskIds: [...(f.actionTaskIds || []), res.id] })
+    } else {
+      alert('Could not add the action. Please try again.')
     }
   }
   async function patchTask(id, patch) {
@@ -266,7 +268,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
 
   // --- Add Risk -> Risk Log (two-way; new risks show live in project risk log) ---
   async function addRisk() {
-    const risk = { projectNo, projectName, description: '', mitigation: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
+    const risk = { projectNo, projectName, description: 'New risk', mitigation: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
     const res = await fetch('/api/risks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk }) }).then(r => r.json())
     if (res.id) {
       setRisks(rs => [{ ...risk, id: res.id, createdAt: Date.now() }, ...rs])

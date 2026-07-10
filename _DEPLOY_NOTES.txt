@@ -1,14 +1,15 @@
-PROJECT CONCERNS — attendee persistence + richer invite + invite-only-new-attendees
+FIX: SRAT & Project Concern task/risk linking wasn't persisting
 
-  components/ProjectConcerns.js
-   - Saving no longer risks losing attendees (invite metadata is now saved by the invite API
-     WITHOUT overwriting attendees or other fields — it re-reads fresh and patches only invite fields).
-   - Adding attendees to an already-invited meeting now sends an invite to ONLY the new attendees.
-   - Date/time change still sends an update to everyone.
+ROOT CAUSE: "+ Add Task" / "+ Add Risk" created the row with an EMPTY description, but the
+tasks/risks APIs REJECT creation when description is empty (400). So the new task/risk never
+actually saved to Live Project Tasks / the Risk Log — it looked half-wired.
 
-  pages/api/concern-invite.js
-   - Only-new-attendees logic: tracks invitedAttendees[]; on an existing invite with no date change,
-     emails only attendees who haven't been invited yet. Date/time change -> emails everyone (update).
-   - Invite now includes ALL meeting info: attendees, recording link, issues (+ if other),
-     description, mitigation, full risk log, and meeting actions.
-   - Save-back re-reads the record and patches only invite fields (fixes attendee clobber).
+FIX:
+  pages/api/tasks.js            require description only on CREATE (new), allow updates with any value
+                                 (so inline-editing to empty mid-type doesn't fail).
+  components/ProjectConcerns.js  Add Action / Add Risk now create with a placeholder ("New action" /
+                                 "New risk") so they persist immediately; edit to rename. Alerts on failure.
+  pages/operations/project-management/srat.js  Add Task creates with "New task" placeholder; alerts on failure.
+
+RESULT: adding an action/risk in a Concern or SRAT now immediately creates the linked record on
+the Live Project Tasks / Risk Log pages (Concern = two-way, SRAT = one-way), as intended.
