@@ -4,6 +4,9 @@ import Head from 'next/head'
 
 const ROLES = ['standard', 'management', 'admin']
 const roleLabel = { standard: 'Standard', management: 'Management', admin: 'Admin' }
+// Fixed job roles (descriptive) — matches the old Team Members list plus the
+// roles the IHM/Pre-Start dropdowns need.
+const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Director', 'Other']
 
 export default function AdminPage() {
   const router = useRouter()
@@ -97,7 +100,7 @@ export default function AdminPage() {
           {loading ? <div style={{ color: '#999', padding: 30 }}>Loading…</div> : (
             <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr style={{ background: '#faf9f7' }}>{['Name', 'Email', 'Mobile', 'Job role', 'Access', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
+                <thead><tr style={{ background: '#faf9f7' }}>{['Name', 'Email', 'Phone', 'Job role', 'Access', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id} style={{ borderTop: '1px solid #f0f0f0' }}>
@@ -130,8 +133,12 @@ export default function AdminPage() {
                 <div style={{ flex: 1 }}><Lbl>Last name</Lbl><input value={form.lastName || ''} onChange={e => setForm({ ...form, lastName: e.target.value })} style={inp} /></div>
               </div>
               <Lbl>Email</Lbl><input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp} type="email" />
-              <Lbl>Mobile number</Lbl><input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp} inputMode="tel" placeholder="07…" />
-              <Lbl>Job role (e.g. Contracts Manager, Estimator, QS)</Lbl><input value={form.jobRole || ''} onChange={e => setForm({ ...form, jobRole: e.target.value })} style={inp} placeholder="Used for project role dropdowns" />
+              <Lbl>Phone number</Lbl><input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp} inputMode="tel" placeholder="07…" />
+              <Lbl>Job role</Lbl>
+              <select value={form.jobRole || ''} onChange={e => setForm({ ...form, jobRole: e.target.value })} style={inp}>
+                <option value="">Select job role…</option>
+                {JOB_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
               <Lbl>Access level</Lbl>
               <select value={form.role || 'standard'} onChange={e => setForm({ ...form, role: e.target.value })} style={inp}>
                 {ROLES.map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
