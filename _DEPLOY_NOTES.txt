@@ -1,15 +1,13 @@
-SRATs PAGE + PROJECT CONCERNS SORTABLE
+CONCERN INVITE FIX — "no meeting attendees" bug
 
-DEPLOY (mirror into repo, overwrite):
-  components/ProjectConcerns.js                        Project Concerns table now sortable by column headers
-  pages/api/srats.js                                   NEW — SRATs storage
-  pages/operations/project-management/srat.js          NEW — SRATs page (replaces the coming-soon stub)
+  pages/api/concern-invite.js
+   ROOT CAUSE: the invite API was fetching /api/team, /api/tasks, /api/risks over HTTP.
+   On the main portal domain the login middleware requires auth for those endpoints, so the
+   server-to-server calls (which carry no login cookie) were bounced to the login page and
+   returned no data — hence "no attendee emails".
+   FIX: read portal users, live tasks and risks DIRECTLY from the database (getPortalUsers,
+   getLiveTasks, get('ops:risks')). No internal HTTP calls. Attendees now resolve correctly.
 
-SRATs PAGE
-  - Table: Project (No + Name), Situation, Roadblocks, Actions, Timeline. Sortable headers. "+ Add new".
-  - Add/Edit modal (large): project dropdown (auto-fills name), Situation, Roadblocks,
-    Actions (a text box PLUS a Live Project Tasks list with "+ Add new"; tasks can be marked
-    resolved immediately). Timeline text box.
-  - Actions tasks push ONE-WAY into Live Project Tasks (created there); removing from the SRAT
-    just unlinks (leaves the Live Task in place). No live two-way sync.
-  - View opens a large read-only view of the full SRAT.
+STILL REQUIRED (unchanged):
+  - Your Portal User record must have an email address (the invite goes to attendee emails).
+  - RESEND_API_KEY set, and FORMS_FROM_EMAIL set to your send.rockroofing.co.uk sender.

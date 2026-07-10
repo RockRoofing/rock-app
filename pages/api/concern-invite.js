@@ -1,4 +1,4 @@
-import { get, set } from '../../lib/db'
+import { get, set, getPortalUsers, getLiveTasks } from '../../lib/db'
 
 // Sends (or updates/cancels) a calendar invite for a Project Concern meeting's
 // "next meeting". Uses a stable UID + incrementing SEQUENCE stored on the meeting
@@ -41,12 +41,15 @@ export default async function handler(req, res) {
   if (idx < 0) return res.status(404).json({ error: 'meeting not found' })
   const m = meetings[idx]
 
-  // Resolve attendee emails from portal users
-  let users = []
-  try {
-    const base = `http://${req.headers.host}`
-    users = (await fetch(`${base}/api/team`).then(r => r.json())).members || []
-  } catch {}
+  // Resolve attendee emails directly from portal users (no internal HTTP fetch —
+  // that would be blocked by the login middleware and return nothing).
+  let portalUsers = []
+  try { portalUsers = await getPortalUsers() } catch {}
+  const users = portalUsers.map(u => ({
+    id: u.id,
+    name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '',
+    email: u.email || '',
+  }))
   const attendeeEmails = (m.attendees || [])
     .map(id => users.find(u => u.id === id))
     .filter(Boolean)
@@ -61,16 +64,13 @@ export default async function handler(req, res) {
   const uid = m.inviteUid || `concern-${projectNo}-${meetingId}@rockroofing.co.uk`
   const sequence = (m.inviteSequence || 0) + 1
 
-  // Build description: risks, mitigations, meeting actions
+  // Build description: risks, mitigations, meeting actions (direct DB reads)
   let tasks = [], risks = []
   try {
-    const base = `http://${req.headers.host}`
-    const [tk, rk] = await Promise.all([
-      fetch(`${base}/api/tasks`).then(r => r.json()).catch(() => ({})),
-      fetch(`${base}/api/risks`).then(r => r.json()).catch(() => ({})),
-    ])
-    tasks = (tk.tasks || []).filter(t => (m.actionTaskIds || []).includes(t.id))
-    risks = (rk.risks || []).filter(r => r.projectNo === projectNo)
+    const allTasks = await getLiveTasks()
+    const allRisks = (await get('ops:risks')) || []
+    tasks = allTasks.filter(t => (m.actionTaskIds || []).includes(t.id))
+    risks = allRisks.filter(r => r.projectNo === projectNo)
   } catch {}
 
   const lines = []
