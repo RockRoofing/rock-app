@@ -131,8 +131,8 @@ export default function Procurement() {
         <EmptyCard title="No procurement items to show" body={hasFilters ? 'Try adjusting the filters.' : 'Procurement items from Internal Handover Minutes and manually-added items appear here.'} />
       ) : (
         <>
-          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto', zoom }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 }}>
+          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 * zoom, fontSize: `${zoom}em`, transformOrigin: 'top left' }}>
               <thead><tr style={{ background: '#faf9f7' }}>
                 {sortableCols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
                 <th style={th}>Design By</th>

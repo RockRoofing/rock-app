@@ -16,7 +16,7 @@ export default function ExpandableText({ value, onSave, placeholder = '—', lab
   return (
     <>
       <div onClick={() => setOpen(true)} title="Click to expand"
-        style={{ width, minHeight: 34, maxHeight: 66, overflow: 'hidden', cursor: 'pointer', border: '1px solid #eee', borderRadius: 6, padding: '6px 8px', fontSize: 12.5, color: value ? '#333' : '#bbb', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: '#fff' }}>
+        style={{ width: typeof width === 'number' ? width : '100%', minWidth: 120, minHeight: 34, maxHeight: 66, overflow: 'hidden', cursor: 'pointer', border: '1px solid #eee', borderRadius: 6, padding: '6px 8px', fontSize: 12.5, color: value ? '#333' : '#bbb', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: '#fff', boxSizing: 'border-box' }}>
         {value ? clamp(value) : placeholder}
       </div>
       {open && (

@@ -133,8 +133,8 @@ export default function RiskLog() {
                   return (
                     <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
-                      <td style={{ ...td, ...greenCell }}><ExpandableText value={r.description} onSave={v => patchRisk(r.id, { description: v })} label="Risk" width={260} /></td>
-                      <td style={{ ...td, ...greenCell }}><ExpandableText value={r.mitigation} onSave={v => patchRisk(r.id, { mitigation: v })} label="Risk mitigation" placeholder="—" width={260} /></td>
+                      <td style={{ ...td, ...greenCell, minWidth: 220 }}><ExpandableText value={r.description} onSave={v => patchRisk(r.id, { description: v })} label="Risk" width="100%" /></td>
+                      <td style={{ ...td, ...greenCell, minWidth: 220 }}><ExpandableText value={r.mitigation} onSave={v => patchRisk(r.id, { mitigation: v })} label="Risk mitigation" placeholder="—" width="100%" /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>
@@ -142,7 +142,7 @@ export default function RiskLog() {
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
                       </td>
-                      <td style={td}><ExpandableText value={r.comments} onSave={v => patchRisk(r.id, { comments: v })} label="Comments" width={280} /></td>
+                      <td style={{ ...td, minWidth: 240 }}><ExpandableText value={r.comments} onSave={v => patchRisk(r.id, { comments: v })} label="Comments" width="100%" /></td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patchRisk(r.id, { attachments: files })} />
