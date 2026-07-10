@@ -30,8 +30,8 @@ export default function Deliveries() {
       setProjects(d.projects || [])
       if (sync && d.syncInfo) {
         setNotice(d.syncInfo.error ? `Sync issue: ${d.syncInfo.error}`
-          : d.syncInfo.firstRun ? 'Connected. New approved POs from now on will appear here on sync.'
-          : 'Synced with Xero.')
+          : d.syncInfo.firstRun ? `Baseline set (${d.syncInfo.baseline || 0} existing POs noted). New POs approved from now on will appear here on the next sync.`
+          : (d.syncInfo.added ? `Synced — ${d.syncInfo.added} new PO(s) added.` : 'Synced — no new POs.'))
       }
     } catch (e) { setNotice('Could not load deliveries.') }
     sync ? setSyncing(false) : setLoading(false)

@@ -25,56 +25,63 @@ async function xeroCtx() {
   return tokens
 }
 
+async function getSeenIds() { return (await get('ops:deliveries:seenPoIds')) || [] }
+async function setSeenIds(ids) { await set('ops:deliveries:seenPoIds', ids) }
+
 async function syncPOs() {
   const tokens = await xeroCtx()
   if (!tokens) return { error: 'Not connected to Xero' }
 
-  // Establish go-live on first ever sync so the old back-catalogue is excluded.
-  let goLive = await getGoLive()
-  const firstRun = !goLive
-  if (firstRun) { goLive = Date.now(); await setGoLive(goLive) }
+  let pos = []
+  try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) } catch (e) { return { error: e.message } }
 
   let deliveries = await getDeliveries()
   const existingPoIds = new Set(deliveries.filter(d => d.purchaseOrderId).map(d => d.purchaseOrderId))
 
-  let pos = []
-  try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) } catch (e) { return { error: e.message } }
+  // ID-based "going forward" rule (dates on POs are unreliable):
+  //  - First ever sync: record every current AUTHORISED PO id as "seen",
+  //    add nothing. This draws the line — everything existing now is backlog.
+  //  - Later syncs: any AUTHORISED PO whose id we've never seen is NEW -> add it.
+  let seen = await getSeenIds()
+  const firstRun = seen.length === 0
+  const seenSet = new Set(seen)
 
-  // On the very first run we set go-live and add nothing (only NEW POs from now).
-  // After that, add AUTHORISED POs RAISED (order date) at/after go-live that we
-  // haven't seen. We gate on the PO's order date — not UpdatedDateUTC — so that
-  // editing/re-approving an OLD po in Xero does not drag it into the schedule.
-  const goLiveDay = new Date(goLive).toISOString().slice(0, 10)
-  if (!firstRun) {
-    for (const po of pos) {
-      if (existingPoIds.has(po.purchaseOrderId)) continue
-      // Skip anything raised before go-live (by order date).
-      if (!po.orderDate || po.orderDate < goLiveDay) continue
-      deliveries.push({
-        id: `po_${po.purchaseOrderId}`,
-        purchaseOrderId: po.purchaseOrderId,
-        source: 'xero',
-        poNumber: po.poNumber,
-        supplier: po.supplier,
-        orderDate: po.orderDate || '',
-        deliveryAddress: po.deliveryAddress || '',
-        requiredDeliveryDate: po.deliveryDate || '',   // from Xero, manually adjustable
-        lineItems: po.lineItems || [],
-        // project: auto from tracking if present, else blank for manual assign
-        projectName: po.tracking?.name || '',
-        projectNo: po.tracking?.jobNo || '',
-        poSent: false,
-        supplierConfirmedDate: false,
-        secondCheck: false,
-        actualDeliveryDate: '',
-        attachments: [],
-        comments: '',
-        createdAt: Date.now(),
-      })
-    }
-    await saveDeliveries(deliveries)
+  if (firstRun) {
+    await setSeenIds(pos.map(p => p.purchaseOrderId))
+    return { ok: true, firstRun, baseline: pos.length }
   }
-  return { ok: true, firstRun }
+
+  let added = 0
+  for (const po of pos) {
+    if (seenSet.has(po.purchaseOrderId)) continue      // already known -> backlog/imported
+    if (existingPoIds.has(po.purchaseOrderId)) { seenSet.add(po.purchaseOrderId); continue }
+    // NEW PO -> add it (regardless of any date)
+    deliveries.push({
+      id: `po_${po.purchaseOrderId}`,
+      purchaseOrderId: po.purchaseOrderId,
+      source: 'xero',
+      poNumber: po.poNumber,
+      supplier: po.supplier,
+      orderDate: po.orderDate || '',
+      deliveryAddress: po.deliveryAddress || '',
+      requiredDeliveryDate: po.deliveryDate || '',
+      lineItems: po.lineItems || [],
+      projectName: po.tracking?.name || '',
+      projectNo: po.tracking?.jobNo || '',
+      poSent: false,
+      supplierConfirmedDate: false,
+      secondCheck: false,
+      actualDeliveryDate: '',
+      attachments: [],
+      comments: '',
+      createdAt: Date.now(),
+    })
+    seenSet.add(po.purchaseOrderId)
+    added++
+  }
+  await saveDeliveries(deliveries)
+  await setSeenIds([...seenSet])
+  return { ok: true, firstRun: false, added }
 }
 
 export default async function handler(req, res) {
@@ -103,7 +110,7 @@ export default async function handler(req, res) {
       let deliveries = await getDeliveries()
       const kept = deliveries.filter(d => d.source !== 'xero')
       await saveDeliveries(kept)
-      await setGoLive(Date.now())
+      await setSeenIds([])   // clear baseline so next sync re-establishes "from now"
       return res.json({ ok: true, removed: deliveries.length - kept.length, kept: kept.length })
     }
 
