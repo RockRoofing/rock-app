@@ -33,6 +33,37 @@ function clearSessionCookie(res) {
 }
 const strip = (u) => { const { passwordHash, ...rest } = u; return rest }
 
+// Emails a new portal user their temporary password + login link.
+async function sendPortalInvite({ to, name, tempPassword, origin }) {
+  const RESEND_KEY = process.env.RESEND_API_KEY
+  if (!RESEND_KEY) return { sent: false, error: 'Email not configured' }
+  const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+  const loginUrl = `${origin || 'https://app.rockroofing.co.uk'}/login`
+  const html = `
+    <div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a1a19">
+      <h2 style="color:#1a1a19">Hi ${name ? name.split(' ')[0] : 'there'},</h2>
+      <p>An account has been created for you on the Rock Roofing Portal.</p>
+      <p style="font-size:15px">Sign in with your email and this temporary password:</p>
+      <div style="font-size:22px;font-weight:700;letter-spacing:2px;background:#faf9f7;border:1px solid #eee;border-radius:12px;padding:16px;text-align:center;margin:12px 0">${tempPassword}</div>
+      <p>You'll be asked to set your own password the first time you log in.</p>
+      <p style="text-align:center;margin:24px 0">
+        <a href="${loginUrl}" style="background:#ca8a04;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;display:inline-block">Sign in to the Portal</a>
+      </p>
+      <p style="font-size:13px;color:#666">Link: <a href="${loginUrl}">${loginUrl}</a></p>
+      <p style="font-size:12px;color:#999">For security, please change your password on first login and don't share it.</p>
+    </div>`
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to, reply_to: REPLY_TO, subject: 'Your Rock Roofing Portal login', html }),
+    })
+    const data = await r.json()
+    return { sent: r.ok, error: r.ok ? null : (data?.message || 'Send failed') }
+  } catch (e) { return { sent: false, error: e.message } }
+}
+
 async function ensureSeed() {
   let users = await getPortalUsers()
   if (users.length === 0) {
@@ -130,7 +161,9 @@ export default async function handler(req, res) {
       }
       users.push(newUser)
       await savePortalUsers(users)
-      return res.json({ ok: true, users: users.map(strip), tempPassword: tempPw })
+      const origin = `https://${req.headers.host}`
+      const invite = await sendPortalInvite({ to: email, name: newUser.name, tempPassword: tempPw, origin })
+      return res.json({ ok: true, users: users.map(strip), tempPassword: tempPw, emailSent: invite.sent, emailError: invite.error })
     }
 
     if (action === 'update') {

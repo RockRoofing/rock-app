@@ -40,7 +40,9 @@ export default function AdminPage() {
       if (!r.ok) { setErr(d.error || 'Save failed'); setSaving(false); return }
       setUsers(d.users || users)
       setNotice(action === 'create'
-        ? `User created. Temporary password: ${d.tempPassword} — share this with them; they'll set their own on first login.`
+        ? (d.emailSent
+            ? `User created. Their login details have been emailed to ${form.email}.`
+            : `User created, but the email could not be sent${d.emailError ? ` (${d.emailError})` : ''}. Temporary password: ${d.tempPassword} — share this with them; they'll set their own on first login.`)
         : 'User updated.')
       setForm(null)
     } catch (e) { setErr(e?.message || 'Save failed') }
@@ -123,7 +125,7 @@ export default function AdminPage() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 14 }}>
                 <input type="checkbox" checked={form.active !== false} onChange={e => setForm({ ...form, active: e.target.checked })} /> Active
               </label>
-              {!form.id && <div style={{ background: '#f2efe8', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: '#666', marginTop: 14 }}>A temporary password will be generated and shown to you to pass on. They'll set their own on first login.</div>}
+              {!form.id && <div style={{ background: '#f2efe8', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: '#666', marginTop: 14 }}>A temporary password will be generated and emailed to them with a login link. They'll set their own on first login. (If email can't send, the password is shown here to pass on manually.)</div>}
               {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 10 }}>{err}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
                 <button onClick={save} disabled={saving} style={btn}>{saving ? 'Saving…' : (form.id ? 'Save' : 'Create user')}</button>
