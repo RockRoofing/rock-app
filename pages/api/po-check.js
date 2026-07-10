@@ -1,56 +1,47 @@
-import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken } from '../../lib/xero'
+import { get, getTokens, saveTokens } from '../../lib/db'
+import { refreshXeroToken, fetchPurchaseOrders } from '../../lib/xero'
 
-// TEMPORARY diagnostic: inspect what Xero Purchase Orders return, so we can
-// design the Deliveries feature against real data. Delete after investigation.
-// GET /api/po-check   (must have reconnected Xero with accounting.transactions.read)
+// TEMPORARY diagnostic: explains why POs are / aren't appearing on the
+// Delivery Schedule. Shows go-live, and for each recent AUTHORISED PO whether
+// it qualifies (order date >= go-live) and whether it's already imported.
+// GET /api/po-check   — delete after use.
 export default async function handler(req, res) {
   try {
     let tokens = await getTokens()
     if (!tokens) return res.status(401).json({ error: 'Not connected to Xero' })
-    try {
-      const nt = await refreshXeroToken(tokens.refresh_token)
-      tokens = { ...tokens, ...nt }
-      await saveTokens(tokens)
-    } catch (e) {
-      return res.json({ step: 'refresh', error: 'Token refresh failed — you may need to reconnect Xero with the new permission.', detail: String(e) })
-    }
+    try { const nt = await refreshXeroToken(tokens.refresh_token); tokens = { ...tokens, ...nt }; await saveTokens(tokens) }
+    catch (e) { return res.json({ error: 'Token refresh failed — reconnect Xero.', detail: String(e) }) }
 
-    // Fetch a small page of POs
-    const r = await fetch('https://api.xero.com/api.xro/2.0/PurchaseOrders?page=1', {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-tenant-id': tokens.tenant_id, Accept: 'application/json' },
-    })
-    if (!r.ok) {
-      const text = await r.text()
-      return res.json({ ok: false, status: r.status, hint: r.status === 403 ? 'Scope missing — reconnect Xero (the connect page now requests Purchase Orders).' : 'Xero returned an error.', body: text.slice(0, 500) })
-    }
-    const data = await r.json()
-    const pos = data.PurchaseOrders || []
-    // Summarise the shape of the first PO with a line item, without dumping everything
-    const sample = pos.find(p => (p.LineItems || []).length) || pos[0]
-    const summary = sample ? {
-      fieldsPresent: Object.keys(sample),
-      PurchaseOrderNumber: sample.PurchaseOrderNumber,
-      Status: sample.Status,
-      DeliveryDate: sample.DeliveryDate || null,
-      DeliveryAddress: sample.DeliveryAddress || null,
-      Date: sample.Date,
-      hasTracking: (sample.LineItems || []).some(li => (li.Tracking || []).length),
-      exampleLineItem: (sample.LineItems || [])[0] ? {
-        Description: sample.LineItems[0].Description,
-        Quantity: sample.LineItems[0].Quantity,
-        Tracking: sample.LineItems[0].Tracking || [],
-      } : null,
-    } : null
-    const statusCounts = {}
-    for (const p of pos) statusCounts[p.Status] = (statusCounts[p.Status] || 0) + 1
+    const goLive = await get('ops:deliveries:golive')
+    const goLiveDay = goLive ? new Date(goLive).toISOString().slice(0, 10) : null
+    const deliveries = (await get('ops:deliveries')) || []
+    const importedIds = new Set(deliveries.filter(d => d.purchaseOrderId).map(d => d.purchaseOrderId))
+
+    let pos = []
+    try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) }
+    catch (e) { return res.json({ error: 'PO fetch failed', detail: e.message }) }
+
+    // Show the 15 most recent AUTHORISED POs and why each does/doesn't qualify
+    const recent = pos.slice(0, 15).map(po => ({
+      poNumber: po.poNumber,
+      status: po.status,
+      orderDate: po.orderDate,
+      alreadyImported: importedIds.has(po.purchaseOrderId),
+      qualifies: !!(po.orderDate && goLiveDay && po.orderDate >= goLiveDay && !importedIds.has(po.purchaseOrderId)),
+      reasonIfNot: !po.orderDate ? 'no order date on PO'
+        : !goLiveDay ? 'go-live not set (run a sync once to set it)'
+        : po.orderDate < goLiveDay ? `order date ${po.orderDate} is BEFORE go-live ${goLiveDay}`
+        : importedIds.has(po.purchaseOrderId) ? 'already imported'
+        : 'qualifies — should appear on next sync',
+    }))
 
     return res.json({
-      ok: true,
-      totalReturned: pos.length,
-      statusCounts,
-      sampleSummary: summary,
-      note: 'This is a temporary diagnostic. It shows whether POs carry PO number, delivery date/address, status, line items (description+qty), and project tracking.',
+      goLiveTimestamp: goLive || null,
+      goLiveDay,
+      totalAuthorisedReturned: pos.length,
+      alreadyImportedCount: deliveries.filter(d => d.source === 'xero').length,
+      recentAuthorisedPOs: recent,
+      note: 'If your PO shows "order date ... is BEFORE go-live", that is why it is not appearing. Tell me and I can adjust the cutoff.',
     })
   } catch (e) {
     return res.status(500).json({ error: String(e) })
