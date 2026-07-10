@@ -4,9 +4,11 @@ import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, gh
 import ProjectFiles from '../../components/ProjectFiles'
 import PreStartForm from '../../components/PreStartForm'
 import SubmissionModal from '../../components/SubmissionModal'
+import ProcurementSavings from '../../components/ProcurementSavings'
 
 const SUB_TABS = [
   { key: 'handover', label: 'Handover' },
+  { key: 'procurement-savings', label: 'Procurement Savings' },
   { key: 'prestart', label: 'Pre-Start' },
   { key: 'drawings', label: 'Drawings' },
   { key: 'rams', label: 'RAMS' },
@@ -114,6 +116,7 @@ export default function ProjectsPage() {
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
         {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
+        {sub === 'procurement-savings' && <ProcurementSavings projectNo={openNo} />}
         {sub === 'prestart' && <PreStartForm projectNo={openNo} />}
         {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Site App." />}
         {sub === 'rams' && <RamsTable projectNo={openNo} />}

@@ -14,7 +14,6 @@ export const NAV = [
       { key: 'pm:tasks', label: 'Live Tasks', href: '/operations/project-management/tasks' },
       { key: 'pm:risks', label: 'Risk Log', href: '/operations/project-management/risks' },
       { key: 'pm:procurement', label: 'Procurement', href: '/operations/project-management/procurement' },
-      { key: 'pm:procurement-savings', label: 'Procurement Savings', href: '/operations/project-management/procurement-savings' },
       { key: 'pm:deliveries', label: 'Deliveries', href: '/operations/project-management/deliveries' },
       { key: 'pm:variations', label: 'Variations', href: '/operations/project-management/variations' },
       { key: 'pm:negotiating', label: 'Negotiating', href: '/operations/negotiating' },

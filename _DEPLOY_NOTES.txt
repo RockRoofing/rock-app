@@ -1,0 +1,16 @@
+PROCUREMENT SAVINGS (corrected placement)
+
+DEPLOY these files (mirror into your repo, overwriting):
+  pages/api/procurement-savings.js          (updated: adds ?summary=true)
+  components/ProcurementSavings.js          (NEW shared editable grid)
+  components/PreContractNav.js              (adds Procurement Savings tab after IHM)
+  components/OperationsNav.js               (removes the earlier wrong Ops nav entry)
+  pages/procurement-savings.js             (NEW Pre-Contract page w/ needs-finalising list)
+  pages/operations/projects.js             (adds Procurement Savings sub-tab after Handover)
+
+DELETE this file from your repo if you deployed the earlier version:
+  pages/operations/project-management/procurement-savings.js   (wrong location - remove)
+
+HOUSEKEEPING (separate, safe to also delete):
+  pages/api/po-check.js
+  pages/api/blob-check.js

@@ -8,6 +8,7 @@ export default function PreContractNav({ active, children }) {
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },
     { key: 'handover', label: 'Internal Handover Minutes', href: '/handover' },
+    { key: 'procurement-savings', label: 'Procurement Savings', href: '/procurement-savings' },
   ]
   return (
     <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 52, overflowX: 'auto' }}>
