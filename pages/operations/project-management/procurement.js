@@ -23,6 +23,7 @@ export default function Procurement() {
   const [fTo, setFTo] = useState('')
   const [fOrdered, setFOrdered] = useState('no')   // default: show not-yet-ordered
   const [sort, setSort] = useState({ key: 'orderBy', dir: 'asc' })
+  const [zoom, setZoom] = useState(1)
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -116,6 +117,13 @@ export default function Procurement() {
         <F label="Order placed?"><select value={fOrdered} onChange={e => { setFOrdered(e.target.value); setPage(0) }} style={sel}><option value="no">No (open)</option><option value="yes">Yes (placed)</option><option value="all">All</option></select></F>
         {hasFilters && <button onClick={() => { setFProject(''); setFMember(''); setFSupplier(''); setFFrom(''); setFTo(''); setFOrdered('no'); setPage(0) }} style={ghostBtn}>Reset</button>}
         <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'center' }}>
+          <span style={{ fontSize: 11, color: '#999' }}>Zoom</span>
+          <button onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(2)))} style={zoomBtn} title="Zoom out">−</button>
+          <span style={{ fontSize: 12, color: '#666', width: 38, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.min(1.2, +(z + 0.1).toFixed(2)))} style={zoomBtn} title="Zoom in">+</button>
+          {zoom !== 1 && <button onClick={() => setZoom(1)} style={{ ...zoomBtn, width: 'auto', padding: '0 8px', fontSize: 11 }} title="Reset zoom">Reset</button>}
+        </div>
         <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} item{filtered.length === 1 ? '' : 's'}</div>
       </div>
 
@@ -123,7 +131,7 @@ export default function Procurement() {
         <EmptyCard title="No procurement items to show" body={hasFilters ? 'Try adjusting the filters.' : 'Procurement items from Internal Handover Minutes and manually-added items appear here.'} />
       ) : (
         <>
-          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto', zoom }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 }}>
               <thead><tr style={{ background: '#faf9f7' }}>
                 {sortableCols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
@@ -156,7 +164,7 @@ export default function Procurement() {
                       <td style={{ ...td, whiteSpace: 'nowrap', ...leftGreen }}>{r.assignee || '—'}</td>
                       {/* Design By — green if design complete, else traffic light */}
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(designGreen || orderGreen ? GREEN : dateCellStyle(r.designBy)) }}>{r.designBy ? fmtDate(r.designBy) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...(designGreen || orderGreen ? GREEN : {}) }}>
                         <select value={r.designComplete ? 'yes' : 'no'} onChange={e => patchItem(r.id, { designComplete: e.target.value === 'yes' })} style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
@@ -251,3 +259,4 @@ function ProcModal({ item, team, projectOptions, onClose, onSave }) {
 
 const F = ({ label, children }) => <div><div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>{label}</div>{children}</div>
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 140 }
+const zoomBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #e0e0e0', background: '#fff', cursor: 'pointer', fontSize: 15, color: '#555', lineHeight: 1 }
