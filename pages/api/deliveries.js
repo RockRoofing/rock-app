@@ -41,12 +41,15 @@ async function syncPOs() {
   try { pos = await fetchPurchaseOrders(tokens.access_token, tokens.tenant_id, { status: 'AUTHORISED' }) } catch (e) { return { error: e.message } }
 
   // On the very first run we set go-live and add nothing (only NEW POs from now).
-  // After that, add AUTHORISED POs updated at/after go-live that we haven't seen.
+  // After that, add AUTHORISED POs RAISED (order date) at/after go-live that we
+  // haven't seen. We gate on the PO's order date — not UpdatedDateUTC — so that
+  // editing/re-approving an OLD po in Xero does not drag it into the schedule.
+  const goLiveDay = new Date(goLive).toISOString().slice(0, 10)
   if (!firstRun) {
     for (const po of pos) {
       if (existingPoIds.has(po.purchaseOrderId)) continue
-      const updated = po.updatedUTC ? Date.parse(po.updatedUTC) : Date.now()
-      if (updated < goLive) continue   // pre-go-live backlog: skip
+      // Skip anything raised before go-live (by order date).
+      if (!po.orderDate || po.orderDate < goLiveDay) continue
       deliveries.push({
         id: `po_${po.purchaseOrderId}`,
         purchaseOrderId: po.purchaseOrderId,
@@ -92,7 +95,19 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    const { delivery } = req.body || {}
+    const body = req.body || {}
+
+    // Clean-up: remove all Xero-synced rows and reset go-live to now, so the
+    // schedule starts fresh from this moment. Manual rows are kept.
+    if (body.action === 'reset-synced') {
+      let deliveries = await getDeliveries()
+      const kept = deliveries.filter(d => d.source !== 'xero')
+      await saveDeliveries(kept)
+      await setGoLive(Date.now())
+      return res.json({ ok: true, removed: deliveries.length - kept.length, kept: kept.length })
+    }
+
+    const { delivery } = body
     if (!delivery) return res.status(400).json({ error: 'Missing delivery' })
     let deliveries = await getDeliveries()
     if (!delivery.id) {
