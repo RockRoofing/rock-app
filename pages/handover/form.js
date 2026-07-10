@@ -22,7 +22,7 @@ function Wrap({ children }) {
 export default function Handover() {
   const router = useRouter()
   const { no } = router.query   // editing an existing project?
-  const [data, setData] = useState({ siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], scopeFiles: [] })
+  const [data, setData] = useState({ siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], procurement: [], scopeFiles: [] })
   const [status, setStatus] = useState('draft')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -71,7 +71,7 @@ export default function Handover() {
         const d = await r.json()
         if (d.project) {
           setData({
-            siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], scopeFiles: [],
+            siteContacts: [], manufacturerContacts: [], roofTypes: [emptyRoofType()], risks: [], liveTasks: [], procurement: [], scopeFiles: [],
             ...d.project.data,
           })
           setStatus(d.project.status || 'active')
@@ -111,6 +111,11 @@ export default function Handover() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'sync-ihm', projectNo: data.projectNo, projectName: data.projectName,
             risks: (data.risks || []).map(r => ({ description: r.risk, mitigation: r.mitigation, assignee: r.assignee, closeOutDate: r.closeOutDate, closed: r.closed, comments: r.comments })) }),
+        })
+        // Sync procurement items
+        await fetch('/api/procurement', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'sync-ihm', projectNo: data.projectNo, projectName: data.projectName, items: data.procurement || [] }),
         })
         // Save manufacturer contacts to the address book for reuse
         for (const c of (data.manufacturerContacts || [])) {
@@ -179,6 +184,7 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
   if (f.type === 'mfrcontacts') return <MfrContactsField value={value || []} onChange={onChange} book={mfrBook || []} />
   if (f.type === 'rooftypes') return <RoofTypesField value={value || []} onChange={onChange} />
   if (f.type === 'risklog') return <RiskLogField value={value || []} onChange={onChange} team={team} />
+  if (f.type === 'procurement') return <ProcurementField value={value || []} onChange={onChange} team={team} projectNo={projectNo} projectName={projectName} />
   if (f.type === 'livetasks') return <LiveTasksField value={value || []} onChange={onChange} team={team} projectNo={projectNo} projectName={projectName} />
   if (f.type === 'files') return <FilesField label={f.label} value={value || []} onChange={onChange} />
 
@@ -311,6 +317,46 @@ function RiskLogField({ value, onChange, team }) {
         </div>
       ))}
       <button onClick={addRow} style={addBtn}>+ Add risk</button>
+    </div>
+  )
+}
+
+function ProcurementField({ value, onChange, team, projectNo, projectName }) {
+  function addRow() { onChange([...value, { package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', orderPlaced: false, supplierContact: '', comments: '' }]) }
+  function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
+  function remove(i) { onChange(value.filter((_, j) => j !== i)) }
+  return (
+    <div style={{ margin: '8px 0' }}>
+      <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
+        Project auto-filled: <strong>{projectNo || '—'}</strong> {projectName ? `· ${projectName}` : ''}. Added to the Procurement Schedule on Meeting Complete.
+      </div>
+      {value.map((p, i) => (
+        <div key={i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'start' }}>
+            <input value={p.package} onChange={e => update(i, 'package', e.target.value)} placeholder="Activity / Package" style={inpSm} />
+            <input value={p.supplier} onChange={e => update(i, 'supplier', e.target.value)} placeholder="Supplier" style={inpSm} />
+            <button onClick={() => remove(i)} style={removeBtn}>×</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <select value={p.assignee || ''} onChange={e => update(i, 'assignee', e.target.value)} style={inpSm}>
+              <option value="">Responsible…</option>
+              {(team || []).map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}</option>)}
+              {p.assignee && !(team || []).some(m => tmName(m) === p.assignee) && <option value={p.assignee}>{p.assignee}</option>}
+            </select>
+            <label style={{ fontSize: 11, color: '#888' }}>Design by<input type="date" value={p.designBy || ''} onChange={e => update(i, 'designBy', e.target.value)} style={inpSm} /></label>
+            <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'end' }}><input type="checkbox" checked={!!p.designComplete} onChange={e => update(i, 'designComplete', e.target.checked)} /> Design complete</label>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 0.7fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <label style={{ fontSize: 11, color: '#888' }}>Order by<input type="date" value={p.orderBy || ''} onChange={e => update(i, 'orderBy', e.target.value)} style={inpSm} /></label>
+            <label style={{ fontSize: 11, color: '#888' }}>Lead-in (wks)<input type="number" min="0" step="1" value={p.leadInWeeks ?? ''} onChange={e => update(i, 'leadInWeeks', e.target.value.replace(/[^0-9]/g, ''))} style={inpSm} /></label>
+            <label style={{ fontSize: 11, color: '#888' }}>Required on site<input type="date" value={p.requiredOnSite || ''} onChange={e => update(i, 'requiredOnSite', e.target.value)} style={inpSm} /></label>
+            <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'end' }}><input type="checkbox" checked={!!p.orderPlaced} onChange={e => update(i, 'orderPlaced', e.target.checked)} /> Order placed</label>
+          </div>
+          <input value={p.supplierContact || ''} onChange={e => update(i, 'supplierContact', e.target.value)} placeholder="Supplier contact details" style={{ ...inpSm, marginBottom: 8 }} />
+          <textarea value={p.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical' }} />
+        </div>
+      ))}
+      <button onClick={addRow} style={addBtn}>+ Add procurement item</button>
     </div>
   )
 }
