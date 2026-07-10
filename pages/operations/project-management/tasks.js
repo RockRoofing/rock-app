@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDate } from '../../../components/opsUI'
 import RowAttachments from '../../../components/RowAttachments'
+import ExpandableText from '../../../components/ExpandableText'
 import { dateCellStyle } from '../../../components/pmShared'
 
 const PAGE_SIZE = 100
@@ -120,16 +121,16 @@ export default function LiveTasks() {
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1000 }}>
               <thead><tr style={{ background: '#faf9f7' }}>
                 {cols.map(c => <th key={c.key} onClick={() => toggleSort(c.key)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{c.label}{sort.key === c.key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>)}
-                <th style={th}>Comments</th><th style={th}>Files</th><th style={th}></th>
+                <th style={th}>Comments</th><th style={{ ...th, textAlign: 'right' }}>Actions</th>
               </tr></thead>
               <tbody>
                 {pageRows.map(r => {
                   const resolved = !!r.closed
                   const greenCell = resolved ? { background: '#ecfdf5' } : {}
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
-                      <td style={{ ...td, ...greenCell }}>{r.description}</td>
+                      <td style={{ ...td, ...greenCell }}><ExpandableText value={r.description} onSave={v => patchTask(r.id, { description: v })} label="Task" width={280} /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>
@@ -137,11 +138,13 @@ export default function LiveTasks() {
                           <option value="no">No</option><option value="yes">Yes</option>
                         </select>
                       </td>
-                      <td style={td}><InlineComment value={r.comments} onSave={v => patchTask(r.id, { comments: v })} /></td>
-                      <td style={td}><RowAttachments files={r.attachments || []} onChange={files => patchTask(r.id, { attachments: files })} /></td>
+                      <td style={td}><ExpandableText value={r.comments} onSave={v => patchTask(r.id, { comments: v })} label="Comments" width={280} /></td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => setEdit(r)} style={linkBtn}>Edit</button>
-                        <button onClick={() => delTask(r.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>
+                        <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                          <RowAttachments files={r.attachments || []} onChange={files => patchTask(r.id, { attachments: files })} />
+                          <button onClick={() => setEdit(r)} style={linkBtn}>Edit</button>
+                          <button onClick={() => delTask(r.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>
+                        </div>
                       </td>
                     </tr>
                   )
