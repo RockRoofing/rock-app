@@ -407,10 +407,24 @@ function ProjectSubmissions({ projectNo }) {
 function ProjectImages({ projectNo }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
+  const [openSub, setOpenSub] = useState(null)      // full submission shown in modal
+  const [loadingSub, setLoadingSub] = useState(false)
+  const [formDefs, setFormDefs] = useState({})
   useEffect(() => { (async () => {
     try {
-      const r = await fetch('/api/submissions'); const d = await r.json()
-      const mine = (d.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo)
+      const [subsR, formsR] = await Promise.all([
+        fetch('/api/submissions').then(r => r.json()),
+        fetch('/api/forms').then(r => r.json()).catch(() => ({})),
+      ])
+      // Build a formId -> {qId: label} map for readable question labels
+      const defs = {}
+      for (const f of (formsR.forms || [])) {
+        const m = {}
+        for (const q of (f.questions || f.fields || [])) m[q.id] = q.label || q.question || q.id
+        defs[f.id] = m
+      }
+      setFormDefs(defs)
+      const mine = (subsR.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo)
       const fulls = await Promise.all(mine.map(s => fetch(`/api/submissions?id=${s.id}`).then(r => r.json()).then(d => d.submission).catch(() => null)))
       const imgs = []
       for (const sub of fulls.filter(Boolean)) {
@@ -426,20 +440,91 @@ function ProjectImages({ projectNo }) {
     setLoading(false)
   })() }, [projectNo])
 
+  async function viewForm(subId) {
+    setLoadingSub(true)
+    try {
+      const d = await fetch(`/api/submissions?id=${subId}`).then(r => r.json())
+      if (d.submission) setOpenSub(d.submission)
+    } catch {}
+    setLoadingSub(false)
+  }
+
   if (loading) return <Loading />
   if (!images.length) return <EmptyCard title="No images yet" body="Images added to form submissions for this project will appear here." />
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
-      {images.map((img, i) => (
-        <div key={i} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
-          <a href={img.url} target="_blank" rel="noreferrer"><img src={img.url} alt="" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} /></a>
-          <div style={{ padding: '10px 12px' }}>
-            <div style={{ fontSize: 12, color: '#999' }}>{new Date(img.submittedAt).toLocaleString('en-GB')}</div>
-            <div style={{ fontSize: 13, color: INK, fontWeight: 600, marginTop: 2 }}>{img.formTitle}</div>
-            <a href={`/operations/forms?open=${img.subId}`} style={{ ...linkBtn, display: 'inline-block', marginTop: 4 }}>View form ›</a>
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: 16 }}>
+        {images.map((img, i) => (
+          <div key={i} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
+            <img src={img.url} alt="" onClick={() => setOpenSub({ _imageOnly: true, url: img.url, formTitle: img.formTitle, submittedAt: img.submittedAt })} style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block', cursor: 'pointer' }} />
+            <div style={{ padding: '10px 12px' }}>
+              <div style={{ fontSize: 12, color: '#999' }}>{new Date(img.submittedAt).toLocaleString('en-GB')}</div>
+              <div style={{ fontSize: 13, color: INK, fontWeight: 600, marginTop: 2 }}>{img.formTitle}</div>
+              <button onClick={() => viewForm(img.subId)} style={{ ...linkBtn, display: 'inline-block', marginTop: 4, padding: 0 }}>{loadingSub ? 'Opening…' : 'View form ›'}</button>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+      {openSub && <ImageFormModal sub={openSub} formDefs={formDefs} onClose={() => setOpenSub(null)} />}
+    </>
+  )
+}
+
+// Large pop-out for a form submission (or a single image), with download + close.
+function ImageFormModal({ sub, formDefs, onClose }) {
+  const labelFor = (k) => (formDefs[sub.formId] && formDefs[sub.formId][k]) || k
+  const isImageOnly = sub._imageOnly
+  const entries = isImageOnly ? [] : Object.entries(sub.answers || {}).filter(([, v]) => !(v == null || v === '' || (Array.isArray(v) && !v.length)))
+  const renderVal = (v) => {
+    const isPhotos = Array.isArray(v) && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
+    if (isPhotos) return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {v.map((u, i) => (
+          <div key={i} style={{ position: 'relative' }}>
+            <img src={u} alt="" style={{ width: 140, height: 140, objectFit: 'cover', borderRadius: 8, border: '1px solid #eee' }} />
+            <a href={u} download target="_blank" rel="noreferrer" style={{ position: 'absolute', bottom: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 11, padding: '3px 7px', borderRadius: 5, textDecoration: 'none' }}>Download</a>
+          </div>
+        ))}
+      </div>
+    )
+    if (Array.isArray(v)) return v.join(', ')
+    if (typeof v === 'object') return v.name ? `${v.name}${v.date ? ` (${v.date})` : ''}` : JSON.stringify(v)
+    return String(v)
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px' }}>
+        <div style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>{sub.formTitle}{sub.submittedAt ? ` · ${new Date(sub.submittedAt).toLocaleString('en-GB')}` : ''}</div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 30, cursor: 'pointer', lineHeight: 1 }}>×</button>
+      </div>
+      <div onClick={e => e.stopPropagation()} style={{ flex: 1, overflow: 'auto', margin: '0 20px 20px', background: '#fff', borderRadius: 12, padding: isImageOnly ? 0 : 28 }}>
+        {isImageOnly ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 }}>
+              <img src={sub.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            </div>
+            <div style={{ padding: '12px 16px', borderTop: '1px solid #eee', textAlign: 'right' }}>
+              <a href={sub.url} download target="_blank" rel="noreferrer" style={{ ...primaryBtn, textDecoration: 'none' }}>Download image</a>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: INK }}>{sub.formTitle}</div>
+                <div style={{ fontSize: 13, color: '#999', marginTop: 2 }}>{sub.projectName || ''}{sub.operative ? ` · ${sub.operative}` : ''}</div>
+              </div>
+              <button onClick={() => openPrintView([sub], (fid, k) => (formDefs[fid] && formDefs[fid][k]) || k)} style={ghostBtn}>Download PDF</button>
+            </div>
+            {entries.map(([k, v]) => (
+              <div key={k} style={{ padding: '12px 0', borderBottom: '1px solid #f4f4f2' }}>
+                <div style={{ fontSize: 12.5, color: '#888', marginBottom: 6 }}>{labelFor(k)}</div>
+                <div style={{ fontSize: 14, color: INK }}>{renderVal(v)}</div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }
