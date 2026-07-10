@@ -16,7 +16,7 @@ const ISSUE_OPTIONS = [
   'Gross profit margin <20%',
 ]
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
+const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 // Parse an ISO date (YYYY-MM-DD) as a LOCAL calendar date, not UTC, so it never
 // shifts by a day across timezones.
 const parseLocal = (d) => { if (!d) return null; const [y, m, day] = d.split('-').map(Number); return new Date(y, (m || 1) - 1, day || 1) }
@@ -218,7 +218,7 @@ export default function ProjectConcerns({ projectNo, projectName }) {
 
 // ---- Large meeting modal ----
 function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRisks, saving, onClose, onSave, reloadLinks }) {
-  const [f, setF] = useState(initial)
+  const [f, setF] = useState(() => ({ ...initial, date: initial.date || todayISO() }))
   const [tasks, setTasks] = useState(allTasks)
   const [risks, setRisks] = useState(allRisks)
   const set = (patch) => setF(prev => ({ ...prev, ...patch }))
