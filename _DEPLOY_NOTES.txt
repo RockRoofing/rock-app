@@ -1,19 +1,10 @@
-MATRICES — column drag/lock/colour (H&S) + shared styling (both)
+H&S MATRIX — locked columns = protect from deletion (not "required")
 
-  pages/api/hs-matrix.js
-   - New column actions: reorder-cols (save new order), set-col (lock + colour). Column object is now
-     { id, label, locked, colour }.
+  pages/operations/hs/hs-matrix.js
+   - Locking a column no longer stamps "required" on empty cells or outlines them red.
+   - A locked column simply means its cells CAN'T BE CLEARED once they hold a value (you can still change
+     the date). The Clear button is hidden for a locked cell that has a value, and clearing is blocked
+     server-side-of-UI with a note. Empty locked cells behave normally.
+   - Column menu checkbox relabelled "Lock column (cells can't be cleared)"; 🔒 shown on locked headers.
 
-  pages/operations/hs/hs-matrix.js  (H&S Training Matrix)
-   - DRAG column headers to reorder (persists).
-   - Click ⋯ on any column header for a menu: "Mandatory (lock cells)" checkbox — empty locked cells
-     show "required" with a red outline; tick again to deselect. 10 header colour swatches to categorise
-     (plus default). Delete moved into this menu too.
-   - Column headers are a darker orange; rows alternate white / light grey.
-   - Trade filter already present.
-
-  pages/operations/hs/rams-matrix.js  (RAMS Matrix)
-   - Added a Trade filter (installers filterable by Project / Operative / Company / Trade).
-   - Column header row is darker orange; project rows alternate white / light grey.
-
-Deploy over previous. No cron/env change.
+Deploy over previous hs-matrix.js. No API change.
