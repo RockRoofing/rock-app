@@ -202,7 +202,7 @@ export default function PlanningPage() {
           </div>
           <button onClick={() => openAllocate('add')} style={primaryBtn}>Allocate labour →</button>
           {selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
-          <button onClick={() => setSel(null)} style={ghostBtn}>Clear selection</button>
+          <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }} onClick={(e) => { e.stopPropagation(); dragging.current = false; setSel(null) }} style={ghostBtn}>Clear selection</button>
         </div>
       )}
 
@@ -658,9 +658,9 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
   }
   const initialUnnamed = () => { if (!isEdit) return 0; let m = 0; for (const dk of dates) m = Math.max(m, cellOf(dk).unnamed); return m }
   const initialStatus = () => {
-    if (!isEdit) return 'confirmed'
+    if (!isEdit) return ''   // add mode: no status pre-selected — user must choose
     const statuses = [...new Set(dates.map(dk => cellOf(dk).status))]
-    return statuses.length === 1 ? statuses[0] : 'confirmed'
+    return statuses.length === 1 ? statuses[0] : ''
   }
   const [picked, setPicked] = useState(initialPicked)   // named opIds
   const [unnamed, setUnnamed] = useState(initialUnnamed)  // extra unnamed slots
@@ -698,6 +698,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
 
   async function save() {
     setErr('')
+    if (!status) { setErr('Choose an allocation status (Confirmed, Provisional or Actual) before allocating.'); return }
     if (!picked.length && unnamed <= 0) { setErr('Add at least one installer, or set an unnamed headcount.'); if (!isEdit) return; }
     setSaving(true)
     try {
@@ -746,7 +747,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
           {isEdit && <div style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>Editing shows everyone currently allocated across the selected days. Saving sets this exact list on every selected day (remove someone to take them off those days).</div>}
 
           {/* Status */}
-          <div style={lbl}>Allocation status</div>
+          <div style={lbl}>Allocation status {!status && <span style={{ color: '#dc2626', fontWeight: 600 }}>— choose one to allocate</span>}</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => {
               const disabled = v === 'actual' && !allPast
@@ -803,7 +804,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? (isEdit ? 'Saving…' : 'Allocating…') : (isEdit ? `Save changes to ${dates.length} day${dates.length === 1 ? '' : 's'}` : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`)}</button>
+            <button onClick={save} disabled={saving || !status} style={{ ...primaryBtn, ...((saving || !status) ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}>{saving ? (isEdit ? 'Saving…' : 'Allocating…') : (isEdit ? `Save changes to ${dates.length} day${dates.length === 1 ? '' : 's'}` : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`)}</button>
           </div>
         </div>
       </div>

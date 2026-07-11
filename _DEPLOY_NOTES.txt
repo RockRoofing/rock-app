@@ -1,32 +1,17 @@
-PLANNING — Supervisor requirement + CSCS/Working-at-Height gating (from the H&S Matrix)
-
-WHAT THIS DOES
-  Ties the H&S Training Matrix into the Planning Gantt so labour can't be planned unsafely.
-
-  pages/api/hs-matrix.js
-   - Adds two default training columns if missing: "Working at Height" and "Internal Supervisor
-     Assessment". ensureColumns() BACKFILLS these into existing deployments automatically (matched by
-     label) on the first GET — you don't lose any existing data.
-   - New GET ?competency=1 -> { competency: { [operativeId]: { isSupervisor, hasCSCS, hasWAH } } }.
-        * isSupervisor = has ANY of (in date / no-expiry): Internal Supervisor Assessment, SSSTS, SMSTS,
-          IOSH Managing Safely, IOSH Managing Safely Refresher.
-        * hasCSCS = a valid (in date / no-expiry) CSCS.
-        * hasWAH  = a valid "Working at Height" (column whose name starts with that; the office variant
-          and "Ladder Safety (part of working at heights)" are deliberately NOT counted).
+PLANNING — status must be chosen + Clear selection fix
 
   pages/operations/project-management/planning.js
-   - SUPERVISOR WARNING (GANTT ONLY): if a day has named labour but NONE of those people is a supervisor,
-     that day's cell is highlighted BRIGHT RED with white text ("No supervisor allocated this day").
-     A "no supervisor" swatch is added to the colour key. This appears ONLY in the Gantt — never in the
-     Weekly Labour Allocation pop-out, the WLA PDF, or the installer emails.
-   - CSCS / WORKING-AT-HEIGHT HARD BLOCK: when allocating labour, every operative still shows in the
-     picker (those missing certs are marked "⚠ no CSCS/WAH"), but trying to add one without BOTH a valid
-     CSCS and a valid Working at Height pops a warning ("You cannot allocate <name> because they do not
-     have a valid Working at Height or CSCS…") and refuses to add them. No override.
 
-IMPORTANT — DATA
-  Gating only bites once the H&S Matrix has the data. After deploying, open H&S -> H&S Training Matrix and
-  fill in CSCS, Working at Height, and the supervisor tickets (dates or "No expiry") for your operatives.
-  Until a person has those entered, they'll read as non-supervisor / missing-cert.
+  ALLOCATION STATUS NOT PRE-SELECTED
+   - When adding labour, no status is selected by default (previously defaulted to Confirmed).
+   - You can't allocate until you pick Confirmed / Provisional / Actual: the Allocate button is disabled
+     and greyed until a status is chosen, the label shows "— choose one to allocate" in red, and saving
+     without one shows an error. (Edit mode still pre-loads the existing status if the selected days share
+     one.)
 
-Deploy both files over the previous versions. No cron/env change.
+  CLEAR SELECTION FIX
+   - "Clear selection" now also resets the drag state and stops event propagation, so the day highlights
+     and the amber selection bar reliably clear on click (previously a lingering drag state could
+     immediately re-select cells as the cursor moved).
+
+Deploy over previous planning.js. No API change.
