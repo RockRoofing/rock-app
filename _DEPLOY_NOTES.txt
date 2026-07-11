@@ -1,9 +1,13 @@
-PROJECT REPORT — Customer Company
-  pages/operations/project-management/report.js
-   - Renamed "Customer Name" to "Customer Company" (form field, table header, filter, view label).
-   - The field auto-fills from the project's IHM customer company (settings.customerCompany, exposed
-     by /api/ops-projects as `customer`) when a project is selected. It stays editable.
+PROJECT REPORT — append full open-issue forms to the PDF
+  lib/projectReportPdf.js       After the Approval/signature section, the report PDF now appends the
+                                FULL issue form (via the issue PDF builder) for each open issue listed
+                                in the report's Issues table. The issues table now includes a note that
+                                the full forms are appended at the end. The digital-signature/revision
+                                stamp is applied to EVERY page AFTER the issues are appended (so it sits
+                                on the appended issue pages too, i.e. after the issues forms).
+  pages/api/project-report-pdf.js  Fetches the full issue records (by id) referenced in the report and
+                                   passes them to the PDF builder.
+  pages/operations/project-management/report.js  Issues snapshot now stores each issue's id; on-screen
+                                   note added under the issues table that full forms are appended in the PDF.
 
-IMPORTANT: auto-fill only works if the project's IHM has the Customer Company filled in. If it's blank
-on the IHM, the field will be empty (type it manually, or fill it on the IHM). This was the reason it
-"wasn't inserting" — the wiring is correct; the source field was empty.
+Deploy over the previous versions. (Depends on lib/issuePdf.js already deployed.)

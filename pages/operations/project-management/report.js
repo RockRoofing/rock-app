@@ -199,7 +199,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
 
       // Open issues for this project
       const openIssues = (issR.issues || []).filter(i => i.projectNo === no && !i.resolvedDate)
-        .map(i => ({ dateCreated: i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '', issueName: i.issueName, issueTypes: [...(i.issueTypes || []), ...(i.issueOther ? ['Other'] : [])], requiredDate: i.requiredDate || '', status: 'Open' }))
+        .map(i => ({ id: i.id, dateCreated: i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '', issueName: i.issueName, issueTypes: [...(i.issueTypes || []), ...(i.issueOther ? ['Other'] : [])], requiredDate: i.requiredDate || '', status: 'Open' }))
 
       // Photos from all submissions for this project, from last report date -> now
       const subsIndex = (subR.submissions || []).filter(s => (s.projectId === no || s.projectName === p?.name))
@@ -287,6 +287,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
           </tbody>
         </table>
       </div>
+      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>The full issue forms for these open issues are appended at the end of the report PDF.</div>}
 
       <L req>Site communications</L>
       <textarea value={f.siteComms || ''} onChange={e => set({ siteComms: e.target.value })} style={{ ...input, minHeight: 100, resize: 'vertical' }} placeholder="Insert all discussions and occurrences that relate to Variations, H&S, Quality, Design, Delay and Disruption." />
