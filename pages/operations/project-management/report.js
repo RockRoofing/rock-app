@@ -86,7 +86,7 @@ export default function ReportPage() {
           <FilterSel label="Project" value={filters.project} onChange={v => setF({ project: v })} options={filterOpts.projects} />
           <FilterSel label="Status" value={filters.status} onChange={v => setF({ status: v })} options={[{ v: 'draft', l: 'Draft' }, { v: 'complete', l: 'Complete' }]} raw />
           <FilterSel label="Completed By" value={filters.completedBy} onChange={v => setF({ completedBy: v })} options={filterOpts.completedBy} />
-          <FilterSel label="Customer" value={filters.customer} onChange={v => setF({ customer: v })} options={filterOpts.customers} />
+          <FilterSel label="Customer Company" value={filters.customer} onChange={v => setF({ customer: v })} options={filterOpts.customers} />
           <div><div style={lbl}>Date from</div><input type="date" value={filters.from} onChange={e => setF({ from: e.target.value })} style={fInput} /></div>
           <div><div style={lbl}>Date to</div><input type="date" value={filters.to} onChange={e => setF({ to: e.target.value })} style={fInput} /></div>
           {(filters.project || filters.status || filters.completedBy || filters.customer || filters.from || filters.to) &&
@@ -99,7 +99,7 @@ export default function ReportPage() {
             <thead><tr style={{ background: '#faf9f7' }}>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Completion Date{arrow('date')}</th>
-              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('customer')}>Customer{arrow('customer')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('customer')}>Customer Company{arrow('customer')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('completedBy')}>Completed By{arrow('completedBy')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('status')}>Status{arrow('status')}</th>
               <th style={{ ...th, textAlign: 'right' }}></th>
@@ -258,7 +258,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
-        <div><L>Customer name</L><input value={f.customerName || ''} onChange={e => set({ customerName: e.target.value })} style={input} /></div>
+        <div><L>Customer company</L><input value={f.customerName || ''} onChange={e => set({ customerName: e.target.value })} style={input} /></div>
         <div><L>Your name</L><input value={f.completedBy || ''} onChange={e => set({ completedBy: e.target.value })} style={input} /></div>
       </div>
       <L>Project address</L>
@@ -335,7 +335,7 @@ function ViewModal({ id, onClose, onEdit }) {
           : <span style={{ fontSize: 11.5, color: '#b45309', background: '#fef3c7', padding: '3px 12px', borderRadius: 12, fontWeight: 700 }}>● DRAFT</span>}
       </div>
       <Row label="Project">{r.projectNo} {r.projectName ? `— ${r.projectName}` : ''}</Row>
-      <Row label="Customer">{r.customerName || '—'}</Row>
+      <Row label="Customer Company">{r.customerName || '—'}</Row>
       <Row label="Address">{r.projectAddress || '—'}</Row>
       <Row label="Completion date">{fmtDMY(r.date)} · by {r.completedBy || '—'}</Row>
       <Row label="Site communications">{r.siteComms || '—'}</Row>
