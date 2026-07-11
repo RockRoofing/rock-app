@@ -13,7 +13,7 @@ const fmtLong = (d) => d ? d.toLocaleDateString('en-GB', { weekday: 'short', day
 const sameDay = (a, b) => a && b && iso(a) === iso(b)
 const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6
 
-const NAME_W = 220, DATE_W = 92, CELL_W = 34, WEEKCELL_W = 46, ROW_H = 42
+const NAME_W = 280, DATE_W = 92, CELL_W = 34, WEEKCELL_W = 46, ROW_H = 42
 
 // Allocation colours
 const C_ACTUAL = '#15803d'      // dark green
@@ -230,7 +230,6 @@ export default function PlanningPage() {
         <Legend c={C_PROVISIONAL} label="Provisional" />
         <Legend c={C_UNNAMED} label="Provisional — labour not confirmed (unnamed)" />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: 14 }}>3</span> past contracted completion</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 14, borderRadius: 3, background: '#ff2d2d', display: 'inline-block' }} /> no supervisor</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#ea580c' }}>⚑</span> historic needs confirming</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 4, height: 14, background: '#15803d', display: 'inline-block' }} /> today</span>
       </div>
@@ -314,18 +313,20 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
   let historicNeedsActual = false
   let projectHasLabour = false
   let projectHasNamedLabour = false
+  let ganttHasSupervisor = false
   const todayKey = iso(new Date())
   for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
     const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
     const cd = cellData(cell); if (cd.count > 0) projectHasLabour = true
     if (cd.entries && cd.entries.length > 0) projectHasNamedLabour = true
+    if (cd.entries && cd.entries.some(e => comp && comp[e.opId] && comp[e.opId].isSupervisor)) ganttHasSupervisor = true
     // any allocation strictly before today that is NOT marked actual -> needs confirming
     if (dk < todayKey) { if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
   }
   const overrun = complD && lastAlloc && lastAlloc > complD
-  // Project-level supervisor flag: live project with NAMED labour but no supervisor assigned in Project Details.
-  // (Never flags when there's no labour, or only unnamed/temporary labour.)
-  const noProjectSupervisor = p.type === 'live' && projectHasNamedLabour && !p.siteSupervisor
+  // Project-level supervisor flag: live project with NAMED labour but NO supervisor either assigned in
+  // Project Details OR allocated on the Gantt. (Never flags with no labour or only unnamed labour.)
+  const noProjectSupervisor = p.type === 'live' && projectHasNamedLabour && !p.siteSupervisor && !ganttHasSupervisor
 
   async function saveMeta(nextStart, nextCompl) {
     await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: p.key, startDate: nextStart, completionDate: nextCompl }) }).catch(() => {})
@@ -341,9 +342,9 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
           {missing && <span title="Start / completion date missing" style={{ color: '#dc2626' }}>⚠ </span>}
           {overrun && <span title="Runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
           {historicNeedsActual && <span title="Historic dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}
-          {noProjectSupervisor && <span title="No supervisor assigned to this project (set one in Project Details)" style={{ color: '#ff2d2d' }}>⚠ No supervisor </span>}
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
+        {noProjectSupervisor && <div title="No supervisor assigned in Project Details or allocated on the Gantt" style={{ fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }}>⚠ No supervisor</div>}
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       {/* inline date editors */}
@@ -364,10 +365,6 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
           const selected = selDates && selDates.has(key)
           const col = n ? cellColours(cd) : null
           const isToday = key === todayCellKey
-          // Supervisor check (Gantt only): a day with named labour but NO supervisor among them -> bright red.
-          const namedIds = cd.entries.map(e => e.opId)
-          const hasSupervisor = namedIds.some(id => comp && comp[id] && comp[id].isSupervisor)
-          const noSup = n > 0 && namedIds.length > 0 && !hasSupervisor
           // Layer markers via box-shadow insets (base status edge, then today's green right line)
           const shadows = []
           if (isCompl) shadows.push('inset -2px 0 0 0 #dc2626')
@@ -377,15 +374,15 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
             <div key={i}
               onMouseDown={() => onCellDown(p.key, d)}
               onMouseEnter={() => onCellEnter(p.key, d)}
-              title={noSup ? 'No supervisor allocated this day' : (isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')))}
+              title={isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : ''))}
               style={{
                 width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
-                background: selected ? '#fde68a' : (noSup ? '#ff2d2d' : (col ? col.bg : (we ? '#f3f1ec' : '#fff'))),
+                background: selected ? '#fde68a' : (col ? col.bg : (we ? '#f3f1ec' : '#fff')),
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: shadows.length ? shadows.join(', ') : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: pastCompl ? 15 : 12, fontWeight: pastCompl ? 900 : 700,
-                color: pastCompl ? '#ff0000' : (noSup ? '#fff' : (col ? col.num : '#999')),
+                color: pastCompl ? '#ff0000' : (col ? col.num : '#999'),
               }}>{n || ''}</div>
           )
         })

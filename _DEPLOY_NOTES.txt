@@ -1,15 +1,11 @@
-H&S MATRIX — lock now protects the COLUMN, plus clear-cell
+PLANNING — supervisor flag rework
 
-  pages/operations/hs/hs-matrix.js
+  pages/operations/project-management/planning.js
+   - "⚠ No supervisor" (project name column) now clears if a qualified supervisor is EITHER assigned in
+     Project Details OR allocated on the Gantt for that project. It still only appears when the project has
+     NAMED labour (never with no labour or only unnamed labour).
+   - Removed the per-day bright-red "no supervisor" cell shading entirely (and its colour-key entry).
+   - Project name column widened (220 -> 280) and "⚠ No supervisor" now sits on its own line under the
+     project name so it's always fully visible.
 
-  LOCK MEANING CHANGED
-   - Locking a column now protects the COLUMN ITSELF: it can't be renamed, recoloured or deleted while
-     locked. In the ⋯ menu, the colour swatches are greyed out and Delete is disabled when locked; both
-     also refuse with a note if triggered. Untick "Lock column" to make changes again.
-   - Locking NO LONGER affects cells. Cell dates are always fully editable, including clearing.
-
-  CLEAR CELL
-   - The cell editor always shows a red "Clear" button when the cell has a value (date or "No expiry"),
-     regardless of column lock. Clearing removes the entry (cell goes blank).
-
-Deploy over previous hs-matrix.js. No API change (uses existing set-col/del-col/set-cell).
+Deploy over previous planning.js. No API change.
