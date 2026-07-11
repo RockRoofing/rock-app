@@ -39,6 +39,9 @@ export default async function handler(req, res) {
       id: r.id, reportId: r.reportId, projectNo: r.projectNo, projectName: r.projectName,
       customerName: r.customerName, completedBy: r.completedBy, date: r.date,
       status: r.status || 'draft', revision: r.revision || 0, updatedAt: r.updatedAt || r.createdAt || 0,
+      // Compact record of which issues this report captured and whether they were
+      // closed at the time — so the report form can apply the "show once when closed" rule.
+      issueHistory: (r.issuesSnapshot || []).map(s => ({ id: s.id, status: s.status || 'Open' })).filter(s => s.id),
     }))
     index.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
     return res.json({ reports: index })

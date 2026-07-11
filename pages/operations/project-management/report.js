@@ -198,22 +198,24 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: false, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
 
       // ── Issues ────────────────────────────────────────────────────────────
-      // Include issues (open OR closed) that have been SENT to the customer
-      // (or marked as sent), created since the last report, and NOT already
-      // included in a previous report for this project.
+      // Show issues for THIS project that have been sent to the customer.
+      // Rule: an OPEN issue keeps appearing on every report until it closes.
+      // When it CLOSES it appears once more (this report), then never again.
+      // So: exclude any issue that has ALREADY appeared on a prior report while
+      // it was in CLOSED status.
       const sentToCustomer = (i) => i.sendToCustomer !== 'nosend' && (i.sentToCustomer === true || i.sentManually === true)
-      // ids of issues already captured on earlier reports for this project
-      const priorIssueIds = new Set()
+      // ids of issues that previously appeared on a report WHILE CLOSED (for this project)
+      const closedInPriorReport = new Set()
       for (const rep of (allReports || [])) {
         if (rep.projectNo !== no || rep.id === id) continue
-        for (const s of (rep.issuesSnapshot || [])) if (s.id) priorIssueIds.add(s.id)
+        for (const s of (rep.issueHistory || [])) {
+          if (s.id && (s.status === 'Closed')) closedInPriorReport.add(s.id)
+        }
       }
-      const lastCutoff = lastReportDate ? parseLocal(lastReportDate).getTime() : 0
       const eligibleIssues = (issR.issues || []).filter(i =>
         i.projectNo === no &&
         sentToCustomer(i) &&
-        !priorIssueIds.has(i.id) &&
-        (i.createdAt || 0) >= lastCutoff
+        !closedInPriorReport.has(i.id)
       )
       const openIssues = eligibleIssues.map(i => ({
         id: i.id,
@@ -317,7 +319,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
           </tbody>
         </table>
       </div>
-      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>Issues sent to the customer since the last report (open or closed), excluding any already in a previous report. Full forms are appended at the end of the report PDF.</div>}
+      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>Open issues (sent to the customer) show on every report until closed; a closed issue shows once more, then drops off. Full forms are appended at the end of the report PDF.</div>}
 
       <L req>Site communications</L>
       <textarea value={f.siteComms || ''} onChange={e => set({ siteComms: e.target.value })} style={{ ...input, minHeight: 100, resize: 'vertical' }} placeholder="Insert all discussions and occurrences that relate to Variations, H&S, Quality, Design, Delay and Disruption." />

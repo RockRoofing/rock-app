@@ -1,17 +1,30 @@
-PROJECT REPORT — issue & photo rule refinements
+PLANNING — PHASE 3 of 5: the Gantt UI
 
-PHOTOS:
-  - Issue photos are only included if the linked issue was SENT to the customer (or marked sent).
-  - Photos from issues marked "do not send", or with no send/do-not-send decision yet, are EXCLUDED.
-  - Non-issue form photos are unaffected (all included, since last report).
+  pages/operations/project-management/planning.js   Replaces the coming-soon stub. The Gantt:
+   - Rows: LIVE PROJECTS first, then NEGOTIATED — NOT YET SECURED (clearly labelled, amber tint).
+   - Columns: day view starting Monday; W/C date header per week; day letters M T W T F S S with the
+     date; weekends shaded; Monday has a heavier divider.
+   - Each project-day cell shows the installer COUNT. Click a cell to open the day pop-out.
+   - Top row tallies TOTAL installers per day across all visible projects.
+   - Start + Contracted Completion date columns beside the project name. ⚠ shown if either date is
+     missing (in the date cell and by the project name). The contracted-completion day has a red right
+     edge; any allocation PAST the completion date is shaded red, and a ⚠ over-run warning shows by the
+     project name.
+   - Filters: Project, Installer (shows only projects that installer is on), From/To week range.
+   - Navigation: Back / Today / Fwd, and zoom by weeks shown (4/8/12/26).
 
-ISSUES TABLE + APPENDED FORMS (new logic):
-  - Include issues with OPEN or CLOSED status (previously open-only) that have been SENT to the customer.
-  - Only issues created since the last report for this project.
-  - EXCLUDE any issue already included in a previous report (each issue appears on one report only).
-  - Status column now shows Open/Closed correctly.
+  DAY POP-OUT (click any cell):
+   - Set the project Start + Contracted Completion dates here (writes to planning meta).
+   - Add named installers from the Operatives roster; set Full day / AM / PM per person; remove.
+   - The picker flags installers already "busy" elsewhere that day. On save, the server clash-checks:
+     a person can't be on two projects the same day unless BOTH are half-days (AM on one, PM on the
+     other) — a clash returns a clear error naming the person.
 
-  pages/operations/project-management/report.js   All of the above applied in the project auto-pull.
+Requires Phase 2 (/api/planning) already deployed — DONE. Uses the Operatives roster (Phase 1) for names.
 
-(PDF endpoint + PDF table already filter to sent issues and to the report's snapshot, so they stay
-consistent with the new rule. Deploy over the previous version; pairs with report-issues-sent-only.)
+THIS IS THE MOST COMPLEX SCREEN IN THE PORTAL. Expect to refine it together once you see it with real
+data (column widths, colours, zoom). Deploy and have a play: add start/completion dates and allocate a
+few installers, then check the totals, the red completion edge, and try to create a clash.
+
+NEXT: Phase 4 = Weekly pop-out (click a week -> per-person grid -> Download PDF / email each operative
+their week). Phase 5 = Forms split (Completed | Missing).
