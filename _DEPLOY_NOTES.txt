@@ -1,7 +1,15 @@
-PLANNING — past-completion number more obvious
+H&S MATRIX — lock now protects the COLUMN, plus clear-cell
 
-  pages/operations/project-management/planning.js
-   - Labour allocated past a project's contracted completion date now shows its day-count number in a
-     brighter red (#ff0000), heavier weight (900) and slightly larger (15px) so it stands out.
+  pages/operations/hs/hs-matrix.js
 
-Deploy over previous planning.js. No API change.
+  LOCK MEANING CHANGED
+   - Locking a column now protects the COLUMN ITSELF: it can't be renamed, recoloured or deleted while
+     locked. In the ⋯ menu, the colour swatches are greyed out and Delete is disabled when locked; both
+     also refuse with a note if triggered. Untick "Lock column" to make changes again.
+   - Locking NO LONGER affects cells. Cell dates are always fully editable, including clearing.
+
+  CLEAR CELL
+   - The cell editor always shows a red "Clear" button when the cell has a value (date or "No expiry"),
+     regardless of column lock. Clearing removes the entry (cell goes blank).
+
+Deploy over previous hs-matrix.js. No API change (uses existing set-col/del-col/set-cell).

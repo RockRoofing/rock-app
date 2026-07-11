@@ -62,22 +62,21 @@ export default function HSMatrixPage() {
     if (d.columns) setColumns(d.columns)
   }
   async function delColumn(colId, label) {
+    const col = columns.find(c => c.id === colId)
+    if (col && col.locked) { window.alert('This column is locked. Unlock it first (untick “Lock column” in the ⋯ menu) to delete it.'); return }
     if (!window.confirm(`Delete the "${label}" column and all its dates? This cannot be undone.`)) return
     const d = await fetch('/api/hs-matrix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'del-col', colId }) }).then(r => r.json())
     if (d.columns) setColumns(d.columns); setColMenu(null)
   }
   async function patchCol(colId, patch) {
+    // A locked column cannot have its colour changed (but the lock toggle itself always works).
+    const col = columns.find(c => c.id === colId)
+    if (col && col.locked && ('colour' in patch)) { window.alert('This column is locked. Unlock it first to change its colour.'); return }
     setColumns(prev => prev.map(c => c.id === colId ? { ...c, ...patch } : c))
     await fetch('/api/hs-matrix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-col', colId, ...patch }) }).catch(() => {})
   }
   async function saveCell(personId, colId, value) {
-    // Locked columns: cells can't be CLEARED once they hold a value (they can still be changed).
-    const col = columns.find(c => c.id === colId)
-    const existing = (data[personId] || {})[colId]
-    if (col && col.locked && existing && !value) {
-      window.alert('This column is locked. You can change the date but not clear it. Unlock the column (⋯ menu) first if you need to remove it.')
-      return
-    }
+    // Cells are always fully editable (including clearing) regardless of column lock.
     setData(prev => {
       const n = { ...prev, [personId]: { ...(prev[personId] || {}) } }
       if (!value) delete n[personId][colId]; else n[personId][colId] = value
@@ -155,23 +154,24 @@ export default function HSMatrixPage() {
                   onDragOver={e => e.preventDefault()}
                   onDrop={() => onDrop(c.id)}
                   style={{ width: COL_W, minWidth: COL_W, height: 150, position: 'relative', borderLeft: '1px solid #eab968', background: c.colour || HEADER_ORANGE }}>
-                  <div style={{ position: 'absolute', bottom: 30, left: '50%', transformOrigin: 'left bottom', transform: 'rotate(-60deg)', whiteSpace: 'nowrap', fontSize: 10.5, color: '#3a2e12', fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${c.label}${c.locked ? ' (mandatory)' : ''}`}>{c.locked ? '🔒 ' : ''}{c.label}</div>
+                  <div style={{ position: 'absolute', bottom: 30, left: '50%', transformOrigin: 'left bottom', transform: 'rotate(-60deg)', whiteSpace: 'nowrap', fontSize: 10.5, color: '#3a2e12', fontWeight: 600, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${c.label}${c.locked ? ' (locked)' : ''}`}>{c.locked ? '🔒 ' : ''}{c.label}</div>
                   <button onClick={() => setColMenu(colMenu === c.id ? null : c.id)} title="Column options" style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', border: 'none', background: 'rgba(255,255,255,0.7)', borderRadius: 5, color: '#5a4a1a', cursor: 'pointer', fontSize: 11, padding: '1px 6px' }}>⋯</button>
                   {colMenu === c.id && (
                     <div style={{ position: 'absolute', top: 150, left: '50%', transform: 'translateX(-50%)', zIndex: 30, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.18)', padding: 12, width: 200 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 8 }}>{c.label}</div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer', marginBottom: 10 }}>
-                        <input type="checkbox" checked={!!c.locked} onChange={e => patchCol(c.id, { locked: e.target.checked })} /> Lock column (cells can't be cleared)
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer', marginBottom: 4 }}>
+                        <input type="checkbox" checked={!!c.locked} onChange={e => patchCol(c.id, { locked: e.target.checked })} /> Lock column
                       </label>
-                      <div style={{ fontSize: 11, color: '#888', marginBottom: 5 }}>Header colour</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                      <div style={{ fontSize: 10.5, color: '#888', marginBottom: 10 }}>Prevents renaming, recolouring or deleting this column. Cell dates stay editable.</div>
+                      <div style={{ fontSize: 11, color: '#888', marginBottom: 5 }}>Header colour{c.locked ? ' (locked)' : ''}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10, opacity: c.locked ? 0.4 : 1, pointerEvents: c.locked ? 'none' : 'auto' }}>
                         <button onClick={() => patchCol(c.id, { colour: '' })} title="Default" style={{ width: 22, height: 22, borderRadius: 5, border: !c.colour ? '2px solid #333' : '1px solid #ccc', background: HEADER_ORANGE, cursor: 'pointer' }} />
                         {COL_COLOURS.map(col => (
                           <button key={col} onClick={() => patchCol(c.id, { colour: col })} style={{ width: 22, height: 22, borderRadius: 5, border: c.colour === col ? '2px solid #333' : '1px solid #ccc', background: col, cursor: 'pointer' }} />
                         ))}
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <button onClick={() => delColumn(c.id, c.label)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12, color: '#dc2626' }}>Delete</button>
+                        <button onClick={() => delColumn(c.id, c.label)} disabled={c.locked} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12, color: c.locked ? '#ccc' : '#dc2626', cursor: c.locked ? 'not-allowed' : 'pointer' }}>Delete</button>
                         <button onClick={() => setColMenu(null)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>Close</button>
                       </div>
                     </div>
@@ -197,9 +197,9 @@ export default function HSMatrixPage() {
                   return (
                     <div key={c.id} style={{ width: COL_W, minWidth: COL_W, borderLeft: '1px solid #f5f5f5', position: 'relative' }}>
                       {isEditing ? (
-                        <CellEditor cell={cell} locked={!!c.locked} onSave={(v) => saveCell(p.id, c.id, v)} onCancel={() => setEdit(null)} />
+                        <CellEditor cell={cell} onSave={(v) => saveCell(p.id, c.id, v)} onCancel={() => setEdit(null)} />
                       ) : (
-                        <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} — ${c.label}${c.locked ? ' (locked)' : ''}`}
+                        <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} — ${c.label}`}
                           style={{ height: '100%', minHeight: 38, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: col ? col.bg : 'transparent', color: col ? col.fg : '#ddd', fontSize: 10.5, fontWeight: 600, textAlign: 'center', padding: '2px' }}>
                           {col ? col.text : ''}
                         </div>
@@ -214,26 +214,24 @@ export default function HSMatrixPage() {
           </div>
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>Click a cell to set an expiry date or “No expiry”. Drag a column header to reorder. Click ⋯ on a column to lock it (locked cells can be changed but not cleared), colour it, or delete it.</div>
+      <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>Click a cell to set an expiry date or “No expiry”. Drag a column header to reorder. Click ⋯ on a column to lock it (a locked column can't be renamed, recoloured or deleted — cell dates stay editable), colour it, or delete it.</div>
     </OperationsShell>
   )
 }
 
-function CellEditor({ cell, locked, onSave, onCancel }) {
+function CellEditor({ cell, onSave, onCancel }) {
   const [date, setDate] = useState(cell && cell.date ? cell.date : '')
   const [noExpiry, setNoExpiry] = useState(!!(cell && cell.noExpiry))
   const hasValue = !!(cell && (cell.date || cell.noExpiry))
-  const canClear = !(locked && hasValue)
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20, background: '#fff', border: `2px solid ${GOLD}`, borderRadius: 8, padding: 8, width: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
       <input type="date" value={date} disabled={noExpiry} onChange={e => setDate(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '6px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', opacity: noExpiry ? 0.5 : 1 }} />
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, marginTop: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={noExpiry} onChange={e => setNoExpiry(e.target.checked)} /> Does not expire
       </label>
-      {locked && hasValue && <div style={{ fontSize: 10.5, color: '#9a3412', marginTop: 6 }}>🔒 Locked column — can be changed, not cleared.</div>}
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
         <button onClick={() => onSave(noExpiry ? { noExpiry: true } : (date ? { date } : null))} style={{ ...primaryBtn, padding: '5px 10px', fontSize: 12, flex: 1 }}>Save</button>
-        {canClear && <button onClick={() => onSave(null)} title="Clear" style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12 }}>Clear</button>}
+        {hasValue && <button onClick={() => onSave(null)} title="Clear this cell" style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12, color: '#dc2626' }}>Clear</button>}
         <button onClick={onCancel} style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12 }}>×</button>
       </div>
     </div>
