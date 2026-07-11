@@ -1,8 +1,6 @@
-COMMERCIAL PORTAL — consistent nav colour
-  Changed the nav header background from #1a1a2e (bluer navy) to #1a1a19 (the near-black
-  used by the Commercial Scorecard nav, and by the Ops/main portal nav) on:
-    pages/commercial.js         (both the embed slim bar and the full nav)
-    pages/variations.js
-    pages/retention.js
-    pages/application-calendar.js
-  Commercial Scorecard already used #1a1a19, so all Commercial pages now match.
+PROJECT CONCERN — banner re-evaluates when next-meeting date/time changes
+  components/ProjectConcerns.js
+   - On save, if the next-meeting date OR time differs from the previous saved values,
+     any earlier banner dismissal is cleared automatically. So changing the date (incl. to a
+     past date) re-shows the banner and correctly flags red "…has now passed."
+   - A dismissal (×) still sticks while the date is unchanged (as requested).

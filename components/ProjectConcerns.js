@@ -107,6 +107,11 @@ export default function ProjectConcerns({ projectNo, projectName }) {
     setSaving(true)
     try {
       const prev = meetings.find(m => m.id === meeting.id) || {}
+      // If the next-meeting date/time differs from what was previously in place,
+      // clear any earlier dismissal so the banner re-evaluates (and shows red if
+      // the new date is in the past). A dismissal only sticks while the date is unchanged.
+      const nmChanged = (prev.nextMeetingDate || '') !== (meeting.nextMeetingDate || '') || (prev.nextMeetingTime || '') !== (meeting.nextMeetingTime || '')
+      if (nmChanged) meeting = { ...meeting, nextMeetingDismissed: false }
       const resp = await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectNo, meeting }) }).then(r => r.json())
       const meetingId = meeting.id || resp.id
