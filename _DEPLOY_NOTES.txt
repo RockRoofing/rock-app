@@ -1,11 +1,10 @@
-PLANNING — View Weekly Labour Allocations: date-range PDF
+PLANNING — View WLA: W/C dropdowns + PDF only (table removed)
 
   pages/operations/project-management/planning.js  (ViewWeekModal)
-   - Replaced the single "Week commencing" picker with a FROM / TO week range.
-   - Shows how many weeks the range spans; the on-screen table previews the FIRST week of the range.
-   - "Download PDF" now downloads EVERY week in the range (one page per week), labelled with the count.
+   - From / To are now W/C DROPDOWNS listing "W/C <date>" (2 years back to 1 year forward), not free
+     date pickers. Picking a From past To auto-bumps To; To only offers weeks >= From.
+   - Removed the on-screen table and the "No labour allocated for the first week…" message (the range
+     can be long; it's just for downloading).
+   - Shows the list of W/C weeks that will be in the PDF, then Download PDF (one page per week, max 26).
 
-  pages/api/planning-week-pdf.js
-   - Raised the max weeks per PDF from 8 to 26 so date ranges up to ~6 months download in one go.
-
-Deploy over previous. No env / cron change.
+Deploy over previous planning.js. No API change.

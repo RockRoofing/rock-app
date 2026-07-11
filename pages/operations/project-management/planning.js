@@ -572,86 +572,56 @@ function WeekModal({ monday, onClose }) {
 
 // ── Historic viewer: pick any W/C, view + download PDF only (no send) ──
 function ViewWeekModal({ onClose }) {
-  const [fromDate, setFromDate] = useState(() => iso(mondayOf(new Date())))
-  const [toDate, setToDate] = useState(() => iso(mondayOf(new Date())))
-  const [week, setWeek] = useState(null)
-  const fromMon = mondayOf(parseISO(fromDate))
-  const toMon = mondayOf(parseISO(toDate))
-  const fromMonISO = iso(fromMon)
-  // number of weeks in the range (inclusive), min 1, capped at 8 (Hobby-safe PDF size)
+  // Offer a list of W/C Mondays: 2 years back to 1 year forward.
+  const wcOptions = useMemo(() => {
+    const base = mondayOf(new Date())
+    const opts = []
+    for (let i = -104; i <= 52; i++) opts.push(iso(new Date(base.getTime() + i * 7 * 86400000)))
+    return opts
+  }, [])
+  const thisMon = iso(mondayOf(new Date()))
+  const [fromMonISO, setFromMonISO] = useState(thisMon)
+  const [toMonISO, setToMonISO] = useState(thisMon)
+
+  const fromMon = parseISO(fromMonISO)
+  const toMon = parseISO(toMonISO)
   const weekCount = Math.min(26, Math.max(1, Math.round((toMon - fromMon) / (7 * 86400000)) + 1))
+  const wcLabel = (m) => `W/C ${parseISO(m).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
 
-  useEffect(() => {
-    let cancelled = false
-    setWeek(null)
-    fetch(`/api/planning-week?monday=${encodeURIComponent(fromMonISO)}`).then(r => r.json()).then(w => { if (!cancelled) setWeek(w) }).catch(() => { if (!cancelled) setWeek({ rows: [], days: [], dailyTotals: [] }) })
-    return () => { cancelled = true }
-  }, [fromMonISO])
-
-  const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  const statusColour = (s) => s === 'actual' ? C_ACTUAL : s === 'provisional' ? C_PROVISIONAL : C_CONFIRMED
+  // the weeks that will be in the PDF
+  const weeksInRange = Array.from({ length: weekCount }, (_, i) => iso(new Date(fromMon.getTime() + i * 7 * 86400000)))
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 2vw', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>View Weekly Labour Allocations</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Historic &amp; upcoming weeks — download only</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Download past &amp; upcoming weeks as a PDF</div>
           </div>
           <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
         </div>
 
-        <div style={{ padding: '14px 22px 22px' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-            <div><div style={lbl}>From (week)</div><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={{ ...fInput }} /></div>
-            <div><div style={lbl}>To (week)</div><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={{ ...fInput }} /></div>
-            <div style={{ fontSize: 11.5, color: '#999', paddingBottom: 8 }}>
-              {weekCount} week{weekCount === 1 ? '' : 's'} · W/C {fromMon.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })} → {new Date(fromMon.getTime() + (weekCount - 1) * 7 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}. Table previews the first week; PDF covers the whole range (max 26 weeks).
+        <div style={{ padding: '18px 22px 22px' }}>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div><div style={lbl}>From</div>
+              <select value={fromMonISO} onChange={e => { const v = e.target.value; setFromMonISO(v); if (parseISO(v) > parseISO(toMonISO)) setToMonISO(v) }} style={{ ...fInput, minWidth: 190, fontFamily: 'inherit' }}>
+                {wcOptions.map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
+              </select>
+            </div>
+            <div><div style={lbl}>To</div>
+              <select value={toMonISO} onChange={e => setToMonISO(e.target.value)} style={{ ...fInput, minWidth: 190, fontFamily: 'inherit' }}>
+                {wcOptions.filter(m => parseISO(m) >= fromMon).map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
+              </select>
             </div>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 12, fontSize: 11.5, color: '#555' }}>
-            <span style={{ fontWeight: 700, color: '#888' }}>Key:</span>
-            <Legend c={C_ACTUAL} label="Actual" />
-            <Legend c={C_CONFIRMED} label="Confirmed" />
-            <Legend c={C_PROVISIONAL} label="Provisional" />
-            <Legend c={C_UNNAMED} label="Unnamed / TBC" />
+          <div style={{ fontSize: 12.5, color: '#555', marginBottom: 8 }}>{weekCount} week{weekCount === 1 ? '' : 's'} will be included (one page each, max 26):</div>
+          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #eee', borderRadius: 10, padding: '6px 0' }}>
+            {weeksInRange.map(m => (
+              <div key={m} style={{ padding: '6px 14px', fontSize: 13, color: INK, borderBottom: '1px solid #f5f5f5' }}>{wcLabel(m)}</div>
+            ))}
           </div>
-
-          {!week ? <Loading /> : week.rows.length === 0 ? (
-            <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated for the first week of this range.</div>
-          ) : (
-            <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820 }}>
-                <thead>
-                  <tr style={{ background: '#faf9f7' }}>
-                    <th style={{ ...wth, textAlign: 'left', minWidth: 150 }}>Operative</th>
-                    {week.days.map((dk, i) => <th key={i} style={{ ...wth, background: i >= 5 ? '#f3f1ec' : undefined, color: i >= 5 ? '#b91c1c' : '#444' }}>{DOWFULL[i]}<div style={{ fontSize: 9, color: '#aaa', fontWeight: 400 }}>{parseISO(dk).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</div></th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {week.rows.map(r => (
-                    <tr key={r.opId} style={{ borderTop: '1px solid #f0f0f0', background: r.unnamed ? '#fff7ed' : undefined }}>
-                      <td style={{ ...wtd, fontWeight: 600, color: r.unnamed ? '#9a3412' : INK }}>{r.name}{r.company && !r.unnamed ? <div style={{ fontSize: 10, color: '#aaa', fontWeight: 400 }}>{r.company}</div> : null}</td>
-                      {r.cells.map((c, i) => (
-                        <td key={i} style={{ ...wtd, textAlign: 'center', background: i >= 5 ? '#faf8f4' : undefined, fontSize: 11 }}>
-                          {c ? c.entries.map((e, j) => {
-                            const col = r.unnamed ? C_UNNAMED : statusColour(e.status)
-                            return <div key={j} style={{ color: '#333' }}><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: col, marginRight: 4 }} />{e.unnamed ? `${e.unnamed} unnamed` : e.projectName}{e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}</div>
-                          }) : <span style={{ color: '#ddd' }}>—</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                  <tr style={{ borderTop: '2px solid #e6e2d8', background: '#faf9f7' }}>
-                    <td style={{ ...wtd, fontWeight: 700 }}>Total installers</td>
-                    {week.dailyTotals.map((t, i) => <td key={i} style={{ ...wtd, textAlign: 'center', fontWeight: 700 }}>{t || 0}</td>)}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
