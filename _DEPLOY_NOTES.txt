@@ -1,10 +1,29 @@
-ISSUES — PDF required date, internal comments
+PROJECT REPORT PAGE (Project Management → Project Report)
 
-  lib/issuePdf.js
-   - Added "Required resolution date" to the issue PDF header (shown to the customer).
-   - Confirmed the PDF does NOT include the Comments field (internal only) — unchanged.
-  pages/operations/project-management/issues.js
-   - Renamed the tracker "Comments" column to "Internal Comments" (column header, the pop-out
-     title, and the edit-window label). The field is internal and never appears on the customer PDF.
+NEW FILES
+  lib/projectReportPdf.js                              Date-stamped report PDF with digital-signature
+                                                       revision footer (Rev N · last amended · by whom).
+  pages/api/project-reports.js                         Reports store (ops:project-reports). Tracks revision
+                                                       number + revision history each time saved as complete.
+  pages/api/project-report-pdf.js                      GET ?id=... -> the report PDF.
+  pages/operations/project-management/report.js        The page (replaces the coming-soon stub).
 
-Deploy over the previous versions.
+WHAT IT DOES
+  - Table of site reports: Project, Completion Date, Customer, Completed By, Status (Draft/Complete),
+    View/Edit/Delete. Drafts highlighted (amber row + "● DRAFT"). Sort by clicking headers.
+    Filters: Project, Status, Completed By, Customer, Date range. Max 50/page. "+ Add new".
+  - Report form (desktop): Date (defaults today, editable); Project dropdown (auto-fills Customer +
+    Address); Your name (auto = logged-in user). On project select it AUTO-PULLS:
+      * Variations marked Not Instructed -> table (No., Description, Instructed, Total)
+      * Open issues for the project -> table (Date Created, Issue Name, Type, Required Resolution, Status)
+      * Photos from all project submissions between the LAST report's date and now
+    Mandatory: Site Communications, Works Completed, Approval Name. Approval statement shown; approval
+    date is stamped as the submission date on completion.
+  - Save draft OR Save & complete. Completing bumps the revision and records who/when.
+  - View shows everything read-only + Download PDF. PDF is date-stamped with a digital-signature line
+    (revision number, last amended date/time, amended by) on every page.
+
+NOTES / ASSUMPTIONS
+  - Variations pulled from /api/dashboard (Xero-side project settings), matched to the ops project by
+    job number/name. Issues from /api/issues. Photos from /api/submissions (same source as Project Images).
+  - "Completed on desktop" — the page lives in the portal (desktop) Operations area; not added to the Site App.
