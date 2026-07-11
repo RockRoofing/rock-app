@@ -1,17 +1,9 @@
-PLANNING — clear labour from cells + save-to-clear in the edit popout
+PLANNING — HOTFIX for client-side crash
 
   pages/operations/project-management/planning.js
+   - Fix: the new "clearing" useState had been placed AFTER the component's early loading return, which
+     breaks React's Rules of Hooks and caused "Application error: a client-side exception has occurred".
+   - Moved it up with the other useState calls. No behaviour change otherwise — the Clear labour button and
+     save-to-clear from the previous drop work as intended.
 
-  SELECTION BAR
-   - "Clear selection" is replaced by two buttons:
-       * "Clear labour" (red) — appears when the selection HAS labour. Removes all labour/allocations from
-         the selected days (with a confirm), then deselects. This wipes the cell contents.
-       * "Deselect" — just removes the selection highlight (no data change), as before.
-
-  EDIT LABOUR POPOUT
-   - Allocation status is only MANDATORY when labour remains (installers or an unnamed headcount).
-   - In EDIT mode, if you remove all labour, you can Save with no status — this CLEARS those days. The
-     button switches to a red "Clear labour on N days" and the status prompt notes it will clear the days.
-   - Adding labour still requires a status, exactly as before.
-
-Deploy over previous planning.js. No API change (uses existing set-day, which deletes an empty cell).
+Deploy this planning.js over the previous (broken) one.

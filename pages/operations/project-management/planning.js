@@ -56,6 +56,7 @@ export default function PlanningPage() {
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
   const [weekModal, setWeekModal] = useState(null)    // monday iso
   const [viewModal, setViewModal] = useState(false)   // historic viewer
+  const [clearing, setClearing] = useState(false)
   const dragging = useRef(false)
 
   async function load() {
@@ -156,7 +157,6 @@ export default function PlanningPage() {
     return false
   }
   // wipe the labour/contents of the selected cells (set-day with empty entries clears the cell)
-  const [clearing, setClearing] = useState(false)
   async function clearSelectionLabour() {
     if (!sel || !sel.dates.size) return
     if (!window.confirm(`Clear all labour from ${sel.dates.size} selected day${sel.dates.size === 1 ? '' : 's'}? This removes the allocations on those days.`)) return
