@@ -176,7 +176,7 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
 
   // One-way push to Live Project Tasks: create the task, keep its id, but no live sync.
   async function addTask() {
-    const task = { projectNo: f.projectNo, projectName: f.projectName, description: 'New task', assignee: '', closed: false, comments: '', attachments: [], sourceSrat: true }
+    const task = { projectNo: f.projectNo, projectName: f.projectName, description: '', assignee: '', closed: false, comments: '', attachments: [], sourceSrat: true }
     const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) }).then(r => r.json())
     if (res.id) {
       setTasks(ts => [{ ...task, id: res.id, createdAt: Date.now() }, ...ts])
@@ -240,7 +240,7 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
             {myTasks.length === 0 && <tr><td colSpan={4} style={{ ...td, color: '#aaa', fontSize: 12 }}>No tasks yet.</td></tr>}
             {myTasks.map(t => (
               <tr key={t.id} style={{ borderTop: '1px solid #f2f2f2', background: t.closed ? '#ecfdf5' : '#fff' }}>
-                <td style={td}><input value={t.description || ''} onChange={e => patchTask(t.id, { description: e.target.value })} placeholder="Describe the task" style={{ ...input, padding: '6px 8px' }} /></td>
+                <td style={td}><input value={t.description || ''} onChange={e => patchTask(t.id, { description: e.target.value })} placeholder="Insert task..." style={{ ...input, padding: '6px 8px' }} /></td>
                 <td style={td}>
                   <select value={t.assignee || ''} onChange={e => patchTask(t.id, { assignee: e.target.value })} style={{ ...input, padding: '6px 8px' }}>
                     <option value="">—</option>

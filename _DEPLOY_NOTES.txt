@@ -1,5 +1,14 @@
-OPS PROJECT FINANCIALS — full-bleed (no longer looks "inserted")
-  pages/operations/project-financials.js
-   - Removed the padded card container + rounded corners around the embed.
-   - The embed now sits edge-to-edge directly under the Ops nav (single 52px bar),
-     filling the window, so it reads as one continuous native page.
+PROJECT CONCERN + SRAT — placeholders + no accidental close
+
+  components/ProjectConcerns.js
+   - Meeting pop-out no longer closes when you click the dark backdrop — only the X (top)
+     or Save/Cancel (bottom) close it. Prevents losing everything by mis-clicking.
+   - New actions/risks are created EMPTY with greyed placeholders instead of literal text:
+       Action     -> "Insert action..."
+       Risk       -> "Insert risk..."
+       Mitigation -> "Insert mitigation..."
+  pages/operations/project-management/srat.js
+   - New SRAT task created empty with placeholder "Insert task...".
+  pages/api/tasks.js, pages/api/risks.js
+   - Allow creating a task/risk with an empty description (so the placeholder shows and the
+     record still links to Live Tasks / Risk Log). Fill it in inline.

@@ -244,7 +244,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
 
   // --- Meeting Actions <-> Live Tasks (two-way) ---
   async function addAction() {
-    const task = { projectNo, projectName, description: 'New action', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
+    const task = { projectNo, projectName, description: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
     const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) }).then(r => r.json())
     if (res.id) {
       const newTask = { ...task, id: res.id, createdAt: Date.now() }
@@ -268,7 +268,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
 
   // --- Add Risk -> Risk Log (two-way; new risks show live in project risk log) ---
   async function addRisk() {
-    const risk = { projectNo, projectName, description: 'New risk', mitigation: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
+    const risk = { projectNo, projectName, description: '', mitigation: '', assignee: '', closed: false, comments: '', attachments: [], sourceConcern: projectNo }
     const res = await fetch('/api/risks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ risk }) }).then(r => r.json())
     if (res.id) {
       setRisks(rs => [{ ...risk, id: res.id, createdAt: Date.now() }, ...rs])
@@ -291,8 +291,8 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
   const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 2vw', overflowY: 'auto' }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '3vh 2vw', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 28px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 2 }}>
           <h2 style={{ margin: 0, fontSize: 18, color: INK }}>Project Concern Meeting</h2>
@@ -372,7 +372,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
                 {myTasks.length === 0 && <tr><td colSpan={4} style={{ ...td, color: '#aaa', fontSize: 12 }}>No actions yet.</td></tr>}
                 {myTasks.map(t => (
                   <tr key={t.id} style={{ borderTop: '1px solid #f2f2f2', background: t.closed ? '#ecfdf5' : '#fff' }}>
-                    <td style={td}><input value={t.description || ''} onChange={e => patchTask(t.id, { description: e.target.value })} placeholder="Describe the action" style={{ ...input, padding: '6px 8px' }} /></td>
+                    <td style={td}><input value={t.description || ''} onChange={e => patchTask(t.id, { description: e.target.value })} placeholder="Insert action..." style={{ ...input, padding: '6px 8px' }} /></td>
                     <td style={td}>
                       <select value={t.assignee || ''} onChange={e => patchTask(t.id, { assignee: e.target.value })} style={{ ...input, padding: '6px 8px' }}>
                         <option value="">—</option>
@@ -406,8 +406,8 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
                 {projectRisks.length === 0 && <tr><td colSpan={3} style={{ ...td, color: '#aaa', fontSize: 12 }}>No risks logged for this project.</td></tr>}
                 {projectRisks.map(r => (
                   <tr key={r.id} style={{ borderTop: '1px solid #f2f2f2', background: r.closed ? '#ecfdf5' : '#fff' }}>
-                    <td style={td}><input value={r.description || ''} onChange={e => patchRisk(r.id, { description: e.target.value })} style={{ ...input, padding: '6px 8px' }} /></td>
-                    <td style={td}><input value={r.mitigation || ''} onChange={e => patchRisk(r.id, { mitigation: e.target.value })} style={{ ...input, padding: '6px 8px' }} /></td>
+                    <td style={td}><input value={r.description || ''} onChange={e => patchRisk(r.id, { description: e.target.value })} placeholder="Insert risk..." style={{ ...input, padding: '6px 8px' }} /></td>
+                    <td style={td}><input value={r.mitigation || ''} onChange={e => patchRisk(r.id, { mitigation: e.target.value })} placeholder="Insert mitigation..." style={{ ...input, padding: '6px 8px' }} /></td>
                     <td style={{ ...td, textAlign: 'center' }}>
                       <select value={r.closed ? 'yes' : 'no'} onChange={e => patchRisk(r.id, { closed: e.target.value === 'yes' })} style={{ ...input, padding: '6px 8px' }}>
                         <option value="no">No</option><option value="yes">Yes</option>

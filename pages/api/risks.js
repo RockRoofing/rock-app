@@ -56,7 +56,6 @@ export default async function handler(req, res) {
     if (!risk) return res.status(400).json({ error: 'Missing risk' })
     let risks = await getRisks()
     if (!risk.id) {
-      if (!risk.description) return res.status(400).json({ error: 'Description required' })
       risk.id = `man_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
       risk.source = 'manual'
       risk.createdAt = Date.now()
