@@ -313,16 +313,19 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
   let lastAlloc = null
   let historicNeedsActual = false
   let projectHasLabour = false
+  let projectHasNamedLabour = false
   const todayKey = iso(new Date())
   for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
     const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
     const cd = cellData(cell); if (cd.count > 0) projectHasLabour = true
+    if (cd.entries && cd.entries.length > 0) projectHasNamedLabour = true
     // any allocation strictly before today that is NOT marked actual -> needs confirming
     if (dk < todayKey) { if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
   }
   const overrun = complD && lastAlloc && lastAlloc > complD
-  // Project-level supervisor flag: live project has labour but no supervisor assigned in Project Details.
-  const noProjectSupervisor = p.type === 'live' && projectHasLabour && !p.siteSupervisor
+  // Project-level supervisor flag: live project with NAMED labour but no supervisor assigned in Project Details.
+  // (Never flags when there's no labour, or only unnamed/temporary labour.)
+  const noProjectSupervisor = p.type === 'live' && projectHasNamedLabour && !p.siteSupervisor
 
   async function saveMeta(nextStart, nextCompl) {
     await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: p.key, startDate: nextStart, completionDate: nextCompl }) }).catch(() => {})

@@ -3,7 +3,13 @@
 // Sections with sub-pages render a SECOND ROW of tabs underneath (like the
 // Sales Dashboard). Every sub-page has its own route.
 export const NAV = [
-  { key: 'forms', label: 'Forms', href: '/operations/forms' },
+  {
+    key: 'forms', label: 'Forms', href: '/operations/forms',
+    children: [
+      { key: 'forms:completed', label: 'Completed', href: '/operations/forms' },
+      { key: 'forms:missing', label: 'Missing', href: '/operations/forms-missing' },
+    ],
+  },
   { key: 'projects', label: 'Projects', href: '/operations/projects' },
   {
     key: 'pm', label: 'Project Management', href: '/operations/project-management/srat',

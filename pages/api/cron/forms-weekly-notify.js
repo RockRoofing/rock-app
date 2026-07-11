@@ -47,22 +47,47 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
     const nm = m.name || [m.firstName, m.lastName].filter(Boolean).join(' ')
     if (nm) emailByName[nm.toLowerCase()] = m.email || ''
   }
-  // supervisor roster emails
+  // roster emails + names + supervisor competency (in-date supervisor ticket from the H&S matrix)
   const roster = (await get('ops:operatives-roster')) || []
   const supEmailByName = {}
-  for (const o of roster) { const nm = `${o.firstName || ''} ${o.lastName || ''}`.trim(); if (nm) supEmailByName[nm.toLowerCase()] = o.email || '' }
+  const rosterNameById = {}
+  for (const o of roster) { const nm = `${o.firstName || ''} ${o.lastName || ''}`.trim(); if (nm) { supEmailByName[nm.toLowerCase()] = o.email || ''; rosterNameById[o.id] = nm } }
 
-  // per-project sorted allocated day list (only days with labour)
+  // Which roster opIds are qualified supervisors (in-date supervisor ticket)?
+  const [hsCols, hsData] = await Promise.all([
+    get('ops:hs-matrix-columns').then(v => v || []),
+    get('ops:hs-matrix-data').then(v => v || {}),
+  ])
+  const nowMid = new Date(); nowMid.setHours(0, 0, 0, 0)
+  const validCell = (cell) => cell && (cell.noExpiry || (cell.date && parseISO(cell.date) >= nowMid))
+  const supColIds = (hsCols || []).filter(c => ['internal supervisor', 'sssts', 'smsts', 'iosh managing safely'].some(m => (c.label || '').toLowerCase().includes(m))).map(c => c.id)
+  const isSupervisorOpId = (opId) => { const cols = hsData[`op:${opId}`] || {}; return supColIds.some(id => validCell(cols[id])) }
+
+  // per-project sorted allocated day list (only days with labour) + allocated named people
   const projMeta = {}
   for (const p of (ops || [])) {
     if ((p.status || 'active') !== 'active') continue
     const key = `L:${p.projectNo}`
-    const days = Object.entries(alloc[key] || {}).filter(([, c]) => cellCount(c) > 0).map(([dk]) => dk).sort()
+    const dayCells = Object.entries(alloc[key] || {}).filter(([, c]) => cellCount(c) > 0)
+    const days = dayCells.map(([dk]) => dk).sort()
+    // named opIds allocated to this project (across all days)
+    const allocOpIds = new Set()
+    for (const [, c] of dayCells) {
+      const entries = Array.isArray(c) ? c : (c.entries || [])
+      for (const e of entries) if (e.opId) allocOpIds.add(e.opId)
+    }
+    const detailsSup = p.data?.siteSupervisor || ''
+    // is the Details supervisor actually on the Gantt for this project?
+    const detailsSupOnGantt = detailsSup && [...allocOpIds].some(id => rosterNameById[id] && rosterNameById[id].toLowerCase() === detailsSup.toLowerCase())
+    // Gantt-allocated qualified supervisors (names)
+    const ganttSupNames = [...allocOpIds].filter(id => isSupervisorOpId(id)).map(id => rosterNameById[id]).filter(Boolean)
+    // Effective supervisor for notifications: Details sup if on the Gantt, else the first Gantt-allocated supervisor, else Details sup.
+    const effectiveSupervisor = detailsSupOnGantt ? detailsSup : (ganttSupNames[0] || detailsSup)
     projMeta[p.projectNo] = {
       projectNo: p.projectNo,
       name: p.data?.projectName || p.projectNo,
       cm: p.data?.contractsManager || '',
-      supervisor: p.data?.siteSupervisor || '',
+      supervisor: effectiveSupervisor,
       days,
     }
   }

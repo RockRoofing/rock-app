@@ -73,7 +73,7 @@ export default function SubmissionsPage() {
   }
 
   return (
-    <OperationsShell active="forms" title="Forms" wide>
+    <OperationsShell active="forms:completed" section="forms" title="Forms" wide>
       <PageHeading title="Forms" sub="Every form submitted from the Site App" />
 
       {/* Filter bar */}
