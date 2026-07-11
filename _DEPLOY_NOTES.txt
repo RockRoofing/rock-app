@@ -1,13 +1,23 @@
-PLANNING — Edit Labour Allocation
+PLANNING — PHASE 4 of 5: Weekly labour pop-out (PDF + per-operative email)
 
+NEW FILES
+  lib/weeklyLabourPdf.js            Two PDF builders: the full week grid (landscape) and a single
+                                    operative's own week (portrait, for the email attachment).
+  pages/api/planning-week.js        Assembles one week BY OPERATIVE: rows of {name,email,phone,company,
+                                    cells[7]} + daily totals. Only operatives allocated that week appear.
+  pages/api/planning-week-pdf.js    GET ?monday=YYYY-MM-DD -> the week grid PDF.
+  pages/api/planning-week-email.js  POST { monday } -> emails EACH operative their OWN week (HTML + a
+                                    one-page PDF attachment). Operatives without an email are skipped
+                                    and reported back.
+
+CHANGED
   pages/operations/project-management/planning.js
-   - New "Edit labour allocation" button in the selection action bar, positioned between
-     "Allocate labour →" and "Clear selection". It only appears when the selected cell(s) already
-     have labour allocated.
-   - Opens the same pop-up in EDIT mode: pre-loaded with everyone currently allocated across the
-     selected days (the union). You can remove people or add others. Saving sets that exact list on
-     every selected day (so removing someone takes them off those days; an empty list clears them).
-   - "Allocate labour" (add mode) is unchanged: it merges the chosen installers onto the days.
-   - Clash checking still applies in both modes.
+    - The W/C week headers are now CLICKABLE (👥 in day view). Click a week to open the Weekly Labour
+      Allocation pop-out: a per-operative grid (operatives down the side, Mon–Sun across, project in
+      each cell, weekends shaded, daily total installers row) — mirroring your spreadsheet.
+    - Buttons: Download PDF, and "Email each operative their week" (sends each person their own week).
 
-Deploy over the previous planning.js. No API change.
+Requires Resend env already set (RESEND_API_KEY + FORMS_FROM_EMAIL) — same as issues/report emails.
+Deploy over previous. Uses Phase 1 roster (for names/emails) + Phase 2 allocations.
+
+NEXT: Phase 5 = Forms split (Completed | Missing), driven by the Gantt allocations.

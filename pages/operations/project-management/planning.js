@@ -26,6 +26,7 @@ export default function PlanningPage() {
   // selection: { key, dates:Set<iso> }  — active drag project row
   const [sel, setSel] = useState(null)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
+  const [weekModal, setWeekModal] = useState(null)    // monday iso
   const dragging = useRef(false)
 
   async function load() {
@@ -187,10 +188,10 @@ export default function PlanningPage() {
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
               {view === 'day'
                 ? weekGroups.map((g, i) => (
-                  <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>
+                  <div key={i} onClick={() => setWeekModal(iso(g[0]))} title="Open weekly labour allocation" style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#8a6d1a', fontWeight: 600, cursor: 'pointer' }}>W/C {fmtDMY(g[0])} 👥</div>
                 ))
                 : weekGroups.map((g, i) => (
-                  <div key={i} style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>
+                  <div key={i} onClick={() => setWeekModal(iso(g[0]))} title="Open weekly labour allocation" style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#8a6d1a', fontWeight: 600, textAlign: 'center', cursor: 'pointer' }}>{fmtDMY(g[0])}</div>
                 ))
               }
             </div>
@@ -236,6 +237,7 @@ export default function PlanningPage() {
 
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
+      {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
     </OperationsShell>
   )
 }
@@ -341,6 +343,79 @@ const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
 const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
+
+// ── Weekly labour pop-out (per-operative grid) ──
+function WeekModal({ monday, onClose }) {
+  const [week, setWeek] = useState(null)
+  const [emailing, setEmailing] = useState(false)
+  const [msg, setMsg] = useState('')
+  useEffect(() => { fetch(`/api/planning-week?monday=${encodeURIComponent(monday)}`).then(r => r.json()).then(setWeek).catch(() => setWeek({ rows: [], days: [], dailyTotals: [] })) }, [monday])
+
+  const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  async function emailAll() {
+    if (!confirm('Email each operative their own week? This sends to everyone allocated this week who has an email address.')) return
+    setEmailing(true); setMsg('')
+    try {
+      const d = await fetch('/api/planning-week-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monday }) }).then(r => r.json())
+      setMsg(`Sent to ${d.sent} operative${d.sent === 1 ? '' : 's'}.${d.skipped?.length ? ` Skipped: ${d.skipped.join(', ')}.` : ''}`)
+    } catch { setMsg('Could not send.') }
+    setEmailing(false)
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Weekly Labour Allocation</div>
+            <div style={{ fontSize: 12, color: '#888' }}>{week ? `Week commencing ${parseISO(week.weekStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}` : 'Loading…'}</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: '16px 22px 22px' }}>
+          {!week ? <Loading /> : week.rows.length === 0 ? (
+            <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated this week.</div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820 }}>
+                <thead>
+                  <tr style={{ background: '#faf9f7' }}>
+                    <th style={{ ...wth, textAlign: 'left', minWidth: 150 }}>Operative</th>
+                    {week.days.map((dk, i) => <th key={i} style={{ ...wth, background: i >= 5 ? '#f3f1ec' : undefined, color: i >= 5 ? '#b91c1c' : '#444' }}>{DOWFULL[i]}<div style={{ fontSize: 9, color: '#aaa', fontWeight: 400 }}>{parseISO(dk).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</div></th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {week.rows.map(r => (
+                    <tr key={r.opId} style={{ borderTop: '1px solid #f0f0f0' }}>
+                      <td style={{ ...wtd, fontWeight: 600 }}>{r.name}{r.company ? <div style={{ fontSize: 10, color: '#aaa', fontWeight: 400 }}>{r.company}</div> : null}</td>
+                      {r.cells.map((c, i) => (
+                        <td key={i} style={{ ...wtd, textAlign: 'center', background: i >= 5 ? '#faf8f4' : undefined, fontSize: 11, color: c ? '#1e40af' : '#ddd' }}>
+                          {c ? c.entries.map((e, j) => <div key={j}>{e.projectName}{e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}</div>) : '—'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid #e6e2d8', background: '#faf9f7' }}>
+                    <td style={{ ...wtd, fontWeight: 700 }}>Total installers</td>
+                    {week.dailyTotals.map((t, i) => <td key={i} style={{ ...wtd, textAlign: 'center', fontWeight: 700 }}>{t || 0}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {msg && <div style={{ fontSize: 12.5, color: '#16a34a', marginTop: 12 }}>{msg}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
+            <button onClick={onClose} style={ghostBtn}>Close</button>
+            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(monday)}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
+            <button onClick={emailAll} disabled={emailing || !week || !week.rows.length} style={primaryBtn}>{emailing ? 'Sending…' : 'Email each operative their week'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+const wth = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#444', textAlign: 'center', borderBottom: '1px solid #eee' }
+const wtd = { padding: '7px 10px', fontSize: 12, color: '#333', verticalAlign: 'top' }
 
 // ── Allocate / edit labour for the selected dates ──
 function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, reloadOps }) {
