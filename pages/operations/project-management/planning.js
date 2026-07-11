@@ -465,6 +465,9 @@ function WeekModal({ monday, onClose }) {
         </div>
 
         <div style={{ padding: '14px 22px 22px' }}>
+          <div style={{ fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 8, padding: '9px 12px', marginBottom: 14 }}>
+            If this week is in the past it won't send to installers — it's only available to download as a PDF. Emails are sent for future dates only.
+          </div>
           {/* filters */}
           <div style={{ padding: 14, border: '1px solid #eee', background: '#faf9f7', borderRadius: 10, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
