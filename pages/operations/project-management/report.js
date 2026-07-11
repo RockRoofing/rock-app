@@ -197,23 +197,47 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         .filter(v => !v.instructed)
         .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: false, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
 
-      // Open issues for this project
-      // Only include issues that have been sent to the customer (or marked as sent).
-      // Exclude "do not send" and anything not yet sent.
-      const openIssues = (issR.issues || []).filter(i =>
-        i.projectNo === no && !i.resolvedDate &&
-        i.sendToCustomer !== 'nosend' &&
-        (i.sentToCustomer === true || i.sentManually === true)
+      // ── Issues ────────────────────────────────────────────────────────────
+      // Include issues (open OR closed) that have been SENT to the customer
+      // (or marked as sent), created since the last report, and NOT already
+      // included in a previous report for this project.
+      const sentToCustomer = (i) => i.sendToCustomer !== 'nosend' && (i.sentToCustomer === true || i.sentManually === true)
+      // ids of issues already captured on earlier reports for this project
+      const priorIssueIds = new Set()
+      for (const rep of (allReports || [])) {
+        if (rep.projectNo !== no || rep.id === id) continue
+        for (const s of (rep.issuesSnapshot || [])) if (s.id) priorIssueIds.add(s.id)
+      }
+      const lastCutoff = lastReportDate ? parseLocal(lastReportDate).getTime() : 0
+      const eligibleIssues = (issR.issues || []).filter(i =>
+        i.projectNo === no &&
+        sentToCustomer(i) &&
+        !priorIssueIds.has(i.id) &&
+        (i.createdAt || 0) >= lastCutoff
       )
-        .map(i => ({ id: i.id, dateCreated: i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '', issueName: i.issueName, issueTypes: [...(i.issueTypes || []), ...(i.issueOther ? ['Other'] : [])], requiredDate: i.requiredDate || '', status: 'Open' }))
+      const openIssues = eligibleIssues.map(i => ({
+        id: i.id,
+        dateCreated: i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '',
+        issueName: i.issueName,
+        issueTypes: [...(i.issueTypes || []), ...(i.issueOther ? ['Other'] : [])],
+        requiredDate: i.requiredDate || '',
+        status: i.resolvedDate ? 'Closed' : 'Open',
+      }))
 
-      // Photos from all submissions for this project, from last report date -> now
+      // ── Photos ────────────────────────────────────────────────────────────
+      // From all project submissions since the last report. For ISSUE photos
+      // (companion submissions tagged isIssue), only include if the linked issue
+      // was sent to the customer. Non-issue form photos are always included.
+      // Build a set of submissionIds belonging to sent issues, and of not-sent issues.
+      const sentIssueSubIds = new Set((issR.issues || []).filter(i => i.projectNo === no && sentToCustomer(i)).map(i => i.submissionId).filter(Boolean))
       const subsIndex = (subR.submissions || []).filter(s => (s.projectId === no || s.projectName === p?.name))
       const cutoff = lastReportDate ? parseLocal(lastReportDate).getTime() : 0
       const inWindow = subsIndex.filter(s => (s.submittedAt || 0) >= cutoff)
       const fulls = await Promise.all(inWindow.map(s => fetch(`/api/submissions?id=${s.id}`).then(r => r.json()).then(d => d.submission).catch(() => null)))
       const photos = []
       for (const sub of fulls.filter(Boolean)) {
+        // Skip issue-photo submissions unless the linked issue was sent to the customer.
+        if (sub.isIssue && !sentIssueSubIds.has(sub.id)) continue
         for (const v of Object.values(sub.answers || {})) {
           if (Array.isArray(v)) for (const u of v) if (typeof u === 'string' && /^https?:|^data:/.test(u)) photos.push(u)
         }
@@ -288,12 +312,12 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr style={{ background: '#faf9f7' }}><th style={{ ...th, fontSize: 11 }}>Date Created</th><th style={{ ...th, fontSize: 11 }}>Issue Name</th><th style={{ ...th, fontSize: 11 }}>Type</th><th style={{ ...th, fontSize: 11 }}>Required Resolution</th><th style={{ ...th, fontSize: 11 }}>Status</th></tr></thead>
           <tbody>
-            {(f.issuesSnapshot || []).length === 0 && <tr><td colSpan={5} style={{ ...td, color: '#aaa' }}>No open issues.</td></tr>}
+            {(f.issuesSnapshot || []).length === 0 && <tr><td colSpan={5} style={{ ...td, color: '#aaa' }}>No new issues sent to the customer since the last report.</td></tr>}
             {(f.issuesSnapshot || []).map((i, idx) => <tr key={idx} style={{ borderTop: '1px solid #f2f2f2' }}><td style={td}>{fmtDMY(i.dateCreated)}</td><td style={td}>{i.issueName}</td><td style={td}>{(i.issueTypes || []).join(', ')}</td><td style={td}>{fmtDMY(i.requiredDate)}</td><td style={td}>{i.status}</td></tr>)}
           </tbody>
         </table>
       </div>
-      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>Only issues sent to the customer (or marked as sent) are included; their full forms are appended at the end of the report PDF.</div>}
+      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>Issues sent to the customer since the last report (open or closed), excluding any already in a previous report. Full forms are appended at the end of the report PDF.</div>}
 
       <L req>Site communications</L>
       <textarea value={f.siteComms || ''} onChange={e => set({ siteComms: e.target.value })} style={{ ...input, minHeight: 100, resize: 'vertical' }} placeholder="Insert all discussions and occurrences that relate to Variations, H&S, Quality, Design, Delay and Disruption." />

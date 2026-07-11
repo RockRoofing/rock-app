@@ -1,13 +1,17 @@
-PROJECT REPORT — only include issues sent to the customer
+PROJECT REPORT — issue & photo rule refinements
 
-Rule applied: an issue is included in the report's Issues table AND appended (full form) ONLY if it has
-been sent to the customer OR marked as sent (sentToCustomer === true OR sentManually === true). Issues
-marked "No — Do not send" (sendToCustomer === 'nosend') and any not-yet-sent issues are excluded.
+PHOTOS:
+  - Issue photos are only included if the linked issue was SENT to the customer (or marked sent).
+  - Photos from issues marked "do not send", or with no send/do-not-send decision yet, are EXCLUDED.
+  - Non-issue form photos are unaffected (all included, since last report).
 
-  pages/operations/project-management/report.js   Issue auto-pull on project select now applies this filter.
-  pages/api/project-report-pdf.js                 Enforces the same filter when appending full forms (so
-                                                  even older saved reports won't append excluded issues).
-  lib/projectReportPdf.js                         The PDF's issues table renders only the included issues,
-                                                  so the table and appended forms always match.
+ISSUES TABLE + APPENDED FORMS (new logic):
+  - Include issues with OPEN or CLOSED status (previously open-only) that have been SENT to the customer.
+  - Only issues created since the last report for this project.
+  - EXCLUDE any issue already included in a previous report (each issue appears on one report only).
+  - Status column now shows Open/Closed correctly.
 
-Deploy over the previous versions.
+  pages/operations/project-management/report.js   All of the above applied in the project auto-pull.
+
+(PDF endpoint + PDF table already filter to sent issues and to the report's snapshot, so they stay
+consistent with the new rule. Deploy over the previous version; pairs with report-issues-sent-only.)
