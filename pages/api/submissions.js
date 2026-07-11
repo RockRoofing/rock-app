@@ -1,6 +1,6 @@
 import {
   getSubmissionIndex, saveSubmissionIndex,
-  getSubmission, saveSubmission,
+  getSubmission, saveSubmission, deleteSubmission,
 } from '../../lib/db'
 
 // Allow larger bodies (photos are URLs, but signatures/answers can add up).
@@ -78,6 +78,18 @@ export default async function handler(req, res) {
     } catch (e) {
       console.error('submission update failed:', e)
       return res.status(500).json({ error: `Update failed: ${e.message || 'server error'}` })
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id || (req.body && req.body.id)
+    if (!id) return res.status(400).json({ error: 'Missing id' })
+    try {
+      await deleteSubmission(id)
+      return res.json({ ok: true, id })
+    } catch (e) {
+      console.error('submission delete failed:', e)
+      return res.status(500).json({ error: `Delete failed: ${e.message || 'server error'}` })
     }
   }
 

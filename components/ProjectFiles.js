@@ -90,7 +90,7 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
               <div style={{ padding: '10px 12px', flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ fontSize: 13, color: INK, fontWeight: 600, wordBreak: 'break-word', lineHeight: 1.3 }}>{f.name}</div>
                 <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{fmtSize(f.size)} · {new Date(f.uploadedAt).toLocaleDateString('en-GB')}</div>
-                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   <button onClick={() => setPreview(f)} style={linkBtn}>View</button>
                   <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, textDecoration: 'none' }}>Download</a>
                   {!readOnly && <button onClick={() => del(f.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}

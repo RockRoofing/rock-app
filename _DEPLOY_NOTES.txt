@@ -1,20 +1,22 @@
-PROJECT FINANCIALS — EOM Report now shows budgets from the Budget Tracker
+PROJECT VIEW — three fixes
 
-  pages/commercial.js  (the page both Project Financials views iframe into)
+1) LAND ON PROJECT DETAILS
+   pages/operations/projects.js
+   - Opening a project now lands on the "Project Details" tab (was "Handover"). Applies to the View button,
+     the project-name link, and the default.
 
-  THE BUG
-   - In the EOM Report view, if a project had no valuation day set, the code blanked EVERY column ("—"),
-     including the static Budget columns (Lab/Mat/Total Budget) and AFA that are entered in the Budget
-     Tracker and don't depend on a valuation date. That's why budgets weren't "filtering through" — only
-     projects with a valuation date (e.g. J228) showed anything.
+2) EDIT + DELETE ON PROJECT FORMS (and both Forms pages stay in sync)
+   lib/db.js            - new deleteSubmission(id): removes the submission key + its index entry.
+   pages/api/submissions.js - new DELETE /api/submissions?id=... (edit already existed via PUT).
+   pages/operations/projects.js (Project Forms tab) - each row now has "View / Edit" and a red "Delete".
+   pages/operations/forms.js (main Forms page)      - each row now has "View / Edit" and a red "Delete".
+   - Both pages read/write the SAME submissions store, so deleting in either place removes it from both.
+     Editing uses the existing submission modal (saves via PUT).
 
-  THE FIX
-   - AFA and the three Budget columns now always render their Budget-Tracker values in EOM, regardless of
-     whether a valuation date is set (unset budgets still show the "⚠ Set" prompt, as in the Tracker).
-   - Only the genuine "to val. date" figures (spend, remaining, profit, WIP, and the derived "left"
-     columns) show "—" when a project has no valuation day — which is correct, since they can't be
-     computed without one.
+3) DRAWINGS DELETE BUTTON CLIPPED
+   components/ProjectFiles.js
+   - The View / Download / Delete row on each drawing/file card now wraps (flexWrap) with a slightly
+     smaller gap, so the Delete button is no longer pushed out of view on narrow cards. (Affects Drawings
+     and any other ProjectFiles-based file grid.)
 
-  To also see spend/profit/WIP to date for a project in EOM, set its valuation day (as before).
-
-Deploy over previous pages/commercial.js. No API change.
+Deploy all five. No cron/env change.

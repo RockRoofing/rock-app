@@ -132,7 +132,10 @@ export default function SubmissionsPage() {
                     <td style={td}>{s.flagCount > 0
                       ? <span style={{ background: '#fef3c7', color: '#92400e', fontWeight: 600, borderRadius: 20, padding: '2px 10px', fontSize: 12 }}>⚠ {s.flagCount}</span>
                       : <span style={{ color: '#bbb' }}>—</span>}</td>
-                    <td style={td}><button onClick={() => openSub(s.id, setOpen)} style={linkBtn}>View</button></td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <button onClick={() => openSub(s.id, setOpen)} style={linkBtn}>View / Edit</button>
+                      <button onClick={() => deleteSub(s, setSubs)} style={{ ...linkBtn, color: '#dc2626', marginLeft: 12 }}>Delete</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -156,6 +159,15 @@ export default function SubmissionsPage() {
 
 async function openSub(id, setOpen) {
   try { const r = await fetch(`/api/submissions?id=${id}`); const d = await r.json(); setOpen(d.submission) } catch {}
+}
+
+async function deleteSub(s, setSubs) {
+  if (!window.confirm(`Delete this "${s.formTitle}" submission? This removes it from the Forms page and the project's Project Forms tab. This cannot be undone.`)) return
+  try {
+    const r = await fetch(`/api/submissions?id=${s.id}`, { method: 'DELETE' })
+    if (!r.ok) throw new Error('failed')
+    setSubs(prev => prev.filter(x => x.id !== s.id))
+  } catch { window.alert('Could not delete the submission.') }
 }
 
 function SubModal({ sub, labels, onClose }) {

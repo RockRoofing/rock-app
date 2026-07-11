@@ -25,7 +25,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [openNo, setOpenNo] = useState(null)   // project detail open
-  const [sub, setSub] = useState('handover')
+  const [sub, setSub] = useState('details')
   const [manual, setManual] = useState(null)   // manual-add modal
   const [team, setTeam] = useState([])
 
@@ -173,9 +173,9 @@ export default function ProjectsPage() {
             <tbody>
               {filtered.map(p => (
                 <tr key={p.projectNo} style={{ borderTop: '1px solid #f0f0f0' }}>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => { setOpenNo(p.projectNo); setSub('handover') }} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>View</button></td>
+                  <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => { setOpenNo(p.projectNo); setSub('details') }} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>View</button></td>
                   <td style={{ ...td, whiteSpace: 'nowrap' }}><strong>{p.projectNo}</strong>{p.manual && <span title="Manually added" style={{ marginLeft: 6, fontSize: 10, color: '#aaa' }}>manual</span>}</td>
-                  <td style={td}><button onClick={() => { setOpenNo(p.projectNo); setSub('handover') }} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontWeight: 600, padding: 0, textAlign: 'left' }}>{p.projectName || '—'}</button></td>
+                  <td style={td}><button onClick={() => { setOpenNo(p.projectNo); setSub('details') }} style={{ background: 'none', border: 'none', color: GOLD, cursor: 'pointer', fontWeight: 600, padding: 0, textAlign: 'left' }}>{p.projectName || '—'}</button></td>
                   <td style={td}>{p.contractsManager || '—'}</td>
                   <td style={td}>{p.estimator || '—'}</td>
                   <td style={td}>{p.quantitySurveyor || '—'}</td>
@@ -489,6 +489,16 @@ function ProjectSubmissions({ projectNo }) {
     setOpen(s); setFull(null)
     try { const r = await fetch(`/api/submissions?id=${s.id}`); const d = await r.json(); setFull(d.submission) } catch {}
   }
+  async function deleteSub(s) {
+    if (!window.confirm(`Delete this "${s.formTitle}" submission? This removes it from Project Forms and the main Forms page. This cannot be undone.`)) return
+    try {
+      const r = await fetch(`/api/submissions?id=${s.id}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error('failed')
+      setSubs(prev => prev.filter(x => x.id !== s.id))
+      setSel(prev => { const n = { ...prev }; delete n[s.id]; return n })
+      if (open && open.id === s.id) { setOpen(null); setFull(null) }
+    } catch { window.alert('Could not delete the submission.') }
+  }
   function toggle(id) { setSel(p => ({ ...p, [id]: !p[id] })) }
   const selIds = Object.keys(sel).filter(k => sel[k])
 
@@ -527,7 +537,10 @@ function ProjectSubmissions({ projectNo }) {
                   <td style={td}><strong style={{ color: INK }}>{s.formTitle}</strong></td>
                   <td style={td}>{s.operative || '—'}</td>
                   <td style={{ ...td, color: '#999', whiteSpace: 'nowrap' }}>{fmtDateTime(s.submittedAt)}</td>
-                  <td style={{ ...td, textAlign: 'right' }}><button onClick={() => openSub(s)} style={linkBtn}>View</button></td>
+                  <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button onClick={() => openSub(s)} style={linkBtn}>View / Edit</button>
+                    <button onClick={() => deleteSub(s)} style={{ ...linkBtn, color: '#dc2626', marginLeft: 12 }}>Delete</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
