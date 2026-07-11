@@ -1,11 +1,21 @@
-PLANNING — current-week + today markers, past-editing note
+PLANNING — fix: can't edit existing/historic allocations + marker tweaks
 
   pages/operations/project-management/planning.js
-   1) THICK BLUE LINE down the LEFT edge of the current week's Monday cell (start of the W/C we're in).
-   2) THIN DARK-GREEN lines on BOTH the left and right edges of TODAY's cell.
-   3) Both added to the colour key.
-   4) Past days ARE editable — they're just only visible when "Historic" is on (now last 2 weeks).
-      Footer help text updated to say so. Select past cells -> Edit labour allocation -> (optionally set
-      Actual) -> Save. No code change was blocking past edits; the markers make "today" obvious now.
+
+  BUG FIX (the real cause of "no way to edit historic/existing allocations"):
+    The "Edit labour allocation" button is shown when the selected cells already have labour. That check
+    used (cell || []).length — but cells are now stored as objects { status, unnamed, entries }, so
+    .length was undefined and the button NEVER appeared for any allocation saved in the new format.
+    Fixed to use cellData(cell).count. Now selecting any cell(s) with labour (past OR future) shows
+    "Edit labour allocation", which opens the pop-up pre-loaded with the current people/headcount/status.
+    (Historic editing works once "Historic" is toggled on so past days are visible.)
+
+  MARKERS (per request):
+    - Removed the blue current-week (W/C) line.
+    - Today marker is now a single dark-green line on the RIGHT of today's cell only.
+    - Legend updated to match.
 
 Deploy over previous planning.js. No API change.
+
+TO EDIT PAST LABOUR: toggle "Historic" (shows last 2 weeks) -> select the past cell(s) -> click
+"Edit labour allocation" -> change people/headcount, and set "Actual" if the dates have passed -> Save.

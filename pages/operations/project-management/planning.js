@@ -148,7 +148,7 @@ export default function PlanningPage() {
   const selectionHasLabour = () => {
     if (!sel || !sel.dates.size) return false
     const days3 = data.allocations[sel.key] || {}
-    for (const dk of sel.dates) if ((days3[dk] || []).length) return true
+    for (const dk of sel.dates) if (cellData(days3[dk]).count > 0) return true
     return false
   }
 
@@ -208,8 +208,7 @@ export default function PlanningPage() {
         <Legend c={C_UNNAMED} label="Provisional — labour not confirmed (unnamed)" />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: 14 }}>3</span> past contracted completion</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#ea580c' }}>⚑</span> historic needs confirming</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 4, height: 14, background: '#2563eb', display: 'inline-block' }} /> start of this week</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 14, border: '2px solid #15803d', display: 'inline-block' }} /> today</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 4, height: 14, background: '#15803d', display: 'inline-block' }} /> today</span>
       </div>
 
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
@@ -280,7 +279,6 @@ export default function PlanningPage() {
 function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCellDown, onCellEnter, onSaveMeta }) {
   const meta = data.meta[p.key] || {}
   const _today = new Date(); const todayCellKey = iso(_today)
-  const thisMondayKey = iso(mondayOf(_today))
   const [start, setStart] = useState(meta.startDate || '')
   const [compl, setCompl] = useState(meta.completionDate || '')
   useEffect(() => { setStart(meta.startDate || ''); setCompl(meta.completionDate || '') }, [meta.startDate, meta.completionDate])
@@ -332,23 +330,21 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
           const pastCompl = complD && d > complD && n > 0
           const selected = selDates && selDates.has(key)
           const col = n ? cellColours(cd) : null
-          const isThisMonday = key === thisMondayKey
           const isToday = key === todayCellKey
-          // Layer markers via box-shadow insets (order: base status edge, then today green L+R, then this-week blue left)
+          // Layer markers via box-shadow insets (base status edge, then today's green right line)
           const shadows = []
           if (isCompl) shadows.push('inset -2px 0 0 0 #dc2626')
           else if (col) shadows.push(`inset 0 -3px 0 0 ${col.edge}`)
-          if (isToday) shadows.push('inset 2px 0 0 0 #15803d', 'inset -2px 0 0 0 #15803d')
-          if (isThisMonday) shadows.push('inset 4px 0 0 0 #2563eb')
+          if (isToday) shadows.push('inset -2px 0 0 0 #15803d')
           return (
             <div key={i}
               onMouseDown={() => onCellDown(p.key, d)}
               onMouseEnter={() => onCellEnter(p.key, d)}
-              title={isToday ? 'Today' : (isThisMonday ? 'Start of this week' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')))}
+              title={isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : ''))}
               style={{
                 width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
                 background: selected ? '#fde68a' : (col ? col.bg : (we ? '#f3f1ec' : '#fff')),
-                borderLeft: (!isThisMonday && d.getDay() === 1 ? '2px solid #d9d5cc' : (isThisMonday ? 'none' : '1px solid #f5f5f5')),
+                borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: shadows.length ? shadows.join(', ') : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: pastCompl ? 14 : 12, fontWeight: 700,
