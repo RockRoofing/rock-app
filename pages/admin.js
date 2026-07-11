@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 
-import { ROLES, ROLE_LABEL as roleLabel } from '../lib/roles'
+import { ROLES, ROLE_LABEL as roleLabel, normRole } from '../lib/roles'
 // Fixed job roles (descriptive) — matches the old Team Members list plus the
 // roles the IHM/Pre-Start dropdowns need.
 const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Sales Manager', 'Director', 'Other']
@@ -89,7 +89,7 @@ export default function AdminPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Portal Users</h1>
-              <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Standard · Management · Admin.</div>
+              <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Pre-Contract · Post-Contract · Management · Admin.</div>
             </div>
             <button onClick={() => { setNotice(''); setErr(''); setForm({ firstName: '', lastName: '', email: '', phone: '', jobRole: '', role: 'post-contract', active: true }) }} style={btn}>+ Add user</button>
           </div>
@@ -110,7 +110,7 @@ export default function AdminPage() {
                       <td style={td}><span style={{ background: u.role === 'admin' ? '#fef3c7' : u.role === 'management' ? '#fff1f2' : '#f3f4f6', color: u.role === 'admin' ? '#92400e' : u.role === 'management' ? '#be123c' : '#555', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>{roleLabel[u.role] || u.role}</span>{u.mustResetPassword && <span style={{ marginLeft: 6, fontSize: 11, color: '#ca8a04' }}>temp pw</span>}</td>
                       <td style={td}>{u.active === false ? <span style={{ color: '#bbb' }}>Inactive</span> : <span style={{ color: '#16a34a' }}>Active</span>}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => { setNotice(''); setErr(''); setForm({ ...u }) }} style={link}>Edit</button>
+                        <button onClick={() => { setNotice(''); setErr(''); setForm({ ...u, role: normRole(u.role) }) }} style={link}>Edit</button>
                         <button onClick={() => resetPassword(u)} style={link}>Reset password</button>
                         {u.id !== me.id && <button onClick={() => del(u.id)} style={{ ...link, color: '#dc2626' }}>Delete</button>}
                       </td>
@@ -139,7 +139,7 @@ export default function AdminPage() {
                 {JOB_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <Lbl>Access level</Lbl>
-              <select value={form.role || 'standard'} onChange={e => setForm({ ...form, role: e.target.value })} style={inp}>
+              <select value={normRole(form.role)} onChange={e => setForm({ ...form, role: e.target.value })} style={inp}>
                 {ROLES.map(r => <option key={r} value={r}>{roleLabel[r]}</option>)}
               </select>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 14 }}>
