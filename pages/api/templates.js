@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getTemplate, saveTemplate } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { PRESTART_SECTIONS } from '../../lib/preStartSchema'
@@ -26,6 +27,7 @@ export default async function handler(req, res) {
     return res.json({ key, sections: stored?.sections || DEFAULTS[key], isCustom: !!stored })
   }
   if (req.method === 'POST') {
+    if (!requireRole(req, res, ['admin'])) return;
     const me = currentUser(req)
     if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' })
     const { key, sections } = req.body || {}

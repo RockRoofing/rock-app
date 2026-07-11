@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getCachedProjects } from '../../lib/db'
 
 async function getRedis() {
@@ -25,6 +26,7 @@ function monthKey(date) {
 }
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 

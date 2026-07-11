@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { LABOUR_ACCOUNTS, COST_OF_SALE_ACCOUNTS, extractJobNoFromDescription } from '../../lib/xero'
 
 async function getRedis() {
@@ -59,6 +60,7 @@ function parseCSVLine(line) {
 }
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
   try {

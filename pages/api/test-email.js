@@ -1,4 +1,6 @@
+import { requireRole } from '../../lib/portalAuth'
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['admin'])) return;
   const RESEND_KEY = process.env.RESEND_API_KEY
   const ALERT_EMAIL = process.env.ALERT_EMAIL
 

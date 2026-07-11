@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getProject } from '../../lib/db'
 
 export const config = {
@@ -52,6 +53,7 @@ function excelDateToString(val) {
 }
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
   try {

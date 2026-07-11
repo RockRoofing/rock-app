@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getOpsUsers, saveOpsUsers } from '../../lib/db'
 
 // Operative users for forms.rockroofing.co.uk.
@@ -80,6 +81,7 @@ const strip = (u) => { const { pin, ...rest } = u; return rest }
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
+    if (!requireRole(req, res, ['admin'])) return;
     const users = await getOpsUsers()
     return res.json({ users: users.map(strip) })
   }
@@ -152,6 +154,7 @@ export default async function handler(req, res) {
 
     // ── Admin resets a user's PIN to a new temp PIN ───────────────────────
     if (body.action === 'reset-pin') {
+      if (!requireRole(req, res, ['admin'])) return;
       const idx = users.findIndex(u => u.id === body.id)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })
       const tempPin = genPin(users)
@@ -162,6 +165,7 @@ export default async function handler(req, res) {
     }
 
     // ── Create / update a user ────────────────────────────────────────────
+    if (!requireRole(req, res, ['admin'])) return;
     const { user } = body
     if (!user || !user.firstName || !user.lastName) return res.status(400).json({ error: 'Missing name' })
 
@@ -203,6 +207,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'DELETE') {
+    if (!requireRole(req, res, ['admin'])) return;
     const { id } = req.body || {}
     let users = await getOpsUsers()
     users = users.filter(u => u.id !== id)

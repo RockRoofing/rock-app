@@ -1,7 +1,9 @@
+import { requireRole } from '../../lib/portalAuth'
 import { saveCachedDeals, saveLastSync, saveFieldMap, getCachedDeals } from '../../lib/db'
 import { fetchAllDeals, discoverFieldMap } from '../../lib/pipedrive'
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
   try {
     // Always refresh fields on every sync

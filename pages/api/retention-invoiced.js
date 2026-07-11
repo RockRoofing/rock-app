@@ -1,6 +1,8 @@
+import { requireRole } from '../../lib/portalAuth'
 import { get, set } from '../../lib/db'
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   if (req.method === 'GET') {
     const data = await get('commercial:retention_invoiced') || {}
     return res.json({ data })

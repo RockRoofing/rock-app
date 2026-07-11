@@ -1,6 +1,8 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getCachedDeals, getLastSync } from '../../lib/db'
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const deals = await getCachedDeals() || []
   const lastSync = await getLastSync()
 

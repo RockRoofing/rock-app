@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 async function getRedis() {
   try {
     const { Redis } = await import('@upstash/redis')
@@ -9,6 +10,7 @@ async function getRedis() {
 }
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
   const redis = await getRedis()
   if (redis) {

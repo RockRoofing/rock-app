@@ -1,6 +1,39 @@
-PROJECT CONCERN — banner re-evaluates when next-meeting date/time changes
-  components/ProjectConcerns.js
-   - On save, if the next-meeting date OR time differs from the previous saved values,
-     any earlier banner dismissal is cleared automatically. So changing the date (incl. to a
-     past date) re-shows the banner and correctly flags red "…has now passed."
-   - A dismissal (×) still sticks while the date is unchanged (as requested).
+FOUR-ROLE RESTRUCTURE + SERVER-SIDE ENFORCEMENT
+
+NEW ROLES: pre-contract, post-contract, management, admin
+  Existing 'standard' users are automatically treated as post-contract (no migration
+  needed — normRole() maps them at runtime everywhere). Editing them in Admin shows
+  "Standard — Post-Contract".
+
+ACCESS MAP (areas each role can see):
+  pre-contract        : Pre-Contract, Lessons Learnt, HR
+  post-contract       : Commercial, Operations, Lessons Learnt, HR
+  management          : all of the above + Management + Admin area (NOT Business Financials)
+  admin               : everything, including Business Financials
+
+FILES
+  lib/roles.js                 NEW — single source of truth: ROLES, ROLE_LABEL, normRole,
+                               AREA_ACCESS, canAccessArea, hasRole.
+  lib/portalAuth.js            + getSessionFromReq(req) and requireRole(req,res,allowed) guard helper.
+  pages/index.js               Portal cards now filtered by canAccessArea(role, area).
+                               NEW "Business Financials" card (Admin-only, stub — page to be built later).
+  pages/admin.js               User dropdown now offers the 4 roles (labels from lib/roles).
+                               New users default to post-contract.
+
+SERVER-SIDE API GUARDS (client gating is backed by real server checks now):
+  Admin only:            clear-cache, reset-backfill, reset-costs, debug, test-email,
+                         test-storage, templates (SAVE/POST only — GET stays open for IHM/Pre-Start),
+                         ops-users (list GET + create + reset-pin + delete; operative LOGIN/set-pin stay open)
+  Management + Admin:    upload-bills, upload-invoices, upload-transactions, sync
+  Post-Contract+ (view): commercial-metrics, deals, deal-raw, retention, retention-invoiced,
+                         wip-by-month, wip-calculate, negotiating, targets, stages
+
+DELIBERATELY LEFT OPEN (used by the Site App / operational, no session):
+  dashboard, forms, ops-docs, ops-projects, project-files, submissions, team (GET),
+  upload-file, staff (project team assignment — operational), and all day-to-day ops
+  endpoints (tasks, risks, srats, concerns, procurement, deliveries, contacts, etc.)
+
+IMPORTANT — TEST PER ROLE AFTER DEPLOY:
+  Log in as each role and confirm: correct cards show; financial pages work for post-contract+
+  but 403 for pre-contract; admin area only for admin; Site App operative login still works.
+  If any legitimate feature returns "You do not have access", tell me which endpoint and role.

@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getCachedDeals } from '../../lib/db'
 
 // Returns all Pipedrive deals currently sitting in the Negotiating stage.
@@ -6,6 +7,7 @@ import { getCachedDeals } from '../../lib/db'
 //
 // GET /api/negotiating -> { deals: [...], count, totalValue }
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   try {
     const all = (await getCachedDeals()) || []
     const deals = all

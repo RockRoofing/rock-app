@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 
-const ROLES = ['standard', 'management', 'admin']
-const roleLabel = { standard: 'Standard', management: 'Management', admin: 'Admin' }
+import { ROLES, ROLE_LABEL as roleLabel } from '../lib/roles'
 // Fixed job roles (descriptive) — matches the old Team Members list plus the
 // roles the IHM/Pre-Start dropdowns need.
 const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Sales Manager', 'Director', 'Other']
@@ -92,7 +91,7 @@ export default function AdminPage() {
               <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Portal Users</h1>
               <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Standard · Management · Admin.</div>
             </div>
-            <button onClick={() => { setNotice(''); setErr(''); setForm({ firstName: '', lastName: '', email: '', phone: '', jobRole: '', role: 'standard', active: true }) }} style={btn}>+ Add user</button>
+            <button onClick={() => { setNotice(''); setErr(''); setForm({ firstName: '', lastName: '', email: '', phone: '', jobRole: '', role: 'post-contract', active: true }) }} style={btn}>+ Add user</button>
           </div>
 
           {notice && <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14, display: 'flex', justifyContent: 'space-between' }}><span>{notice}</span><button onClick={() => setNotice('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#065f46' }}>×</button></div>}

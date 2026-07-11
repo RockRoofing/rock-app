@@ -1,3 +1,4 @@
+import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories, fetchBillsByCategory, fetchLabourJournalsByCategory } from '../../lib/xero'
 
@@ -6,6 +7,7 @@ export const config = {
 }
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
 
   const { month } = req.body

@@ -1,6 +1,8 @@
+import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
 
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['admin'])) return;
   try {
     // Try both key formats
     const withUnderscore = await get('value_changes_all')

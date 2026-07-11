@@ -1,4 +1,6 @@
+import { requireRole } from '../../lib/portalAuth'
 export default async function handler(req, res) {
+  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
   const KEY = process.env.PIPEDRIVE_API_KEY || process.env.Pipedrive_API_Key
   const { id } = req.query
   if (!id) return res.status(400).json({ error: 'Need ?id=dealId' })

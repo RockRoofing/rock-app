@@ -1,8 +1,7 @@
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
-
-const ROLE_RANK = { standard: 1, management: 2, admin: 3 }
+import { canAccessArea } from '../lib/roles'
 
 const departments = [
   {
@@ -108,6 +107,23 @@ const departments = [
       </svg>
     ),
   },
+  {
+    key: 'business-financials',
+    label: 'Business Financials',
+    description: 'Company P&L, overheads & turnover (Admin only) — coming soon',
+    href: null,
+    color: '#0f766e',
+    lightColor: '#f0fdfa',
+    borderColor: '#99f6e4',
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <rect x="7" y="7" width="26" height="26" rx="3" stroke="#0f766e" strokeWidth="2" fill="none"/>
+        <line x1="14" y1="26" x2="14" y2="18" stroke="#0f766e" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1="20" y1="26" x2="20" y2="13" stroke="#0f766e" strokeWidth="2.5" strokeLinecap="round"/>
+        <line x1="26" y1="26" x2="26" y2="21" stroke="#0f766e" strokeWidth="2.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
 ]
 
 export default function Portal() {
@@ -126,8 +142,7 @@ export default function Portal() {
     router.replace('/login')
   }
 
-  const rank = user ? (ROLE_RANK[user.role] || 1) : 0
-  const visible = departments.filter(d => !d.minRole || rank >= (ROLE_RANK[d.minRole] || 1))
+  const visible = departments.filter(d => user && canAccessArea(user.role, d.key))
 
   return (
     <>
