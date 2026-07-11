@@ -1,21 +1,15 @@
-PLANNING — fix: can't edit existing/historic allocations + marker tweaks
+PLANNING — darker Actual, Send WLA button, stacked multi-week send pop-out
 
   pages/operations/project-management/planning.js
+   1) ACTUAL cells are now a darker/medium green (#4ade80) — clearly darker than Confirmed, lighter than
+      the dark-green status line.
+   2) Removed the small download button / click-to-open from the W/C column headers (now plain labels).
+   3) New "Send Weekly Labour Allocation" button top-right (in the controls row).
+   4) Clicking it opens a pop-out that IS the send flow:
+        - Filters at the top: how far ahead (1/2/3/4 weeks) + per-operative de-select (untick people).
+        - Below, one table PER WEEK, stacked: "This week" on top, "Week +1" below, "Week +2" below that,
+          etc. Each shows the per-operative grid + daily totals + colour key.
+        - Buttons: Download PDF (this week) and "Send to operatives" (emails future-only allocations
+          across the selected number of weeks to the ticked operatives).
 
-  BUG FIX (the real cause of "no way to edit historic/existing allocations"):
-    The "Edit labour allocation" button is shown when the selected cells already have labour. That check
-    used (cell || []).length — but cells are now stored as objects { status, unnamed, entries }, so
-    .length was undefined and the button NEVER appeared for any allocation saved in the new format.
-    Fixed to use cellData(cell).count. Now selecting any cell(s) with labour (past OR future) shows
-    "Edit labour allocation", which opens the pop-up pre-loaded with the current people/headcount/status.
-    (Historic editing works once "Historic" is toggled on so past days are visible.)
-
-  MARKERS (per request):
-    - Removed the blue current-week (W/C) line.
-    - Today marker is now a single dark-green line on the RIGHT of today's cell only.
-    - Legend updated to match.
-
-Deploy over previous planning.js. No API change.
-
-TO EDIT PAST LABOUR: toggle "Historic" (shows last 2 weeks) -> select the past cell(s) -> click
-"Edit labour allocation" -> change people/headcount, and set "Actual" if the dates have passed -> Save.
+Deploy over previous planning.js. No API change (uses existing planning-week / -email / -pdf).
