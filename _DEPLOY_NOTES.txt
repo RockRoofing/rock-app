@@ -1,30 +1,15 @@
-FORMS — revised due-logic (notifications + Missing dashboard kept in sync)
+WATER INGRESS — status colour scheme + historic flag
 
-How items clear on the Missing dashboard:
-  An item flips Missing -> Completed when a matching Site App submission arrives for that job/project within
-  that form's week (site diaries match the specific day; others match the week). It's driven by real
-  submissions, not manual ticking.
+  pages/operations/project-management/planning.js
+   - Water Ingress day cells now use the SAME colour scheme as project rows: any unnamed slot -> orange;
+     otherwise Actual = medium green, Provisional = blue, Confirmed = light green, with the status edge bar.
+     The day's combined status is derived from its visits (all-Actual -> Actual; any Provisional ->
+     Provisional; else Confirmed; any unnamed -> orange).
+   - ⚑ "historic needs confirming" flag now shows on the Water Ingress row label when a past day has
+     visits not yet marked Actual (matches the project rows).
 
-Rule changes (applied to BOTH the Monday cron and the Missing dashboard so they agree):
+  WLA / email: Water Ingress visits are ALREADY included in the Weekly Labour Allocation (table, PDF and
+  installer email) as "💧 <job name>" with their address — this shipped in the previous water-ingress drop,
+  no change needed here.
 
-  PRE-START (CM)
-   - Now triggers when a project STARTS or RETURNS to site within 14 CALENDAR DAYS of the Monday (was
-     "within 3 working days"). Email is titled "Up and coming projects that require a Pre-Start
-     Notification".
-
-  DAILY SITE DIARY (Supervisor)
-   - Email now lists the PROJECTS that need a site diary that week (was a count). Dashboard still tracks one
-     per allocated day. Goes to the effective supervisor (Gantt-allocated supervisor takes priority over the
-     Project Details one; if two, the first is used).
-
-  WORKS AREA HANDOVER (Supervisor)
-   - Now triggers when a finish day is followed by a gap of 5+ CALENDAR DAYS before the next visit (covers
-     "finishes Friday, not back by the following Wednesday"), and also at project end (no next visit). Was
-     "week of the last allocated day".
-
-  START ON SITE CHECKLIST (Supervisor) — unchanged (week of the first allocated day).
-
-  One combined email per supervisor still covers all their required forms (Start on Site + Site Diaries +
-  WAH). CMs get their own Pre-Start email.
-
-Deploy both over previous. No cron/env change.
+Deploy over previous planning.js. No API change.

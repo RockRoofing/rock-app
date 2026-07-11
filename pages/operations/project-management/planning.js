@@ -414,12 +414,34 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
 // ── Water Ingress row: one permanent row; each day shows total headcount across all WI visits ──
 function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
   const wi = data.waterIngress || {}
+  const todayKey = iso(new Date())
   const headcount = (dk) => (wi[dk] || []).reduce((s, v) => s + (v.entries ? v.entries.length : 0) + (Number(v.unnamed) || 0), 0)
   const visitCount = (dk) => (wi[dk] || []).length
+  // Combined status for a day's visits -> use the shared cellColours scheme.
+  const dayCellData = (dk) => {
+    const visits = wi[dk] || []
+    let unnamed = 0, hasProvisional = false, allActual = visits.length > 0, hasAny = false
+    for (const v of visits) {
+      unnamed += Number(v.unnamed) || 0
+      const named = (v.entries || []).length
+      if (named > 0 || (Number(v.unnamed) || 0) > 0) hasAny = true
+      if (v.status === 'provisional') hasProvisional = true
+      if (v.status !== 'actual') allActual = false
+    }
+    const status = allActual ? 'actual' : (hasProvisional ? 'provisional' : 'confirmed')
+    return { status, unnamed, hasAny }
+  }
+  // ⚑ historic-needs-confirming: a past day with visits not all marked Actual.
+  let historicNeedsActual = false
+  for (const [dk, visits] of Object.entries(wi)) {
+    if (dk < todayKey && (visits || []).some(v => v.status !== 'actual' && ((v.entries || []).length > 0 || (Number(v.unnamed) || 0) > 0))) historicNeedsActual = true
+  }
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
       <Frozen w={NAME_W} left={0} style={{ background: '#f2f8fc', flexDirection: 'column', justifyContent: 'center', display: 'flex' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0e5a8a' }}>💧 Water Ingress</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0e5a8a' }}>
+          {historicNeedsActual && <span title="Historic water-ingress dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}💧 Water Ingress
+        </div>
         <div style={{ fontSize: 10, color: '#7799aa' }}>Reactive visits — job name & address per allocation</div>
       </Frozen>
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
@@ -427,11 +449,14 @@ function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
       {view === 'day'
         ? days.map((d, i) => {
           const dk = iso(d); const n = headcount(dk); const vc = visitCount(dk); const we = isWeekend(d)
+          const col = n ? cellColours(dayCellData(dk)) : null
+          const shadows = col ? [`inset 0 -3px 0 0 ${col.edge}`] : []
           return (
             <div key={i} onClick={() => onOpenDay(dk)} title={vc ? `${vc} water-ingress job${vc === 1 ? '' : 's'} — click to view/edit` : 'Click to add a water-ingress visit'}
               style={{ width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: n ? '#cdeafe' : (we ? '#f3f1ec' : '#fff'), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
-                fontSize: 12, fontWeight: 700, color: n ? '#0e5a8a' : '#ddd' }}>{n || ''}</div>
+                background: col ? col.bg : (we ? '#f3f1ec' : '#fff'), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                boxShadow: shadows.length ? shadows.join(', ') : 'none',
+                fontSize: 12, fontWeight: 700, color: col ? col.num : '#ddd' }}>{n || ''}</div>
           )
         })
         : weekGroups.map((g, i) => {
