@@ -20,6 +20,8 @@ export default function PlanningPage() {
   const [weeks, setWeeks] = useState(8)
   const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
   const [dayModal, setDayModal] = useState(null)
+  const [datesModal, setDatesModal] = useState(null)
+  const [historic, setHistoric] = useState(false)
   const [filters, setFilters] = useState({ project: '', installer: '', from: '', to: '' })
 
   async function load() {
@@ -37,14 +39,16 @@ export default function PlanningPage() {
   useEffect(() => { load() }, [])
 
   const days = useMemo(() => {
-    let start = anchorMonday
+    // Normally the view starts at the anchor Monday (today's week by default).
+    // Historic mode pulls the start back so past weeks are visible.
+    let start = historic ? mondayOf(addDays(anchorMonday, -weeks * 7)) : anchorMonday
     let end = addDays(anchorMonday, weeks * 7 - 1)
     if (filters.from) { const f = mondayOf(parseISO(filters.from)); if (f) start = f }
     if (filters.to) { const t = parseISO(filters.to); if (t) end = t }
     const out = []
     for (let d = new Date(start); d <= end; d = addDays(d, 1)) out.push(new Date(d))
     return out
-  }, [anchorMonday, weeks, filters.from, filters.to])
+  }, [anchorMonday, weeks, historic, filters.from, filters.to])
 
   const weekGroups = useMemo(() => {
     const groups = []
@@ -108,6 +112,10 @@ export default function PlanningPage() {
         {(filters.project || filters.installer || filters.from || filters.to) &&
           <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => setHistoric(h => !h)} title="Show past weeks"
+            style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
+            {historic ? '✓ Historic' : 'Historic'}
+          </button>
           <button onClick={() => shift(-weeks)} style={ghostBtn}>‹ Back</button>
           <button onClick={() => setAnchorMonday(mondayOf(new Date()))} style={ghostBtn}>Today</button>
           <button onClick={() => shift(weeks)} style={ghostBtn}>Fwd ›</button>
@@ -152,13 +160,13 @@ export default function PlanningPage() {
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
             {liveRows.map(p => (
-              <GanttRow key={p.key} p={p} days={days} data={data} countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} />
+              <GanttRow key={p.key} p={p} days={days} data={data} countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} onDates={(pr) => setDatesModal(pr)} />
             ))}
 
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
             {negRows.map(p => (
-              <GanttRow key={p.key} p={p} days={days} data={data} neg countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} />
+              <GanttRow key={p.key} p={p} days={days} data={data} neg countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} onDates={(pr) => setDatesModal(pr)} />
             ))}
 
           </div>
@@ -171,11 +179,12 @@ export default function PlanningPage() {
       </div>
 
       {dayModal && <DayModal proj={dayModal.proj} date={dayModal.date} data={data} ops={ops} onClose={() => setDayModal(null)} onChanged={load} />}
+      {datesModal && <DatesModal proj={datesModal} data={data} onClose={() => setDatesModal(null)} onChanged={load} />}
     </OperationsShell>
   )
 }
 
-function GanttRow({ p, days, data, neg, countFor, onCell }) {
+function GanttRow({ p, days, data, neg, countFor, onCell, onDates }) {
   const meta = data.meta[p.key] || {}
   const start = parseISO(meta.startDate)
   const compl = parseISO(meta.completionDate)
@@ -196,8 +205,8 @@ function GanttRow({ p, days, data, neg, countFor, onCell }) {
         </div>
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.location}</div>}
       </div>
-      <DateCell val={start} missing={!meta.startDate} />
-      <DateCell val={compl} missing={!meta.completionDate} warn={overrun} />
+      <DateCell val={start} missing={!meta.startDate} onClick={() => onDates(p)} />
+      <DateCell val={compl} missing={!meta.completionDate} warn={overrun} onClick={() => onDates(p)} />
       {days.map((d, i) => {
         const we = d.getDay() === 0 || d.getDay() === 6
         const n = countFor(p, d)
@@ -221,10 +230,11 @@ function GanttRow({ p, days, data, neg, countFor, onCell }) {
   )
 }
 
-function DateCell({ val, missing, warn }) {
+function DateCell({ val, missing, warn, onClick }) {
   return (
-    <div style={{ width: DATE_W, padding: '4px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderRight: '1px solid #f0f0f0', color: missing ? '#dc2626' : (warn ? '#dc2626' : '#555'), background: '#fff' }}>
-      {missing ? '⚠ set' : fmtDMY(val)}
+    <div onClick={onClick} title="Click to set project dates"
+      style={{ width: DATE_W, padding: '4px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderRight: '1px solid #f0f0f0', cursor: 'pointer', color: missing ? '#dc2626' : (warn ? '#dc2626' : '#555'), background: missing ? '#fff8f8' : '#fff' }}>
+      {missing ? '⚠ set date' : fmtDMY(val)}
     </div>
   )
 }
@@ -239,6 +249,56 @@ const EmptyRow = ({ children }) => <div style={{ padding: '10px 12px', fontSize:
 
 const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
+
+// ── Set a project's Start + Contracted Completion dates ──
+function DatesModal({ proj, data, onClose, onChanged }) {
+  const meta = data.meta[proj.key] || {}
+  const [startDate, setStartDate] = useState(meta.startDate || '')
+  const [completionDate, setCompletionDate] = useState(meta.completionDate || '')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function save() {
+    setErr('')
+    if (startDate && completionDate && parseISO(completionDate) < parseISO(startDate)) {
+      setErr('Contracted completion cannot be before the start date.'); return
+    }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: proj.key, startDate, completionDate }) })
+      if (!r.ok) throw new Error('Save failed')
+      onChanged(); onClose()
+    } catch (e) { setErr(e.message || 'Could not save.') }
+    setSaving(false)
+  }
+
+  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '8vh 2vw' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>{proj.name}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Programme dates{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: '18px 22px 22px' }}>
+          <div style={lbl}>Project start date</div>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={input} />
+          <div style={{ ...lbl, marginTop: 14 }}>Contracted completion date</div>
+          <input type="date" value={completionDate} onChange={e => setCompletionDate(e.target.value)} style={input} />
+          <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>These drive the Start / Contracted Completion columns, the red completion marker, and the over-run warning.</div>
+          {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
+            <button onClick={onClose} style={ghostBtn}>Cancel</button>
+            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save dates'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function DayModal({ proj, date, data, ops, onClose, onChanged }) {
   const dk = iso(date)
