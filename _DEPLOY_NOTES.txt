@@ -1,20 +1,11 @@
-PLANNING — historic range, setting Actual, editing past, Actual-only-on-past
+PLANNING — current-week + today markers, past-editing note
 
   pages/operations/project-management/planning.js
-   1) HISTORIC now goes back only 2 WEEKS from today (was a year). Toggle "Historic" (top right) to
-      reveal the last 2 weeks alongside the forward view.
-   2) HOW TO SET PAST DATES TO ACTUAL (now clearly guided):
-        - Turn on Historic to see past days.
-        - Click/drag to select the past cells on a project row.
-        - Click "Edit labour allocation" (adjust the people/headcount if the day differed from plan).
-        - In the pop-up, set status to "Actual" (only enabled when every selected date has passed).
-        - Save. Affects only the selected days.
-   3) EDITING PAST LABOUR / assignments: past cells are fully selectable and editable via the same
-      select -> Edit labour allocation flow (change who was on, headcount, or status).
-   4) ACTUAL CANNOT BE SET ON FUTURE DATES: the Actual button is disabled unless the whole selection is
-      in the past, with a hint explaining why.
+   1) THICK BLUE LINE down the LEFT edge of the current week's Monday cell (start of the W/C we're in).
+   2) THIN DARK-GREEN lines on BOTH the left and right edges of TODAY's cell.
+   3) Both added to the colour key.
+   4) Past days ARE editable — they're just only visible when "Historic" is on (now last 2 weeks).
+      Footer help text updated to say so. Select past cells -> Edit labour allocation -> (optionally set
+      Actual) -> Save. No code change was blocking past edits; the markers make "today" obvious now.
 
-  pages/api/planning.js
-   - Server-side guard: rejects setting status 'actual' on any date that hasn't passed (can't be bypassed).
-
-Deploy over previous. No new env / cron.
+Deploy over previous planning.js. No API change.
