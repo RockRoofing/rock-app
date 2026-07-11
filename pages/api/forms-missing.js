@@ -20,13 +20,14 @@ function cellEntries(cell) { if (!cell) return []; return Array.isArray(cell) ? 
 
 export default async function handler(req, res) {
   try {
-    const [alloc, ops, subs, roster, hsCols, hsData] = await Promise.all([
+    const [alloc, ops, subs, roster, hsCols, hsData, waterIngress] = await Promise.all([
       get('ops:planning-allocations').then(v => v || {}),
       getOpsProjects(),
       getSubmissionIndex(),
       get('ops:operatives-roster').then(v => v || []),
       get('ops:hs-matrix-columns').then(v => v || []),
       get('ops:hs-matrix-data').then(v => v || {}),
+      get('ops:water-ingress').then(v => v || {}),
     ])
 
     const fromMon = mondayOf(req.query.from ? parseISO(req.query.from) : new Date())
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
       'Start on Site Checklist': { required: 0, completed: 0 },
       'Daily Site Diary': { required: 0, completed: 0 },
       'Works Area Handover': { required: 0, completed: 0 },
+      'Water Ingress Report': { required: 0, completed: 0 },
     }
 
     for (const p of (ops || [])) {
@@ -117,6 +119,25 @@ export default async function handler(req, res) {
 
         // WORKS AREA HANDOVER (Supervisor): week containing last allocated day
         if (inWeek(lastDay)) add('Works Area Handover', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'works area handover', weekMon))
+      }
+    }
+
+    // WATER INGRESS REPORT — one required per job-visit (per job per day), attributed to that visit's week.
+    for (const [dk, visits] of Object.entries(waterIngress || {})) {
+      const dObj = parseISO(dk); if (!dObj) continue
+      const visitWeekMon = iso(mondayOf(dObj))
+      // only include visits whose week falls in the requested range
+      if (!weeks.includes(visitWeekMon)) continue
+      const wStart = parseISO(visitWeekMon); const wEnd = new Date(wStart.getTime() + 7 * DAY)
+      for (const v of (visits || [])) {
+        const jobName = v.jobName || 'Water ingress'
+        // done = a Water Ingress Report submission for this job within the visit's week
+        const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('water ingress') &&
+          ((v.projectNo && ((s.projectName || '').includes(v.projectNo) || (s.projectId || '') === v.projectNo)) || (s.projectName || '').includes(jobName.replace(/^💧\s*/, ''))) &&
+          s.submittedAt && new Date(s.submittedAt) >= wStart && new Date(s.submittedAt) < wEnd)
+        rows.push({ week: visitWeekMon, projectNo: v.projectNo || '—', projectName: `💧 ${jobName}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk })
+        byForm['Water Ingress Report'].required++
+        if (done) byForm['Water Ingress Report'].completed++
       }
     }
 

@@ -57,6 +57,7 @@ export default function PlanningPage() {
   const [weekModal, setWeekModal] = useState(null)    // monday iso
   const [viewModal, setViewModal] = useState(false)   // historic viewer
   const [clearing, setClearing] = useState(false)
+  const [wiDay, setWiDay] = useState(null)            // Water Ingress day (iso) being edited
   const dragging = useRef(false)
 
   async function load() {
@@ -67,7 +68,7 @@ export default function PlanningPage() {
         fetch('/api/operatives').then(r => r.json()).catch(() => ({})),
         fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
       ])
-      setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {} })
+      setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
       setOps(opr.operatives || [])
       setComp(cmp.competency || {})
     } catch {}
@@ -277,6 +278,9 @@ export default function PlanningPage() {
             {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp}
               sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
+            <SectionLabel>WATER INGRESS</SectionLabel>
+            <WaterIngressRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setWiDay(dk)} />
+
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
             {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
@@ -296,6 +300,7 @@ export default function PlanningPage() {
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
+      {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
     </OperationsShell>
   )
 }
@@ -402,6 +407,207 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
           )
         })
       }
+    </div>
+  )
+}
+
+// ── Water Ingress row: one permanent row; each day shows total headcount across all WI visits ──
+function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
+  const wi = data.waterIngress || {}
+  const headcount = (dk) => (wi[dk] || []).reduce((s, v) => s + (v.entries ? v.entries.length : 0) + (Number(v.unnamed) || 0), 0)
+  const visitCount = (dk) => (wi[dk] || []).length
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
+      <Frozen w={NAME_W} left={0} style={{ background: '#f2f8fc', flexDirection: 'column', justifyContent: 'center', display: 'flex' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0e5a8a' }}>💧 Water Ingress</div>
+        <div style={{ fontSize: 10, color: '#7799aa' }}>Reactive visits — job name & address per allocation</div>
+      </Frozen>
+      <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
+      <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
+      {view === 'day'
+        ? days.map((d, i) => {
+          const dk = iso(d); const n = headcount(dk); const vc = visitCount(dk); const we = isWeekend(d)
+          return (
+            <div key={i} onClick={() => onOpenDay(dk)} title={vc ? `${vc} water-ingress job${vc === 1 ? '' : 's'} — click to view/edit` : 'Click to add a water-ingress visit'}
+              style={{ width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: n ? '#cdeafe' : (we ? '#f3f1ec' : '#fff'), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                fontSize: 12, fontWeight: 700, color: n ? '#0e5a8a' : '#ddd' }}>{n || ''}</div>
+          )
+        })
+        : weekGroups.map((g, i) => {
+          const total = g.days.reduce((s, d) => s + headcount(iso(d)), 0)
+          return <div key={i} style={{ width: WEEKCELL_W, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #eee', fontSize: 11, color: total ? '#0e5a8a' : '#ddd', fontWeight: 700 }}>{total || ''}</div>
+        })}
+    </div>
+  )
+}
+
+// ── Water Ingress day modal: list visits for a day; add/edit/delete each ──
+function WaterIngressDayModal({ date, data, ops, comp = {}, onClose, onDone, reloadOps }) {
+  const existing = (data.waterIngress || {})[date] || []
+  const [visits, setVisits] = useState(existing)
+  const [editing, setEditing] = useState(null)
+  const dObj = parseISO(date)
+
+  async function del(id) {
+    if (!window.confirm('Delete this water-ingress visit?')) return
+    await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'wi-delete', date, id }) }).catch(() => {})
+    setVisits(prev => prev.filter(v => v.id !== id))
+    onDone()
+  }
+  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 2vw', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 640 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>💧 Water Ingress — {dObj.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>One or more reactive visits. Each needs a job name and address.</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: '16px 22px 22px' }}>
+          {editing ? (
+            <WIVisitEditor date={date} visit={editing === 'new' ? null : editing} data={data} ops={ops} comp={comp}
+              onCancel={() => setEditing(null)}
+              onSaved={(v) => { setVisits(prev => { const i = prev.findIndex(x => x.id === v.id); if (i >= 0) { const n = [...prev]; n[i] = v; return n } return [...prev, v] }); setEditing(null); onDone() }}
+              reloadOps={reloadOps} />
+          ) : (
+            <>
+              {visits.length === 0 && <div style={{ color: '#999', fontSize: 13, padding: '10px 0' }}>No water-ingress visits yet for this day.</div>}
+              {visits.map(v => (
+                <div key={v.id} style={{ border: '1px solid #e8e8e8', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: INK, fontSize: 14 }}>{v.jobName}</div>
+                      <div style={{ fontSize: 12, color: '#666' }}>{v.jobAddress}</div>
+                      <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                        {(v.entries || []).map(e => opName(e.opId)).join(', ')}{v.unnamed > 0 ? `${v.entries && v.entries.length ? ', ' : ''}${v.unnamed} unnamed` : ''}
+                        <span style={{ marginLeft: 8, textTransform: 'capitalize', color: v.status === 'provisional' ? '#2563eb' : (v.status === 'actual' ? '#15803d' : '#16a34a') }}>· {v.status}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setEditing(v)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>Edit</button>
+                      <button onClick={() => del(v.id)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12, color: '#dc2626' }}>Delete</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setEditing('new')} style={{ ...primaryBtn, marginTop: 4 }}>+ Add water-ingress visit</button>
+            </>
+          )}
+          {!editing && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16, borderTop: '1px solid #eee', paddingTop: 14 }}><button onClick={onClose} style={ghostBtn}>Close</button></div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WIVisitEditor({ date, visit, data, ops, comp = {}, onCancel, onSaved, reloadOps }) {
+  const liveProjects = (data.projects || []).filter(p => p.type === 'live')
+  const [jobName, setJobName] = useState(visit?.jobName || '')
+  const [jobAddress, setJobAddress] = useState(visit?.jobAddress || '')
+  const [projectNo, setProjectNo] = useState(visit?.projectNo || '')
+  const [manualJob, setManualJob] = useState(!visit?.projectNo && !!visit?.jobName)
+  const [picked, setPicked] = useState((visit?.entries || []).map(e => e.opId))
+  const [unnamed, setUnnamed] = useState(visit?.unnamed || 0)
+  const [status, setStatus] = useState(visit?.status || '')
+  const [pick, setPick] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const todayKey = iso(new Date())
+  const isPast = date < todayKey
+
+  function selectProject(no) {
+    setProjectNo(no)
+    const p = liveProjects.find(x => x.projectNo === no)
+    if (p) { setJobName(p.projectNo + (p.name && p.name !== p.projectNo ? ` — ${p.name}` : '')); setJobAddress(p.location || '') }
+  }
+  function addPick(id) {
+    if (!id || picked.includes(id)) return
+    const c = comp[id] || {}
+    if (!c.hasCSCS || !c.hasWAH) {
+      const o = ops.find(x => x.id === id); const nm = o ? `${o.firstName} ${o.lastName}` : 'this operative'
+      window.alert(`You cannot allocate ${nm} because they do not have a valid Working at Height or CSCS. These are mandatory trainings for all operatives.`)
+      setPick(''); return
+    }
+    setPicked([...picked, id]); setPick('')
+  }
+
+  async function save() {
+    setErr('')
+    if (!jobName.trim() || !jobAddress.trim()) { setErr('Job name and address are both required.'); return }
+    if (!picked.length && unnamed <= 0) { setErr('Add at least one installer or an unnamed headcount.'); return }
+    if (!status) { setErr('Choose a status.'); return }
+    setSaving(true)
+    try {
+      const body = { action: 'wi-save', date, visit: { id: visit?.id, jobName: jobName.trim(), jobAddress: jobAddress.trim(), projectNo: manualJob ? '' : projectNo, status, unnamed, entries: picked.map(id => ({ opId: id, half: 'full' })) } }
+      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Save failed')
+      onSaved(d.visit)
+    } catch (e) { setErr(e.message || 'Could not save.') }
+    setSaving(false)
+  }
+
+  const available = ops.filter(o => !picked.includes(o.id))
+  const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+
+  return (
+    <div>
+      <div style={{ fontWeight: 700, color: INK, marginBottom: 10 }}>{visit ? 'Edit visit' : 'New water-ingress visit'}</div>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, marginBottom: 8, cursor: 'pointer' }}>
+        <input type="checkbox" checked={manualJob} onChange={e => { setManualJob(e.target.checked); if (e.target.checked) setProjectNo(''); }} /> Enter an old / unlisted job manually
+      </label>
+      {!manualJob ? (
+        <>
+          <div style={lbl}>Job (live project)</div>
+          <select value={projectNo} onChange={e => selectProject(e.target.value)} style={{ ...input, fontFamily: 'inherit' }}>
+            <option value="">Select a project…</option>
+            {liveProjects.map(p => <option key={p.projectNo} value={p.projectNo}>{p.projectNo}{p.name && p.name !== p.projectNo ? ` — ${p.name}` : ''}</option>)}
+          </select>
+        </>
+      ) : (
+        <>
+          <div style={lbl}>Job name</div>
+          <input value={jobName} onChange={e => setJobName(e.target.value)} placeholder="e.g. Old Mill Warehouse" style={input} />
+        </>
+      )}
+      <div style={{ ...lbl, marginTop: 10 }}>Project address</div>
+      <textarea value={jobAddress} onChange={e => setJobAddress(e.target.value)} placeholder="Site address (required)" style={{ ...input, minHeight: 52, resize: 'vertical' }} />
+
+      <div style={{ ...lbl, marginTop: 12 }}>Installers</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+        {picked.map(id => { const o = ops.find(x => x.id === id); return <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef6ff', border: '1px solid #cfe4fb', borderRadius: 16, padding: '4px 10px', fontSize: 12.5 }}>{o ? `${o.firstName} ${o.lastName}` : id}<button onClick={() => setPicked(picked.filter(x => x !== id))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button></span> })}
+        {picked.length === 0 && <span style={{ fontSize: 12.5, color: '#aaa' }}>None selected.</span>}
+      </div>
+      <select value={pick} onChange={e => addPick(e.target.value)} style={{ ...input, fontFamily: 'inherit' }}>
+        <option value="">+ Add installer…</option>
+        {available.map(o => { const c = comp[o.id] || {}; const bad = !c.hasCSCS || !c.hasWAH; return <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}{bad ? ' ⚠ no CSCS/WAH' : ''}</option> })}
+      </select>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+        <span style={lbl}>Unnamed headcount</span>
+        <button onClick={() => setUnnamed(Math.max(0, unnamed - 1))} style={stepBtn}>−</button>
+        <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{unnamed}</span>
+        <button onClick={() => setUnnamed(unnamed + 1)} style={stepBtn}>+</button>
+      </div>
+
+      <div style={{ ...lbl, marginTop: 12 }}>Status {!status && <span style={{ color: '#dc2626', fontWeight: 600 }}>— choose one</span>}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => {
+          const disabled = v === 'actual' && !isPast
+          return <button key={v} disabled={disabled} onClick={() => setStatus(v)} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: status === v ? `2px solid ${c}` : '1px solid #ddd', background: disabled ? '#f4f4f4' : (status === v ? c + '22' : '#fff'), fontWeight: status === v ? 700 : 500, fontSize: 12.5, cursor: disabled ? 'not-allowed' : 'pointer', color: disabled ? '#bbb' : '#333' }}>{label}</button>
+        })}
+      </div>
+
+      {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16, borderTop: '1px solid #eee', paddingTop: 14 }}>
+        <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+        <button onClick={save} disabled={saving} style={{ ...primaryBtn, ...(saving ? { opacity: 0.5 } : {}) }}>{saving ? 'Saving…' : (visit ? 'Save visit' : 'Add visit')}</button>
+      </div>
     </div>
   )
 }

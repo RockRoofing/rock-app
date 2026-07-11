@@ -31,10 +31,11 @@ export async function assembleWeek(mondayStr) {
     const monday = mondayStr ? mondayOf(parseISO(mondayStr)) : mondayOf(new Date())
     const days = Array.from({ length: 7 }, (_, i) => iso(addDays(monday, i)))
 
-    const [alloc, roster, names] = await Promise.all([
+    const [alloc, roster, names, waterIngress] = await Promise.all([
       get('ops:planning-allocations').then(v => v || {}),
       get('ops:operatives-roster').then(v => v || []),
       projectNameMap(),
+      get('ops:water-ingress').then(v => v || {}),
     ])
     const opById = Object.fromEntries(roster.map(o => [o.id, o]))
 
@@ -58,6 +59,27 @@ export async function assembleWeek(mondayStr) {
         if (unnamed > 0) {
           unnamedByProjDay[pk] = unnamedByProjDay[pk] || {}
           unnamedByProjDay[pk][dk] = { count: unnamed, status, projectName: pname }
+        }
+      }
+    }
+
+    // Water Ingress visits: each carries its own job name + address; multiple per day.
+    for (const dk of days) {
+      const visits = waterIngress[dk] || []
+      for (const v of visits) {
+        const pname = `💧 ${v.jobName}`; const paddr = v.jobAddress || ''
+        const status = v.status || 'confirmed'
+        for (const e of (v.entries || [])) {
+          byOp[e.opId] = byOp[e.opId] || {}
+          byOp[e.opId][dk] = byOp[e.opId][dk] || []
+          byOp[e.opId][dk].push({ projectName: pname, projectAddress: paddr, half: e.half || 'full', status })
+        }
+        const un = Number(v.unnamed) || 0
+        if (un > 0) {
+          const pk = `wi:${v.id}`
+          unnamedByProjDay[pk] = unnamedByProjDay[pk] || {}
+          unnamedByProjDay[pk][dk] = { count: un, status, projectName: pname }
+          if (!names[pk]) names[pk] = { name: pname, address: paddr }
         }
       }
     }

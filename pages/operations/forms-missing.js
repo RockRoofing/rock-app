@@ -8,7 +8,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const wd = (x.getDay() + 6) % 7; return new Date(x.getTime() - wd * DAY) }
 const wcLabel = (m) => `W/C ${parseISO(m).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
 
-const FORM_ORDER = ['Pre-Start', 'Start on Site Checklist', 'Daily Site Diary', 'Works Area Handover']
+const FORM_ORDER = ['Pre-Start', 'Start on Site Checklist', 'Daily Site Diary', 'Works Area Handover', 'Water Ingress Report']
 
 export default function FormsMissingPage() {
   const thisMon = iso(mondayOf(new Date()))

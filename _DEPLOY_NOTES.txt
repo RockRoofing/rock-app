@@ -1,11 +1,29 @@
-PLANNING — supervisor flag rework
+WATER INGRESS — new planning section + WLA/email + forms
+
+  pages/api/planning.js
+   - New store ops:water-ingress = { [dateISO]: [ { id, jobName, jobAddress, projectNo, status, unnamed,
+     entries:[{opId,half}] } ] }. GET now returns waterIngress. New POST actions: wi-save, wi-delete.
+     Server requires jobName + jobAddress; blocks Actual on non-past dates; requires ≥1 installer or unnamed.
 
   pages/operations/project-management/planning.js
-   - "⚠ No supervisor" (project name column) now clears if a qualified supervisor is EITHER assigned in
-     Project Details OR allocated on the Gantt for that project. It still only appears when the project has
-     NAMED labour (never with no labour or only unnamed labour).
-   - Removed the per-day bright-red "no supervisor" cell shading entirely (and its colour-key entry).
-   - Project name column widened (220 -> 280) and "⚠ No supervisor" now sits on its own line under the
-     project name so it's always fully visible.
+   - New "WATER INGRESS" section between Live and Negotiated. One permanent row; each day shows the total
+     head-count across all water-ingress visits that day (blue cell). Click a day to open the day modal.
+   - Day modal lists that day's visits (multiple jobs per day allowed) and lets you add/edit/delete each.
+     Each visit: pick a LIVE PROJECT from a dropdown (auto-fills name + address) OR tick "manual" to type an
+     old/unlisted job name; project ADDRESS is mandatory (auto or manual). Installers (CSCS/WAH hard-block
+     applies), unnamed headcount, and a status (Confirmed/Provisional/Actual). Nothing auto-selected.
 
-Deploy over previous planning.js. No API change.
+  pages/api/planning-week.js  (assembleWeek)
+   - Water-ingress visits now flow into the Weekly Labour Allocation: each shows as "💧 <job name>" on the
+     operative's row with its own address, so it appears in the WLA table, the WLA PDF, and the installer
+     EMAIL (including under the email's "Project addresses" list). Future-only / non-Actual email rules
+     still apply.
+
+  pages/api/forms-missing.js + pages/operations/forms-missing.js
+   - Standard forms are NOT required for water-ingress work. The only required form is a WATER INGRESS
+     REPORT — one per job-visit (per job per day), shown in the Missing dashboard in the visit's week with
+     its own card, %, and Missing/Completed status. Matched to a submitted form whose title contains
+     "Water Ingress" for that job in that week.
+
+Deploy all five. No cron/env change. New Redis key ops:water-ingress is created on first save.
+Note: Water Ingress Report completion matching relies on the Site App form title containing "Water Ingress".

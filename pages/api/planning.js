@@ -22,10 +22,13 @@ export const config = { api: { bodyParser: { sizeLimit: '2mb' } } }
 
 const A_KEY = 'ops:planning-allocations'
 const M_KEY = 'ops:planning-meta'
+const WI_KEY = 'ops:water-ingress'   // { [dateISO]: [ { id, jobName, jobAddress, projectNo, status, unnamed, entries:[{opId,half}] } ] }
 const getAlloc = async () => (await get(A_KEY)) || {}
 const saveAlloc = (v) => set(A_KEY, v)
 const getMeta = async () => (await get(M_KEY)) || {}
 const saveMeta = (v) => set(M_KEY, v)
+const getWI = async () => (await get(WI_KEY)) || {}
+const saveWI = (v) => set(WI_KEY, v)
 
 // A day-cell can be the legacy array [{opId,half}] OR the new object
 // { status, unnamed, entries:[{opId,half}] }. Normalise to the entries array.
@@ -86,8 +89,8 @@ async function buildProjects() {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const [{ live, negotiated }, allocations, meta] = await Promise.all([buildProjects(), getAlloc(), getMeta()])
-      return res.json({ projects: [...live, ...negotiated], allocations, meta })
+      const [{ live, negotiated }, allocations, meta, waterIngress] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI()])
+      return res.json({ projects: [...live, ...negotiated], allocations, meta, waterIngress })
     } catch (e) {
       console.error('planning GET failed:', e)
       return res.status(500).json({ error: e.message || 'Load failed' })
@@ -164,6 +167,34 @@ export default async function handler(req, res) {
         }
         await saveAlloc(alloc)
         return res.json({ ok: true, day: alloc[key][date] || null })
+      }
+
+      // ── Water Ingress visits (separate model; multiple jobs per day) ──
+      if (action === 'wi-save') {
+        // body: { date, visit:{ id?, jobName, jobAddress, projectNo, status, unnamed, entries:[{opId,half}] } }
+        const { date, visit } = body
+        if (!date || !visit) return res.status(400).json({ error: 'Missing date/visit' })
+        if (!visit.jobName || !visit.jobAddress) return res.status(400).json({ error: 'Job name and address are required' })
+        const status = ['confirmed', 'provisional', 'actual'].includes(visit.status) ? visit.status : 'confirmed'
+        if (status === 'actual' && date >= new Date().toISOString().slice(0, 10)) return res.status(400).json({ error: 'Actual can only be set on past dates' })
+        const entries = Array.isArray(visit.entries) ? visit.entries.filter(e => e.opId).map(e => ({ opId: e.opId, half: e.half || 'full' })) : []
+        const unnamed = Math.max(0, Number(visit.unnamed) || 0)
+        if (!entries.length && unnamed <= 0) return res.status(400).json({ error: 'Add at least one installer or an unnamed headcount' })
+        const wi = await getWI()
+        wi[date] = wi[date] || []
+        const rec = { id: visit.id || `wi_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, jobName: visit.jobName, jobAddress: visit.jobAddress, projectNo: visit.projectNo || '', status, unnamed, entries }
+        const idx = wi[date].findIndex(v => v.id === rec.id)
+        if (idx >= 0) wi[date][idx] = rec; else wi[date].push(rec)
+        await saveWI(wi)
+        return res.json({ ok: true, visit: rec })
+      }
+      if (action === 'wi-delete') {
+        const { date, id } = body
+        if (!date || !id) return res.status(400).json({ error: 'Missing date/id' })
+        const wi = await getWI()
+        if (wi[date]) { wi[date] = wi[date].filter(v => v.id !== id); if (!wi[date].length) delete wi[date] }
+        await saveWI(wi)
+        return res.json({ ok: true })
       }
 
       return res.status(400).json({ error: 'Unknown action' })
