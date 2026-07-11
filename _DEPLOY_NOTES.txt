@@ -1,26 +1,6 @@
-ISSUES — smart email link + Site App Issues Log (CM-only)
-
-SMART LINK (device-aware from the notification email):
-  pages/go/issue.js         NEW redirect page. Email button now points here. It detects the device:
-                            desktop/laptop -> portal Issues tracker (opens the issue);
-                            mobile/tablet  -> Site App Issues Log (opens the issue).
-  pages/api/issue-notify.js Email now uses the single smart link (/go/issue?id=...).
-  middleware.js             /go/ pages allowed without login (so the redirect always loads);
-                            added /api/issue-send-customer and /api/issue-pdf to the Site App
-                            passthrough (mobile CM needs them). (/api/issues, /api/issue-notify
-                            were already added in the previous fix.)
-
-SITE APP ISSUES LOG (Contracts Managers only):
-  pages/forms/issues-log.js NEW. Shows all OPEN issues (toggle to include closed), filterable by
-                            project. Tap an issue to open a full sheet where a CM can: amend name/
-                            description/comments, set Required & Resolved dates, set Send-to-Customer
-                            (with the IHM customer-contacts picker — remove/add/send PDF), or mark
-                            "Sent manually". Changes save back to the same Issues record/table.
-                            Non-CM users see a "Contracts Managers only" message.
-  pages/forms/index.js      Added a CM-only "Issues Log" tile to the Site App home.
-
-NOTE: whether someone is a Contracts Manager is based on the Site App user's accessLevel
-('contracts-manager'), set on their Site App user record.
-
-Deploy over the previous versions. (middleware.js at repo root.) Pairs with the earlier
-issues-system and issues-fixes packages.
+ISSUE PDF — Status box
+  lib/issuePdf.js
+   Added a Status box near the top of the issue PDF:
+     - Default: "STATUS: OPEN" (amber)
+     - Once a Resolved date is entered: "STATUS: RESOLVED" (green), with the resolved date shown beneath.
+Deploy over the previous lib/issuePdf.js.
