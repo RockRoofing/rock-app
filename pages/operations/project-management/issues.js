@@ -25,6 +25,8 @@ export default function IssuesPage() {
   const [edit, setEdit] = useState(null)
   const [cell, setCell] = useState(null)
   const [sendFor, setSendFor] = useState(null)   // issue for which the send-to-customer pop-out is open
+  const [create, setCreate] = useState(false)
+  const [meName, setMeName] = useState('')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState({ key: 'createdAt', dir: 'desc' })
 
@@ -41,6 +43,7 @@ export default function IssuesPage() {
     setLoading(false)
   }
   useEffect(() => { load() }, [])
+  useEffect(() => { fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => setMeName(d.user?.name || '')).catch(() => {}) }, [])
 
   // Deep link from the notification email: ?issue=<id> opens that issue for editing
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function IssuesPage() {
       if (sort.key === 'type') return (i.issueTypes || []).join(',').toLowerCase()
       if (sort.key === 'createdBy') return (i.createdBy || '').toLowerCase()
       if (sort.key === 'resolved') return i.resolvedDate || ''
+      if (sort.key === 'required') return i.requiredDate || ''
       return i.createdAt || 0
     }
     arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
@@ -92,7 +96,8 @@ export default function IssuesPage() {
 
   return (
     <OperationsShell active="pm:issues" section="pm" title="Issues" wide>
-      <PageHeading title="Issues" sub="Raised from the Site App. Decide whether each needs sending to the customer." />
+      <PageHeading title="Issues" sub="Raised from the Site App. Decide whether each needs sending to the customer."
+        action={<button onClick={() => setCreate(true)} style={primaryBtn}>+ Add Issue</button>} />
 
       {loading ? <Loading /> : issues.length === 0 ? (
         <EmptyCard title="No issues yet" body="Issues raised by operatives on the Site App will appear here." />
@@ -107,6 +112,7 @@ export default function IssuesPage() {
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('createdBy')}>Created By{arrow('createdBy')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('name')}>Issue Name{arrow('name')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('type')}>Issue Type{arrow('type')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('required')}>Required Resolution{arrow('required')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('resolved')}>Resolved Date{arrow('resolved')}</th>
               <th style={th}>Comments</th>
               <th style={th}>Attachments</th>
@@ -148,6 +154,10 @@ export default function IssuesPage() {
                     <td style={{ ...td, cursor: 'pointer' }} onClick={() => setCell({ title: 'Issue', text: i.issueName })}>{clamp(i.issueName, 40)}</td>
                     <td style={td}>{[...(i.issueTypes || []), ...(i.issueOther ? [`Other: ${i.issueOther}`] : [])].join(', ') || '—'}</td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <input type="date" value={i.requiredDate || ''} onChange={e => patchIssue(i.id, { requiredDate: e.target.value })} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
+                      {i.requiredDate && !i.resolvedDate && parseLocal(i.requiredDate) < new Date(new Date().toDateString()) && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>⚠ Overdue</div>}
+                    </td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
                       <input type="date" value={i.resolvedDate || ''} onChange={e => patchIssue(i.id, { resolvedDate: e.target.value })} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
                       {resolved && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>Resolved</div>}
                     </td>
@@ -182,6 +192,8 @@ export default function IssuesPage() {
       {edit && <EditModal initial={edit} onClose={() => { setEdit(null); if (router.query.issue) router.replace('/operations/project-management/issues', undefined, { shallow: true }) }} onSaved={() => { setEdit(null); load() }} onSend={(iss) => setSendFor(iss)} />}
 
       {sendFor && <SendCustomerModal issue={sendFor} onClose={() => setSendFor(null)} onSent={() => { setSendFor(null); load() }} />}
+
+      {create && <CreateModal projects={projects} createdBy={meName} onClose={() => setCreate(false)} onSaved={() => { setCreate(false); load() }} />}
     </OperationsShell>
   )
 }
@@ -237,6 +249,9 @@ function EditModal({ initial, onClose, onSaved, onSend }) {
 
       <L>Comments</L>
       <textarea value={f.comments || ''} onChange={e => set({ comments: e.target.value })} style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder="Internal comments" />
+
+      <L>Required Resolution Date</L>
+      <input type="date" value={f.requiredDate || ''} onChange={e => set({ requiredDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
 
       <L>Resolved Date</L>
       <input type="date" value={f.resolvedDate || ''} onChange={e => set({ resolvedDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
@@ -322,6 +337,110 @@ function SendCustomerModal({ issue, onClose, onSent }) {
           </div>
         </>
       )}
+    </Modal>
+  )
+}
+
+// ── Create a new issue from the portal ──
+const ISSUE_TYPES = ['Design', 'Quality', 'Health & Safety', 'Delay / Programme', 'Deliveries / Materials', 'Water ingress', 'Damage to our works', 'Interface issue', 'Access', 'Weather', 'Customer / Main Contractor', 'Workmanship', 'Other']
+
+function CreateModal({ projects, createdBy, onClose, onSaved }) {
+  const [f, setF] = useState({ projectNo: '', projectName: '', projectAddress: '', issueName: '', issueTypes: [], issueOther: '', description: '', requiredDate: '', photos: [] })
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (patch) => setF(prev => ({ ...prev, ...patch }))
+
+  function pickProject(no) {
+    const p = projects.find(x => x.no === no)
+    set({ projectNo: no, projectName: p?.name || '' })
+  }
+  function toggleType(t) { set({ issueTypes: f.issueTypes.includes(t) ? f.issueTypes.filter(x => x !== t) : [...f.issueTypes, t] }) }
+
+  async function handleFiles(files) {
+    if (!files || !files.length) return
+    setUploading(true)
+    const next = [...f.photos]
+    for (const file of Array.from(files)) {
+      try {
+        const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name || `photo-${Date.now()}.jpg`), 'x-content-type': file.type || 'image/jpeg' }, body: file })
+        const d = await up.json(); if (up.ok && d.url) next.push(d.url)
+      } catch {}
+    }
+    set({ photos: next }); setUploading(false)
+  }
+
+  async function save() {
+    setErr('')
+    if (!f.projectNo) return setErr('Select a project.')
+    if (!f.issueName.trim()) return setErr('Issue name is required.')
+    if (!f.issueTypes.length) return setErr('Select at least one issue type.')
+    if (f.issueTypes.includes('Other') && !f.issueOther.trim()) return setErr('Describe the other issue type.')
+    if (!f.description.trim()) return setErr('Description is required.')
+    if (!f.photos.length) return setErr('Attach at least one photo.')
+    setSaving(true)
+    try {
+      const issue = { ...f, createdBy: createdBy || 'Portal user', issueOther: f.issueTypes.includes('Other') ? f.issueOther.trim() : '' }
+      const r = await fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue }) })
+      const d = await r.json()
+      if (!r.ok || !d.issue) throw new Error(d.error || 'Save failed')
+      fetch('/api/issue-notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.issue.id }) }).catch(() => {})
+      onSaved()
+    } catch (e) { setErr(e.message || 'Could not save.') }
+    setSaving(false)
+  }
+
+  const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+  const L = ({ children }) => <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '16px 0 6px' }}>{children}<span style={{ color: '#dc2626' }}> *</span></div>
+
+  return (
+    <Modal title="Add Issue" onClose={onClose} wide>
+      <L>Project</L>
+      <select value={f.projectNo} onChange={e => pickProject(e.target.value)} style={input}>
+        <option value="">Select project…</option>
+        {projects.map(p => <option key={p.no} value={p.no}>{[p.no, p.name].filter(Boolean).join(' — ')}</option>)}
+      </select>
+      <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>Created: {todayISO().split('-').reverse().join('/')} · By: {createdBy || 'Portal user'}</div>
+
+      <L>Issue Name</L>
+      <input value={f.issueName} onChange={e => set({ issueName: e.target.value })} style={input} placeholder="Short title for the issue" />
+
+      <L>Issue Type <span style={{ fontWeight: 400, color: '#999', fontSize: 12 }}>(select all that apply)</span></L>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {ISSUE_TYPES.map(t => {
+          const on = f.issueTypes.includes(t)
+          return <button key={t} onClick={() => toggleType(t)} style={{ padding: '8px 13px', borderRadius: 20, border: on ? `2px solid ${GOLD}` : '1px solid #d9d5cc', background: on ? '#fffbeb' : '#fff', color: on ? '#92400e' : '#555', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{on ? '✓ ' : ''}{t}</button>
+        })}
+      </div>
+      {f.issueTypes.includes('Other') && <input value={f.issueOther} onChange={e => set({ issueOther: e.target.value })} style={{ ...input, marginTop: 10 }} placeholder="Describe the other issue type" />}
+
+      <L>Issue Description</L>
+      <textarea value={f.description} onChange={e => set({ description: e.target.value })} style={{ ...input, minHeight: 90, resize: 'vertical' }} placeholder="Describe the issue" />
+
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '16px 0 6px' }}>Required Resolution Date</div>
+      <input type="date" value={f.requiredDate} onChange={e => set({ requiredDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
+
+      <L>Photos</L>
+      <label style={{ display: 'inline-block', padding: '10px 16px', border: '2px dashed #d9d5cc', borderRadius: 10, cursor: 'pointer', color: '#666', fontSize: 13 }}>
+        {uploading ? 'Uploading…' : '📷 Add photos'}
+        <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+      </label>
+      {f.photos.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+          {f.photos.map((p, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              <img src={p} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8, border: '1px solid #eee' }} />
+              <button onClick={() => set({ photos: f.photos.filter((_, j) => j !== i) })} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, border: 'none', background: '#dc2626', color: '#fff', cursor: 'pointer', fontSize: 12, lineHeight: '20px', padding: 0 }}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 14 }}>{err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, borderTop: '1px solid #eee', paddingTop: 18 }}>
+        <button onClick={onClose} style={ghostBtn}>Cancel</button>
+        <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Create Issue'}</button>
+      </div>
     </Modal>
   )
 }

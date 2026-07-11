@@ -49,6 +49,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    try {
     const { issue } = req.body || {}
     if (!issue) return res.status(400).json({ error: 'Missing issue' })
     let issues = await getIssues()
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
       issue.comments = issue.comments || ''
 
       // Companion submission so photos show in Project Images (tagged isIssue so
-      // the Forms tab / Project Forms tab can filter it out).
+      // the Forms tab / Project Forms tab can filter it out). Best-effort only.
       try {
         const photos = issue.photos || []
         if (photos.length) {
@@ -92,11 +93,15 @@ export default async function handler(req, res) {
     }
 
     // ── Update ────────────────────────────────────────────────────────────
-    const idx = issues.findIndex(i => i.id === issue.id)
-    if (idx >= 0) issues[idx] = { ...issues[idx], ...issue }
+    const uidx = issues.findIndex(i => i.id === issue.id)
+    if (uidx >= 0) issues[uidx] = { ...issues[uidx], ...issue }
     else issues.push(issue)
     await saveIssues(issues)
-    return res.json({ ok: true, issue: issues[idx >= 0 ? idx : issues.length - 1] })
+    return res.json({ ok: true, issue: issues[uidx >= 0 ? uidx : issues.length - 1] })
+    } catch (e) {
+      console.error('issues POST failed:', e)
+      return res.status(500).json({ error: `Save failed: ${e.message || 'server error'}` })
+    }
   }
 
   if (req.method === 'DELETE') {

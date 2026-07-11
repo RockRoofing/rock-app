@@ -1,47 +1,20 @@
-ISSUES SYSTEM — Site App form + Tracker + email notifications (items 1–3)
+ISSUES — submit fix + Required Resolution Date column + portal Add Issue
 
-NEW FILES
-  lib/issuePdf.js                                   Styled issue PDF (logo, project, name, type, description, photos)
-  pages/api/issues.js                               Issues store (ops:issues). On create, writes a companion
-                                                    submission tagged isIssue so photos appear in Project Images.
-  pages/api/issue-pdf.js                            GET ?id=... -> branded issue PDF
-  pages/api/issue-notify.js                         Emails the project's CM, Ops Manager & QS (from the IHM) on
-                                                    creation, with a link to action send-to-customer.
-  pages/api/issue-send-customer.js                  Emails the styled PDF to chosen customer emails; marks sent.
-  pages/forms/issue.js                              Site App "Raise an Issue" form (multi-select type + Other,
-                                                    photos, auto project/date/address/created-by/issue ID).
-  pages/operations/project-management/issues.js     Issues Tracker (PM nav, after Live Tasks).
+SUBMIT BUG FIX (the "Unexpected end of JSON input" error):
+  middleware.js        ROOT CAUSE: on the Site App subdomain (siteapp./forms.), /api/issues and
+                       /api/issue-notify were NOT in the passthrough list, so the login middleware
+                       redirected them to /forms (HTML) — the form got HTML instead of JSON.
+                       FIX: added /api/issues and /api/issue-notify to the Site App passthrough.
+  pages/api/issues.js  Wrapped the POST handler in try/catch so it ALWAYS returns JSON (even on
+                       error) instead of an empty response. Companion-submission stays best-effort.
 
-CHANGED FILES
-  pages/forms/index.js                 Added "Raise an Issue" card to the Site App home.
-  components/OperationsNav.js           Added "Issues" to the PM sub-nav after Live Tasks.
-  pages/operations/projects.js          Project Forms tab now EXCLUDES issue submissions; Project Images KEEPS them.
-  pages/operations/forms.js             Main submissions list EXCLUDES issue submissions.
+NEW:
+  pages/operations/project-management/issues.js
+   - New "Required Resolution" date column, placed BEFORE Resolved Date. Editable inline and in the
+     edit window. Shows a red "⚠ Overdue" note if the required date has passed and it's not resolved.
+   - New "+ Add Issue" button on the tracker header so issues can be raised from the PORTAL too
+     (not just the Site App). Same fields as the Site App form (project, issue name, multi-select
+     type + Other, description, required resolution date, photos). Fires the CM/Ops/QS notification.
+     "Created By" = the logged-in portal user's name.
 
-BEHAVIOUR
-  - Issues do NOT appear in the Forms list or the per-project Project Forms tab.
-  - Issue photos DO appear in Project Images (viewable like any other form's photos).
-  - Form fields (* mandatory): *Project (dropdown), Created Date (auto), Project Address (auto),
-    Form Created By (auto from operative), Issue ID (auto ISS-0001), *Issue Name, *Issue Type
-    (multi-select: Design, Quality, H&S, Delay/Programme, Deliveries/Materials, Water ingress,
-    Damage to our works, Interface issue, Access, Weather, Customer/Main Contractor, Workmanship,
-    Other+description), *Issue Description, *Attach Photos.
-  - Tracker columns: Send to Customer? | Project | Created | Created By | Issue Name | Issue Type |
-    Resolved Date | Comments | Attachments | Edit | Delete. Inline editable. Sort + 50/page.
-  - Send to Customer? state machine:
-      (nothing) -> "⚠ Needs actioning"
-      Yes – Send -> opens pop-out of IHM customer contacts (remove line-by-line / add / Send PDF)
-      Yes but not sent -> red "⚠ Not sent yet" + "Send now" + "Sent manually?" (clears the warning)
-      No – Requires edits -> hold state
-      No – Do not send -> line clear
-  - Resolved Date set -> row turns green / marked resolved.
-  - Edit opens a click-off-safe window (backdrop won't close it): Save / Download PDF /
-    Send to Customer / X.
-  - Notification email to CM/Ops/QS contains a button linking to the portal (desktop) Issues
-    tracker (?issue=<id> deep-links straight to the issue) or the Site App (mobile).
-
-REQUIRES (already used elsewhere): RESEND_API_KEY + FORMS_FROM_EMAIL env vars.
-Recipients resolve from IHM team names -> Portal Users -> emails; customer contacts from IHM siteContacts.
-
-NOT DONE YET (per your instruction): do NOT send issues to the customer automatically — sending is
-a manual action in the tracker. Client-send wording can be refined before first real use.
+Deploy over the previous versions from the issues-system package. (middleware.js is at repo root.)
