@@ -1,18 +1,13 @@
-PLANNING — Send WLA week model + historic View button
+PROJECT REPORT — status wording, Issues/Variations sections
 
-  pages/operations/project-management/planning.js
+  lib/projectReportPdf.js
+   - The status pill on the downloaded PDF now reads "STATUS: SUBMITTED" (was "COMPLETE"). Draft unchanged.
 
-  SEND WLA POP-OUT — new week model:
-   - "How far ahead" = 1 / 2 / 3 / 4 weeks, where WEEK 1 = NEXT week (the Monday after the current
-     week; if today is Monday, still next Monday). Weeks 2–4 follow. Default = 1 week.
-   - New "Include previous week (download only)" checkbox — OFF by default; when off the previous-week
-     table is hidden. When ticked it shows the previous week but it is NEVER emailed (download only).
-   - The current week (the one we're in) is no longer part of Send.
-   - Emails cover the forward weeks only; operative de-select applies to those. Download PDF spans the
-     selected forward weeks (plus previous week if ticked).
+  pages/operations/project-management/report.js
+   - On-screen status badge and the Status filter now say "Submitted" (stored value stays 'complete', so
+     existing reports/filters keep working). The "Save & complete" button is now "Save & submit".
+   - Issues section heading changed from "Issues still to be resolved" to just "Issues".
+   - Variations section now includes ALL variations (not only awaiting-instruction); heading changed to
+     "Variations"; the Instructed column shows the real Yes/No per variation.
 
-  NEW "View Weekly Labour Allocations" button (next to Send, ghost style):
-   - Opens a historic/upcoming viewer. Pick any Week Commencing date (snaps to that week's Monday),
-     see the per-operative grid + colour key. DOWNLOAD PDF ONLY — no send.
-
-Deploy over previous planning.js. No API change (uses existing planning-week / -pdf).
+Deploy over previous. No API change.

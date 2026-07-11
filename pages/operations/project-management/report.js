@@ -84,7 +84,7 @@ export default function ReportPage() {
         <>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14, alignItems: 'flex-end' }}>
           <FilterSel label="Project" value={filters.project} onChange={v => setF({ project: v })} options={filterOpts.projects} />
-          <FilterSel label="Status" value={filters.status} onChange={v => setF({ status: v })} options={[{ v: 'draft', l: 'Draft' }, { v: 'complete', l: 'Complete' }]} raw />
+          <FilterSel label="Status" value={filters.status} onChange={v => setF({ status: v })} options={[{ v: 'draft', l: 'Draft' }, { v: 'complete', l: 'Submitted' }]} raw />
           <FilterSel label="Completed By" value={filters.completedBy} onChange={v => setF({ completedBy: v })} options={filterOpts.completedBy} />
           <FilterSel label="Customer Company" value={filters.customer} onChange={v => setF({ customer: v })} options={filterOpts.customers} />
           <div><div style={lbl}>Date from</div><input type="date" value={filters.from} onChange={e => setF({ from: e.target.value })} style={fInput} /></div>
@@ -112,7 +112,7 @@ export default function ReportPage() {
                   <td style={td}>{r.customerName || '—'}</td>
                   <td style={td}>{r.completedBy || '—'}</td>
                   <td style={td}>{r.status === 'complete'
-                    ? <span style={{ fontSize: 11.5, color: '#16a34a', background: '#dcfce7', padding: '2px 10px', borderRadius: 12, fontWeight: 600 }}>Complete</span>
+                    ? <span style={{ fontSize: 11.5, color: '#16a34a', background: '#dcfce7', padding: '2px 10px', borderRadius: 12, fontWeight: 600 }}>Submitted</span>
                     : <span style={{ fontSize: 11.5, color: '#b45309', background: '#fef3c7', padding: '2px 10px', borderRadius: 12, fontWeight: 700 }}>● DRAFT</span>}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button onClick={() => setView(r.id)} style={linkBtn}>View</button>
@@ -191,11 +191,10 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         fetch('/api/submissions').then(r => r.json()).catch(() => ({})),
       ])
 
-      // Variations marked Not Instructed for this project
+      // All variations for this project (instructed and not)
       const proj = (dashR.projects || []).find(x => x.jobNo === no || x.projectNo === no || (p?.name && (x.name === p.name || x.projectName === p.name)))
       const vars = (proj?.settings?.variations || proj?.variations || [])
-        .filter(v => !v.instructed)
-        .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: false, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
+        .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: !!v.instructed, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
 
       // ── Issues ────────────────────────────────────────────────────────────
       // Show issues for THIS project that have been sent to the customer.
@@ -298,18 +297,18 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
 
       {autoLoading && <div style={{ fontSize: 12.5, color: '#ca8a04', marginTop: 12 }}>Pulling variations, issues & photos for this project…</div>}
 
-      <L>Variations priced awaiting instruction</L>
+      <L>Variations</L>
       <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr style={{ background: '#faf9f7' }}><th style={{ ...th, fontSize: 11 }}>No.</th><th style={{ ...th, fontSize: 11 }}>Description</th><th style={{ ...th, fontSize: 11 }}>Instructed</th><th style={{ ...th, fontSize: 11 }}>Total</th></tr></thead>
           <tbody>
-            {(f.variationsSnapshot || []).length === 0 && <tr><td colSpan={4} style={{ ...td, color: '#aaa' }}>None to instruct.</td></tr>}
-            {(f.variationsSnapshot || []).map((v, i) => <tr key={i} style={{ borderTop: '1px solid #f2f2f2' }}><td style={td}>{v.varNumber}</td><td style={td}>{v.description}</td><td style={td}>No</td><td style={td}>{money(v.total)}</td></tr>)}
+            {(f.variationsSnapshot || []).length === 0 && <tr><td colSpan={4} style={{ ...td, color: '#aaa' }}>No variations.</td></tr>}
+            {(f.variationsSnapshot || []).map((v, i) => <tr key={i} style={{ borderTop: '1px solid #f2f2f2' }}><td style={td}>{v.varNumber}</td><td style={td}>{v.description}</td><td style={td}>{v.instructed ? 'Yes' : 'No'}</td><td style={td}>{money(v.total)}</td></tr>)}
           </tbody>
         </table>
       </div>
 
-      <L>Issues still to be resolved</L>
+      <L>Issues</L>
       <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr style={{ background: '#faf9f7' }}><th style={{ ...th, fontSize: 11 }}>Date Created</th><th style={{ ...th, fontSize: 11 }}>Issue Name</th><th style={{ ...th, fontSize: 11 }}>Type</th><th style={{ ...th, fontSize: 11 }}>Required Resolution</th><th style={{ ...th, fontSize: 11 }}>Status</th></tr></thead>
@@ -348,7 +347,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20, borderTop: '1px solid #eee', paddingTop: 18 }}>
         <button onClick={onClose} style={ghostBtn}>Cancel</button>
         <button onClick={() => save(false)} disabled={saving} style={ghostBtn}>{saving ? 'Saving…' : 'Save draft'}</button>
-        <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save & complete'}</button>
+        <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save & submit'}</button>
       </div>
     </Modal>
   )
