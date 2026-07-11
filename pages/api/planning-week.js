@@ -27,9 +27,7 @@ async function projectNameMap() {
   return map
 }
 
-export default async function handler(req, res) {
-  try {
-    const mondayStr = req.query.monday
+export async function assembleWeek(mondayStr) {
     const monday = mondayStr ? mondayOf(parseISO(mondayStr)) : mondayOf(new Date())
     const days = Array.from({ length: 7 }, (_, i) => iso(addDays(monday, i)))
 
@@ -40,15 +38,25 @@ export default async function handler(req, res) {
     ])
     const opById = Object.fromEntries(roster.map(o => [o.id, o]))
 
-    // opId -> { [dateISO]: [{projectName, half}] }
+    // opId -> { [dateISO]: [{projectName, half, status}] }
     const byOp = {}
+    const unnamedByProjDay = {}  // pk -> { dk: {count, status, projectName} }
     for (const [pk, daysMap] of Object.entries(alloc)) {
       const pname = names[pk] || pk
       for (const dk of days) {
-        for (const e of (daysMap[dk] || [])) {
+        const cell = daysMap[dk]
+        if (!cell) continue
+        const entries = Array.isArray(cell) ? cell : (cell.entries || [])
+        const status = Array.isArray(cell) ? 'confirmed' : (cell.status || 'confirmed')
+        const unnamed = Array.isArray(cell) ? 0 : (Number(cell.unnamed) || 0)
+        for (const e of entries) {
           byOp[e.opId] = byOp[e.opId] || {}
           byOp[e.opId][dk] = byOp[e.opId][dk] || []
-          byOp[e.opId][dk].push({ projectName: pname, half: e.half || 'full' })
+          byOp[e.opId][dk].push({ projectName: pname, half: e.half || 'full', status })
+        }
+        if (unnamed > 0) {
+          unnamedByProjDay[pk] = unnamedByProjDay[pk] || {}
+          unnamedByProjDay[pk][dk] = { count: unnamed, status, projectName: pname }
         }
       }
     }
@@ -67,12 +75,29 @@ export default async function handler(req, res) {
       }
     }).sort((a, b) => a.name.localeCompare(b.name))
 
-    const dailyTotals = days.map((dk, i) => rows.reduce((s, r) => {
-      const c = r.cells[i]; if (!c) return s
-      return s + c.entries.reduce((ss, e) => ss + (e.half !== 'full' ? 0.5 : 1), 0)
-    }, 0))
+    // One "TBC — unnamed" row per project that has unnamed slots in the week.
+    const unnamedRows = Object.entries(unnamedByProjDay).map(([pk, dayMap]) => {
+      const pname = names[pk] || pk
+      const cells = days.map(dk => dayMap[dk] ? { date: dk, entries: [{ projectName: pname, half: 'full', status: dayMap[dk].status, unnamed: dayMap[dk].count }] } : null)
+      return { opId: `unnamed:${pk}`, name: `TBC — ${pname}`, email: '', phone: '', company: 'Unnamed', unnamed: true, cells }
+    }).sort((a, b) => a.name.localeCompare(b.name))
 
-    return res.json({ weekStart: iso(monday), days, rows, dailyTotals })
+    const allRows = [...rows, ...unnamedRows]
+
+    const dailyTotals = days.map((dk, i) => {
+      let s = 0
+      for (const r of rows) { const c = r.cells[i]; if (c) s += c.entries.reduce((ss, e) => ss + (e.half !== 'full' ? 0.5 : 1), 0) }
+      for (const [pk, dayMap] of Object.entries(unnamedByProjDay)) { if (dayMap[dk]) s += dayMap[dk].count }
+      return s
+    })
+
+    return { weekStart: iso(monday), days, rows: allRows, dailyTotals }
+}
+
+export default async function handler(req, res) {
+  try {
+    const week = await assembleWeek(req.query.monday)
+    return res.json(week)
   } catch (e) {
     console.error('planning-week error:', e)
     return res.status(500).json({ error: e.message || 'Failed' })

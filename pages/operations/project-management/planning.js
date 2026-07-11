@@ -15,6 +15,33 @@ const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6
 
 const NAME_W = 220, DATE_W = 92, CELL_W = 34, WEEKCELL_W = 46, ROW_H = 42
 
+// Allocation colours
+const C_ACTUAL = '#15803d'      // dark green
+const C_CONFIRMED = '#86efac'   // light green
+const C_PROVISIONAL = '#60a5fa' // blue
+const C_UNNAMED = '#fb923c'     // orange (any unnamed slot)
+const C_ACTUAL_BG = '#dcfce7', C_CONFIRMED_BG = '#f0fdf4', C_PROV_BG = '#dbeafe', C_UNNAMED_BG = '#ffedd5'
+
+// Normalise a day-cell (legacy array OR new object) to a consistent shape.
+function cellData(cell) {
+  if (!cell) return { status: 'confirmed', unnamed: 0, entries: [], count: 0 }
+  if (Array.isArray(cell)) {
+    const count = cell.reduce((s, e) => s + (e.half && e.half !== 'full' ? 0.5 : 1), 0)
+    return { status: 'confirmed', unnamed: 0, entries: cell, count }
+  }
+  const entries = Array.isArray(cell.entries) ? cell.entries : []
+  const named = entries.reduce((s, e) => s + (e.half && e.half !== 'full' ? 0.5 : 1), 0)
+  const unnamed = Number(cell.unnamed) || 0
+  return { status: cell.status || 'confirmed', unnamed, entries, count: named + unnamed }
+}
+// Cell background + number colour by status/unnamed. Unnamed present -> orange.
+function cellColours(cd) {
+  if (cd.unnamed > 0) return { bg: C_UNNAMED_BG, edge: C_UNNAMED, num: '#9a3412' }
+  if (cd.status === 'actual') return { bg: C_ACTUAL_BG, edge: C_ACTUAL, num: '#14532d' }
+  if (cd.status === 'provisional') return { bg: C_PROV_BG, edge: C_PROVISIONAL, num: '#1e40af' }
+  return { bg: C_CONFIRMED_BG, edge: C_CONFIRMED, num: '#166534' } // confirmed
+}
+
 export default function PlanningPage() {
   const [data, setData] = useState(null)
   const [ops, setOps] = useState([])
@@ -84,11 +111,7 @@ export default function PlanningPage() {
   const liveRows = live.filter(matchProject)
   const negRows = negotiated.filter(matchProject)
 
-  const countOnDay = (p, dateKey) => {
-    const list = (data.allocations[p.key] || {})[dateKey] || []
-    let n = 0; for (const e of list) n += (e.half && e.half !== 'full') ? 0.5 : 1
-    return n
-  }
+  const countOnDay = (p, dateKey) => cellData((data.allocations[p.key] || {})[dateKey]).count
   const dayTotal = (date) => {
     const key = iso(date); let t = 0
     for (const p of [...liveRows, ...negRows]) t += countOnDay(p, key)
@@ -177,6 +200,16 @@ export default function PlanningPage() {
         </div>
       )}
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 10, fontSize: 11.5, color: '#555' }}>
+        <span style={{ fontWeight: 700, color: '#888' }}>Key:</span>
+        <Legend c={C_ACTUAL} label="Actual" />
+        <Legend c={C_CONFIRMED} label="Confirmed" />
+        <Legend c={C_PROVISIONAL} label="Provisional" />
+        <Legend c={C_UNNAMED} label="Provisional — labour not confirmed (unnamed)" />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: 14 }}>3</span> past contracted completion</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#ea580c' }}>⚑</span> historic needs confirming</span>
+      </div>
+
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: NAME_W + DATE_W * 2 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
@@ -251,7 +284,13 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
   const startD = parseISO(start), complD = parseISO(compl)
   const missing = !start || !compl
   let lastAlloc = null
-  for (const dk of Object.keys(data.allocations[p.key] || {})) { const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd }
+  let historicNeedsActual = false
+  const todayKey = iso(new Date())
+  for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
+    const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
+    // any allocation strictly before today that is NOT marked actual -> needs confirming
+    if (dk < todayKey) { const cd = cellData(cell); if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
+  }
   const overrun = complD && lastAlloc && lastAlloc > complD
 
   async function saveMeta(nextStart, nextCompl) {
@@ -267,6 +306,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
         <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
           {missing && <span title="Start / completion date missing" style={{ color: '#dc2626' }}>⚠ </span>}
           {overrun && <span title="Runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
+          {historicNeedsActual && <span title="Historic dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
@@ -281,10 +321,13 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
 
       {view === 'day'
         ? days.map((d, i) => {
-          const we = isWeekend(d); const key = iso(d); const n = countOnDay(p, key)
+          const we = isWeekend(d); const key = iso(d)
+          const cd = cellData((data.allocations[p.key] || {})[key])
+          const n = cd.count
           const isCompl = complD && sameDay(d, complD)
-          const past = complD && d > complD && n > 0
+          const pastCompl = complD && d > complD && n > 0
           const selected = selDates && selDates.has(key)
+          const col = n ? cellColours(cd) : null
           return (
             <div key={i}
               onMouseDown={() => onCellDown(p.key, d)}
@@ -292,11 +335,12 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
               title={isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')}
               style={{
                 width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
-                background: selected ? '#fde68a' : (past ? '#fee2e2' : (n ? (neg ? '#fef9c3' : '#dbeafe') : (we ? '#f3f1ec' : '#fff'))),
+                background: selected ? '#fde68a' : (col ? col.bg : (we ? '#f3f1ec' : '#fff')),
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
-                boxShadow: isCompl ? 'inset -2px 0 0 0 #dc2626' : 'none',
+                boxShadow: isCompl ? 'inset -2px 0 0 0 #dc2626' : (col ? `inset 0 -3px 0 0 ${col.edge}` : 'none'),
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 12, fontWeight: 700, color: neg ? '#8a6d1a' : '#1e40af',
+                fontSize: pastCompl ? 14 : 12, fontWeight: 700,
+                color: pastCompl ? '#dc2626' : (col ? col.num : '#999'),
               }}>{n || ''}</div>
           )
         })
@@ -338,26 +382,43 @@ const SectionLabel = ({ children, neg }) => (
   <div style={{ position: 'sticky', left: 0, padding: '5px 10px', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, color: neg ? '#8a6d1a' : GOLD, background: neg ? '#fdfbf3' : '#faf9f7', borderBottom: '1px solid #eee', borderTop: '1px solid #eee' }}>{children}</div>
 )
 const EmptyRow = ({ children }) => <div style={{ padding: '10px 12px', fontSize: 12, color: '#aaa', position: 'sticky', left: 0 }}>{children}</div>
+function Legend({ c, label }) {
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 14, borderRadius: 3, background: c, border: '1px solid rgba(0,0,0,0.1)', display: 'inline-block' }} />{label}</span>
+}
 
 const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
 const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }
+const stepBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #d9d5cc', background: '#fff', fontSize: 16, cursor: 'pointer', lineHeight: '1' }
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
 
 // ── Weekly labour pop-out (per-operative grid) ──
 function WeekModal({ monday, onClose }) {
   const [week, setWeek] = useState(null)
+  const [emailStep, setEmailStep] = useState(false)
+  const [weeksAhead, setWeeksAhead] = useState(1)
+  const [excluded, setExcluded] = useState(new Set())   // opIds to NOT email
   const [emailing, setEmailing] = useState(false)
   const [msg, setMsg] = useState('')
   useEffect(() => { fetch(`/api/planning-week?monday=${encodeURIComponent(monday)}`).then(r => r.json()).then(setWeek).catch(() => setWeek({ rows: [], days: [], dailyTotals: [] })) }, [monday])
 
   const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  async function emailAll() {
-    if (!confirm('Email each operative their own week? This sends to everyone allocated this week who has an email address.')) return
+  const statusColour = (s) => s === 'actual' ? C_ACTUAL : s === 'provisional' ? C_PROVISIONAL : C_CONFIRMED
+
+  // People eligible to email = named rows with an email (exclude unnamed/TBC rows)
+  const emailable = week ? week.rows.filter(r => !r.unnamed) : []
+  const toggleExcl = (opId) => setExcluded(prev => { const n = new Set(prev); n.has(opId) ? n.delete(opId) : n.add(opId); return n })
+
+  async function sendEmails() {
     setEmailing(true); setMsg('')
     try {
-      const d = await fetch('/api/planning-week-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monday }) }).then(r => r.json())
+      // build the list of week-Mondays to include
+      const base = parseISO(monday); const weeks = []
+      for (let i = 0; i < weeksAhead; i++) { const m = new Date(base.getTime() + i * 7 * 86400000); weeks.push(iso(m)) }
+      const includeOpIds = emailable.filter(r => !excluded.has(r.opId)).map(r => r.opId)
+      const d = await fetch('/api/planning-week-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weeks, includeOpIds }) }).then(r => r.json())
       setMsg(`Sent to ${d.sent} operative${d.sent === 1 ? '' : 's'}.${d.skipped?.length ? ` Skipped: ${d.skipped.join(', ')}.` : ''}`)
+      setEmailStep(false)
     } catch { setMsg('Could not send.') }
     setEmailing(false)
   }
@@ -372,7 +433,16 @@ function WeekModal({ monday, onClose }) {
           </div>
           <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
         </div>
-        <div style={{ padding: '16px 22px 22px' }}>
+        <div style={{ padding: '14px 22px 22px' }}>
+          {/* colour key */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 12, fontSize: 11.5, color: '#555' }}>
+            <span style={{ fontWeight: 700, color: '#888' }}>Key:</span>
+            <Legend c={C_ACTUAL} label="Actual" />
+            <Legend c={C_CONFIRMED} label="Confirmed" />
+            <Legend c={C_PROVISIONAL} label="Provisional" />
+            <Legend c={C_UNNAMED} label="Unnamed / TBC" />
+          </div>
+
           {!week ? <Loading /> : week.rows.length === 0 ? (
             <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated this week.</div>
           ) : (
@@ -386,11 +456,14 @@ function WeekModal({ monday, onClose }) {
                 </thead>
                 <tbody>
                   {week.rows.map(r => (
-                    <tr key={r.opId} style={{ borderTop: '1px solid #f0f0f0' }}>
-                      <td style={{ ...wtd, fontWeight: 600 }}>{r.name}{r.company ? <div style={{ fontSize: 10, color: '#aaa', fontWeight: 400 }}>{r.company}</div> : null}</td>
+                    <tr key={r.opId} style={{ borderTop: '1px solid #f0f0f0', background: r.unnamed ? '#fff7ed' : undefined }}>
+                      <td style={{ ...wtd, fontWeight: 600, color: r.unnamed ? '#9a3412' : INK }}>{r.name}{r.company && !r.unnamed ? <div style={{ fontSize: 10, color: '#aaa', fontWeight: 400 }}>{r.company}</div> : null}</td>
                       {r.cells.map((c, i) => (
-                        <td key={i} style={{ ...wtd, textAlign: 'center', background: i >= 5 ? '#faf8f4' : undefined, fontSize: 11, color: c ? '#1e40af' : '#ddd' }}>
-                          {c ? c.entries.map((e, j) => <div key={j}>{e.projectName}{e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}</div>) : '—'}
+                        <td key={i} style={{ ...wtd, textAlign: 'center', background: i >= 5 ? '#faf8f4' : undefined, fontSize: 11 }}>
+                          {c ? c.entries.map((e, j) => {
+                            const col = r.unnamed ? C_UNNAMED : statusColour(e.status)
+                            return <div key={j} style={{ color: '#333' }}><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: col, marginRight: 4 }} />{e.unnamed ? `${e.unnamed} unnamed` : e.projectName}{e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}</div>
+                          }) : <span style={{ color: '#ddd' }}>—</span>}
                         </td>
                       ))}
                     </tr>
@@ -403,31 +476,71 @@ function WeekModal({ monday, onClose }) {
               </table>
             </div>
           )}
+
+          {/* Email step */}
+          {emailStep && week && (
+            <div style={{ marginTop: 16, padding: 16, border: '1px solid #f0e2b0', background: '#fffdf5', borderRadius: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 10 }}>Email operatives their allocation</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, color: '#555' }}>Send how far ahead:</span>
+                {[1, 2, 3, 4].map(w => (
+                  <button key={w} onClick={() => setWeeksAhead(w)} style={{ padding: '6px 12px', borderRadius: 8, border: weeksAhead === w ? `2px solid ${GOLD}` : '1px solid #ddd', background: weeksAhead === w ? '#fffbeb' : '#fff', fontWeight: weeksAhead === w ? 700 : 500, fontSize: 12.5, cursor: 'pointer' }}>{w} week{w > 1 ? 's' : ''}</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Only future dates are sent (past days and Actuals are never emailed). Untick anyone you don't want to email:</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {emailable.map(r => (
+                  <label key={r.opId} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 20, padding: '5px 12px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!excluded.has(r.opId)} onChange={() => toggleExcl(r.opId)} />
+                    {r.name}{!r.email ? ' (no email)' : ''}
+                  </label>
+                ))}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button onClick={() => setEmailStep(false)} style={ghostBtn}>Cancel</button>
+                <button onClick={sendEmails} disabled={emailing} style={primaryBtn}>{emailing ? 'Sending…' : 'Send emails'}</button>
+              </div>
+            </div>
+          )}
+
           {msg && <div style={{ fontSize: 12.5, color: '#16a34a', marginTop: 12 }}>{msg}</div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
-            <button onClick={onClose} style={ghostBtn}>Close</button>
-            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(monday)}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
-            <button onClick={emailAll} disabled={emailing || !week || !week.rows.length} style={primaryBtn}>{emailing ? 'Sending…' : 'Email each operative their week'}</button>
-          </div>
+          {!emailStep && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
+              <button onClick={onClose} style={ghostBtn}>Close</button>
+              <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(monday)}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
+              <button onClick={() => setEmailStep(true)} disabled={!week || !week.rows.length} style={primaryBtn}>Email operatives →</button>
+            </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
 const wth = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#444', textAlign: 'center', borderBottom: '1px solid #eee' }
 const wtd = { padding: '7px 10px', fontSize: 12, color: '#333', verticalAlign: 'top' }
 
 // ── Allocate / edit labour for the selected dates ──
 function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, reloadOps }) {
   const isEdit = mode === 'edit'
-  // In edit mode, pre-load everyone currently allocated across ANY of the selected dates.
+  // In edit mode, pre-load everyone currently allocated across ANY of the selected dates,
+  // plus the max unnamed count and a common status.
+  const cellOf = (dk) => cellData((data.allocations[proj.key] || {})[dk])
   const initialPicked = () => {
     if (!isEdit) return []
     const set = new Set()
-    for (const dk of dates) for (const e of ((data.allocations[proj.key] || {})[dk] || [])) set.add(e.opId)
+    for (const dk of dates) for (const e of cellOf(dk).entries) set.add(e.opId)
     return [...set]
   }
-  const [picked, setPicked] = useState(initialPicked)   // opIds to allocate across all selected dates
+  const initialUnnamed = () => { if (!isEdit) return 0; let m = 0; for (const dk of dates) m = Math.max(m, cellOf(dk).unnamed); return m }
+  const initialStatus = () => {
+    if (!isEdit) return 'confirmed'
+    const statuses = [...new Set(dates.map(dk => cellOf(dk).status))]
+    return statuses.length === 1 ? statuses[0] : 'confirmed'
+  }
+  const [picked, setPicked] = useState(initialPicked)   // named opIds
+  const [unnamed, setUnnamed] = useState(initialUnnamed)  // extra unnamed slots
+  const [status, setStatus] = useState(initialStatus)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [pick, setPick] = useState('')
@@ -444,23 +557,22 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
 
   async function save() {
     setErr('')
-    // In edit mode an empty list is valid (means "clear these days"); in add mode require at least one.
-    if (!isEdit && !picked.length) { setErr('Add at least one installer.'); return }
+    if (!picked.length && unnamed <= 0) { setErr('Add at least one installer, or set an unnamed headcount.'); if (!isEdit) return; }
     setSaving(true)
     try {
       const clashes = []
       for (const dk of dates) {
         let entries
         if (isEdit) {
-          // Replace the day's list with exactly the picked set (removes anyone unpicked).
           entries = picked.map(id => ({ opId: id, half: 'full' }))
         } else {
-          // Add: merge existing + picked (no dupes), all full-day.
-          const existing = (data.allocations[proj.key] || {})[dk] || []
+          const existing = cellOf(dk).entries
           entries = [...existing.map(e => ({ opId: e.opId, half: e.half || 'full' }))]
           for (const id of picked) if (!entries.some(e => e.opId === id)) entries.push({ opId: id, half: 'full' })
         }
-        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries }) })
+        // unnamed: in edit mode set to the chosen value; in add mode add to existing
+        const dayUnnamed = isEdit ? unnamed : (cellOf(dk).unnamed + unnamed)
+        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries, unnamed: dayUnnamed, status }) })
         const d = await r.json()
         if (r.status === 409) clashes.push(`${opName(d.opId)} on ${fmtDMY(parseISO(dk))}`)
         else if (!r.ok) throw new Error(d.error || 'Save failed')
@@ -492,14 +604,37 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
           </div>
           {isEdit && <div style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>Editing shows everyone currently allocated across the selected days. Saving sets this exact list on every selected day (remove someone to take them off those days).</div>}
 
+          {/* Status */}
+          <div style={lbl}>Allocation status</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => (
+              <button key={v} onClick={() => setStatus(v)} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: status === v ? `2px solid ${c}` : '1px solid #ddd', background: status === v ? c + '22' : '#fff', fontWeight: status === v ? 700 : 500, fontSize: 12.5, cursor: 'pointer' }}>
+                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: c, marginRight: 6 }} />{label}
+              </button>
+            ))}
+          </div>
+
           <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>{isEdit ? 'Installers allocated (full day)' : 'Installers to allocate (full day)'}</div>
-          {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>{isEdit ? 'No one allocated — saving will clear these days.' : 'None selected yet.'}</div>}
+          {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>{isEdit ? 'No named installers.' : 'None selected yet.'}</div>}
           {picked.map(id => (
             <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#faf9f7', borderRadius: 8, marginBottom: 6 }}>
               <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{opName(id)}</div>{opTrades(id) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(id)}</div>}</div>
               <button onClick={() => removePick(id)} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
             </div>
           ))}
+
+          {/* Unnamed headcount */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, padding: '10px 12px', background: unnamed > 0 ? '#fff7ed' : '#faf9f7', borderRadius: 8, border: unnamed > 0 ? '1px solid #fed7aa' : '1px solid transparent' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Unnamed slots {isEdit ? '(sets the total)' : '(added to the day)'}</div>
+              <div style={{ fontSize: 11, color: '#9a3412' }}>Installers needed but not yet named — the cell shows orange until all are named.</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setUnnamed(Math.max(0, unnamed - 1))} style={stepBtn}>−</button>
+              <span style={{ minWidth: 20, textAlign: 'center', fontWeight: 700 }}>{unnamed}</span>
+              <button onClick={() => setUnnamed(unnamed + 1)} style={stepBtn}>+</button>
+            </div>
+          </div>
 
           {!addOpen ? (
             <div style={{ marginTop: 10 }}>

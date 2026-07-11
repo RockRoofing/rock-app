@@ -1,23 +1,31 @@
-PLANNING — PHASE 4 of 5: Weekly labour pop-out (PDF + per-operative email)
+PLANNING — status (Confirmed/Provisional/Actual) + unnamed slots + Download PDF fix + email selection
 
-NEW FILES
-  lib/weeklyLabourPdf.js            Two PDF builders: the full week grid (landscape) and a single
-                                    operative's own week (portrait, for the email attachment).
-  pages/api/planning-week.js        Assembles one week BY OPERATIVE: rows of {name,email,phone,company,
-                                    cells[7]} + daily totals. Only operatives allocated that week appear.
-  pages/api/planning-week-pdf.js    GET ?monday=YYYY-MM-DD -> the week grid PDF.
-  pages/api/planning-week-email.js  POST { monday } -> emails EACH operative their OWN week (HTML + a
-                                    one-page PDF attachment). Operatives without an email are skipped
-                                    and reported back.
+DOWNLOAD PDF CRASH FIXED
+  The PDF/email endpoints no longer call /api/planning-week over HTTP (that internal fetch was failing
+  -> "Cannot read properties of undefined (reading 'forEach')"). They now import a shared assembleWeek()
+  function directly. pages/api/planning-week.js exports assembleWeek; -pdf and -email import it.
 
-CHANGED
-  pages/operations/project-management/planning.js
-    - The W/C week headers are now CLICKABLE (👥 in day view). Click a week to open the Weekly Labour
-      Allocation pop-out: a per-operative grid (operatives down the side, Mon–Sun across, project in
-      each cell, weekends shaded, daily total installers row) — mirroring your spreadsheet.
-    - Buttons: Download PDF, and "Email each operative their week" (sends each person their own week).
+ALLOCATION STATUS + UNNAMED SLOTS (data model)
+  pages/api/planning.js  Day-cell is now { status:'confirmed'|'provisional'|'actual', unnamed:N,
+                         entries:[{opId,half}] } (legacy bare-array cells still read fine). Clash-check
+                         still applies to NAMED entries only.
 
-Requires Resend env already set (RESEND_API_KEY + FORMS_FROM_EMAIL) — same as issues/report emails.
-Deploy over previous. Uses Phase 1 roster (for names/emails) + Phase 2 allocations.
+GANTT (pages/operations/project-management/planning.js)
+  - Colour key added at the top.
+  - Cell colours: Actual = dark green, Confirmed = light green, Provisional = blue,
+    ANY unnamed slot = orange (overrides status). Past contracted completion: number turns red, bold,
+    larger; background colour still follows the status/unnamed rule.
+  - Historic warning flag (⚑) by the project name when labour before today isn't marked Actual.
+  - Allocate / Edit pop-up now has: a Confirmed/Provisional/Actual status selector; an "Unnamed slots"
+    stepper (headcount with no names — cell shows orange until all named). You can allocate unnamed-only.
+    To mark past work Actual: select the past cells -> Edit labour allocation -> set status Actual -> save
+    (affects only the selection; past dates stay fully editable).
 
-NEXT: Phase 5 = Forms split (Completed | Missing), driven by the Gantt allocations.
+WEEKLY LABOUR ALLOCATION pop-out
+  - Colour key at the top; each cell shows a status dot (blue provisional / green confirmed / dark-green
+    actual / orange unnamed). Unnamed slots appear as a "TBC — <project>" row.
+  - "Email operatives →" now opens a step: choose how far ahead (1/2/3/4 weeks) and untick anyone you
+    don't want to email. FUTURE dates only — past days and Actuals are never emailed. Provisional IS sent
+    (labelled provisional). Each operative gets their own multi-week allocation (HTML + PDF attachment).
+
+Deploy over previous. Uses existing Resend env. No cron/other changes.

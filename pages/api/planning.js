@@ -27,19 +27,27 @@ const saveAlloc = (v) => set(A_KEY, v)
 const getMeta = async () => (await get(M_KEY)) || {}
 const saveMeta = (v) => set(M_KEY, v)
 
+// A day-cell can be the legacy array [{opId,half}] OR the new object
+// { status, unnamed, entries:[{opId,half}] }. Normalise to the entries array.
+function cellEntries(cell) {
+  if (!cell) return []
+  if (Array.isArray(cell)) return cell
+  return Array.isArray(cell.entries) ? cell.entries : []
+}
+function cellUnnamed(cell) { return (cell && !Array.isArray(cell) && Number(cell.unnamed)) || 0 }
+function cellStatus(cell) { return (cell && !Array.isArray(cell) && cell.status) || 'confirmed' }
+
 // Two allocations of the same operative on the same day are allowed ONLY if BOTH
 // are half days (am/pm split across two projects). Anything else is a clash.
 function wouldClash(alloc, key, date, opId, half) {
   const h = half || 'full'
   for (const [pk, days] of Object.entries(alloc)) {
     if (pk === key) continue
-    const list = (days && days[date]) || []
+    const list = cellEntries(days && days[date])
     for (const e of list) {
       if (e.opId !== opId) continue
-      // existing booking elsewhere on the same day
       if (h === 'full' || (e.half || 'full') === 'full') return { clash: true, pk }
-      // both are halves — allowed only if different halves
-      if ((e.half || 'full') === h) return { clash: true, pk }  // same half -> clash
+      if ((e.half || 'full') === h) return { clash: true, pk }
     }
   }
   return { clash: false }
@@ -132,18 +140,24 @@ export default async function handler(req, res) {
       if (action === 'set-day') {
         const { key, date } = body
         const entries = Array.isArray(body.entries) ? body.entries : []
+        const unnamed = Math.max(0, Number(body.unnamed) || 0)
+        const status = ['confirmed', 'provisional', 'actual'].includes(body.status) ? body.status : 'confirmed'
         if (!key || !date) return res.status(400).json({ error: 'Missing key/date' })
         const alloc = await getAlloc()
-        // Clash-check every entry against OTHER projects (ignore this project's own day)
+        // Clash-check only NAMED entries against OTHER projects.
         for (const e of entries) {
+          if (!e.opId) continue
           const clash = wouldClash(alloc, key, date, e.opId, e.half || 'full')
           if (clash.clash) return res.status(409).json({ error: 'clash', opId: e.opId, clashKey: clash.pk })
         }
         alloc[key] = alloc[key] || {}
-        if (entries.length) alloc[key][date] = entries.map(e => ({ opId: e.opId, half: e.half || 'full' }))
-        else { delete alloc[key][date]; if (!Object.keys(alloc[key]).length) delete alloc[key] }
+        if (entries.length || unnamed > 0) {
+          alloc[key][date] = { status, unnamed, entries: entries.map(e => ({ opId: e.opId, half: e.half || 'full' })) }
+        } else {
+          delete alloc[key][date]; if (!Object.keys(alloc[key]).length) delete alloc[key]
+        }
         await saveAlloc(alloc)
-        return res.json({ ok: true, day: alloc[key][date] || [] })
+        return res.json({ ok: true, day: alloc[key][date] || null })
       }
 
       return res.status(400).json({ error: 'Unknown action' })
