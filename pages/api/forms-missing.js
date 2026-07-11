@@ -95,11 +95,11 @@ export default async function handler(req, res) {
           if (done) byForm[formType].completed++
         }
 
-        // PRE-START (CM): start on site OR revisit (>1 wk gap) whose date is within 3 working days of the week start.
-        const cutoff = addWorkingDays(wStart, 3)
+        // PRE-START (CM): project starts OR returns to site within 14 calendar days of the week start.
+        const twoWeeks = new Date(wStart.getTime() + 14 * DAY)
         const triggers = [firstDay]
         for (let i = 1; i < dayObjs.length; i++) if ((dayObjs[i] - dayObjs[i - 1]) > 7 * DAY) triggers.push(dayObjs[i])
-        if (triggers.some(t => t >= wStart && t <= cutoff)) {
+        if (triggers.some(t => t >= wStart && t <= twoWeeks)) {
           add('Pre-Start', cm, 'CM', doneFor(projectNo, projectName, 'pre-start', weekMon))
         }
 
@@ -117,8 +117,16 @@ export default async function handler(req, res) {
           if (done) byForm['Daily Site Diary'].completed++
         }
 
-        // WORKS AREA HANDOVER (Supervisor): week containing last allocated day
-        if (inWeek(lastDay)) add('Works Area Handover', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'works area handover', weekMon))
+        // WORKS AREA HANDOVER (Supervisor): a finish day in this week followed by a 5+ calendar-day gap
+        // before the next visit (or no next visit = project end).
+        let wahNeeded = false
+        for (let i = 0; i < dayObjs.length; i++) {
+          const d = dayObjs[i]; if (!inWeek(d)) continue
+          const next = dayObjs[i + 1] || null
+          const gap = next ? Math.round((next - d) / DAY) : Infinity
+          if (gap >= 5) { wahNeeded = true; break }
+        }
+        if (wahNeeded) add('Works Area Handover', supervisor, 'Supervisor', doneFor(projectNo, projectName, 'works area handover', weekMon))
       }
     }
 

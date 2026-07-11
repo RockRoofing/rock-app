@@ -99,11 +99,11 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
 
   // Build obligations keyed by recipient
   const cmTasks = {}   // cmName -> { preStart:[{name, when}] }
-  const supTasks = {}  // supName -> { startOnSite:[], siteDiaryCount:0, wah:[] }
+  const supTasks = {}  // supName -> { startOnSite:[], siteDiaryProjects:[], wah:[] }
   const pushCM = (nm, item) => { (cmTasks[nm] = cmTasks[nm] || { preStart: [] }).preStart.push(item) }
-  const ensureSup = (nm) => (supTasks[nm] = supTasks[nm] || { startOnSite: [], siteDiaryCount: 0, siteDiaryProjects: [], wah: [] })
+  const ensureSup = (nm) => (supTasks[nm] = supTasks[nm] || { startOnSite: [], siteDiaryProjects: [], wah: [] })
 
-  const cutoff = addWorkingDays(weekMon, 3)  // "within 3 working days of the coming week"
+  const twoWeeks = new Date(weekMon.getTime() + 14 * DAY)  // start/return within 14 calendar days
 
   for (const pm of Object.values(projMeta)) {
     if (!pm.days.length) continue
@@ -111,15 +111,13 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
     const firstDay = dayObjs[0]
     const lastDay = dayObjs[dayObjs.length - 1]
 
-    // PRE-START (CM): first day OR a revisit after >1 week gap, whose date is within 3 working days.
+    // PRE-START (CM): project starts OR returns to site within 14 calendar days of this Monday.
     if (pm.cm) {
-      const triggers = []
-      // start on site
-      triggers.push(firstDay)
-      // revisits: any allocated day that follows a gap of > 7 days from the previous allocated day
+      const triggers = [firstDay]
+      // returns: any allocated day following a gap of > 7 days from the previous allocated day
       for (let i = 1; i < dayObjs.length; i++) if ((dayObjs[i] - dayObjs[i - 1]) > 7 * DAY) triggers.push(dayObjs[i])
       for (const t of triggers) {
-        if (t >= weekMon && t <= cutoff && !doneFor(pm.projectNo, 'pre-start')) {
+        if (t >= weekMon && t <= twoWeeks && !doneFor(pm.projectNo, 'pre-start')) {
           pushCM(pm.cm, { name: `${pm.projectNo} — ${pm.name}`, when: fmt(t) })
         }
       }
@@ -130,11 +128,18 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
       const s = ensureSup(pm.supervisor)
       // Start on Site Checklist — week containing the first-ever allocated day
       if (inThisWeek(firstDay) && !doneFor(pm.projectNo, 'start on site')) s.startOnSite.push(`${pm.projectNo} — ${pm.name}`)
-      // Daily Site Diary — count allocated days this week for this project
+      // Daily Site Diary — list the project if it has any allocated day this week
       const diaryDays = pm.days.filter(dk => weekDays.includes(dk)).length
-      if (diaryDays > 0) { s.siteDiaryCount += diaryDays; s.siteDiaryProjects.push(`${pm.projectNo} — ${pm.name} (${diaryDays})`) }
-      // Works Area Handover — last allocated day falls in this week
-      if (inThisWeek(lastDay) && !doneFor(pm.projectNo, 'works area handover')) s.wah.push(`${pm.projectNo} — ${pm.name}`)
+      if (diaryDays > 0) s.siteDiaryProjects.push(`${pm.projectNo} — ${pm.name}`)
+      // Works Area Handover — a finish day this week followed by a 5+ calendar-day gap before the next
+      // visit (or no next visit = project end). Checked per allocated day that falls in this week.
+      for (let i = 0; i < dayObjs.length; i++) {
+        const d = dayObjs[i]
+        if (!inThisWeek(d)) continue
+        const next = dayObjs[i + 1] || null
+        const gapDays = next ? Math.round((next - d) / DAY) : Infinity
+        if (gapDays >= 5 && !doneFor(pm.projectNo, 'works area handover')) { s.wah.push(`${pm.projectNo} — ${pm.name}`); break }
+      }
     }
   }
 
@@ -158,23 +163,22 @@ export async function runFormsWeeklyNotify({ force = false } = {}) {
     if (!t.preStart.length) continue
     const email = emailByName[nm.toLowerCase()]
     const html = `<div style="font-family:system-ui,Arial,sans-serif;max-width:620px">
-      <h2 style="color:#1a1a19;margin:0 0 4px">Forms to complete — week commencing ${wcLabel}</h2>
-      <p style="color:#666;margin:0 0 10px">Hi ${nm.split(' ')[0]}, the following are due this week.</p>
+      <h2 style="color:#1a1a19;margin:0 0 4px">Up and coming projects that require a Pre-Start Notification</h2>
+      <p style="color:#666;margin:0 0 10px">Hi ${nm.split(' ')[0]}, these projects start or return to site within the next 2 weeks and need a Pre-Start.</p>
       <h3 style="font-size:15px;color:#1a1a19;margin:14px 0 2px">Pre-Start Meetings (${t.preStart.length})</h3>
-      <p style="color:#888;font-size:12px;margin:0 0 4px">Needed within 3 working days of the start / revisit shown.</p>
       ${listHtml(t.preStart.map(p => `${p.name} — starts ${p.when}`))}
       <p style="color:#999;font-size:12px;margin-top:16px">Complete in the portal: Projects → select project → Pre-Start.</p>
     </div>`
-    await sendMail(email, `Rock Roofing — Pre-Start forms due (w/c ${weekMon.toLocaleDateString('en-GB')})`, html)
+    await sendMail(email, `Rock Roofing — Up and coming Pre-Start Notifications (w/c ${weekMon.toLocaleDateString('en-GB')})`, html)
   }
 
   // Supervisor emails
   for (const [nm, t] of Object.entries(supTasks)) {
-    if (!t.startOnSite.length && !t.siteDiaryCount && !t.wah.length) continue
+    if (!t.startOnSite.length && !t.siteDiaryProjects.length && !t.wah.length) continue
     const email = supEmailByName[nm.toLowerCase()] || emailByName[nm.toLowerCase()]
     let body = ''
     if (t.startOnSite.length) body += `<h3 style="font-size:15px;color:#1a1a19;margin:14px 0 2px">Start on Site Checklist (${t.startOnSite.length})</h3>${listHtml(t.startOnSite)}`
-    if (t.siteDiaryCount) body += `<h3 style="font-size:15px;color:#1a1a19;margin:14px 0 2px">Daily Site Diaries</h3><p style="margin:2px 0 8px">You have <strong>${t.siteDiaryCount}</strong> site diaries to complete this week:</p>${listHtml(t.siteDiaryProjects)}`
+    if (t.siteDiaryProjects.length) body += `<h3 style="font-size:15px;color:#1a1a19;margin:14px 0 2px">Daily Site Diaries (${t.siteDiaryProjects.length})</h3><p style="margin:2px 0 8px;color:#666">A daily site diary is required for each of these projects this week:</p>${listHtml(t.siteDiaryProjects)}`
     if (t.wah.length) body += `<h3 style="font-size:15px;color:#1a1a19;margin:14px 0 2px">Works Area Handovers (${t.wah.length})</h3>${listHtml(t.wah)}`
     const html = `<div style="font-family:system-ui,Arial,sans-serif;max-width:620px">
       <h2 style="color:#1a1a19;margin:0 0 4px">Forms to complete — week commencing ${wcLabel}</h2>

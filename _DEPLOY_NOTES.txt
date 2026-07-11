@@ -1,29 +1,30 @@
-WATER INGRESS — new planning section + WLA/email + forms
+FORMS — revised due-logic (notifications + Missing dashboard kept in sync)
 
-  pages/api/planning.js
-   - New store ops:water-ingress = { [dateISO]: [ { id, jobName, jobAddress, projectNo, status, unnamed,
-     entries:[{opId,half}] } ] }. GET now returns waterIngress. New POST actions: wi-save, wi-delete.
-     Server requires jobName + jobAddress; blocks Actual on non-past dates; requires ≥1 installer or unnamed.
+How items clear on the Missing dashboard:
+  An item flips Missing -> Completed when a matching Site App submission arrives for that job/project within
+  that form's week (site diaries match the specific day; others match the week). It's driven by real
+  submissions, not manual ticking.
 
-  pages/operations/project-management/planning.js
-   - New "WATER INGRESS" section between Live and Negotiated. One permanent row; each day shows the total
-     head-count across all water-ingress visits that day (blue cell). Click a day to open the day modal.
-   - Day modal lists that day's visits (multiple jobs per day allowed) and lets you add/edit/delete each.
-     Each visit: pick a LIVE PROJECT from a dropdown (auto-fills name + address) OR tick "manual" to type an
-     old/unlisted job name; project ADDRESS is mandatory (auto or manual). Installers (CSCS/WAH hard-block
-     applies), unnamed headcount, and a status (Confirmed/Provisional/Actual). Nothing auto-selected.
+Rule changes (applied to BOTH the Monday cron and the Missing dashboard so they agree):
 
-  pages/api/planning-week.js  (assembleWeek)
-   - Water-ingress visits now flow into the Weekly Labour Allocation: each shows as "💧 <job name>" on the
-     operative's row with its own address, so it appears in the WLA table, the WLA PDF, and the installer
-     EMAIL (including under the email's "Project addresses" list). Future-only / non-Actual email rules
-     still apply.
+  PRE-START (CM)
+   - Now triggers when a project STARTS or RETURNS to site within 14 CALENDAR DAYS of the Monday (was
+     "within 3 working days"). Email is titled "Up and coming projects that require a Pre-Start
+     Notification".
 
-  pages/api/forms-missing.js + pages/operations/forms-missing.js
-   - Standard forms are NOT required for water-ingress work. The only required form is a WATER INGRESS
-     REPORT — one per job-visit (per job per day), shown in the Missing dashboard in the visit's week with
-     its own card, %, and Missing/Completed status. Matched to a submitted form whose title contains
-     "Water Ingress" for that job in that week.
+  DAILY SITE DIARY (Supervisor)
+   - Email now lists the PROJECTS that need a site diary that week (was a count). Dashboard still tracks one
+     per allocated day. Goes to the effective supervisor (Gantt-allocated supervisor takes priority over the
+     Project Details one; if two, the first is used).
 
-Deploy all five. No cron/env change. New Redis key ops:water-ingress is created on first save.
-Note: Water Ingress Report completion matching relies on the Site App form title containing "Water Ingress".
+  WORKS AREA HANDOVER (Supervisor)
+   - Now triggers when a finish day is followed by a gap of 5+ CALENDAR DAYS before the next visit (covers
+     "finishes Friday, not back by the following Wednesday"), and also at project end (no next visit). Was
+     "week of the last allocated day".
+
+  START ON SITE CHECKLIST (Supervisor) — unchanged (week of the first allocated day).
+
+  One combined email per supervisor still covers all their required forms (Start on Site + Site Diaries +
+  WAH). CMs get their own Pre-Start email.
+
+Deploy both over previous. No cron/env change.
