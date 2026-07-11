@@ -1,21 +1,28 @@
-PLANNING — Phase 3 refinements: set dates easily + historic view
+PLANNING — Gantt rework (selection + day/week view + inline dates + frozen column) & Operatives mandatory fields
 
-  pages/operations/project-management/planning.js
+pages/operations/project-management/planning.js
+  1) INLINE DATE EDITING: Start and Contracted Completion are now date inputs directly in each project
+     row — edit in place, saves on change. No dates in the allocate pop-up anymore.
+  2) COLUMN DATES SHOW THE YEAR (W/C dd Mmm yy).
+  3) DAY / WEEK VIEW TOGGLE (replaces the weeks dropdown). Default horizon = 3 years forward
+     (Historic toggle adds 1 year back). WEEK VIEW is read-only: each column = a week; part-weeks
+     fill proportionally by working days Mon–Fri (e.g. 3/5). Allocation is Day-view only.
+  4) CELL SELECTION + DRAG: in Day view, click a day to select/deselect; drag across days to select a
+     range (weekends can't be selected). A yellow action bar shows the count with an "Allocate labour →"
+     button. Nothing opens on a plain click now — you choose the cells first.
+  5) ALLOCATE POP-UP: no start/completion dates; instead lists the actual dates being allocated. Pick
+     installers to apply across ALL selected days (full day). Clashes (installer already on another
+     project that day) are skipped and reported. 
+  6) ADD NEW OPERATIVE inline from the allocate pop-up (writes to the roster, then auto-selects them).
+  7) FROZEN PROJECT + DATE COLUMNS: the Project / Start / Contracted Completion columns stay put when
+     scrolling the calendar horizontally (sticky).
 
-  1) SET PROJECT DATES DIRECTLY ON THE ROW
-     The Start and "Contract Compl." cells on each project row are now CLICKABLE. Click either one to
-     open a focused "Programme dates" dialog with Project start date + Contracted completion date and
-     Save. This is the clear way to build the programme — you no longer have to go via a day cell.
-     (The day pop-out still also lets you set dates; both write to the same place.)
-     Empty date cells now show "⚠ set date" on a pale-red background so they're obvious.
+pages/operations/hs/operatives.js
+  - Email, Phone, Company and at least one Trade are now MANDATORY (marked *), enforced on save.
 
-  2) HISTORIC VIEW TOGGLE
-     New "Historic" button (top-right, next to Back/Today/Fwd). When on, the Gantt also shows past
-     weeks (it pulls the start back by the current zoom span) so you can look backwards. Off by default.
+Deploy over the previous versions. Uses the same Phase 2 API (no API change).
 
-  Note on building the Gantt bars: a project's day cells only show a number once you've assigned named
-  installers to that day (click a day cell -> add installers -> Save day). The bar = installers on site.
-  Set the project's Start/Completion dates first (click the date cell) so the row is anchored, then
-  allocate installers per day.
-
-Deploy over the previous planning.js. (Uses the same Phase 2 API — no API change.)
+WORTH TESTING: set a project's start/completion inline; switch Day/Week; in Day view drag 3 weeks
+(skipping weekends) and allocate a person; try to allocate someone already booked elsewhere (should be
+reported as skipped); add a new operative from inside the allocate pop-up; scroll right and confirm the
+Project column stays frozen.

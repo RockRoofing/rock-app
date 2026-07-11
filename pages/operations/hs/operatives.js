@@ -120,6 +120,10 @@ function OpModal({ initial, onClose, onSaved }) {
   async function save() {
     setErr('')
     if (!f.firstName.trim() || !f.lastName.trim()) return setErr('First and last name are required.')
+    if (!f.email.trim()) return setErr('Email is required.')
+    if (!f.phone.trim()) return setErr('Phone is required.')
+    if (!f.company.trim()) return setErr('Company is required.')
+    if (!(f.trades || []).length) return setErr('Select at least one trade.')
     setSaving(true)
     try {
       const r = await fetch('/api/operatives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operative: f }) })
@@ -143,12 +147,12 @@ function OpModal({ initial, onClose, onSaved }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
             <div><L req>First name</L><input value={f.firstName} onChange={e => set({ firstName: e.target.value })} style={input} /></div>
             <div><L req>Last name</L><input value={f.lastName} onChange={e => set({ lastName: e.target.value })} style={input} /></div>
-            <div><L>Email</L><input value={f.email} onChange={e => set({ email: e.target.value })} style={input} type="email" /></div>
-            <div><L>Phone</L><input value={f.phone} onChange={e => set({ phone: e.target.value })} style={input} /></div>
+            <div><L req>Email</L><input value={f.email} onChange={e => set({ email: e.target.value })} style={input} type="email" /></div>
+            <div><L req>Phone</L><input value={f.phone} onChange={e => set({ phone: e.target.value })} style={input} /></div>
           </div>
-          <L>Company</L>
+          <L req>Company</L>
           <input value={f.company} onChange={e => set({ company: e.target.value })} style={input} />
-          <L>Trade <span style={{ fontWeight: 400, color: '#999', fontSize: 12 }}>(select all that apply)</span></L>
+          <L req>Trade <span style={{ fontWeight: 400, color: '#999', fontSize: 12 }}>(select all that apply)</span></L>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {TRADES.map(t => {
               const on = (f.trades || []).includes(t)

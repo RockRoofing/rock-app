@@ -8,21 +8,25 @@ const parseISO = (s) => { if (!s) return null; const [y, m, d] = String(s).split
 const addDays = (d, n) => new Date(d.getTime() + n * DAY)
 const mondayOf = (d) => { const x = new Date(d); const wd = (x.getDay() + 6) % 7; return addDays(x, -wd) }
 const DOW = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const fmtDMY = (d) => d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '—'
+const fmtDMY = (d) => d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'
+const fmtLong = (d) => d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' }) : ''
 const sameDay = (a, b) => a && b && iso(a) === iso(b)
+const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6
 
-const NAME_W = 210, DATE_W = 96, CELL_W = 34, ROW_H = 40
+const NAME_W = 220, DATE_W = 92, CELL_W = 34, WEEKCELL_W = 46, ROW_H = 42
 
 export default function PlanningPage() {
   const [data, setData] = useState(null)
   const [ops, setOps] = useState([])
   const [loading, setLoading] = useState(true)
-  const [weeks, setWeeks] = useState(8)
+  const [view, setView] = useState('day')          // 'day' | 'week'
   const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
-  const [dayModal, setDayModal] = useState(null)
-  const [datesModal, setDatesModal] = useState(null)
   const [historic, setHistoric] = useState(false)
   const [filters, setFilters] = useState({ project: '', installer: '', from: '', to: '' })
+  // selection: { key, dates:Set<iso> }  — active drag project row
+  const [sel, setSel] = useState(null)
+  const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
+  const dragging = useRef(false)
 
   async function load() {
     setLoading(true)
@@ -38,17 +42,17 @@ export default function PlanningPage() {
   }
   useEffect(() => { load() }, [])
 
+  // Default forward horizon = 3 years; historic pulls the start back 1 year.
+  const RANGE_WEEKS = 156
   const days = useMemo(() => {
-    // Normally the view starts at the anchor Monday (today's week by default).
-    // Historic mode pulls the start back so past weeks are visible.
-    let start = historic ? mondayOf(addDays(anchorMonday, -weeks * 7)) : anchorMonday
-    let end = addDays(anchorMonday, weeks * 7 - 1)
+    let start = historic ? mondayOf(addDays(anchorMonday, -52 * 7)) : anchorMonday
+    let end = addDays(anchorMonday, RANGE_WEEKS * 7 - 1)
     if (filters.from) { const f = mondayOf(parseISO(filters.from)); if (f) start = f }
     if (filters.to) { const t = parseISO(filters.to); if (t) end = t }
     const out = []
     for (let d = new Date(start); d <= end; d = addDays(d, 1)) out.push(new Date(d))
     return out
-  }, [anchorMonday, weeks, historic, filters.from, filters.to])
+  }, [anchorMonday, historic, filters.from, filters.to])
 
   const weekGroups = useMemo(() => {
     const groups = []
@@ -56,39 +60,67 @@ export default function PlanningPage() {
     return groups
   }, [days])
 
+  useEffect(() => {
+    const up = () => { dragging.current = false }
+    window.addEventListener('mouseup', up)
+    return () => window.removeEventListener('mouseup', up)
+  }, [])
+
   if (loading || !data) return (
     <OperationsShell active="pm:planning" section="pm" title="Planning" wide><PageHeading title="Planning" /><Loading /></OperationsShell>
   )
 
   const live = data.projects.filter(p => p.type === 'live')
   const negotiated = data.projects.filter(p => p.type === 'negotiated')
-
   const matchProject = (p) => {
     if (filters.project && p.key !== filters.project) return false
     if (filters.installer) {
       const opDays = data.allocations[p.key] || {}
-      const hasOp = Object.values(opDays).some(list => (list || []).some(e => e.opId === filters.installer))
-      if (!hasOp) return false
+      if (!Object.values(opDays).some(list => (list || []).some(e => e.opId === filters.installer))) return false
     }
     return true
   }
   const liveRows = live.filter(matchProject)
   const negRows = negotiated.filter(matchProject)
 
-  const dayTotal = (date) => {
-    const key = iso(date); let total = 0
-    for (const p of [...liveRows, ...negRows]) {
-      const list = (data.allocations[p.key] || {})[key] || []
-      for (const e of list) total += (e.half && e.half !== 'full') ? 0.5 : 1
-    }
-    return total
-  }
-  const countFor = (p, date) => {
-    const list = (data.allocations[p.key] || {})[iso(date)] || []
+  const countOnDay = (p, dateKey) => {
+    const list = (data.allocations[p.key] || {})[dateKey] || []
     let n = 0; for (const e of list) n += (e.half && e.half !== 'full') ? 0.5 : 1
     return n
   }
+  const dayTotal = (date) => {
+    const key = iso(date); let t = 0
+    for (const p of [...liveRows, ...negRows]) t += countOnDay(p, key)
+    return t
+  }
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
+
+  // selection helpers (day view only)
+  const toggleCell = (key, date) => {
+    if (isWeekend(date)) return
+    setSel(prev => {
+      const dates = new Set(prev && prev.key === key ? prev.dates : [])
+      const k = iso(date)
+      if (dates.has(k)) dates.delete(k); else dates.add(k)
+      return { key, dates }
+    })
+  }
+  const dragTo = (key, date) => {
+    if (!dragging.current || isWeekend(date)) return
+    setSel(prev => {
+      if (!prev || prev.key !== key) return { key, dates: new Set([iso(date)]) }
+      const dates = new Set(prev.dates); dates.add(iso(date)); return { key, dates }
+    })
+  }
+  const startDrag = (key, date) => { if (isWeekend(date)) return; dragging.current = true; toggleCell(key, date) }
+
+  const openAllocate = () => {
+    if (!sel || !sel.dates.size) return
+    const proj = data.projects.find(p => p.key === sel.key)
+    if (!proj) return
+    const dates = [...sel.dates].sort()
+    setAllocModal({ proj, dates })
+  }
 
   return (
     <OperationsShell active="pm:planning" section="pm" title="Planning" wide>
@@ -107,237 +139,236 @@ export default function PlanningPage() {
             {ops.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}
           </select>
         </div>
-        <div><div style={lbl}>From (week)</div><input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} style={fInput} /></div>
+        <div><div style={lbl}>From</div><input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} style={fInput} /></div>
         <div><div style={lbl}>To</div><input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} style={fInput} /></div>
         {(filters.project || filters.installer || filters.from || filters.to) &&
           <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+            <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
+            <button onClick={() => setView('week')} style={{ ...segBtn, background: view === 'week' ? GOLD : '#fff', color: view === 'week' ? '#fff' : '#555' }}>Week</button>
+          </div>
           <button onClick={() => setHistoric(h => !h)} title="Show past weeks"
             style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
             {historic ? '✓ Historic' : 'Historic'}
           </button>
-          <button onClick={() => shift(-weeks)} style={ghostBtn}>‹ Back</button>
+          <button onClick={() => shift(-12)} style={ghostBtn}>‹</button>
           <button onClick={() => setAnchorMonday(mondayOf(new Date()))} style={ghostBtn}>Today</button>
-          <button onClick={() => shift(weeks)} style={ghostBtn}>Fwd ›</button>
-          <select value={weeks} onChange={e => setWeeks(Number(e.target.value))} style={{ ...fInput, fontFamily: 'inherit' }}>
-            <option value={4}>4 weeks</option><option value={8}>8 weeks</option><option value={12}>12 weeks</option><option value={26}>26 weeks</option>
-          </select>
+          <button onClick={() => shift(12)} style={ghostBtn}>›</button>
         </div>
       </div>
 
+      {/* selection action bar (day view) */}
+      {view === 'day' && sel && sel.dates.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: '#92400e' }}>
+            <strong>{data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
+          </div>
+          <button onClick={openAllocate} style={primaryBtn}>Allocate labour →</button>
+          <button onClick={() => setSel(null)} style={ghostBtn}>Clear selection</button>
+        </div>
+      )}
+
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: NAME_W + DATE_W * 2 + days.length * CELL_W }}>
+          <div style={{ minWidth: NAME_W + DATE_W * 2 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
 
+            {/* Week/date header */}
             <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
-              <HeadCell w={NAME_W} style={{ fontWeight: 700 }}>Project</HeadCell>
-              <HeadCell w={DATE_W}>Start</HeadCell>
-              <HeadCell w={DATE_W}>Contract Compl.</HeadCell>
-              {weekGroups.map((g, i) => (
-                <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>
-                  W/C {fmtDMY(g[0])}
-                </div>
-              ))}
+              <Frozen w={NAME_W} left={0} style={{ fontWeight: 700, background: '#faf9f7' }}>Project</Frozen>
+              <Frozen w={DATE_W} left={NAME_W} style={{ background: '#faf9f7' }}>Start</Frozen>
+              <Frozen w={DATE_W} left={NAME_W + DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</Frozen>
+              {view === 'day'
+                ? weekGroups.map((g, i) => (
+                  <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>
+                ))
+                : weekGroups.map((g, i) => (
+                  <div key={i} style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>
+                ))
+              }
             </div>
 
-            <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff' }}>
-              <HeadCell w={NAME_W} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</HeadCell>
-              <HeadCell w={DATE_W}></HeadCell>
-              <HeadCell w={DATE_W}></HeadCell>
-              {days.map((d, i) => {
-                const we = d.getDay() === 0 || d.getDay() === 6
-                const t = dayTotal(d)
-                return (
-                  <div key={i} style={{ width: CELL_W, textAlign: 'center', padding: '2px 0', background: we ? '#f3f1ec' : '#fff', borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f2f2f2') }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: t ? INK : '#ccc' }}>{t || ''}</div>
-                    <div style={{ fontSize: 9.5, color: we ? '#b91c1c' : '#aaa' }}>{DOW[(d.getDay() + 6) % 7]}</div>
-                    <div style={{ fontSize: 8.5, color: '#bbb' }}>{d.getDate()}</div>
-                  </div>
-                )
-              })}
-            </div>
+            {/* Totals + day letters (day view only) */}
+            {view === 'day' && (
+              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff' }}>
+                <Frozen w={NAME_W} left={0} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</Frozen>
+                <Frozen w={DATE_W} left={NAME_W}></Frozen>
+                <Frozen w={DATE_W} left={NAME_W + DATE_W}></Frozen>
+                {days.map((d, i) => {
+                  const we = isWeekend(d); const t = dayTotal(d)
+                  return (
+                    <div key={i} style={{ width: CELL_W, textAlign: 'center', padding: '2px 0', background: we ? '#f3f1ec' : '#fff', borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f2f2f2') }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: t ? INK : '#ccc' }}>{t || ''}</div>
+                      <div style={{ fontSize: 9.5, color: we ? '#b91c1c' : '#aaa' }}>{DOW[(d.getDay() + 6) % 7]}</div>
+                      <div style={{ fontSize: 8.5, color: '#bbb' }}>{d.getDate()}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
 
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
-            {liveRows.map(p => (
-              <GanttRow key={p.key} p={p} days={days} data={data} countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} onDates={(pr) => setDatesModal(pr)} />
-            ))}
+            {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay}
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
-            {negRows.map(p => (
-              <GanttRow key={p.key} p={p} days={days} data={data} neg countFor={countFor} onCell={(date) => setDayModal({ proj: p, date })} onDates={(pr) => setDatesModal(pr)} />
-            ))}
+            {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
           </div>
         </div>
       </div>
 
       <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>
-        Numbers are installer counts. Click a day cell to assign named operatives. Weekends are shaded.
-        The red edge marks the contracted completion date; a ⚠ warning shows if the programme runs past it or dates are missing.
+        {view === 'day'
+          ? 'Click a day to select it (click again to deselect); drag across days to select a range, then “Allocate labour”. Weekends can’t be selected. Edit Start / Contracted Completion directly in the row.'
+          : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
-      {dayModal && <DayModal proj={dayModal.proj} date={dayModal.date} data={data} ops={ops} onClose={() => setDayModal(null)} onChanged={load} />}
-      {datesModal && <DatesModal proj={datesModal} data={data} onClose={() => setDatesModal(null)} onChanged={load} />}
+      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} data={data} ops={ops}
+        onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
     </OperationsShell>
   )
 }
 
-function GanttRow({ p, days, data, neg, countFor, onCell, onDates }) {
+function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCellDown, onCellEnter, onSaveMeta }) {
   const meta = data.meta[p.key] || {}
-  const start = parseISO(meta.startDate)
-  const compl = parseISO(meta.completionDate)
-  const missing = !meta.startDate || !meta.completionDate
+  const [start, setStart] = useState(meta.startDate || '')
+  const [compl, setCompl] = useState(meta.completionDate || '')
+  useEffect(() => { setStart(meta.startDate || ''); setCompl(meta.completionDate || '') }, [meta.startDate, meta.completionDate])
 
+  const startD = parseISO(start), complD = parseISO(compl)
+  const missing = !start || !compl
   let lastAlloc = null
-  const days2 = data.allocations[p.key] || {}
-  for (const dk of Object.keys(days2)) { const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd }
-  const overrun = compl && lastAlloc && lastAlloc > compl
+  for (const dk of Object.keys(data.allocations[p.key] || {})) { const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd }
+  const overrun = complD && lastAlloc && lastAlloc > complD
+
+  async function saveMeta(nextStart, nextCompl) {
+    await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: p.key, startDate: nextStart, completionDate: nextCompl }) }).catch(() => {})
+    onSaveMeta && onSaveMeta()
+  }
+
+  const selDates = (sel && sel.key === p.key) ? sel.dates : null
 
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', height: ROW_H, alignItems: 'stretch' }}>
-      <div style={{ width: NAME_W, padding: '4px 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: neg ? '#fbfaf8' : '#fff', borderRight: '1px solid #f0f0f0' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+    <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
+      <Frozen w={NAME_W} left={0} style={{ background: neg ? '#fbfaf8' : '#fff', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', display: 'flex' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
           {missing && <span title="Start / completion date missing" style={{ color: '#dc2626' }}>⚠ </span>}
-          {overrun && <span title="Programme runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
+          {overrun && <span title="Runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
-        {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.location}</div>}
-      </div>
-      <DateCell val={start} missing={!meta.startDate} onClick={() => onDates(p)} />
-      <DateCell val={compl} missing={!meta.completionDate} warn={overrun} onClick={() => onDates(p)} />
-      {days.map((d, i) => {
-        const we = d.getDay() === 0 || d.getDay() === 6
-        const n = countFor(p, d)
-        const isCompl = compl && sameDay(d, compl)
-        const past = compl && d > compl && n > 0
-        return (
-          <div key={i} onClick={() => onCell(d)} title={isCompl ? 'Contracted completion date' : ''}
-            style={{
-              width: CELL_W, textAlign: 'center', cursor: 'pointer', position: 'relative',
-              background: past ? '#fee2e2' : (n ? (neg ? '#fef9c3' : '#dbeafe') : (we ? '#f3f1ec' : '#fff')),
-              borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: isCompl ? 'inset -2px 0 0 0 #dc2626' : 'none',
-              fontSize: 12, fontWeight: 700, color: neg ? '#8a6d1a' : '#1e40af',
-            }}>
-            {n || ''}
-          </div>
-        )
-      })}
+        {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
+      </Frozen>
+      {/* inline date editors */}
+      <Frozen w={DATE_W} left={NAME_W} style={{ background: !start ? '#fff8f8' : '#fff' }}>
+        <input type="date" value={start} onChange={e => { setStart(e.target.value); saveMeta(e.target.value, compl) }} style={dateInput} />
+      </Frozen>
+      <Frozen w={DATE_W} left={NAME_W + DATE_W} style={{ background: !compl ? '#fff8f8' : '#fff' }}>
+        <input type="date" value={compl} onChange={e => { setCompl(e.target.value); saveMeta(start, e.target.value) }} style={{ ...dateInput, color: overrun ? '#dc2626' : undefined }} />
+      </Frozen>
+
+      {view === 'day'
+        ? days.map((d, i) => {
+          const we = isWeekend(d); const key = iso(d); const n = countOnDay(p, key)
+          const isCompl = complD && sameDay(d, complD)
+          const past = complD && d > complD && n > 0
+          const selected = selDates && selDates.has(key)
+          return (
+            <div key={i}
+              onMouseDown={() => onCellDown(p.key, d)}
+              onMouseEnter={() => onCellEnter(p.key, d)}
+              title={isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')}
+              style={{
+                width: CELL_W, textAlign: 'center', cursor: we ? 'default' : 'pointer', userSelect: 'none',
+                background: selected ? '#fde68a' : (past ? '#fee2e2' : (n ? (neg ? '#fef9c3' : '#dbeafe') : (we ? '#f3f1ec' : '#fff'))),
+                borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                boxShadow: isCompl ? 'inset -2px 0 0 0 #dc2626' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 700, color: neg ? '#8a6d1a' : '#1e40af',
+              }}>{n || ''}</div>
+          )
+        })
+        : weekGroups.map((g, i) => {
+          // week view: proportion of working days (Mon-Fri) with allocations
+          const workdays = g.filter(d => !isWeekend(d))
+          const worked = workdays.filter(d => countOnDay(p, iso(d)) > 0).length
+          const frac = workdays.length ? worked / workdays.length : 0
+          const anyOverrun = complD && g.some(d => d > complD && countOnDay(p, iso(d)) > 0)
+          const hasCompl = complD && g.some(d => sameDay(d, complD))
+          return (
+            <div key={i} title={worked ? `${worked}/${workdays.length} working days` : ''} style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', boxShadow: hasCompl ? 'inset -2px 0 0 0 #dc2626' : 'none' }}>
+              {frac > 0 && <div style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: `${frac * 100}%`, background: anyOverrun ? '#fca5a5' : (neg ? '#fde68a' : '#93c5fd'), borderRadius: 3 }} />}
+              {worked > 0 && <span style={{ position: 'relative', fontSize: 9.5, fontWeight: 700, color: '#1e3a8a' }}>{worked}/{workdays.length}</span>}
+            </div>
+          )
+        })
+      }
     </div>
   )
 }
 
-function DateCell({ val, missing, warn, onClick }) {
+// Frozen left columns use sticky positioning so they stay visible when scrolling.
+function Frozen({ w, left, children, style }) {
   return (
-    <div onClick={onClick} title="Click to set project dates"
-      style={{ width: DATE_W, padding: '4px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderRight: '1px solid #f0f0f0', cursor: 'pointer', color: missing ? '#dc2626' : (warn ? '#dc2626' : '#555'), background: missing ? '#fff8f8' : '#fff' }}>
-      {missing ? '⚠ set date' : fmtDMY(val)}
-    </div>
+    <div style={{ width: w, minWidth: w, position: 'sticky', left, zIndex: 3, padding: '4px 8px', borderRight: '1px solid #f0f0f0', background: '#fff', ...style }}>{children}</div>
   )
 }
 
-const HeadCell = ({ w, children, style }) => (
-  <div style={{ width: w, padding: '6px 8px', fontSize: 11, color: '#666', ...style }}>{children}</div>
-)
+const HeadCell = ({ w, children, style }) => <div style={{ width: w, padding: '6px 8px', fontSize: 11, color: '#666', ...style }}>{children}</div>
 const SectionLabel = ({ children, neg }) => (
-  <div style={{ padding: '5px 10px', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, color: neg ? '#8a6d1a' : GOLD, background: neg ? '#fdfbf3' : '#faf9f7', borderBottom: '1px solid #eee', borderTop: '1px solid #eee' }}>{children}</div>
+  <div style={{ position: 'sticky', left: 0, padding: '5px 10px', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, color: neg ? '#8a6d1a' : GOLD, background: neg ? '#fdfbf3' : '#faf9f7', borderBottom: '1px solid #eee', borderTop: '1px solid #eee' }}>{children}</div>
 )
-const EmptyRow = ({ children }) => <div style={{ padding: '10px 12px', fontSize: 12, color: '#aaa' }}>{children}</div>
+const EmptyRow = ({ children }) => <div style={{ padding: '10px 12px', fontSize: 12, color: '#aaa', position: 'sticky', left: 0 }}>{children}</div>
 
 const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
+const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }
+const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
 
-// ── Set a project's Start + Contracted Completion dates ──
-function DatesModal({ proj, data, onClose, onChanged }) {
-  const meta = data.meta[proj.key] || {}
-  const [startDate, setStartDate] = useState(meta.startDate || '')
-  const [completionDate, setCompletionDate] = useState(meta.completionDate || '')
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-
-  async function save() {
-    setErr('')
-    if (startDate && completionDate && parseISO(completionDate) < parseISO(startDate)) {
-      setErr('Contracted completion cannot be before the start date.'); return
-    }
-    setSaving(true)
-    try {
-      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: proj.key, startDate, completionDate }) })
-      if (!r.ok) throw new Error('Save failed')
-      onChanged(); onClose()
-    } catch (e) { setErr(e.message || 'Could not save.') }
-    setSaving(false)
-  }
-
-  const input = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '8vh 2vw' }}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 440 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
-          <div>
-            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>{proj.name}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Programme dates{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
-          </div>
-          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
-        </div>
-        <div style={{ padding: '18px 22px 22px' }}>
-          <div style={lbl}>Project start date</div>
-          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} style={input} />
-          <div style={{ ...lbl, marginTop: 14 }}>Contracted completion date</div>
-          <input type="date" value={completionDate} onChange={e => setCompletionDate(e.target.value)} style={input} />
-          <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>These drive the Start / Contracted Completion columns, the red completion marker, and the over-run warning.</div>
-          {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
-            <button onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save dates'}</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DayModal({ proj, date, data, ops, onClose, onChanged }) {
-  const dk = iso(date)
-  const [entries, setEntries] = useState(() => ((data.allocations[proj.key] || {})[dk] || []).map(e => ({ ...e })))
-  const [meta, setMeta] = useState(() => data.meta[proj.key] || { startDate: '', completionDate: '' })
+// ── Allocate labour to the selected dates ──
+function AllocateModal({ proj, dates, data, ops, onClose, onDone, reloadOps }) {
+  // pre-fill installers common to ALL selected dates? Start empty; user picks who to add across the range.
+  const [picked, setPicked] = useState([])   // opIds to allocate across all selected dates
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [pick, setPick] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [opList, setOpList] = useState(ops)
+  useEffect(() => { setOpList(ops) }, [ops])
 
-  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
-  const opTrades = (id) => { const o = ops.find(x => x.id === id); return (o?.trades || []).join(', ') }
+  const opName = (id) => { const o = opList.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+  const opTrades = (id) => { const o = opList.find(x => x.id === id); return (o?.trades || []).join(', ') }
+  const dateObjs = dates.map(parseISO).sort((a, b) => a - b)
 
-  const bookedElsewhere = useMemo(() => {
-    const map = {}
-    for (const [pk, dd] of Object.entries(data.allocations || {})) {
-      if (pk === proj.key) continue
-      for (const e of (dd[dk] || [])) map[e.opId] = e.half || 'full'
-    }
-    return map
-  }, [data, dk, proj.key])
-
-  function addOp(id) { if (!id || entries.some(e => e.opId === id)) return; setEntries([...entries, { opId: id, half: 'full' }]); setPick('') }
-  function setHalf(id, half) { setEntries(entries.map(e => e.opId === id ? { ...e, half } : e)) }
-  function remove(id) { setEntries(entries.filter(e => e.opId !== id)) }
+  function addPick(id) { if (!id || picked.includes(id)) return; setPicked([...picked, id]); setPick('') }
+  function removePick(id) { setPicked(picked.filter(x => x !== id)) }
 
   async function save() {
-    setErr(''); setSaving(true)
+    setErr('')
+    if (!picked.length) { setErr('Add at least one installer.'); return }
+    setSaving(true)
     try {
-      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: proj.key, startDate: meta.startDate, completionDate: meta.completionDate }) })
-      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries }) })
-      const d = await r.json()
-      if (r.status === 409) { setErr(`Clash: ${opName(d.opId)} is already booked on another project this day. Use half-days on both, or remove them.`); setSaving(false); return }
-      if (!r.ok) throw new Error(d.error || 'Save failed')
-      onChanged(); onClose()
+      const clashes = []
+      for (const dk of dates) {
+        // merge existing entries for that day with the newly picked (avoid dupes), all full-day
+        const existing = (data.allocations[proj.key] || {})[dk] || []
+        const merged = [...existing.map(e => ({ opId: e.opId, half: e.half || 'full' }))]
+        for (const id of picked) if (!merged.some(e => e.opId === id)) merged.push({ opId: id, half: 'full' })
+        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries: merged }) })
+        const d = await r.json()
+        if (r.status === 409) clashes.push(`${opName(d.opId)} on ${fmtDMY(parseISO(dk))}`)
+        else if (!r.ok) throw new Error(d.error || 'Save failed')
+      }
+      if (clashes.length) { setErr(`Some allocations clashed and were skipped: ${clashes.join('; ')}. Those installers are already on another project those days.`); setSaving(false); onDone(); return }
+      onDone()
     } catch (e) { setErr(e.message || 'Could not save.') }
     setSaving(false)
   }
 
-  const available = ops.filter(o => !entries.some(e => e.opId === o.id))
+  const available = opList.filter(o => !picked.includes(o.id))
   const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
 
   return (
@@ -346,49 +377,95 @@ function DayModal({ proj, date, data, ops, onClose, onChanged }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>{proj.name}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>{date.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Allocating labour for {dates.length} day{dates.length === 1 ? '' : 's'}{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
           </div>
           <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
         </div>
-        <div style={{ padding: '10px 22px 22px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 14px', marginBottom: 8 }}>
-            <div><div style={lbl}>Project start date</div><input type="date" value={meta.startDate || ''} onChange={e => setMeta(m => ({ ...m, startDate: e.target.value }))} style={input} /></div>
-            <div><div style={lbl}>Contracted completion</div><input type="date" value={meta.completionDate || ''} onChange={e => setMeta(m => ({ ...m, completionDate: e.target.value }))} style={input} /></div>
+        <div style={{ padding: '12px 22px 22px' }}>
+          {/* the dates being allocated */}
+          <div style={lbl}>Dates being allocated</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, maxHeight: 96, overflowY: 'auto' }}>
+            {dateObjs.map((d, i) => <span key={i} style={{ fontSize: 11.5, background: '#f3f4f6', borderRadius: 12, padding: '3px 9px', color: '#444' }}>{fmtLong(d)}</span>)}
           </div>
 
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '14px 0 6px' }}>Installers on site ({entries.reduce((s, e) => s + (e.half !== 'full' ? 0.5 : 1), 0)})</div>
-          {entries.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>No one allocated yet.</div>}
-          {entries.map(e => (
-            <div key={e.opId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#faf9f7', borderRadius: 8, marginBottom: 6 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{opName(e.opId)}</div>
-                {opTrades(e.opId) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(e.opId)}</div>}
-              </div>
-              <select value={e.half} onChange={ev => setHalf(e.opId, ev.target.value)} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }}>
-                <option value="full">Full day</option><option value="am">AM</option><option value="pm">PM</option>
-              </select>
-              <button onClick={() => remove(e.opId)} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>Installers to allocate (full day)</div>
+          {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>None selected yet.</div>}
+          {picked.map(id => (
+            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#faf9f7', borderRadius: 8, marginBottom: 6 }}>
+              <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{opName(id)}</div>{opTrades(id) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(id)}</div>}</div>
+              <button onClick={() => removePick(id)} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
             </div>
           ))}
 
-          <div style={{ marginTop: 10 }}>
-            <div style={lbl}>Add installer</div>
-            <select value={pick} onChange={e => addOp(e.target.value)} style={input}>
-              <option value="">Select installer…</option>
-              {available.map(o => {
-                const busy = bookedElsewhere[o.id]
-                return <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}{busy ? ` — busy ${busy === 'full' ? 'today' : busy.toUpperCase()}` : ''}</option>
-              })}
-            </select>
-            <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>An installer can't be on two projects the same day unless both are half-days (AM on one, PM on the other).</div>
-          </div>
+          {!addOpen ? (
+            <div style={{ marginTop: 10 }}>
+              <div style={lbl}>Add installer</div>
+              <select value={pick} onChange={e => addPick(e.target.value)} style={input}>
+                <option value="">Select installer…</option>
+                {available.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}</option>)}
+              </select>
+              <button onClick={() => setAddOpen(true)} style={{ ...linkBtn, marginTop: 8, paddingLeft: 0 }}>+ Add new operative to the roster</button>
+              <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Clashes (same installer already on another project that day) are skipped and reported.</div>
+            </div>
+          ) : (
+            <AddOperativeInline onCancel={() => setAddOpen(false)} onAdded={async (newId) => { const list = await reloadOps(); setOpList(list); setAddOpen(false); if (newId) setPicked(prev => prev.includes(newId) ? prev : [...prev, newId]) }} />
+          )}
 
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save day'}</button>
+            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Allocating…' : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`}</button>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const TRADES = ['Single Ply', 'Felt', 'Liquids', 'Hot Melt', 'Rainscreen', 'Composite Panels', 'Aluminium', 'Standing Seam', 'Labourer', 'Other']
+function AddOperativeInline({ onCancel, onAdded }) {
+  const [f, setF] = useState({ firstName: '', lastName: '', email: '', phone: '', company: '', trades: [] })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (patch) => setF(prev => ({ ...prev, ...patch }))
+  const toggleTrade = (t) => set({ trades: f.trades.includes(t) ? f.trades.filter(x => x !== t) : [...f.trades, t] })
+  const input = { width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+
+  async function save() {
+    setErr('')
+    if (!f.firstName.trim() || !f.lastName.trim()) return setErr('First and last name are required.')
+    if (!f.email.trim()) return setErr('Email is required.')
+    if (!f.phone.trim()) return setErr('Phone is required.')
+    if (!f.company.trim()) return setErr('Company is required.')
+    if (!f.trades.length) return setErr('Select at least one trade.')
+    setSaving(true)
+    try {
+      const r = await fetch('/api/operatives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ operative: f }) })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Save failed')
+      onAdded(d.operative?.id)
+    } catch (e) { setErr(e.message || 'Could not save.') }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ marginTop: 10, padding: 14, border: '1px solid #f0e2b0', background: '#fffdf5', borderRadius: 10 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>New operative</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <input placeholder="First name *" value={f.firstName} onChange={e => set({ firstName: e.target.value })} style={input} />
+        <input placeholder="Last name *" value={f.lastName} onChange={e => set({ lastName: e.target.value })} style={input} />
+        <input placeholder="Email *" value={f.email} onChange={e => set({ email: e.target.value })} style={input} type="email" />
+        <input placeholder="Phone *" value={f.phone} onChange={e => set({ phone: e.target.value })} style={input} />
+      </div>
+      <input placeholder="Company *" value={f.company} onChange={e => set({ company: e.target.value })} style={{ ...input, marginTop: 8 }} />
+      <div style={{ fontSize: 11, color: '#888', margin: '10px 0 6px' }}>Trade * (select all that apply)</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {TRADES.map(t => { const on = f.trades.includes(t); return <button key={t} onClick={() => toggleTrade(t)} style={{ padding: '6px 11px', borderRadius: 16, border: on ? `2px solid ${GOLD}` : '1px solid #d9d5cc', background: on ? '#fffbeb' : '#fff', color: on ? '#92400e' : '#555', fontSize: 12, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{on ? '✓ ' : ''}{t}</button> })}
+      </div>
+      {err && <div style={{ color: '#dc2626', fontSize: 12.5, marginTop: 10 }}>{err}</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+        <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+        <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Adding…' : 'Add operative'}</button>
       </div>
     </div>
   )
