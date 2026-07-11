@@ -384,8 +384,8 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: shadows.length ? shadows.join(', ') : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: pastCompl ? 14 : 12, fontWeight: 700,
-                color: pastCompl ? '#7f1d1d' : (noSup ? '#fff' : (col ? col.num : '#999')),
+                fontSize: pastCompl ? 15 : 12, fontWeight: pastCompl ? 900 : 700,
+                color: pastCompl ? '#ff0000' : (noSup ? '#fff' : (col ? col.num : '#999')),
               }}>{n || ''}</div>
           )
         })

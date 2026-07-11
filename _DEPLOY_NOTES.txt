@@ -1,33 +1,7 @@
-FORMS — Completed | Missing sub-pages (Phase 5 portal dashboard)
+PLANNING — past-completion number more obvious
 
-  components/OperationsNav.js
-   - "Forms" is now a section with two sub-tabs: "Completed" (the existing submissions page) and "Missing"
-     (the new dashboard). A second tab row appears under Forms.
+  pages/operations/project-management/planning.js
+   - Labour allocated past a project's contracted completion date now shows its day-count number in a
+     brighter red (#ff0000), heavier weight (900) and slightly larger (15px) so it stands out.
 
-  pages/operations/forms.js
-   - Now renders under the "Completed" sub-tab (active key forms:completed) — otherwise unchanged (all
-     submitted forms from the Site App).
-
-  pages/operations/forms-missing.js  (NEW)  — the Missing dashboard:
-   - Filterable W/C date RANGE (From / To dropdowns).
-   - Top summary card: overall % completed + "X of Y required forms", with a progress bar.
-   - Per-form cards (Pre-Start, Start on Site Checklist, Daily Site Diary, Works Area Handover): % and
-     completed/required/missing counts.
-   - Table of every REQUIRED form in the range: week, project, form (site-diary rows show the specific
-     day), the RESPONSIBLE person + role (who gets the Monday notification), and Completed/Missing status.
-   - Filters: Show (all / missing only / completed only), Form, Responsible person.
-
-  pages/api/forms-missing.js  (NEW)
-   - Computes required-vs-completed using the SAME due-rules as the Monday notification cron:
-       * Pre-Start (CM) — start-on-site or a >1-week-gap revisit within 3 working days of the week.
-       * Start on Site Checklist (Supervisor) — week of the first allocated day.
-       * Daily Site Diary (Supervisor) — one per allocated day that week (matched to a same-day submission).
-       * Works Area Handover (Supervisor) — week of the last allocated day.
-   - "Responsible" = CM for Pre-Start; the EFFECTIVE supervisor for the rest (Project Details supervisor if
-     on the Gantt, else a qualified supervisor allocated on the Gantt).
-   - Completion matched against Site App submissions (by form title + project, within the week; site diary
-     matched per day).
-
-Deploy all four. No cron/env change. Note: completion matching relies on submitted form titles containing
-the form name ("Pre-Start", "Start on Site", "Daily Site Diary", "Works Area Handover") and the project
-number/name — consistent with how the Site App tags submissions.
+Deploy over previous planning.js. No API change.
