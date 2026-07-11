@@ -97,7 +97,6 @@ export default function PlanningPage() {
 
   // selection helpers (day view only)
   const toggleCell = (key, date) => {
-    if (isWeekend(date)) return
     setSel(prev => {
       const dates = new Set(prev && prev.key === key ? prev.dates : [])
       const k = iso(date)
@@ -106,13 +105,13 @@ export default function PlanningPage() {
     })
   }
   const dragTo = (key, date) => {
-    if (!dragging.current || isWeekend(date)) return
+    if (!dragging.current) return
     setSel(prev => {
       if (!prev || prev.key !== key) return { key, dates: new Set([iso(date)]) }
       const dates = new Set(prev.dates); dates.add(iso(date)); return { key, dates }
     })
   }
-  const startDrag = (key, date) => { if (isWeekend(date)) return; dragging.current = true; toggleCell(key, date) }
+  const startDrag = (key, date) => { dragging.current = true; toggleCell(key, date) }
 
   const openAllocate = () => {
     if (!sel || !sel.dates.size) return
@@ -176,8 +175,8 @@ export default function PlanningPage() {
             {/* Week/date header */}
             <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
               <Frozen w={NAME_W} left={0} style={{ fontWeight: 700, background: '#faf9f7' }}>Project</Frozen>
-              <Frozen w={DATE_W} left={NAME_W} style={{ background: '#faf9f7' }}>Start</Frozen>
-              <Frozen w={DATE_W} left={NAME_W + DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</Frozen>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Start</PlainCell>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
               {view === 'day'
                 ? weekGroups.map((g, i) => (
                   <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>
@@ -192,8 +191,8 @@ export default function PlanningPage() {
             {view === 'day' && (
               <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff' }}>
                 <Frozen w={NAME_W} left={0} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</Frozen>
-                <Frozen w={DATE_W} left={NAME_W}></Frozen>
-                <Frozen w={DATE_W} left={NAME_W + DATE_W}></Frozen>
+                <PlainCell w={DATE_W}></PlainCell>
+                <PlainCell w={DATE_W}></PlainCell>
                 {days.map((d, i) => {
                   const we = isWeekend(d); const t = dayTotal(d)
                   return (
@@ -223,7 +222,7 @@ export default function PlanningPage() {
 
       <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>
         {view === 'day'
-          ? 'Click a day to select it (click again to deselect); drag across days to select a range, then “Allocate labour”. Weekends can’t be selected. Edit Start / Contracted Completion directly in the row.'
+          ? 'Click a day to select it (click again to deselect); drag across days to select a range, then “Allocate labour”. Edit Start / Contracted Completion directly in the row.'
           : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
@@ -263,12 +262,12 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       {/* inline date editors */}
-      <Frozen w={DATE_W} left={NAME_W} style={{ background: !start ? '#fff8f8' : '#fff' }}>
+      <PlainCell w={DATE_W} style={{ background: !start ? '#fff8f8' : '#fff' }}>
         <input type="date" value={start} onChange={e => { setStart(e.target.value); saveMeta(e.target.value, compl) }} style={dateInput} />
-      </Frozen>
-      <Frozen w={DATE_W} left={NAME_W + DATE_W} style={{ background: !compl ? '#fff8f8' : '#fff' }}>
+      </PlainCell>
+      <PlainCell w={DATE_W} style={{ background: !compl ? '#fff8f8' : '#fff' }}>
         <input type="date" value={compl} onChange={e => { setCompl(e.target.value); saveMeta(start, e.target.value) }} style={{ ...dateInput, color: overrun ? '#dc2626' : undefined }} />
-      </Frozen>
+      </PlainCell>
 
       {view === 'day'
         ? days.map((d, i) => {
@@ -282,7 +281,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
               onMouseEnter={() => onCellEnter(p.key, d)}
               title={isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')}
               style={{
-                width: CELL_W, textAlign: 'center', cursor: we ? 'default' : 'pointer', userSelect: 'none',
+                width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
                 background: selected ? '#fde68a' : (past ? '#fee2e2' : (n ? (neg ? '#fef9c3' : '#dbeafe') : (we ? '#f3f1ec' : '#fff'))),
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: isCompl ? 'inset -2px 0 0 0 #dc2626' : 'none',
@@ -292,16 +291,17 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
           )
         })
         : weekGroups.map((g, i) => {
-          // week view: proportion of working days (Mon-Fri) with allocations
-          const workdays = g.filter(d => !isWeekend(d))
-          const worked = workdays.filter(d => countOnDay(p, iso(d)) > 0).length
-          const frac = workdays.length ? worked / workdays.length : 0
+          // Week view: numerator = ALL days worked in the week (incl. weekends);
+          // denominator = working days (Mon–Fri = 5). Bar fill is capped at 5/5.
+          const workdayCount = g.filter(d => !isWeekend(d)).length || 5
+          const worked = g.filter(d => countOnDay(p, iso(d)) > 0).length
+          const frac = Math.min(1, worked / workdayCount)
           const anyOverrun = complD && g.some(d => d > complD && countOnDay(p, iso(d)) > 0)
           const hasCompl = complD && g.some(d => sameDay(d, complD))
           return (
-            <div key={i} title={worked ? `${worked}/${workdays.length} working days` : ''} style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', boxShadow: hasCompl ? 'inset -2px 0 0 0 #dc2626' : 'none' }}>
+            <div key={i} title={worked ? `${worked}/${workdayCount} days worked` : ''} style={{ width: WEEKCELL_W, borderLeft: '1px solid #eee', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', boxShadow: hasCompl ? 'inset -2px 0 0 0 #dc2626' : 'none' }}>
               {frac > 0 && <div style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: `${frac * 100}%`, background: anyOverrun ? '#fca5a5' : (neg ? '#fde68a' : '#93c5fd'), borderRadius: 3 }} />}
-              {worked > 0 && <span style={{ position: 'relative', fontSize: 9.5, fontWeight: 700, color: '#1e3a8a' }}>{worked}/{workdays.length}</span>}
+              {worked > 0 && <span style={{ position: 'relative', fontSize: 9.5, fontWeight: 700, color: '#1e3a8a' }}>{worked}/{workdayCount}</span>}
             </div>
           )
         })
@@ -314,6 +314,12 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
 function Frozen({ w, left, children, style }) {
   return (
     <div style={{ width: w, minWidth: w, position: 'sticky', left, zIndex: 3, padding: '4px 8px', borderRight: '1px solid #f0f0f0', background: '#fff', ...style }}>{children}</div>
+  )
+}
+// Non-sticky fixed-width cell (scrolls with the calendar).
+function PlainCell({ w, children, style }) {
+  return (
+    <div style={{ width: w, minWidth: w, padding: '4px 8px', borderRight: '1px solid #f0f0f0', background: '#fff', display: 'flex', alignItems: 'center', ...style }}>{children}</div>
   )
 }
 
