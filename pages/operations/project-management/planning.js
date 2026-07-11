@@ -113,12 +113,19 @@ export default function PlanningPage() {
   }
   const startDrag = (key, date) => { dragging.current = true; toggleCell(key, date) }
 
-  const openAllocate = () => {
+  const openAllocate = (mode = 'add') => {
     if (!sel || !sel.dates.size) return
     const proj = data.projects.find(p => p.key === sel.key)
     if (!proj) return
     const dates = [...sel.dates].sort()
-    setAllocModal({ proj, dates })
+    setAllocModal({ proj, dates, mode })
+  }
+  // does the current selection already have any labour allocated?
+  const selectionHasLabour = () => {
+    if (!sel || !sel.dates.size) return false
+    const days3 = data.allocations[sel.key] || {}
+    for (const dk of sel.dates) if ((days3[dk] || []).length) return true
+    return false
   }
 
   return (
@@ -163,7 +170,8 @@ export default function PlanningPage() {
           <div style={{ fontSize: 13, color: '#92400e' }}>
             <strong>{data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
           </div>
-          <button onClick={openAllocate} style={primaryBtn}>Allocate labour →</button>
+          <button onClick={() => openAllocate('add')} style={primaryBtn}>Allocate labour →</button>
+          {selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
           <button onClick={() => setSel(null)} style={ghostBtn}>Clear selection</button>
         </div>
       )}
@@ -226,7 +234,7 @@ export default function PlanningPage() {
           : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
-      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} data={data} ops={ops}
+      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
     </OperationsShell>
   )
@@ -334,10 +342,17 @@ const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0
 const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
 
-// ── Allocate labour to the selected dates ──
-function AllocateModal({ proj, dates, data, ops, onClose, onDone, reloadOps }) {
-  // pre-fill installers common to ALL selected dates? Start empty; user picks who to add across the range.
-  const [picked, setPicked] = useState([])   // opIds to allocate across all selected dates
+// ── Allocate / edit labour for the selected dates ──
+function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, reloadOps }) {
+  const isEdit = mode === 'edit'
+  // In edit mode, pre-load everyone currently allocated across ANY of the selected dates.
+  const initialPicked = () => {
+    if (!isEdit) return []
+    const set = new Set()
+    for (const dk of dates) for (const e of ((data.allocations[proj.key] || {})[dk] || [])) set.add(e.opId)
+    return [...set]
+  }
+  const [picked, setPicked] = useState(initialPicked)   // opIds to allocate across all selected dates
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [pick, setPick] = useState('')
@@ -354,16 +369,23 @@ function AllocateModal({ proj, dates, data, ops, onClose, onDone, reloadOps }) {
 
   async function save() {
     setErr('')
-    if (!picked.length) { setErr('Add at least one installer.'); return }
+    // In edit mode an empty list is valid (means "clear these days"); in add mode require at least one.
+    if (!isEdit && !picked.length) { setErr('Add at least one installer.'); return }
     setSaving(true)
     try {
       const clashes = []
       for (const dk of dates) {
-        // merge existing entries for that day with the newly picked (avoid dupes), all full-day
-        const existing = (data.allocations[proj.key] || {})[dk] || []
-        const merged = [...existing.map(e => ({ opId: e.opId, half: e.half || 'full' }))]
-        for (const id of picked) if (!merged.some(e => e.opId === id)) merged.push({ opId: id, half: 'full' })
-        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries: merged }) })
+        let entries
+        if (isEdit) {
+          // Replace the day's list with exactly the picked set (removes anyone unpicked).
+          entries = picked.map(id => ({ opId: id, half: 'full' }))
+        } else {
+          // Add: merge existing + picked (no dupes), all full-day.
+          const existing = (data.allocations[proj.key] || {})[dk] || []
+          entries = [...existing.map(e => ({ opId: e.opId, half: e.half || 'full' }))]
+          for (const id of picked) if (!entries.some(e => e.opId === id)) entries.push({ opId: id, half: 'full' })
+        }
+        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries }) })
         const d = await r.json()
         if (r.status === 409) clashes.push(`${opName(d.opId)} on ${fmtDMY(parseISO(dk))}`)
         else if (!r.ok) throw new Error(d.error || 'Save failed')
@@ -383,19 +405,20 @@ function AllocateModal({ proj, dates, data, ops, onClose, onDone, reloadOps }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>{proj.name}</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Allocating labour for {dates.length} day{dates.length === 1 ? '' : 's'}{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>{isEdit ? 'Editing labour for' : 'Allocating labour for'} {dates.length} day{dates.length === 1 ? '' : 's'}{proj.type === 'negotiated' ? ' · not yet secured' : ''}</div>
           </div>
           <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
         </div>
         <div style={{ padding: '12px 22px 22px' }}>
           {/* the dates being allocated */}
-          <div style={lbl}>Dates being allocated</div>
+          <div style={lbl}>{isEdit ? 'Dates being edited' : 'Dates being allocated'}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, maxHeight: 96, overflowY: 'auto' }}>
             {dateObjs.map((d, i) => <span key={i} style={{ fontSize: 11.5, background: '#f3f4f6', borderRadius: 12, padding: '3px 9px', color: '#444' }}>{fmtLong(d)}</span>)}
           </div>
+          {isEdit && <div style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>Editing shows everyone currently allocated across the selected days. Saving sets this exact list on every selected day (remove someone to take them off those days).</div>}
 
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>Installers to allocate (full day)</div>
-          {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>None selected yet.</div>}
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>{isEdit ? 'Installers allocated (full day)' : 'Installers to allocate (full day)'}</div>
+          {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>{isEdit ? 'No one allocated — saving will clear these days.' : 'None selected yet.'}</div>}
           {picked.map(id => (
             <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#faf9f7', borderRadius: 8, marginBottom: 6 }}>
               <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{opName(id)}</div>{opTrades(id) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(id)}</div>}</div>
@@ -420,7 +443,7 @@ function AllocateModal({ proj, dates, data, ops, onClose, onDone, reloadOps }) {
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Allocating…' : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`}</button>
+            <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? (isEdit ? 'Saving…' : 'Allocating…') : (isEdit ? `Save changes to ${dates.length} day${dates.length === 1 ? '' : 's'}` : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`)}</button>
           </div>
         </div>
       </div>

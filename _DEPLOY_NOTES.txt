@@ -1,12 +1,13 @@
-PLANNING — Gantt fixes
+PLANNING — Edit Labour Allocation
 
   pages/operations/project-management/planning.js
-   1) FROZEN COLUMN: only the PROJECT column is now frozen when scrolling horizontally. The Start and
-      Contracted Completion columns scroll with the calendar (they were wrongly frozen before).
-   2) WEEKEND ALLOCATION: weekends can now be selected/dragged and have labour allocated (still shaded
-      grey so they read as weekends, but fully clickable). Rare, but supported.
-   3) WEEK VIEW NUMBERS: the number now counts ALL days worked in the week including weekends over a
-      5-day base — e.g. 6 days worked shows "6/5", 7 shows "7/5" — while the coloured bar is capped at
-      the 5/5 (100%) width so a full week and a weekend-worked week look the same length.
+   - New "Edit labour allocation" button in the selection action bar, positioned between
+     "Allocate labour →" and "Clear selection". It only appears when the selected cell(s) already
+     have labour allocated.
+   - Opens the same pop-up in EDIT mode: pre-loaded with everyone currently allocated across the
+     selected days (the union). You can remove people or add others. Saving sets that exact list on
+     every selected day (so removing someone takes them off those days; an empty list clears them).
+   - "Allocate labour" (add mode) is unchanged: it merges the chosen installers onto the days.
+   - Clash checking still applies in both modes.
 
 Deploy over the previous planning.js. No API change.
