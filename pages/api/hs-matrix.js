@@ -90,6 +90,23 @@ export default async function handler(req, res) {
         }
         return res.json({ competency: out })
       }
+      // Named supervisor list for dropdowns: roster operatives holding a supervisor ticket in date.
+      if (req.query.supervisors === '1') {
+        const [columns, data, roster] = await Promise.all([
+          ensureColumns(), get(DATA_KEY).then(v => v || {}),
+          get('ops:operatives-roster').then(v => v || []),
+        ])
+        const now = new Date(); now.setHours(0, 0, 0, 0)
+        const valid = (cell) => cell && (cell.noExpiry || (cell.date && parseISO(cell.date) >= now))
+        const supCols = columns.filter(c => ['internal supervisor', 'sssts', 'smsts', 'iosh managing safely'].some(m => (c.label || '').toLowerCase().includes(m))).map(c => c.id)
+        const supervisors = []
+        for (const o of roster) {
+          const cols = data[`op:${o.id}`] || {}
+          if (supCols.some(id => valid(cols[id]))) supervisors.push({ id: o.id, name: `${o.firstName || ''} ${o.lastName || ''}`.trim(), email: o.email || '', phone: o.phone || '' })
+        }
+        supervisors.sort((a, b) => a.name.localeCompare(b.name))
+        return res.json({ supervisors })
+      }
       const [columns, data, people] = await Promise.all([ensureColumns(), get(DATA_KEY).then(v => v || {}), buildPeople()])
       return res.json({ columns, data, people })
     }

@@ -155,6 +155,22 @@ export default function PlanningPage() {
     for (const dk of sel.dates) if (cellData(days3[dk]).count > 0) return true
     return false
   }
+  // wipe the labour/contents of the selected cells (set-day with empty entries clears the cell)
+  const [clearing, setClearing] = useState(false)
+  async function clearSelectionLabour() {
+    if (!sel || !sel.dates.size) return
+    if (!window.confirm(`Clear all labour from ${sel.dates.size} selected day${sel.dates.size === 1 ? '' : 's'}? This removes the allocations on those days.`)) return
+    setClearing(true)
+    try {
+      for (const dk of sel.dates) {
+        await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: sel.key, date: dk, entries: [], unnamed: 0 }) }).catch(() => {})
+      }
+      dragging.current = false
+      setSel(null)
+      await load()
+    } catch {}
+    setClearing(false)
+  }
 
   return (
     <OperationsShell active="pm:planning" section="pm" title="Planning" wide>
@@ -202,7 +218,8 @@ export default function PlanningPage() {
           </div>
           <button onClick={() => openAllocate('add')} style={primaryBtn}>Allocate labour →</button>
           {selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
-          <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }} onClick={(e) => { e.stopPropagation(); dragging.current = false; setSel(null) }} style={ghostBtn}>Clear selection</button>
+          {selectionHasLabour() && <button onClick={clearSelectionLabour} disabled={clearing} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c0c0' }}>{clearing ? 'Clearing…' : 'Clear labour'}</button>}
+          <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }} onClick={(e) => { e.stopPropagation(); dragging.current = false; setSel(null) }} style={ghostBtn}>Deselect</button>
         </div>
       )}
 
@@ -295,13 +312,17 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
   const missing = !start || !compl
   let lastAlloc = null
   let historicNeedsActual = false
+  let projectHasLabour = false
   const todayKey = iso(new Date())
   for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
     const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
+    const cd = cellData(cell); if (cd.count > 0) projectHasLabour = true
     // any allocation strictly before today that is NOT marked actual -> needs confirming
-    if (dk < todayKey) { const cd = cellData(cell); if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
+    if (dk < todayKey) { if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
   }
   const overrun = complD && lastAlloc && lastAlloc > complD
+  // Project-level supervisor flag: live project has labour but no supervisor assigned in Project Details.
+  const noProjectSupervisor = p.type === 'live' && projectHasLabour && !p.siteSupervisor
 
   async function saveMeta(nextStart, nextCompl) {
     await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-meta', key: p.key, startDate: nextStart, completionDate: nextCompl }) }).catch(() => {})
@@ -317,6 +338,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
           {missing && <span title="Start / completion date missing" style={{ color: '#dc2626' }}>⚠ </span>}
           {overrun && <span title="Runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
           {historicNeedsActual && <span title="Historic dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}
+          {noProjectSupervisor && <span title="No supervisor assigned to this project (set one in Project Details)" style={{ color: '#ff2d2d' }}>⚠ No supervisor </span>}
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
@@ -698,8 +720,13 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
 
   async function save() {
     setErr('')
-    if (!status) { setErr('Choose an allocation status (Confirmed, Provisional or Actual) before allocating.'); return }
-    if (!picked.length && unnamed <= 0) { setErr('Add at least one installer, or set an unnamed headcount.'); if (!isEdit) return; }
+    const hasLabour = picked.length > 0 || unnamed > 0
+    // In edit mode with all labour removed, saving clears the cells — no status needed.
+    const clearing = isEdit && !hasLabour
+    if (!clearing) {
+      if (!hasLabour) { setErr('Add at least one installer, or set an unnamed headcount.'); return }
+      if (!status) { setErr('Choose an allocation status (Confirmed, Provisional or Actual) before allocating.'); return }
+    }
     setSaving(true)
     try {
       const clashes = []
@@ -747,7 +774,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
           {isEdit && <div style={{ fontSize: 11, color: '#b45309', background: '#fffbeb', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>Editing shows everyone currently allocated across the selected days. Saving sets this exact list on every selected day (remove someone to take them off those days).</div>}
 
           {/* Status */}
-          <div style={lbl}>Allocation status {!status && <span style={{ color: '#dc2626', fontWeight: 600 }}>— choose one to allocate</span>}</div>
+          <div style={lbl}>Allocation status {!status && (picked.length > 0 || unnamed > 0) && <span style={{ color: '#dc2626', fontWeight: 600 }}>— choose one to allocate</span>}{isEdit && !status && picked.length === 0 && unnamed === 0 && <span style={{ color: '#dc2626', fontWeight: 600 }}>— saving with no labour will clear these days</span>}</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
             {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => {
               const disabled = v === 'actual' && !allPast
@@ -804,7 +831,17 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
-            <button onClick={save} disabled={saving || !status} style={{ ...primaryBtn, ...((saving || !status) ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}>{saving ? (isEdit ? 'Saving…' : 'Allocating…') : (isEdit ? `Save changes to ${dates.length} day${dates.length === 1 ? '' : 's'}` : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`)}</button>
+            {(() => {
+              const hasLabour = picked.length > 0 || unnamed > 0
+              const clearMode = isEdit && !hasLabour
+              const blocked = saving || (!clearMode && !status)
+              const label = saving
+                ? (isEdit ? 'Saving…' : 'Allocating…')
+                : clearMode
+                  ? `Clear labour on ${dates.length} day${dates.length === 1 ? '' : 's'}`
+                  : (isEdit ? `Save changes to ${dates.length} day${dates.length === 1 ? '' : 's'}` : `Allocate to ${dates.length} day${dates.length === 1 ? '' : 's'}`)
+              return <button onClick={save} disabled={blocked} style={{ ...primaryBtn, ...(clearMode ? { background: '#dc2626' } : {}), ...(blocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}>{label}</button>
+            })()}
           </div>
         </div>
       </div>

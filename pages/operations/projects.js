@@ -237,6 +237,7 @@ export default function ProjectsPage() {
 function ProjectDetails({ projectNo, onSaved }) {
   const [d, setD] = useState(null)
   const [team, setTeam] = useState([])
+  const [supervisors, setSupervisors] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -244,9 +245,10 @@ function ProjectDetails({ projectNo, onSaved }) {
   useEffect(() => { (async () => {
     setLoading(true)
     try {
-      const [pr, tr] = await Promise.all([
+      const [pr, tr, sr] = await Promise.all([
         fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json()),
         fetch('/api/team').then(r => r.json()).catch(() => ({})),
+        fetch('/api/hs-matrix?supervisors=1').then(r => r.json()).catch(() => ({})),
       ])
       const data = pr?.project?.data || {}
       setD({
@@ -259,6 +261,7 @@ function ProjectDetails({ projectNo, onSaved }) {
         siteContacts: Array.isArray(data.siteContacts) ? data.siteContacts : [],
       })
       setTeam((tr.members || []).filter(m => m.active !== false))
+      setSupervisors(sr.supervisors || [])
     } catch {}
     setLoading(false)
   })() }, [projectNo])
@@ -300,6 +303,17 @@ function ProjectDetails({ projectNo, onSaved }) {
       </select>
     </div>
   )
+  const SupSel = ({ label, field }) => (
+    <div>
+      <L>{label}</L>
+      <select value={d[field] || ''} onChange={e => set({ [field]: e.target.value })} style={input}>
+        <option value="">Select…</option>
+        {supervisors.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+        {d[field] && !supervisors.some(s => s.name === d[field]) && <option value={d[field]}>{d[field]} (no current supervisor ticket)</option>}
+      </select>
+      {supervisors.length === 0 && <div style={{ fontSize: 11, color: '#b45309', margintop: 4 }}>No qualified supervisors yet — add a supervisor ticket (Internal Supervisor Assessment / SSSTS / SMSTS / IOSH Managing Safely) in the H&S Training Matrix.</div>}
+    </div>
+  )
 
   return (
     <div style={{ maxWidth: 820 }}>
@@ -323,7 +337,7 @@ function ProjectDetails({ projectNo, onSaved }) {
           <TeamSel label="Quantity Surveyor" field="quantitySurveyor" />
           <TeamSel label="Estimator" field="estimator" />
           <TeamSel label="Design Manager" field="designManager" />
-          <TeamSel label="Site Supervisor" field="siteSupervisor" />
+          <SupSel label="Site Supervisor" field="siteSupervisor" />
         </div>
       </Section>
 

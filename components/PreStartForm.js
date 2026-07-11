@@ -11,6 +11,7 @@ export default function PreStartForm({ projectNo }) {
   const [form, setForm] = useState(null)      // working copy while editing
   const [ihm, setIhm] = useState(null)
   const [team, setTeam] = useState([])
+  const [supervisors, setSupervisors] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [sending, setSending] = useState(false)
@@ -29,14 +30,16 @@ export default function PreStartForm({ projectNo }) {
   async function load() {
     setLoading(true)
     try {
-      const [ps, pr, tm] = await Promise.all([
+      const [ps, pr, tm, sv] = await Promise.all([
         fetch(`/api/pre-start?no=${encodeURIComponent(projectNo)}`).then(r => r.json()).catch(() => ({})),
         fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json()).catch(() => ({})),
         fetch('/api/team').then(r => r.json()).catch(() => ({})),
+        fetch('/api/hs-matrix?supervisors=1').then(r => r.json()).catch(() => ({})),
       ])
       setData(ps?.data || null)
       setIhm(pr?.project?.data || null)
       setTeam((tm?.members || []).filter(m => m.active !== false))
+      setSupervisors(sv?.supervisors || [])
       if (!ps?.data) setEditing(true)
     } catch {}
     setLoading(false)
@@ -172,7 +175,7 @@ export default function PreStartForm({ projectNo }) {
               <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>{sec.title}</div>
 
               {sec.fields.map(f => (
-                <FieldRow key={f.id} field={f} value={src?.[f.id]} editing={editing} team={team}
+                <FieldRow key={f.id} field={f} value={src?.[f.id]} editing={editing} team={team} supervisors={supervisors}
                   ihmDocs={f.id === 'scopeFiles' ? scopeFilesIHM.filter(d => !(src?.dismissedIhmDocs || []).includes(d.url)) : null}
                   onView={setDoc}
                   onDismissIhm={f.id === 'scopeFiles' ? (remaining => {
@@ -245,7 +248,7 @@ function ResolvedRow({ resolved, comments }) {
   )
 }
 
-function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange, onDismissIhm }) {
+function FieldRow({ field, value, editing, team, supervisors = [], ihmDocs, onView, onChange, onDismissIhm }) {
   const { type, label, help } = field
 
   if (type === 'qrow') {
@@ -340,14 +343,20 @@ function FieldRow({ field, value, editing, team, ihmDocs, onView, onChange, onDi
   }
 
   if (type === 'team') {
+    const isSup = /supervisor/i.test(label || '')
+    const opts = isSup ? supervisors.map(s => ({ id: s.id, nm: s.name })) : team.map(m => ({ id: m.id, nm: teamName(m) }))
     return (
       <div style={{ padding: '10px 0' }}>
         <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>{label}</div>
         {editing ? (
-          <select value={value || ''} onChange={e => onChange(e.target.value)} style={inp2}>
-            <option value="">Select…</option>
-            {team.map(m => <option key={m.id} value={teamName(m)}>{teamName(m)}</option>)}
-          </select>
+          <>
+            <select value={value || ''} onChange={e => onChange(e.target.value)} style={inp2}>
+              <option value="">Select…</option>
+              {opts.map(o => <option key={o.id} value={o.nm}>{o.nm}</option>)}
+              {value && !opts.some(o => o.nm === value) && <option value={value}>{value}{isSup ? ' (no current supervisor ticket)' : ''}</option>}
+            </select>
+            {isSup && supervisors.length === 0 && <div style={{ fontSize: 11, color: '#b45309', marginTop: 4 }}>No qualified supervisors — add a supervisor ticket in the H&S Training Matrix.</div>}
+          </>
         ) : <div style={{ fontSize: 14, color: value ? INK : '#bbb' }}>{value || '—'}</div>}
       </div>
     )

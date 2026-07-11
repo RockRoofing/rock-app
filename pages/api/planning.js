@@ -63,6 +63,7 @@ async function buildProjects() {
       name: p.data?.projectName || p.projectNo,
       location: p.data?.projectAddress || p.data?.siteLocation || '',
       customer: p.data?.customerCompany || '',
+      siteSupervisor: p.data?.siteSupervisor || '',
     }))
 
   // Negotiated projects (from cached Pipedrive deals at Negotiating stage)
