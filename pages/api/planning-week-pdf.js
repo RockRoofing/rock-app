@@ -9,7 +9,7 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 export default async function handler(req, res) {
   try {
     const mondayStr = req.query.monday || ''
-    const n = Math.min(8, Math.max(1, Number(req.query.weeks) || 1))
+    const n = Math.min(26, Math.max(1, Number(req.query.weeks) || 1))
     const base = mondayStr ? parseISO(mondayStr) : new Date()
     const mondays = Array.from({ length: n }, (_, i) => iso(new Date(base.getTime() + i * 7 * DAY)))
     const weeks = await Promise.all(mondays.map(m => assembleWeek(m)))

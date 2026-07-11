@@ -572,16 +572,21 @@ function WeekModal({ monday, onClose }) {
 
 // ── Historic viewer: pick any W/C, view + download PDF only (no send) ──
 function ViewWeekModal({ onClose }) {
-  const [wcDate, setWcDate] = useState(() => iso(mondayOf(new Date())))
+  const [fromDate, setFromDate] = useState(() => iso(mondayOf(new Date())))
+  const [toDate, setToDate] = useState(() => iso(mondayOf(new Date())))
   const [week, setWeek] = useState(null)
-  const mondayISO = iso(mondayOf(parseISO(wcDate)))
+  const fromMon = mondayOf(parseISO(fromDate))
+  const toMon = mondayOf(parseISO(toDate))
+  const fromMonISO = iso(fromMon)
+  // number of weeks in the range (inclusive), min 1, capped at 8 (Hobby-safe PDF size)
+  const weekCount = Math.min(26, Math.max(1, Math.round((toMon - fromMon) / (7 * 86400000)) + 1))
 
   useEffect(() => {
     let cancelled = false
     setWeek(null)
-    fetch(`/api/planning-week?monday=${encodeURIComponent(mondayISO)}`).then(r => r.json()).then(w => { if (!cancelled) setWeek(w) }).catch(() => { if (!cancelled) setWeek({ rows: [], days: [], dailyTotals: [] }) })
+    fetch(`/api/planning-week?monday=${encodeURIComponent(fromMonISO)}`).then(r => r.json()).then(w => { if (!cancelled) setWeek(w) }).catch(() => { if (!cancelled) setWeek({ rows: [], days: [], dailyTotals: [] }) })
     return () => { cancelled = true }
-  }, [mondayISO])
+  }, [fromMonISO])
 
   const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const statusColour = (s) => s === 'actual' ? C_ACTUAL : s === 'provisional' ? C_PROVISIONAL : C_CONFIRMED
@@ -598,10 +603,12 @@ function ViewWeekModal({ onClose }) {
         </div>
 
         <div style={{ padding: '14px 22px 22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#555' }}>Week commencing:</span>
-            <input type="date" value={wcDate} onChange={e => setWcDate(e.target.value)} style={{ ...fInput }} />
-            <span style={{ fontSize: 11.5, color: '#999' }}>Showing W/C {parseISO(mondayISO).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })} (snaps to the Monday of the chosen date).</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+            <div><div style={lbl}>From (week)</div><input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} style={{ ...fInput }} /></div>
+            <div><div style={lbl}>To (week)</div><input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={{ ...fInput }} /></div>
+            <div style={{ fontSize: 11.5, color: '#999', paddingBottom: 8 }}>
+              {weekCount} week{weekCount === 1 ? '' : 's'} · W/C {fromMon.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })} → {new Date(fromMon.getTime() + (weekCount - 1) * 7 * 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}. Table previews the first week; PDF covers the whole range (max 26 weeks).
+            </div>
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 12, fontSize: 11.5, color: '#555' }}>
@@ -613,7 +620,7 @@ function ViewWeekModal({ onClose }) {
           </div>
 
           {!week ? <Loading /> : week.rows.length === 0 ? (
-            <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated for this week.</div>
+            <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated for the first week of this range.</div>
           ) : (
             <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
               <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820 }}>
@@ -648,7 +655,7 @@ function ViewWeekModal({ onClose }) {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
-            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(mondayISO)}&weeks=1`} target="_blank" rel="noreferrer" style={{ ...primaryBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
+            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(fromMonISO)}&weeks=${weekCount}`} target="_blank" rel="noreferrer" style={{ ...primaryBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF ({weekCount} wk{weekCount === 1 ? '' : 's'})</a>
           </div>
         </div>
       </div>
