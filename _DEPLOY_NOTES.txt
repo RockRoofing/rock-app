@@ -1,15 +1,17 @@
-ROLES — fixes
+FIX: can't set users to Pre-Contract / Post-Contract
 
-  pages/admin.js
-   BUG FIX: selecting a role (e.g. Pre-Contract) didn't "take". Cause: the role dropdown
-   defaulted to value 'standard', which is no longer an option in the list, so the select
-   showed a mismatched value and the change didn't register. Now the dropdown always shows a
-   real option (legacy 'standard' normalised to Post-Contract on display and on edit-load).
-   Also updated the helper text to list the four roles.
+ROOT CAUSE: the portal user save API (portal-auth.js) still validated roles against the OLD
+list ['standard','management','admin']. So:
+  - Management saved fine (it was in the old list)
+  - Pre-Contract / Post-Contract were rejected: on CREATE they fell back to 'standard';
+    on UPDATE the role change was DELETED (discarded) — which is why editing to Pre/Post-Contract
+    "didn't take".
 
-  pages/api/ops-users.js
-   Site App user management (add / reset-PIN / delete / list) widened from Admin-only to
-   MANAGEMENT + ADMIN, per request. Operative login/set-pin remain open (Site App unaffected).
-   Templates remain ADMIN-ONLY (unchanged).
+FIX (pages/api/portal-auth.js):
+  - Both create and update now validate against the central ROLES list
+    (pre-contract, post-contract, management, admin), with legacy 'standard' normalised
+    to post-contract.
 
-Deploy over the versions from the roles-restructure-enforcement package.
+Deploy over the previous portal-auth.js. After deploy: edit a user -> set Pre-Contract ->
+Save -> reopen; it should now stick. (This is the real fix; the earlier admin.js change was
+only the dropdown display.)

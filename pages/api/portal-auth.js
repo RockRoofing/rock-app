@@ -1,5 +1,6 @@
 import { getPortalUsers, savePortalUsers } from '../../lib/db'
 import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
+import { ROLES, normRole } from '../../lib/roles'
 
 // Portal authentication + user management.
 //   POST { action:'login', email, password }      -> sets session cookie
@@ -158,7 +159,7 @@ export default async function handler(req, res) {
         lastName: u.lastName || '',
         phone: u.phone || '',
         jobRole: u.jobRole || '',   // descriptive role (Estimator, CM, QS…) — separate from access role
-        role: ['standard', 'management', 'admin'].includes(u.role) ? u.role : 'standard',
+        role: ROLES.includes(u.role) ? u.role : normRole(u.role),
         active: u.active !== false,
         passwordHash: hashPassword(tempPw),
         mustResetPassword: true,
@@ -176,7 +177,7 @@ export default async function handler(req, res) {
       const idx = users.findIndex(x => x.id === u.id)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })
       const { password, passwordHash, ...editable } = u
-      if (editable.role && !['standard', 'management', 'admin'].includes(editable.role)) delete editable.role
+      if (editable.role && !ROLES.includes(editable.role)) editable.role = normRole(editable.role)
       if (editable.email) editable.email = String(editable.email).toLowerCase().trim()
       // Keep display name in sync when first/last provided
       if (editable.firstName || editable.lastName) {
