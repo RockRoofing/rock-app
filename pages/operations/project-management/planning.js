@@ -407,6 +407,7 @@ function WeekModal({ monday, onClose }) {
   const [weeksData, setWeeksData] = useState(null)  // array of week objects
   const [excluded, setExcluded] = useState(new Set())
   const [emailing, setEmailing] = useState(false)
+  const [sent, setSent] = useState(false)
   const [msg, setMsg] = useState('')
 
   const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -444,6 +445,7 @@ function WeekModal({ monday, onClose }) {
       const includeOpIds = emailable.filter(r => !excluded.has(r.opId)).map(r => r.opId)
       const d = await fetch('/api/planning-week-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weeks, includeOpIds }) }).then(r => r.json())
       setMsg(`Sent to ${d.sent} operative${d.sent === 1 ? '' : 's'}.${d.skipped?.length ? ` Skipped: ${d.skipped.join(', ')}.` : ''}`)
+      setSent(true)
     } catch { setMsg('Could not send.') }
     setEmailing(false)
   }
@@ -537,8 +539,8 @@ function WeekModal({ monday, onClose }) {
           {msg && <div style={{ fontSize: 12.5, color: '#16a34a', marginTop: 12 }}>{msg}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, borderTop: '1px solid #eee', paddingTop: 16, position: 'sticky', bottom: 0, background: '#fff' }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
-            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(pdfMonday)}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF (this week)</a>
-            <button onClick={sendEmails} disabled={emailing || emailable.length === 0} style={primaryBtn}>{emailing ? 'Sending…' : 'Send to operatives'}</button>
+            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(pdfMonday)}&weeks=${weeksAhead}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
+            <button onClick={sendEmails} disabled={emailing || sent || emailable.length === 0} style={{ ...primaryBtn, ...(sent ? { background: '#16a34a', cursor: 'default' } : {}) }}>{sent ? '✓ Sent' : (emailing ? 'Sending…' : 'Send to operatives')}</button>
           </div>
         </div>
       </div>

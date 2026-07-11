@@ -1,17 +1,17 @@
-PLANNING — operative email: no attachment, new heading, project addresses list
+PLANNING — WLA send/download refinements
 
-  pages/api/planning-week-email.js
-   - Removed the PDF attachment — the email is now text/HTML only.
-   - Heading and subject changed to "Your upcoming project allocation".
-   - Below the day-by-day allocation, a "Project addresses" section lists each unique project the
-     operative is assigned to, with its address (shows "Address not set" if the project has no address).
+  pages/operations/project-management/planning.js
+   - "Send to operatives" now becomes "✓ Sent" (green, disabled) after a successful send. To send again,
+     close the pop-out and hit "Send Weekly Labour Allocation" again (reopening resets it).
+   - "Download PDF (this week)" renamed to just "Download PDF"; it now downloads ALL selected weeks
+     (matches the "how far ahead" filter), passing &weeks=N.
 
-  pages/api/planning-week.js
-   - The week assembler now carries each project's ADDRESS through (from the IHM projectAddress /
-     siteLocation for live projects, or the deal's site/organisation for negotiated), so the email can
-     list addresses. (projectNameMap now returns { name, address }.)
+  pages/api/planning-week-pdf.js
+   - Accepts ?weeks=N and assembles N consecutive weeks.
 
-Deploy over previous. No env / cron change. Uses existing Resend setup.
+  lib/weeklyLabourPdf.js
+   - buildWeeklyLabourPDF now takes { weeks:[...] } and renders EACH WEEK ON ITS OWN PAGE.
+   - Row height increased (24 -> 34) so the company line under each name is no longer cut off.
+   - Unnamed slots render as "N unnamed" in the PDF too.
 
-NOTE: addresses come from each project's record. If some show "Address not set", set the project address
-on the Project Details tab (or the IHM) and it'll appear.
+Deploy over previous. No env / cron change.
