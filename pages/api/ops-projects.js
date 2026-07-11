@@ -60,19 +60,30 @@ export default async function handler(req, res) {
       const p = body.project || {}
       const idx = projects.findIndex(x => x.projectNo === body.projectNo)
       if (idx < 0) return res.status(404).json({ error: 'Not found' })
-      projects[idx].data = {
-        ...(projects[idx].data || {}),
-        projectName: p.projectName,
-        contractsManager: p.contractsManager || '',
-        estimator: p.estimator || '',
-        quantitySurveyor: p.quantitySurveyor || '',
-        designManager: p.designManager || '',
-        projectAddress: p.location || '',
-      }
+      // Project Details = the single source of truth. Merge these fields into the
+      // shared project.data (the SAME object the IHM reads/writes), so Project
+      // Details and the IHM stay in lockstep automatically. Only defined fields
+      // are written, so we never wipe other IHM data.
+      const d0 = projects[idx].data || {}
+      const setIf = (obj, key, val) => { if (val !== undefined) obj[key] = val }
+      const merged = { ...d0 }
+      setIf(merged, 'projectName', p.projectName)
+      setIf(merged, 'contractsManager', p.contractsManager)
+      setIf(merged, 'estimator', p.estimator)
+      setIf(merged, 'quantitySurveyor', p.quantitySurveyor)
+      setIf(merged, 'designManager', p.designManager)
+      setIf(merged, 'operationsManager', p.operationsManager)
+      setIf(merged, 'siteSupervisor', p.siteSupervisor)
+      setIf(merged, 'customerCompany', p.customerCompany)
+      // address: accept either projectAddress or location
+      if (p.projectAddress !== undefined) merged.projectAddress = p.projectAddress
+      else if (p.location !== undefined) merged.projectAddress = p.location
+      if (p.siteContacts !== undefined) merged.siteContacts = p.siteContacts
+      projects[idx].data = merged
       if (p.status) projects[idx].status = p.status
       projects[idx].updatedAt = now
       await saveOpsProjects(projects)
-      return res.json({ ok: true })
+      return res.json({ ok: true, project: projects[idx] })
     }
 
     // Quick-add an old project manually (temporary record)

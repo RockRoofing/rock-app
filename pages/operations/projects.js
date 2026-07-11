@@ -8,6 +8,7 @@ import ProcurementSavings from '../../components/ProcurementSavings'
 import ProjectConcerns from '../../components/ProjectConcerns'
 
 const SUB_TABS = [
+  { key: 'details', label: 'Project Details' },
   { key: 'handover', label: 'Handover' },
   { key: 'procurement-savings', label: 'Procurement Savings' },
   { key: 'prestart', label: 'Pre-Start' },
@@ -115,6 +116,7 @@ export default function ProjectsPage() {
         <button onClick={() => setOpenNo(null)} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 8 }}>‹ All projects</button>
         <PageHeading title={`${p?.projectNo || ''} — ${p?.projectName || ''}`} sub={p?.location || ''} />
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
+        {sub === 'details' && <ProjectDetails projectNo={openNo} onSaved={load} />}
         {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
         {sub === 'procurement-savings' && <ProcurementSavings projectNo={openNo} />}
         {sub === 'prestart' && <PreStartForm projectNo={openNo} />}
@@ -231,6 +233,128 @@ export default function ProjectsPage() {
 }
 
 // Read-only handover view inside a project
+// ── Project Details — single source of truth (writes the same project.data the IHM uses) ──
+function ProjectDetails({ projectNo, onSaved }) {
+  const [d, setD] = useState(null)
+  const [team, setTeam] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => { (async () => {
+    setLoading(true)
+    try {
+      const [pr, tr] = await Promise.all([
+        fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json()),
+        fetch('/api/team').then(r => r.json()).catch(() => ({})),
+      ])
+      const data = pr?.project?.data || {}
+      setD({
+        projectName: data.projectName || '', projectNo,
+        projectAddress: data.projectAddress || data.siteLocation || '',
+        contractsManager: data.contractsManager || '', operationsManager: data.operationsManager || '',
+        quantitySurveyor: data.quantitySurveyor || '', estimator: data.estimator || '',
+        designManager: data.designManager || '', siteSupervisor: data.siteSupervisor || '',
+        customerCompany: data.customerCompany || '',
+        siteContacts: Array.isArray(data.siteContacts) ? data.siteContacts : [],
+      })
+      setTeam((tr.members || []).filter(m => m.active !== false))
+    } catch {}
+    setLoading(false)
+  })() }, [projectNo])
+
+  const set = (patch) => setD(prev => ({ ...prev, ...patch }))
+  const tmName = (m) => m.name || [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email
+
+  async function save() {
+    setSaving(true); setMsg('')
+    try {
+      const r = await fetch('/api/ops-projects', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-details', projectNo, project: d }),
+      })
+      if (!r.ok) throw new Error('Save failed')
+      setMsg('Saved. The Internal Handover Minutes reflect these details too.')
+      onSaved && onSaved()
+    } catch { setMsg('Could not save. Please try again.') }
+    setSaving(false)
+  }
+
+  if (loading || !d) return <Loading />
+
+  const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+  const L = ({ children }) => <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '14px 0 6px' }}>{children}</div>
+  const Section = ({ title, children }) => (
+    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 18, marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 4 }}>{title.toUpperCase()}</div>
+      {children}
+    </div>
+  )
+  const TeamSel = ({ label, field }) => (
+    <div>
+      <L>{label}</L>
+      <select value={d[field] || ''} onChange={e => set({ [field]: e.target.value })} style={input}>
+        <option value="">Select…</option>
+        {team.map(m => <option key={m.id} value={tmName(m)}>{tmName(m)}{m.role ? ` — ${m.role}` : ''}</option>)}
+        {d[field] && !team.some(m => tmName(m) === d[field]) && <option value={d[field]}>{d[field]}</option>}
+      </select>
+    </div>
+  )
+
+  return (
+    <div style={{ maxWidth: 820 }}>
+      <div style={{ fontSize: 12.5, color: '#888', marginBottom: 14 }}>
+        This is the single source of truth for the project. Editing here updates the Internal Handover Minutes, and feeds project forms, reports and tables.
+      </div>
+
+      <Section title="Project Details">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 18px' }}>
+          <div><L>Project name</L><input value={d.projectName} onChange={e => set({ projectName: e.target.value })} style={input} /></div>
+          <div><L>Project number</L><input value={d.projectNo} disabled style={{ ...input, background: '#f0f0f0', color: '#888' }} /></div>
+        </div>
+        <L>Project address</L>
+        <textarea value={d.projectAddress} onChange={e => set({ projectAddress: e.target.value })} style={{ ...input, minHeight: 60, resize: 'vertical' }} />
+      </Section>
+
+      <Section title="Project Team">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 18px' }}>
+          <TeamSel label="Contracts Manager" field="contractsManager" />
+          <TeamSel label="Operations Manager" field="operationsManager" />
+          <TeamSel label="Quantity Surveyor" field="quantitySurveyor" />
+          <TeamSel label="Estimator" field="estimator" />
+          <TeamSel label="Design Manager" field="designManager" />
+          <TeamSel label="Site Supervisor" field="siteSupervisor" />
+        </div>
+      </Section>
+
+      <Section title="Customer Details">
+        <L>Customer company</L>
+        <input value={d.customerCompany} onChange={e => set({ customerCompany: e.target.value })} style={input} />
+      </Section>
+
+      <Section title="Site Contacts">
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Customer site contacts. Used for sending issues and reports to the customer.</div>
+        {(d.siteContacts || []).map((c, i) => (
+          <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+            <input value={c.title || ''} onChange={e => { const n = [...d.siteContacts]; n[i] = { ...n[i], title: e.target.value }; set({ siteContacts: n }) }} placeholder="Role" style={{ ...input, padding: '7px 9px' }} />
+            <input value={c.name || ''} onChange={e => { const n = [...d.siteContacts]; n[i] = { ...n[i], name: e.target.value }; set({ siteContacts: n }) }} placeholder="Name" style={{ ...input, padding: '7px 9px' }} />
+            <input value={c.email || ''} onChange={e => { const n = [...d.siteContacts]; n[i] = { ...n[i], email: e.target.value }; set({ siteContacts: n }) }} placeholder="Email" style={{ ...input, padding: '7px 9px' }} />
+            <input value={c.phone || ''} onChange={e => { const n = [...d.siteContacts]; n[i] = { ...n[i], phone: e.target.value }; set({ siteContacts: n }) }} placeholder="Phone" style={{ ...input, padding: '7px 9px' }} />
+            <button onClick={() => set({ siteContacts: d.siteContacts.filter((_, j) => j !== i) })} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
+          </div>
+        ))}
+        <button onClick={() => set({ siteContacts: [...(d.siteContacts || []), { title: '', name: '', email: '', phone: '' }] })} style={ghostBtn}>+ Add contact</button>
+      </Section>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
+        <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save Project Details'}</button>
+        {msg && <span style={{ fontSize: 12.5, color: msg.startsWith('Saved') ? '#16a34a' : '#dc2626' }}>{msg}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Read-only Handover ──
 function HandoverReadOnly({ projectNo }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)

@@ -1,13 +1,23 @@
-PROJECT REPORT — append full open-issue forms to the PDF
-  lib/projectReportPdf.js       After the Approval/signature section, the report PDF now appends the
-                                FULL issue form (via the issue PDF builder) for each open issue listed
-                                in the report's Issues table. The issues table now includes a note that
-                                the full forms are appended at the end. The digital-signature/revision
-                                stamp is applied to EVERY page AFTER the issues are appended (so it sits
-                                on the appended issue pages too, i.e. after the issues forms).
-  pages/api/project-report-pdf.js  Fetches the full issue records (by id) referenced in the report and
-                                   passes them to the PDF builder.
-  pages/operations/project-management/report.js  Issues snapshot now stores each issue's id; on-screen
-                                   note added under the issues table that full forms are appended in the PDF.
+PROJECT DETAILS PAGE — single source of truth (Projects → select project → Project Details)
 
-Deploy over the previous versions. (Depends on lib/issuePdf.js already deployed.)
+  pages/operations/projects.js   New "Project Details" sub-tab (first tab). Fully editable:
+                                 - Project Details: Name, Number (read-only), Address
+                                 - Project Team: CM, Ops Manager, QS, Estimator, Design Manager,
+                                   Site Supervisor (dropdowns from Team; free value preserved)
+                                 - Customer Details: Customer Company
+                                 - Site Contacts: repeatable rows (title/name/email/phone) — matches
+                                   the IHM's contact shape, so they stay in sync.
+  pages/api/ops-projects.js      Extended the existing 'set-details' action to write the FULL field set
+                                 (adds operationsManager, siteSupervisor, customerCompany, siteContacts)
+                                 into the SAME project.data object the IHM reads/writes. Only defined
+                                 fields are written (never wipes other IHM data).
+
+HOW THE SYNC WORKS (safe, no bidirectional-copy risk):
+  Project Details and the IHM edit the SAME underlying project.data record. There is only ONE copy of
+  the data — so editing Project Details is immediately reflected in the IHM and vice versa. No copying
+  back and forth, nothing to reconcile, nothing to clobber. This is why it's safe.
+
+RESULT: Customer Company, team, address, site contacts set here flow into the IHM AND into project
+forms/reports/tables that read project.data (e.g. the Project Report's Customer Company auto-fill).
+
+Deploy over the previous versions.
