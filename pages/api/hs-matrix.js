@@ -93,6 +93,29 @@ export default async function handler(req, res) {
         await set(COLS_KEY, cols)
         return res.json({ ok: true, columns: cols })
       }
+      if (action === 'set-col') {
+        // patch lock and/or colour on a column
+        const { colId, locked, colour } = req.body
+        const cols = await ensureColumns()
+        const c = cols.find(x => x.id === colId)
+        if (c) {
+          if (typeof locked === 'boolean') c.locked = locked
+          if (colour !== undefined) c.colour = colour || ''
+        }
+        await set(COLS_KEY, cols)
+        return res.json({ ok: true, columns: cols })
+      }
+      if (action === 'reorder-cols') {
+        // body.order = array of colIds in new order
+        const order = Array.isArray(req.body.order) ? req.body.order : []
+        const cols = await ensureColumns()
+        const byId = Object.fromEntries(cols.map(c => [c.id, c]))
+        const reordered = order.map(id => byId[id]).filter(Boolean)
+        // append any columns not in the order list (safety)
+        for (const c of cols) if (!order.includes(c.id)) reordered.push(c)
+        await set(COLS_KEY, reordered)
+        return res.json({ ok: true, columns: reordered })
+      }
       if (action === 'set-cell') {
         const { personId, colId, value } = req.body  // value = { date } | { noExpiry:true } | null
         if (!personId || !colId) return res.status(400).json({ error: 'Missing personId/colId' })

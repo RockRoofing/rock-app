@@ -3,13 +3,15 @@ import OperationsShell, { PageHeading } from '../../../components/OperationsShel
 import { INK, GOLD, Loading, ghostBtn } from '../../../components/opsUI'
 
 const NAME_W = 220, CELL_W = 40, ROW_H = 34
+const HEADER_ORANGE = '#f5c77e'
+const ROW_ALT = '#f7f6f3'
 
 export default function RamsMatrixPage() {
   const [projects, setProjects] = useState([])
   const [ops, setOps] = useState([])
   const [signoffs, setSignoffs] = useState({})
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({ project: '', operative: '', company: '' })
+  const [filters, setFilters] = useState({ project: '', operative: '', company: '', trade: '' })
 
   async function load() {
     setLoading(true)
@@ -27,10 +29,12 @@ export default function RamsMatrixPage() {
   useEffect(() => { load() }, [])
 
   const companies = useMemo(() => [...new Set(ops.map(o => o.company).filter(Boolean))].sort(), [ops])
+  const trades = useMemo(() => [...new Set(ops.flatMap(o => (o.trades || [])))].filter(Boolean).sort(), [ops])
 
   const shownOps = useMemo(() => ops.filter(o => {
     if (filters.operative && o.id !== filters.operative) return false
     if (filters.company && o.company !== filters.company) return false
+    if (filters.trade && !(o.trades || []).includes(filters.trade)) return false
     return true
   }), [ops, filters])
 
@@ -76,8 +80,14 @@ export default function RamsMatrixPage() {
             {companies.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        {(filters.project || filters.operative || filters.company) &&
-          <button onClick={() => setFilters({ project: '', operative: '', company: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
+        <div><div style={lbl}>Trade</div>
+          <select value={filters.trade} onChange={e => setFilters(f => ({ ...f, trade: e.target.value }))} style={{ ...fInput, minWidth: 140, fontFamily: 'inherit' }}>
+            <option value="">All trades</option>
+            {trades.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        {(filters.project || filters.operative || filters.company || filters.trade) &&
+          <button onClick={() => setFilters({ project: '', operative: '', company: '', trade: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
       </div>
 
       {ops.length === 0 ? (
@@ -87,30 +97,33 @@ export default function RamsMatrixPage() {
           <div style={{ overflowX: 'auto' }}>
             <div style={{ minWidth: NAME_W + shownOps.length * CELL_W }}>
               {/* header: operative names, rotated */}
-              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#faf9f7', alignItems: 'flex-end' }}>
-                <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 3, background: '#faf9f7', padding: '8px', fontSize: 12, fontWeight: 700, color: INK, alignSelf: 'flex-end' }}>Project RAMS</div>
+              <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', background: HEADER_ORANGE, alignItems: 'flex-end' }}>
+                <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 3, background: HEADER_ORANGE, padding: '8px', fontSize: 12, fontWeight: 700, color: '#3a2e12', alignSelf: 'flex-end' }}>Project RAMS</div>
                 {shownOps.map(o => (
-                  <div key={o.id} title={`${opName(o)}${o.company ? ` · ${o.company}` : ''}`} style={{ width: CELL_W, minWidth: CELL_W, height: 130, position: 'relative', borderLeft: '1px solid #f0f0f0' }}>
-                    <div style={{ position: 'absolute', bottom: 8, left: '50%', transformOrigin: 'left bottom', transform: 'rotate(-60deg)', whiteSpace: 'nowrap', fontSize: 10.5, color: '#444' }}>{opName(o)}</div>
+                  <div key={o.id} title={`${opName(o)}${o.company ? ` · ${o.company}` : ''}`} style={{ width: CELL_W, minWidth: CELL_W, height: 130, position: 'relative', borderLeft: '1px solid #eab968' }}>
+                    <div style={{ position: 'absolute', bottom: 8, left: '50%', transformOrigin: 'left bottom', transform: 'rotate(-60deg)', whiteSpace: 'nowrap', fontSize: 10.5, color: '#3a2e12', fontWeight: 600 }}>{opName(o)}</div>
                   </div>
                 ))}
               </div>
 
               {/* rows */}
-              {shownProjects.map(p => (
-                <div key={p.key} style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
-                  <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 2, background: '#fff', borderRight: '1px solid #f0f0f0', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: INK, display: 'flex', alignItems: 'center' }}>{p.name}</div>
+              {shownProjects.map((p, ri) => {
+                const rowBg = ri % 2 === 1 ? ROW_ALT : '#fff'
+                return (
+                <div key={p.key} style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch', background: rowBg }}>
+                  <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '1px solid #f0f0f0', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: INK, display: 'flex', alignItems: 'center' }}>{p.name}</div>
                   {shownOps.map(o => {
                     const signed = !!(signoffs[p.key] && signoffs[p.key][o.id])
                     return (
                       <div key={o.id} onClick={() => toggle(p.key, o.id)} title={`${p.name} — ${opName(o)}`}
-                        style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '1px solid #f5f5f5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: signed ? '#dcfce7' : '#fff', fontSize: 12, fontWeight: 700, color: signed ? '#166534' : '#e0e0e0' }}>
+                        style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '1px solid #f5f5f5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: signed ? '#dcfce7' : 'transparent', fontSize: 12, fontWeight: 700, color: signed ? '#166534' : '#ddd' }}>
                         {signed ? 'Yes' : ''}
                       </div>
                     )
                   })}
                 </div>
-              ))}
+                )
+              })}
               {shownProjects.length === 0 && <div style={{ padding: 14, fontSize: 12.5, color: '#aaa' }}>No projects match.</div>}
             </div>
           </div>
