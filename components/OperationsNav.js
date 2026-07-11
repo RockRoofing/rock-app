@@ -12,6 +12,7 @@ export const NAV = [
       { key: 'pm:report', label: 'Project Report', href: '/operations/project-management/report' },
       { key: 'pm:planning', label: 'Planning', href: '/operations/project-management/planning' },
       { key: 'pm:tasks', label: 'Live Tasks', href: '/operations/project-management/tasks' },
+      { key: 'pm:issues', label: 'Issues', href: '/operations/project-management/issues' },
       { key: 'pm:risks', label: 'Risk Log', href: '/operations/project-management/risks' },
       { key: 'pm:procurement', label: 'Procurement', href: '/operations/project-management/procurement' },
       { key: 'pm:deliveries', label: 'Deliveries', href: '/operations/project-management/deliveries' },

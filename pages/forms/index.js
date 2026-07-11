@@ -169,6 +169,7 @@ export default function FormsHome() {
 
 // ── Home: choose Complete a Form or View Project Details ─────────────────────
 function FormsHomeMenu({ user }) {
+  const router = useRouter()
   const [mode, setMode] = useState('menu')  // menu | forms | details
   const isCM = user?.accessLevel === 'contracts-manager'
   if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
@@ -186,6 +187,11 @@ function FormsHomeMenu({ user }) {
         <button onClick={() => setMode('details')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📁</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>View Project Details</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings & RAMS for your project</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
+        <button onClick={() => router.push('/forms/issue')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>⚠️</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Raise an Issue</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Report a site issue with photos</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
         {/* Contracts Manager-only options appear here. */}

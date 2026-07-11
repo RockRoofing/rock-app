@@ -22,7 +22,7 @@ export default function SubmissionsPage() {
   const [selNote, setSelNote] = useState('')
 
   useEffect(() => { (async () => {
-    try { const r = await fetch('/api/submissions'); const d = await r.json(); setSubs(d.submissions || []) } catch {}
+    try { const r = await fetch('/api/submissions'); const d = await r.json(); setSubs((d.submissions || []).filter(s => !s.isIssue)) } catch {}
     try {
       const rf = await fetch('/api/forms'); const df = await rf.json()
       const map = {}

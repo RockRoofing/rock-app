@@ -321,7 +321,7 @@ function ProjectSubmissions({ projectNo }) {
   useEffect(() => { (async () => {
     try {
       const r = await fetch('/api/submissions'); const d = await r.json()
-      setSubs((d.submissions || []).filter(s => s.projectId === projectNo || s.projectName === projectNo))
+      setSubs((d.submissions || []).filter(s => !s.isIssue && (s.projectId === projectNo || s.projectName === projectNo)))
     } catch {}
     // Load all form definitions once, build id->label maps for showing questions
     try {
