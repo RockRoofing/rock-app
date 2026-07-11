@@ -1,23 +1,16 @@
-PROJECT DETAILS PAGE — single source of truth (Projects → select project → Project Details)
+PLANNING — PHASE 1 of 5: Operatives roster (H&S)
 
-  pages/operations/projects.js   New "Project Details" sub-tab (first tab). Fully editable:
-                                 - Project Details: Name, Number (read-only), Address
-                                 - Project Team: CM, Ops Manager, QS, Estimator, Design Manager,
-                                   Site Supervisor (dropdowns from Team; free value preserved)
-                                 - Customer Details: Customer Company
-                                 - Site Contacts: repeatable rows (title/name/email/phone) — matches
-                                   the IHM's contact shape, so they stay in sync.
-  pages/api/ops-projects.js      Extended the existing 'set-details' action to write the FULL field set
-                                 (adds operationsManager, siteSupervisor, customerCompany, siteContacts)
-                                 into the SAME project.data object the IHM reads/writes. Only defined
-                                 fields are written (never wipes other IHM data).
+  pages/api/operatives.js              New roster store (ops:operatives-roster). Separate from Site App
+                                       login users. GET/POST/DELETE.
+  pages/operations/hs/operatives.js    Replaces the coming-soon stub. Table with:
+                                       - Add new (top), sortable headers (Name/Email/Phone/Company/Trade)
+                                       - Search by name, filter by Trade and Company, live count
+                                       - Add/edit modal: First Name*, Last Name*, Email, Phone, Company,
+                                         Trade (multiselect: Single Ply, Felt, Liquids, Hot Melt, Rainscreen,
+                                         Composite Panels, Aluminium, Standing Seam, Labourer, Other)
 
-HOW THE SYNC WORKS (safe, no bidirectional-copy risk):
-  Project Details and the IHM edit the SAME underlying project.data record. There is only ONE copy of
-  the data — so editing Project Details is immediately reflected in the IHM and vice versa. No copying
-  back and forth, nothing to reconcile, nothing to clobber. This is why it's safe.
+This is the installer roster that will feed the Planning Gantt (Phase 3). Deploy and add your operatives
+so they're ready to allocate. The nav entry (H&S → Operatives) already exists.
 
-RESULT: Customer Company, team, address, site contacts set here flow into the IHM AND into project
-forms/reports/tables that read project.data (e.g. the Project Report's Customer Company auto-fill).
-
-Deploy over the previous versions.
+NEXT PHASES (coming): 2) Planning data model + API (allocations, clash rules, project start/completion
+dates); 3) Gantt UI; 4) Weekly pop-out (PDF + per-operative email); 5) Forms split (Completed | Missing).
