@@ -1,15 +1,7 @@
-WATER INGRESS — status colour scheme + historic flag
+FORMS MISSING — Status filter
 
-  pages/operations/project-management/planning.js
-   - Water Ingress day cells now use the SAME colour scheme as project rows: any unnamed slot -> orange;
-     otherwise Actual = medium green, Provisional = blue, Confirmed = light green, with the status edge bar.
-     The day's combined status is derived from its visits (all-Actual -> Actual; any Provisional ->
-     Provisional; else Confirmed; any unnamed -> orange).
-   - ⚑ "historic needs confirming" flag now shows on the Water Ingress row label when a past day has
-     visits not yet marked Actual (matches the project rows).
+  pages/operations/forms-missing.js
+   - Renamed the "Show" filter to "Status" with clearer options: All statuses / Missing / Completed.
+     (Functionally this is the status filter; it filters the table rows by completion status.)
 
-  WLA / email: Water Ingress visits are ALREADY included in the Weekly Labour Allocation (table, PDF and
-  installer email) as "💧 <job name>" with their address — this shipped in the previous water-ingress drop,
-  no change needed here.
-
-Deploy over previous planning.js. No API change.
+Deploy over previous forms-missing.js (the page). No API change.

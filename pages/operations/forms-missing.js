@@ -92,11 +92,11 @@ export default function FormsMissingPage() {
 
           {/* filters */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
-            <div><div style={lbl}>Show</div>
+            <div><div style={lbl}>Status</div>
               <select value={showOnly} onChange={e => setShowOnly(e.target.value)} style={{ ...fInput, fontFamily: 'inherit' }}>
-                <option value="all">All required</option>
-                <option value="missing">Missing only</option>
-                <option value="done">Completed only</option>
+                <option value="all">All statuses</option>
+                <option value="missing">Missing</option>
+                <option value="done">Completed</option>
               </select>
             </div>
             <div><div style={lbl}>Form</div>
