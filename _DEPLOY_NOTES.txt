@@ -1,13 +1,40 @@
-PROJECT REPORT — status wording, Issues/Variations sections
+H&S — RAMS Matrix + H&S Training Matrix (both under H&S nav, stubs replaced)
 
-  lib/projectReportPdf.js
-   - The status pill on the downloaded PDF now reads "STATUS: SUBMITTED" (was "COMPLETE"). Draft unchanged.
+NEW / REPLACED FILES
+  pages/operations/hs/rams-matrix.js   RAMS Matrix page (replaces the coming-soon stub).
+  pages/operations/hs/hs-matrix.js     H&S Training Matrix page (replaces the coming-soon stub).
+  pages/api/rams-matrix.js             RAMS sign-off store + toggle API.
+  pages/api/hs-matrix.js               Training columns + per-person expiry store API.
+  pages/api/cron/hs-expiry-email.js    Monthly expiry digest email.
+  vercel.json                          ADDS a 2nd cron for the expiry email (see WARNING below).
 
-  pages/operations/project-management/report.js
-   - On-screen status badge and the Status filter now say "Submitted" (stored value stays 'complete', so
-     existing reports/filters keep working). The "Save & complete" button is now "Save & submit".
-   - Issues section heading changed from "Issues still to be resolved" to just "Issues".
-   - Variations section now includes ALL variations (not only awaiting-instruction); heading changed to
-     "Variations"; the Instructed column shows the real Yes/No per variation.
+RAMS MATRIX
+  - Projects down the side (auto from active Ops projects, sorted by number).
+  - Installers across the top (auto from the Operatives roster, alphabetical; no Rock/subbie split).
+  - Click a cell to toggle "Yes" = that installer has signed onto that project's RAMS.
+  - Filter by Project / Operative / Company. Project column frozen when scrolling.
+  - Store: ops:rams-matrix = { [projectNo]: { [opId]: true } }.
 
-Deploy over previous. No API change.
+H&S TRAINING MATRIX
+  - People down the side (alphabetical): Operatives roster + Portal users, de-duped by name. Blank cell
+    when no record.
+  - Columns: Employee (frozen), Company, Trade, Phone, Email, then the training columns.
+  - Cells: click to set an EXPIRY DATE or tick "Does not expire". Colour: >2 months green, <2 months
+    amber, past today red, blank if empty.
+  - Add training columns (+ Add training column) and delete any column (× on the column header).
+    Defaults seeded from the company's live tracker (33 trainings) on first load; fully editable after.
+  - Filter by Person / Company / Trade. Store: ops:hs-matrix-columns + ops:hs-matrix-data.
+
+MONTHLY EXPIRY EMAIL
+  - pages/api/cron/hs-expiry-email.js emails all Operations Managers (team members whose role contains
+    "Operations Manager"; falls back to ALERT_EMAIL) a digest of trainings expired + expiring within 2
+    months. Runs DAILY but only actually sends on the 1st of the month. Manual test: hit
+    /api/cron/hs-expiry-email?force=1 .
+
+*** WARNING — VERCEL HOBBY CRON LIMIT ***
+  vercel.json now has TWO crons (deliveries-sync + hs-expiry-email) = the Hobby maximum. Both are
+  once-daily, which Hobby allows. Do NOT add a third cron or deployments may break. If you later add
+  more scheduled jobs, fold them into an existing daily cron instead.
+
+Deploy all files (create the two H&S pages/APIs, the cron, and REPLACE vercel.json). Uses existing
+Resend env (RESEND_API_KEY + FORMS_FROM_EMAIL; optional ALERT_EMAIL fallback).
