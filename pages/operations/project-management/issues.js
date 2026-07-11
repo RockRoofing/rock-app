@@ -29,6 +29,8 @@ export default function IssuesPage() {
   const [meName, setMeName] = useState('')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState({ key: 'createdAt', dir: 'desc' })
+  const [filters, setFilters] = useState({ project: '', status: '', createdBy: '', type: '', from: '', to: '' })
+  const setF = (patch) => { setFilters(prev => ({ ...prev, ...patch })); setPage(0) }
 
   async function load() {
     setLoading(true)
@@ -53,8 +55,23 @@ export default function IssuesPage() {
 
   function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
   const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  const filterOptions = useMemo(() => {
+    const byField = (get) => [...new Set(issues.map(get).filter(Boolean))].sort()
+    const types = [...new Set(issues.flatMap(i => i.issueTypes || []))].sort()
+    return { projects: byField(i => `${i.projectNo || ''}${i.projectName ? ' — ' + i.projectName : ''}`), createdBy: byField(i => i.createdBy), types }
+  }, [issues])
+
   const sorted = useMemo(() => {
-    const arr = [...issues]
+    let arr = issues.filter(i => {
+      if (filters.project && `${i.projectNo || ''}${i.projectName ? ' — ' + i.projectName : ''}` !== filters.project) return false
+      if (filters.status === 'open' && i.resolvedDate) return false
+      if (filters.status === 'closed' && !i.resolvedDate) return false
+      if (filters.createdBy && i.createdBy !== filters.createdBy) return false
+      if (filters.type && !(i.issueTypes || []).includes(filters.type)) return false
+      if (filters.from) { const d = i.createdAt ? new Date(i.createdAt) : null; if (!d || d < parseLocal(filters.from)) return false }
+      if (filters.to) { const d = i.createdAt ? new Date(i.createdAt) : null; const end = parseLocal(filters.to); if (end) end.setHours(23,59,59,999); if (!d || d > end) return false }
+      return true
+    })
     const val = (i) => {
       if (sort.key === 'project') return `${i.projectNo || ''} ${i.projectName || ''}`.toLowerCase()
       if (sort.key === 'name') return (i.issueName || '').toLowerCase()
@@ -64,9 +81,9 @@ export default function IssuesPage() {
       if (sort.key === 'required') return i.requiredDate || ''
       return i.createdAt || 0
     }
-    arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
+    arr = [...arr].sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
     return arr
-  }, [issues, sort])
+  }, [issues, sort, filters])
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
 
@@ -103,6 +120,24 @@ export default function IssuesPage() {
         <EmptyCard title="No issues yet" body="Issues raised by operatives on the Site App will appear here." />
       ) : (
         <>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14, alignItems: 'flex-end' }}>
+          <FilterSel label="Project" value={filters.project} onChange={v => setF({ project: v })} options={filterOptions.projects} />
+          <FilterSel label="Status" value={filters.status} onChange={v => setF({ status: v })} options={[{ v: 'open', l: 'Open' }, { v: 'closed', l: 'Closed' }]} raw />
+          <FilterSel label="Created By" value={filters.createdBy} onChange={v => setF({ createdBy: v })} options={filterOptions.createdBy} />
+          <FilterSel label="Issue Type" value={filters.type} onChange={v => setF({ type: v })} options={filterOptions.types} />
+          <div>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>Created from</div>
+            <input type="date" value={filters.from} onChange={e => setF({ from: e.target.value })} style={{ padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>Created to</div>
+            <input type="date" value={filters.to} onChange={e => setF({ to: e.target.value })} style={{ padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }} />
+          </div>
+          {(filters.project || filters.status || filters.createdBy || filters.type || filters.from || filters.to) && (
+            <button onClick={() => setFilters({ project: '', status: '', createdBy: '', type: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>
+          )}
+          <div style={{ marginLeft: 'auto', fontSize: 12.5, color: '#888', alignSelf: 'center' }}>{sorted.length} issue{sorted.length === 1 ? '' : 's'}</div>
+        </div>
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1250 }}>
             <thead><tr style={{ background: '#faf9f7' }}>
@@ -114,7 +149,7 @@ export default function IssuesPage() {
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('type')}>Issue Type{arrow('type')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('required')}>Required Resolution{arrow('required')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('resolved')}>Resolved Date{arrow('resolved')}</th>
-              <th style={th}>Comments</th>
+              <th style={th}>Internal Comments</th>
               <th style={th}>Attachments</th>
               <th style={{ ...th, textAlign: 'right' }}></th>
             </tr></thead>
@@ -161,7 +196,7 @@ export default function IssuesPage() {
                       <input type="date" value={i.resolvedDate || ''} onChange={e => patchIssue(i.id, { resolvedDate: e.target.value })} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
                       {resolved && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>Resolved</div>}
                     </td>
-                    <td style={{ ...td, cursor: 'pointer', maxWidth: 200 }} onClick={() => setCell({ title: 'Comments', text: i.comments, editId: i.id })}>{clamp(i.comments, 50)}</td>
+                    <td style={{ ...td, cursor: 'pointer', maxWidth: 200 }} onClick={() => setCell({ title: 'Internal Comments', text: i.comments, editId: i.id })}>{clamp(i.comments, 50)}</td>
                     <td style={{ ...td, textAlign: 'center' }}>{(i.photos || []).length ? <span title={`${i.photos.length} photo(s)`}>📎 {i.photos.length}</span> : '—'}</td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={() => setEdit({ ...i })} style={linkBtn}>Edit</button>
@@ -247,7 +282,7 @@ function EditModal({ initial, onClose, onSaved, onSend }) {
       <L>Description</L>
       <textarea value={f.description || ''} onChange={e => set({ description: e.target.value })} style={{ ...input, minHeight: 90, resize: 'vertical' }} />
 
-      <L>Comments</L>
+      <L>Internal Comments</L>
       <textarea value={f.comments || ''} onChange={e => set({ comments: e.target.value })} style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder="Internal comments" />
 
       <L>Required Resolution Date</L>
@@ -342,6 +377,18 @@ function SendCustomerModal({ issue, onClose, onSent }) {
 }
 
 // ── Create a new issue from the portal ──
+function FilterSel({ label, value, onChange, options, raw }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>{label}</div>
+      <select value={value} onChange={e => onChange(e.target.value)} style={{ padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5, fontFamily: 'inherit', minWidth: 130, maxWidth: 220 }}>
+        <option value="">All</option>
+        {options.map(o => raw ? <option key={o.v} value={o.v}>{o.l}</option> : <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  )
+}
+
 const ISSUE_TYPES = ['Design', 'Quality', 'Health & Safety', 'Delay / Programme', 'Deliveries / Materials', 'Water ingress', 'Damage to our works', 'Interface issue', 'Access', 'Weather', 'Customer / Main Contractor', 'Workmanship', 'Other']
 
 function CreateModal({ projects, createdBy, onClose, onSaved }) {

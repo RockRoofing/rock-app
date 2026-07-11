@@ -1,6 +1,10 @@
-ISSUE PDF — Status box
+ISSUES — PDF required date, internal comments
+
   lib/issuePdf.js
-   Added a Status box near the top of the issue PDF:
-     - Default: "STATUS: OPEN" (amber)
-     - Once a Resolved date is entered: "STATUS: RESOLVED" (green), with the resolved date shown beneath.
-Deploy over the previous lib/issuePdf.js.
+   - Added "Required resolution date" to the issue PDF header (shown to the customer).
+   - Confirmed the PDF does NOT include the Comments field (internal only) — unchanged.
+  pages/operations/project-management/issues.js
+   - Renamed the tracker "Comments" column to "Internal Comments" (column header, the pop-out
+     title, and the edit-window label). The field is internal and never appears on the customer PDF.
+
+Deploy over the previous versions.
