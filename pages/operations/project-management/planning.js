@@ -54,6 +54,7 @@ export default function PlanningPage() {
   const [sel, setSel] = useState(null)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
   const [weekModal, setWeekModal] = useState(null)    // monday iso
+  const [viewModal, setViewModal] = useState(false)   // historic viewer
   const dragging = useRef(false)
 
   async function load() {
@@ -175,6 +176,7 @@ export default function PlanningPage() {
           <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
+          <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
           <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
             <button onClick={() => setView('week')} style={{ ...segBtn, background: view === 'week' ? GOLD : '#fff', color: view === 'week' ? '#fff' : '#555' }}>Week</button>
@@ -273,6 +275,7 @@ export default function PlanningPage() {
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
+      {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
     </OperationsShell>
   )
 }
@@ -403,8 +406,9 @@ const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #
 
 // ── Weekly labour pop-out: filters + one stacked table per week + Download/Send ──
 function WeekModal({ monday, onClose }) {
-  const [weeksAhead, setWeeksAhead] = useState(1)
-  const [weeksData, setWeeksData] = useState(null)  // array of week objects
+  const [weeksAhead, setWeeksAhead] = useState(1)      // 1..4 forward weeks (week 1 = next Monday)
+  const [includePrev, setIncludePrev] = useState(false) // Previous week (download-only), off by default
+  const [weeksData, setWeeksData] = useState(null)     // array of { week, kind:'prev'|'ahead', label }
   const [excluded, setExcluded] = useState(new Set())
   const [emailing, setEmailing] = useState(false)
   const [sent, setSent] = useState(false)
@@ -413,25 +417,33 @@ function WeekModal({ monday, onClose }) {
   const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const statusColour = (s) => s === 'actual' ? C_ACTUAL : s === 'provisional' ? C_PROVISIONAL : C_CONFIRMED
 
-  // Load the required number of consecutive weeks starting at `monday`.
+  // `monday` = current week's Monday. Week 1 = NEXT Monday (current + 7). Previous = current - 7.
+  const thisMon = parseISO(monday)
+  const nextMon = new Date(thisMon.getTime() + 7 * 86400000)
+  const prevMon = new Date(thisMon.getTime() - 7 * 86400000)
+  const aheadMondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(nextMon.getTime() + i * 7 * 86400000)))
+  const prevMonISO = iso(prevMon)
+
+  // Load previous (if selected) + the forward weeks.
   useEffect(() => {
     let cancelled = false
     async function loadWeeks() {
       setWeeksData(null)
-      const base = parseISO(monday)
-      const mondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(base.getTime() + i * 7 * 86400000)))
-      const results = await Promise.all(mondays.map(m => fetch(`/api/planning-week?monday=${encodeURIComponent(m)}`).then(r => r.json()).catch(() => null)))
+      const plan = []
+      if (includePrev) plan.push({ monday: prevMonISO, kind: 'prev', label: 'Previous week' })
+      aheadMondays.forEach((m, i) => plan.push({ monday: m, kind: 'ahead', label: i === 0 ? 'Week 1 (next week)' : `Week ${i + 1}` }))
+      const results = await Promise.all(plan.map(p => fetch(`/api/planning-week?monday=${encodeURIComponent(p.monday)}`).then(r => r.json()).then(week => ({ week, kind: p.kind, label: p.label })).catch(() => null)))
       if (!cancelled) setWeeksData(results.filter(Boolean))
     }
     loadWeeks()
     return () => { cancelled = true }
-  }, [monday, weeksAhead])
+  }, [monday, weeksAhead, includePrev])
 
-  // Everyone emailable across all loaded weeks (named rows with an email), de-duplicated.
+  // Emailable = named rows with an email, but ONLY from forward (ahead) weeks — never the previous week.
   const emailable = useMemo(() => {
     if (!weeksData) return []
     const map = {}
-    for (const wk of weeksData) for (const r of wk.rows) if (!r.unnamed) map[r.opId] = r
+    for (const w of weeksData) { if (w.kind !== 'ahead') continue; for (const r of w.week.rows) if (!r.unnamed) map[r.opId] = r }
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
   }, [weeksData])
 
@@ -440,8 +452,7 @@ function WeekModal({ monday, onClose }) {
   async function sendEmails() {
     setEmailing(true); setMsg('')
     try {
-      const base = parseISO(monday)
-      const weeks = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(base.getTime() + i * 7 * 86400000)))
+      const weeks = aheadMondays  // forward weeks only; previous week is never emailed
       const includeOpIds = emailable.filter(r => !excluded.has(r.opId)).map(r => r.opId)
       const d = await fetch('/api/planning-week-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weeks, includeOpIds }) }).then(r => r.json())
       setMsg(`Sent to ${d.sent} operative${d.sent === 1 ? '' : 's'}.${d.skipped?.length ? ` Skipped: ${d.skipped.join(', ')}.` : ''}`)
@@ -450,8 +461,9 @@ function WeekModal({ monday, onClose }) {
     setEmailing(false)
   }
 
-  const base = parseISO(monday)
-  const pdfMonday = iso(base)
+  // PDF: covers the forward weeks (and previous week if selected). We pass the earliest monday + count.
+  const pdfStart = includePrev ? prevMonISO : aheadMondays[0]
+  const pdfCount = weeksAhead + (includePrev ? 1 : 0)
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }}>
@@ -459,14 +471,14 @@ function WeekModal({ monday, onClose }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Send Weekly Labour Allocation</div>
-            <div style={{ fontSize: 12, color: '#888' }}>From week commencing {base.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Week 1 = w/c {nextMon.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
           </div>
           <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
         </div>
 
         <div style={{ padding: '14px 22px 22px' }}>
           <div style={{ fontSize: 12.5, color: '#92400e', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 8, padding: '9px 12px', marginBottom: 14 }}>
-            If this week is in the past it won't send to installers — it's only available to download as a PDF. Emails are sent for future dates only.
+            Emails cover the upcoming weeks only (Week 1 is next week). The Previous week is download-only and is never emailed.
           </div>
           {/* filters */}
           <div style={{ padding: 14, border: '1px solid #eee', background: '#faf9f7', borderRadius: 10, marginBottom: 14 }}>
@@ -475,10 +487,14 @@ function WeekModal({ monday, onClose }) {
               {[1, 2, 3, 4].map(w => (
                 <button key={w} onClick={() => setWeeksAhead(w)} style={{ padding: '6px 12px', borderRadius: 8, border: weeksAhead === w ? `2px solid ${GOLD}` : '1px solid #ddd', background: weeksAhead === w ? '#fffbeb' : '#fff', fontWeight: weeksAhead === w ? 700 : 500, fontSize: 12.5, cursor: 'pointer' }}>{w} week{w > 1 ? 's' : ''}</button>
               ))}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, marginLeft: 6, cursor: 'pointer', color: '#555' }}>
+                <input type="checkbox" checked={includePrev} onChange={e => setIncludePrev(e.target.checked)} />
+                Include previous week (download only)
+              </label>
             </div>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Only future dates are sent (past days and Actuals are never emailed). Untick anyone you don't want to email:</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Untick anyone you don't want to email (upcoming weeks only):</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {emailable.length === 0 && <span style={{ fontSize: 12.5, color: '#aaa' }}>No named operatives in this period.</span>}
+              {emailable.length === 0 && <span style={{ fontSize: 12.5, color: '#aaa' }}>No named operatives in the upcoming weeks.</span>}
               {emailable.map(r => (
                 <label key={r.opId} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 20, padding: '5px 12px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={!excluded.has(r.opId)} onChange={() => toggleExcl(r.opId)} />
@@ -498,10 +514,12 @@ function WeekModal({ monday, onClose }) {
           </div>
 
           {/* stacked week tables */}
-          {!weeksData ? <Loading /> : weeksData.map((week, wi) => (
+          {!weeksData ? <Loading /> : weeksData.map((w, wi) => {
+            const week = w.week
+            return (
             <div key={wi} style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 6 }}>
-                {wi === 0 ? 'This week' : `Week +${wi}`} — W/C {parseISO(week.weekStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              <div style={{ fontSize: 13, fontWeight: 700, color: w.kind === 'prev' ? '#92400e' : GOLD, marginBottom: 6 }}>
+                {w.label} — W/C {parseISO(week.weekStart).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}{w.kind === 'prev' ? ' · download only' : ''}
               </div>
               {week.rows.length === 0 ? (
                 <div style={{ color: '#aaa', fontSize: 12.5, padding: '10px 0' }}>No labour allocated this week.</div>
@@ -537,13 +555,100 @@ function WeekModal({ monday, onClose }) {
                 </div>
               )}
             </div>
-          ))}
+            )
+          })}
 
           {msg && <div style={{ fontSize: 12.5, color: '#16a34a', marginTop: 12 }}>{msg}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8, borderTop: '1px solid #eee', paddingTop: 16, position: 'sticky', bottom: 0, background: '#fff' }}>
             <button onClick={onClose} style={ghostBtn}>Close</button>
-            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(pdfMonday)}&weeks=${weeksAhead}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
+            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(pdfStart)}&weeks=${pdfCount}`} target="_blank" rel="noreferrer" style={{ ...ghostBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
             <button onClick={sendEmails} disabled={emailing || sent || emailable.length === 0} style={{ ...primaryBtn, ...(sent ? { background: '#16a34a', cursor: 'default' } : {}) }}>{sent ? '✓ Sent' : (emailing ? 'Sending…' : 'Send to operatives')}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Historic viewer: pick any W/C, view + download PDF only (no send) ──
+function ViewWeekModal({ onClose }) {
+  const [wcDate, setWcDate] = useState(() => iso(mondayOf(new Date())))
+  const [week, setWeek] = useState(null)
+  const mondayISO = iso(mondayOf(parseISO(wcDate)))
+
+  useEffect(() => {
+    let cancelled = false
+    setWeek(null)
+    fetch(`/api/planning-week?monday=${encodeURIComponent(mondayISO)}`).then(r => r.json()).then(w => { if (!cancelled) setWeek(w) }).catch(() => { if (!cancelled) setWeek({ rows: [], days: [], dailyTotals: [] }) })
+    return () => { cancelled = true }
+  }, [mondayISO])
+
+  const DOWFULL = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const statusColour = (s) => s === 'actual' ? C_ACTUAL : s === 'provisional' ? C_PROVISIONAL : C_CONFIRMED
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>View Weekly Labour Allocations</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Historic &amp; upcoming weeks — download only</div>
+          </div>
+          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+
+        <div style={{ padding: '14px 22px 22px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: '#555' }}>Week commencing:</span>
+            <input type="date" value={wcDate} onChange={e => setWcDate(e.target.value)} style={{ ...fInput }} />
+            <span style={{ fontSize: 11.5, color: '#999' }}>Showing W/C {parseISO(mondayISO).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })} (snaps to the Monday of the chosen date).</span>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center', marginBottom: 12, fontSize: 11.5, color: '#555' }}>
+            <span style={{ fontWeight: 700, color: '#888' }}>Key:</span>
+            <Legend c={C_ACTUAL} label="Actual" />
+            <Legend c={C_CONFIRMED} label="Confirmed" />
+            <Legend c={C_PROVISIONAL} label="Provisional" />
+            <Legend c={C_UNNAMED} label="Unnamed / TBC" />
+          </div>
+
+          {!week ? <Loading /> : week.rows.length === 0 ? (
+            <div style={{ color: '#999', padding: '30px 0', textAlign: 'center' }}>No labour allocated for this week.</div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 820 }}>
+                <thead>
+                  <tr style={{ background: '#faf9f7' }}>
+                    <th style={{ ...wth, textAlign: 'left', minWidth: 150 }}>Operative</th>
+                    {week.days.map((dk, i) => <th key={i} style={{ ...wth, background: i >= 5 ? '#f3f1ec' : undefined, color: i >= 5 ? '#b91c1c' : '#444' }}>{DOWFULL[i]}<div style={{ fontSize: 9, color: '#aaa', fontWeight: 400 }}>{parseISO(dk).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</div></th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {week.rows.map(r => (
+                    <tr key={r.opId} style={{ borderTop: '1px solid #f0f0f0', background: r.unnamed ? '#fff7ed' : undefined }}>
+                      <td style={{ ...wtd, fontWeight: 600, color: r.unnamed ? '#9a3412' : INK }}>{r.name}{r.company && !r.unnamed ? <div style={{ fontSize: 10, color: '#aaa', fontWeight: 400 }}>{r.company}</div> : null}</td>
+                      {r.cells.map((c, i) => (
+                        <td key={i} style={{ ...wtd, textAlign: 'center', background: i >= 5 ? '#faf8f4' : undefined, fontSize: 11 }}>
+                          {c ? c.entries.map((e, j) => {
+                            const col = r.unnamed ? C_UNNAMED : statusColour(e.status)
+                            return <div key={j} style={{ color: '#333' }}><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 2, background: col, marginRight: 4 }} />{e.unnamed ? `${e.unnamed} unnamed` : e.projectName}{e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}</div>
+                          }) : <span style={{ color: '#ddd' }}>—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid #e6e2d8', background: '#faf9f7' }}>
+                    <td style={{ ...wtd, fontWeight: 700 }}>Total installers</td>
+                    {week.dailyTotals.map((t, i) => <td key={i} style={{ ...wtd, textAlign: 'center', fontWeight: 700 }}>{t || 0}</td>)}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
+            <button onClick={onClose} style={ghostBtn}>Close</button>
+            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(mondayISO)}&weeks=1`} target="_blank" rel="noreferrer" style={{ ...primaryBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF</a>
           </div>
         </div>
       </div>
