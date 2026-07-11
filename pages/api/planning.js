@@ -143,6 +143,11 @@ export default async function handler(req, res) {
         const unnamed = Math.max(0, Number(body.unnamed) || 0)
         const status = ['confirmed', 'provisional', 'actual'].includes(body.status) ? body.status : 'confirmed'
         if (!key || !date) return res.status(400).json({ error: 'Missing key/date' })
+        // Actual is only valid for dates that have already passed.
+        if (status === 'actual') {
+          const todayKey = new Date().toISOString().slice(0, 10)
+          if (date >= todayKey) return res.status(400).json({ error: 'Actual can only be set on past dates' })
+        }
         const alloc = await getAlloc()
         // Clash-check only NAMED entries against OTHER projects.
         for (const e of entries) {

@@ -70,10 +70,10 @@ export default function PlanningPage() {
   }
   useEffect(() => { load() }, [])
 
-  // Default forward horizon = 3 years; historic pulls the start back 1 year.
+  // Default forward horizon = 3 years; historic pulls the start back 2 weeks.
   const RANGE_WEEKS = 156
   const days = useMemo(() => {
-    let start = historic ? mondayOf(addDays(anchorMonday, -52 * 7)) : anchorMonday
+    let start = historic ? mondayOf(addDays(anchorMonday, -2 * 7)) : anchorMonday
     let end = addDays(anchorMonday, RANGE_WEEKS * 7 - 1)
     if (filters.from) { const f = mondayOf(parseISO(filters.from)); if (f) start = f }
     if (filters.to) { const t = parseISO(filters.to); if (t) end = t }
@@ -551,6 +551,12 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
   const opName = (id) => { const o = opList.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
   const opTrades = (id) => { const o = opList.find(x => x.id === id); return (o?.trades || []).join(', ') }
   const dateObjs = dates.map(parseISO).sort((a, b) => a - b)
+  // Actual is only valid when EVERY selected date is before today.
+  const todayKey = iso(new Date())
+  const allPast = dates.length > 0 && dates.every(dk => dk < todayKey)
+  const anyFuture = dates.some(dk => dk >= todayKey)
+  // If a preloaded status is 'actual' but the selection isn't all-past, fall back to confirmed.
+  useEffect(() => { if (status === 'actual' && !allPast) setStatus('confirmed') }, [])
 
   function addPick(id) { if (!id || picked.includes(id)) return; setPicked([...picked, id]); setPick('') }
   function removePick(id) { setPicked(picked.filter(x => x !== id)) }
@@ -606,12 +612,21 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
 
           {/* Status */}
           <div style={lbl}>Allocation status</div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => (
-              <button key={v} onClick={() => setStatus(v)} style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: status === v ? `2px solid ${c}` : '1px solid #ddd', background: status === v ? c + '22' : '#fff', fontWeight: status === v ? 700 : 500, fontSize: 12.5, cursor: 'pointer' }}>
-                <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: c, marginRight: 6 }} />{label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+            {[['confirmed', 'Confirmed', C_CONFIRMED], ['provisional', 'Provisional', C_PROVISIONAL], ['actual', 'Actual', C_ACTUAL]].map(([v, label, c]) => {
+              const disabled = v === 'actual' && !allPast
+              return (
+                <button key={v} disabled={disabled} onClick={() => !disabled && setStatus(v)} title={disabled ? 'Actual can only be set on dates that have already passed' : ''}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: status === v ? `2px solid ${c}` : '1px solid #ddd', background: disabled ? '#f4f4f4' : (status === v ? c + '22' : '#fff'), fontWeight: status === v ? 700 : 500, fontSize: 12.5, cursor: disabled ? 'not-allowed' : 'pointer', color: disabled ? '#bbb' : '#333' }}>
+                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: disabled ? '#ccc' : c, marginRight: 6 }} />{label}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: '#999', marginBottom: 12 }}>
+            {allPast
+              ? 'These dates have passed — set to Actual to confirm the work happened as planned (edit the people/headcount first if it differed).'
+              : anyFuture ? 'Actual is only available once dates have passed. Use Confirmed or Provisional for upcoming work.' : ''}
           </div>
 
           <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>{isEdit ? 'Installers allocated (full day)' : 'Installers to allocate (full day)'}</div>

@@ -1,31 +1,20 @@
-PLANNING — status (Confirmed/Provisional/Actual) + unnamed slots + Download PDF fix + email selection
+PLANNING — historic range, setting Actual, editing past, Actual-only-on-past
 
-DOWNLOAD PDF CRASH FIXED
-  The PDF/email endpoints no longer call /api/planning-week over HTTP (that internal fetch was failing
-  -> "Cannot read properties of undefined (reading 'forEach')"). They now import a shared assembleWeek()
-  function directly. pages/api/planning-week.js exports assembleWeek; -pdf and -email import it.
+  pages/operations/project-management/planning.js
+   1) HISTORIC now goes back only 2 WEEKS from today (was a year). Toggle "Historic" (top right) to
+      reveal the last 2 weeks alongside the forward view.
+   2) HOW TO SET PAST DATES TO ACTUAL (now clearly guided):
+        - Turn on Historic to see past days.
+        - Click/drag to select the past cells on a project row.
+        - Click "Edit labour allocation" (adjust the people/headcount if the day differed from plan).
+        - In the pop-up, set status to "Actual" (only enabled when every selected date has passed).
+        - Save. Affects only the selected days.
+   3) EDITING PAST LABOUR / assignments: past cells are fully selectable and editable via the same
+      select -> Edit labour allocation flow (change who was on, headcount, or status).
+   4) ACTUAL CANNOT BE SET ON FUTURE DATES: the Actual button is disabled unless the whole selection is
+      in the past, with a hint explaining why.
 
-ALLOCATION STATUS + UNNAMED SLOTS (data model)
-  pages/api/planning.js  Day-cell is now { status:'confirmed'|'provisional'|'actual', unnamed:N,
-                         entries:[{opId,half}] } (legacy bare-array cells still read fine). Clash-check
-                         still applies to NAMED entries only.
+  pages/api/planning.js
+   - Server-side guard: rejects setting status 'actual' on any date that hasn't passed (can't be bypassed).
 
-GANTT (pages/operations/project-management/planning.js)
-  - Colour key added at the top.
-  - Cell colours: Actual = dark green, Confirmed = light green, Provisional = blue,
-    ANY unnamed slot = orange (overrides status). Past contracted completion: number turns red, bold,
-    larger; background colour still follows the status/unnamed rule.
-  - Historic warning flag (⚑) by the project name when labour before today isn't marked Actual.
-  - Allocate / Edit pop-up now has: a Confirmed/Provisional/Actual status selector; an "Unnamed slots"
-    stepper (headcount with no names — cell shows orange until all named). You can allocate unnamed-only.
-    To mark past work Actual: select the past cells -> Edit labour allocation -> set status Actual -> save
-    (affects only the selection; past dates stay fully editable).
-
-WEEKLY LABOUR ALLOCATION pop-out
-  - Colour key at the top; each cell shows a status dot (blue provisional / green confirmed / dark-green
-    actual / orange unnamed). Unnamed slots appear as a "TBC — <project>" row.
-  - "Email operatives →" now opens a step: choose how far ahead (1/2/3/4 weeks) and untick anyone you
-    don't want to email. FUTURE dates only — past days and Actuals are never emailed. Provisional IS sent
-    (labelled provisional). Each operative gets their own multi-week allocation (HTML + PDF attachment).
-
-Deploy over previous. Uses existing Resend env. No cron/other changes.
+Deploy over previous. No new env / cron.
