@@ -48,9 +48,13 @@ export default async function handler(req, res) {
       if (!info.email) { skipped.push(`${info.name} (no email)`); continue }
       info.days.sort((a, b) => a.date.localeCompare(b.date))
       const lines = info.days.map(d => {
-        const txt = d.entries.map(e => `${e.projectName}${e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}${e.status === 'provisional' ? ' — provisional' : ''}`).join(', ')
+        const parts = d.entries.map(e => {
+          const colour = e.status === 'provisional' ? '#2563eb' : '#16a34a' // blue provisional, green confirmed
+          const label = `${e.projectName}${e.half !== 'full' ? ` (${e.half.toUpperCase()})` : ''}`
+          return `<span style="color:${colour};font-weight:600">${label}</span>`
+        }).join('<span style="color:#999">, </span>')
         const weekend = [0, 6].includes(parseISO(d.date).getDay())
-        return `<tr><td style="padding:6px 14px 6px 0;color:${weekend ? '#b91c1c' : '#333'};font-weight:600;white-space:nowrap">${dow(d.date)} ${fmtDM(d.date)}</td><td style="padding:6px 0;color:#1e3a8a">${txt}</td></tr>`
+        return `<tr><td style="padding:6px 14px 6px 0;color:${weekend ? '#b91c1c' : '#333'};font-weight:600;white-space:nowrap">${dow(d.date)} ${fmtDM(d.date)}</td><td style="padding:6px 0">${parts}</td></tr>`
       }).join('')
 
       // Unique project -> address list for the projects this operative is on.
@@ -63,7 +67,11 @@ export default async function handler(req, res) {
       const html = `
         <div style="font-family:system-ui,Arial,sans-serif;max-width:560px">
           <h2 style="color:#1a1a19;margin:0 0 2px">Your upcoming project allocation</h2>
-          <p style="color:#666;margin:0 0 16px">Hi ${info.name.split(' ')[0] || ''}, here's your allocation for the period ahead.</p>
+          <p style="color:#666;margin:0 0 12px">Hi ${info.name.split(' ')[0] || ''}, here's your allocation for the period ahead.</p>
+          <div style="margin:0 0 14px;font-size:12.5px;color:#555">
+            <span style="display:inline-block;margin-right:16px"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#16a34a;vertical-align:middle;margin-right:5px"></span>Confirmed</span>
+            <span style="display:inline-block"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:#2563eb;vertical-align:middle;margin-right:5px"></span>Provisional</span>
+          </div>
           <table style="font-size:14px;border-collapse:collapse">${lines}</table>
           <h3 style="color:#1a1a19;margin:22px 0 8px;font-size:15px">Project addresses</h3>
           <ul style="font-size:14px;padding-left:18px;margin:0">${addrLines}</ul>
@@ -73,7 +81,7 @@ export default async function handler(req, res) {
       try {
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, to: info.email, subject: `Your upcoming project allocation`, html }),
+          body: JSON.stringify({ from: FROM, to: info.email, subject: `Rock Roofing Project Allocation`, html }),
         })
         if (resp.ok) sent++; else skipped.push(`${info.name} (send failed)`)
       } catch { skipped.push(`${info.name} (send error)`) }

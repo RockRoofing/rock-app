@@ -1,17 +1,16 @@
-PLANNING — WLA send/download refinements
+PLANNING — WLA email + PDF colour-coding
 
-  pages/operations/project-management/planning.js
-   - "Send to operatives" now becomes "✓ Sent" (green, disabled) after a successful send. To send again,
-     close the pop-out and hit "Send Weekly Labour Allocation" again (reopening resets it).
-   - "Download PDF (this week)" renamed to just "Download PDF"; it now downloads ALL selected weeks
-     (matches the "how far ahead" filter), passing &weeks=N.
-
-  pages/api/planning-week-pdf.js
-   - Accepts ?weeks=N and assembles N consecutive weeks.
+  pages/api/planning-week-email.js
+   - Subject changed to "Rock Roofing Project Allocation".
+   - Colour KEY added directly below the intro line (above the dates): green = Confirmed, blue = Provisional.
+   - Each allocation is coloured by status (green confirmed / blue provisional). NO "— provisional" or
+     "— confirmed" text after the project name — the colour + key convey it. (The in-body heading
+     "Your upcoming project allocation" is unchanged, as requested.)
 
   lib/weeklyLabourPdf.js
-   - buildWeeklyLabourPDF now takes { weeks:[...] } and renders EACH WEEK ON ITS OWN PAGE.
-   - Row height increased (24 -> 34) so the company line under each name is no longer cut off.
-   - Unnamed slots render as "N unnamed" in the PDF too.
+   - "Week commencing …" moved down so it isn't crowding the logo.
+   - Colour key (Confirmed green / Provisional blue) added under the date line.
+   - Allocation entries coloured by status: green = confirmed, blue = provisional, orange = unnamed/TBC.
+   (Multi-week one-page-each + taller rows from the previous drop are retained.)
 
 Deploy over previous. No env / cron change.
