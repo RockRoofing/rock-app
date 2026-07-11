@@ -1,17 +1,16 @@
-FIX: can't set users to Pre-Contract / Post-Contract
+PRE-CONTRACT ACCESS FIXES (Scorecard + Negotiating)
 
-ROOT CAUSE: the portal user save API (portal-auth.js) still validated roles against the OLD
-list ['standard','management','admin']. So:
-  - Management saved fine (it was in the old list)
-  - Pre-Contract / Post-Contract were rejected: on CREATE they fell back to 'standard';
-    on UPDATE the role change was DELETED (discarded) — which is why editing to Pre/Post-Contract
-    "didn't take".
+Pre-Contract users were blocked from their own sales tools because these APIs were scoped to
+exclude them. Widened to include pre-contract:
 
-FIX (pages/api/portal-auth.js):
-  - Both create and update now validate against the central ROLES list
-    (pre-contract, post-contract, management, admin), with legacy 'standard' normalised
-    to post-contract.
+  pages/api/negotiating.js   now: pre-contract, post-contract, management, admin
+                              (fixes "no access" — Negotiating shows in BOTH Pre-Contract & Operations)
+  pages/api/deals.js         now: pre-contract, post-contract, management, admin  (Scorecard/Sales)
+  pages/api/targets.js       now: pre-contract, post-contract, management, admin  (Scorecard targets)
+  pages/api/sync.js          now: pre-contract, post-contract, management, admin  (Scorecard sync button)
 
-Deploy over the previous portal-auth.js. After deploy: edit a user -> set Pre-Contract ->
-Save -> reopen; it should now stick. (This is the real fix; the earlier admin.js change was
-only the dropdown display.)
+Verified the full Pre-Contract page surface (sales, scorecard, negotiating, procurement-savings):
+all APIs they call now allow pre-contract. commercial-metrics and stages remain restricted
+(post-contract+) — correct, as Pre-Contract pages don't use them (those are project financials/margins).
+
+Deploy over the previous versions of these 4 files.

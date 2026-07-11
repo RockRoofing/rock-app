@@ -33,7 +33,7 @@ const DEFAULT_TARGETS = {
 }
 
 export default async function handler(req, res) {
-  if (!requireRole(req, res, ['post-contract','management','admin'])) return;
+  if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   if (req.method === 'GET') {
     const stored = await get('scorecard:targets')
     return res.status(200).json({ targets: stored || DEFAULT_TARGETS })

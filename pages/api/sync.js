@@ -3,7 +3,7 @@ import { saveCachedDeals, saveLastSync, saveFieldMap, getCachedDeals } from '../
 import { fetchAllDeals, discoverFieldMap } from '../../lib/pipedrive'
 
 export default async function handler(req, res) {
-  if (!requireRole(req, res, ['management','admin'])) return;
+  if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   if (req.method !== 'POST') return res.status(405).end()
   try {
     // Always refresh fields on every sync
