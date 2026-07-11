@@ -322,7 +322,7 @@ export default function Dashboard() {
 
         {/* Nav — slim version when embedded in iframe: controls only, no portal links */}
         {isEmbed ? (
-        <div style={{ background: '#1a1a2e', padding: '0 20px', position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, height: 52, borderBottom: '1px solid #2a2a28' }}>
+        <div style={{ background: '#1a1a19', padding: '0 20px', position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, height: 52, borderBottom: '1px solid #2a2a28' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2a2a3e', borderRadius: 8, padding: '4px 12px' }}>
             <span style={{ color: eomMode ? '#888' : '#fff', fontSize: 12 }}>Budget Tracker</span>
             <div onClick={() => setEomMode(!eomMode)}
@@ -348,7 +348,7 @@ export default function Dashboard() {
           </button>
         </div>
         ) : (
-        <div style={{ background: '#1a1a2e', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
+        <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
