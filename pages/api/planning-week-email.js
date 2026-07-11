@@ -1,4 +1,3 @@
-import { buildOperativeWeekPDF } from '../../lib/weeklyLabourPdf'
 import { assembleWeek } from './planning-week'
 
 // POST /api/planning-week-email
@@ -53,24 +52,28 @@ export default async function handler(req, res) {
         const weekend = [0, 6].includes(parseISO(d.date).getDay())
         return `<tr><td style="padding:6px 14px 6px 0;color:${weekend ? '#b91c1c' : '#333'};font-weight:600;white-space:nowrap">${dow(d.date)} ${fmtDM(d.date)}</td><td style="padding:6px 0;color:#1e3a8a">${txt}</td></tr>`
       }).join('')
+
+      // Unique project -> address list for the projects this operative is on.
+      const addrMap = {}
+      for (const d of info.days) for (const e of d.entries) { if (!addrMap[e.projectName]) addrMap[e.projectName] = e.projectAddress || '' }
+      const addrLines = Object.entries(addrMap).map(([name, addr]) =>
+        `<li style="margin-bottom:6px"><strong>${name}</strong>${addr ? `<br/><span style="color:#666">${addr}</span>` : `<br/><span style="color:#bbb">Address not set</span>`}</li>`
+      ).join('')
+
       const html = `
         <div style="font-family:system-ui,Arial,sans-serif;max-width:560px">
-          <h2 style="color:#1a1a19;margin:0 0 2px">Your upcoming work</h2>
+          <h2 style="color:#1a1a19;margin:0 0 2px">Your upcoming project allocation</h2>
           <p style="color:#666;margin:0 0 16px">Hi ${info.name.split(' ')[0] || ''}, here's your allocation for the period ahead.</p>
           <table style="font-size:14px;border-collapse:collapse">${lines}</table>
+          <h3 style="color:#1a1a19;margin:22px 0 8px;font-size:15px">Project addresses</h3>
+          <ul style="font-size:14px;padding-left:18px;margin:0">${addrLines}</ul>
           <p style="color:#999;font-size:12px;margin-top:18px">Provisional dates may still change. Please contact the office with any queries.</p>
         </div>`
-      let attachment = null
-      try {
-        const origin = `https://${req.headers.host}`
-        // reuse the single-operative PDF with a synthetic 'week' spanning their days
-        const bytes = await buildOperativeWeekPDF({ row: { name: info.name, cells: [] }, week: { weekStart: info.days[0].date, days: info.days.map(d => d.date) }, logoUrl: `${origin}/rock-logo.jpg`, customDays: info.days })
-        attachment = { filename: `Your allocation.pdf`, content: Buffer.from(bytes).toString('base64') }
-      } catch {}
+
       try {
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST', headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, to: info.email, subject: `Your upcoming work allocation`, html, attachments: attachment ? [attachment] : [] }),
+          body: JSON.stringify({ from: FROM, to: info.email, subject: `Your upcoming project allocation`, html }),
         })
         if (resp.ok) sent++; else skipped.push(`${info.name} (send failed)`)
       } catch { skipped.push(`${info.name} (send error)`) }

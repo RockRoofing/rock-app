@@ -18,11 +18,11 @@ async function projectNameMap() {
   const map = {}
   try {
     const ops = await getOpsProjects()
-    for (const p of (ops || [])) map[`L:${p.projectNo}`] = p.data?.projectName || p.projectNo
+    for (const p of (ops || [])) map[`L:${p.projectNo}`] = { name: p.data?.projectName || p.projectNo, address: p.data?.projectAddress || p.data?.siteLocation || '' }
   } catch {}
   try {
     const deals = (await getCachedDeals()) || []
-    for (const d of deals) if (d.stageName === 'Negotiating') map[`N:${d.id}`] = (d.title || `Deal ${d.id}`) + ' (neg.)'
+    for (const d of deals) if (d.stageName === 'Negotiating') map[`N:${d.id}`] = { name: (d.title || `Deal ${d.id}`) + ' (neg.)', address: d.siteLocation || d.organizationName || '' }
   } catch {}
   return map
 }
@@ -42,7 +42,8 @@ export async function assembleWeek(mondayStr) {
     const byOp = {}
     const unnamedByProjDay = {}  // pk -> { dk: {count, status, projectName} }
     for (const [pk, daysMap] of Object.entries(alloc)) {
-      const pname = names[pk] || pk
+      const pinfo = names[pk] || { name: pk, address: '' }
+      const pname = pinfo.name; const paddr = pinfo.address
       for (const dk of days) {
         const cell = daysMap[dk]
         if (!cell) continue
@@ -52,7 +53,7 @@ export async function assembleWeek(mondayStr) {
         for (const e of entries) {
           byOp[e.opId] = byOp[e.opId] || {}
           byOp[e.opId][dk] = byOp[e.opId][dk] || []
-          byOp[e.opId][dk].push({ projectName: pname, half: e.half || 'full', status })
+          byOp[e.opId][dk].push({ projectName: pname, projectAddress: paddr, half: e.half || 'full', status })
         }
         if (unnamed > 0) {
           unnamedByProjDay[pk] = unnamedByProjDay[pk] || {}
@@ -77,7 +78,7 @@ export async function assembleWeek(mondayStr) {
 
     // One "TBC — unnamed" row per project that has unnamed slots in the week.
     const unnamedRows = Object.entries(unnamedByProjDay).map(([pk, dayMap]) => {
-      const pname = names[pk] || pk
+      const pname = (names[pk] && names[pk].name) || pk
       const cells = days.map(dk => dayMap[dk] ? { date: dk, entries: [{ projectName: pname, half: 'full', status: dayMap[dk].status, unnamed: dayMap[dk].count }] } : null)
       return { opId: `unnamed:${pk}`, name: `TBC — ${pname}`, email: '', phone: '', company: 'Unnamed', unnamed: true, cells }
     }).sort((a, b) => a.name.localeCompare(b.name))

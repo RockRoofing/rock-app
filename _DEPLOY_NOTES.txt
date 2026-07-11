@@ -1,15 +1,17 @@
-PLANNING — darker Actual, Send WLA button, stacked multi-week send pop-out
+PLANNING — operative email: no attachment, new heading, project addresses list
 
-  pages/operations/project-management/planning.js
-   1) ACTUAL cells are now a darker/medium green (#4ade80) — clearly darker than Confirmed, lighter than
-      the dark-green status line.
-   2) Removed the small download button / click-to-open from the W/C column headers (now plain labels).
-   3) New "Send Weekly Labour Allocation" button top-right (in the controls row).
-   4) Clicking it opens a pop-out that IS the send flow:
-        - Filters at the top: how far ahead (1/2/3/4 weeks) + per-operative de-select (untick people).
-        - Below, one table PER WEEK, stacked: "This week" on top, "Week +1" below, "Week +2" below that,
-          etc. Each shows the per-operative grid + daily totals + colour key.
-        - Buttons: Download PDF (this week) and "Send to operatives" (emails future-only allocations
-          across the selected number of weeks to the ticked operatives).
+  pages/api/planning-week-email.js
+   - Removed the PDF attachment — the email is now text/HTML only.
+   - Heading and subject changed to "Your upcoming project allocation".
+   - Below the day-by-day allocation, a "Project addresses" section lists each unique project the
+     operative is assigned to, with its address (shows "Address not set" if the project has no address).
 
-Deploy over previous planning.js. No API change (uses existing planning-week / -email / -pdf).
+  pages/api/planning-week.js
+   - The week assembler now carries each project's ADDRESS through (from the IHM projectAddress /
+     siteLocation for live projects, or the deal's site/organisation for negotiated), so the email can
+     list addresses. (projectNameMap now returns { name, address }.)
+
+Deploy over previous. No env / cron change. Uses existing Resend setup.
+
+NOTE: addresses come from each project's record. If some show "Address not set", set the project address
+on the Project Details tab (or the IHM) and it'll appear.
