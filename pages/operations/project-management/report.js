@@ -198,7 +198,13 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: false, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
 
       // Open issues for this project
-      const openIssues = (issR.issues || []).filter(i => i.projectNo === no && !i.resolvedDate)
+      // Only include issues that have been sent to the customer (or marked as sent).
+      // Exclude "do not send" and anything not yet sent.
+      const openIssues = (issR.issues || []).filter(i =>
+        i.projectNo === no && !i.resolvedDate &&
+        i.sendToCustomer !== 'nosend' &&
+        (i.sentToCustomer === true || i.sentManually === true)
+      )
         .map(i => ({ id: i.id, dateCreated: i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '', issueName: i.issueName, issueTypes: [...(i.issueTypes || []), ...(i.issueOther ? ['Other'] : [])], requiredDate: i.requiredDate || '', status: 'Open' }))
 
       // Photos from all submissions for this project, from last report date -> now
@@ -287,7 +293,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
           </tbody>
         </table>
       </div>
-      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>The full issue forms for these open issues are appended at the end of the report PDF.</div>}
+      {(f.issuesSnapshot || []).length > 0 && <div style={{ fontSize: 11.5, color: '#888', fontStyle: 'italic', marginTop: 6 }}>Only issues sent to the customer (or marked as sent) are included; their full forms are appended at the end of the report PDF.</div>}
 
       <L req>Site communications</L>
       <textarea value={f.siteComms || ''} onChange={e => set({ siteComms: e.target.value })} style={{ ...input, minHeight: 100, resize: 'vertical' }} placeholder="Insert all discussions and occurrences that relate to Variations, H&S, Quality, Design, Delay and Disruption." />

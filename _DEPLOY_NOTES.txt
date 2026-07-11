@@ -1,16 +1,13 @@
-PLANNING — PHASE 1 of 5: Operatives roster (H&S)
+PROJECT REPORT — only include issues sent to the customer
 
-  pages/api/operatives.js              New roster store (ops:operatives-roster). Separate from Site App
-                                       login users. GET/POST/DELETE.
-  pages/operations/hs/operatives.js    Replaces the coming-soon stub. Table with:
-                                       - Add new (top), sortable headers (Name/Email/Phone/Company/Trade)
-                                       - Search by name, filter by Trade and Company, live count
-                                       - Add/edit modal: First Name*, Last Name*, Email, Phone, Company,
-                                         Trade (multiselect: Single Ply, Felt, Liquids, Hot Melt, Rainscreen,
-                                         Composite Panels, Aluminium, Standing Seam, Labourer, Other)
+Rule applied: an issue is included in the report's Issues table AND appended (full form) ONLY if it has
+been sent to the customer OR marked as sent (sentToCustomer === true OR sentManually === true). Issues
+marked "No — Do not send" (sendToCustomer === 'nosend') and any not-yet-sent issues are excluded.
 
-This is the installer roster that will feed the Planning Gantt (Phase 3). Deploy and add your operatives
-so they're ready to allocate. The nav entry (H&S → Operatives) already exists.
+  pages/operations/project-management/report.js   Issue auto-pull on project select now applies this filter.
+  pages/api/project-report-pdf.js                 Enforces the same filter when appending full forms (so
+                                                  even older saved reports won't append excluded issues).
+  lib/projectReportPdf.js                         The PDF's issues table renders only the included issues,
+                                                  so the table and appended forms always match.
 
-NEXT PHASES (coming): 2) Planning data model + API (allocations, clash rules, project start/completion
-dates); 3) Gantt UI; 4) Weekly pop-out (PDF + per-operative email); 5) Forms split (Completed | Missing).
+Deploy over the previous versions.
