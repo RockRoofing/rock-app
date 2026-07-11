@@ -1,20 +1,26 @@
-ISSUES — submit fix + Required Resolution Date column + portal Add Issue
+ISSUES — smart email link + Site App Issues Log (CM-only)
 
-SUBMIT BUG FIX (the "Unexpected end of JSON input" error):
-  middleware.js        ROOT CAUSE: on the Site App subdomain (siteapp./forms.), /api/issues and
-                       /api/issue-notify were NOT in the passthrough list, so the login middleware
-                       redirected them to /forms (HTML) — the form got HTML instead of JSON.
-                       FIX: added /api/issues and /api/issue-notify to the Site App passthrough.
-  pages/api/issues.js  Wrapped the POST handler in try/catch so it ALWAYS returns JSON (even on
-                       error) instead of an empty response. Companion-submission stays best-effort.
+SMART LINK (device-aware from the notification email):
+  pages/go/issue.js         NEW redirect page. Email button now points here. It detects the device:
+                            desktop/laptop -> portal Issues tracker (opens the issue);
+                            mobile/tablet  -> Site App Issues Log (opens the issue).
+  pages/api/issue-notify.js Email now uses the single smart link (/go/issue?id=...).
+  middleware.js             /go/ pages allowed without login (so the redirect always loads);
+                            added /api/issue-send-customer and /api/issue-pdf to the Site App
+                            passthrough (mobile CM needs them). (/api/issues, /api/issue-notify
+                            were already added in the previous fix.)
 
-NEW:
-  pages/operations/project-management/issues.js
-   - New "Required Resolution" date column, placed BEFORE Resolved Date. Editable inline and in the
-     edit window. Shows a red "⚠ Overdue" note if the required date has passed and it's not resolved.
-   - New "+ Add Issue" button on the tracker header so issues can be raised from the PORTAL too
-     (not just the Site App). Same fields as the Site App form (project, issue name, multi-select
-     type + Other, description, required resolution date, photos). Fires the CM/Ops/QS notification.
-     "Created By" = the logged-in portal user's name.
+SITE APP ISSUES LOG (Contracts Managers only):
+  pages/forms/issues-log.js NEW. Shows all OPEN issues (toggle to include closed), filterable by
+                            project. Tap an issue to open a full sheet where a CM can: amend name/
+                            description/comments, set Required & Resolved dates, set Send-to-Customer
+                            (with the IHM customer-contacts picker — remove/add/send PDF), or mark
+                            "Sent manually". Changes save back to the same Issues record/table.
+                            Non-CM users see a "Contracts Managers only" message.
+  pages/forms/index.js      Added a CM-only "Issues Log" tile to the Site App home.
 
-Deploy over the previous versions from the issues-system package. (middleware.js is at repo root.)
+NOTE: whether someone is a Contracts Manager is based on the Site App user's accessLevel
+('contracts-manager'), set on their Site App user record.
+
+Deploy over the previous versions. (middleware.js at repo root.) Pairs with the earlier
+issues-system and issues-fixes packages.

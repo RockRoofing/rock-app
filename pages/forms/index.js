@@ -191,10 +191,17 @@ function FormsHomeMenu({ user }) {
         </button>
         <button onClick={() => router.push('/forms/issue')} style={homeCard}>
           <div style={{ fontSize: 30 }}>⚠️</div>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Raise an Issue</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Report a site issue with photos</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Report Site Issue</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Raise a Site Issue</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
         {/* Contracts Manager-only options appear here. */}
+        {isCM && (
+          <button onClick={() => router.push('/forms/issues-log')} style={homeCard}>
+            <div style={{ fontSize: 30 }}>📋</div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Issues Log</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Assess & action site issues</div></div>
+            <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+          </button>
+        )}
       </div>
     </div>
   )

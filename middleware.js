@@ -41,7 +41,9 @@ export async function middleware(req) {
       pathname.startsWith('/api/upload-photo') ||
       pathname.startsWith('/api/dashboard') ||
       pathname.startsWith('/api/issues') ||
-      pathname.startsWith('/api/issue-notify')
+      pathname.startsWith('/api/issue-notify') ||
+      pathname.startsWith('/api/issue-send-customer') ||
+      pathname.startsWith('/api/issue-pdf')
     if (passthrough) return NextResponse.next()
     if (pathname === '/forms' || pathname.startsWith('/forms/')) return NextResponse.next()
     url.pathname = '/forms'
@@ -56,6 +58,7 @@ export async function middleware(req) {
     pathname.startsWith('/favicon') ||
     pathname === '/rock-logo.jpg' ||
     pathname === '/login' ||
+    pathname.startsWith('/go/') ||
     pathname === '/api/portal-auth' ||
     pathname.startsWith('/xero-callback') ||
     pathname.startsWith('/api/xero')

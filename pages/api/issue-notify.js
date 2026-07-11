@@ -37,9 +37,8 @@ export default async function handler(req, res) {
     if (!recipients.length) return res.status(200).json({ sent: 0, error: 'No CM/Ops/QS emails found on the IHM' })
 
     const origin = `https://${req.headers.host}`
-    // Portal (desktop) tracker link + Site App (mobile) link
-    const portalLink = `${origin}/operations/project-management/issues?issue=${encodeURIComponent(issue.id)}`
-    const siteappLink = `https://siteapp.rockroofing.co.uk`
+    // Single smart link: forwards to the portal on desktop, the Site App on mobile.
+    const smartLink = `${origin}/go/issue?id=${encodeURIComponent(issue.id)}`
 
     const types = [...(issue.issueTypes || [])]; if (issue.issueOther) types.push(`Other: ${issue.issueOther}`)
     const html = `
@@ -55,8 +54,8 @@ export default async function handler(req, res) {
         </table>
         <div style="margin:22px 0 8px;padding:16px;background:#faf9f7;border-radius:10px">
           <p style="margin:0 0 12px;color:#1a1a19;font-weight:600">Does this issue need to be sent to the customer?</p>
-          <a href="${portalLink}" style="display:inline-block;background:#ca8a04;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Review &amp; action this issue</a>
-          <p style="margin:12px 0 0;font-size:12px;color:#888">On desktop this opens the portal Issues tracker. On mobile, open the Site App: <a href="${siteappLink}">${siteappLink}</a></p>
+          <a href="${smartLink}" style="display:inline-block;background:#ca8a04;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600">Review &amp; action this issue</a>
+          <p style="margin:12px 0 0;font-size:12px;color:#888">This opens the portal on a computer, or the Site App on a phone.</p>
         </div>
       </div>`
 
