@@ -824,23 +824,27 @@ export default function Dashboard() {
                           {visibleEomCols.filter(c => c.group !== 'none').map(col => {
                             const g = groupColors[col.group]
                             const bgC = bg ? g.bg : col.group === 'contract' ? '#eef0fc' : col.group === 'labour' ? '#e8faf0' : col.group === 'materials' ? '#fff3e8' : col.group === 'budget' ? '#ede8fc' : col.group === 'profit' ? '#faedf6' : '#fef9c3'
-                            if (!e) return <td key={col.key} style={cell({ bg: bgC })}>—</td>
+                            // Budget + AFA are static (entered in Budget Tracker) and show regardless of the
+                            // valuation date. Only the "to val. date" figures depend on `e`.
+                            const staticKeys = ['afa', 'labourBudget', 'matsBudget', 'totalBudget']
+                            if (!e && !staticKeys.includes(col.key)) return <td key={col.key} style={cell({ bg: bgC })}>—</td>
                             let val, color
                             if (col.key === 'afa') { val = fmt(p.afa) }
+                            else if (col.key === 'labourBudget') { val = p.labourBudget > 0 ? fmt(p.labourBudget) : <span style={{ color: '#e63946', fontSize: 10 }}>⚠ Set</span> }
+                            else if (col.key === 'matsBudget') { val = p.materialsBudget > 0 ? fmt(p.materialsBudget) : <span style={{ color: '#e63946', fontSize: 10 }}>⚠ Set</span> }
+                            else if (col.key === 'totalBudget') { val = p.totalBudget > 0 ? fmt(p.totalBudget) : <span style={{ color: '#e63946', fontSize: 10 }}>⚠ Set</span> }
+                            else if (!e) { val = '—' }
                             else if (col.key === 'grossInvoiced') { val = fmt(e.grossInvoiced) }
                             else if (col.key === 'retention') { val = fmt(e.retention); color = e.retention > 0 ? '#ca8a04' : '#888' }
                             else if (col.key === 'remaining') { val = fmt(e.remainingToClaim); color = e.remainingToClaim > 0 ? '#2563eb' : '#e63946' }
                             else if (col.key === 'remainingInc') { val = fmt(eRg); color = eRg != null && eRg > 0 ? '#2563eb' : '#888' }
                             else if (col.key === 'labourSpend') { val = fmt(e.labourToDate) }
-                            else if (col.key === 'labourBudget') { val = p.labourBudget > 0 ? fmt(p.labourBudget) : '—' }
                             else if (col.key === 'labourLeft') { val = p.labourBudget > 0 ? fmt(ll) : '—'; color = ll != null ? (ll >= 0 ? '#16a34a' : '#e63946') : null }
                             else if (col.key === 'labourLeftPct') { val = p.labourBudget > 0 && ll != null ? pct(ll / p.labourBudget) : '—'; color = p.labourBudget > 0 && ll != null ? pctColor(ll / p.labourBudget) : '#888' }
                             else if (col.key === 'matsSpend') { val = fmt(e.materialsToDate) }
-                            else if (col.key === 'matsBudget') { val = p.materialsBudget > 0 ? fmt(p.materialsBudget) : '—' }
                             else if (col.key === 'matsLeft') { val = p.materialsBudget > 0 ? fmt(ml) : '—'; color = ml != null ? (ml >= 0 ? '#16a34a' : '#e63946') : null }
                             else if (col.key === 'matsLeftPct') { val = p.materialsBudget > 0 && ml != null ? pct(ml / p.materialsBudget) : '—'; color = p.materialsBudget > 0 && ml != null ? pctColor(ml / p.materialsBudget) : '#888' }
                             else if (col.key === 'totalSpend') { val = fmt(e.costsToDate) }
-                            else if (col.key === 'totalBudget') { val = p.totalBudget > 0 ? fmt(p.totalBudget) : '—' }
                             else if (col.key === 'totalLeft') { val = p.totalBudget > 0 ? fmt(tl) : '—'; color = tl != null ? (tl >= 0 ? '#16a34a' : '#e63946') : null }
                             else if (col.key === 'totalLeftPct') { val = p.totalBudget > 0 && tl != null ? pct(tl / p.totalBudget) : '—'; color = p.totalBudget > 0 && tl != null ? pctColor(tl / p.totalBudget) : '#888' }
                             else if (col.key === 'profit') { val = fmt(e.profit); color = e.profit >= 0 ? '#16a34a' : '#e63946' }

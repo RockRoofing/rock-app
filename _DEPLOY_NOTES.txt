@@ -1,7 +1,20 @@
-FORMS MISSING — Status filter
+PROJECT FINANCIALS — EOM Report now shows budgets from the Budget Tracker
 
-  pages/operations/forms-missing.js
-   - Renamed the "Show" filter to "Status" with clearer options: All statuses / Missing / Completed.
-     (Functionally this is the status filter; it filters the table rows by completion status.)
+  pages/commercial.js  (the page both Project Financials views iframe into)
 
-Deploy over previous forms-missing.js (the page). No API change.
+  THE BUG
+   - In the EOM Report view, if a project had no valuation day set, the code blanked EVERY column ("—"),
+     including the static Budget columns (Lab/Mat/Total Budget) and AFA that are entered in the Budget
+     Tracker and don't depend on a valuation date. That's why budgets weren't "filtering through" — only
+     projects with a valuation date (e.g. J228) showed anything.
+
+  THE FIX
+   - AFA and the three Budget columns now always render their Budget-Tracker values in EOM, regardless of
+     whether a valuation date is set (unset budgets still show the "⚠ Set" prompt, as in the Tracker).
+   - Only the genuine "to val. date" figures (spend, remaining, profit, WIP, and the derived "left"
+     columns) show "—" when a project has no valuation day — which is correct, since they can't be
+     computed without one.
+
+  To also see spend/profit/WIP to date for a project in EOM, set its valuation day (as before).
+
+Deploy over previous pages/commercial.js. No API change.
