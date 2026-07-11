@@ -12,14 +12,15 @@ import { get, set, getPortalUsers } from '../../lib/db'
 
 const COLS_KEY = 'ops:hs-matrix-columns'
 const DATA_KEY = 'ops:hs-matrix-data'
+const parseISO = (s) => { if (!s) return null; const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
 
 // Default training columns (from the company's live tracker).
 const DEFAULT_COLS = [
-  'Latest H&S Policy on Fonn', 'Working at Height / H&S (office)', 'CSCS', 'Manual Handling',
+  'Latest H&S Policy on Fonn', 'Working at Height', 'Working at Height / H&S (office)', 'CSCS', 'Manual Handling',
   'Fire Safety Training', 'Asbestos Awareness', 'Working on Fragile Roofs',
   'IOSH Safety for Executives and Directors', 'Hazardous substances (COSHH)', 'Ladder Safety',
   'Lone Working', 'Facefit', 'Abrasive Wheels', 'Harness Awareness', 'Forklift / Telehandler',
-  'IPAF', 'SSSTS', 'SMSTS', 'IOSH Managing Safely', 'IOSH Managing Safely Refresher',
+  'IPAF', 'Internal Supervisor Assessment', 'SSSTS', 'SMSTS', 'IOSH Managing Safely', 'IOSH Managing Safely Refresher',
   'H&S PPE', 'Medical Emergency', 'Can you spot the hazard?', 'Drug and alcohol awareness',
   'First aid', 'Managing personal stress', 'Avoiding slips and trips', 'NVQ Level 2',
   'Renolit', 'Rock Sintoplan', 'Sikaplan', 'Resitrix', 'ICB Alwitra',
@@ -32,7 +33,15 @@ async function ensureColumns() {
   if (!Array.isArray(cols) || !cols.length) {
     cols = DEFAULT_COLS.map((label, i) => ({ id: `${slug(label)}-${i}`, label }))
     await set(COLS_KEY, cols)
+    return cols
   }
+  // Backfill any newly-added default columns that aren't present yet (match by label, case-insensitive).
+  const have = new Set(cols.map(c => (c.label || '').toLowerCase().trim()))
+  let added = false
+  for (const label of DEFAULT_COLS) {
+    if (!have.has(label.toLowerCase().trim())) { cols.push({ id: `${slug(label)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label }); added = true }
+  }
+  if (added) await set(COLS_KEY, cols)
   return cols
 }
 
@@ -61,6 +70,26 @@ async function buildPeople() {
 export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
+      // Competency map for Planning gating: keyed by operative id (roster id, no 'op:' prefix).
+      if (req.query.competency === '1') {
+        const [columns, data] = await Promise.all([ensureColumns(), get(DATA_KEY).then(v => v || {})])
+        const now = new Date(); now.setHours(0, 0, 0, 0)
+        const valid = (cell) => cell && (cell.noExpiry || (cell.date && parseISO(cell.date) >= now))
+        // find column ids by label (case-insensitive contains)
+        const colIdsFor = (matchers) => columns.filter(c => matchers.some(m => (c.label || '').toLowerCase().includes(m))).map(c => c.id)
+        const supCols = colIdsFor(['internal supervisor', 'sssts', 'smsts', 'iosh managing safely'])
+        const cscsCols = colIdsFor(['cscs'])
+        // WAH: column label must START with "working at height" (avoids e.g. "Ladder Safety (part of Working at heights)")
+        const wahCols = columns.filter(c => (c.label || '').toLowerCase().trim().startsWith('working at height')).map(c => c.id)
+        const out = {}
+        for (const [pid, cols] of Object.entries(data)) {
+          if (!pid.startsWith('op:')) continue
+          const opId = pid.slice(3)
+          const has = (ids) => ids.some(id => valid(cols[id]))
+          out[opId] = { isSupervisor: has(supCols), hasCSCS: has(cscsCols), hasWAH: has(wahCols) }
+        }
+        return res.json({ competency: out })
+      }
       const [columns, data, people] = await Promise.all([ensureColumns(), get(DATA_KEY).then(v => v || {}), buildPeople()])
       return res.json({ columns, data, people })
     }

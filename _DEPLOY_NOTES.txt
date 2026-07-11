@@ -1,10 +1,32 @@
-PLANNING — View WLA: W/C dropdowns + PDF only (table removed)
+PLANNING — Supervisor requirement + CSCS/Working-at-Height gating (from the H&S Matrix)
 
-  pages/operations/project-management/planning.js  (ViewWeekModal)
-   - From / To are now W/C DROPDOWNS listing "W/C <date>" (2 years back to 1 year forward), not free
-     date pickers. Picking a From past To auto-bumps To; To only offers weeks >= From.
-   - Removed the on-screen table and the "No labour allocated for the first week…" message (the range
-     can be long; it's just for downloading).
-   - Shows the list of W/C weeks that will be in the PDF, then Download PDF (one page per week, max 26).
+WHAT THIS DOES
+  Ties the H&S Training Matrix into the Planning Gantt so labour can't be planned unsafely.
 
-Deploy over previous planning.js. No API change.
+  pages/api/hs-matrix.js
+   - Adds two default training columns if missing: "Working at Height" and "Internal Supervisor
+     Assessment". ensureColumns() BACKFILLS these into existing deployments automatically (matched by
+     label) on the first GET — you don't lose any existing data.
+   - New GET ?competency=1 -> { competency: { [operativeId]: { isSupervisor, hasCSCS, hasWAH } } }.
+        * isSupervisor = has ANY of (in date / no-expiry): Internal Supervisor Assessment, SSSTS, SMSTS,
+          IOSH Managing Safely, IOSH Managing Safely Refresher.
+        * hasCSCS = a valid (in date / no-expiry) CSCS.
+        * hasWAH  = a valid "Working at Height" (column whose name starts with that; the office variant
+          and "Ladder Safety (part of working at heights)" are deliberately NOT counted).
+
+  pages/operations/project-management/planning.js
+   - SUPERVISOR WARNING (GANTT ONLY): if a day has named labour but NONE of those people is a supervisor,
+     that day's cell is highlighted BRIGHT RED with white text ("No supervisor allocated this day").
+     A "no supervisor" swatch is added to the colour key. This appears ONLY in the Gantt — never in the
+     Weekly Labour Allocation pop-out, the WLA PDF, or the installer emails.
+   - CSCS / WORKING-AT-HEIGHT HARD BLOCK: when allocating labour, every operative still shows in the
+     picker (those missing certs are marked "⚠ no CSCS/WAH"), but trying to add one without BOTH a valid
+     CSCS and a valid Working at Height pops a warning ("You cannot allocate <name> because they do not
+     have a valid Working at Height or CSCS…") and refuses to add them. No override.
+
+IMPORTANT — DATA
+  Gating only bites once the H&S Matrix has the data. After deploying, open H&S -> H&S Training Matrix and
+  fill in CSCS, Working at Height, and the supervisor tickets (dates or "No expiry") for your operatives.
+  Until a person has those entered, they'll read as non-supervisor / missing-cert.
+
+Deploy both files over the previous versions. No cron/env change.

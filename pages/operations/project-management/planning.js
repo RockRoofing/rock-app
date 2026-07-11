@@ -45,6 +45,7 @@ function cellColours(cd) {
 export default function PlanningPage() {
   const [data, setData] = useState(null)
   const [ops, setOps] = useState([])
+  const [comp, setComp] = useState({})   // opId -> { isSupervisor, hasCSCS, hasWAH }
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('day')          // 'day' | 'week'
   const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
@@ -60,12 +61,14 @@ export default function PlanningPage() {
   async function load() {
     setLoading(true)
     try {
-      const [pl, opr] = await Promise.all([
+      const [pl, opr, cmp] = await Promise.all([
         fetch('/api/planning').then(r => r.json()).catch(() => ({})),
         fetch('/api/operatives').then(r => r.json()).catch(() => ({})),
+        fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
       ])
       setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {} })
       setOps(opr.operatives || [])
+      setComp(cmp.competency || {})
     } catch {}
     setLoading(false)
   }
@@ -210,6 +213,7 @@ export default function PlanningPage() {
         <Legend c={C_PROVISIONAL} label="Provisional" />
         <Legend c={C_UNNAMED} label="Provisional — labour not confirmed (unnamed)" />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#dc2626', fontWeight: 700, fontSize: 14 }}>3</span> past contracted completion</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 14, height: 14, borderRadius: 3, background: '#ff2d2d', display: 'inline-block' }} /> no supervisor</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ color: '#ea580c' }}>⚑</span> historic needs confirming</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 4, height: 14, background: '#15803d', display: 'inline-block' }} /> today</span>
       </div>
@@ -254,12 +258,12 @@ export default function PlanningPage() {
 
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
-            {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay}
+            {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp}
               sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
-            {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg
+            {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
               sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
           </div>
@@ -272,7 +276,7 @@ export default function PlanningPage() {
           : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
-      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops}
+      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
@@ -280,7 +284,7 @@ export default function PlanningPage() {
   )
 }
 
-function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCellDown, onCellEnter, onSaveMeta }) {
+function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel, onCellDown, onCellEnter, onSaveMeta }) {
   const meta = data.meta[p.key] || {}
   const _today = new Date(); const todayCellKey = iso(_today)
   const [start, setStart] = useState(meta.startDate || '')
@@ -335,6 +339,10 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
           const selected = selDates && selDates.has(key)
           const col = n ? cellColours(cd) : null
           const isToday = key === todayCellKey
+          // Supervisor check (Gantt only): a day with named labour but NO supervisor among them -> bright red.
+          const namedIds = cd.entries.map(e => e.opId)
+          const hasSupervisor = namedIds.some(id => comp && comp[id] && comp[id].isSupervisor)
+          const noSup = n > 0 && namedIds.length > 0 && !hasSupervisor
           // Layer markers via box-shadow insets (base status edge, then today's green right line)
           const shadows = []
           if (isCompl) shadows.push('inset -2px 0 0 0 #dc2626')
@@ -344,15 +352,15 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, sel, onCel
             <div key={i}
               onMouseDown={() => onCellDown(p.key, d)}
               onMouseEnter={() => onCellEnter(p.key, d)}
-              title={isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : ''))}
+              title={noSup ? 'No supervisor allocated this day' : (isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : '')))}
               style={{
                 width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
-                background: selected ? '#fde68a' : (col ? col.bg : (we ? '#f3f1ec' : '#fff')),
+                background: selected ? '#fde68a' : (noSup ? '#ff2d2d' : (col ? col.bg : (we ? '#f3f1ec' : '#fff'))),
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: shadows.length ? shadows.join(', ') : 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: pastCompl ? 14 : 12, fontWeight: 700,
-                color: pastCompl ? '#dc2626' : (col ? col.num : '#999'),
+                color: pastCompl ? '#7f1d1d' : (noSup ? '#fff' : (col ? col.num : '#999')),
               }}>{n || ''}</div>
           )
         })
@@ -637,7 +645,7 @@ const wth = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#444',
 const wtd = { padding: '7px 10px', fontSize: 12, color: '#333', verticalAlign: 'top' }
 
 // ── Allocate / edit labour for the selected dates ──
-function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, reloadOps }) {
+function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClose, onDone, reloadOps }) {
   const isEdit = mode === 'edit'
   // In edit mode, pre-load everyone currently allocated across ANY of the selected dates,
   // plus the max unnamed count and a common status.
@@ -674,7 +682,18 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
   // If a preloaded status is 'actual' but the selection isn't all-past, fall back to confirmed.
   useEffect(() => { if (status === 'actual' && !allPast) setStatus('confirmed') }, [])
 
-  function addPick(id) { if (!id || picked.includes(id)) return; setPicked([...picked, id]); setPick('') }
+  function addPick(id) {
+    if (!id || picked.includes(id)) return
+    const c = comp[id] || {}
+    if (!c.hasCSCS || !c.hasWAH) {
+      const o = opList.find(x => x.id === id)
+      const nm = o ? `${o.firstName} ${o.lastName}` : 'this operative'
+      window.alert(`You cannot allocate ${nm} because they do not have a valid Working at Height or CSCS. These are mandatory trainings for all operatives.\n\nAdd the in-date certificates in the H&S Training Matrix first.`)
+      setPick('')
+      return
+    }
+    setPicked([...picked, id]); setPick('')
+  }
   function removePick(id) { setPicked(picked.filter(x => x !== id)) }
 
   async function save() {
@@ -772,7 +791,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, onClose, onDone, 
               <div style={lbl}>Add installer</div>
               <select value={pick} onChange={e => addPick(e.target.value)} style={input}>
                 <option value="">Select installer…</option>
-                {available.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}</option>)}
+                {available.map(o => { const c = comp[o.id] || {}; const bad = !c.hasCSCS || !c.hasWAH; return <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}{bad ? ' ⚠ no CSCS/WAH' : ''}</option> })}
               </select>
               <button onClick={() => setAddOpen(true)} style={{ ...linkBtn, marginTop: 8, paddingLeft: 0 }}>+ Add new operative to the roster</button>
               <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Clashes (same installer already on another project that day) are skipped and reported.</div>
