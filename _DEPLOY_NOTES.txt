@@ -1,17 +1,18 @@
-ATTACHMENTS — View now actually shows the image/PDF (inline proxy)
+ATTACHMENTS — View now renders exactly like the Drawings viewer
 
-  Diagnosis (from the screenshot): the viewer WAS opening, but the <img> pointed straight at the
-  cross-origin Vercel Blob URL, which the browser refused to render inline — so it fell through to the
-  "Download to view" fallback. (Download worked because it fetches the blob via JS.)
-
-  pages/api/download.js
-   - Added ?inline=1 mode: serves the file with Content-Disposition: inline (instead of attachment) so it
-     can be shown in an <img>/<iframe> from our own origin. Without inline it still forces a download.
+  Why it kept failing: the viewer was loading images through the /api/download proxy and had an aggressive
+  <img onError> fallback that hid the image and showed "Download to view" whenever anything went slightly
+  wrong. The Drawings viewer (which works) simply uses a plain <img src={file.url}> against the blob URL
+  with no proxy and no error fallback.
 
   components/RowAttachments.js
-   - The viewer now loads images and PDFs through /api/download?inline=1 (same-origin) instead of the raw
-     blob URL, so they render reliably. Thumbnails in the attachments list use the same inline proxy.
-   - "Download" still uses the attachment proxy (correct filename), unchanged.
+   - Viewer now renders images with a plain <img src={f.url}> and PDFs with <iframe src={f.url}> — the
+     exact same approach as the working Drawings viewer. Removed the proxy src and the onError "Download to
+     view" fallback that was swallowing the image.
+   - Still portalled to document.body (so it can't be clipped by the table) and still has prev/next.
+   - Download button unchanged (proper filename via proxy).
 
-Affects Deliveries, Procurement, Risk Log, Live Tasks (shared component). Deploy both files.
-No cron/env change.
+  NOTE: the /api/download inline mode from the previous drop is no longer needed by the viewer; you can
+  keep the earlier download.js as-is (harmless) — no need to redeploy it.
+
+Affects Deliveries, Procurement, Risk Log, Live Tasks (shared component). Deploy this single file.
