@@ -166,11 +166,19 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
     let failed = 0
     for (const file of Array.from(files)) {
       try {
-        const fd = new FormData(); fd.append('file', file)
-        const up = await fetch('/api/upload-file', { method: 'POST', body: fd })
+        // upload-file expects RAW bytes with the name/type in headers (NOT FormData).
+        const up = await fetch('/api/upload-file', {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'x-filename': encodeURIComponent(file.name || `photo-${Date.now()}.jpg`),
+            'x-content-type': file.type || 'image/jpeg',
+          },
+          body: file,
+        })
         const ud = await up.json()
         if (!up.ok || !ud.url) { failed++; continue }
-        setAttachments(prev => [...prev, { type: 'photo', url: ud.url, name: file.name || 'photo' }])
+        setAttachments(prev => [...prev, { type: 'photo', url: ud.url, name: file.name || 'photo', mime: file.type || 'image/jpeg' }])
       } catch { failed++ }
     }
     if (failed) setErr(`${failed} file${failed > 1 ? 's' : ''} failed to upload — please try again.`)
