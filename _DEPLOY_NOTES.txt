@@ -1,17 +1,14 @@
-SITE APP — Drawings/RAMS in-app viewer with prev/next
+SITE APP — Deliveries card warning wording
 
-  pages/forms/index.js
-   - Tapping "View" (or the thumbnail) on a Drawing or RAMS now opens an IN-APP full-screen viewer instead
-     of navigating away to the file link — so operatives can always get back to the app (× or Escape).
-   - The viewer supports moving through the list:
-        • on-screen ‹ / › arrows either side of the file,
-        • "‹ Previous" / "Next ›" buttons at the bottom,
-        • left/right keyboard arrows,
-        • swipe left = next, swipe right = previous (touch).
-   - Shows "n of N" position; Download is still available from the top bar.
-   - Images render inline; PDFs render in an embedded frame within the overlay (no page navigation).
+  pages/forms/deliveries.js
+   - On each delivery card, when no attachment is present the warning now reads:
+       "⚠ No proof of delivery attached. Delivery needs confirming arrived."
+     (bold, orange, wraps cleanly; "Update ›" stays on the right). When attachments exist it shows the
+     attachment count in green as before.
 
-   (This file also still contains the earlier Deliveries home card and the Start-on-Site list fix, so it
-    supersedes the index.js from siteapp-1b-deliveries — deploy this one.)
+  NOTE: this file is the FULL enhancements version of pages/forms/deliveries.js — it also contains the
+  Required delivery date + comments on the card, bulleted line items, the reworded save warning, and the
+  "not delivered OR due within 2 weeks" filter. Deploy THIS file as pages/forms/deliveries.js (it
+  supersedes both siteapp-1b-deliveries and deliveries-enhancements versions).
 
-Deploy this single file (it replaces pages/forms/index.js). No API/cron/env change.
+Deploy this single file. No API/cron/env change.

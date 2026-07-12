@@ -115,11 +115,11 @@ export default function DeliveriesView() {
                       {d.requiredDeliveryDate && <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>Required delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong></div>}
                       <ItemList items={d.lineItems || []} />
                       {d.comments && <div style={{ fontSize: 12, color: '#666', marginTop: 6, fontStyle: 'italic' }}>“{d.comments}”</div>}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                        <div style={{ fontSize: 12, color: (d.attachments || []).length ? '#16a34a' : '#c2410c' }}>
-                          {(d.attachments || []).length ? `📎 ${(d.attachments || []).length} attachment${(d.attachments || []).length === 1 ? '' : 's'}` : '⚠ No proof attached'}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10, marginTop: 8 }}>
+                        <div style={{ fontSize: 12, color: (d.attachments || []).length ? '#16a34a' : '#c2410c', fontWeight: (d.attachments || []).length ? 400 : 600, lineHeight: 1.35 }}>
+                          {(d.attachments || []).length ? `📎 ${(d.attachments || []).length} attachment${(d.attachments || []).length === 1 ? '' : 's'}` : '⚠ No proof of delivery attached. Delivery needs confirming arrived.'}
                         </div>
-                        <div style={{ color: BRAND, fontSize: 13, fontWeight: 600 }}>Update ›</div>
+                        <div style={{ color: BRAND, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>Update ›</div>
                       </div>
                     </div>
                   ))}
