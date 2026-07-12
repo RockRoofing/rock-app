@@ -44,6 +44,7 @@ export async function middleware(req) {
       pathname.startsWith('/api/issue-notify') ||
       pathname.startsWith('/api/issue-send-customer') ||
       pathname.startsWith('/api/issue-pdf') ||
+      pathname.startsWith('/api/download') ||
       pathname.startsWith('/api/deliveries') ||
       pathname.startsWith('/api/operatives') ||
       pathname.startsWith('/api/planning')

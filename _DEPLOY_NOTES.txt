@@ -1,14 +1,26 @@
-SITE APP — Deliveries card warning wording
+ATTACHMENTS — in-app viewer + real download (Deliveries, Procurement, Risk Log, Live Tasks)
 
-  pages/forms/deliveries.js
-   - On each delivery card, when no attachment is present the warning now reads:
-       "⚠ No proof of delivery attached. Delivery needs confirming arrived."
-     (bold, orange, wraps cleanly; "Update ›" stays on the right). When attachments exist it shows the
-     attachment count in green as before.
+These four portal pages all share components/RowAttachments.js, so fixing it fixes all of them.
 
-  NOTE: this file is the FULL enhancements version of pages/forms/deliveries.js — it also contains the
-  Required delivery date + comments on the card, bulleted line items, the reworded save warning, and the
-  "not delivered OR due within 2 weeks" filter. Deploy THIS file as pages/forms/deliveries.js (it
-  supersedes both siteapp-1b-deliveries and deliveries-enhancements versions).
+  components/RowAttachments.js
+   - VIEW now opens an IN-APP viewer overlay (like the Drawings viewer) instead of opening the raw URL in
+     a new tab: images render inline, PDFs embed, other types offer a download. Includes prev/next via
+     on-screen ‹ / › arrows, "‹ Previous / Next ›" buttons, left/right arrow keys, and swipe. Close with ×
+     or Escape — you never leave the page.
+   - DOWNLOAD now saves the actual file with its correct name and extension (e.g. .jpg/.pdf) instead of a
+     generic "file". It routes through a new same-origin download proxy that sets the filename; falls back
+     to a blob fetch, then to opening the URL.
+   - Small thumbnails now show next to image attachments in the list. Optional readOnly prop hides the
+     add/remove controls (not required by the existing callers).
 
-Deploy this single file. No API/cron/env change.
+  pages/api/download.js  (NEW)
+   - GET /api/download?url=<blob url>&name=<filename> — streams a Vercel Blob file back through our origin
+     with Content-Disposition: attachment so the browser saves it correctly. Restricted to
+     *.blob.vercel-storage.com hosts.
+
+  middleware.js
+   - Added /api/download to the Site App passthrough (so attachments can also be downloaded from Site App
+     contexts).
+
+No change needed to deliveries.js / procurement.js / risks.js / tasks.js — they already import
+RowAttachments. Deploy all three files. No cron/env change.
