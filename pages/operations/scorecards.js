@@ -121,7 +121,7 @@ export default function OpsScorecardsPage() {
     const showChart = !m.isToolbox && !m.latestOnly
 
     return (
-      <div key={m.key} style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', border: '1px solid #e1e0d9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'grid', gridTemplateColumns: showChart ? '150px 1fr' : '1fr', gap: 16, alignItems: 'center', minHeight: CARD_H, boxSizing: 'border-box' }}>
+      <div key={m.key} style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', border: '1px solid #e1e0d9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', display: 'grid', gridTemplateColumns: showChart ? '220px 1fr' : '1fr', gap: 20, alignItems: 'center', minHeight: CARD_H, boxSizing: 'border-box' }}>
         <div style={!showChart ? { textAlign: 'center' } : undefined}>
           <div style={{ fontSize: 13.5, color: '#888', marginBottom: 6, lineHeight: 1.3 }}>
             {m.label}
@@ -155,10 +155,10 @@ export default function OpsScorecardsPage() {
           </div>
         </div>
         {showChart && (
-          <div style={{ height: CARD_H - 30 }}>
+          <div style={{ height: CARD_H - 24 }}>
             {series.some(s => s[m.key] != null) && (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                <LineChart data={chartData} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#bbb' }} interval="preserveStartEnd" />
                   <YAxis hide domain={['auto', 'auto']} />
                   <Tooltip formatter={(v) => m.format(v)} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
@@ -173,17 +173,27 @@ export default function OpsScorecardsPage() {
     )
   }
 
+  const months = data?.months || []
+
   return (
     <OperationsShell active="scorecards" title="Scorecards">
       <PageHeading title="Operations Scorecards" sub="Contracts Managers (Will & Mike) and Operations Manager (Dori)." />
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <SubTabs tabs={SUB_TABS} active={sub} onChange={setSub} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: '#888' }}>From</span>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={dateInp} />
-          <span style={{ fontSize: 12, color: '#888' }}>To</span>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={dateInp} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: '#888' }}>From</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={dateInp} />
+            <span style={{ fontSize: 12, color: '#888' }}>To</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={dateInp} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 12, color: '#888' }}>
+            <span style={{ fontWeight: 600 }}>Key:</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#16a34a' }} /> On target</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} /> Close (≥80%)</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#e63946' }} /> Below target</span>
+          </div>
         </div>
       </div>
 
@@ -194,14 +204,73 @@ export default function OpsScorecardsPage() {
           No projects found for {current.label}. Check the Contracts Manager name on their projects matches "{current.name}".
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 14 }}>
-          {metrics.map(renderCard)}
-        </div>
+        <>
+          {/* Full-width graph cards (no current-month column) */}
+          <div style={{ marginBottom: 8, fontSize: 14, fontWeight: 600 }}>
+            {current.label}{latestMonth && <span style={{ fontSize: 12, color: '#888', marginLeft: 8 }}>— Latest: {monthLabel(latestMonth)}</span>}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+            {metrics.map(renderCard)}
+          </div>
+
+          {/* Bottom trend table — same as pre-contract */}
+          {months.length > 0 && (
+            <>
+              <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 12 }}>Trend — {monthLabel(months[0])} to {monthLabel(months[months.length - 1])}</div>
+              <div style={{ overflowX: 'auto', maxHeight: 460, border: '0.5px solid #e1e0d9', borderRadius: 8 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #e1e0d9', position: 'sticky', top: 0, background: '#fff', zIndex: 2 }}>
+                      <th style={{ ...thS, minWidth: 220, position: 'sticky', left: 0, background: '#fff', zIndex: 3 }}>Metric</th>
+                      <th style={{ ...thS, minWidth: 110, position: 'sticky', left: 220, background: '#fff', zIndex: 3 }}>Target</th>
+                      {months.map(m => <th key={m} style={{ ...thS, textAlign: 'right', minWidth: 72 }}>{monthLabel(m)}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metrics.map(md => {
+                      const target = targets?.[md.targetType]?.[md.targetKey]
+                      return (
+                        <tr key={md.key} style={{ borderBottom: '0.5px solid #f0efec' }}>
+                          <td style={{ ...tdS, position: 'sticky', left: 0, background: '#fff' }}>{md.label}{md.sub && <span style={{ fontSize: 10, color: '#bbb' }}> ({md.sub})</span>}</td>
+                          <td style={{ ...tdS, color: '#888', position: 'sticky', left: 220, background: '#fff' }}>
+                            {editingTarget === `table-${md.key}` ? (
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                <input type="text" value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus onKeyDown={e => { if (e.key === 'Enter') saveTarget(md.targetType, md.targetKey, editValue); if (e.key === 'Escape') setEditingTarget(null) }} style={{ width: 64, fontSize: 12, padding: '2px 6px', border: '1px solid #d0d0cc', borderRadius: 4, fontFamily: 'inherit' }} />
+                                <button onClick={() => saveTarget(md.targetType, md.targetKey, editValue)} style={{ fontSize: 11, padding: '2px 6px', border: 'none', borderRadius: 4, background: '#1a1a19', color: '#fff', cursor: 'pointer' }}>✓</button>
+                              </div>
+                            ) : md.isToolbox ? (
+                              <span style={{ color: '#bbb' }}>—</span>
+                            ) : (
+                              <span style={{ cursor: 'pointer' }} onClick={() => { setEditingTarget(`table-${md.key}`); setEditValue(String(target ?? '')) }}>
+                                {target == null ? '—' : (md.format === pct ? pct(target) : (md.format === gbp ? gbp(target) : target))} <span style={{ fontSize: 10 }}>✎</span>
+                              </span>
+                            )}
+                          </td>
+                          {series.map(s => {
+                            const val = s[md.key]
+                            const color = rag(val, target, md.mode)
+                            return (
+                              <td key={s.month} style={{ ...tdS, textAlign: 'right', color: val != null ? color : '#ddd', fontWeight: val != null ? 500 : 400 }}>
+                                {val != null ? md.format(val) : '—'}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </>
       )}
     </OperationsShell>
   )
 }
 
+const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
+const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12, verticalAlign: 'middle' }
 const dateInp = { fontSize: 12, padding: '5px 8px', border: '1px solid #d0d0cc', borderRadius: 6, fontFamily: 'inherit' }
 const toggleBtn = { flex: 1, maxWidth: 90, padding: '8px 0', borderRadius: 8, border: '1px solid #e1e0d9', background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#888' }
 const toggleOn = { background: '#16a34a', color: '#fff', borderColor: '#16a34a' }

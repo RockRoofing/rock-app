@@ -1,39 +1,13 @@
-OPERATIONS SCORECARDS — trend lines/graphs, year date filter, percentage metrics (matches pre-contract)
+OPERATIONS SCORECARDS — layout matched to pre-contract (full-width graphs + bottom table)
 
-pages/api/ops-scorecards.js  (REWRITTEN)
-  - Now returns a MONTHLY SERIES for the requested range (?from=&to=), so every metric has a trend line.
-  - Reuses the portal's /api/forms-missing engine (server-side) to get required-vs-completed per form per
-    week, then buckets by month — so the % metrics use exactly the same logic as the portal.
-  - Metrics reframed as requested:
-      Will & Mike (CM):
-        • Gross margin — live & defects projects (latest value; point-in-time).
-        • Pre-Start Notifications — % completed vs required (their Pre-Start rows).
-        • H&S incidences — count (dedup per project/month).
-        • Water Ingress — Rock at fault — count.
-        • Procurement savings complete — % of their CLOSED projects with a full savings doc; N/A (—) if
-          none closed in range (point-in-time, latest).
-        • Issues resolved on time — % of issues resolved in-month that were on/before the required date.
-      Dori (Ops):
-        • Start On Site / Daily Site Diary / Work Area Handover — % completed vs required.
-        • Toolbox Talk — manual Yes/No per month (toggle on the latest month).
-        • Tasks completed on time — % of closed tasks that weren't past due.
-        • Risk log completed on time — % of resolved risks that met the target resolution date.
-  - POST { month, toolbox } unchanged (manual Toolbox Yes/No).
+pages/operations/scorecards.js  (updated)
+  - Dropped the "current month" column. Each metric is now a single FULL-WIDTH card with the label/value/
+    target on the left and the 12-month trend graph spanning the rest of the width.
+  - Added the RAG Key legend (On target / Close (≥80%) / Below target) next to the date filter, like
+    pre-contract.
+  - Added the bottom TREND TABLE (same as pre-contract): Metric | Target | one column per month, with
+    RAG-coloured values and inline-editable targets. Sticky Metric + Target columns and sticky header.
+  - Point-in-time metrics (Gross margin, Procurement) keep a single value card (no graph) but still appear
+    as a row in the trend table.
 
-pages/operations/scorecards.js  (REWRITTEN)
-  - Trend-line graphs on every time-series card (blue value line + dashed grey trend line), same recharts
-    style as the pre-contract scorecard.
-  - Year date filter (From / To) defaulting to the last 12 months, like pre-contract.
-  - Gross margin & Procurement are point-in-time so they show the latest value (no misleading trend line);
-    all other metrics show the monthly trend.
-
-pages/api/targets.js
-  - Default targets updated to the new percentage keys (psnPct, procPct, issuesOnTimePct, sosPct, diaryPct,
-    wahPct, tasksPct, risksPct).
-
-Deploy all files. No cron/env change.
-
-CONFIRM AFTER DEPLOY:
-  - Will/Mike tabs match a CM name CONTAINING "Will"/"Mike". If the names differ, tell me the exact ones.
-  - % metrics show "—" when there's nothing required in a month (e.g. no PSNs due, no projects closed);
-    that's the intended N/A behaviour.
+Deploy this file. No cron/env change. (Depends on the ops-scorecards API from the previous drop.)
