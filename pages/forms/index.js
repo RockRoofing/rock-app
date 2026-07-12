@@ -220,7 +220,7 @@ function ProjectDetailsView({ onBack }) {
   const [tab, setTab] = useState('drawings')
   const [files, setFiles] = useState([])
   const [filesLoading, setFilesLoading] = useState(false)
-  const [viewer, setViewer] = useState(null)
+  const [viewerIdx, setViewerIdx] = useState(null)   // index into `files`, or null when closed
 
   useEffect(() => { (async () => {
     try {
@@ -284,15 +284,15 @@ function ProjectDetailsView({ onBack }) {
         : !files.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No {tab === 'drawings' ? 'drawings' : 'RAMS'} uploaded for this project yet.</div>
         : tab === 'drawings' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
-            {files.map(f => (
+            {files.map((f, i) => (
               <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <div onClick={() => setViewer(f)} style={{ height: 120, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div onClick={() => setViewerIdx(i)} style={{ height: 120, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   {isImage(f) ? <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <SitePdfThumb url={f.url} />}
                 </div>
                 <div style={{ padding: '10px 12px' }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: INK, wordBreak: 'break-word', lineHeight: 1.3 }}>{f.name}</div>
                   <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-                    <button onClick={() => setViewer(f)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 }}>View</button>
+                    <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 13, cursor: 'pointer', padding: 0 }}>View</button>
                     <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 13, textDecoration: 'none' }}>Download</a>
                   </div>
                 </div>
@@ -301,30 +301,87 @@ function ProjectDetailsView({ onBack }) {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {files.map(f => (
+            {files.map((f, i) => (
               <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div><div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>Current revision</div></div>
-                <button onClick={() => setViewer(f)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
+                <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
                 <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
               </div>
             ))}
           </div>
         )}
-      {viewer && (
-        <div onClick={() => setViewer(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 2000, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{viewer.name}</div>
-            <button onClick={() => setViewer(null)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer' }}>×</button>
-          </div>
-          <div onClick={e => e.stopPropagation()} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
-            {isImage(viewer) ? <img src={viewer.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <iframe src={viewer.url} title={viewer.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
-          </div>
+      {viewerIdx != null && files[viewerIdx] && (
+        <FileViewer files={files} index={viewerIdx} onIndex={setViewerIdx} onClose={() => setViewerIdx(null)} />
+      )}
+    </div>
+  )
+}
+
+// ── Full-screen in-app file viewer with prev/next (buttons, arrow keys, swipe) ──
+function FileViewer({ files, index, onIndex, onClose }) {
+  const f = files[index]
+  const has = files.length > 1
+  const go = (delta) => { const n = (index + delta + files.length) % files.length; onIndex(n) }
+  const touch = useRef(null)
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') go(1)
+      else if (e.key === 'ArrowLeft') go(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [index, files.length])
+
+  const onTouchStart = (e) => { touch.current = e.touches[0].clientX }
+  const onTouchEnd = (e) => {
+    if (touch.current == null) return
+    const dx = e.changedTouches[0].clientX - touch.current
+    if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1)   // swipe left = next, right = prev
+    touch.current = null
+  }
+
+  const navBtn = (side) => ({
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: 8, zIndex: 3,
+    width: 46, height: 46, borderRadius: '50%', border: 'none', cursor: 'pointer',
+    background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 26, lineHeight: '46px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  })
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2000, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
+          {has && <div style={{ fontSize: 12, color: '#bbb' }}>{index + 1} of {files.length}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap' }}>Download</a>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+      </div>
+
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+        style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
+        {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
+        {isImage(f)
+          ? <img key={f.url} src={f.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          : <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+        {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
+      </div>
+
+      {has && (
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 20, padding: '10px 16px 16px' }}>
+          <button onClick={() => go(-1)} style={pageNavBtn}>‹ Previous</button>
+          <button onClick={() => go(1)} style={pageNavBtn}>Next ›</button>
         </div>
       )}
     </div>
   )
 }
+const pageNavBtn = { background: 'rgba(255,255,255,0.14)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
 
 const homeCard = { display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: '18px', cursor: 'pointer', width: '100%' }
 const backLink = { background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }
