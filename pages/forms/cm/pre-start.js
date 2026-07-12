@@ -36,6 +36,7 @@ export default function CmPreStart() {
       const d = await fetch('/api/submissions').then(r => r.json())
       const mine = (d.submissions || []).filter(s => s.formId === PSN_FORM_ID &&
         ((s.projectName || '') === (p.projectName || '') || (s.projectName || '') === (p.projectNo || '') || (s.projectName || '').includes(p.projectNo || '__x__')))
+      mine.sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))
       setSubs(mine)
     } catch {}
     setLoading(false)

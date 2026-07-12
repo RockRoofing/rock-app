@@ -1,40 +1,16 @@
-SITE APP + PORTAL — PSN rework, Forms view/edit fix, Risk Log inline, PSN send fix
+SITE APP — Missing Forms aligned to portal + completed lists sorted newest-first
 
-PSN SEND ERROR ("unexpected end of json input")  ** the main bug **
-  middleware.js
-   - ROOT CAUSE: /api/pre-start-notify-send wasn't in the Site App passthrough, so the middleware
-     intercepted it and returned an empty response -> the client's r.json() threw. Added /api/pre-start*
-     to the passthrough.
-  pages/forms/fill.js + pages/forms/cm/pre-start.js
-   - Client send now parses the response defensively (won't throw on a non-JSON response; shows the real
-     error/status instead).
+MISSING FORMS (pages/forms/cm/missing-forms.js)
+  - CAUSE of the June Pre-Start showing: the app defaulted its date range to the LAST 2 weeks (looking
+    backwards), while the portal defaults to the CURRENT week and snaps to Mondays. Looking back into June
+    surfaced an old week's Pre-Start requirement. It was not a stale row in a table — just the date window.
+  - Now matches the portal: uses the same /api/forms-missing engine, defaults to THIS week .. NEXT week
+    (2-week forward visibility), and snaps both ends of the range to Mondays. Past weeks no longer appear.
 
-FORMS NOT VIEWABLE / EDIT BROKEN  ** the other main bug **
-  components/SubmissionModal.js
-   - ROOT CAUSE: the submissions LIST is lightweight (no answers), so the modal opened empty. It now
-     fetches the full submission by id (/api/submissions?id=) when answers aren't present, so View and
-     Edit both work (Completed Forms, CM Forms Completed, PSN view).
-
-PSN FORM CHANGES  (lib/formDefs.js + pages/forms/fill.js)
-   - Removed "What is the email address of the person who requested our return to site?" (f_4). It's
-     removed from the seed AND hidden/skip-validated in the form renderer, so it disappears on already-
-     seeded forms too (NO reseed needed).
-   - Visit Number (f_7) is now AUTO-SUGGESTED = (number of existing PSNs for this project) + 1. The user
-     can still edit it.
-   - The PSN now goes straight to "Submit & send to customer" (no "notify office" step). After submit, the
-     Send-to-customer step opens: recipients pre-filled from Project Details (siteContacts + customerEmail)
-     with add/delete, then emails the PSN PDF.
-   - Added "Save as draft" — stores the PSN with draft:true (shown with a "Draft" badge in Pre-Start ›
-     View completed) so it can be finished/sent later.
-  pages/api/submissions.js
-   - Stores/returns a draft flag on submissions (full record + index entry).
-
-RISK LOG — pages/operations/project-management/risks.js
-   - "Responsible" (dropdown of team) and "Target Resolution" (date) are now EDITABLE INLINE in the table,
-     matching the Live Tasks pattern.
-
-PRE-START MISSING LOGIC — verified (no change needed)
-   - The forms-missing engine already triggers a Pre-Start when a project starts for the first time OR
-     returns to site after a >7-day gap, within a 14-day (2-week) window — exactly the required rule.
+COMPLETED LISTS — sorted "last completed first" (newest first)
+  - pages/forms/completed.js (operative Completed Forms)
+  - pages/forms/cm/forms-completed.js (CM Forms Completed)
+  - pages/forms/cm/pre-start.js (Pre-Start › View completed)
+  All three now explicitly sort by submittedAt descending.
 
 Deploy all files. No cron/env change.

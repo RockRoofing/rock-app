@@ -3,10 +3,13 @@ import { useRouter } from 'next/router'
 import { Shell } from '../index'
 import { INK, BRAND, fmtDate, useMyProjects } from '../../../lib/cmSiteApp'
 
+const DAY = 86400000
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const wd = (x.getDay() + 6) % 7; return new Date(x.getTime() - wd * DAY) }
 
-// CM › Missing Forms — the CM's own projects only (NOT project-filtered), all the
-// portal columns + metrics, defaulting to the last 2 weeks.
+// CM › Missing Forms — the CM's own projects only. Uses the SAME forms-missing
+// engine as the portal, defaulting to this week + next week (2-week forward
+// visibility, snapped to Mondays) so past weeks don't show stale requirements.
 export default function CmMissingForms() {
   const router = useRouter()
   const [user, setUser] = useState(null); const [ready, setReady] = useState(false)
@@ -20,10 +23,10 @@ export default function CmMissingForms() {
     if (!s) { router.replace('/forms'); return }
     try { setUser(JSON.parse(s)) } catch {}
     setReady(true)
-    // Default: last 2 weeks (this week + previous week)
-    const now = new Date()
-    const twoWkAgo = new Date(now.getTime() - 14 * 86400000)
-    setFrom(iso(twoWkAgo)); setTo(iso(now))
+    // Default: this week (Mon) .. next week (Mon) — matches the portal's forward-looking view.
+    const thisMon = mondayOf(new Date())
+    const nextMon = new Date(thisMon.getTime() + 7 * DAY)
+    setFrom(iso(thisMon)); setTo(iso(nextMon))
   }, [])
 
   const { myProjects, loading: projLoading } = useMyProjects(user)
@@ -33,7 +36,10 @@ export default function CmMissingForms() {
     if (!from || !to) return
     (async () => {
       setLoading(true)
-      try { setData(await fetch(`/api/forms-missing?from=${from}&to=${to}`).then(r => r.json())) } catch {}
+      // Snap the requested range to Mondays, exactly like the portal.
+      const f = iso(mondayOf(new Date(from)))
+      const t = iso(mondayOf(new Date(to)))
+      try { setData(await fetch(`/api/forms-missing?from=${f}&to=${t}`).then(r => r.json())) } catch {}
       setLoading(false)
     })()
   }, [from, to])

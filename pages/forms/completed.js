@@ -28,7 +28,9 @@ export default function CompletedForms() {
   }, [])
 
   const projects = [...new Set(subs.map(s => s.projectName).filter(Boolean))].sort()
-  const rows = subs.filter(s => !projectFilter || s.projectName === projectFilter)
+  const rows = subs
+    .filter(s => !projectFilter || s.projectName === projectFilter)
+    .sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))
 
   if (!ready) return <Shell user={user}><Loading /></Shell>
 

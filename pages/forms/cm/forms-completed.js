@@ -31,6 +31,7 @@ export default function CmFormsCompleted() {
         (s.projectName || '') === (p.projectName || '') ||
         (s.projectName || '') === (p.projectNo || '') ||
         (s.projectName || '').includes(p.projectNo || '__nope__'))
+      mine.sort((a, b) => (b.submittedAt || 0) - (a.submittedAt || 0))
       setSubs(mine)
     } catch {}
     setLoading(false)
