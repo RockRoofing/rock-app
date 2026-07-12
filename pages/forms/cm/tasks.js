@@ -43,6 +43,20 @@ export default function CmTasks() {
 
   const members = useMemo(() => [...new Set(tasks.map(t => t.assignee).filter(Boolean))].sort(), [tasks])
 
+  // Same colour convention as the portal: red = due today/overdue, orange = within
+  // a week, green = >1 week away.
+  const dateColour = (dateStr) => {
+    if (!dateStr) return {}
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const d = new Date(dateStr); d.setHours(0, 0, 0, 0)
+    if (isNaN(d)) return {}
+    const days = Math.round((d - today) / 86400000)
+    if (days <= 0) return { background: '#fef2f2', color: '#991b1b', fontWeight: 700 }
+    if (days <= 7) return { background: '#fff7ed', color: '#9a3412', fontWeight: 700 }
+    return { background: '#ecfdf5', color: '#065f46' }
+  }
+  const isOverdue = (t) => { if (t.closed || !t.closeOutDate) return false; const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); const td = new Date(); td.setHours(0,0,0,0); return d <= td }
+
   const rows = useMemo(() => {
     return tasks
       .filter(t => myNos.has(t.projectNo))              // only this CM's projects
@@ -97,7 +111,7 @@ export default function CmTasks() {
                     <input value={t.assignee || ''} onChange={e => patch(t.id, { assignee: e.target.value })} style={{ ...miniInp, width: 150 }} />
                   </label>
                   <label style={{ fontSize: 11, color: '#888' }}>Target completion<br />
-                    <input type="date" value={t.closeOutDate || ''} onChange={e => patch(t.id, { closeOutDate: e.target.value })} style={miniInp} />
+                    <input type="date" value={t.closeOutDate || ''} onChange={e => patch(t.id, { closeOutDate: e.target.value })} style={{ ...miniInp, ...dateColour(t.closeOutDate) }} />
                   </label>
                 </div>
 

@@ -1,42 +1,49 @@
-SITE APP — STAGE 2: Contracts Manager area (operative features PLUS 7 CM sections)
+SITE APP + PLANNING — fixes batch 1
 
-IDENTITY: a logged-in user is treated as a Contracts Manager when their name matches the Contracts
-Manager field (IHM/Project Details) on one or more Ops projects. Those matched projects are their
-"my projects". No new role flag needed (an accessLevel:'contracts-manager' account also counts).
-
-NEW / CHANGED FILES
-  middleware.js
-    - Added /api/srats, /api/tasks, /api/forms-missing, /api/variations to the Site App passthrough.
-
-  lib/cmSiteApp.js  (NEW) — shared helpers: nameMatches(), useMyProjects() hook, ProjectPicker,
-    ProjectHeader, and shared styles/among the CM pages.
-
+CLIENT-SIDE CRASH FIXES
   pages/forms/index.js
-    - Home now detects CM by name-match and shows a "Contracts Manager" section with 7 cards:
-      Pre-Start Notifications, Forms Completed, Missing Forms, Issues Log, SRATs, Live Tasks, Variations.
-    - Operatives (non-CM) see exactly what they did before. CMs get everything operatives have PLUS the
-      CM section (so CM = operative features + CM features, as intended).
+   - FIX: Drawings/RAMS "View" threw "application error / client-side exception". Cause: isImage() was
+     defined inside ProjectDetailsView but used by the separate FileViewer component (out of scope).
+     isImage is now a module-level helper. Drawings & RAMS View works again.
+  pages/operations/project-management/planning.js
+   - FIX: Planning WEEK view threw a client-side exception. Cause: the Water Ingress row's week total did
+     `g.days.reduce(...)` but week groups are plain arrays (g), so g.days was undefined. Now `g.reduce(...)`.
 
-  pages/forms/cm/pre-start.js      — up-and-coming projects needing a Pre-Start (uses the forms-missing
-                                     14-day rule, this CM's projects only); tap to complete the Pre-Start.
-  pages/forms/cm/forms-completed.js— project-first; submitted forms with Form, Operative, Submitted,
-                                     Flags; tap to open the full submission (view/edit).
-  pages/forms/cm/missing-forms.js  — this CM's projects only (not project-filtered); date range defaults
-                                     to the last 2 weeks; Required/Completed/Completion% metrics + list.
-  pages/forms/cm/srats.js          — project-first; view existing SRATs and create a new one from mobile
-                                     (Situation, Roadblocks, Actions, Timeline) -> saved via /api/srats.
-  pages/forms/cm/tasks.js          — Live Tasks; filter by project / team member / target-date / resolved
-                                     (default Open); Task, Responsible, Target completion, Resolved,
-                                     Comments, Attachments — all editable in-app.
-  pages/forms/cm/variations.js     — project-first, read-only; Variation number, Description, Instructed,
-                                     Total (from the dashboard/commercial data).
+VARIATIONS
+  pages/forms/cm/variations.js
+   - FIX: no variations were showing. Now reads the full project record via /api/ops-projects?no=<projectNo>
+     (settings.variations) instead of the dashboard cache. Project-first, then Variation number,
+     Description, Instructed, Total (as specified).
 
-  Issues Log: the CM "Issues Log" card points at the existing /forms/issues-log page (already project-
-  filterable, editable, with created date/by, issue name, comments, resolved date and send-to-customer).
+DELIVERIES
+  pages/forms/deliveries.js
+   - Proof-photo thumbnails now load via the inline image proxy so they render (and tapping opens the
+     full in-app viewer with prev/next). (Attachment viewing inside the app now works.)
 
-DEPLOY: all files. This pages/forms/index.js supersedes earlier ones (keeps Deliveries card, Drawings
-viewer, Start-on-Site fix, and adds the CM section). No cron/env change.
+LIVE TASKS
+  pages/forms/cm/tasks.js
+   - Target-completion dates now use the SAME colour coding as the portal (red = due today/overdue,
+     orange = within a week, green = >1 week away).
 
-NOT INCLUDED (flagged for your later review pass):
-  - Issues Log "Required resolution date" field and switching issue photos -> generic attachments (the
-    issue model currently uses photos[]). Left as-is since it's functional; easy to add on review.
+SRATs
+  pages/forms/cm/srats.js
+   - Can now EDIT existing SRATs from the app (Edit button on each card).
+   - Timeline box moved BELOW Actions and is now the same size as the other boxes (full textarea).
+   - Can add Live Project Tasks from the SRAT form — they're created in Live Tasks and linked to the SRAT.
+   - Linked Live Project Tasks now show on the SRAT card (with status + due date).
+
+HOME BADGES
+  pages/forms/index.js
+   - Issues Log card shows an ORANGE count of issues needing actioning (your projects).
+   - Live Tasks card shows a RED count of overdue tasks (your projects).
+   - Pre-Start Notification form is now hidden from the operative "Complete a Form" list (it lives in the
+     CM Pre-Start area — full customer-send rework to follow).
+
+Deploy all files. No cron/env change.
+
+STILL TO COME (next drop — larger features):
+  1. Pre-Start area rework: project-first; choose "Complete new" or "View completed" (table of dates ->
+     view portal of the completed PSN); form changes to "Submit & send to customer", pulling customer
+     contacts from the IHM/Project Details with add/delete.
+  2. Forms: view/edit completed forms from inside the Site App (completed-forms browser).
+  3. Missing Forms "pre-start not required" wording tidy-up (verify after Pre-Start rework).

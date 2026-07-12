@@ -172,6 +172,9 @@ function FormsHomeMenu({ user }) {
   const router = useRouter()
   const [mode, setMode] = useState('menu')  // menu | forms | details
   const [myProjectCount, setMyProjectCount] = useState(0)
+  const [myProjectNos, setMyProjectNos] = useState(new Set())
+  const [issueActionCount, setIssueActionCount] = useState(0)
+  const [overdueTaskCount, setOverdueTaskCount] = useState(0)
   useEffect(() => {
     if (!user?.name) return
     (async () => {
@@ -187,6 +190,21 @@ function FormsHomeMenu({ user }) {
           return false
         })
         setMyProjectCount(mine.length)
+        const nos = new Set(mine.map(p => p.projectNo))
+        setMyProjectNos(nos)
+        // Issues needing actioning on my projects (not resolved, no send-to-customer decision yet).
+        try {
+          const di = await fetch('/api/issues').then(r => r.json())
+          const need = (di.issues || []).filter(i => nos.has(i.projectNo) && !i.resolvedDate && !i.sendToCustomer)
+          setIssueActionCount(need.length)
+        } catch {}
+        // Overdue Live Tasks on my projects.
+        try {
+          const dt = await fetch('/api/tasks').then(r => r.json())
+          const td = new Date(); td.setHours(0, 0, 0, 0)
+          const overdue = (dt.tasks || []).filter(t => nos.has(t.projectNo) && !t.closed && t.closeOutDate && (() => { const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); return d <= td })())
+          setOverdueTaskCount(overdue.length)
+        } catch {}
       } catch {}
     })()
   }, [user])
@@ -224,17 +242,18 @@ function FormsHomeMenu({ user }) {
           <>
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND, margin: '18px 0 2px' }}>Contracts Manager</div>
             {[
-              ['🏗️', 'Pre-Start Notifications', 'Up-and-coming projects to Pre-Start', '/forms/cm/pre-start'],
-              ['✅', 'Forms Completed', 'Submitted forms by project', '/forms/cm/forms-completed'],
-              ['📋', 'Missing Forms', 'Outstanding forms on your projects', '/forms/cm/missing-forms'],
-              ['⚠️', 'Issues Log', 'Assess & action site issues', '/forms/issues-log'],
-              ['📝', 'SRATs', 'View & create SRATs', '/forms/cm/srats'],
-              ['🗂️', 'Live Tasks', 'Manage project tasks', '/forms/cm/tasks'],
-              ['💷', 'Variations', 'View project variations', '/forms/cm/variations'],
-            ].map(([icon, title, sub, href]) => (
+              ['🏗️', 'Pre-Start Notifications', 'Up-and-coming projects to Pre-Start', '/forms/cm/pre-start', 0, null],
+              ['✅', 'Forms Completed', 'Submitted forms by project', '/forms/cm/forms-completed', 0, null],
+              ['📋', 'Missing Forms', 'Outstanding forms on your projects', '/forms/cm/missing-forms', 0, null],
+              ['⚠️', 'Issues Log', 'Assess & action site issues', '/forms/issues-log', issueActionCount, '#f59e0b'],
+              ['📝', 'SRATs', 'View & create SRATs', '/forms/cm/srats', 0, null],
+              ['🗂️', 'Live Tasks', 'Manage project tasks', '/forms/cm/tasks', overdueTaskCount, '#dc2626'],
+              ['💷', 'Variations', 'View project variations', '/forms/cm/variations', 0, null],
+            ].map(([icon, title, sub, href, badge, badgeColour]) => (
               <button key={href} onClick={() => router.push(href)} style={homeCard}>
                 <div style={{ fontSize: 30 }}>{icon}</div>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>{title}</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{sub}</div></div>
+                {badge > 0 && <span style={{ background: badgeColour, color: '#fff', borderRadius: 20, minWidth: 24, height: 24, padding: '0 7px', fontSize: 13, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{badge}</span>}
                 <div style={{ color: BRAND, fontSize: 24 }}>›</div>
               </button>
             ))}
@@ -246,6 +265,13 @@ function FormsHomeMenu({ user }) {
 }
 
 // ── Project details for operatives: pick a live project, view Drawings & RAMS ──
+// Shared: is this file an image (used by the drawings grid and the FileViewer).
+function isImage(f) {
+  if (!f) return false
+  if ((f.contentType || f.type || '').startsWith('image/')) return true
+  return /\.(jpe?g|png|gif|webp|bmp|heic|heif)(\?|$)/i.test(f.name || f.url || '')
+}
+
 function ProjectDetailsView({ onBack }) {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -280,8 +306,6 @@ function ProjectDetailsView({ onBack }) {
       setFilesLoading(false)
     })()
   }, [proj, tab])
-
-  const isImage = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.name)
 
   if (loading) return <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading…</div>
 
@@ -463,7 +487,7 @@ function FormsList({ user, onBack }) {
       try {
         const r = await fetch('/api/forms')
         const d = await r.json()
-        const HIDDEN = ['contracts-manager-report']
+        const HIDDEN = ['contracts-manager-report', 'pre-start-notification']
         setForms((d.forms || []).filter(f => f.category === 'project' && !HIDDEN.includes(f.id)))
       } catch {}
       setLoading(false)

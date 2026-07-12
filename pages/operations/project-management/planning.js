@@ -460,7 +460,7 @@ function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
           )
         })
         : weekGroups.map((g, i) => {
-          const total = g.days.reduce((s, d) => s + headcount(iso(d)), 0)
+          const total = g.reduce((s, d) => s + headcount(iso(d)), 0)
           return <div key={i} style={{ width: WEEKCELL_W, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #eee', fontSize: 11, color: total ? '#0e5a8a' : '#ddd', fontWeight: 700 }}>{total || ''}</div>
         })}
     </div>

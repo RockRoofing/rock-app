@@ -249,7 +249,7 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
                     <div key={i} style={{ position: 'relative' }}>
                       {a.type === 'note'
                         ? <div style={{ background: '#f2efe8', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#555', maxWidth: 180 }}>📝 {a.text}</div>
-                        : <img src={a.url} alt="" onClick={() => setPhotoView(photos.findIndex(p => p === a))} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, cursor: 'pointer' }} />}
+                        : <img src={`/api/download?inline=1&url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name || '')}`} alt="" onClick={() => setPhotoView(photos.findIndex(p => p === a))} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, cursor: 'pointer' }} />}
                       <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
                         style={{ position: 'absolute', top: -6, right: -6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12 }}>×</button>
                     </div>

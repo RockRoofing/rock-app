@@ -26,9 +26,9 @@ export default function CmVariations() {
   async function pick(p) {
     setProj(p); setVariations(null); setLoading(true)
     try {
-      const d = await fetch('/api/dashboard').then(r => r.json())
-      const row = (d.projects || []).find(x => x.projectNo === p.projectNo)
-      setVariations(row?.variations || [])
+      const d = await fetch(`/api/ops-projects?no=${encodeURIComponent(p.projectNo)}`).then(r => r.json())
+      const vars = d?.project?.settings?.variations || d?.project?.data?.variations || []
+      setVariations(vars)
     } catch { setVariations([]) }
     setLoading(false)
   }
