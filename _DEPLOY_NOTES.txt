@@ -1,9 +1,11 @@
-DELIVERIES — Supplier field in Add/Edit form
+DELIVERIES APP — Scheduled / Delivered filter
 
-  pages/operations/project-management/deliveries.js
-   - The Add/Edit delivery form now has a "Supplier" text box (below PO number / Order date), which
-     populates the Supplier column in the table. Previously the Supplier column could only be filled by the
-     Xero sync — manually added deliveries had no way to set it.
-   - "+ Add delivery" now initialises a supplier field too.
+  pages/forms/deliveries.js
+   - After selecting a project, a two-way filter appears: "Scheduled" | "Delivered", defaulting to
+     Scheduled.
+       • Scheduled = deliveries not yet marked delivered (dated ones still limited to those due within the
+         next 2 weeks / overdue, as before; undated ones always show).
+       • Delivered = deliveries that have an actual delivery date recorded.
+   - Empty-state text adapts to the selected filter.
 
-Deploy this single file. No cron/env change.
+Deploy this single file (supersedes the previous pages/forms/deliveries.js). No cron/env change.

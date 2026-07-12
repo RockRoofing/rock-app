@@ -17,6 +17,7 @@ export default function DeliveriesView() {
   const [deliveries, setDeliveries] = useState([])
   const [loading, setLoading] = useState(true)
   const [projectNo, setProjectNo] = useState('')
+  const [statusFilter, setStatusFilter] = useState('scheduled')   // 'scheduled' | 'delivered'
   const [open, setOpen] = useState(null)   // delivery being edited
 
   useEffect(() => {
@@ -49,20 +50,16 @@ export default function DeliveriesView() {
     const in2wk = new Date(now.getTime() + 14 * 86400000)
     return deliveries
       .filter(d => (d.projectNo || d.projectName || '') === projectNo)
-      // Show only deliveries NOT yet marked delivered, OR due within the next 2 weeks.
       .filter(d => {
-        if (!d.actualDeliveryDate) {
-          if (!d.requiredDeliveryDate) return true          // undated & undelivered -> still show
-          const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
-          return req <= in2wk                                // due within 2 weeks (incl. overdue)
-        }
-        // delivered: only show if it was due within the last/next 2 weeks window
-        const req = d.requiredDeliveryDate ? new Date(d.requiredDeliveryDate) : null
-        if (req) { req.setHours(0, 0, 0, 0); return req >= now && req <= in2wk }
-        return false
+        if (statusFilter === 'delivered') return !!d.actualDeliveryDate
+        // 'scheduled' = not yet delivered (keep the 2-week focus for dated ones).
+        if (d.actualDeliveryDate) return false
+        if (!d.requiredDeliveryDate) return true            // undated & undelivered -> still show
+        const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
+        return req <= in2wk                                  // due within 2 weeks (incl. overdue)
       })
       .sort((a, b) => (a.requiredDeliveryDate || '').localeCompare(b.requiredDeliveryDate || ''))
-  }, [deliveries, projectNo])
+  }, [deliveries, projectNo, statusFilter])
 
   const selProject = projects.find(p => p.key === projectNo)
 
@@ -97,12 +94,22 @@ export default function DeliveriesView() {
           </>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px' }}>
               <button onClick={() => setProjectNo('')} style={{ background: '#f2f2f0', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: '#555' }}>‹ Projects</button>
               <div style={{ fontWeight: 700, color: INK, fontSize: 15 }}>{selProject?.projectNo}{selProject?.projectName && selProject.projectName !== selProject.projectNo ? ` — ${selProject.projectName}` : ''}</div>
             </div>
 
-            {!rows.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No deliveries for this project.</div>
+            {/* Scheduled / Delivered filter (default Scheduled) */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {[['scheduled', 'Scheduled'], ['delivered', 'Delivered']].map(([v, label]) => (
+                <button key={v} onClick={() => setStatusFilter(v)}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: statusFilter === v ? `2px solid ${BRAND}` : '1px solid #e3e0d9', background: statusFilter === v ? '#fffbeb' : '#fff', color: statusFilter === v ? INK : '#777', fontWeight: statusFilter === v ? 700 : 500, fontSize: 14, cursor: 'pointer' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {!rows.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>{statusFilter === 'delivered' ? 'No delivered items for this project.' : 'No scheduled deliveries for this project.'}</div>
               : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {rows.map(d => (
