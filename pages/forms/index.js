@@ -224,11 +224,6 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Complete a Form</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Site diaries, checklists, reports</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
-        <button onClick={() => router.push('/forms/completed')} style={homeCard}>
-          <div style={{ fontSize: 30 }}>✅</div>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Completed Forms</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>View or edit submitted forms</div></div>
-          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
-        </button>
         <button onClick={() => setMode('details')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📁</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>View Project Details</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings & RAMS for your project</div></div>
