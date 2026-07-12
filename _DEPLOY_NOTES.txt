@@ -1,45 +1,26 @@
-SITE APP — STAGE 1a: Forms (seed, reorg, Daily Site Diary auto-fill, type-aware edit)
+SITE APP — STAGE 1b: Operative Deliveries + Start-on-Site fix
 
-NEW/CHANGED FILES
-  lib/formDefsExtra.js  (NEW) — 5 forms converted from the Fonn exports to the internal model:
-     • ACCIDENT BOOK: H&S Incident Record        (group: hs-incidence)
-     • Near Miss Report Form                     (group: hs-incidence)
-     • H&S Accident and Incident Report and Lessons Learnt  (group: hs-incidence, CM-only)
-     • Daywork Sheet & Onsite Instructions
-     • Using a Harness
-  lib/formDefs.js — appends EXTRA_SEED_FORMS to SEED_FORMS.
-  pages/api/forms.js — new POST { action:'seed-missing' }: additively inserts any seed forms whose id
-     isn't already present, WITHOUT touching existing/edited forms. Safe to run repeatedly.
+  pages/forms/index.js
+   - FIX: "Start on Site Checklist" is no longer forced under the Contracts Manager section — it's a normal
+     form completable by anyone and now sits in the main alphabetical list. (The CM section now only holds
+     forms explicitly tagged accessLevel:'contracts-manager', i.e. the H&S Accident & Incident Report.)
+   - Added a "Deliveries" card to the Site App home (all users).
 
-  pages/forms/index.js — "Complete a Form" list reorganised:
-     • Alphabetical within each group.
-     • New "H&S Incidence Reporting" sub-section (Accident Book, Near Miss, + the CM-only H&S Report).
-     • New "Contracts Manager" sub-section (shown only to CM logins) containing the Start on Site
-       Checklist and CM-only forms.
-     • Forms tagged accessLevel:'contracts-manager' are hidden from operatives.
+  pages/forms/deliveries.js  (NEW) — operative Deliveries schedule:
+   - Select a PROJECT first (only projects that have deliveries are listed); the project name shows at the
+     top once selected.
+   - Per delivery shows: PO No, Supplier, Items, required/actual date, comments, attachment status.
+   - Tap a delivery to update. EDITABLE on mobile: Actual Delivery Date, Comments, Attachments only.
+     Everything else (PO, supplier, items, required date) is read-only.
+   - Proof of delivery = a photo (camera or gallery) OR a typed delivery note. If none is attached, a
+     warning appears on save ("Save anyway") — the operative can still submit.
+   - NO delete option.
+   - Reads/writes the SAME ops:deliveries store as the portal Deliveries page (Xero-synced POs), so
+     confirmations/photos/comments appear in both.
 
-  pages/forms/fill.js — Daily Site Diary auto-fill + searchable people:
-     • "Insert your name" (any members field labelled "your name") auto-fills the logged-in user.
-     • "Personnel on site working on behalf of Rock" defaults to whoever is allocated on the Planning
-       Gantt for that project on the selected diary date (still fully editable).
-     • The people picker (members fields) is now a SEARCHABLE list sourced from the Operatives roster
-       (falls back to Team Members), with selected people shown as removable chips.
+  middleware.js
+   - Added /api/deliveries, /api/operatives and /api/planning to the Site App passthrough so the Deliveries
+     view (and the Daily Site Diary Gantt auto-fill from 1a) can load their data.
 
-  components/SubmissionModal.js — editing a submitted form now renders the SAME control types as the
-     original form (single/multi choice keep their options, yes/no, date picker, long/short text, photos),
-     instead of turning every answer into a plain text box. It loads the form definition by formId.
-
-TO ACTIVATE THE NEW FORMS after deploy (one-time, additive — does NOT wipe existing forms):
-   POST https://app.rockroofing.co.uk/api/forms   body: {"action":"seed-missing"}
-   (e.g. from the browser console:
-      fetch('/api/forms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'seed-missing'})}).then(r=>r.json()).then(console.log)
-   It returns { added:[...ids] }. )
-
-Deploy all six files. No cron/env change.
-
-STILL TO COME (next drops):
-  1b — Operative Deliveries view (select project; PO/Supplier/Items/Actual date/Comments/Attachments;
-       photo/note warning; no delete; only actual date/comments/attachments editable on mobile).
-  Stage 2 — Contracts Manager Site App: Pre-Start section, Forms Completed, Missing Forms (CM's projects,
-       last-2-weeks default), Issues Log, SRATs (view+create), Live Tasks, Variations — all mobile,
-       project-first with the project name shown at the top.
+Deploy all three. Deploy AFTER siteapp-1a-forms (this index.js supersedes 1a's index.js).
+No cron/env change.

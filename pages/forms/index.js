@@ -194,6 +194,11 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Report Site Issue</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Raise a Site Issue</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
+        <button onClick={() => router.push('/forms/deliveries')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>🚚</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Deliveries</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Confirm deliveries & attach proof</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
         {/* Contracts Manager-only options appear here. */}
         {isCM && (
           <button onClick={() => router.push('/forms/issues-log')} style={homeCard}>
@@ -379,10 +384,8 @@ function FormsList({ user, onBack }) {
   const visible = forms.filter(f => !f.accessLevel || f.accessLevel !== 'contracts-manager' || isCM)
   const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '')
 
-  // "Start on Site Checklist" belongs under the Contracts Manager section.
-  const isStartOnSite = f => f.id === 'start-on-site' || /start on site/i.test(f.title || '')
   const isHS = f => f.group === 'hs-incidence'
-  const isCMForm = f => f.accessLevel === 'contracts-manager' || isStartOnSite(f)
+  const isCMForm = f => f.accessLevel === 'contracts-manager'
 
   const general = visible.filter(f => !isHS(f) && !isCMForm(f)).sort(byTitle)
   const hs = visible.filter(f => isHS(f) && !isCMForm(f)).sort(byTitle)
