@@ -117,7 +117,7 @@ export default function Deliveries() {
         action={
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => load(true)} disabled={syncing} style={ghostBtn}>{syncing ? 'Syncing…' : 'Sync with Xero'}</button>
-            <button onClick={() => setEdit({ projectNo: '', projectName: '', deliveryAddress: '', poNumber: '', orderDate: '', requiredDeliveryDate: '', lineItems: [], poSent: false, supplierConfirmedDate: false, secondCheck: false, actualDeliveryDate: '', attachments: [], comments: '' })} style={primaryBtn}>+ Add delivery</button>
+            <button onClick={() => setEdit({ projectNo: '', projectName: '', deliveryAddress: '', poNumber: '', supplier: '', orderDate: '', requiredDeliveryDate: '', lineItems: [], poSent: false, supplierConfirmedDate: false, secondCheck: false, actualDeliveryDate: '', attachments: [], comments: '' })} style={primaryBtn}>+ Add delivery</button>
           </div>
         } />
 
@@ -277,6 +277,7 @@ function DeliveryModal({ row, projectOptions, onClose, onSave }) {
         <div style={{ flex: 1 }}><Lbl>PO number</Lbl><input value={f.poNumber || ''} onChange={e => setF({ ...f, poNumber: e.target.value })} style={inp2} /></div>
         <div style={{ flex: 1 }}><Lbl>Order date</Lbl><input type="date" value={f.orderDate || ''} onChange={e => setF({ ...f, orderDate: e.target.value })} style={inp2} /></div>
       </div>
+      <Lbl>Supplier</Lbl><input value={f.supplier || ''} onChange={e => setF({ ...f, supplier: e.target.value })} placeholder="Supplier name" style={inp2} />
       <Lbl>Delivery address</Lbl><textarea value={f.deliveryAddress || ''} onChange={e => setF({ ...f, deliveryAddress: e.target.value })} style={{ ...inp2, minHeight: 48 }} />
       <Lbl>Scheduled delivery date</Lbl><input type="date" value={f.requiredDeliveryDate || ''} onChange={e => setF({ ...f, requiredDeliveryDate: e.target.value })} style={inp2} />
 

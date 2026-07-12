@@ -1,15 +1,9 @@
-DELIVERIES — View button fix + Scheduled Delivery green rule
-
-  components/RowAttachments.js
-   - Fix: clicking "View" now closes the attachments list modal and opens the full-screen viewer cleanly
-     (previously the viewer could open behind the still-open modal and appear to do nothing).
-   - Viewer is now robust to files with no extension / missing type: it attempts to render as an image and
-     only falls back to the "Download to view" panel if the image genuinely fails to load. PDFs still embed.
-   (Affects Deliveries, Procurement, Risk Log, Live Tasks — all share this component.)
+DELIVERIES — Supplier field in Add/Edit form
 
   pages/operations/project-management/deliveries.js
-   - The Scheduled Delivery cell now goes green ONLY when a scheduled date is actually set. Marking
-     "PO Sent" = Yes no longer turns the Scheduled Delivery cell green. (PO Sent still greens its own cell
-     and the columns to its left as before.)
+   - The Add/Edit delivery form now has a "Supplier" text box (below PO number / Order date), which
+     populates the Supplier column in the table. Previously the Supplier column could only be filled by the
+     Xero sync — manually added deliveries had no way to set it.
+   - "+ Add delivery" now initialises a supplier field too.
 
-Deploy both. No cron/env change.
+Deploy this single file. No cron/env change.
