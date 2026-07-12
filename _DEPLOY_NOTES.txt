@@ -1,17 +1,31 @@
-SITE APP — Drawings/RAMS in-app viewer with prev/next
+DELIVERIES — enhancements
 
-  pages/forms/index.js
-   - Tapping "View" (or the thumbnail) on a Drawing or RAMS now opens an IN-APP full-screen viewer instead
-     of navigating away to the file link — so operatives can always get back to the app (× or Escape).
-   - The viewer supports moving through the list:
-        • on-screen ‹ / › arrows either side of the file,
-        • "‹ Previous" / "Next ›" buttons at the bottom,
-        • left/right keyboard arrows,
-        • swipe left = next, swipe right = previous (touch).
-   - Shows "n of N" position; Download is still available from the top bar.
-   - Images render inline; PDFs render in an embedded frame within the overlay (no page navigation).
+  pages/operations/project-management/deliveries.js  (portal)
+   - When PO Sent, Supplier Confirmed, or 2nd Check is switched to "Yes", a prompt asks
+     "Is the required delivery date of <date> still applicable?" reminding you to update it in the
+     Required Delivery column if not.
 
-   (This file also still contains the earlier Deliveries home card and the Start-on-Site list fix, so it
-    supersedes the index.js from siteapp-1b-deliveries — deploy this one.)
+  pages/forms/deliveries.js  (Site App)
+   - Required Delivery Date now shown on each delivery card (and already in the editor).
+   - PO line items are listed on SEPARATE bulleted lines (card + editor).
+   - Proof warning reworded to: "Please attach a delivery note or photos. If not available, tap Save anyway."
+   - The list now only shows deliveries that are EITHER not yet marked delivered OR due within the next
+     2 weeks (delivered items outside that window are hidden to keep the site view focused).
 
-Deploy this single file (it replaces pages/forms/index.js). No API/cron/env change.
+  pages/api/cron/deliveries-notify.js  (NEW)  — runDeliveriesNotify()
+   - Finds deliveries whose Required Delivery Date is TODAY and not yet delivered, grouped by project.
+   - Emails the effective site supervisor (Project Details supervisor if on the Gantt, else the first
+     qualified Gantt supervisor) a list of expected deliveries (PO, supplier, bulleted items), a note to
+     call the Rock Roofing Operations Manager (name + phone + email pulled from Team) for more info, and a
+     reminder to mark each delivery as delivered in the Site App and attach the delivery note + photos.
+
+  pages/api/cron/hs-expiry-email.js  (daily dispatcher)
+   - Now also runs the deliveries notification EVERY day at 07:00 (alongside the Monday forms digest and
+     1st-of-month H&S expiry). No new Vercel cron is added — stays within the Hobby 2-cron limit.
+
+TESTING: hit /api/cron/hs-expiry-email?force=1 to run all jobs now (deliveries-notify only emails for
+deliveries dated today).
+
+Deploy all four. Deploy AFTER siteapp-1b-deliveries (this pages/forms/deliveries.js supersedes it).
+No new env vars required; uses existing RESEND_API_KEY / FORMS_FROM_EMAIL (and ALERT_EMAIL as a fallback
+Ops-Manager contact). Ensure the Operations Manager's phone is set on their Team record for the call note.
