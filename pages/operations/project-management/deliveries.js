@@ -99,7 +99,14 @@ export default function Deliveries() {
   }
 
   const yn = (r, key) => (
-    <select value={r[key] ? 'yes' : 'no'} onChange={e => patch(r.id, { [key]: e.target.value === 'yes' })} style={{ ...sel, minWidth: 72, padding: '5px 8px' }}>
+    <select value={r[key] ? 'yes' : 'no'} onChange={e => {
+      const toYes = e.target.value === 'yes'
+      if (toYes && !r[key]) {
+        const dstr = r.requiredDeliveryDate ? new Date(r.requiredDeliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'not set'
+        alert(`Is the required delivery date of ${dstr} still applicable?\n\nIf not, please update it in the "Required Delivery" column of this row.`)
+      }
+      patch(r.id, { [key]: toYes })
+    }} style={{ ...sel, minWidth: 72, padding: '5px 8px' }}>
       <option value="no">No</option><option value="yes">Yes</option>
     </select>
   )

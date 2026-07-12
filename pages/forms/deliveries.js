@@ -43,17 +43,27 @@ export default function DeliveriesView() {
     return Object.values(map).sort((a, b) => (a.projectNo || a.projectName).localeCompare(b.projectNo || b.projectName, undefined, { numeric: true }))
   }, [deliveries])
 
-  const rows = useMemo(() => deliveries
-    .filter(d => (d.projectNo || d.projectName || '') === projectNo)
-    .sort((a, b) => (a.requiredDeliveryDate || '').localeCompare(b.requiredDeliveryDate || '')), [deliveries, projectNo])
+  const rows = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0)
+    const in2wk = new Date(now.getTime() + 14 * 86400000)
+    return deliveries
+      .filter(d => (d.projectNo || d.projectName || '') === projectNo)
+      // Show only deliveries NOT yet marked delivered, OR due within the next 2 weeks.
+      .filter(d => {
+        if (!d.actualDeliveryDate) {
+          if (!d.requiredDeliveryDate) return true          // undated & undelivered -> still show
+          const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
+          return req <= in2wk                                // due within 2 weeks (incl. overdue)
+        }
+        // delivered: only show if it was due within the last/next 2 weeks window
+        const req = d.requiredDeliveryDate ? new Date(d.requiredDeliveryDate) : null
+        if (req) { req.setHours(0, 0, 0, 0); return req >= now && req <= in2wk }
+        return false
+      })
+      .sort((a, b) => (a.requiredDeliveryDate || '').localeCompare(b.requiredDeliveryDate || ''))
+  }, [deliveries, projectNo])
 
   const selProject = projects.find(p => p.key === projectNo)
-
-  function itemsText(d) {
-    const items = d.lineItems || []
-    if (!items.length) return '—'
-    return items.map(li => `${li.description || li.item || ''}${li.quantity ? ` ×${li.quantity}` : ''}`).filter(Boolean).join(', ')
-  }
 
   if (!ready) return <Shell user={user}><div style={{ textAlign: 'center', color: '#999', paddingTop: 40 }}>Loading…</div></Shell>
 
@@ -102,7 +112,8 @@ export default function DeliveriesView() {
                         <div style={{ fontSize: 12, color: d.actualDeliveryDate ? '#16a34a' : '#999' }}>{d.actualDeliveryDate ? `✓ Delivered ${fmtDate(d.actualDeliveryDate)}` : (d.requiredDeliveryDate ? `Due ${fmtDate(d.requiredDeliveryDate)}` : '')}</div>
                       </div>
                       <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{d.supplier || '—'}</div>
-                      <div style={{ fontSize: 12.5, color: '#777', marginTop: 6 }}>{itemsText(d)}</div>
+                      {d.requiredDeliveryDate && <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>Required delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong></div>}
+                      <ItemList items={d.lineItems || []} />
                       {d.comments && <div style={{ fontSize: 12, color: '#666', marginTop: 6, fontStyle: 'italic' }}>“{d.comments}”</div>}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                         <div style={{ fontSize: 12, color: (d.attachments || []).length ? '#16a34a' : '#c2410c' }}>
@@ -192,7 +203,10 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
         <div style={{ padding: '16px 18px 28px' }}>
           {/* Read-only details */}
           <Detail label="Supplier" value={delivery.supplier || '—'} />
-          <Detail label="Items" value={items.length ? items.map(li => `${li.description || li.item || ''}${li.quantity ? ` ×${li.quantity}` : ''}`).filter(Boolean).join(', ') : '—'} />
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: '#999' }}>Items</div>
+            <ItemList items={items} />
+          </div>
           {delivery.requiredDeliveryDate && <Detail label="Required delivery date" value={fmtDate(delivery.requiredDeliveryDate)} />}
 
           {/* Editable */}
@@ -237,7 +251,7 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
 
           {warn && !attachments.length && (
             <div style={{ marginTop: 14, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#92400e' }}>
-              ⚠️ You haven't attached a photo or delivery note as proof. You can still save — tap “Save anyway”.
+              ⚠️ Please attach a delivery note or photos. If not available, tap “Save anyway”.
             </div>
           )}
           {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
@@ -257,6 +271,16 @@ const Detail = ({ label, value }) => (
     <div style={{ fontSize: 14, color: INK }}>{value}</div>
   </div>
 )
+// Each PO line item on its own bulleted line.
+const ItemList = ({ items }) => {
+  const list = (items || []).map(li => `${li.description || li.item || ''}${li.quantity ? ` ×${li.quantity}` : ''}`.trim()).filter(Boolean)
+  if (!list.length) return <div style={{ fontSize: 14, color: '#999', marginTop: 2 }}>—</div>
+  return (
+    <ul style={{ margin: '4px 0 0', paddingLeft: 18, fontSize: 13, color: '#555' }}>
+      {list.map((t, i) => <li key={i} style={{ marginBottom: 2 }}>{t}</li>)}
+    </ul>
+  )
+}
 const Lbl = ({ children }) => <div style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 6 }}>{children}</div>
 const inp = { width: '100%', boxSizing: 'border-box', padding: '12px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, fontFamily: 'inherit', outline: 'none' }
 const smallBtn = { background: '#fff', border: '2px solid #e3e0d9', borderRadius: 12, padding: '10px 14px', fontSize: 14, cursor: 'pointer', color: INK }
