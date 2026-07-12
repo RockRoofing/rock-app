@@ -134,7 +134,10 @@ export default function LiveTasks() {
                       <td style={{ ...td, ...greenCell, minWidth: 260 }}><ExpandableText value={r.description} onSave={v => patchTask(r.id, { description: v })} label="Task" width="100%" /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell, color: '#888', fontSize: 12.5 }}>{r.createdAt ? fmtDate(r.createdAt) : '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : <span style={{ color: '#c2410c', fontWeight: 600, fontSize: 12 }}>⚠ No target date</span>}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>
+                        <input type="date" value={r.closeOutDate || ''} onChange={e => patchTask(r.id, { closeOutDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
+                        {!r.closeOutDate && <div style={{ color: '#c2410c', fontWeight: 600, fontSize: 11, marginTop: 3 }}>Target Completion Date Required</div>}
+                      </td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
                         <select value={resolved ? 'yes' : 'no'} onChange={e => patchTask(r.id, { closed: e.target.value === 'yes' })} style={{ ...sel, minWidth: 80, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>

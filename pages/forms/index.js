@@ -273,6 +273,55 @@ function isImage(f) {
   return /\.(jpe?g|png|gif|webp|bmp|heic|heif)(\?|$)/i.test(f.name || f.url || '')
 }
 
+// Renders a PDF's pages to canvases (scrollable) using pdf.js — the browser can't
+// hijack this into a "download/open" prompt the way it does with an <iframe> PDF.
+function PdfCanvas({ url }) {
+  const holderRef = useRef()
+  const [state, setState] = useState('loading')  // loading | ok | failed
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+            s.onload = resolve; s.onerror = reject; document.body.appendChild(s)
+          })
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        }
+        const pdf = await window.pdfjsLib.getDocument(url).promise
+        if (cancelled) return
+        const holder = holderRef.current; if (!holder) return
+        holder.innerHTML = ''
+        const maxW = Math.min(holder.clientWidth || 900, 1000)
+        for (let n = 1; n <= pdf.numPages; n++) {
+          const page = await pdf.getPage(n)
+          if (cancelled) return
+          const vp0 = page.getViewport({ scale: 1 })
+          const scale = (maxW / vp0.width) * (window.devicePixelRatio || 1)
+          const viewport = page.getViewport({ scale })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width; canvas.height = viewport.height
+          canvas.style.width = '100%'; canvas.style.height = 'auto'
+          canvas.style.marginBottom = '10px'; canvas.style.borderRadius = '6px'; canvas.style.background = '#fff'
+          holder.appendChild(canvas)
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+        }
+        if (!cancelled) setState('ok')
+      } catch { if (!cancelled) setState('failed') }
+    })()
+    return () => { cancelled = true }
+  }, [url])
+  return (
+    <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
+      {state === 'loading' && <div style={{ color: '#bbb', textAlign: 'center', paddingTop: 40 }}>Loading PDF…</div>}
+      {state === 'failed' && <div style={{ color: '#bbb', textAlign: 'center', paddingTop: 40 }}>Couldn't render this PDF — use Download.</div>}
+      <div ref={holderRef} style={{ maxWidth: 1000, margin: '0 auto' }} />
+    </div>
+  )
+}
+
 function ProjectDetailsView({ onBack }) {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -428,7 +477,7 @@ function FileViewer({ files, index, onIndex, onClose }) {
         {isImage(f)
           ? <img key={f.url} src={inlineUrl} data-stage="proxy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
               onError={(e) => { const s = e.target.getAttribute('data-stage'); if (s === 'proxy') { e.target.setAttribute('data-stage', 'raw'); e.target.src = f.url } }} />
-          : <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+          : <PdfCanvas key={f.url} url={inlineUrl} />}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
 

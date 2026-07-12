@@ -156,7 +156,7 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
         {isPdf(f)
-          ? <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
+          ? <PdfCanvasA key={f.url} url={inlineUrl} />
           : <img key={f.url} src={inlineUrl} alt={f.name || ''} data-stage="proxy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
               onError={(e) => {
                 const stage = e.target.getAttribute('data-stage')
@@ -183,3 +183,51 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
   return createPortal(overlay, document.body)
 }
 const pageNavBtn = { background: 'rgba(255,255,255,0.14)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
+
+// Render a PDF to canvases via pdf.js (mobile browsers won't inline-render PDFs in an iframe).
+function PdfCanvasA({ url }) {
+  const holderRef = useRef()
+  const [state, setState] = useState('loading')
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+            s.onload = resolve; s.onerror = reject; document.body.appendChild(s)
+          })
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        }
+        const pdf = await window.pdfjsLib.getDocument(url).promise
+        if (cancelled) return
+        const holder = holderRef.current; if (!holder) return
+        holder.innerHTML = ''
+        const maxW = Math.min(holder.clientWidth || 900, 1000)
+        for (let n = 1; n <= pdf.numPages; n++) {
+          const page = await pdf.getPage(n)
+          if (cancelled) return
+          const vp0 = page.getViewport({ scale: 1 })
+          const scale = (maxW / vp0.width) * (window.devicePixelRatio || 1)
+          const viewport = page.getViewport({ scale })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width; canvas.height = viewport.height
+          canvas.style.width = '100%'; canvas.style.height = 'auto'
+          canvas.style.marginBottom = '10px'; canvas.style.borderRadius = '6px'; canvas.style.background = '#fff'
+          holder.appendChild(canvas)
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+        }
+        if (!cancelled) setState('ok')
+      } catch { if (!cancelled) setState('failed') }
+    })()
+    return () => { cancelled = true }
+  }, [url])
+  return (
+    <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
+      {state === 'loading' && <div style={{ color: '#bbb', textAlign: 'center', paddingTop: 40 }}>Loading PDF…</div>}
+      {state === 'failed' && <div style={{ color: '#bbb', textAlign: 'center', paddingTop: 40 }}>Couldn't render this PDF — use Download.</div>}
+      <div ref={holderRef} style={{ maxWidth: 1000, margin: '0 auto' }} />
+    </div>
+  )
+}

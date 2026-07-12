@@ -1,33 +1,21 @@
-SITE APP + PORTAL — fixes batch 3
+SITE APP + PORTAL — PDF viewer (canvas) + task fixes
 
-DRAWINGS / RAMS VIEWER (pages/forms/index.js)
-  - The viewer now loads PDFs and images through the inline proxy (/api/download?inline=1) — served
-    same-origin with the right content-type and Content-Disposition: inline — instead of the raw blob URL.
-    That stops the browser showing its native "Open / Download" PDF fallback (per screenshot) and renders
-    the drawing/RAMS inside the in-app viewer. Images fall back to the raw URL if the proxy ever fails.
+DRAWINGS / RAMS + DELIVERIES PDF VIEWING
+  The reason PDFs kept showing the browser's "Open / download" prompt is that mobile Chrome refuses to
+  inline-render a PDF in an <iframe>, no matter the headers. Fix: PDFs are now rendered with pdf.js onto
+  <canvas> elements (scrollable, all pages), which the browser cannot hijack.
+  - pages/forms/index.js: FileViewer now uses a PdfCanvas component for PDFs (Drawings & RAMS). Images
+    still render via the inline proxy.
+  - components/RowAttachments.js: the shared AttachmentViewer (Deliveries/Procurement/Risk/Tasks) now uses
+    the same pdf.js canvas for PDFs.
+  pdf.js is loaded from the same CDN already used for thumbnails; PDFs load via /api/download?inline=1 so
+  pdf.js fetches them same-origin.
 
-DELIVERIES / ATTACHMENT VIEWER (components/RowAttachments.js)
-  - Same change: images/PDFs load via the inline proxy first (correct MIME type), then raw URL, then the
-    download panel. Correctly-uploaded proof photos now display in-app.
-  - NOTE: 45361.jpg in the screenshot is a photo uploaded during the earlier FormData bug — its stored
-    bytes are corrupted, so it will still not preview. Re-upload it; new photos are fine.
+PORTAL LIVE PROJECT TASKS (pages/operations/project-management/tasks.js)
+  - Target Completion date is now editable INLINE (date picker in the cell), like the other schedules.
+  - When no target date is set, the cell shows "Target Completion Date Required" (was "No target date").
 
-LIVE PROJECT TASKS
-  - pages/forms/cm/tasks.js: sorted by Target Completion date, EARLIEST first (tasks with no date go to
-    the bottom). Added a "⚠ No target date set" warning on any task card without a target completion date.
-  - pages/operations/project-management/tasks.js: the portal table now shows "⚠ No target date" in the
-    Target Completion cell when none is set.
+Deploy all three files. No cron/env change.
 
-ISSUE NOTIFICATION (pages/api/issue-notify.js)
-  - The Operations Manager and QS info-only emails now have the branded Issue PDF ATTACHED (for
-    information). Only the CM gets the "Review & action" button. Nothing is sent to the customer at this
-    stage (customer sending remains a separate manual step from the tracker).
-
-VARIATIONS (pages/forms/cm/variations.js)
-  - FIX: the dashboard identifies projects by jobNo, not projectNo — the match was failing, so the table
-    was always empty. Now matches p.projectNo against the dashboard project's jobNo (falls back to a sync).
-    Project-first, then Variation number / Description / Instructed / Total.
-
-Deploy all files. No cron/env change.
-
-STILL TO COME: Pre-Start area rework; view/edit completed forms in the Site App.
+STILL TO COME (next drop): Pre-Start area rework (project-first; Complete new vs View completed; Submit &
+send to customer pulling IHM siteContacts with add/delete) and view/edit completed Forms inside the app.
