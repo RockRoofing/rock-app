@@ -103,7 +103,7 @@ export default function Deliveries() {
       const toYes = e.target.value === 'yes'
       if (toYes && !r[key]) {
         const dstr = r.requiredDeliveryDate ? new Date(r.requiredDeliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'not set'
-        alert(`Is the required delivery date of ${dstr} still applicable?\n\nIf not, please update it in the "Required Delivery" column of this row.`)
+        alert(`Is the scheduled delivery date of ${dstr} still applicable?\n\nIf not, please update it in the "Scheduled Delivery" column of this row.`)
       }
       patch(r.id, { [key]: toYes })
     }} style={{ ...sel, minWidth: 72, padding: '5px 8px' }}>
@@ -144,8 +144,9 @@ export default function Deliveries() {
                 <th onClick={() => toggleSort('orderDate')} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>Order Date{sort.key === 'orderDate' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
                 <th style={th}>Address</th>
                 <th style={th}>Items</th>
-                <th style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort('requiredDeliveryDate')}>Required Delivery{sort.key === 'requiredDeliveryDate' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
-                <th style={th}>PO Sent</th><th style={th}>Supplier Confirmed</th><th style={th}>2nd Check</th>
+                <th style={th}>PO Sent</th>
+                <th style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }} onClick={() => toggleSort('requiredDeliveryDate')}>Scheduled Delivery{sort.key === 'requiredDeliveryDate' ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>
+                <th style={th}>Supplier Confirmed</th><th style={th}>2nd Check</th>
                 <th style={th}>Actual Delivery</th><th style={th}>Comments</th>
                 <th style={{ ...th, textAlign: 'right' }}>Actions</th>
               </tr></thead>
@@ -186,10 +187,11 @@ export default function Deliveries() {
                           ? <button onClick={() => setItems(r)} style={{ ...linkBtn, padding: 0 }}>View items ({r.lineItems.length})</button>
                           : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
                       </td>
+                      <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'poSent')}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...((delivered || lastGreen >= 0) ? GREENC : dateCellStyle(r.requiredDeliveryDate)) }}>
                         <input type="date" value={r.requiredDeliveryDate || ''} onChange={e => patch(r.id, { requiredDeliveryDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
+                        {!r.requiredDeliveryDate && <div style={{ fontSize: 11, color: '#c2410c', fontWeight: 600, marginTop: 3 }}>⚠ No scheduled date set</div>}
                       </td>
-                      <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'poSent')}</td>
                       <td style={{ ...td, ...stageGreen(2) }}>{yn(r, 'supplierConfirmedDate')}</td>
                       <td style={{ ...td, ...stageGreen(3) }}>{yn(r, 'secondCheck')}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
@@ -276,7 +278,7 @@ function DeliveryModal({ row, projectOptions, onClose, onSave }) {
         <div style={{ flex: 1 }}><Lbl>Order date</Lbl><input type="date" value={f.orderDate || ''} onChange={e => setF({ ...f, orderDate: e.target.value })} style={inp2} /></div>
       </div>
       <Lbl>Delivery address</Lbl><textarea value={f.deliveryAddress || ''} onChange={e => setF({ ...f, deliveryAddress: e.target.value })} style={{ ...inp2, minHeight: 48 }} />
-      <Lbl>Required delivery date</Lbl><input type="date" value={f.requiredDeliveryDate || ''} onChange={e => setF({ ...f, requiredDeliveryDate: e.target.value })} style={inp2} />
+      <Lbl>Scheduled delivery date</Lbl><input type="date" value={f.requiredDeliveryDate || ''} onChange={e => setF({ ...f, requiredDeliveryDate: e.target.value })} style={inp2} />
 
       <Lbl>Line items (description &amp; quantity)</Lbl>
       {isXero && <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>Pulled from Xero. You can adjust if needed.</div>}

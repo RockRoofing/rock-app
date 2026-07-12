@@ -1,26 +1,24 @@
-ATTACHMENTS — in-app viewer + real download (Deliveries, Procurement, Risk Log, Live Tasks)
+DELIVERIES — Scheduled Delivery rename, column move, warnings, app viewer/download
 
-These four portal pages all share components/RowAttachments.js, so fixing it fixes all of them.
+DEPENDS ON: attachments-viewer-download.zip must be deployed first (this uses the AttachmentViewer +
+downloadFile now exported from components/RowAttachments.js).
 
-  components/RowAttachments.js
-   - VIEW now opens an IN-APP viewer overlay (like the Drawings viewer) instead of opening the raw URL in
-     a new tab: images render inline, PDFs embed, other types offer a download. Includes prev/next via
-     on-screen ‹ / › arrows, "‹ Previous / Next ›" buttons, left/right arrow keys, and swipe. Close with ×
-     or Escape — you never leave the page.
-   - DOWNLOAD now saves the actual file with its correct name and extension (e.g. .jpg/.pdf) instead of a
-     generic "file". It routes through a new same-origin download proxy that sets the filename; falls back
-     to a blob fetch, then to opening the URL.
-   - Small thumbnails now show next to image attachments in the list. Optional readOnly prop hides the
-     add/remove controls (not required by the existing callers).
+  pages/operations/project-management/deliveries.js  (portal)
+   - "Required Delivery" renamed to "Scheduled Delivery" everywhere (column header, edit-form label, and
+     the PO-stage reminder prompt).
+   - The Scheduled Delivery column has MOVED to sit immediately AFTER the "PO Sent" column
+     (order now: … Items · PO Sent · Scheduled Delivery · Supplier Confirmed · 2nd Check · Actual Delivery …).
+   - In-cell warning: when no scheduled delivery date is set, the cell shows "⚠ No scheduled date set"
+     under the date box.
+   - Attachments already use the shared RowAttachments component, so View (in-app viewer) and Download
+     (correct filename) now behave the same as Procurement / Risk Log / Live Tasks.
 
-  pages/api/download.js  (NEW)
-   - GET /api/download?url=<blob url>&name=<filename> — streams a Vercel Blob file back through our origin
-     with Content-Disposition: attachment so the browser saves it correctly. Restricted to
-     *.blob.vercel-storage.com hosts.
+  pages/forms/deliveries.js  (Site App)
+   - "Required delivery" renamed to "Scheduled delivery" on the card and in the editor.
+   - Removed the "Due <date>" text from the top-right of each delivery card (delivered cards still show the
+     green "✓ Delivered <date>").
+   - Card now shows "⚠ No scheduled delivery date set" when the date is missing.
+   - Proof photos: tap a photo to open the same full-screen in-app viewer (prev/next/swipe) used elsewhere,
+     with a Download button that saves the real image file.
 
-  middleware.js
-   - Added /api/download to the Site App passthrough (so attachments can also be downloaded from Site App
-     contexts).
-
-No change needed to deliveries.js / procurement.js / risks.js / tasks.js — they already import
-RowAttachments. Deploy all three files. No cron/env change.
+Deploy both. Deploy AFTER attachments-viewer-download.zip. No cron/env change.

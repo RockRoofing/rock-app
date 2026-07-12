@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
+import { AttachmentViewer, downloadFile } from '../../components/RowAttachments'
 
 const INK = '#1a1a19'
 const BRAND = '#ca8a04'
@@ -109,10 +110,12 @@ export default function DeliveriesView() {
                       style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: 14, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                         <div style={{ fontWeight: 700, color: INK, fontSize: 14 }}>{d.poNumber || '—'}</div>
-                        <div style={{ fontSize: 12, color: d.actualDeliveryDate ? '#16a34a' : '#999' }}>{d.actualDeliveryDate ? `✓ Delivered ${fmtDate(d.actualDeliveryDate)}` : (d.requiredDeliveryDate ? `Due ${fmtDate(d.requiredDeliveryDate)}` : '')}</div>
+                        {d.actualDeliveryDate && <div style={{ fontSize: 12, color: '#16a34a' }}>✓ Delivered {fmtDate(d.actualDeliveryDate)}</div>}
                       </div>
                       <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{d.supplier || '—'}</div>
-                      {d.requiredDeliveryDate && <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>Required delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong></div>}
+                      {d.requiredDeliveryDate
+                        ? <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>Scheduled delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong></div>
+                        : <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginTop: 4 }}>⚠ No scheduled delivery date set</div>}
                       <ItemList items={d.lineItems || []} />
                       {d.comments && <div style={{ fontSize: 12, color: '#666', marginTop: 6, fontStyle: 'italic' }}>“{d.comments}”</div>}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 10, marginTop: 8 }}>
@@ -144,6 +147,7 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [warn, setWarn] = useState(false)
   const [err, setErr] = useState('')
+  const [photoView, setPhotoView] = useState(null)   // index into photo attachments
   const cameraRef = useRef(); const galleryRef = useRef()
 
   const photoCount = attachments.filter(a => a.type !== 'note').length
@@ -207,7 +211,7 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
             <div style={{ fontSize: 11, color: '#999' }}>Items</div>
             <ItemList items={items} />
           </div>
-          {delivery.requiredDeliveryDate && <Detail label="Required delivery date" value={fmtDate(delivery.requiredDeliveryDate)} />}
+          {delivery.requiredDeliveryDate && <Detail label="Scheduled delivery date" value={fmtDate(delivery.requiredDeliveryDate)} />}
 
           {/* Editable */}
           <div style={{ marginTop: 16 }}>
@@ -224,15 +228,18 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
             <Lbl>Proof of delivery (photo or delivery note)</Lbl>
             {attachments.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-                {attachments.map((a, i) => (
-                  <div key={i} style={{ position: 'relative' }}>
-                    {a.type === 'note'
-                      ? <div style={{ background: '#f2efe8', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#555', maxWidth: 180 }}>📝 {a.text}</div>
-                      : <img src={a.url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10 }} />}
-                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
-                      style={{ position: 'absolute', top: -6, right: -6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12 }}>×</button>
-                  </div>
-                ))}
+                {attachments.map((a, i) => {
+                  const photos = attachments.filter(x => x.type !== 'note')
+                  return (
+                    <div key={i} style={{ position: 'relative' }}>
+                      {a.type === 'note'
+                        ? <div style={{ background: '#f2efe8', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#555', maxWidth: 180 }}>📝 {a.text}</div>
+                        : <img src={a.url} alt="" onClick={() => setPhotoView(photos.findIndex(p => p === a))} style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 10, cursor: 'pointer' }} />}
+                      <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                        style={{ position: 'absolute', top: -6, right: -6, background: 'rgba(0,0,0,0.65)', color: '#fff', border: 'none', borderRadius: '50%', width: 20, height: 20, cursor: 'pointer', fontSize: 12 }}>×</button>
+                    </div>
+                  )
+                })}
               </div>
             )}
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
@@ -261,6 +268,11 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
           </button>
         </div>
       </div>
+      {photoView != null && (() => {
+        const photos = attachments.filter(x => x.type !== 'note')
+        if (!photos[photoView]) return null
+        return <AttachmentViewer files={photos} index={photoView} onIndex={setPhotoView} onClose={() => setPhotoView(null)} />
+      })()}
     </div>
   )
 }
