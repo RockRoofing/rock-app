@@ -47,7 +47,11 @@ export async function middleware(req) {
       pathname.startsWith('/api/download') ||
       pathname.startsWith('/api/deliveries') ||
       pathname.startsWith('/api/operatives') ||
-      pathname.startsWith('/api/planning')
+      pathname.startsWith('/api/planning') ||
+      pathname.startsWith('/api/srats') ||
+      pathname.startsWith('/api/tasks') ||
+      pathname.startsWith('/api/forms-missing') ||
+      pathname.startsWith('/api/variations')
     if (passthrough) return NextResponse.next()
     if (pathname === '/forms' || pathname.startsWith('/forms/')) return NextResponse.next()
     url.pathname = '/forms'

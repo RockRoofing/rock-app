@@ -1,21 +1,42 @@
-DELIVERIES — the real cause of broken attachment images
+SITE APP — STAGE 2: Contracts Manager area (operative features PLUS 7 CM sections)
 
-  WHAT WAS DIFFERENT ABOUT DELIVERIES:
-  The Site App Deliveries page uploaded proof photos using FormData:
-        const fd = new FormData(); fd.append('file', file)
-        fetch('/api/upload-file', { method:'POST', body: fd })
-  But /api/upload-file expects RAW file bytes with the name/type in x-filename / x-content-type headers
-  (bodyParser is off). So the delivery photos were stored as the multipart-form wrapper with content-type
-  multipart/form-data — i.e. a corrupted, non-viewable "image". That's why View showed a broken icon and
-  Download saved a file that isn't a real JPEG. Procurement / Risk Log / Live Tasks upload via
-  RowAttachments (raw bytes + headers), which is why THEY always worked.
+IDENTITY: a logged-in user is treated as a Contracts Manager when their name matches the Contracts
+Manager field (IHM/Project Details) on one or more Ops projects. Those matched projects are their
+"my projects". No new role flag needed (an accessLevel:'contracts-manager' account also counts).
 
-  pages/forms/deliveries.js
-   - handleFiles now uploads RAW bytes with the correct headers (matching RowAttachments), so delivery
-     proof photos are stored as proper images and render in the viewer everywhere.
+NEW / CHANGED FILES
+  middleware.js
+    - Added /api/srats, /api/tasks, /api/forms-missing, /api/variations to the Site App passthrough.
 
-  IMPORTANT: this fixes NEW uploads. Any photo uploaded BEFORE this fix (e.g. the current 45361.jpg) was
-  stored corrupted and will still show broken — please re-upload those few after deploying.
+  lib/cmSiteApp.js  (NEW) — shared helpers: nameMatches(), useMyProjects() hook, ProjectPicker,
+    ProjectHeader, and shared styles/among the CM pages.
 
-Deploy this single file. (Keep the earlier attachment-view-mime-name-fix too; together they cover both
-new correctly-typed images and any legitimately octet-stream ones.)
+  pages/forms/index.js
+    - Home now detects CM by name-match and shows a "Contracts Manager" section with 7 cards:
+      Pre-Start Notifications, Forms Completed, Missing Forms, Issues Log, SRATs, Live Tasks, Variations.
+    - Operatives (non-CM) see exactly what they did before. CMs get everything operatives have PLUS the
+      CM section (so CM = operative features + CM features, as intended).
+
+  pages/forms/cm/pre-start.js      — up-and-coming projects needing a Pre-Start (uses the forms-missing
+                                     14-day rule, this CM's projects only); tap to complete the Pre-Start.
+  pages/forms/cm/forms-completed.js— project-first; submitted forms with Form, Operative, Submitted,
+                                     Flags; tap to open the full submission (view/edit).
+  pages/forms/cm/missing-forms.js  — this CM's projects only (not project-filtered); date range defaults
+                                     to the last 2 weeks; Required/Completed/Completion% metrics + list.
+  pages/forms/cm/srats.js          — project-first; view existing SRATs and create a new one from mobile
+                                     (Situation, Roadblocks, Actions, Timeline) -> saved via /api/srats.
+  pages/forms/cm/tasks.js          — Live Tasks; filter by project / team member / target-date / resolved
+                                     (default Open); Task, Responsible, Target completion, Resolved,
+                                     Comments, Attachments — all editable in-app.
+  pages/forms/cm/variations.js     — project-first, read-only; Variation number, Description, Instructed,
+                                     Total (from the dashboard/commercial data).
+
+  Issues Log: the CM "Issues Log" card points at the existing /forms/issues-log page (already project-
+  filterable, editable, with created date/by, issue name, comments, resolved date and send-to-customer).
+
+DEPLOY: all files. This pages/forms/index.js supersedes earlier ones (keeps Deliveries card, Drawings
+viewer, Start-on-Site fix, and adds the CM section). No cron/env change.
+
+NOT INCLUDED (flagged for your later review pass):
+  - Issues Log "Required resolution date" field and switching issue photos -> generic attachments (the
+    issue model currently uses photos[]). Left as-is since it's functional; easy to add on review.

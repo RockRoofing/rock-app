@@ -171,7 +171,26 @@ export default function FormsHome() {
 function FormsHomeMenu({ user }) {
   const router = useRouter()
   const [mode, setMode] = useState('menu')  // menu | forms | details
-  const isCM = user?.accessLevel === 'contracts-manager'
+  const [myProjectCount, setMyProjectCount] = useState(0)
+  useEffect(() => {
+    if (!user?.name) return
+    (async () => {
+      try {
+        const d = await fetch('/api/ops-projects').then(r => r.json())
+        const norm = s => (s || '').trim().toLowerCase()
+        const mine = (d.projects || []).filter(p => {
+          const a = norm(user.name), b = norm(p.contractsManager)
+          if (!a || !b) return false
+          if (a === b) return true
+          const at = a.split(/\s+/), bt = b.split(/\s+/)
+          if (at.length >= 2 && bt.length >= 2) return at[0] === bt[0] && at[at.length - 1] === bt[bt.length - 1]
+          return false
+        })
+        setMyProjectCount(mine.length)
+      } catch {}
+    })()
+  }, [user])
+  const isCM = myProjectCount > 0 || user?.accessLevel === 'contracts-manager'
   if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
   if (mode === 'details') return <ProjectDetailsView onBack={() => setMode('menu')} />
   return (
@@ -199,13 +218,27 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Deliveries</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Confirm deliveries & attach proof</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
-        {/* Contracts Manager-only options appear here. */}
+
+        {/* ── Contracts Manager area ── */}
         {isCM && (
-          <button onClick={() => router.push('/forms/issues-log')} style={homeCard}>
-            <div style={{ fontSize: 30 }}>📋</div>
-            <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Issues Log</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Assess & action site issues</div></div>
-            <div style={{ color: BRAND, fontSize: 24 }}>›</div>
-          </button>
+          <>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND, margin: '18px 0 2px' }}>Contracts Manager</div>
+            {[
+              ['🏗️', 'Pre-Start Notifications', 'Up-and-coming projects to Pre-Start', '/forms/cm/pre-start'],
+              ['✅', 'Forms Completed', 'Submitted forms by project', '/forms/cm/forms-completed'],
+              ['📋', 'Missing Forms', 'Outstanding forms on your projects', '/forms/cm/missing-forms'],
+              ['⚠️', 'Issues Log', 'Assess & action site issues', '/forms/issues-log'],
+              ['📝', 'SRATs', 'View & create SRATs', '/forms/cm/srats'],
+              ['🗂️', 'Live Tasks', 'Manage project tasks', '/forms/cm/tasks'],
+              ['💷', 'Variations', 'View project variations', '/forms/cm/variations'],
+            ].map(([icon, title, sub, href]) => (
+              <button key={href} onClick={() => router.push(href)} style={homeCard}>
+                <div style={{ fontSize: 30 }}>{icon}</div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>{title}</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{sub}</div></div>
+                <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+              </button>
+            ))}
+          </>
         )}
       </div>
     </div>
