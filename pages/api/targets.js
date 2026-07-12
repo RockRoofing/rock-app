@@ -32,19 +32,19 @@ const DEFAULT_TARGETS = {
   },
   contractsManager: {
     gpMargin: 0.20,
+    psnPct: 1,
     hsIncidences: 0,
     wiRockFault: 0,
-    psnSubmitted: 1,
-    procIncomplete: 0,
-    issuesLateResolved: 0,
+    procPct: 1,
+    issuesOnTimePct: 0.9,
   },
   operationsManager: {
-    sosDone: 1,
-    diaryDone: 1,
-    wahDone: 1,
+    sosPct: 1,
+    diaryPct: 1,
+    wahPct: 1,
     toolbox: 1,
-    tasksResolvedOverdue: 0,
-    risksLate: 0,
+    tasksPct: 0.9,
+    risksPct: 0.9,
   }
 }
 

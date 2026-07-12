@@ -1,18 +1,39 @@
-PRE-START NOTIFICATION PDF — proper branded document (was rendering as a Site Issue Report)
+OPERATIONS SCORECARDS — trend lines/graphs, year date filter, percentage metrics (matches pre-contract)
 
-WHAT WAS WRONG (per screenshot)
-  The PSN sent to the customer was built with the Issue-report PDF builder, so it showed "Site Issue
-  Report", an "Issue ID", a "STATUS: OPEN" box, and the answers as raw field codes (f_7, f_2, f_13...).
+pages/api/ops-scorecards.js  (REWRITTEN)
+  - Now returns a MONTHLY SERIES for the requested range (?from=&to=), so every metric has a trend line.
+  - Reuses the portal's /api/forms-missing engine (server-side) to get required-vs-completed per form per
+    week, then buckets by month — so the % metrics use exactly the same logic as the portal.
+  - Metrics reframed as requested:
+      Will & Mike (CM):
+        • Gross margin — live & defects projects (latest value; point-in-time).
+        • Pre-Start Notifications — % completed vs required (their Pre-Start rows).
+        • H&S incidences — count (dedup per project/month).
+        • Water Ingress — Rock at fault — count.
+        • Procurement savings complete — % of their CLOSED projects with a full savings doc; N/A (—) if
+          none closed in range (point-in-time, latest).
+        • Issues resolved on time — % of issues resolved in-month that were on/before the required date.
+      Dori (Ops):
+        • Start On Site / Daily Site Diary / Work Area Handover — % completed vs required.
+        • Toolbox Talk — manual Yes/No per month (toggle on the latest month).
+        • Tasks completed on time — % of closed tasks that weren't past due.
+        • Risk log completed on time — % of resolved risks that met the target resolution date.
+  - POST { month, toolbox } unchanged (manual Toolbox Yes/No).
 
-FIX
-  lib/preStartNotifyPdf.js  (NEW)
-   - A dedicated Pre-Start Notification PDF builder. Rock-branded header titled "Pre-Start Notification"
-     (no issue/status language). Renders the REAL question labels grouped by the form's sections, with
-     answers formatted properly (dates as DD/MM/YYYY, single/multi choices as their labels, photos as a
-     count, signature as the name). The removed "email of requester" field (f_4) is skipped.
+pages/operations/scorecards.js  (REWRITTEN)
+  - Trend-line graphs on every time-series card (blue value line + dashed grey trend line), same recharts
+    style as the pre-contract scorecard.
+  - Year date filter (From / To) defaulting to the last 12 months, like pre-contract.
+  - Gross margin & Procurement are point-in-time so they show the latest value (no misleading trend line);
+    all other metrics show the monthly trend.
 
-  pages/api/pre-start-notify-send.js  (REWRITTEN)
-   - Now loads the PSN form definition (for the labels) and the project, and builds the PDF with
-     buildPsnPDF instead of buildIssuePDF. Everything else (recipients, Resend send, statuses) unchanged.
+pages/api/targets.js
+  - Default targets updated to the new percentage keys (psnPct, procPct, issuesOnTimePct, sosPct, diaryPct,
+    wahPct, tasksPct, risksPct).
 
-Deploy both files. No cron/env change. Re-send a PSN to see the corrected document.
+Deploy all files. No cron/env change.
+
+CONFIRM AFTER DEPLOY:
+  - Will/Mike tabs match a CM name CONTAINING "Will"/"Mike". If the names differ, tell me the exact ones.
+  - % metrics show "—" when there's nothing required in a month (e.g. no PSNs due, no projects closed);
+    that's the intended N/A behaviour.
