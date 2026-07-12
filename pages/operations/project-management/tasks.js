@@ -93,6 +93,7 @@ export default function LiveTasks() {
     { key: 'projectNo', label: 'Project' },
     { key: 'description', label: 'Task' },
     { key: 'assignee', label: 'Responsible' },
+    { key: 'createdAt', label: 'Date Added' },
     { key: 'closeOutDate', label: 'Target Completion' },
     { key: 'closed', label: 'Resolved?' },
   ]
@@ -132,6 +133,7 @@ export default function LiveTasks() {
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
                       <td style={{ ...td, ...greenCell, minWidth: 260 }}><ExpandableText value={r.description} onSave={v => patchTask(r.id, { description: v })} label="Task" width="100%" /></td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell, color: '#888', fontSize: 12.5 }}>{r.createdAt ? fmtDate(r.createdAt) : '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : '—'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
                         <select value={resolved ? 'yes' : 'no'} onChange={e => patchTask(r.id, { closed: e.target.value === 'yes' })} style={{ ...sel, minWidth: 80, padding: '5px 8px' }}>

@@ -103,8 +103,15 @@ function SratForm({ project, srat, onCancel, onSaved }) {
   const [actionsText, setActionsText] = useState(srat?.actionsText || '')
   const [timeline, setTimeline] = useState(srat?.timeline || '')
   const [newTasks, setNewTasks] = useState([])   // [{description, assignee, closeOutDate}]
+  const [people, setPeople] = useState([])
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      try { const d = await fetch('/api/team').then(r => r.json()); setPeople((d.members || []).map(m => m.name).filter(Boolean).sort()) } catch {}
+    })()
+  }, [])
 
   const addTaskRow = () => setNewTasks(t => [...t, { description: '', assignee: '', closeOutDate: '' }])
   const updTask = (i, k, v) => setNewTasks(t => t.map((x, j) => j === i ? { ...x, [k]: v } : x))
@@ -157,7 +164,10 @@ function SratForm({ project, srat, onCancel, onSaved }) {
             <div key={i} style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 10, marginBottom: 8 }}>
               <input value={t.description} onChange={e => updTask(i, 'description', e.target.value)} placeholder="Task description" style={{ ...inp, marginBottom: 8 }} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <input value={t.assignee} onChange={e => updTask(i, 'assignee', e.target.value)} placeholder="Responsible" style={{ ...inp, flex: 1 }} />
+                <select value={t.assignee} onChange={e => updTask(i, 'assignee', e.target.value)} style={{ ...inp, flex: 1 }}>
+                  <option value="">Responsible…</option>
+                  {people.map(nm => <option key={nm} value={nm}>{nm}</option>)}
+                </select>
                 <input type="date" value={t.closeOutDate} onChange={e => updTask(i, 'closeOutDate', e.target.value)} style={{ ...inp, width: 150 }} />
               </div>
               <button onClick={() => rmTask(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, marginTop: 6 }}>Remove</button>

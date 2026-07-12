@@ -156,9 +156,13 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
         {isPdf(f)
-          ? <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
-          : <img key={f.url} src={inlineUrl} alt={f.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-              onError={(e) => { e.target.style.display = 'none'; const fb = e.target.parentNode.querySelector('[data-fallback]'); if (fb) fb.style.display = 'block' }} />}
+          ? <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
+          : <img key={f.url} src={f.url} alt={f.name || ''} data-stage="raw" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              onError={(e) => {
+                const stage = e.target.getAttribute('data-stage')
+                if (stage === 'raw') { e.target.setAttribute('data-stage', 'proxy'); e.target.src = inlineUrl }
+                else { e.target.style.display = 'none'; const fb = e.target.parentNode.querySelector('[data-fallback]'); if (fb) fb.style.display = 'block' }
+              }} />}
         {!isPdf(f) && <div data-fallback style={{ display: 'none', color: '#fff', textAlign: 'center' }}>
           <div style={{ fontSize: 40, marginBottom: 10 }}>🖼️</div>
           <div style={{ marginBottom: 14 }}>{f.name || 'Image'}</div>

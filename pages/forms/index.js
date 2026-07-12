@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 
@@ -202,7 +203,7 @@ function FormsHomeMenu({ user }) {
         try {
           const dt = await fetch('/api/tasks').then(r => r.json())
           const td = new Date(); td.setHours(0, 0, 0, 0)
-          const overdue = (dt.tasks || []).filter(t => nos.has(t.projectNo) && !t.closed && t.closeOutDate && (() => { const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); return d <= td })())
+          const overdue = (dt.tasks || []).filter(t => nos.has(t.projectNo) && !t.closed && t.closeOutDate && (() => { const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); return d < td })())
           setOverdueTaskCount(overdue.length)
         } catch {}
       } catch {}
@@ -407,15 +408,16 @@ function FileViewer({ files, index, onIndex, onClose }) {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   })
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2000, display: 'flex', flexDirection: 'column' }}>
+  const inlineUrl = `/api/download?inline=1&url=${encodeURIComponent(f.url)}&name=${encodeURIComponent(f.name || '')}`
+  const overlay = (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff', gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
           {has && <div style={{ fontSize: 12, color: '#bbb' }}>{index + 1} of {files.length}</div>}
         </div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#fff', fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap' }}>Download</a>
+          <button onClick={() => downloadDrawing(f)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>Download</button>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 28, cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
       </div>
@@ -424,7 +426,8 @@ function FileViewer({ files, index, onIndex, onClose }) {
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
         {isImage(f)
-          ? <img key={f.url} src={f.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          ? <img key={f.url} src={f.url} data-stage="raw" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              onError={(e) => { const s = e.target.getAttribute('data-stage'); if (s === 'raw') { e.target.setAttribute('data-stage', 'proxy'); e.target.src = inlineUrl } }} />
           : <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
@@ -437,6 +440,18 @@ function FileViewer({ files, index, onIndex, onClose }) {
       )}
     </div>
   )
+  if (typeof document === 'undefined') return null
+  return createPortal(overlay, document.body)
+}
+// Download a drawing/RAMS through the proxy so it keeps its filename and doesn't navigate away.
+async function downloadDrawing(f) {
+  const name = f.name || 'download'
+  try {
+    const a = document.createElement('a')
+    a.href = `/api/download?url=${encodeURIComponent(f.url)}&name=${encodeURIComponent(name)}`
+    a.download = name
+    document.body.appendChild(a); a.click(); a.remove()
+  } catch { window.open(f.url, '_blank', 'noopener') }
 }
 const pageNavBtn = { background: 'rgba(255,255,255,0.14)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
 

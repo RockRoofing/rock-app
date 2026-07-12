@@ -26,9 +26,14 @@ export default function CmVariations() {
   async function pick(p) {
     setProj(p); setVariations(null); setLoading(true)
     try {
-      const d = await fetch(`/api/ops-projects?no=${encodeURIComponent(p.projectNo)}`).then(r => r.json())
-      const vars = d?.project?.settings?.variations || d?.project?.data?.variations || []
-      setVariations(vars)
+      let d = await fetch('/api/dashboard').then(r => r.json())
+      let row = (d.projects || []).find(x => String(x.projectNo) === String(p.projectNo))
+      // If the cached dashboard didn't include this project (or had no variations), force a sync.
+      if (!row || !('variations' in row)) {
+        d = await fetch('/api/dashboard?sync=true').then(r => r.json())
+        row = (d.projects || []).find(x => String(x.projectNo) === String(p.projectNo))
+      }
+      setVariations(row?.variations || [])
     } catch { setVariations([]) }
     setLoading(false)
   }

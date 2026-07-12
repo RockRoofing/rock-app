@@ -16,6 +16,7 @@ export default function CmTasks() {
   const [fMember, setFMember] = useState('')
   const [fResolved, setFResolved] = useState('open')  // open | resolved | all
   const [fFrom, setFFrom] = useState(''); const [fTo, setFTo] = useState('')
+  const [people, setPeople] = useState([])
 
   useEffect(() => {
     const s = sessionStorage.getItem('ops_operative')
@@ -23,6 +24,7 @@ export default function CmTasks() {
     try { setUser(JSON.parse(s)) } catch {}
     setReady(true)
     load()
+    ;(async () => { try { const d = await fetch('/api/team').then(r => r.json()); setPeople((d.members || []).map(m => m.name).filter(Boolean).sort()) } catch {} })()
   }, [])
 
   async function load() {
@@ -43,19 +45,16 @@ export default function CmTasks() {
 
   const members = useMemo(() => [...new Set(tasks.map(t => t.assignee).filter(Boolean))].sort(), [tasks])
 
-  // Same colour convention as the portal: red = due today/overdue, orange = within
-  // a week, green = >1 week away.
+  // On or after today = green; past due = red.
   const dateColour = (dateStr) => {
     if (!dateStr) return {}
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const d = new Date(dateStr); d.setHours(0, 0, 0, 0)
     if (isNaN(d)) return {}
-    const days = Math.round((d - today) / 86400000)
-    if (days <= 0) return { background: '#fef2f2', color: '#991b1b', fontWeight: 700 }
-    if (days <= 7) return { background: '#fff7ed', color: '#9a3412', fontWeight: 700 }
-    return { background: '#ecfdf5', color: '#065f46' }
+    if (d < today) return { background: '#fef2f2', color: '#991b1b', fontWeight: 700 }   // past = red
+    return { background: '#ecfdf5', color: '#065f46', fontWeight: 600 }                   // today/future = green
   }
-  const isOverdue = (t) => { if (t.closed || !t.closeOutDate) return false; const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); const td = new Date(); td.setHours(0,0,0,0); return d <= td }
+  const isOverdue = (t) => { if (t.closed || !t.closeOutDate) return false; const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); const td = new Date(); td.setHours(0,0,0,0); return d < td }
 
   const rows = useMemo(() => {
     return tasks
@@ -105,10 +104,15 @@ export default function CmTasks() {
                 <div style={{ fontSize: 12, color: '#777', marginTop: 3 }}>
                   {t.projectNo}{t.projectName && t.projectName !== t.projectNo ? ` — ${t.projectName}` : ''}
                 </div>
+                {t.createdAt && <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>Added {fmtDate(t.createdAt)}</div>}
 
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
                   <label style={{ fontSize: 11, color: '#888' }}>Responsible<br />
-                    <input value={t.assignee || ''} onChange={e => patch(t.id, { assignee: e.target.value })} style={{ ...miniInp, width: 150 }} />
+                    <select value={t.assignee || ''} onChange={e => patch(t.id, { assignee: e.target.value })} style={{ ...miniInp, width: 170 }}>
+                      <option value="">—</option>
+                      {people.map(nm => <option key={nm} value={nm}>{nm}</option>)}
+                      {t.assignee && !people.includes(t.assignee) && <option value={t.assignee}>{t.assignee}</option>}
+                    </select>
                   </label>
                   <label style={{ fontSize: 11, color: '#888' }}>Target completion<br />
                     <input type="date" value={t.closeOutDate || ''} onChange={e => patch(t.id, { closeOutDate: e.target.value })} style={{ ...miniInp, ...dateColour(t.closeOutDate) }} />
