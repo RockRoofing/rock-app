@@ -1,16 +1,21 @@
-ATTACHMENTS — View shows the actual image (MIME-type fix)
+ATTACHMENTS — View image fix (derive MIME from filename)
 
-  Diagnosis: the overlay opened but showed a broken-image icon. The manually uploaded delivery photos were
-  stored on the blob with content-type "application/octet-stream" (the browser sent no type on upload), and
-  browsers refuse to render <img> for a non-image content type — while Download still worked (it just saves
-  the bytes). Drawings didn't hit this because those files were stored with correct image types.
+  Confirmed from the screenshot: both the viewer AND the small thumbnail show a broken-image icon, which
+  means the raw blob URL won't render as an image — the file was stored as application/octet-stream, so the
+  browser won't display it inline (Download still works). The previous fix only derived the MIME type from
+  the blob URL's extension; Vercel Blob URLs don't always keep a usable extension, so it stayed octet-stream.
 
   pages/api/download.js
-   - When serving inline, if the stored content-type isn't an image/PDF, it now derives the correct MIME
-     type from the file extension (jpg/jpeg/png/gif/webp/bmp/heic/heif/pdf) so <img>/<iframe> render it.
+   - Inline mode now derives the image/PDF MIME type from BOTH the blob URL extension AND the file's name
+     (?name=45361.jpg), so it reliably serves image/jpeg etc. even when the blob path has no extension.
 
   components/RowAttachments.js
-   - The viewer loads images/PDFs via /api/download?inline=1 (correct MIME type, same origin). If that ever
-     errors, the <img> falls back to the raw blob URL.
+   - The small thumbnail in the attachments list now also loads via /api/download?inline=1 (so it renders).
+   - Viewer: if the image still can't be shown, it now shows a clean "Download to view" panel instead of a
+     broken icon.
 
-Affects Deliveries, Procurement, Risk Log, Live Tasks. Deploy BOTH files.
+Deploy BOTH files. Affects Deliveries, Procurement, Risk Log, Live Tasks.
+
+If View STILL shows a broken image after this: open the browser Network tab, click View, find the
+/api/download?inline=1... request and tell me its status + response content-type — that will pinpoint
+whether the proxy is reaching the blob.

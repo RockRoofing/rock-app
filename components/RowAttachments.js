@@ -44,7 +44,7 @@ export default function RowAttachments({ files, onChange, readOnly = false }) {
             {list.length === 0 && <div style={{ fontSize: 13, color: '#bbb', marginBottom: 12 }}>No files yet.</div>}
             {list.map((f, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i ? '1px solid #f2f2f2' : 'none' }}>
-                {isImage(f) && <img src={f.url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />}
+                {isImage(f) && <img src={`/api/download?inline=1&url=${encodeURIComponent(f.url)}&name=${encodeURIComponent(f.name || '')}`} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />}
                 <span style={{ flex: 1, fontSize: 13, color: '#333', wordBreak: 'break-word' }}>{f.name || 'file'}</span>
                 <button onClick={() => setViewIdx(i)} style={linkA}>View</button>
                 <button onClick={() => downloadFile(f)} style={linkA}>Download</button>
@@ -158,7 +158,12 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
         {isPdf(f)
           ? <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
           : <img key={f.url} src={inlineUrl} alt={f.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-              onError={(e) => { if (e.target.src !== f.url) e.target.src = f.url }} />}
+              onError={(e) => { e.target.style.display = 'none'; const fb = e.target.parentNode.querySelector('[data-fallback]'); if (fb) fb.style.display = 'block' }} />}
+        {!isPdf(f) && <div data-fallback style={{ display: 'none', color: '#fff', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>🖼️</div>
+          <div style={{ marginBottom: 14 }}>{f.name || 'Image'}</div>
+          <button onClick={() => downloadFile(f)} style={{ background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Download to view</button>
+        </div>}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
       {has && (

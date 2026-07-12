@@ -22,9 +22,12 @@ export default async function handler(req, res) {
     // on upload), derive a proper MIME type from the extension so <img>/<iframe>
     // will render it inline.
     if (!/^image\//.test(ct) && ct !== 'application/pdf') {
-      const ext = (target.pathname.split('.').pop() || '').toLowerCase()
+      const fromName = String(name || '')
+      const ext = ((target.pathname.split('.').pop() || '') || (fromName.split('.').pop() || '')).toLowerCase()
+      const nameExt = (fromName.split('.').pop() || '').toLowerCase()
       const map = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' }
       if (map[ext]) ct = map[ext]
+      else if (map[nameExt]) ct = map[nameExt]
     }
     res.setHeader('Content-Type', ct)
     // inline=1 -> render in the browser (img/iframe); otherwise force a download.
