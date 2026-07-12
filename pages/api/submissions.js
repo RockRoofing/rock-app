@@ -40,6 +40,7 @@ export default async function handler(req, res) {
         operative: submission.operative || '',
         answers: submission.answers || {},
         flags: submission.flags || [],   // manager-notify triggers captured at fill time
+        draft: !!submission.draft,
         submittedAt: now,
       }
       await saveSubmission(id, full)
@@ -54,6 +55,7 @@ export default async function handler(req, res) {
         projectName: full.projectName,
         operative: full.operative,
         flagCount: (full.flags || []).length,
+        draft: full.draft,
         submittedAt: now,
       })
       await saveSubmissionIndex(idx)

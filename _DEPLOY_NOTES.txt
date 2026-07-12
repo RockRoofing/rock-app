@@ -1,13 +1,40 @@
-SITE APP — CM access now gated by access level + Operative badge styling
+SITE APP + PORTAL — PSN rework, Forms view/edit fix, Risk Log inline, PSN send fix
 
-  pages/forms/index.js
-   - FIX: the Contracts Manager sections were showing to anyone whose NAME matched a project's Contracts
-     Manager field, even if their Site App access level was set to Operative. CM access is now gated purely
-     by the access level (accessLevel === 'contracts-manager'). Name-matching still decides which projects
-     are "theirs", but no longer grants CM access. Setting a user to Operative now hides all CM sections.
+PSN SEND ERROR ("unexpected end of json input")  ** the main bug **
+  middleware.js
+   - ROOT CAUSE: /api/pre-start-notify-send wasn't in the Site App passthrough, so the middleware
+     intercepted it and returned an empty response -> the client's r.json() threw. Added /api/pre-start*
+     to the passthrough.
+  pages/forms/fill.js + pages/forms/cm/pre-start.js
+   - Client send now parses the response defensively (won't throw on a non-JSON response; shows the real
+     error/status instead).
 
-  pages/operations/users.js  (Site App Users page)
-   - The "Operative" access value now renders as a pill badge (grey/slate) matching the style of the
-     "Contracts Manager" pill, instead of plain text.
+FORMS NOT VIEWABLE / EDIT BROKEN  ** the other main bug **
+  components/SubmissionModal.js
+   - ROOT CAUSE: the submissions LIST is lightweight (no answers), so the modal opened empty. It now
+     fetches the full submission by id (/api/submissions?id=) when answers aren't present, so View and
+     Edit both work (Completed Forms, CM Forms Completed, PSN view).
 
-Deploy both files. No cron/env change.
+PSN FORM CHANGES  (lib/formDefs.js + pages/forms/fill.js)
+   - Removed "What is the email address of the person who requested our return to site?" (f_4). It's
+     removed from the seed AND hidden/skip-validated in the form renderer, so it disappears on already-
+     seeded forms too (NO reseed needed).
+   - Visit Number (f_7) is now AUTO-SUGGESTED = (number of existing PSNs for this project) + 1. The user
+     can still edit it.
+   - The PSN now goes straight to "Submit & send to customer" (no "notify office" step). After submit, the
+     Send-to-customer step opens: recipients pre-filled from Project Details (siteContacts + customerEmail)
+     with add/delete, then emails the PSN PDF.
+   - Added "Save as draft" — stores the PSN with draft:true (shown with a "Draft" badge in Pre-Start ›
+     View completed) so it can be finished/sent later.
+  pages/api/submissions.js
+   - Stores/returns a draft flag on submissions (full record + index entry).
+
+RISK LOG — pages/operations/project-management/risks.js
+   - "Responsible" (dropdown of team) and "Target Resolution" (date) are now EDITABLE INLINE in the table,
+     matching the Live Tasks pattern.
+
+PRE-START MISSING LOGIC — verified (no change needed)
+   - The forms-missing engine already triggers a Pre-Start when a project starts for the first time OR
+     returns to site after a >7-day gap, within a 14-day (2-week) window — exactly the required rule.
+
+Deploy all files. No cron/env change.

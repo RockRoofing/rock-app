@@ -78,7 +78,7 @@ export default function CmPreStart() {
                 <tbody>
                   {subs.map(s => (
                     <tr key={s.id} style={{ borderTop: '1px solid #f2f2f2' }}>
-                      <td style={tdc}>{fmtDateTime(s.submittedAt)}</td>
+                      <td style={tdc}>{fmtDateTime(s.submittedAt)}{s.draft && <span style={{ marginLeft: 8, background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '1px 8px', fontSize: 11, fontWeight: 700 }}>Draft</span>}</td>
                       <td style={tdc}>{s.operative || '—'}</td>
                       <td style={{ ...tdc, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button onClick={() => setOpen(s)} style={linkA}>View</button>
@@ -131,8 +131,8 @@ function SendToCustomer({ submission, project, onClose }) {
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/pre-start-notify-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId: submission.id, emails: emails.map(e => e.email) }) })
-      const d = await r.json()
-      if (!r.ok) { setErr(d.error || 'Send failed'); setSending(false); return }
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok) { setErr(d.error || `Send failed (${r.status})`); setSending(false); return }
       setDone(true); setSending(false)
     } catch (e) { setErr(e?.message || 'Send failed'); setSending(false) }
   }

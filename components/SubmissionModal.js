@@ -21,6 +21,20 @@ export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownl
     })()
   }, [sub.formId])
 
+  // List entries are lightweight (no answers). Fetch the full submission so the
+  // modal can actually show/edit the answers.
+  useEffect(() => {
+    if (sub.answers && Object.keys(sub.answers).length) return
+    if (!sub.id) return
+    (async () => {
+      try {
+        const r = await fetch(`/api/submissions?id=${encodeURIComponent(sub.id)}`)
+        const d = await r.json()
+        if (d?.submission?.answers) setAnswers(d.submission.answers)
+      } catch {}
+    })()
+  }, [sub.id])
+
   const fieldFor = (k) => formDef?.fields?.find(f => f.id === k)
 
   async function save() {

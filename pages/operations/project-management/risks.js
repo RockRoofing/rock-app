@@ -135,8 +135,16 @@ export default function RiskLog() {
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}><strong>{r.projectNo}</strong>{r.projectName ? <div style={{ fontSize: 11, color: '#999' }}>{r.projectName}</div> : null}</td>
                       <td style={{ ...td, ...greenCell, minWidth: 220 }}><ExpandableText value={r.description} onSave={v => patchRisk(r.id, { description: v })} label="Risk" width="100%" /></td>
                       <td style={{ ...td, ...greenCell, minWidth: 220 }}><ExpandableText value={r.mitigation} onSave={v => patchRisk(r.id, { mitigation: v })} label="Risk mitigation" placeholder="—" width="100%" /></td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>{r.assignee || '—'}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>{r.closeOutDate ? fmtDate(r.closeOutDate) : '—'}</td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
+                        <select value={r.assignee || ''} onChange={e => patchRisk(r.id, { assignee: e.target.value })} style={{ ...sel, minWidth: 130, padding: '5px 8px' }}>
+                          <option value="">—</option>
+                          {team.map(m => <option key={m.id} value={m.name}>{m.name}</option>)}
+                          {r.assignee && !team.some(m => m.name === r.assignee) && <option value={r.assignee}>{r.assignee}</option>}
+                        </select>
+                      </td>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>
+                        <input type="date" value={r.closeOutDate || ''} onChange={e => patchRisk(r.id, { closeOutDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
+                      </td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
                         <select value={resolved ? 'yes' : 'no'} onChange={e => patchRisk(r.id, { closed: e.target.value === 'yes' })} style={{ ...sel, minWidth: 80, padding: '5px 8px' }}>
                           <option value="no">No</option><option value="yes">Yes</option>

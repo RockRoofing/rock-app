@@ -9,6 +9,7 @@ export default function Fill() {
   const { form: formId, project: projectParam, sendCustomer } = router.query
   const [submittedId, setSubmittedId] = useState(null)
   const [sendOpen, setSendOpen] = useState(false)
+  const [savingDraft, setSavingDraft] = useState(false)
   const [user, setUser] = useState(null)
   const [form, setForm] = useState(null)
   const [answers, setAnswers] = useState({})
@@ -86,6 +87,28 @@ export default function Fill() {
     prefilled.current = true
   }, [form, user])
 
+  // PSN only: auto-suggest the Visit Number (f_7) = number of existing PSNs for
+  // this project + 1. Only fills if the user hasn't typed one.
+  const psnVisitSuggested = useRef(false)
+  useEffect(() => {
+    if (!form || form.id !== 'pre-start-notification' || !projectId) return
+    psnVisitSuggested.current = false
+  }, [projectId, form])
+  useEffect(() => {
+    if (!form || form.id !== 'pre-start-notification' || !projectId || psnVisitSuggested.current) return
+    if (answers.f_7) { psnVisitSuggested.current = true; return }
+    (async () => {
+      try {
+        const d = await fetch('/api/submissions').then(r => r.json())
+        const label = selectedProject ? `${selectedProject.jobNo ? selectedProject.jobNo + ' — ' : ''}${selectedProject.name}` : ''
+        const count = (d.submissions || []).filter(s => s.formId === 'pre-start-notification' &&
+          (s.projectName === label || s.projectName === projectId || (s.projectName || '').includes(projectId))).length
+        setAnswers(a => a.f_7 ? a : { ...a, f_7: String(count + 1) })
+      } catch {}
+      psnVisitSuggested.current = true
+    })()
+  }, [form, projectId, selectedProject])
+
   // Daily Site Diary: default "Personnel on site" to whoever is on the Gantt for
   // this project on the diary date. Runs when project or the diary date changes.
   const diaryDateFieldId = form?.fields?.find(f => f.type === 'date' && /(site diary date|^date$|date for which)/i.test(f.label || ''))?.id
@@ -126,6 +149,7 @@ export default function Fill() {
     if (!projectId) errs.__project = 'Required'
     for (const f of form.fields) {
       if (f.type === 'section' || f.type === 'note') continue
+      if (form.id === 'pre-start-notification' && f.id === 'f_4') continue  // removed/hidden field
       if (!f.required) continue
       const v = answers[f.id]
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0) ||
@@ -171,18 +195,47 @@ export default function Fill() {
     setSubmitting(false)
   }
 
+  // PSN "Save as draft" — stores the submission with draft:true so it can be
+  // resumed/sent later. Requires a project but skips full validation.
+  async function saveDraft() {
+    if (!projectId) {
+      setErrors(e => ({ ...e, __project: 'Required' }))
+      const el = document.getElementById('f___project'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
+    }
+    setSavingDraft(true)
+    try {
+      const r = await fetch('/api/submissions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          submission: {
+            formId: form.id, formTitle: form.title,
+            projectId, projectName: projectLabel,
+            operative: user?.name || '', answers, flags: [], draft: true,
+          },
+        }),
+      })
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok) { alert(d.error || 'Could not save draft'); setSavingDraft(false); return }
+      alert('Draft saved. You can finish and send it later from Pre-Start Notifications › View completed.')
+      router.push('/forms/cm/pre-start')
+    } catch (e) { alert(e?.message || 'Could not save draft') }
+    setSavingDraft(false)
+  }
+
   if (loading || !form) {
     return <Shell user={user}><div style={{ textAlign: 'center', color: '#999', paddingTop: 40 }}>Loading form…</div></Shell>
   }
 
   if (done) {
     const flags = computeFlags()
+    const isPsn = form.id === 'pre-start-notification'
     return (
       <Shell user={user}>
         <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center', paddingTop: 32 }}>
           <div style={{ fontSize: 56 }}>✅</div>
           <h2 style={{ color: INK, margin: '12px 0 6px' }}>Submitted</h2>
-          <p style={{ color: '#777', fontSize: 15 }}>{form.title} sent to the office.</p>
+          <p style={{ color: '#777', fontSize: 15 }}>{isPsn ? `${form.title} saved. Now send it to the customer.` : `${form.title} sent to the office.`}</p>
           {flags.length > 0 && (
             <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 12, padding: 16, margin: '16px 0', textAlign: 'left' }}>
               <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Action needed — call your manager now</div>
@@ -191,10 +244,10 @@ export default function Fill() {
               </ul>
             </div>
           )}
-          {sendCustomer && submittedId && (
+          {(isPsn || sendCustomer) && submittedId && (
             <button onClick={() => setSendOpen(true)} style={{ ...bigBtn(false), marginBottom: 12 }}>Send to customer</button>
           )}
-          <button onClick={() => router.push('/forms')} style={sendCustomer ? ghostBig : bigBtn(false)}>Done</button>
+          <button onClick={() => router.push('/forms')} style={(isPsn || sendCustomer) ? ghostBig : bigBtn(false)}>Done</button>
         </div>
         {sendOpen && submittedId && (
           <PsnSendToCustomer submissionId={submittedId} projectId={projectId} projectNo={selectedProject?.jobNo || selectedProject?.projectNo} onClose={() => setSendOpen(false)} />
@@ -227,13 +280,26 @@ export default function Fill() {
           {errors.__project && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>Please select the project</div>}
         </div>
 
-        {form.fields.map(f => (
-          <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} />
-        ))}
+        {form.fields
+          .filter(f => !(form.id === 'pre-start-notification' && f.id === 'f_4'))
+          .map(f => (
+            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} />
+          ))}
 
-        <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
-          {submitting ? 'Submitting…' : 'Submit & notify office'}
-        </button>
+        {form.id === 'pre-start-notification' ? (
+          <>
+            <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
+              {submitting ? 'Submitting…' : 'Submit & send to customer'}
+            </button>
+            <button onClick={saveDraft} disabled={savingDraft} style={{ ...ghostBig, marginTop: 12 }}>
+              {savingDraft ? 'Saving…' : 'Save as draft'}
+            </button>
+          </>
+        ) : (
+          <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
+            {submitting ? 'Submitting…' : 'Submit & notify office'}
+          </button>
+        )}
         <div style={{ height: 40 }} />
       </div>
     </Shell>
@@ -500,8 +566,8 @@ function PsnSendToCustomer({ submissionId, projectId, projectNo, onClose }) {
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/pre-start-notify-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId, emails: emails.map(e => e.email) }) })
-      const d = await r.json()
-      if (!r.ok) { setErr(d.error || 'Send failed'); setSending(false); return }
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok) { setErr(d.error || `Send failed (${r.status})`); setSending(false); return }
       setDone(true); setSending(false)
     } catch (e) { setErr(e?.message || 'Send failed'); setSending(false) }
   }
