@@ -1,51 +1,18 @@
-OPERATIONS SCORECARDS — Will, Mike (Contracts Managers) + Dori (Operations Manager)
+PRE-START NOTIFICATION PDF — proper branded document (was rendering as a Site Issue Report)
 
-NEW API — pages/api/ops-scorecards.js
-  GET  /api/ops-scorecards?month=YYYY-MM  -> computes the metrics below for the month.
-  POST /api/ops-scorecards { month, toolbox:true|false } -> saves the manual Toolbox-talk Yes/No.
-  (Role-gated: post-contract / management / admin.)
+WHAT WAS WRONG (per screenshot)
+  The PSN sent to the customer was built with the Issue-report PDF builder, so it showed "Site Issue
+  Report", an "Issue ID", a "STATUS: OPEN" box, and the answers as raw field codes (f_7, f_2, f_13...).
 
-pages/operations/scorecards.js  (REWRITTEN)
-  - Tabs are now Will | Mike | Dori (Forms tab REMOVED as requested). Same card layout / RAG style as the
-    Edita / estimator / commercial scorecards, with a month selector and editable targets (click the
-    target to edit; stored via /api/targets).
+FIX
+  lib/preStartNotifyPdf.js  (NEW)
+   - A dedicated Pre-Start Notification PDF builder. Rock-branded header titled "Pre-Start Notification"
+     (no issue/status language). Renders the REAL question labels grouped by the form's sections, with
+     answers formatted properly (dates as DD/MM/YYYY, single/multi choices as their labels, photos as a
+     count, signature as the name). The removed "email of requester" field (f_4) is skipped.
 
-WILL & MIKE (Contracts Managers — identical metric set, data by their name):
-  1. Gross margin — their projects. Uses the Commercial/Project Financials CM designation; only LIVE
-     (INPROGRESS) and DEFECTS-period projects. Shows profit + project count.
-  2. H&S incidences — projects with an Accident Book OR Accident & Incident Report submitted in the month;
-     if both exist for the same project in the month it counts ONCE.
-  3. Water Ingress — Rock at fault — count of Water Ingress reports (all time, their projects) where
-     "Who is responsible" = Rock.
-  4. Pre-Start Notifications submitted — PSNs they submitted in the month (unique to that CM).
-  5. Procurement savings incomplete — their projects completed in the month whose procurement savings doc
-     isn't fully complete.
-  6. Issues resolved late — issues where the required resolution date is before the resolved date.
+  pages/api/pre-start-notify-send.js  (REWRITTEN)
+   - Now loads the PSN form definition (for the labels) and the project, and builds the PDF with
+     buildPsnPDF instead of buildIssuePDF. Everything else (recipients, Resend send, statuses) unchanged.
 
-DORI (Operations Manager):
-  1. Start On Site Checklists — completed this month.
-  2. Daily Site Diaries — completed this month.
-  3. Work Area Handovers — completed this month.
-  4. Toolbox Talk — manual Yes/No per month (green/red toggle on the card; saved per month).
-  5. Tasks resolved overdue — Live Project Tasks closed after their target date.
-  6. Risk log items resolved late — resolved after the target resolution date.
-
-pages/api/targets.js
-  - Added default target sets for 'contractsManager' and 'operationsManager'.
-
-SITE APP — pages/forms/index.js
-  - Removed the "Completed Forms" card from the operative home (it's covered by the CM › Forms Completed
-    section). The /forms/completed page is simply no longer linked.
-
-NOTES / THINGS TO CONFIRM AFTER DEPLOY:
-  - The Will/Mike tabs match a CM whose name CONTAINS "Will" / "Mike". If the CM names on projects are
-    fuller (e.g. "William ...") it still matches; if they're different, tell me the exact names.
-  - Metrics 2 & 4 (H&S incidences, PSNs) use the FORM SUBMISSION month. Gross margin & procurement use the
-    live/defects/closed stage from Commercial. Water-ingress-at-fault and the "late" counts are all-time as
-    specified.
-  - "PSNs sent vs required": I've shown ACTUAL PSNs submitted per month (the reliable half). If you want a
-    "required" denominator too, tell me how a required PSN count per CM should be derived and I'll add it.
-  - "Other, then name the project" option on Water Ingress: WI reports already carry the project; if you
-    want a manual "other project" capture on the form itself, I can add that field.
-
-Deploy all files. No cron/env change.
+Deploy both files. No cron/env change. Re-send a PSN to see the corrected document.
