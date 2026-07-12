@@ -19,7 +19,9 @@ export default async function handler(req, res) {
     const ct = upstream.headers.get('content-type') || 'application/octet-stream'
     const safeName = String(name || target.pathname.split('/').pop() || 'download').replace(/[^\w.\- ]+/g, '_')
     res.setHeader('Content-Type', ct)
-    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
+    // inline=1 -> render in the browser (img/iframe); otherwise force a download.
+    const disposition = req.query.inline ? 'inline' : 'attachment'
+    res.setHeader('Content-Disposition', `${disposition}; filename="${safeName}"`)
     res.setHeader('Content-Length', buf.length)
     res.setHeader('Cache-Control', 'private, max-age=0, no-store')
     return res.status(200).send(buf)

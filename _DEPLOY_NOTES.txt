@@ -1,12 +1,17 @@
-ATTACHMENTS — View button fix (render viewer via portal)
+ATTACHMENTS — View now actually shows the image/PDF (inline proxy)
+
+  Diagnosis (from the screenshot): the viewer WAS opening, but the <img> pointed straight at the
+  cross-origin Vercel Blob URL, which the browser refused to render inline — so it fell through to the
+  "Download to view" fallback. (Download worked because it fetches the blob via JS.)
+
+  pages/api/download.js
+   - Added ?inline=1 mode: serves the file with Content-Disposition: inline (instead of attachment) so it
+     can be shown in an <img>/<iframe> from our own origin. Without inline it still forces a download.
 
   components/RowAttachments.js
-   - Root cause: the in-app viewer overlay was rendered from inside a table cell. A position:fixed element
-     inside a table/scroll container whose ancestor has a transform (or similar) gets clipped/hidden, so
-     "View" appeared to do nothing — while "Download" (a pure JS action) worked fine.
-   - Fix: the viewer overlay is now rendered through a React portal to document.body, so it always covers
-     the full viewport regardless of the table's layout/stacking context. Raised its z-index to 3000.
-   - "View" no longer closes the attachments list first; the viewer simply layers on top.
+   - The viewer now loads images and PDFs through /api/download?inline=1 (same-origin) instead of the raw
+     blob URL, so they render reliably. Thumbnails in the attachments list use the same inline proxy.
+   - "Download" still uses the attachment proxy (correct filename), unchanged.
 
-Affects Deliveries, Procurement, Risk Log and Live Tasks (shared component). Deploy this single file.
+Affects Deliveries, Procurement, Risk Log, Live Tasks (shared component). Deploy both files.
 No cron/env change.
