@@ -1,11 +1,12 @@
-DELIVERIES APP — Scheduled / Delivered filter
+ATTACHMENTS — View button fix (render viewer via portal)
 
-  pages/forms/deliveries.js
-   - After selecting a project, a two-way filter appears: "Scheduled" | "Delivered", defaulting to
-     Scheduled.
-       • Scheduled = deliveries not yet marked delivered (dated ones still limited to those due within the
-         next 2 weeks / overdue, as before; undated ones always show).
-       • Delivered = deliveries that have an actual delivery date recorded.
-   - Empty-state text adapts to the selected filter.
+  components/RowAttachments.js
+   - Root cause: the in-app viewer overlay was rendered from inside a table cell. A position:fixed element
+     inside a table/scroll container whose ancestor has a transform (or similar) gets clipped/hidden, so
+     "View" appeared to do nothing — while "Download" (a pure JS action) worked fine.
+   - Fix: the viewer overlay is now rendered through a React portal to document.body, so it always covers
+     the full viewport regardless of the table's layout/stacking context. Raised its z-index to 3000.
+   - "View" no longer closes the attachments list first; the viewer simply layers on top.
 
-Deploy this single file (supersedes the previous pages/forms/deliveries.js). No cron/env change.
+Affects Deliveries, Procurement, Risk Log and Live Tasks (shared component). Deploy this single file.
+No cron/env change.

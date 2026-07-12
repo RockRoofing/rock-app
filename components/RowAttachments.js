@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 // Per-row attachments. Uses a full modal (not an inline popover) so it's never
 // clipped by the table's scroll container. Shows a paperclip + count.
@@ -45,7 +46,7 @@ export default function RowAttachments({ files, onChange, readOnly = false }) {
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i ? '1px solid #f2f2f2' : 'none' }}>
                 {isImage(f) && <img src={f.url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />}
                 <span style={{ flex: 1, fontSize: 13, color: '#333', wordBreak: 'break-word' }}>{f.name || 'file'}</span>
-                <button onClick={() => { setOpen(false); setViewIdx(i) }} style={linkA}>View</button>
+                <button onClick={() => setViewIdx(i)} style={linkA}>View</button>
                 <button onClick={() => downloadFile(f)} style={linkA}>Download</button>
                 {!readOnly && <button onClick={() => onChange(list.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>}
               </div>
@@ -136,8 +137,8 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   })
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2100, display: 'flex', flexDirection: 'column' }}>
+  const overlay = (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff', gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name || 'Attachment'}</div>
@@ -170,5 +171,8 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
       )}
     </div>
   )
+  // Render to document.body so table/scroll/transform ancestors can't clip or hide it.
+  if (typeof document === 'undefined') return null
+  return createPortal(overlay, document.body)
 }
 const pageNavBtn = { background: 'rgba(255,255,255,0.14)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
