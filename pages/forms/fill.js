@@ -6,7 +6,9 @@ const INK = '#1a1a19', BRAND = '#ca8a04'
 
 export default function Fill() {
   const router = useRouter()
-  const { form: formId } = router.query
+  const { form: formId, project: projectParam, sendCustomer } = router.query
+  const [submittedId, setSubmittedId] = useState(null)
+  const [sendOpen, setSendOpen] = useState(false)
   const [user, setUser] = useState(null)
   const [form, setForm] = useState(null)
   const [answers, setAnswers] = useState({})
@@ -45,6 +47,7 @@ export default function Fill() {
           .filter(p => p.status === 'active')   // Live only — Complete projects can't be selected
           .map(p => ({ id: p.projectNo, jobNo: p.projectNo, name: p.projectName }))
           .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '')))
+        if (projectParam) setProjectId(String(projectParam))
         try {
           const rt = await fetch('/api/team'); const dt = await rt.json()
           setTeam((dt.members || []).filter(m => m.active !== false)
@@ -159,6 +162,7 @@ export default function Fill() {
         try { const e = await r.json(); if (e?.error) detail = e.error } catch {}
         throw new Error(detail)
       }
+      try { const d = await r.json(); if (d?.submission?.id) setSubmittedId(d.submission.id); else if (d?.id) setSubmittedId(d.id) } catch {}
       setDone(true)
       window.scrollTo(0, 0)
     } catch (e) {
@@ -187,8 +191,14 @@ export default function Fill() {
               </ul>
             </div>
           )}
-          <button onClick={() => router.push('/forms')} style={bigBtn(false)}>Done</button>
+          {sendCustomer && submittedId && (
+            <button onClick={() => setSendOpen(true)} style={{ ...bigBtn(false), marginBottom: 12 }}>Send to customer</button>
+          )}
+          <button onClick={() => router.push('/forms')} style={sendCustomer ? ghostBig : bigBtn(false)}>Done</button>
         </div>
+        {sendOpen && submittedId && (
+          <PsnSendToCustomer submissionId={submittedId} projectId={projectId} projectNo={selectedProject?.jobNo || selectedProject?.projectNo} onClose={() => setSendOpen(false)} />
+        )}
       </Shell>
     )
   }
@@ -450,4 +460,86 @@ function readAsDataURL(file) {
 const inp = {
   width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 15,
   border: '2px solid #e3e0d9', borderRadius: 12, background: '#fff', outline: 'none',
+}
+
+const ghostBig = {
+  width: '100%', padding: '14px', fontSize: 16, fontWeight: 600, borderRadius: 12,
+  border: '2px solid #e3e0d9', background: '#fff', color: '#555', cursor: 'pointer',
+}
+
+// PSN → send to customer. Contacts pre-filled from Project Details (siteContacts +
+// customerEmail), with add/delete, then emails the PSN PDF.
+function PsnSendToCustomer({ submissionId, projectId, projectNo, onClose }) {
+  const [emails, setEmails] = useState([])
+  const [newEmail, setNewEmail] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const no = projectNo || projectId
+        const d = await fetch(`/api/ops-projects?no=${encodeURIComponent(no)}`).then(r => r.json())
+        const data = d?.project?.data || {}
+        const found = []
+        for (const c of (data.siteContacts || [])) if (c.email) found.push({ name: c.name || c.title || '', email: c.email })
+        if (data.customerEmail && !found.some(f => f.email.toLowerCase() === data.customerEmail.toLowerCase())) found.push({ name: data.customerContact || 'Customer', email: data.customerEmail })
+        setEmails(found)
+      } catch {}
+      setLoading(false)
+    })()
+  }, [projectId, projectNo])
+
+  const addEmail = () => { const e = newEmail.trim(); if (e && !emails.some(x => x.email.toLowerCase() === e.toLowerCase())) { setEmails([...emails, { name: '', email: e }]); setNewEmail('') } }
+  const rmEmail = (i) => setEmails(emails.filter((_, j) => j !== i))
+
+  async function send() {
+    if (!emails.length) { setErr('Add at least one recipient.'); return }
+    setSending(true); setErr('')
+    try {
+      const r = await fetch('/api/pre-start-notify-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ submissionId, emails: emails.map(e => e.email) }) })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Send failed'); setSending(false); return }
+      setDone(true); setSending(false)
+    } catch (e) { setErr(e?.message || 'Send failed'); setSending(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', padding: '20px 18px 28px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Send to customer</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+            <div style={{ fontSize: 15, color: INK, fontWeight: 600 }}>Pre-Start Notification sent.</div>
+            <button onClick={onClose} style={{ ...bigBtn(false), marginTop: 18 }}>Done</button>
+          </div>
+        ) : loading ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading contacts…</div> : (
+          <>
+            <p style={{ fontSize: 13, color: '#777', margin: '0 0 12px' }}>Recipients (from Project Details — add or remove as needed):</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {emails.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No customer contacts on file — add one below.</div>}
+              {emails.map((e, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: '8px 10px' }}>
+                  <div style={{ flex: 1, fontSize: 13, color: INK }}>{e.name ? <strong>{e.name}</strong> : null} {e.email}</div>
+                  <button onClick={() => rmEmail(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16 }}>×</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Add email address" style={{ ...inp, flex: 1 }} onKeyDown={e => e.key === 'Enter' && addEmail()} />
+              <button onClick={addEmail} disabled={!newEmail.trim()} style={{ background: '#fff', border: `2px solid ${BRAND}`, color: BRAND, borderRadius: 10, padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: newEmail.trim() ? 1 : 0.5 }}>Add</button>
+            </div>
+            {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 10 }}>{err}</div>}
+            <button onClick={send} disabled={sending} style={bigBtn(sending)}>{sending ? 'Sending…' : 'Send Pre-Start Notification'}</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
