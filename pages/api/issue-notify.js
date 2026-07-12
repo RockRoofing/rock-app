@@ -1,4 +1,5 @@
 import { get, getOpsProject, getPortalUsers } from '../../lib/db'
+import { buildIssuePDF } from '../../lib/issuePdf'
 
 // POST /api/issue-notify { id } -> emails the project's Contracts Manager,
 // Operations Manager and Quantity Surveyor that an issue has been raised, with
@@ -82,13 +83,25 @@ export default async function handler(req, res) {
         <p style="margin:20px 0 0;font-size:13px;color:#888">For your information — the Contracts Manager will review and action this issue.</p>
       </div>`
 
+    // Build the issue PDF once so we can attach it to the QS/OM info emails.
+    let pdfAttachment = null
+    try {
+      const origin2 = `https://${req.headers.host}`
+      const bytes = await buildIssuePDF({ issue, project: pdata || {}, logoUrl: `${origin2}/rock-logo.jpg` })
+      const fname = `Issue ${issue.issueId || ''} - ${(issue.issueName || 'issue')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
+      pdfAttachment = { filename: fname, content: Buffer.from(bytes).toString('base64') }
+    } catch (e) { /* if PDF fails, still send the email without attachment */ }
+
     let sent = 0
     for (const r of recipients) {
       try {
+        const payload = { from: FROM, to: r.email, subject: `New Site Issue — ${issue.issueName || issue.issueId} (${issue.projectNo || ''})`, html: r.kind === 'cm' ? cmHtml : infoHtml }
+        // QS/OM get the issue PDF attached (for information — not sent to the customer).
+        if (r.kind === 'info' && pdfAttachment) payload.attachments = [pdfAttachment]
         const resp = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from: FROM, to: r.email, subject: `New Site Issue — ${issue.issueName || issue.issueId} (${issue.projectNo || ''})`, html: r.kind === 'cm' ? cmHtml : infoHtml }),
+          body: JSON.stringify(payload),
         })
         if (resp.ok) sent++
       } catch {}

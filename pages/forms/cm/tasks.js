@@ -64,7 +64,11 @@ export default function CmTasks() {
       .filter(t => fResolved === 'all' ? true : fResolved === 'resolved' ? t.closed : !t.closed)
       .filter(t => !fFrom || (t.closeOutDate && t.closeOutDate >= fFrom))
       .filter(t => !fTo || (t.closeOutDate && t.closeOutDate <= fTo))
-      .sort((a, b) => (a.closeOutDate || '').localeCompare(b.closeOutDate || ''))
+      .sort((a, b) => {
+        // Earliest target date first; tasks with no date go to the bottom.
+        const ad = a.closeOutDate || '9999-12-31', bd = b.closeOutDate || '9999-12-31'
+        return ad.localeCompare(bd)
+      })
   }, [tasks, myNos, fProject, fMember, fResolved, fFrom, fTo])
 
   if (!ready) return <Shell user={user}><Loading /></Shell>
@@ -116,6 +120,7 @@ export default function CmTasks() {
                   </label>
                   <label style={{ fontSize: 11, color: '#888' }}>Target completion<br />
                     <input type="date" value={t.closeOutDate || ''} onChange={e => patch(t.id, { closeOutDate: e.target.value })} style={{ ...miniInp, ...dateColour(t.closeOutDate) }} />
+                    {!t.closeOutDate && <div style={{ fontSize: 11, color: '#c2410c', fontWeight: 600, marginTop: 3 }}>⚠ No target date set</div>}
                   </label>
                 </div>
 

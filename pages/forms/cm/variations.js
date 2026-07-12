@@ -26,12 +26,12 @@ export default function CmVariations() {
   async function pick(p) {
     setProj(p); setVariations(null); setLoading(true)
     try {
+      const matchKey = (x) => String(x.jobNo || x.projectNo || '').trim()
       let d = await fetch('/api/dashboard').then(r => r.json())
-      let row = (d.projects || []).find(x => String(x.projectNo) === String(p.projectNo))
-      // If the cached dashboard didn't include this project (or had no variations), force a sync.
-      if (!row || !('variations' in row)) {
+      let row = (d.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
+      if (!row) {
         d = await fetch('/api/dashboard?sync=true').then(r => r.json())
-        row = (d.projects || []).find(x => String(x.projectNo) === String(p.projectNo))
+        row = (d.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
       }
       setVariations(row?.variations || [])
     } catch { setVariations([]) }

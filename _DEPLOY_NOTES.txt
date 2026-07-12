@@ -1,39 +1,33 @@
-SITE APP + PORTAL — fixes batch 2
+SITE APP + PORTAL — fixes batch 3
 
 DRAWINGS / RAMS VIEWER (pages/forms/index.js)
-  - The FileViewer now renders through a React portal to document.body and stays a fixed full-screen
-    overlay, so View no longer navigates away to the file URL — you stay in the app and can scroll
-    left/right (arrows / Prev-Next / swipe / arrow keys) through the drawings. Download goes through the
-    proxy (keeps filename, no navigation). Images try the raw URL first then the inline proxy.
+  - The viewer now loads PDFs and images through the inline proxy (/api/download?inline=1) — served
+    same-origin with the right content-type and Content-Disposition: inline — instead of the raw blob URL.
+    That stops the browser showing its native "Open / Download" PDF fallback (per screenshot) and renders
+    the drawing/RAMS inside the in-app viewer. Images fall back to the raw URL if the proxy ever fails.
 
 DELIVERIES / ATTACHMENT VIEWER (components/RowAttachments.js)
-  - The viewer now loads images from the raw blob URL first and only falls back to the inline proxy, then
-    to a download panel — so correctly-uploaded images display in-app instead of showing "Download to view".
-  (Note: photos uploaded before the earlier FormData upload fix are corrupted and will still not preview —
-   re-upload those.)
-
-VARIATIONS (pages/forms/cm/variations.js)
-  - Now reads variations from /api/dashboard (matching by projectNo, forcing a sync if the cache lacks the
-    project) — this is where variation data actually lives — so the table populates. Still project-first,
-    then Variation number / Description / Instructed / Total.
-
-SRATs (pages/forms/cm/srats.js)
-  - "Responsible" on added tasks is now a dropdown of Portal Users (from /api/team), not a free text box.
-
-ISSUE NOTIFICATION EMAILS (pages/api/issue-notify.js)
-  - Only the Contracts Manager now gets the "Review & action this issue" button. The Operations Manager and
-    QS get an information-only email (same details + photo attachments, no action button).
+  - Same change: images/PDFs load via the inline proxy first (correct MIME type), then raw URL, then the
+    download panel. Correctly-uploaded proof photos now display in-app.
+  - NOTE: 45361.jpg in the screenshot is a photo uploaded during the earlier FormData bug — its stored
+    bytes are corrupted, so it will still not preview. Re-upload it; new photos are fine.
 
 LIVE PROJECT TASKS
-  - pages/operations/project-management/tasks.js: new "Date Added" column (auto from createdAt) in the
-    portal table.
-  - pages/forms/cm/tasks.js: shows "Added <date>" on each card; "Responsible" is now a Portal Users
-    dropdown; Target Completion colour fixed — on/after today = GREEN, past due = RED (was all red).
-  - Home overdue badge counts strictly past-due tasks.
+  - pages/forms/cm/tasks.js: sorted by Target Completion date, EARLIEST first (tasks with no date go to
+    the bottom). Added a "⚠ No target date set" warning on any task card without a target completion date.
+  - pages/operations/project-management/tasks.js: the portal table now shows "⚠ No target date" in the
+    Target Completion cell when none is set.
+
+ISSUE NOTIFICATION (pages/api/issue-notify.js)
+  - The Operations Manager and QS info-only emails now have the branded Issue PDF ATTACHED (for
+    information). Only the CM gets the "Review & action" button. Nothing is sent to the customer at this
+    stage (customer sending remains a separate manual step from the tracker).
+
+VARIATIONS (pages/forms/cm/variations.js)
+  - FIX: the dashboard identifies projects by jobNo, not projectNo — the match was failing, so the table
+    was always empty. Now matches p.projectNo against the dashboard project's jobNo (falls back to a sync).
+    Project-first, then Variation number / Description / Instructed / Total.
 
 Deploy all files. No cron/env change.
 
-STILL TO COME (next drop):
-  - Pre-Start area rework (project-first; Complete new vs View completed; Submit & send to customer with
-    IHM customer contacts add/delete).
-  - Forms: view/edit completed forms from inside the Site App.
+STILL TO COME: Pre-Start area rework; view/edit completed forms in the Site App.

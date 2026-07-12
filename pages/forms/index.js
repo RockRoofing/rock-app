@@ -426,9 +426,9 @@ function FileViewer({ files, index, onIndex, onClose }) {
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
         {isImage(f)
-          ? <img key={f.url} src={f.url} data-stage="raw" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-              onError={(e) => { const s = e.target.getAttribute('data-stage'); if (s === 'raw') { e.target.setAttribute('data-stage', 'proxy'); e.target.src = inlineUrl } }} />
-          : <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
+          ? <img key={f.url} src={inlineUrl} data-stage="proxy" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              onError={(e) => { const s = e.target.getAttribute('data-stage'); if (s === 'proxy') { e.target.setAttribute('data-stage', 'raw'); e.target.src = f.url } }} />
+          : <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
 
