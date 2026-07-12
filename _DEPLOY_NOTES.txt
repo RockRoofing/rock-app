@@ -1,18 +1,16 @@
-ATTACHMENTS — View now renders exactly like the Drawings viewer
+ATTACHMENTS — View shows the actual image (MIME-type fix)
 
-  Why it kept failing: the viewer was loading images through the /api/download proxy and had an aggressive
-  <img onError> fallback that hid the image and showed "Download to view" whenever anything went slightly
-  wrong. The Drawings viewer (which works) simply uses a plain <img src={file.url}> against the blob URL
-  with no proxy and no error fallback.
+  Diagnosis: the overlay opened but showed a broken-image icon. The manually uploaded delivery photos were
+  stored on the blob with content-type "application/octet-stream" (the browser sent no type on upload), and
+  browsers refuse to render <img> for a non-image content type — while Download still worked (it just saves
+  the bytes). Drawings didn't hit this because those files were stored with correct image types.
+
+  pages/api/download.js
+   - When serving inline, if the stored content-type isn't an image/PDF, it now derives the correct MIME
+     type from the file extension (jpg/jpeg/png/gif/webp/bmp/heic/heif/pdf) so <img>/<iframe> render it.
 
   components/RowAttachments.js
-   - Viewer now renders images with a plain <img src={f.url}> and PDFs with <iframe src={f.url}> — the
-     exact same approach as the working Drawings viewer. Removed the proxy src and the onError "Download to
-     view" fallback that was swallowing the image.
-   - Still portalled to document.body (so it can't be clipped by the table) and still has prev/next.
-   - Download button unchanged (proper filename via proxy).
+   - The viewer loads images/PDFs via /api/download?inline=1 (correct MIME type, same origin). If that ever
+     errors, the <img> falls back to the raw blob URL.
 
-  NOTE: the /api/download inline mode from the previous drop is no longer needed by the viewer; you can
-  keep the earlier download.js as-is (harmless) — no need to redeploy it.
-
-Affects Deliveries, Procurement, Risk Log, Live Tasks (shared component). Deploy this single file.
+Affects Deliveries, Procurement, Risk Log, Live Tasks. Deploy BOTH files.

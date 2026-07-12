@@ -136,6 +136,9 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
     background: 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 26,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   })
+  // Prefer the inline proxy (fixes octet-stream images that <img> won't render);
+  // fall back to the raw blob URL if the proxy errors.
+  const inlineUrl = `/api/download?inline=1&url=${encodeURIComponent(f.url)}&name=${encodeURIComponent(f.name || '')}`
 
   const overlay = (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 3000, display: 'flex', flexDirection: 'column' }}>
@@ -153,8 +156,9 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
         {isPdf(f)
-          ? <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
-          : <img key={f.url} src={f.url} alt={f.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />}
+          ? <iframe key={f.url} src={inlineUrl} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
+          : <img key={f.url} src={inlineUrl} alt={f.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              onError={(e) => { if (e.target.src !== f.url) e.target.src = f.url }} />}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
       {has && (
