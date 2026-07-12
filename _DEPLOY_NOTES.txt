@@ -1,22 +1,45 @@
-PROJECT VIEW — three fixes
+SITE APP — STAGE 1a: Forms (seed, reorg, Daily Site Diary auto-fill, type-aware edit)
 
-1) LAND ON PROJECT DETAILS
-   pages/operations/projects.js
-   - Opening a project now lands on the "Project Details" tab (was "Handover"). Applies to the View button,
-     the project-name link, and the default.
+NEW/CHANGED FILES
+  lib/formDefsExtra.js  (NEW) — 5 forms converted from the Fonn exports to the internal model:
+     • ACCIDENT BOOK: H&S Incident Record        (group: hs-incidence)
+     • Near Miss Report Form                     (group: hs-incidence)
+     • H&S Accident and Incident Report and Lessons Learnt  (group: hs-incidence, CM-only)
+     • Daywork Sheet & Onsite Instructions
+     • Using a Harness
+  lib/formDefs.js — appends EXTRA_SEED_FORMS to SEED_FORMS.
+  pages/api/forms.js — new POST { action:'seed-missing' }: additively inserts any seed forms whose id
+     isn't already present, WITHOUT touching existing/edited forms. Safe to run repeatedly.
 
-2) EDIT + DELETE ON PROJECT FORMS (and both Forms pages stay in sync)
-   lib/db.js            - new deleteSubmission(id): removes the submission key + its index entry.
-   pages/api/submissions.js - new DELETE /api/submissions?id=... (edit already existed via PUT).
-   pages/operations/projects.js (Project Forms tab) - each row now has "View / Edit" and a red "Delete".
-   pages/operations/forms.js (main Forms page)      - each row now has "View / Edit" and a red "Delete".
-   - Both pages read/write the SAME submissions store, so deleting in either place removes it from both.
-     Editing uses the existing submission modal (saves via PUT).
+  pages/forms/index.js — "Complete a Form" list reorganised:
+     • Alphabetical within each group.
+     • New "H&S Incidence Reporting" sub-section (Accident Book, Near Miss, + the CM-only H&S Report).
+     • New "Contracts Manager" sub-section (shown only to CM logins) containing the Start on Site
+       Checklist and CM-only forms.
+     • Forms tagged accessLevel:'contracts-manager' are hidden from operatives.
 
-3) DRAWINGS DELETE BUTTON CLIPPED
-   components/ProjectFiles.js
-   - The View / Download / Delete row on each drawing/file card now wraps (flexWrap) with a slightly
-     smaller gap, so the Delete button is no longer pushed out of view on narrow cards. (Affects Drawings
-     and any other ProjectFiles-based file grid.)
+  pages/forms/fill.js — Daily Site Diary auto-fill + searchable people:
+     • "Insert your name" (any members field labelled "your name") auto-fills the logged-in user.
+     • "Personnel on site working on behalf of Rock" defaults to whoever is allocated on the Planning
+       Gantt for that project on the selected diary date (still fully editable).
+     • The people picker (members fields) is now a SEARCHABLE list sourced from the Operatives roster
+       (falls back to Team Members), with selected people shown as removable chips.
 
-Deploy all five. No cron/env change.
+  components/SubmissionModal.js — editing a submitted form now renders the SAME control types as the
+     original form (single/multi choice keep their options, yes/no, date picker, long/short text, photos),
+     instead of turning every answer into a plain text box. It loads the form definition by formId.
+
+TO ACTIVATE THE NEW FORMS after deploy (one-time, additive — does NOT wipe existing forms):
+   POST https://app.rockroofing.co.uk/api/forms   body: {"action":"seed-missing"}
+   (e.g. from the browser console:
+      fetch('/api/forms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'seed-missing'})}).then(r=>r.json()).then(console.log)
+   It returns { added:[...ids] }. )
+
+Deploy all six files. No cron/env change.
+
+STILL TO COME (next drops):
+  1b — Operative Deliveries view (select project; PO/Supplier/Items/Actual date/Comments/Attachments;
+       photo/note warning; no delete; only actual date/comments/attachments editable on mobile).
+  Stage 2 — Contracts Manager Site App: Pre-Start section, Forms Completed, Missing Forms (CM's projects,
+       last-2-weeks default), Issues Log, SRATs (view+create), Live Tasks, Variations — all mobile,
+       project-first with the project name shown at the top.

@@ -30,6 +30,17 @@ export default async function handler(req, res) {
       await saveForms([...SEED_FORMS])
       return res.json({ ok: true, forms: SEED_FORMS })
     }
+    // Additive seed: add any seed forms whose id is not already present, without
+    // touching existing (possibly edited) forms. Safe to run repeatedly.
+    if (body.action === 'seed-missing') {
+      let forms = await getForms()
+      if (!forms || !forms.length) forms = []
+      const have = new Set(forms.map(f => f.id))
+      const added = []
+      for (const sf of SEED_FORMS) if (!have.has(sf.id)) { forms.push(sf); added.push(sf.id) }
+      if (added.length) await saveForms(forms)
+      return res.json({ ok: true, added, forms })
+    }
     const { form } = body
     if (!form || !form.title) return res.status(400).json({ error: 'Missing form' })
     let forms = await getForms()

@@ -361,14 +361,13 @@ function FormsList({ user, onBack }) {
   const router = useRouter()
   const [forms, setForms] = useState([])
   const [loading, setLoading] = useState(true)
+  const isCM = user?.accessLevel === 'contracts-manager'
 
   useEffect(() => {
     (async () => {
       try {
         const r = await fetch('/api/forms')
         const d = await r.json()
-        // Contracts Manager Site Report is completed by managers via the portal
-        // Project Report, not by operatives — hide it from the Forms App.
         const HIDDEN = ['contracts-manager-report']
         setForms((d.forms || []).filter(f => f.category === 'project' && !HIDDEN.includes(f.id)))
       } catch {}
@@ -376,33 +375,55 @@ function FormsList({ user, onBack }) {
     })()
   }, [])
 
+  // Access gate: forms tagged accessLevel:'contracts-manager' only show to CMs.
+  const visible = forms.filter(f => !f.accessLevel || f.accessLevel !== 'contracts-manager' || isCM)
+  const byTitle = (a, b) => (a.title || '').localeCompare(b.title || '')
+
+  // "Start on Site Checklist" belongs under the Contracts Manager section.
+  const isStartOnSite = f => f.id === 'start-on-site' || /start on site/i.test(f.title || '')
+  const isHS = f => f.group === 'hs-incidence'
+  const isCMForm = f => f.accessLevel === 'contracts-manager' || isStartOnSite(f)
+
+  const general = visible.filter(f => !isHS(f) && !isCMForm(f)).sort(byTitle)
+  const hs = visible.filter(f => isHS(f) && !isCMForm(f)).sort(byTitle)
+  const cmForms = visible.filter(f => isCMForm(f)).sort(byTitle)
+
+  const Card = f => (
+    <button key={f.id}
+      onClick={() => router.push(`/forms/fill?form=${f.id}`)}
+      style={{ display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: '18px 18px', cursor: 'pointer', width: '100%' }}>
+      <div style={{ fontSize: 26 }}>📝</div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{f.title}</div>
+        {f.short && <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{f.short}</div>}
+      </div>
+      <div style={{ color: BRAND, fontSize: 22 }}>›</div>
+    </button>
+  )
+  const SectionHead = t => <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND, margin: '22px 0 2px' }}>{t}</div>
+
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       {onBack && <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back</button>}
       <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Project Forms</h2>
-      <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Choose a form to complete</p>
+      <p style={{ color: '#777', fontSize: 14, margin: '0 0 8px' }}>Choose a form to complete</p>
       {loading ? (
         <div style={{ textAlign: 'center', color: '#aaa', padding: 30 }}>Loading forms…</div>
-      ) : !forms.length ? (
+      ) : !visible.length ? (
         <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No forms available yet.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {forms.map(f => (
-            <button key={f.id}
-              onClick={() => router.push(`/forms/fill?form=${f.id}`)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
-                background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16,
-                padding: '18px 18px', cursor: 'pointer', width: '100%',
-              }}>
-              <div style={{ fontSize: 26 }}>📝</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: INK }}>{f.title}</div>
-                {f.short && <div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>{f.short}</div>}
-              </div>
-              <div style={{ color: BRAND, fontSize: 22 }}>›</div>
-            </button>
-          ))}
+          {general.map(Card)}
+
+          {hs.length > 0 && <>
+            {SectionHead('H&S Incidence Reporting')}
+            {hs.map(Card)}
+          </>}
+
+          {isCM && cmForms.length > 0 && <>
+            {SectionHead('Contracts Manager')}
+            {cmForms.map(Card)}
+          </>}
         </div>
       )}
     </div>

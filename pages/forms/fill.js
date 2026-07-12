@@ -17,6 +17,9 @@ export default function Fill() {
   const [projects, setProjects] = useState([])
   const [projectId, setProjectId] = useState('')
   const [team, setTeam] = useState([])
+  const [roster, setRoster] = useState([])          // operatives roster (searchable Personnel list)
+  const [planning, setPlanning] = useState(null)    // { allocations, waterIngress }
+  const prefilled = useRef(false)
 
   useEffect(() => {
     try {
@@ -47,6 +50,14 @@ export default function Fill() {
           setTeam((dt.members || []).filter(m => m.active !== false)
             .map(m => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || '').filter(Boolean))
         } catch {}
+        try {
+          const ro = await fetch('/api/operatives'); const dro = await ro.json()
+          setRoster((dro.operatives || []).map(o => ({ id: o.id, name: `${o.firstName || ''} ${o.lastName || ''}`.trim(), company: o.company || '' })).filter(o => o.name))
+        } catch {}
+        try {
+          const rpl = await fetch('/api/planning'); const dpl = await rpl.json()
+          setPlanning({ allocations: dpl.allocations || {}, waterIngress: dpl.waterIngress || {} })
+        } catch {}
       } catch (e) { console.error(e) }
       setLoading(false)
     })()
@@ -54,6 +65,42 @@ export default function Fill() {
 
   const selectedProject = projects.find(p => p.id === projectId)
   const projectLabel = selectedProject ? `${selectedProject.jobNo ? selectedProject.jobNo + ' — ' : ''}${selectedProject.name}` : ''
+
+  // Auto-fill "Insert your name" members fields with the logged-in user (once).
+  useEffect(() => {
+    if (!form || !user || prefilled.current) return
+    const meName = user.name || ''
+    if (!meName) return
+    setAnswers(a => {
+      const next = { ...a }
+      for (const f of form.fields) {
+        if (f.type === 'members' && /your name/i.test(f.label || '') && (next[f.id] == null || (Array.isArray(next[f.id]) && !next[f.id].length))) {
+          next[f.id] = [meName]
+        }
+      }
+      return next
+    })
+    prefilled.current = true
+  }, [form, user])
+
+  // Daily Site Diary: default "Personnel on site" to whoever is on the Gantt for
+  // this project on the diary date. Runs when project or the diary date changes.
+  const diaryDateFieldId = form?.fields?.find(f => f.type === 'date' && /(site diary date|^date$|date for which)/i.test(f.label || ''))?.id
+  const personnelFieldId = form?.fields?.find(f => f.type === 'members' && /personnel|on site working|operatives on site/i.test(f.label || ''))?.id
+  const diaryDate = diaryDateFieldId ? answers[diaryDateFieldId] : ''
+  useEffect(() => {
+    if (!planning || !personnelFieldId || !projectId || !diaryDate) return
+    const cell = (planning.allocations[`L:${projectId}`] || {})[diaryDate]
+    if (!cell) return
+    const entries = Array.isArray(cell) ? cell : (cell.entries || [])
+    const names = entries.map(e => (roster.find(o => o.id === e.opId) || {}).name).filter(Boolean)
+    if (!names.length) return
+    setAnswers(a => {
+      const existing = Array.isArray(a[personnelFieldId]) ? a[personnelFieldId] : []
+      const merged = [...new Set([...existing, ...names])]
+      return { ...a, [personnelFieldId]: merged }
+    })
+  }, [planning, personnelFieldId, projectId, diaryDate, roster])
 
   function set(id, val) {
     setAnswers(a => ({ ...a, [id]: val }))
@@ -171,7 +218,7 @@ export default function Fill() {
         </div>
 
         {form.fields.map(f => (
-          <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} />
+          <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} />
         ))}
 
         <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
@@ -184,7 +231,7 @@ export default function Fill() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function Field({ f, value, onChange, error, team }) {
+function Field({ f, value, onChange, error, team, roster }) {
   if (f.type === 'section') {
     return <div style={{ margin: '26px 0 4px', paddingBottom: 6, borderBottom: '2px solid #ece8df' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND }}>{f.label}</div>
@@ -229,15 +276,8 @@ function Field({ f, value, onChange, error, team }) {
       {f.type === 'signature' && <Signature value={value} onChange={onChange} />}
 
       {f.type === 'members' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {(team || []).length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No team members yet — add them in Operations → Team Members.</div>}
-          {(team || []).map(nm => {
-            const arr = Array.isArray(value) ? value : (value ? [value] : [])
-            const on = arr.includes(nm)
-            return <Choice key={nm} label={nm} selected={on} check
-              onClick={() => onChange(on ? arr.filter(x => x !== nm) : [...arr, nm])} />
-          })}
-        </div>
+        <MembersPicker value={value} onChange={onChange}
+          people={(roster && roster.length ? roster.map(o => o.name) : (team || []))} />
       )}
 
       {notify && (
@@ -266,6 +306,43 @@ function Choice({ label, selected, onClick, check }) {
       }}>{selected ? '✓' : ''}</span>
       <span>{label}</span>
     </button>
+  )
+}
+
+// Searchable multi-select for people (operatives roster). Shows selected as chips,
+// a search box, and a filtered list. Also keeps any pre-selected name that isn't
+// in the list (e.g. an auto-filled name), so nothing is silently dropped.
+function MembersPicker({ value, onChange, people }) {
+  const [q, setQ] = useState('')
+  const selected = Array.isArray(value) ? value : (value ? [value] : [])
+  const all = [...new Set([...(people || []), ...selected])]
+  const toggle = nm => onChange(selected.includes(nm) ? selected.filter(x => x !== nm) : [...selected, nm])
+  const filtered = all.filter(nm => !selected.includes(nm) && (!q || nm.toLowerCase().includes(q.toLowerCase()))).sort((a, b) => a.localeCompare(b))
+  return (
+    <div>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          {selected.map(nm => (
+            <span key={nm} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fffbeb', border: `2px solid ${BRAND}`, borderRadius: 20, padding: '6px 12px', fontSize: 14, color: INK }}>
+              {nm}
+              <button onClick={() => toggle(nm)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#999', fontSize: 16, lineHeight: 1 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      {(people || []).length === 0 && selected.length === 0
+        ? <div style={{ fontSize: 13, color: '#aaa' }}>No operatives on the roster yet — add them in Operations → H&S → Operatives.</div>
+        : (
+          <>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search to add a person…"
+              style={{ ...inp, marginBottom: 8 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+              {filtered.length === 0 && <div style={{ fontSize: 13, color: '#aaa', padding: '4px 2px' }}>{q ? 'No matches.' : 'Everyone is selected.'}</div>}
+              {filtered.map(nm => <Choice key={nm} label={nm} selected={false} check onClick={() => { toggle(nm); setQ('') }} />)}
+            </div>
+          </>
+        )}
+    </div>
   )
 }
 

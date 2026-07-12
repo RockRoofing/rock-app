@@ -1,15 +1,27 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { INK, GOLD, Modal, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from './opsUI'
 
 // Shared submission modal used by the Forms page and the in-project Project
-// Forms tab. View mode shows answers with question labels; Edit mode allows
-// changing text answers and adding/removing photos, then saves via PUT.
+// Forms tab. View mode shows answers with question labels; Edit mode renders the
+// SAME control types as the original form (single/multi choice, yes/no, date,
+// text, photos), so editing preserves the original answer options.
 export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownload }) {
   const [editing, setEditing] = useState(false)
   const [answers, setAnswers] = useState(sub.answers || {})
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
-  const lbl = (k) => (labels && labels[sub.formId] && labels[sub.formId][k]) || k
+  const [formDef, setFormDef] = useState(null)   // full form definition (fields incl. type/options)
+  const lbl = (k) => (formDef?.fields?.find(f => f.id === k)?.label) || (labels && labels[sub.formId] && labels[sub.formId][k]) || k
+
+  // Load the form definition so we can render the correct editor per field.
+  useEffect(() => {
+    if (!sub.formId) return
+    (async () => {
+      try { const r = await fetch(`/api/forms?id=${sub.formId}`); const d = await r.json(); if (d.form) setFormDef(d.form) } catch {}
+    })()
+  }, [sub.formId])
+
+  const fieldFor = (k) => formDef?.fields?.find(f => f.id === k)
 
   async function save() {
     setSaving(true); setErr('')
@@ -25,8 +37,49 @@ export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownl
     } catch (e) { setErr(e?.message || 'Save failed'); setSaving(false) }
   }
 
+  const set = (k, v) => setAnswers(a => ({ ...a, [k]: v }))
   const isPhotos = (v) => Array.isArray(v) && v.length > 0 && typeof v[0] === 'string' && /^https?:|^data:/.test(v[0])
-  const isPhotoKey = (k, v) => isPhotos(v) || /photo|image/i.test(lbl(k))
+  const isPhotoKey = (k, v) => { const f = fieldFor(k); if (f) return f.type === 'photos'; return isPhotos(v) || /photo|image/i.test(lbl(k)) }
+
+  function EditControl({ k, v }) {
+    const f = fieldFor(k)
+    const type = f?.type
+    // Choice-based fields keep their original options.
+    if (type === 'single' || type === 'yesno') {
+      const opts = type === 'yesno' ? ['Yes', 'No'] : (f.options || [])
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {opts.map(opt => (
+            <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+              <input type="radio" checked={v === opt} onChange={() => set(k, opt)} /> {opt}
+            </label>
+          ))}
+        </div>
+      )
+    }
+    if (type === 'multi' || type === 'members') {
+      const arr = Array.isArray(v) ? v : (v ? [v] : [])
+      const opts = type === 'members' ? [...new Set(arr)] : (f.options || [])
+      // For members with no known option list, allow editing existing chips only.
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {opts.map(opt => {
+            const on = arr.includes(opt)
+            return (
+              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
+                <input type="checkbox" checked={on} onChange={() => set(k, on ? arr.filter(x => x !== opt) : [...arr, opt])} /> {opt}
+              </label>
+            )
+          })}
+          {type === 'members' && opts.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No names recorded.</div>}
+        </div>
+      )
+    }
+    if (type === 'date') return <input type="date" value={v || ''} onChange={e => set(k, e.target.value)} style={inpStyle} />
+    if (type === 'longtext') return <textarea value={v ?? ''} onChange={e => set(k, e.target.value)} style={{ ...inpStyle, minHeight: 70, fontFamily: 'inherit' }} />
+    // shorttext / unknown / signature-name fall back to text
+    return <input value={typeof v === 'object' ? (v?.name || '') : (v ?? '')} onChange={e => set(k, e.target.value)} style={inpStyle} />
+  }
 
   return (
     <Modal onClose={onClose} title={sub.formTitle} wide>
@@ -52,9 +105,7 @@ export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownl
             {isPhotoKey(k, v)
               ? <PhotoEditor value={Array.isArray(v) ? v : []} editing={editing} onChange={nv => setAnswers(a => ({ ...a, [k]: nv }))} />
               : editing
-                ? (typeof v === 'string' && v.length > 60
-                    ? <textarea value={v} onChange={e => setAnswers(a => ({ ...a, [k]: e.target.value }))} style={{ width: '100%', minHeight: 70, padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 14, fontFamily: 'inherit' }} />
-                    : <input value={typeof v === 'object' ? (v?.name || '') : (v ?? '')} onChange={e => setAnswers(a => ({ ...a, [k]: e.target.value }))} style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }} />)
+                ? <EditControl k={k} v={v} />
                 : <div style={{ fontSize: 14, color: INK }}>{typeof v === 'object' ? (v?.name ? `${v.name} (${v.date || ''})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
           </div>
         )
@@ -62,6 +113,8 @@ export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownl
     </Modal>
   )
 }
+
+const inpStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }
 
 function PhotoEditor({ value, editing, onChange }) {
   const [uploading, setUploading] = useState(false)
