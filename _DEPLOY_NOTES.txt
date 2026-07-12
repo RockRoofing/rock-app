@@ -1,21 +1,13 @@
-SITE APP + PORTAL — PDF viewer (canvas) + task fixes
+SITE APP — CM access now gated by access level + Operative badge styling
 
-DRAWINGS / RAMS + DELIVERIES PDF VIEWING
-  The reason PDFs kept showing the browser's "Open / download" prompt is that mobile Chrome refuses to
-  inline-render a PDF in an <iframe>, no matter the headers. Fix: PDFs are now rendered with pdf.js onto
-  <canvas> elements (scrollable, all pages), which the browser cannot hijack.
-  - pages/forms/index.js: FileViewer now uses a PdfCanvas component for PDFs (Drawings & RAMS). Images
-    still render via the inline proxy.
-  - components/RowAttachments.js: the shared AttachmentViewer (Deliveries/Procurement/Risk/Tasks) now uses
-    the same pdf.js canvas for PDFs.
-  pdf.js is loaded from the same CDN already used for thumbnails; PDFs load via /api/download?inline=1 so
-  pdf.js fetches them same-origin.
+  pages/forms/index.js
+   - FIX: the Contracts Manager sections were showing to anyone whose NAME matched a project's Contracts
+     Manager field, even if their Site App access level was set to Operative. CM access is now gated purely
+     by the access level (accessLevel === 'contracts-manager'). Name-matching still decides which projects
+     are "theirs", but no longer grants CM access. Setting a user to Operative now hides all CM sections.
 
-PORTAL LIVE PROJECT TASKS (pages/operations/project-management/tasks.js)
-  - Target Completion date is now editable INLINE (date picker in the cell), like the other schedules.
-  - When no target date is set, the cell shows "Target Completion Date Required" (was "No target date").
+  pages/operations/users.js  (Site App Users page)
+   - The "Operative" access value now renders as a pill badge (grey/slate) matching the style of the
+     "Contracts Manager" pill, instead of plain text.
 
-Deploy all three files. No cron/env change.
-
-STILL TO COME (next drop): Pre-Start area rework (project-first; Complete new vs View completed; Submit &
-send to customer pulling IHM siteContacts with add/delete) and view/edit completed Forms inside the app.
+Deploy both files. No cron/env change.

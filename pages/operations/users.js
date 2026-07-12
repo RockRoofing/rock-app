@@ -82,7 +82,7 @@ export default function UsersPage() {
                   <td style={td}>{u.role || '—'}</td>
                   <td style={td}>{u.accessLevel === 'contracts-manager'
                     ? <span style={{ background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>
-                    : <span style={{ color: '#666', fontSize: 13 }}>Operative</span>}</td>
+                    : <span style={{ background: '#f0f4f8', color: '#475569', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Operative</span>}</td>
                   <td style={td}>{u.phone || '—'}</td>
                   <td style={td}>{u.email || '—'}</td>
                   <td style={td}>{u.mustResetPin
