@@ -188,7 +188,7 @@ export default function Deliveries() {
                           : <span style={{ color: '#bbb', fontSize: 12 }}>—</span>}
                       </td>
                       <td style={{ ...td, ...stageGreen(1) }}>{yn(r, 'poSent')}</td>
-                      <td style={{ ...td, whiteSpace: 'nowrap', ...((delivered || lastGreen >= 0) ? GREENC : dateCellStyle(r.requiredDeliveryDate)) }}>
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...((delivered || r.requiredDeliveryDate) ? GREENC : dateCellStyle(r.requiredDeliveryDate)) }}>
                         <input type="date" value={r.requiredDeliveryDate || ''} onChange={e => patch(r.id, { requiredDeliveryDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
                         {!r.requiredDeliveryDate && <div style={{ fontSize: 11, color: '#c2410c', fontWeight: 600, marginTop: 3 }}>⚠ No scheduled date set</div>}
                       </td>

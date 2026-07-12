@@ -1,24 +1,15 @@
-DELIVERIES — Scheduled Delivery rename, column move, warnings, app viewer/download
+DELIVERIES — View button fix + Scheduled Delivery green rule
 
-DEPENDS ON: attachments-viewer-download.zip must be deployed first (this uses the AttachmentViewer +
-downloadFile now exported from components/RowAttachments.js).
+  components/RowAttachments.js
+   - Fix: clicking "View" now closes the attachments list modal and opens the full-screen viewer cleanly
+     (previously the viewer could open behind the still-open modal and appear to do nothing).
+   - Viewer is now robust to files with no extension / missing type: it attempts to render as an image and
+     only falls back to the "Download to view" panel if the image genuinely fails to load. PDFs still embed.
+   (Affects Deliveries, Procurement, Risk Log, Live Tasks — all share this component.)
 
-  pages/operations/project-management/deliveries.js  (portal)
-   - "Required Delivery" renamed to "Scheduled Delivery" everywhere (column header, edit-form label, and
-     the PO-stage reminder prompt).
-   - The Scheduled Delivery column has MOVED to sit immediately AFTER the "PO Sent" column
-     (order now: … Items · PO Sent · Scheduled Delivery · Supplier Confirmed · 2nd Check · Actual Delivery …).
-   - In-cell warning: when no scheduled delivery date is set, the cell shows "⚠ No scheduled date set"
-     under the date box.
-   - Attachments already use the shared RowAttachments component, so View (in-app viewer) and Download
-     (correct filename) now behave the same as Procurement / Risk Log / Live Tasks.
+  pages/operations/project-management/deliveries.js
+   - The Scheduled Delivery cell now goes green ONLY when a scheduled date is actually set. Marking
+     "PO Sent" = Yes no longer turns the Scheduled Delivery cell green. (PO Sent still greens its own cell
+     and the columns to its left as before.)
 
-  pages/forms/deliveries.js  (Site App)
-   - "Required delivery" renamed to "Scheduled delivery" on the card and in the editor.
-   - Removed the "Due <date>" text from the top-right of each delivery card (delivered cards still show the
-     green "✓ Delivered <date>").
-   - Card now shows "⚠ No scheduled delivery date set" when the date is missing.
-   - Proof photos: tap a photo to open the same full-screen in-app viewer (prev/next/swipe) used elsewhere,
-     with a Download button that saves the real image file.
-
-Deploy both. Deploy AFTER attachments-viewer-download.zip. No cron/env change.
+Deploy both. No cron/env change.

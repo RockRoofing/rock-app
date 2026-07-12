@@ -45,7 +45,7 @@ export default function RowAttachments({ files, onChange, readOnly = false }) {
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i ? '1px solid #f2f2f2' : 'none' }}>
                 {isImage(f) && <img src={f.url} alt="" style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: 6 }} />}
                 <span style={{ flex: 1, fontSize: 13, color: '#333', wordBreak: 'break-word' }}>{f.name || 'file'}</span>
-                <button onClick={() => setViewIdx(i)} style={linkA}>View</button>
+                <button onClick={() => { setOpen(false); setViewIdx(i) }} style={linkA}>View</button>
                 <button onClick={() => downloadFile(f)} style={linkA}>Download</button>
                 {!readOnly && <button onClick={() => onChange(list.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>}
               </div>
@@ -151,15 +151,15 @@ export function AttachmentViewer({ files, index, onIndex, onClose }) {
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
         style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto' }}>
         {has && <button onClick={() => go(-1)} aria-label="Previous" style={navBtn('left')}>‹</button>}
-        {isImage(f)
-          ? <img key={f.url} src={f.url} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          : isPdf(f)
-            ? <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
-            : <div style={{ color: '#fff', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>
-                <div style={{ marginBottom: 14 }}>{f.name || 'File'}</div>
-                <button onClick={() => downloadFile(f)} style={{ background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Download to view</button>
-              </div>}
+        {isPdf(f)
+          ? <iframe key={f.url} src={f.url} title={f.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff', borderRadius: 8 }} />
+          : <img key={f.url} src={f.url} alt={f.name || ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              onError={(e) => { e.target.style.display = 'none'; if (e.target.nextSibling) e.target.nextSibling.style.display = 'block' }} />}
+        {!isPdf(f) && <div style={{ display: 'none', color: '#fff', textAlign: 'center' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>
+          <div style={{ marginBottom: 14 }}>{f.name || 'File'}</div>
+          <button onClick={() => downloadFile(f)} style={{ background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Download to view</button>
+        </div>}
         {has && <button onClick={() => go(1)} aria-label="Next" style={navBtn('right')}>›</button>}
       </div>
       {has && (
