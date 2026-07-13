@@ -1,490 +1,451 @@
 // pages/crm.js
 // -----------------------------------------------------------------------------
-// CRM PREVIEW PAGE  (admin-only)
+// CRM PREVIEW  (admin-only once you enable the guard at the bottom)
 //
-// This is a SELF-CONTAINED PREVIEW. It reads deal data baked into the file
-// (lib/crmSeedDeals.js) and keeps all changes in the browser's memory only.
-// Nothing here reads from or writes to your live database or dashboards.
-// Refreshing the page resets everything back to the seed data. That is expected
-// at this stage — the goal is to look at it and click around before we wire it
-// up for real.
+// Styled to match Pipedrive. SELF-CONTAINED PREVIEW: reads deals baked into
+// lib/crmSeedDeals.js and keeps every change in the browser's memory only.
+// Refreshing resets to the seed. Nothing here touches your live database or
+// dashboards.
 //
-// What works in this preview:
-//   - Single pipeline board with your 15 stages, left to right
-//   - Drag a deal card from one stage to another
-//   - Open a deal to see all its fields
-//   - Mark a deal Won or Lost
-//   - Add / tick off tasks on a deal
-//   - Add custom fields to a deal
-//   - Search / filter the board
+// Board:
+//   - 15 stages left-to-right, each header shows £total and deal count
+//   - Cards show title, org, contact, date, value, owner initials
+//   - Click a card to open the full deal view
+//
+// Deal view:
+//   - Clickable stage timeline bar across the top (click a segment = move stage)
+//     Segments are even width, no day-counts (past per-stage history isn't in
+//     the export, so we don't invent it). Passed/current = green, ahead = grey.
+//   - Left: Summary + Details (all custom fields)
+//   - Centre: add a note; add an activity (Call or Email only); Won/Lost
+//   - History: one combined chronological "All" view, every event dated
+//     (note added, activity completed, stage moved, value changed, close-date
+//      changed, won/lost, imported)
 // -----------------------------------------------------------------------------
 
 import { useState, useMemo, useRef } from 'react';
 import { SEED_DEALS } from '../lib/crmSeedDeals';
 
-// ---- Access control -------------------------------------------------------
-// Adjust this import to however your portal exposes the current user's role.
-// Most of your other admin pages already do a role check; mirror that here.
-// The block below assumes a hook or helper that returns the role string.
-// If your project uses `requireRole` server-side (lib/portalAuth.js), you can
-// additionally gate this route in getServerSideProps — see note at the bottom.
-
-// --- Stage definitions (order matters: this is the board left-to-right) -----
 const STAGES = [
-  { id: 'stage_project_in',     label: 'Project In' },
-  { id: 'stage_1st_contact',    label: '1st Contact' },
-  { id: 'stage_calls_x3',       label: 'Calls x 3' },
-  { id: 'stage_in_abeyance',    label: 'In Abeyance' },
-  { id: 'stage_tbf',            label: 'TBF' },
-  { id: 'stage_variations',     label: 'Variations' },
-  { id: 'stage_info_pending',   label: 'Info Pending' },
-  { id: 'stage_received',       label: 'Received' },
-  { id: 'stage_1',              label: 'Stage 1' },
-  { id: 'stage_2',              label: 'Stage 2' },
-  { id: 'stage_review',         label: 'Review' },
-  { id: 'stage_mc_unsec_np',    label: 'MC Unsecured Not Priced' },
-  { id: 'stage_mc_unsecured',   label: 'MC Unsecured' },
-  { id: 'stage_mc_secured',     label: 'MC Secured' },
-  { id: 'stage_negotiating',    label: 'Negotiating' },
+  { id: 'stage_project_in',   label: 'Project In' },
+  { id: 'stage_1st_contact',  label: '1st Contact' },
+  { id: 'stage_calls_x3',     label: 'Calls x 3' },
+  { id: 'stage_in_abeyance',  label: 'In Abeyance' },
+  { id: 'stage_tbf',          label: 'TBF' },
+  { id: 'stage_variations',   label: 'Variations' },
+  { id: 'stage_info_pending', label: 'info Pending' },
+  { id: 'stage_received',     label: 'Received' },
+  { id: 'stage_1',            label: 'Stage 1' },
+  { id: 'stage_2',            label: 'Stage 2' },
+  { id: 'stage_review',       label: 'Review' },
+  { id: 'stage_mc_unsec_np',  label: 'MC Unsecured Not Priced' },
+  { id: 'stage_mc_unsecured', label: 'MC Unsecured' },
+  { id: 'stage_mc_secured',   label: 'MC Secured' },
+  { id: 'stage_negotiating',  label: 'Negotiating' },
+];
+const STAGE_INDEX = Object.fromEntries(STAGES.map((s, i) => [s.id, i]));
+const stageLabel = (id) => (STAGES.find((s) => s.id === id) || {}).label || id;
+
+// Detail fields shown in the left column, in order.
+const DETAIL_FIELDS = [
+  ['glenigan_id', 'Glenigan Project ID'],
+  ['site_location', 'Site Location'],
+  ['region', 'Region'],
+  ['size_m2', 'Size: m2'],
+  ['credit_score', 'Credit Score'],
+  ['credit_limit', 'Credit Limit'],
+  ['project_stage', 'Project Stage'],
+  ['roofing_works_onsite', 'Roofing Works On-Site'],
+  ['estimator_responsible', 'Estimator Responsible'],
+  ['systems_priced', 'Systems Priced'],
+  ['lead_source', 'Lead Source'],
+  ['project_type', 'Project Type'],
+  ['scope_of_works', 'Description of Project Scope of Works'],
+  ['general_info', 'General Information'],
 ];
 
-// Human-friendly labels for the built-in fields carried over from Pipedrive.
-const FIELD_LABELS = {
-  value: 'Value',
-  organization: 'Organization',
-  expected_close_date: 'Expected close',
-  estimator_responsible: 'Estimator',
-  lead_source: 'Lead source',
-  owner: 'Owner',
-  created: 'Created',
-  won_time: 'Won date',
-  lost_time: 'Lost date',
-  lost_reason: 'Lost reason',
-  project_type: 'Project type',
-  systems_priced: 'Systems priced',
-  credit_score: 'Credit score',
-  size_m2: 'Size (m²)',
-  region: 'Region',
-  site_location: 'Site location',
-  site_postcode: 'Postcode',
-  contact_person: 'Contact',
-  scope_of_works: 'Scope of works',
-  email_messages_count: 'Emails',
-};
-
-// The order fields appear inside the deal drawer.
-const FIELD_ORDER = [
-  'organization', 'contact_person', 'value', 'owner', 'estimator_responsible',
-  'region', 'site_location', 'site_postcode', 'size_m2', 'project_type',
-  'systems_priced', 'lead_source', 'credit_score', 'scope_of_works',
-  'expected_close_date', 'created', 'email_messages_count',
-  'won_time', 'lost_time', 'lost_reason',
-];
-
-function formatValue(key, v) {
-  if (v === null || v === undefined || v === '') return '—';
-  if (key === 'value') {
-    const n = Number(v);
-    if (!isNaN(n)) return '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 });
-  }
-  if (key === 'size_m2') {
-    const n = Number(v);
-    if (!isNaN(n)) return n.toLocaleString('en-GB') + ' m²';
-  }
+// ---- helpers --------------------------------------------------------------
+function money(v) {
+  const n = Number(v);
+  if (isNaN(n)) return '£0';
+  return '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 2 });
+}
+function money0(v) {
+  const n = Number(v);
+  if (isNaN(n)) return '£0';
+  return '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 });
+}
+function shortDate(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d)) return String(v);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function dateTime(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (isNaN(d)) return String(v);
+  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+function initials(name) {
+  if (!name) return '?';
+  return String(name).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
+function nowIso() { return new Date().toISOString(); }
+function fieldVal(k, v) {
+  if (v === null || v === undefined || v === '') return '-';
+  if (k === 'size_m2') { const n = Number(v); if (!isNaN(n)) return n.toLocaleString('en-GB'); }
+  if (k === 'credit_limit') { const n = Number(v); if (!isNaN(n)) return money0(n); }
   return String(v);
 }
 
-function money(v) {
-  const n = Number(v);
-  if (isNaN(n)) return '—';
-  return '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 });
-}
-
-// --- Small UI atoms --------------------------------------------------------
-const COLORS = {
-  bg: '#0f1720',
-  panel: '#16212e',
-  panel2: '#1d2b3a',
-  line: '#28384a',
-  text: '#e6edf3',
-  dim: '#8ba0b4',
-  accent: '#f0a500',      // Rock Roofing amber-ish
-  won: '#3fb950',
-  lost: '#d1493f',
-  open: '#4b8bd4',
+// ---- palette (Pipedrive-ish light theme) ----------------------------------
+const C = {
+  green: '#2a862f',
+  greenBar: '#3a9c3e',
+  grey: '#e4e7ea',
+  line: '#e1e4e8',
+  text: '#1a1a1a',
+  dim: '#7a828a',
+  link: '#2a7de1',
+  bg: '#f4f5f7',
+  card: '#ffffff',
+  won: '#2a862f',
+  lost: '#d64545',
+  amber: '#e6a817',
 };
 
-function StatusPill({ status }) {
-  const map = {
-    won: { bg: 'rgba(63,185,80,.15)', fg: COLORS.won, label: 'Won' },
-    lost: { bg: 'rgba(209,73,63,.15)', fg: COLORS.lost, label: 'Lost' },
-    open: { bg: 'rgba(75,139,212,.15)', fg: COLORS.open, label: 'Open' },
-  };
-  const s = map[status] || map.open;
+// ===========================================================================
+// BOARD
+// ===========================================================================
+function BoardCard({ deal, onOpen }) {
   return (
-    <span style={{
-      background: s.bg, color: s.fg, fontSize: 11, fontWeight: 600,
-      padding: '2px 8px', borderRadius: 20, letterSpacing: .3,
-    }}>{s.label}</span>
-  );
-}
-
-// --- Deal card -------------------------------------------------------------
-function DealCard({ deal, onOpen, onDragStart }) {
-  return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, deal.id)}
-      onClick={() => onOpen(deal.id)}
-      style={{
-        background: COLORS.panel2,
-        border: `1px solid ${COLORS.line}`,
-        borderLeft: `3px solid ${
-          deal.status === 'won' ? COLORS.won :
-          deal.status === 'lost' ? COLORS.lost : COLORS.accent
-        }`,
-        borderRadius: 8,
-        padding: '10px 12px',
-        marginBottom: 8,
-        cursor: 'grab',
-        transition: 'transform .08s, box-shadow .08s',
-      }}
-      onMouseDown={(e) => (e.currentTarget.style.cursor = 'grabbing')}
-      onMouseUp={(e) => (e.currentTarget.style.cursor = 'grab')}
-    >
-      <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, lineHeight: 1.3, marginBottom: 6 }}>
-        {deal.title}
-      </div>
-      <div style={{ fontSize: 12, color: COLORS.dim, marginBottom: 4 }}>
-        {deal.fields.organization || '—'}
-      </div>
+    <div onClick={() => onOpen(deal.id)} style={{
+      background: C.card, border: `1px solid ${C.line}`, borderRadius: 6,
+      padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12,
+    }}>
+      <div style={{ fontWeight: 600, color: C.text, lineHeight: 1.3, marginBottom: 3 }}>{deal.title}</div>
+      <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.organization || '\u00a0'}</div>
+      <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.contact_person || '\u00a0'}</div>
+      <div style={{ color: C.dim, marginBottom: 6, fontSize: 11 }}>{shortDate(deal.fields.created)}</div>
+      <div style={{ fontWeight: 600, color: C.text, marginBottom: 8 }}>{money(deal.fields.value)}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.accent }}>
-          {money(deal.fields.value)}
-        </span>
-        <StatusPill status={deal.status} />
+        <span title={deal.fields.owner || ''} style={{
+          width: 22, height: 22, borderRadius: '50%', background: '#cfd6dd',
+          color: '#333', fontSize: 10, fontWeight: 700, display: 'flex',
+          alignItems: 'center', justifyContent: 'center',
+        }}>{initials(deal.fields.owner)}</span>
+        {deal.status === 'won' && <span style={pill(C.won)}>Won</span>}
+        {deal.status === 'lost' && <span style={pill(C.lost)}>Lost</span>}
+        {deal.status === 'open' && Number(deal.fields.value) === 0 &&
+          <span title="No value set" style={{ color: C.amber, fontSize: 14 }}>⚠</span>}
       </div>
-      {deal.tasks && deal.tasks.length > 0 && (
-        <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 6 }}>
-          ✓ {deal.tasks.filter(t => t.done).length}/{deal.tasks.length} tasks
-        </div>
-      )}
     </div>
   );
 }
 
-// --- Stage column ----------------------------------------------------------
-function StageColumn({ stage, deals, onOpen, onDragStart, onDrop }) {
-  const [over, setOver] = useState(false);
+function BoardColumn({ stage, deals, onOpen }) {
   const total = deals.reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
   return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => { setOver(false); onDrop(e, stage.id); }}
-      style={{
-        minWidth: 260, maxWidth: 260, flex: '0 0 260px',
-        background: over ? COLORS.panel2 : COLORS.panel,
-        border: `1px solid ${over ? COLORS.accent : COLORS.line}`,
-        borderRadius: 10, padding: 10, display: 'flex', flexDirection: 'column',
-        maxHeight: '100%',
-      }}
-    >
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{stage.label}</span>
-          <span style={{ fontSize: 12, color: COLORS.dim }}>{deals.length}</span>
-        </div>
-        <div style={{ fontSize: 11, color: COLORS.dim, marginTop: 2 }}>{money(total)}</div>
+    <div style={{ minWidth: 208, maxWidth: 208, flex: '0 0 208px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ padding: '8px 4px 10px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{stage.label}</div>
+        <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{money0(total)} · {deals.length} deals</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1 }}>
-        {deals.map((d) => (
-          <DealCard key={d.id} deal={d} onOpen={onOpen} onDragStart={onDragStart} />
-        ))}
-        {deals.length === 0 && (
-          <div style={{ fontSize: 12, color: COLORS.dim, textAlign: 'center', padding: '20px 0', opacity: .6 }}>
-            Drop a deal here
-          </div>
-        )}
+      <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>
+        {deals.map((d) => <BoardCard key={d.id} deal={d} onOpen={onOpen} />)}
       </div>
     </div>
   );
 }
 
-// --- Deal drawer (detail panel) --------------------------------------------
-function DealDrawer({ deal, onClose, onSetStatus, onAddTask, onToggleTask, onAddField, onMove }) {
-  const [taskText, setTaskText] = useState('');
-  const [newFieldName, setNewFieldName] = useState('');
-  const [newFieldValue, setNewFieldValue] = useState('');
-
-  if (!deal) return null;
-
-  const builtIn = FIELD_ORDER.filter(k => deal.fields[k] !== undefined);
-  const customKeys = Object.keys(deal.fields).filter(
-    k => !FIELD_ORDER.includes(k) && !['value'].includes(k)
-  ).filter(k => k.startsWith('custom_'));
-
+// ===========================================================================
+// STAGE TIMELINE BAR (clickable)
+// ===========================================================================
+function TimelineBar({ deal, onMove }) {
+  const currentIdx = STAGE_INDEX[deal.stageId];
   return (
-    <>
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 40,
-      }} />
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(460px, 100%)',
-        background: COLORS.panel, borderLeft: `1px solid ${COLORS.line}`,
-        zIndex: 50, overflowY: 'auto', padding: 20,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-          <StatusPill status={deal.status} />
-          <button onClick={onClose} style={btnGhost}>Close</button>
-        </div>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: '8px 0 4px' }}>
-          {deal.title}
-        </h2>
-        <div style={{ fontSize: 20, fontWeight: 700, color: COLORS.accent, marginBottom: 16 }}>
-          {money(deal.fields.value)}
-        </div>
-
-        {/* Won / Lost controls */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          <button onClick={() => onSetStatus(deal.id, 'won')}
-            style={{ ...btnBase, background: deal.status === 'won' ? COLORS.won : 'transparent',
-                     color: deal.status === 'won' ? '#fff' : COLORS.won, border: `1px solid ${COLORS.won}` }}>
-            Mark Won
-          </button>
-          <button onClick={() => onSetStatus(deal.id, 'lost')}
-            style={{ ...btnBase, background: deal.status === 'lost' ? COLORS.lost : 'transparent',
-                     color: deal.status === 'lost' ? '#fff' : COLORS.lost, border: `1px solid ${COLORS.lost}` }}>
-            Mark Lost
-          </button>
-          {deal.status !== 'open' && (
-            <button onClick={() => onSetStatus(deal.id, 'open')} style={btnGhost}>Reopen</button>
-          )}
-        </div>
-
-        {/* Move stage */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={lbl}>Stage</label>
-          <select value={deal.stageId} onChange={(e) => onMove(deal.id, e.target.value)} style={select}>
-            {STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        </div>
-
-        {/* Fields */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={sectionTitle}>Details</div>
-          {builtIn.map(k => (
-            <div key={k} style={fieldRow}>
-              <span style={fieldKey}>{FIELD_LABELS[k] || k}</span>
-              <span style={fieldVal}>{formatValue(k, deal.fields[k])}</span>
-            </div>
-          ))}
-          {customKeys.map(k => (
-            <div key={k} style={fieldRow}>
-              <span style={fieldKey}>{k.replace('custom_', '')}</span>
-              <span style={fieldVal}>{formatValue(k, deal.fields[k])}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Add custom field */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={sectionTitle}>Add a field</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input placeholder="Field name" value={newFieldName}
-              onChange={(e) => setNewFieldName(e.target.value)} style={{ ...input, flex: 1 }} />
-            <input placeholder="Value" value={newFieldValue}
-              onChange={(e) => setNewFieldValue(e.target.value)} style={{ ...input, flex: 1 }} />
+    <div style={{ display: 'flex', gap: 3, padding: '10px 0' }}>
+      {STAGES.map((s, i) => {
+        const passed = i <= currentIdx;
+        return (
+          <div key={s.id} title={s.label} onClick={() => onMove(deal.id, s.id)}
+            style={{
+              flex: 1, height: 22, cursor: 'pointer', position: 'relative',
+              background: passed ? C.greenBar : C.grey,
+              clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%)',
+            }}>
+            <span style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: 10, fontWeight: 600,
+              color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden',
+            }}>{i === currentIdx ? s.label : ''}</span>
           </div>
-          <button
-            onClick={() => {
-              if (!newFieldName.trim()) return;
-              onAddField(deal.id, newFieldName.trim(), newFieldValue);
-              setNewFieldName(''); setNewFieldValue('');
-            }}
-            style={{ ...btnBase, marginTop: 8, background: COLORS.accent, color: '#1a1200', width: '100%' }}
-          >Add field</button>
-        </div>
-
-        {/* Tasks */}
-        <div>
-          <div style={sectionTitle}>Tasks</div>
-          {deal.tasks.map(t => (
-            <div key={t.id} onClick={() => onToggleTask(deal.id, t.id)}
-              style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', cursor: 'pointer' }}>
-              <span style={{
-                width: 16, height: 16, borderRadius: 4, flexShrink: 0,
-                border: `1.5px solid ${t.done ? COLORS.won : COLORS.dim}`,
-                background: t.done ? COLORS.won : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 11,
-              }}>{t.done ? '✓' : ''}</span>
-              <span style={{ fontSize: 13, color: t.done ? COLORS.dim : COLORS.text,
-                             textDecoration: t.done ? 'line-through' : 'none' }}>{t.text}</span>
-            </div>
-          ))}
-          {deal.tasks.length === 0 && (
-            <div style={{ fontSize: 12, color: COLORS.dim, opacity: .7, padding: '4px 0' }}>No tasks yet.</div>
-          )}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-            <input placeholder="New task" value={taskText}
-              onChange={(e) => setTaskText(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && taskText.trim()) { onAddTask(deal.id, taskText.trim()); setTaskText(''); } }}
-              style={{ ...input, flex: 1 }} />
-            <button onClick={() => { if (taskText.trim()) { onAddTask(deal.id, taskText.trim()); setTaskText(''); } }}
-              style={{ ...btnBase, background: COLORS.panel2, color: COLORS.text, border: `1px solid ${COLORS.line}` }}>Add</button>
-          </div>
-        </div>
-      </div>
-    </>
+        );
+      })}
+    </div>
   );
 }
 
-// --- Main page -------------------------------------------------------------
+// ===========================================================================
+// HISTORY (combined chronological)
+// ===========================================================================
+function historyIcon(type) {
+  const map = { note: '📝', call: '📞', email: '✉️', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇' };
+  return map[type] || '•';
+}
+function HistoryFeed({ history }) {
+  const sorted = [...history].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  return (
+    <div>
+      {sorted.map((h) => (
+        <div key={h.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+          <span style={{
+            width: 26, height: 26, borderRadius: '50%', background: '#f0f2f4', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12,
+          }}>{historyIcon(h.type)}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}</div>
+            {h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>}
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 3 }}>{dateTime(h.ts)}</div>
+          </div>
+        </div>
+      ))}
+      {sorted.length === 0 && <div style={{ fontSize: 13, color: C.dim, padding: '16px 0' }}>No history yet.</div>}
+    </div>
+  );
+}
+
+// ===========================================================================
+// DEAL VIEW (full screen, replaces board)
+// ===========================================================================
+function DealView({ deal, onBack, onMove, onSetStatus, onAddNote, onAddActivity, onEditValue, onEditClose }) {
+  const [noteText, setNoteText] = useState('');
+  const [actType, setActType] = useState('call');
+  const [actText, setActText] = useState('');
+  const [editingValue, setEditingValue] = useState(false);
+  const [valueDraft, setValueDraft] = useState(String(deal.fields.value ?? ''));
+
+  return (
+    <div style={{ background: C.card, minHeight: '100vh' }}>
+      {/* top bar */}
+      <div style={{ borderBottom: `1px solid ${C.line}`, padding: '14px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button onClick={onBack} style={backBtn}>← Deals</button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: C.text }}>{deal.title}</h1>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => onSetStatus(deal.id, 'won')}
+              style={{ ...wlBtn, background: deal.status === 'won' ? C.won : '#fff',
+                       color: deal.status === 'won' ? '#fff' : C.won, borderColor: C.won }}>Won</button>
+            <button onClick={() => onSetStatus(deal.id, 'lost')}
+              style={{ ...wlBtn, background: deal.status === 'lost' ? C.lost : '#fff',
+                       color: deal.status === 'lost' ? '#fff' : C.lost, borderColor: C.lost }}>Lost</button>
+            {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={backBtn}>Reopen</button>}
+          </div>
+        </div>
+        {/* clickable timeline */}
+        <TimelineBar deal={deal} onMove={onMove} />
+        <div style={{ fontSize: 12, color: C.dim }}>Project → {stageLabel(deal.stageId)}</div>
+      </div>
+
+      {/* body: left details + centre history */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+        {/* LEFT COLUMN */}
+        <div style={{ width: 300, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 20, boxSizing: 'border-box' }}>
+          <div style={sideHead}>Summary</div>
+          <div style={sideRow}>
+            <span style={sideKey}>Value</span>
+            {editingValue ? (
+              <span style={{ display: 'flex', gap: 4 }}>
+                <input value={valueDraft} onChange={(e) => setValueDraft(e.target.value)}
+                  style={{ ...miniInput, width: 90 }} />
+                <button onClick={() => { onEditValue(deal.id, Number(valueDraft) || 0); setEditingValue(false); }}
+                  style={miniBtn}>Save</button>
+              </span>
+            ) : (
+              <span style={sideValLink} onClick={() => { setValueDraft(String(deal.fields.value ?? '')); setEditingValue(true); }}>
+                {money(deal.fields.value)}
+              </span>
+            )}
+          </div>
+          <div style={sideRow}><span style={sideKey}>Organization</span><span style={sideVal}>{deal.fields.organization || '-'}</span></div>
+          <div style={sideRow}><span style={sideKey}>Contact</span><span style={sideVal}>{deal.fields.contact_person || '-'}</span></div>
+          <div style={sideRow}><span style={sideKey}>Owner</span><span style={sideVal}>{deal.fields.owner || '-'}</span></div>
+          <div style={sideRow}>
+            <span style={sideKey}>Expected close</span>
+            <span style={sideValLink} onClick={() => {
+              const v = prompt('Expected close date (YYYY-MM-DD):', deal.fields.expected_close_date || '');
+              if (v !== null) onEditClose(deal.id, v);
+            }}>{shortDate(deal.fields.expected_close_date) || '-'}</span>
+          </div>
+
+          <div style={{ ...sideHead, marginTop: 20 }}>Details</div>
+          {DETAIL_FIELDS.map(([k, lbl]) => (
+            <div key={k} style={sideRow}>
+              <span style={sideKey}>{lbl}</span>
+              <span style={sideVal}>{fieldVal(k, deal.fields[k])}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* CENTRE */}
+        <div style={{ flex: 1, padding: 20, minWidth: 0 }}>
+          {/* add note */}
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, marginBottom: 14 }}>
+            <textarea placeholder="Take a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)}
+              rows={2} style={{ ...miniInput, width: '100%', resize: 'vertical', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14 }} />
+            <div style={{ textAlign: 'right', marginTop: 6 }}>
+              <button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }}
+                style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button>
+            </div>
+          </div>
+
+          {/* add activity */}
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: 12, marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <select value={actType} onChange={(e) => setActType(e.target.value)} style={{ ...miniInput, width: 110 }}>
+                <option value="call">Call</option>
+                <option value="email">Email</option>
+              </select>
+              <input placeholder="Activity detail…" value={actText} onChange={(e) => setActText(e.target.value)}
+                style={{ ...miniInput, flex: 1 }} />
+              <button disabled={!actText.trim()} onClick={() => { onAddActivity(deal.id, actType, actText.trim()); setActText(''); }}
+                style={{ ...primaryBtn, opacity: actText.trim() ? 1 : 0.5 }}>Log {actType}</button>
+            </div>
+            <div style={{ fontSize: 11, color: C.dim }}>Activity types: call or email only.</div>
+          </div>
+
+          {/* history */}
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>History</div>
+          <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>All activity, newest first</div>
+          <HistoryFeed history={deal.history} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// PAGE
+// ===========================================================================
 export default function CRMPage() {
-  const [deals, setDeals] = useState(() => SEED_DEALS.map(d => ({ ...d, fields: { ...d.fields }, tasks: [...(d.tasks || [])] })));
+  const [deals, setDeals] = useState(() =>
+    SEED_DEALS.map((d) => ({ ...d, fields: { ...d.fields }, history: [...(d.history || [])] })));
   const [openId, setOpenId] = useState(null);
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const dragId = useRef(null);
 
-  const openDeal = deals.find(d => d.id === openId) || null;
+  const openDeal = deals.find((d) => d.id === openId) || null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return deals.filter(d => {
-      if (statusFilter !== 'all' && d.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        (d.title || '').toLowerCase().includes(q) ||
-        (d.fields.organization || '').toLowerCase().includes(q) ||
-        (d.fields.contact_person || '').toLowerCase().includes(q)
-      );
-    });
-  }, [deals, query, statusFilter]);
+    if (!q) return deals;
+    return deals.filter((d) =>
+      (d.title || '').toLowerCase().includes(q) ||
+      (d.fields.organization || '').toLowerCase().includes(q) ||
+      (d.fields.contact_person || '').toLowerCase().includes(q));
+  }, [deals, query]);
 
   const byStage = useMemo(() => {
-    const map = {};
-    STAGES.forEach(s => (map[s.id] = []));
-    filtered.forEach(d => { if (map[d.stageId]) map[d.stageId].push(d); });
-    return map;
+    const m = {}; STAGES.forEach((s) => (m[s.id] = []));
+    filtered.forEach((d) => { if (m[d.stageId]) m[d.stageId].push(d); });
+    return m;
   }, [filtered]);
 
-  const totals = useMemo(() => {
-    const open = deals.filter(d => d.status === 'open');
-    return {
-      count: deals.length,
-      openCount: open.length,
-      openValue: open.reduce((s, d) => s + (Number(d.fields.value) || 0), 0),
-      won: deals.filter(d => d.status === 'won').length,
-      lost: deals.filter(d => d.status === 'lost').length,
-    };
-  }, [deals]);
+  const totalCount = deals.length;
+  const totalValue = deals.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
-  const onDragStart = (e, id) => { dragId.current = id; };
-  const onDrop = (e, stageId) => {
-    const id = dragId.current;
-    if (id == null) return;
-    setDeals(prev => prev.map(d => d.id === id ? { ...d, stageId } : d));
-    dragId.current = null;
-  };
-  const moveDeal = (id, stageId) => setDeals(prev => prev.map(d => d.id === id ? { ...d, stageId } : d));
-  const setStatus = (id, status) => setDeals(prev => prev.map(d => d.id === id ? { ...d, status } : d));
-  const addTask = (id, text) => setDeals(prev => prev.map(d => d.id === id
-    ? { ...d, tasks: [...d.tasks, { id: Date.now(), text, done: false }] } : d));
-  const toggleTask = (id, taskId) => setDeals(prev => prev.map(d => d.id === id
-    ? { ...d, tasks: d.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t) } : d));
-  const addField = (id, name, value) => setDeals(prev => prev.map(d => d.id === id
-    ? { ...d, fields: { ...d.fields, ['custom_' + name]: value } } : d));
+  // mutations (each logs history where relevant)
+  const push = (id, ev) => setDeals((prev) => prev.map((d) => d.id === id
+    ? { ...d, history: [...d.history, { id: `${ev.type}_${Date.now()}`, ts: nowIso(), ...ev }] } : d));
+
+  const moveDeal = (id, stageId) => setDeals((prev) => prev.map((d) => {
+    if (d.id !== id || d.stageId === stageId) return d;
+    const from = stageLabel(d.stageId), to = stageLabel(stageId);
+    return { ...d, stageId, history: [...d.history, { id: `stage_${Date.now()}`, type: 'stage', ts: nowIso(), text: `Stage: ${from} → ${to}` }] };
+  }));
+  const setStatus = (id, status) => setDeals((prev) => prev.map((d) => {
+    if (d.id !== id) return d;
+    const label = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened';
+    const type = status === 'won' ? 'won' : status === 'lost' ? 'lost' : 'note';
+    return { ...d, status, history: [...d.history, { id: `st_${Date.now()}`, type, ts: nowIso(), text: label }] };
+  }));
+  const addNote = (id, text) => push(id, { type: 'note', text: 'Note added', body: text });
+  const addActivity = (id, kind, text) => push(id, { type: kind, text: `${kind === 'call' ? 'Call' : 'Email'} logged`, body: text });
+  const editValue = (id, val) => setDeals((prev) => prev.map((d) => {
+    if (d.id !== id) return d;
+    const old = money(d.fields.value);
+    return { ...d, fields: { ...d.fields, value: val },
+             history: [...d.history, { id: `val_${Date.now()}`, type: 'value', ts: nowIso(), text: `Value: ${old} → ${money(val)}` }] };
+  }));
+  const editClose = (id, val) => setDeals((prev) => prev.map((d) => {
+    if (d.id !== id) return d;
+    const old = d.fields.expected_close_date || 'empty';
+    return { ...d, fields: { ...d.fields, expected_close_date: val || null },
+             history: [...d.history, { id: `cl_${Date.now()}`, type: 'close', ts: nowIso(), text: `Expected close date: ${old} → ${val || 'empty'}` }] };
+  }));
+
+  // sync openDeal reference after mutations
+  const live = deals.find((d) => d.id === openId) || null;
+
+  if (live) {
+    return (
+      <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', color: C.text }}>
+        <DealView deal={live} onBack={() => setOpenId(null)} onMove={moveDeal}
+          onSetStatus={setStatus} onAddNote={addNote} onAddActivity={addActivity}
+          onEditValue={editValue} onEditClose={editClose} />
+      </div>
+    );
+  }
 
   return (
-    <div style={{ background: COLORS.bg, minHeight: '100vh', color: COLORS.text,
-                  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', display: 'flex', flexDirection: 'column' }}>
-      {/* Header */}
-      <div style={{ padding: '16px 20px', borderBottom: `1px solid ${COLORS.line}`, flexShrink: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+    <div style={{ background: C.bg, minHeight: '100vh', color: C.text,
+                  fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+                  display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '12px 20px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: -.3 }}>CRM</h1>
-            <div style={{ fontSize: 12, color: COLORS.dim, marginTop: 2 }}>
-              Preview · {totals.count} deals · last 6 months · changes are not saved yet
-            </div>
+            <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Deals</h1>
+            <div style={{ fontSize: 12, color: C.dim, marginTop: 2 }}>Preview · last 6 months · changes not saved yet</div>
           </div>
-          <div style={{ display: 'flex', gap: 20, fontSize: 12 }}>
-            <Stat label="Open" value={totals.openCount} />
-            <Stat label="Open value" value={money(totals.openValue)} accent />
-            <Stat label="Won" value={totals.won} />
-            <Stat label="Lost" value={totals.lost} />
-          </div>
-        </div>
-        {/* Controls */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
           <input placeholder="Search title, organization, contact…" value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ ...input, minWidth: 280, flex: '0 1 340px' }} />
-          <div style={{ display: 'flex', gap: 4 }}>
-            {['all', 'open', 'won', 'lost'].map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)}
-                style={{ ...btnBase, textTransform: 'capitalize',
-                  background: statusFilter === s ? COLORS.accent : COLORS.panel2,
-                  color: statusFilter === s ? '#1a1200' : COLORS.text,
-                  border: `1px solid ${statusFilter === s ? COLORS.accent : COLORS.line}` }}>{s}</button>
-            ))}
-          </div>
+            style={{ ...miniInput, minWidth: 260, flex: '0 1 320px' }} />
+          <div style={{ fontSize: 13, color: C.dim }}>{totalCount} deals · {money0(totalValue)} open</div>
         </div>
       </div>
 
-      {/* Board */}
-      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: 16 }}>
-        <div style={{ display: 'flex', gap: 12, height: '100%', minHeight: 0 }}>
-          {STAGES.map(stage => (
-            <StageColumn key={stage.id} stage={stage} deals={byStage[stage.id] || []}
-              onOpen={setOpenId} onDragStart={onDragStart} onDrop={onDrop} />
-          ))}
+      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '12px 16px' }}>
+        <div style={{ display: 'flex', gap: 10, height: '100%', minHeight: 0 }}>
+          {STAGES.map((s) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={setOpenId} />)}
         </div>
       </div>
-
-      <DealDrawer
-        deal={openDeal}
-        onClose={() => setOpenId(null)}
-        onSetStatus={setStatus}
-        onAddTask={addTask}
-        onToggleTask={toggleTask}
-        onAddField={addField}
-        onMove={moveDeal}
-      />
     </div>
   );
 }
 
-function Stat({ label, value, accent }) {
-  return (
-    <div style={{ textAlign: 'right' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: accent ? COLORS.accent : COLORS.text }}>{value}</div>
-      <div style={{ fontSize: 11, color: COLORS.dim }}>{label}</div>
-    </div>
-  );
+// ---- styles ---------------------------------------------------------------
+function pill(color) {
+  return { fontSize: 10, fontWeight: 700, color: '#fff', background: color, padding: '1px 7px', borderRadius: 3 };
 }
-
-// --- inline styles ---------------------------------------------------------
-const btnBase = { padding: '7px 12px', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' };
-const btnGhost = { ...btnBase, background: 'transparent', color: COLORS.dim, border: `1px solid ${COLORS.line}` };
-const input = { background: COLORS.panel2, border: `1px solid ${COLORS.line}`, borderRadius: 7, padding: '7px 10px', fontSize: 13, color: COLORS.text, outline: 'none' };
-const select = { ...input, width: '100%' };
-const lbl = { display: 'block', fontSize: 11, color: COLORS.dim, marginBottom: 4, textTransform: 'uppercase', letterSpacing: .4 };
-const sectionTitle = { fontSize: 11, color: COLORS.dim, textTransform: 'uppercase', letterSpacing: .5, fontWeight: 700, marginBottom: 8, borderBottom: `1px solid ${COLORS.line}`, paddingBottom: 6 };
-const fieldRow = { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', fontSize: 13, borderBottom: `1px solid rgba(40,56,74,.4)` };
-const fieldKey = { color: COLORS.dim, flexShrink: 0 };
-const fieldVal = { color: COLORS.text, textAlign: 'right', wordBreak: 'break-word' };
+const backBtn = { background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: C.text, fontWeight: 600 };
+const wlBtn = { border: '1px solid', borderRadius: 6, padding: '6px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' };
+const primaryBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
+const miniBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 5, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
+const miniInput = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 9px', fontSize: 13, color: C.text, outline: 'none', background: '#fff' };
+const sideHead = { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${C.line}` };
+const sideRow = { display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', fontSize: 12, alignItems: 'flex-start' };
+const sideKey = { color: C.dim, flexShrink: 0, maxWidth: 130 };
+const sideVal = { color: C.text, textAlign: 'right', wordBreak: 'break-word' };
+const sideValLink = { color: C.link, textAlign: 'right', wordBreak: 'break-word', cursor: 'pointer' };
 
 // -----------------------------------------------------------------------------
-// OPTIONAL server-side admin gate (recommended once you're happy):
-// Uncomment and adapt to your lib/portalAuth.js requireRole pattern.
+// OPTIONAL admin gate — uncomment and wire to your lib/portalAuth.js requireRole:
 //
 // export async function getServerSideProps(ctx) {
-//   const guard = await requireRole(ctx, ['admin']);   // your existing helper
-//   if (!guard.ok) {
-//     return { redirect: { destination: '/', permanent: false } };
-//   }
+//   const guard = await requireRole(ctx, ['admin']);
+//   if (!guard.ok) return { redirect: { destination: '/', permanent: false } };
 //   return { props: {} };
 // }
 // -----------------------------------------------------------------------------
