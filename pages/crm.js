@@ -18,18 +18,18 @@ import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
 const STAGES = [
   { id: 'stage_project_in', label: 'Project In' }, { id: 'stage_1st_contact', label: '1st Contact' },
   { id: 'stage_calls_x3', label: 'Calls x 3' }, { id: 'stage_in_abeyance', label: 'In Abeyance' },
-  { id: 'stage_tbf', label: 'TBF' }, { id: 'stage_variations', label: 'Variations' },
+  { id: 'stage_tbf', label: 'TBF' }, { id: 'stage_mc_unsec_np', label: 'MC Unsecured Not Priced' },
   { id: 'stage_info_pending', label: 'info Pending' }, { id: 'stage_received', label: 'Received' },
   { id: 'stage_1', label: 'Stage 1' }, { id: 'stage_2', label: 'Stage 2' }, { id: 'stage_review', label: 'Review' },
-  { id: 'stage_mc_unsec_np', label: 'MC Unsecured Not Priced' }, { id: 'stage_mc_unsecured', label: 'MC Unsecured' },
+  { id: 'stage_mc_unsecured', label: 'MC Unsecured' }, { id: 'stage_variations', label: 'Variations' },
   { id: 'stage_mc_secured', label: 'MC Secured' }, { id: 'stage_negotiating', label: 'Negotiating' },
 ];
 const STAGE_INDEX = Object.fromEntries(STAGES.map((s, i) => [s.id, i]));
 const stageLabel = (id) => (STAGES.find((s) => s.id === id) || {}).label || id;
 
-const ORANGE_STAGES = new Set(['stage_project_in','stage_1st_contact','stage_calls_x3','stage_in_abeyance','stage_tbf']);
-const BLUE_STAGES = new Set(['stage_variations','stage_info_pending','stage_received','stage_1','stage_2','stage_review','stage_mc_unsec_np','stage_mc_unsecured','stage_mc_secured','stage_negotiating']);
-const ESTIMATOR_STAGES = ['stage_variations','stage_info_pending','stage_received','stage_1','stage_2','stage_review','stage_mc_unsec_np','stage_mc_unsecured','stage_mc_secured','stage_negotiating'];
+const ORANGE_STAGES = new Set(['stage_project_in','stage_1st_contact','stage_calls_x3','stage_in_abeyance','stage_tbf','stage_mc_unsec_np','stage_info_pending']);
+const BLUE_STAGES = new Set(['stage_received','stage_1','stage_2','stage_review','stage_mc_unsecured','stage_variations','stage_mc_secured','stage_negotiating']);
+const ESTIMATOR_STAGES = ['stage_received','stage_1','stage_2','stage_review','stage_mc_unsecured','stage_variations','stage_mc_secured','stage_negotiating'];
 function columnBg(id) { if (ORANGE_STAGES.has(id)) return '#fdf1e3'; if (BLUE_STAGES.has(id)) return '#e8f1fb'; return '#f4f5f7'; }
 
 const LIST_FIELDS = [
@@ -85,13 +85,15 @@ function displayCell(deal, key) {
   return v === '' ? '-' : String(v);
 }
 
+const FONT = "'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif";
 const C = {
   greenBar: '#3a9c3e', grey: '#e4e7ea', line: '#e1e4e8', text: '#1a1a1a', dim: '#7a828a',
   link: '#2a7de1', bg: '#f4f5f7', card: '#ffffff', won: '#2a862f', lost: '#d64545',
   amber: '#f5a623', red: '#ff3b30', green: '#25c249', dotGrey: '#9aa3ab',
   nav: '#1c1c1c', note: '#fff7cc', noteBorder: '#f2e08a', activityBg: '#eaf3ff',
   activityBorder: '#c5ddf7', feedBg: '#f6f8fa', mention: '#e5effd',
-  sideBox: '#eef1f4', // light grey box in sidebar (lighter than feedBg-on-white contrast)
+  sideBox: '#f7f8fa', // very light grey box in sidebar (only slightly off white)
+  noteSaved: '#fffce8', // slightly lighter yellow for saved notes
 };
 
 // ===========================================================================
@@ -110,8 +112,16 @@ function Confetti({ onDone }) {
 }
 
 // ===========================================================================
+// Font loader (Plus Jakarta Sans) — CRM only
+// ===========================================================================
+function FontLoader() {
+  return <style>{`@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');`}</style>;
+}
+
+// ===========================================================================
 // Type-ahead
 // ===========================================================================
+
 function TypeAhead({ value, onChange, options, placeholder }) {
   const [open, setOpen] = useState(false);
   const matches = useMemo(() => { const q = (value || '').trim().toLowerCase(); if (!q) return []; return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 8); }, [value, options]);
@@ -170,14 +180,14 @@ function CommentThread({ comments, onAdd }) {
     <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: `2px solid ${C.line}` }}>
       {(comments || []).map((c) => (
         <div key={c.id} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{c.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(c.ts)}</span></div>
           <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{c.body}</div>
-          <div style={{ fontSize: 11, color: C.dim }}>{dateTime(c.ts)}</div>
         </div>
       ))}
-      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Comment…" style={{ ...miniInput, flex: 1, padding: '5px 8px' }}
+      <div style={{ display: 'flex', gap: 6, marginTop: 4, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 4 }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Add a comment…" style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, padding: '4px 6px', background: '#fff', fontFamily: 'inherit' }}
           onKeyDown={(e) => { if (e.key === 'Enter' && text.trim()) { onAdd(text.trim()); setText(''); } }} />
-        <button disabled={!text.trim()} onClick={() => { onAdd(text.trim()); setText(''); }} style={{ ...miniBtn, opacity: text.trim() ? 1 : 0.5 }}>Reply</button>
+        <button disabled={!text.trim()} onClick={() => { onAdd(text.trim()); setText(''); }} style={{ ...miniBtn, opacity: text.trim() ? 1 : 0.5 }}>Save</button>
       </div>
     </div>
   );
@@ -382,7 +392,7 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{ fontSize: 14 }}>{activity.text}</div>
-            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''}</div>
+            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'me'}</div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button onClick={() => onComplete(activity.id)} style={miniBtn}>Done</button>
@@ -410,7 +420,7 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment 
     <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
       <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: `1px solid ${C.line}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}</div>
+        <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}{(h.type === 'note' || h.type === 'activity') && h.author ? <span style={{ color: C.dim }}> · {h.author}</span> : ''}</div>
         {editing ? (
           <div style={{ marginTop: 4 }}>
             <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: `1px solid ${C.line}`, borderRadius: 6, padding: 6, fontFamily: 'inherit' }} />
@@ -452,6 +462,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
+  const [newAssignee, setNewAssignee] = useState('');
   const [collapsed, setCollapsed] = useState({});
   const toggle = (g) => setCollapsed((p) => ({ ...p, [g]: !p[g] }));
   const groupFields = (g) => schema.filter((f) => f.group === g);
@@ -481,7 +492,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         {/* LEFT — collapsible grey boxes on white */}
         <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: '#fff' }}>
-          <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')} action={<button onClick={(e) => { e.stopPropagation(); onManageFields(); }} style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11 }}>⚙ Fields</button>}>
+          <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')}>
             {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
           </SideBox>
           <SideBox title="Details" collapsed={collapsed.details} onToggle={() => toggle('details')}>
@@ -497,6 +508,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
             <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
             {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
           </SideBox>
+          <button onClick={onManageFields} style={{ ...ghostBtn, width: '100%', marginTop: 4 }}>⚙ Customise fields</button>
         </div>
 
         {/* CENTRE */}
@@ -509,11 +521,17 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: 10 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
                 <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
-                  <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue); setNewText(''); setNewDue(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
+                  <span style={{ fontSize: 12, color: C.dim }}>Assign to</span>
+                  <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} style={{ ...miniInput, width: 150 }}>
+                    <option value="">Myself</option>
+                    {MENTION_USERS.map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
+                  </select>
+                  <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue, newAssignee); setNewText(''); setNewDue(''); setNewAssignee(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
                   <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>
                 </div>
+                <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
             {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => onCompleteActivity(deal.id, id)} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
@@ -532,9 +550,9 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
           {noteHistory.length > 0 && (
             <div style={{ marginTop: 12 }}>
               {noteHistory.map((h) => (
-                <div key={h.id} style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                  <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{h.body}</div>
-                  <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</div>
+                <div key={h.id} style={{ background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{h.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span></div>
+                  <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap', marginTop: 3 }}>{h.body}</div>
                   <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} />
                 </div>
               ))}
@@ -701,7 +719,7 @@ export default function CRMPage() {
   const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
-  const addActivity = (id, text, due) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})`, body: text }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
+  const addActivity = (id, text, due, assignee) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }]; if (assignee) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `${assignee} assigned an activity — email would send in live version` }); if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
   const completeActivity = (id, aid) => patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; });
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
@@ -728,7 +746,8 @@ export default function CRMPage() {
   const live = deals.find((d) => d.id === openId) || null;
   if (live) {
     return (
-      <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', color: C.text }}>
+      <div style={{ fontFamily: FONT, color: C.text }}>
+        <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
         <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
@@ -739,7 +758,8 @@ export default function CRMPage() {
   const isDealView = view === 'pipeline' || view === 'list';
 
   return (
-    <div style={{ background: C.bg, height: '100vh', color: C.text, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ background: C.bg, height: '100vh', color: C.text, fontFamily: FONT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <FontLoader />
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
       {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
       {chooser === 'list' && <ColumnChooser title="Choose columns" fields={LIST_FIELDS} columns={columns} onToggle={(k) => setColumns((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
