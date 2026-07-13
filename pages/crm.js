@@ -102,6 +102,16 @@ const C = {
 // ===========================================================================
 // Confetti
 // ===========================================================================
+function FadeToast({ onDone, message, color }) {
+  useEffect(() => { const t = setTimeout(onDone, 1600); return () => clearTimeout(t); }, [onDone]);
+  return (
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+      <style>{`@keyframes crmfade{0%{opacity:0;transform:translateY(-8px)}20%{opacity:1;transform:translateY(0)}80%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-8px)}}`}</style>
+      <div style={{ marginTop: '18vh', fontSize: 26, fontWeight: 800, color: color || C.link, textShadow: '0 2px 8px rgba(0,0,0,.12)', animation: 'crmfade 1.6s ease-in-out forwards', padding: '0 20px', textAlign: 'center' }}>{message}</div>
+    </div>
+  );
+}
+
 function Confetti({ onDone, message = '🎉 Deal Won! 🎉', color }) {
   useEffect(() => { const t = setTimeout(onDone, 2600); return () => clearTimeout(t); }, [onDone]);
   const pieces = useMemo(() => Array.from({ length: 90 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 0.5, dur: 1.8 + Math.random() * 1.2, color: ['#2a862f','#2a7de1','#e6a817','#d64545','#7c4dff','#00bcd4'][i % 6], rot: Math.random() * 360, size: 6 + Math.random() * 8 })), []);
@@ -778,7 +788,7 @@ export default function CRMPage() {
       <div style={{ fontFamily: FONT, color: C.text }}>
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
-        {activityDone && <Confetti onDone={() => setActivityDone(false)} message="✅ Activity done — now set your next one!" color={C.link} />}
+        {activityDone && <FadeToast onDone={() => setActivityDone(false)} message="Activity done — now set your next one!" color={C.link} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
         <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
