@@ -95,6 +95,8 @@ const C = {
   sideBox: '#f7f8fa', // very light grey box in sidebar (only slightly off white)
   noteSaved: '#fffce8', // slightly lighter yellow for saved notes
   faint: '#f0f2f4', // very faint vertical column lines
+  wonTint: '#e7fbe9', // light bright green background when won
+  lostTint: '#ffe9e7', // light bright red background when lost
 };
 
 // ===========================================================================
@@ -471,8 +473,9 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
   const noteHistory = deal.history.filter((h) => h.type === 'note').sort((a, b) => new Date(b.ts) - new Date(a.ts));
   const summaryFields = groupFields('summary').map((f) => f.key === 'organization' ? { ...f, search: 'org' } : f.key === 'contact_person' ? { ...f, search: 'contact' } : f);
 
+  const statusTint = deal.status === 'won' ? C.wonTint : deal.status === 'lost' ? C.lostTint : C.card;
   return (
-    <div style={{ background: C.card, minHeight: '100vh' }}>
+    <div style={{ background: statusTint, minHeight: '100vh' }}>
       <div style={{ background: C.nav, color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={onBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
@@ -492,7 +495,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         {/* LEFT — collapsible grey boxes on white */}
-        <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: '#fff' }}>
+        <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: statusTint }}>
           <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')}>
             {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
           </SideBox>
@@ -513,7 +516,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
         </div>
 
         {/* CENTRE */}
-        <div style={{ flex: 1, padding: 20, minWidth: 0, background: C.feedBg }}>
+        <div style={{ flex: 1, padding: 20, minWidth: 0, background: deal.status === 'open' ? C.feedBg : statusTint }}>
           {/* Activities to do */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Activities to do</div>
           <div style={{ background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, padding: 14 }}>
