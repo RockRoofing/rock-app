@@ -43,10 +43,10 @@ const LIST_FIELDS = [
 const DEFAULT_COLUMNS = ['title','organization','contact_person','value','stageId','next_activity','estimator_responsible','status'];
 
 // Company / Contact list columns
-const COMPANY_FIELDS = [['name','Company'],['deals','Deals'],['open_value','Open value'],['won','Won'],['lost','Lost']];
-const DEFAULT_COMPANY_COLUMNS = ['name','deals','open_value','won','lost'];
-const CONTACT_FIELDS = [['name','Contact'],['organization','Company'],['deals','Deals'],['open_value','Open value']];
-const DEFAULT_CONTACT_COLUMNS = ['name','organization','deals','open_value'];
+const COMPANY_FIELDS = [['name','Company name'],['org_address','Address'],['org_phone','Phone'],['org_website','Website'],['org_email','Email'],['org_reg_number','Registration Number'],['supply_chain_approved','Supply Chain Approved?'],['deals','Deals'],['open_value','Open value'],['won','Won'],['lost','Lost']];
+const DEFAULT_COMPANY_COLUMNS = COMPANY_FIELDS.map((f) => f[0]);
+const CONTACT_FIELDS = [['name','Name'],['first_name','First name'],['last_name','Last name'],['organization','Company'],['contact_phone','Phone'],['contact_email','Email'],['contact_job_role','Job Role'],['deals','Deals'],['open_value','Open value']];
+const DEFAULT_CONTACT_COLUMNS = CONTACT_FIELDS.map((f) => f[0]);
 
 // ---- helpers --------------------------------------------------------------
 const money = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 2 }); };
@@ -94,6 +94,7 @@ const C = {
   activityBorder: '#c5ddf7', feedBg: '#f6f8fa', mention: '#e5effd',
   sideBox: '#f7f8fa', // very light grey box in sidebar (only slightly off white)
   noteSaved: '#fffce8', // slightly lighter yellow for saved notes
+  faint: '#f0f2f4', // very faint vertical column lines
 };
 
 // ===========================================================================
@@ -392,7 +393,7 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{ fontSize: 14 }}>{activity.text}</div>
-            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'me'}</div>
+            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'current user'}</div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button onClick={() => onComplete(activity.id)} style={miniBtn}>Done</button>
@@ -525,7 +526,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
                   <span style={{ fontSize: 12, color: C.dim }}>Assign to</span>
                   <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} style={{ ...miniInput, width: 150 }}>
-                    <option value="">Myself</option>
+                    <option value="">(current user)</option>
                     {MENTION_USERS.map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
                   </select>
                   <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue, newAssignee); setNewText(''); setNewDue(''); setNewAssignee(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
@@ -579,19 +580,41 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
 // ===========================================================================
 // List view (deals)
 // ===========================================================================
+// ===========================================================================
+// Resizable-column helper (drag the header border to widen/narrow)
+// ===========================================================================
+function useColWidths(keys, initial = 150) {
+  const [widths, setWidths] = useState(() => Object.fromEntries(keys.map((k) => [k, initial])));
+  useEffect(() => { setWidths((w) => { const n = { ...w }; keys.forEach((k) => { if (n[k] == null) n[k] = initial; }); return n; }); }, [keys.join(',')]);
+  const startResize = (key, e) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX; const startW = widths[key] || initial;
+    const move = (ev) => setWidths((w) => ({ ...w, [key]: Math.max(60, startW + (ev.clientX - startX)) }));
+    const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
+  };
+  return { widths, startResize };
+}
+function ResizeHandle({ onMouseDown }) {
+  return <span onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', userSelect: 'none' }} />;
+}
+
 function ListView({ deals, columns, sort, onSort, onOpen, today }) {
+  const { widths, startResize } = useColWidths(columns);
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', background: '#fff', fontSize: 13 }}>
+      <table style={{ borderCollapse: 'collapse', background: '#fff', fontSize: 13, tableLayout: 'fixed' }}>
         <thead><tr>
-          <th style={{ ...th, width: 28 }}></th>
-          {columns.map((k) => { const lbl = (LIST_FIELDS.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>; })}
+          <th style={{ ...th, width: 30 }}></th>
+          {columns.map((k) => { const lbl = (LIST_FIELDS.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return (
+            <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap', width: widths[k], position: 'relative', borderRight: `1px solid ${C.line}` }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}<ResizeHandle onMouseDown={(e) => startResize(k, e)} /></th>
+          ); })}
         </tr></thead>
         <tbody>
           {deals.map((d) => { const stt = dealDotState(d, today); return (
             <tr key={d.id} onClick={() => onOpen(d.id)} style={{ cursor: 'pointer', borderBottom: `1px solid ${C.line}` }} onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f9fb')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
-              <td style={{ ...td, textAlign: 'center' }}>{stt && <Dot state={stt} size={13} />}</td>
-              {columns.map((k) => <td key={k} style={td}>{displayCell(d, k)}</td>)}
+              <td style={{ ...td, textAlign: 'center', borderRight: `1px solid ${C.faint}` }}>{stt && <Dot state={stt} size={13} />}</td>
+              {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{displayCell(d, k)}</td>)}
             </tr>
           ); })}
         </tbody>
@@ -604,14 +627,17 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
 // Companies / Contacts views (derived from deals)
 // ===========================================================================
 function EntityTable({ rows, fields, columns, sort, onSort }) {
+  const { widths, startResize } = useColWidths(columns);
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
-      <table style={{ borderCollapse: 'collapse', width: '100%', background: '#fff', fontSize: 13 }}>
-        <thead><tr>{columns.map((k) => { const lbl = (fields.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>; })}</tr></thead>
+      <table style={{ borderCollapse: 'collapse', background: '#fff', fontSize: 13, tableLayout: 'fixed' }}>
+        <thead><tr>{columns.map((k) => { const lbl = (fields.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return (
+          <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap', width: widths[k], position: 'relative', borderRight: `1px solid ${C.line}` }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}<ResizeHandle onMouseDown={(e) => startResize(k, e)} /></th>
+        ); })}</tr></thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} style={{ borderBottom: `1px solid ${C.line}` }}>
-              {columns.map((k) => <td key={k} style={td}>{k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}</td>)}
+              {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}</td>)}
             </tr>
           ))}
         </tbody>
@@ -691,7 +717,7 @@ export default function CRMPage() {
   // Companies & Contacts derived
   const companyRows = useMemo(() => {
     const m = {};
-    deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
+    deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, org_address: d.fields.org_address || '-', org_phone: d.fields.org_phone || '-', org_website: d.fields.org_website || '-', org_email: d.fields.org_email || '-', org_reg_number: d.fields.org_reg_number || '-', supply_chain_approved: d.fields.supply_chain_approved === true ? 'Yes' : d.fields.supply_chain_approved === false ? 'No' : '-', deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
     let rows = Object.values(m);
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
@@ -700,7 +726,7 @@ export default function CRMPage() {
 
   const contactRows = useMemo(() => {
     const m = {};
-    deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, organization: d.fields.organization || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
+    deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, first_name: firstName(c) || '-', last_name: lastName(c) || '-', organization: d.fields.organization || '-', contact_phone: d.fields.contact_phone || '-', contact_email: d.fields.contact_email || '-', contact_job_role: d.fields.contact_job_role || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
     let rows = Object.values(m);
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.organization || '').toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
