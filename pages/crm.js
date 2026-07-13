@@ -468,6 +468,22 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
   const [newAssignee, setNewAssignee] = useState('');
   const [flash, setFlash] = useState(false);
   useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(false), 800); return () => clearTimeout(t); }, [flash]);
+
+  // Warn when leaving an open deal that has no open activity set.
+  const needsActivityWarning = deal.status === 'open' && (deal.activities || []).filter((a) => !a.done).length === 0;
+  const guardedBack = () => {
+    if (needsActivityWarning) {
+      const ok = window.confirm('You have not set an activity for this project. Are you sure you want to leave?');
+      if (!ok) return;
+    }
+    onBack();
+  };
+  // Browser tab-close / refresh gets the generic browser prompt (custom text not allowed by browsers).
+  useEffect(() => {
+    const handler = (e) => { if (needsActivityWarning) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [needsActivityWarning]);
   const [collapsed, setCollapsed] = useState({});
   const toggle = (g) => setCollapsed((p) => ({ ...p, [g]: !p[g] }));
   const groupFields = (g) => schema.filter((f) => f.group === g);
@@ -480,7 +496,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
     <div style={{ background: statusTint, minHeight: '100vh' }}>
       <div style={{ background: C.nav, color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
+          <button onClick={guardedBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
           <span style={{ fontSize: 17, fontWeight: 700 }}>{deal.title}</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
