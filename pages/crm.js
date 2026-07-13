@@ -5,8 +5,8 @@
 // Refreshing resets everything. Nothing here touches your live DB or dashboards.
 //
 // Deep-link: /crm?deal=12345 opens that deal directly (used by @mention emails).
-// View settings (columns, filters, stage mode) persist for the SESSION; they
-// reset on full refresh. When auth+persistence land, these save per-user to KV.
+// View/column prefs persist for the SESSION; reset on full refresh. When auth +
+// persistence land, they save per-user to KV.
 // -----------------------------------------------------------------------------
 
 import { useState, useMemo, useRef, useEffect } from 'react';
@@ -42,6 +42,12 @@ const LIST_FIELDS = [
 ];
 const DEFAULT_COLUMNS = ['title','organization','contact_person','value','stageId','next_activity','estimator_responsible','status'];
 
+// Company / Contact list columns
+const COMPANY_FIELDS = [['name','Company'],['deals','Deals'],['open_value','Open value'],['won','Won'],['lost','Lost']];
+const DEFAULT_COMPANY_COLUMNS = ['name','deals','open_value','won','lost'];
+const CONTACT_FIELDS = [['name','Contact'],['organization','Company'],['deals','Deals'],['open_value','Open value']];
+const DEFAULT_CONTACT_COLUMNS = ['name','organization','deals','open_value'];
+
 // ---- helpers --------------------------------------------------------------
 const money = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 2 }); };
 const money0 = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 }); };
@@ -51,28 +57,24 @@ const nowIso = () => new Date().toISOString();
 const firstName = (n) => n ? String(n).trim().split(/\s+/)[0] : '';
 const lastName = (n) => { if (!n) return ''; const p = String(n).trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; };
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
+const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
-// dot state across MULTIPLE activities
+// dot state: warning=none, red=before today, green=today, grey=after today
 function dealDotState(deal, today) {
   if (deal.status !== 'open') return null;
   const open = (deal.activities || []).filter((a) => !a.done);
   if (open.length === 0) return 'none';
-  if (open.some((a) => a.due < today)) return 'overdue';   // any overdue = red
-  if (open.some((a) => a.due === today)) return 'today';    // any today = green
-  return 'future';                                          // only future = grey
+  if (open.some((a) => a.due < today)) return 'overdue';
+  if (open.some((a) => a.due === today)) return 'today';
+  return 'future';
 }
-function nextActivityDate(deal) {
-  const open = (deal.activities || []).filter((a) => !a.done);
-  if (!open.length) return '';
-  return open.map((a) => a.due).sort()[0];
-}
+function nextActivityDate(deal) { const open = (deal.activities || []).filter((a) => !a.done); if (!open.length) return ''; return open.map((a) => a.due).sort()[0]; }
 function cellValue(deal, key) {
   if (key === 'stageId') return stageLabel(deal.stageId);
   if (key === 'title') return deal.title;
   if (key === 'status') return deal.status;
   if (key === 'next_activity') return nextActivityDate(deal);
-  const v = deal.fields[key];
-  return v === null || v === undefined ? '' : v;
+  const v = deal.fields[key]; return v === null || v === undefined ? '' : v;
 }
 function displayCell(deal, key) {
   const v = cellValue(deal, key);
@@ -89,6 +91,7 @@ const C = {
   amber: '#f5a623', red: '#ff3b30', green: '#25c249', dotGrey: '#9aa3ab',
   nav: '#1c1c1c', note: '#fff7cc', noteBorder: '#f2e08a', activityBg: '#eaf3ff',
   activityBorder: '#c5ddf7', feedBg: '#f6f8fa', mention: '#e5effd',
+  sideBox: '#eef1f4', // light grey box in sidebar (lighter than feedBg-on-white contrast)
 };
 
 // ===========================================================================
@@ -107,13 +110,13 @@ function Confetti({ onDone }) {
 }
 
 // ===========================================================================
-// Type-ahead (searchable text with suggestions)
+// Type-ahead
 // ===========================================================================
-function TypeAhead({ value, onChange, options, placeholder, style }) {
+function TypeAhead({ value, onChange, options, placeholder }) {
   const [open, setOpen] = useState(false);
   const matches = useMemo(() => { const q = (value || '').trim().toLowerCase(); if (!q) return []; return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 8); }, [value, options]);
   return (
-    <div style={{ position: 'relative', ...(style || {}) }}>
+    <div style={{ position: 'relative' }}>
       <input value={value || ''} placeholder={placeholder} onChange={(e) => { onChange(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
       {open && matches.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 40, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 220, overflowY: 'auto' }}>
@@ -159,7 +162,29 @@ function Dot({ state, size = 14 }) {
 }
 
 // ===========================================================================
-// Board card + column
+// Comment thread (used under notes, both in Notes section & History)
+// ===========================================================================
+function CommentThread({ comments, onAdd }) {
+  const [text, setText] = useState('');
+  return (
+    <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: `2px solid ${C.line}` }}>
+      {(comments || []).map((c) => (
+        <div key={c.id} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{c.body}</div>
+          <div style={{ fontSize: 11, color: C.dim }}>{dateTime(c.ts)}</div>
+        </div>
+      ))}
+      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Comment…" style={{ ...miniInput, flex: 1, padding: '5px 8px' }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && text.trim()) { onAdd(text.trim()); setText(''); } }} />
+        <button disabled={!text.trim()} onClick={() => { onAdd(text.trim()); setText(''); }} style={{ ...miniBtn, opacity: text.trim() ? 1 : 0.5 }}>Reply</button>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Board card + CHEVRON column
 // ===========================================================================
 function BoardCard({ deal, onOpen, onDragStart, today }) {
   const st = dealDotState(deal, today);
@@ -179,16 +204,25 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
     </div>
   );
 }
-function BoardColumn({ stage, deals, onOpen, onDragStart, onDrop, today }) {
+function BoardColumn({ stage, deals, onOpen, onDragStart, onDrop, today, isFirst }) {
   const [over, setOver] = useState(false);
   const total = deals.reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
+  const bg = over ? '#dbe8fb' : columnBg(stage.id);
+  // chevron header shape
+  const notch = 12;
+  const headerClip = isFirst
+    ? `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%)`
+    : `polygon(0 0, calc(100% - ${notch}px) 0, 100% 50%, calc(100% - ${notch}px) 100%, 0 100%, ${notch}px 50%)`;
   return (
-    <div style={{ minWidth: 210, maxWidth: 210, flex: '0 0 210px', display: 'flex', flexDirection: 'column', height: '100%', background: over ? '#dbe8fb' : columnBg(stage.id), borderRadius: 8, padding: 8, boxSizing: 'border-box' }}>
-      <div style={{ padding: '4px 4px 10px' }}>
+    <div style={{ minWidth: 212, maxWidth: 212, flex: '0 0 212px', display: 'flex', flexDirection: 'column', height: '100%', marginRight: -6 }}>
+      {/* chevron header */}
+      <div style={{ background: bg, clipPath: headerClip, padding: `8px 16px 8px ${isFirst ? 12 : 20}px`, marginBottom: 2 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{stage.label}</div>
         <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{money0(total)} · {deals.length} deals</div>
       </div>
-      <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { setOver(false); onDrop(e, stage.id); }} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+      {/* body */}
+      <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { setOver(false); onDrop(e, stage.id); }}
+        style={{ flex: 1, overflowY: 'auto', minHeight: 0, background: bg, borderRadius: '0 0 8px 8px', padding: 8, marginLeft: isFirst ? 0 : notch }}>
         {deals.map((d) => <BoardCard key={d.id} deal={d} onOpen={onOpen} onDragStart={onDragStart} today={today} />)}
         <div style={{ minHeight: 120 }} />
       </div>
@@ -197,23 +231,48 @@ function BoardColumn({ stage, deals, onOpen, onDragStart, onDrop, today }) {
 }
 
 // ===========================================================================
-// Timeline
+// Timeline bar (tight gaps, hover day-count scaffold, current-stage label only)
 // ===========================================================================
 function TimelineBar({ deal, onMove }) {
   const cur = STAGE_INDEX[deal.stageId];
+  // stageDays: map stageId -> days in stage. Not available from import yet.
+  // When persistence records stage-entry timestamps we compute real values here.
+  const stageDays = deal.stageDays || {};
   return (
-    <div style={{ display: 'flex', gap: 3, padding: '10px 0' }}>
-      {STAGES.map((s, i) => { const passed = i <= cur; return (
-        <div key={s.id} title={s.label} onClick={() => onMove(deal.id, s.id)} style={{ flex: 1, height: 22, cursor: 'pointer', position: 'relative', background: passed ? C.greenBar : C.grey, clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%, 9px 50%)' }}>
-          <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{i === cur ? s.label : ''}</span>
-        </div>
-      ); })}
+    <div style={{ display: 'flex', gap: 1, padding: '10px 0' }}>
+      {STAGES.map((s, i) => {
+        const passed = i <= cur;
+        const days = stageDays[s.id];
+        const title = days != null ? `${s.label}: ${days} day${days === 1 ? '' : 's'}` : s.label;
+        return (
+          <div key={s.id} title={title} onClick={() => onMove(deal.id, s.id)} style={{ flex: 1, height: 22, cursor: 'pointer', position: 'relative', background: passed ? C.greenBar : C.grey, clipPath: 'polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%, 7px 50%)' }}>
+            <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: passed ? '#fff' : C.dim, whiteSpace: 'nowrap', overflow: 'hidden' }}>{i === cur ? s.label : ''}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // ===========================================================================
-// Editable sidebar field (with searchable org/contact)
+// Collapsible sidebar box
+// ===========================================================================
+function SideBox({ title, action, children, collapsed, onToggle }) {
+  return (
+    <div style={{ background: C.sideBox, borderRadius: 8, padding: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={onToggle}>
+        <span style={{ fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ display: 'inline-block', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s', fontSize: 11 }}>▼</span>{title}
+        </span>
+        {action}
+      </div>
+      {!collapsed && <div style={{ marginTop: 8 }}>{children}</div>}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Editable sidebar field
 // ===========================================================================
 function EditableField({ field, value, onSave }) {
   const [editing, setEditing] = useState(false);
@@ -228,17 +287,12 @@ function EditableField({ field, value, onSave }) {
     return String(value);
   };
   const save = (v) => { onSave(field.key, field.type === 'yesno' ? (v === 'Yes' || v === true) : v); setEditing(false); };
-
-  if (!editing) {
-    return <span style={sideValLink} onClick={() => setEditing(true)}>{field.type === 'select' && value ? <span style={tag}>{value}</span> : display()}</span>;
-  }
-  // searchable for org/contact
-  if (field.search) {
-    return <span style={{ display: 'flex', gap: 4, flexDirection: 'column', width: '100%' }}>
+  if (!editing) return <span style={sideValLink} onClick={() => setEditing(true)}>{field.type === 'select' && value ? <span style={tag}>{value}</span> : display()}</span>;
+  if (field.search) return (
+    <span style={{ display: 'flex', gap: 4, flexDirection: 'column', width: '100%' }}>
       <TypeAhead value={draft} onChange={setDraft} options={field.search === 'org' ? ORGS : CONTACTS} placeholder={field.search === 'org' ? 'Search customers…' : 'Search contacts…'} />
       <span style={{ display: 'flex', gap: 4 }}><button onClick={() => save(draft)} style={miniBtn}>Save</button><button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button></span>
-    </span>;
-  }
+    </span>);
   const cp = { autoFocus: true, value: draft, onChange: (e) => setDraft(e.target.value), style: { ...miniInput, width: '100%', boxSizing: 'border-box' } };
   return (
     <span style={{ display: 'flex', gap: 4, flexDirection: 'column', width: '100%' }}>
@@ -289,15 +343,15 @@ function FieldManager({ schema, onClose, onAdd, onRemove }) {
 }
 
 // ===========================================================================
-// List column settings (gear)
+// Column chooser (generic; used by List, Companies, Contacts)
 // ===========================================================================
-function ColumnSettings({ columns, onToggle, onClose }) {
+function ColumnChooser({ title, fields, columns, onToggle, onClose }) {
   return (
     <div style={overlay}><div style={{ ...modal, maxWidth: 420 }}>
-      <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Choose columns</span><button onClick={onClose} style={xBtn}>✕</button></div>
+      <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>{title}</span><button onClick={onClose} style={xBtn}>✕</button></div>
       <div style={{ padding: 20, overflowY: 'auto', maxHeight: '70vh' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {LIST_FIELDS.map(([k, lbl]) => <label key={k} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={columns.includes(k)} onChange={() => onToggle(k)} />{lbl}</label>)}
+          {fields.map(([k, lbl]) => <label key={k} style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}><input type="checkbox" checked={columns.includes(k)} onChange={() => onToggle(k)} />{lbl}</label>)}
         </div>
       </div>
       <div style={modalFoot}><button onClick={onClose} style={primaryBtn}>Done</button></div>
@@ -306,7 +360,7 @@ function ColumnSettings({ columns, onToggle, onClose }) {
 }
 
 // ===========================================================================
-// Activity row (editable, deletable) — used in "Activities to do"
+// Activity row (editable text+date combined, complete, delete)
 // ===========================================================================
 function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
   const [editing, setEditing] = useState(false);
@@ -314,12 +368,13 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
   const [due, setDue] = useState(activity.due);
   return (
     <div style={{ border: `1px solid ${overdue ? C.red : C.activityBorder}`, background: '#fff', borderRadius: 6, padding: 10, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input value={text} onChange={(e) => setText(e.target.value)} style={miniInput} />
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
-            <button onClick={() => { onEdit(activity.id, text, due); setEditing(false); }} style={miniBtn}>Save</button>
+            <button onClick={() => { onEdit(activity.id, text || 'Call', due); setEditing(false); }} style={miniBtn}>Save</button>
             <button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button>
           </div>
         </div>
@@ -341,44 +396,49 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
 }
 
 // ===========================================================================
-// History feed (editable + deletable notes/activities; editable dates)
+// History feed (combined edit for activities incl date + reopen; comments on notes)
 // ===========================================================================
 function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇', mention: '@' })[t] || '•'; }
-function HistoryFeed({ history, onEdit, onEditDate, onDelete }) {
-  const [editingId, setEditingId] = useState(null);
-  const [draft, setDraft] = useState('');
-  const [dateId, setDateId] = useState(null);
-  const [dateDraft, setDateDraft] = useState('');
-  const sorted = [...history].sort((a, b) => new Date(b.ts) - new Date(a.ts));
-  const editable = (h) => h.type === 'note' || h.type === 'activity';
+function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment }) {
+  const [editing, setEditing] = useState(false);
+  const [body, setBody] = useState(h.body || '');
+  const [date, setDate] = useState(h.ts ? new Date(h.ts).toISOString().slice(0, 16) : '');
+  const [showComments, setShowComments] = useState(false);
+  const isNote = h.type === 'note';
+  const isActivity = h.type === 'activity';
   return (
-    <div>
-      {sorted.map((h) => (
-        <div key={h.id} style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-          <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: `1px solid ${C.line}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}</div>
-            {editingId === h.id ? (
-              <div style={{ marginTop: 4 }}>
-                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: `1px solid ${C.line}`, borderRadius: 6, padding: 6, fontFamily: 'inherit' }} />
-                <div style={{ marginTop: 4, display: 'flex', gap: 6 }}><button onClick={() => { onEdit(h.id, draft); setEditingId(null); }} style={miniBtn}>Save</button><button onClick={() => setEditingId(null)} style={ghostBtn}>Cancel</button></div>
-              </div>
-            ) : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>)}
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 3, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              {dateId === h.id ? (
-                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                  <input type="datetime-local" value={dateDraft} onChange={(e) => setDateDraft(e.target.value)} style={{ ...miniInput, padding: '3px 6px' }} />
-                  <button onClick={() => { onEditDate(h.id, new Date(dateDraft).toISOString()); setDateId(null); }} style={miniBtn}>Save</button>
-                  <button onClick={() => setDateId(null)} style={ghostBtn}>Cancel</button>
-                </span>
-              ) : <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>}
-              {editable(h) && editingId !== h.id && <span onClick={() => { setEditingId(h.id); setDraft(h.body || ''); }} style={{ color: C.link, cursor: 'pointer' }}>Edit</span>}
-              {h.type === 'activity' && dateId !== h.id && <span onClick={() => { setDateId(h.id); setDateDraft(new Date(h.ts).toISOString().slice(0, 16)); }} style={{ color: C.link, cursor: 'pointer' }}>Edit date</span>}
-              {editable(h) && <span onClick={() => onDelete(h.id)} style={{ color: C.lost, cursor: 'pointer' }}>Delete</span>}
+    <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+      <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: `1px solid ${C.line}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}</div>
+        {editing ? (
+          <div style={{ marginTop: 4 }}>
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: `1px solid ${C.line}`, borderRadius: 6, padding: 6, fontFamily: 'inherit' }} />
+            {isActivity && <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} style={{ ...miniInput, marginTop: 6 }} />}
+            <div style={{ marginTop: 4, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={() => { if (isActivity) onEditActivity(h.id, body, date ? new Date(date).toISOString() : h.ts); else onEdit(h.id, body); setEditing(false); }} style={miniBtn}>Save</button>
+              <button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button>
             </div>
           </div>
+        ) : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>)}
+
+        <div style={{ fontSize: 11, color: C.dim, marginTop: 3, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>
+          {(isNote || isActivity) && !editing && <span onClick={() => setEditing(true)} style={{ color: C.link, cursor: 'pointer' }}>Edit</span>}
+          {isActivity && <span onClick={() => onReopen(h.id)} style={{ color: C.link, cursor: 'pointer' }}>Reopen / Mark undone</span>}
+          {(isNote || isActivity) && <span onClick={() => onDelete(h.id)} style={{ color: C.lost, cursor: 'pointer' }}>Delete</span>}
+          {isNote && <span onClick={() => setShowComments((v) => !v)} style={{ color: C.link, cursor: 'pointer' }}>{showComments ? 'Hide' : 'Comment'} ({(h.comments || []).length})</span>}
         </div>
-      ))}
+        {isNote && showComments && <CommentThread comments={h.comments} onAdd={(body) => onComment(h.id, body)} />}
+      </div>
+    </div>
+  );
+}
+function HistoryFeed(props) {
+  const sorted = [...props.history].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  return (
+    <div>
+      {sorted.map((h) => <HistoryItem key={h.id} h={h} {...props} />)}
       {sorted.length === 0 && <div style={{ fontSize: 13, color: C.dim, padding: '16px 0' }}>No history yet.</div>}
     </div>
   );
@@ -387,15 +447,16 @@ function HistoryFeed({ history, onEdit, onEditDate, onDelete }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote, onEditHistory, onEditHistoryDate, onDeleteHistory, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
+function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
   const [noteText, setNoteText] = useState('');
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
+  const [collapsed, setCollapsed] = useState({});
+  const toggle = (g) => setCollapsed((p) => ({ ...p, [g]: !p[g] }));
   const groupFields = (g) => schema.filter((f) => f.group === g);
   const openActs = (deal.activities || []).filter((a) => !a.done).sort((a, b) => a.due.localeCompare(b.due));
-
-  // inject searchable flags for org/contact
+  const noteHistory = deal.history.filter((h) => h.type === 'note').sort((a, b) => new Date(b.ts) - new Date(a.ts));
   const summaryFields = groupFields('summary').map((f) => f.key === 'organization' ? { ...f, search: 'org' } : f.key === 'contact_person' ? { ...f, search: 'contact' } : f);
 
   return (
@@ -418,42 +479,39 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        {/* LEFT */}
-        <div style={{ width: 320, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 20, boxSizing: 'border-box' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700 }}>Summary</span>
-            <button onClick={onManageFields} style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11 }}>⚙ Fields</button>
-          </div>
-          {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
-
-          <div style={{ ...sideHead, marginTop: 20 }}>Details</div>
-          {groupFields('details').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
-
-          <div style={{ ...sideHead, marginTop: 20 }}>Customer Contact</div>
-          <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text', search: 'contact' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
-          <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(deal.fields.contact_person) || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(deal.fields.contact_person) || '-'}</span></div>
-          {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
-
-          <div style={{ ...sideHead, marginTop: 20 }}>Organization</div>
-          <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
-          {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+        {/* LEFT — collapsible grey boxes on white */}
+        <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: '#fff' }}>
+          <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')} action={<button onClick={(e) => { e.stopPropagation(); onManageFields(); }} style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11 }}>⚙ Fields</button>}>
+            {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+          </SideBox>
+          <SideBox title="Details" collapsed={collapsed.details} onToggle={() => toggle('details')}>
+            {groupFields('details').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+          </SideBox>
+          <SideBox title="Customer Contact" collapsed={collapsed.person} onToggle={() => toggle('person')}>
+            <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text', search: 'contact' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+            <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(deal.fields.contact_person) || '-'}</span></div>
+            <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(deal.fields.contact_person) || '-'}</span></div>
+            {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+          </SideBox>
+          <SideBox title="Organization" collapsed={collapsed.organization} onToggle={() => toggle('organization')}>
+            <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+            {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+          </SideBox>
         </div>
 
         {/* CENTRE */}
         <div style={{ flex: 1, padding: 20, minWidth: 0, background: C.feedBg }}>
-          {/* Activities to do — headlined section */}
-          <div style={{ background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <span style={{ fontSize: 15, fontWeight: 700 }}>Activities to do</span>
-              <button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button>
-            </div>
+          {/* Activities to do */}
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Activities to do</div>
+          <div style={{ background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, padding: 14 }}>
+            <div style={{ textAlign: 'right', marginBottom: openActs.length || adding ? 10 : 0 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>
             {adding && (
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: 10 }}>
-                <MentionInput value={newText} onChange={setNewText} placeholder="What needs doing… (type @ to notify someone)" rows={2} />
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
+                <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6 }}>
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
-                  <button disabled={!newText.trim() || !newDue} onClick={() => { onAddActivity(deal.id, newText.trim(), newDue); setNewText(''); setNewDue(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newText.trim() && newDue ? 1 : 0.5 }}>Save</button>
+                  <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue); setNewText(''); setNewDue(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
                   <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>
                 </div>
               </div>
@@ -462,19 +520,38 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
             {openActs.length === 0 && !adding && <div style={{ fontSize: 13, color: C.dim }}>No activities. Add one to keep this deal on track.</div>}
           </div>
 
-          {/* Notes — headlined section, post-it */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Notes</div>
-            <div style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12 }}>
-              <MentionInput value={noteText} onChange={setNoteText} placeholder="Take a note… (type @ to notify someone)" rows={2} />
-              <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
-            </div>
+          <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
+
+          {/* Notes */}
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Notes</div>
+          <div style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12 }}>
+            <MentionInput value={noteText} onChange={setNoteText} placeholder="Take a note… (type @ to notify someone)" rows={2} />
+            <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
           </div>
+          {/* saved notes with comment threads, staying in Notes section */}
+          {noteHistory.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              {noteHistory.map((h) => (
+                <div key={h.id} style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{h.body}</div>
+                  <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</div>
+                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
           {/* History */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>History</div>
-          <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>All activity, newest first · notes and activities are editable and deletable</div>
-          <HistoryFeed history={deal.history} onEdit={(hid, body) => onEditHistory(deal.id, hid, body)} onEditDate={(hid, ts) => onEditHistoryDate(deal.id, hid, ts)} onDelete={(hid) => onDeleteHistory(deal.id, hid)} />
+          <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>All activity, newest first · notes & activities editable, deletable, commentable</div>
+          <HistoryFeed history={deal.history}
+            onEdit={(hid, body) => onEditHistory(deal.id, hid, body)}
+            onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
+            onDelete={(hid) => onDeleteHistory(deal.id, hid)}
+            onReopen={(hid) => onReopenActivity(deal.id, hid)}
+            onComment={(hid, body) => onCommentNote(deal.id, hid, body)} />
         </div>
       </div>
     </div>
@@ -482,7 +559,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
 }
 
 // ===========================================================================
-// List view
+// List view (deals)
 // ===========================================================================
 function ListView({ deals, columns, sort, onSort, onOpen, today }) {
   return (
@@ -506,6 +583,26 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
 }
 
 // ===========================================================================
+// Companies / Contacts views (derived from deals)
+// ===========================================================================
+function EntityTable({ rows, fields, columns, sort, onSort }) {
+  return (
+    <div style={{ overflow: 'auto', height: '100%' }}>
+      <table style={{ borderCollapse: 'collapse', width: '100%', background: '#fff', fontSize: 13 }}>
+        <thead><tr>{columns.map((k) => { const lbl = (fields.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>; })}</tr></thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} style={{ borderBottom: `1px solid ${C.line}` }}>
+              {columns.map((k) => <td key={k} style={td}>{k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ===========================================================================
 // PAGE
 // ===========================================================================
 export default function CRMPage() {
@@ -513,7 +610,7 @@ export default function CRMPage() {
   const router = useRouter();
   const [deals, setDeals] = useState(() => SEED_DEALS.map((d) => ({ ...d, fields: { ...d.fields }, history: [...(d.history || [])], activities: [...(d.activities || [])] })));
   const [openId, setOpenId] = useState(null);
-  const [view, setView] = useState('pipeline');
+  const [view, setView] = useState('pipeline'); // pipeline | list | companies | contacts
   const [query, setQuery] = useState('');
   const [showSuggest, setShowSuggest] = useState(false);
   const [statusFilter, setStatusFilter] = useState('open');
@@ -523,8 +620,11 @@ export default function CRMPage() {
   const [visibleStages, setVisibleStages] = useState(() => new Set(STAGES.map((s) => s.id)));
   const [stageMode, setStageMode] = useState('all');
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
-  const [showColSettings, setShowColSettings] = useState(false);
+  const [companyCols, setCompanyCols] = useState(DEFAULT_COMPANY_COLUMNS);
+  const [contactCols, setContactCols] = useState(DEFAULT_CONTACT_COLUMNS);
+  const [chooser, setChooser] = useState(null); // 'list' | 'companies' | 'contacts'
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
+  const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
   const [confetti, setConfetti] = useState(false);
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
@@ -570,16 +670,37 @@ export default function CRMPage() {
     return rows;
   }, [finalList, sort, savedFilter]);
 
+  // Companies & Contacts derived
+  const companyRows = useMemo(() => {
+    const m = {};
+    deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
+    let rows = Object.values(m);
+    const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
+    const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
+    return rows;
+  }, [deals, query, entitySort]);
+
+  const contactRows = useMemo(() => {
+    const m = {};
+    deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, organization: d.fields.organization || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
+    let rows = Object.values(m);
+    const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.organization || '').toLowerCase().includes(q));
+    const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
+    return rows;
+  }, [deals, query, entitySort]);
+
   const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
   // mutations
   const patch = (id, fn) => setDeals((prev) => prev.map((d) => d.id === id ? fn(d) : d));
   const moveDeal = (id, stageId) => patch(id, (d) => d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: uid(), type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}` }] });
   const setStatus = (id, status) => { patch(id, (d) => { const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened'; return { ...d, status, history: [...d.history, { id: uid(), type: status === 'open' ? 'note' : status, ts: nowIso(), text }] }; }); if (status === 'won') setConfetti(true); };
-  const addNote = (id, body) => { const m = extractMentions(body); patch(id, (d) => { const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, history: [...d.history, ...ev] }; }); };
+  const addNote = (id, body) => { const m = extractMentions(body); patch(id, (d) => { const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, history: [...d.history, ...ev] }; }); };
+  const commentNote = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso() }] } : h) }));
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));
-  const editHistoryDate = (id, hid, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, ts, edited: true } : h) }));
+  const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
+  const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
   const addActivity = (id, text, due) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})`, body: text }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
   const completeActivity = (id, aid) => patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; });
@@ -599,10 +720,10 @@ export default function CRMPage() {
   const onDragStart = (e, id) => { dragId.current = id; };
   const onDrop = (e, stageId) => { const id = dragId.current; if (id != null) moveDeal(id, stageId); dragId.current = null; };
   const doSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+  const doEntitySort = (key) => setEntitySort((s) => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
   const addCustomFilter = () => setCustomFilters((f) => [...f, { field: '', value: '' }]);
   const updateCustomFilter = (i, patch) => setCustomFilters((f) => f.map((cf, idx) => idx === i ? { ...cf, ...patch } : cf));
   const removeCustomFilter = (i) => setCustomFilters((f) => f.filter((_, idx) => idx !== i));
-  const toggleColumn = (k) => setColumns((prev) => prev.includes(k) ? prev.filter((c) => c !== k) : [...prev, k]);
 
   const live = deals.find((d) => d.id === openId) || null;
   if (live) {
@@ -610,73 +731,98 @@ export default function CRMPage() {
       <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', color: C.text }}>
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onEditHistory={editHistory} onEditHistoryDate={editHistoryDate} onDeleteHistory={deleteHistory} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
+        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
     );
   }
+
+  const isDealView = view === 'pipeline' || view === 'list';
 
   return (
     <div style={{ background: C.bg, height: '100vh', color: C.text, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
       {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-      {showColSettings && <ColumnSettings columns={columns} onToggle={toggleColumn} onClose={() => setShowColSettings(false)} />}
+      {chooser === 'list' && <ColumnChooser title="Choose columns" fields={LIST_FIELDS} columns={columns} onToggle={(k) => setColumns((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
+      {chooser === 'companies' && <ColumnChooser title="Choose columns" fields={COMPANY_FIELDS} columns={companyCols} onToggle={(k) => setCompanyCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
+      {chooser === 'contacts' && <ColumnChooser title="Choose columns" fields={CONTACT_FIELDS} columns={contactCols} onToggle={(k) => setContactCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
+
+      {/* black nav with Rock Roofing logo */}
       <div style={{ background: C.nav, color: '#fff', padding: '10px 16px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, marginRight: 6 }}>Deals</h1>
+        <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: .3, marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ background: C.link, color: '#fff', borderRadius: 5, padding: '2px 7px', fontSize: 14, fontWeight: 800 }}>RR</span>Rock Roofing
+        </span>
         <div style={{ display: 'flex', border: `1px solid #444`, borderRadius: 6, overflow: 'hidden' }}>
           <button onClick={() => setView('pipeline')} style={segBtn(view === 'pipeline')}>Pipeline</button>
           <button onClick={() => setView('list')} style={segBtn(view === 'list')}>List</button>
         </div>
-        <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>
-        {view === 'list' && <button onClick={() => setShowColSettings(true)} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }} title="Column settings">⚙</button>}
+        {/* Companies / Contacts buttons to the LEFT of search */}
+        <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
+        <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
+        {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative', minWidth: 260 }}>
           <input placeholder="Search…" value={query} onChange={(e) => { setQuery(e.target.value); setShowSuggest(true); }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', paddingRight: 26 }} />
           {query && <span onClick={() => setQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.dim, fontSize: 14 }}>✕</span>}
-          {showSuggest && suggestions.length > 0 && (
+          {showSuggest && suggestions.length > 0 && isDealView && (
             <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
               {suggestions.map((s, i) => <div key={i} onMouseDown={() => { if (s.id) openDealById(s.id); else setQuery(s.label); setShowSuggest(false); }} style={{ padding: '8px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5`, display: 'flex', justifyContent: 'space-between', color: C.text }}><span>{s.label}</span><span style={{ fontSize: 11, color: C.dim }}>{s.type}</span></div>)}
             </div>
           )}
         </div>
-        <span style={{ fontSize: 13, color: '#cfd6dd' }}>{finalList.length} deals · {money0(totalValue)} open</span>
+        {isDealView && <span style={{ fontSize: 13, color: '#cfd6dd' }}>{finalList.length} deals · {money0(totalValue)} open</span>}
       </div>
 
-      <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: C.dim }}>Status:</span>
-          <div style={{ display: 'flex', gap: 4 }}>{['open','won','lost','all'].map((s) => <button key={s} onClick={() => setStatusFilter(s)} style={chip(statusFilter === s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}</div>
-          <span style={sep} />
-          <button onClick={() => { setSavedFilter(savedFilter === 'tender' ? null : 'tender'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'tender')}>Tender Review List</button>
-          <button onClick={() => { setSavedFilter(savedFilter === 'mcsn' ? null : 'mcsn'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'mcsn')}>MC Secured &amp; Negotiating</button>
-          {savedFilter === 'mcsn' && <select value={mcsnEstimator} onChange={(e) => setMcsnEstimator(e.target.value)} style={{ ...miniInput, width: 160 }}><option value="all">All estimators</option>{mcsnEstimators.map((e) => <option key={e} value={e}>{e}</option>)}</select>}
-          <span style={sep} />
-          {view === 'pipeline' && <div style={{ display: 'flex', border: `1px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}><button onClick={() => setStageMode('all')} style={toggleBtn(stageMode === 'all')}>All Stages</button><button onClick={() => setStageMode('estimator')} style={toggleBtn(stageMode === 'estimator')}>Estimator Stages Only</button></div>}
-          <span style={sep} />
-          <button onClick={addCustomFilter} style={chip(false)}>+ Add filter</button>
+      {/* filter bar (only for deal views) */}
+      {isDealView && (
+        <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: C.dim }}>Status:</span>
+            <div style={{ display: 'flex', gap: 4 }}>{['open','won','lost','all'].map((s) => <button key={s} onClick={() => setStatusFilter(s)} style={chip(statusFilter === s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}</div>
+            <span style={sep} />
+            <button onClick={() => { setSavedFilter(savedFilter === 'tender' ? null : 'tender'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'tender')}>Tender Review List</button>
+            <button onClick={() => { setSavedFilter(savedFilter === 'mcsn' ? null : 'mcsn'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'mcsn')}>MC Secured &amp; Negotiating</button>
+            {savedFilter === 'mcsn' && <select value={mcsnEstimator} onChange={(e) => setMcsnEstimator(e.target.value)} style={{ ...miniInput, width: 160 }}><option value="all">All estimators</option>{mcsnEstimators.map((e) => <option key={e} value={e}>{e}</option>)}</select>}
+            <span style={sep} />
+            {view === 'pipeline' && <div style={{ display: 'flex', border: `1px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}><button onClick={() => setStageMode('all')} style={toggleBtn(stageMode === 'all')}>All Stages</button><button onClick={() => setStageMode('estimator')} style={toggleBtn(stageMode === 'estimator')}>Estimator Stages Only</button></div>}
+            <span style={sep} />
+            <button onClick={addCustomFilter} style={chip(false)}>+ Add filter</button>
+          </div>
+          {customFilters.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {customFilters.map((cf, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: C.dim, width: 42 }}>{i === 0 ? 'Where' : 'And'}</span>
+                  <select value={cf.field} onChange={(e) => updateCustomFilter(i, { field: e.target.value })} style={{ ...miniInput, width: 190 }}><option value="">Select field…</option>{LIST_FIELDS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}</select>
+                  <span style={{ fontSize: 12, color: C.dim }}>contains</span>
+                  <input placeholder="value" value={cf.value} onChange={(e) => updateCustomFilter(i, { value: e.target.value })} style={{ ...miniInput, width: 190 }} />
+                  <button onClick={() => removeCustomFilter(i)} style={{ ...ghostBtn, padding: '5px 10px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Choose Columns — line below filters, far right, list view only */}
+          {view === 'list' && <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setChooser('list')} style={ghostBtn}>Choose Columns</button></div>}
         </div>
-        {customFilters.length > 0 && (
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {customFilters.map((cf, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, color: C.dim, width: 42 }}>{i === 0 ? 'Where' : 'And'}</span>
-                <select value={cf.field} onChange={(e) => updateCustomFilter(i, { field: e.target.value })} style={{ ...miniInput, width: 190 }}><option value="">Select field…</option>{LIST_FIELDS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}</select>
-                <span style={{ fontSize: 12, color: C.dim }}>contains</span>
-                <input placeholder="value" value={cf.value} onChange={(e) => updateCustomFilter(i, { value: e.target.value })} style={{ ...miniInput, width: 190 }} />
-                <button onClick={() => removeCustomFilter(i)} style={{ ...ghostBtn, padding: '5px 10px' }}>✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
 
+      {/* Companies/Contacts: a thin bar with Choose Columns on the right */}
+      {!isDealView && (
+        <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>{view === 'companies' ? `Companies (${companyRows.length})` : `Contacts (${contactRows.length})`}</span>
+          <button onClick={() => setChooser(view)} style={ghostBtn}>Choose Columns</button>
+        </div>
+      )}
+
+      {/* body */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: view === 'pipeline' ? '12px 12px 0' : 0 }}>
-        {view === 'pipeline' ? (
-          <div style={{ display: 'flex', gap: 8, height: '100%', overflowX: 'auto', overflowY: 'hidden', minHeight: 0, paddingBottom: 12 }}>
-            {shownStages.map((s) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={openDealById} onDragStart={onDragStart} onDrop={onDrop} today={today} />)}
+        {view === 'pipeline' && (
+          <div style={{ display: 'flex', gap: 0, height: '100%', overflowX: 'auto', overflowY: 'hidden', minHeight: 0, paddingBottom: 12 }}>
+            {shownStages.map((s, i) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={openDealById} onDragStart={onDragStart} onDrop={onDrop} today={today} isFirst={i === 0} />)}
           </div>
-        ) : (
-          <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />
         )}
+        {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />}
+        {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} />}
+        {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} />}
       </div>
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} />}
@@ -685,7 +831,7 @@ export default function CRMPage() {
 }
 
 // ===========================================================================
-// Add project modal (Systems Priced multi-select)
+// Add project modal
 // ===========================================================================
 function AddProjectModal({ onClose, onCreate }) {
   const [f, setF] = useState({});
@@ -705,10 +851,7 @@ function AddProjectModal({ onClose, onCreate }) {
           <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer contact</label><TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" /></div>
           <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
           {NPF.map(([k, lbl, req]) => <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label><input value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} /></div>)}
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={fLbl}>Systems Priced (multi-select)</label>
-            <select multiple value={String(f.systems_priced || '').split(', ').filter(Boolean)} onChange={(e) => set('systems_priced', Array.from(e.target.selectedOptions).map((o) => o.value).join(', '))} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', height: 120 }}>{systemsOpts.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-          </div>
+          <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Systems Priced (multi-select)</label><select multiple value={String(f.systems_priced || '').split(', ').filter(Boolean)} onChange={(e) => set('systems_priced', Array.from(e.target.selectedOptions).map((o) => o.value).join(', '))} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', height: 120 }}>{systemsOpts.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
         </div>
       </div>
       <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button onClick={create} style={primaryBtn}>Create project</button></div>
@@ -728,7 +871,6 @@ const primaryBtn = { background: C.link, color: '#fff', border: 'none', borderRa
 const ghostBtn = { background: '#fff', color: C.text, border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const miniBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 const miniInput = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 9px', fontSize: 13, color: C.text, outline: 'none', background: '#fff', fontFamily: 'inherit' };
-const sideHead = { fontSize: 13, fontWeight: 700, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${C.line}` };
 const sideRow = { display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', fontSize: 12, alignItems: 'flex-start' };
 const sideKey = { color: C.dim, flexShrink: 0, maxWidth: 130, paddingTop: 4 };
 const sideVal = { color: C.text, textAlign: 'right', wordBreak: 'break-word', paddingTop: 4 };
