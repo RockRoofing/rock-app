@@ -3,11 +3,15 @@
 // CRM PREVIEW (admin-only once guard enabled at bottom)
 // SELF-CONTAINED: baked-in seed data, all changes in browser memory only.
 // Refreshing resets everything. Nothing here touches your live DB or dashboards.
+//
+// Deep-link: /crm?deal=12345 opens that deal directly (used by @mention emails).
 // -----------------------------------------------------------------------------
 
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { SEED_DEALS, PREVIEW_TODAY } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
+import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
 
 const STAGES = [
   { id: 'stage_project_in',   label: 'Project In' },
@@ -29,10 +33,8 @@ const STAGES = [
 const STAGE_INDEX = Object.fromEntries(STAGES.map((s, i) => [s.id, i]));
 const stageLabel = (id) => (STAGES.find((s) => s.id === id) || {}).label || id;
 
-// Colour bands: orange = Project In..TBF ; blue = Variations onwards.
 const ORANGE_STAGES = new Set(['stage_project_in','stage_1st_contact','stage_calls_x3','stage_in_abeyance','stage_tbf']);
 const BLUE_STAGES = new Set(['stage_variations','stage_info_pending','stage_received','stage_1','stage_2','stage_review','stage_mc_unsec_np','stage_mc_unsecured','stage_mc_secured','stage_negotiating']);
-// "Estimator Stages Only" preset = Variations onwards
 const ESTIMATOR_STAGES = ['stage_variations','stage_info_pending','stage_received','stage_1','stage_2','stage_review','stage_mc_unsec_np','stage_mc_unsecured','stage_mc_secured','stage_negotiating'];
 function columnBg(stageId) {
   if (ORANGE_STAGES.has(stageId)) return '#fdf1e3';
@@ -40,7 +42,7 @@ function columnBg(stageId) {
   return '#f4f5f7';
 }
 
-const FIELDS = [
+const LIST_FIELDS = [
   ['title', 'Title'], ['organization', 'Organization'], ['contact_person', 'Contact'],
   ['value', 'Value'], ['owner', 'Owner'], ['estimator_responsible', 'Estimator Responsible'],
   ['stageId', 'Stage'], ['status', 'Status'], ['region', 'Region'], ['project_type', 'Project Type'],
@@ -51,29 +53,11 @@ const FIELDS = [
 ];
 const DEFAULT_COLUMNS = ['title','organization','contact_person','value','stageId','owner','estimator_responsible','status'];
 
-const DETAIL_FIELDS = [
-  ['glenigan_id','Glenigan Project ID'],['site_location','Site Location'],['region','Region'],
-  ['size_m2','Size: m2'],['credit_score','Credit Score'],['credit_limit','Credit Limit'],
-  ['project_stage','Project Stage'],['roofing_works_onsite','Roofing Works On-Site'],
-  ['estimator_responsible','Estimator Responsible'],['systems_priced','Systems Priced'],
-  ['scope_of_works','Description of Project Scope of Works'],['general_info','General Information'],
-  ['project_type','Project Type'],['lead_source','Lead Source'],
-];
-
-const NEW_PROJECT_FIELDS = [
-  ['title','Project title', true],['value','Value (£)', false],['site_location','Site Location', false],
-  ['site_postcode','Postcode', false],['region','Region', false],['size_m2','Size: m2', false],
-  ['glenigan_id','Glenigan Project ID', false],['estimator_responsible','Estimator Responsible', false],
-  ['project_type','Project Type', false],['systems_priced','Systems Priced', false],
-  ['lead_source','Lead Source', false],['scope_of_works','Scope of Works', false],
-];
-
 // ---- helpers --------------------------------------------------------------
 const money = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 2 }); };
 const money0 = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 }); };
 const shortDate = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
 const dateTime = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
-const initials = (n) => !n ? '?' : String(n).trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 const nowIso = () => new Date().toISOString();
 const firstName = (n) => n ? String(n).trim().split(/\s+/)[0] : '';
 const lastName = (n) => { if (!n) return ''; const p = String(n).trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; };
@@ -103,68 +87,43 @@ function displayCell(deal, key) {
 }
 
 const C = {
-  green: '#2a862f', greenBar: '#3a9c3e', grey: '#e4e7ea', line: '#e1e4e8',
-  text: '#1a1a1a', dim: '#7a828a', link: '#2a7de1', bg: '#f4f5f7', card: '#ffffff',
-  won: '#2a862f', lost: '#d64545', amber: '#e6a817', red: '#d64545', dotGrey: '#9aa3ab',
-  nav: '#1c1c1c',            // black nav banner (matches other portal pages)
-  note: '#fff7cc',           // post-it yellow
-  noteBorder: '#f2e08a',
-  activityBg: '#eaf3ff',     // next-activity panel (soft blue)
-  activityBorder: '#c5ddf7',
-  feedBg: '#f6f8fa',         // background behind activity + history
+  greenBar: '#3a9c3e', grey: '#e4e7ea', line: '#e1e4e8', text: '#1a1a1a', dim: '#7a828a',
+  link: '#2a7de1', bg: '#f4f5f7', card: '#ffffff', won: '#2a862f', lost: '#d64545',
+  amber: '#f5a623', red: '#ff3b30', green: '#25c249', dotGrey: '#9aa3ab',
+  nav: '#1c1c1c', note: '#fff7cc', noteBorder: '#f2e08a', activityBg: '#eaf3ff',
+  activityBorder: '#c5ddf7', feedBg: '#f6f8fa', mention: '#e5effd',
 };
 
 // ===========================================================================
-// Confetti (won celebration) — lightweight, no library
+// Confetti
 // ===========================================================================
 function Confetti({ onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 2600); return () => clearTimeout(t); }, [onDone]);
   const pieces = useMemo(() => Array.from({ length: 90 }, (_, i) => ({
     id: i, left: Math.random() * 100, delay: Math.random() * 0.5, dur: 1.8 + Math.random() * 1.2,
-    color: ['#2a862f','#2a7de1','#e6a817','#d64545','#7c4dff','#00bcd4'][i % 6],
-    rot: Math.random() * 360, size: 6 + Math.random() * 8,
+    color: ['#2a862f','#2a7de1','#e6a817','#d64545','#7c4dff','#00bcd4'][i % 6], rot: Math.random() * 360, size: 6 + Math.random() * 8,
   })), []);
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 200, overflow: 'hidden' }}>
-      <style>{`@keyframes crmfall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.9}}`}</style>
-      {pieces.map((p) => (
-        <div key={p.id} style={{
-          position: 'absolute', top: -20, left: p.left + '%', width: p.size, height: p.size * 0.6,
-          background: p.color, transform: `rotate(${p.rot}deg)`,
-          animation: `crmfall ${p.dur}s ${p.delay}s ease-in forwards`,
-        }} />
-      ))}
-      <div style={{
-        position: 'absolute', top: '32%', left: 0, right: 0, textAlign: 'center',
-        fontSize: 42, fontWeight: 800, color: C.won, textShadow: '0 2px 8px rgba(0,0,0,.15)',
-        animation: 'crmpop .4s ease-out',
-      }}>🎉 Deal Won! 🎉</div>
-      <style>{`@keyframes crmpop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
+      <style>{`@keyframes crmfall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.9}}@keyframes crmpop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
+      {pieces.map((p) => <div key={p.id} style={{ position: 'absolute', top: -20, left: p.left + '%', width: p.size, height: p.size * 0.6, background: p.color, transform: `rotate(${p.rot}deg)`, animation: `crmfall ${p.dur}s ${p.delay}s ease-in forwards` }} />)}
+      <div style={{ position: 'absolute', top: '32%', left: 0, right: 0, textAlign: 'center', fontSize: 42, fontWeight: 800, color: C.won, textShadow: '0 2px 8px rgba(0,0,0,.15)', animation: 'crmpop .4s ease-out' }}>🎉 Deal Won! 🎉</div>
     </div>
   );
 }
 
 // ===========================================================================
-// Type-ahead
+// Type-ahead (customers/contacts)
 // ===========================================================================
 function TypeAhead({ value, onChange, options, placeholder }) {
   const [open, setOpen] = useState(false);
-  const matches = useMemo(() => {
-    const q = (value || '').trim().toLowerCase();
-    if (!q) return [];
-    return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 8);
-  }, [value, options]);
+  const matches = useMemo(() => { const q = (value || '').trim().toLowerCase(); if (!q) return []; return options.filter((o) => o.toLowerCase().includes(q)).slice(0, 8); }, [value, options]);
   return (
     <div style={{ position: 'relative' }}>
-      <input value={value || ''} placeholder={placeholder}
-        onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)}
-        style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
+      <input value={value || ''} placeholder={placeholder} onChange={(e) => { onChange(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
       {open && matches.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 220, overflowY: 'auto' }}>
-          {matches.map((m) => (
-            <div key={m} onMouseDown={() => { onChange(m); setOpen(false); }} style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5` }}>{m}</div>
-          ))}
+          {matches.map((m) => <div key={m} onMouseDown={() => { onChange(m); setOpen(false); }} style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5` }}>{m}</div>)}
         </div>
       )}
     </div>
@@ -172,63 +131,72 @@ function TypeAhead({ value, onChange, options, placeholder }) {
 }
 
 // ===========================================================================
-// Add project modal
+// Mention textarea — type @ to pick a user
 // ===========================================================================
-function AddProjectModal({ onClose, onCreate }) {
-  const [f, setF] = useState({});
-  const [org, setOrg] = useState('');
-  const [contact, setContact] = useState('');
-  const [stageId, setStageId] = useState('stage_project_in');
-  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  const create = () => { if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; } onCreate({ ...f, organization: org, contact_person: contact, stageId }); };
+function MentionInput({ value, onChange, placeholder, rows, bg }) {
+  const [showList, setShowList] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  const matches = MENTION_USERS.filter((u) => u.name.toLowerCase().includes(q.toLowerCase()) || u.username.includes(q.toLowerCase())).slice(0, 6);
+
+  const onInput = (e) => {
+    const val = e.target.value; onChange(val);
+    const m = /@(\w*)$/.exec(val.slice(0, e.target.selectionStart));
+    if (m) { setQ(m[1]); setShowList(true); } else setShowList(false);
+  };
+  const pick = (u) => {
+    const el = ref.current; const pos = el.selectionStart;
+    const before = value.slice(0, pos).replace(/@(\w*)$/, `@${u.name} `);
+    const after = value.slice(pos);
+    onChange(before + after); setShowList(false);
+    setTimeout(() => el.focus(), 0);
+  };
   return (
-    <div style={overlay}>
-      <div style={{ ...modal, maxWidth: 640 }}>
-        <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Add new project</span><button onClick={onClose} style={xBtn}>✕</button></div>
-        <div style={{ padding: 20, overflowY: 'auto', maxHeight: '70vh' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer (organization)</label><TypeAhead value={org} onChange={setOrg} options={ORGS} placeholder="Type to search customers…" /></div>
-            <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer contact</label><TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" /></div>
-            <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-            {NEW_PROJECT_FIELDS.map(([k, lbl, req]) => (
-              <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}>
-                <label style={fLbl}>{lbl}{req ? ' *' : ''}</label>
-                <input value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
-              </div>
-            ))}
-          </div>
+    <div style={{ position: 'relative' }}>
+      <textarea ref={ref} value={value} onChange={onInput} placeholder={placeholder} rows={rows || 2}
+        style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14, fontFamily: 'inherit', background: bg || 'transparent' }} />
+      {showList && matches.length > 0 && (
+        <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 40, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginBottom: 4, boxShadow: '0 4px 12px rgba(0,0,0,.15)', minWidth: 160 }}>
+          {matches.map((u) => <div key={u.username} onMouseDown={() => pick(u)} style={{ padding: '7px 12px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: C.mention, color: C.link, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{u.name[0]}</span>{u.name}</div>)}
         </div>
-        <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button onClick={create} style={primaryBtn}>Create project</button></div>
-      </div>
+      )}
     </div>
   );
 }
+function extractMentions(text) {
+  const names = MENTION_USERS.map((u) => u.name);
+  return names.filter((n) => new RegExp(`@${n}\\b`, 'i').test(text || ''));
+}
 
 // ===========================================================================
-// Board card + column
+// Dots (bigger + brighter)
 // ===========================================================================
-function Dot({ state }) {
-  if (state === 'none') return <span title="No activity set" style={{ color: C.amber, fontSize: 14, lineHeight: 1 }}>⚠</span>;
+function Dot({ state, size = 14 }) {
+  if (state === 'none') return <span title="No activity set" style={{ color: C.amber, fontSize: size + 6, lineHeight: 1 }}>⚠</span>;
   const color = state === 'overdue' ? C.red : state === 'today' ? C.green : C.dotGrey;
   const title = state === 'overdue' ? 'Activity overdue' : state === 'today' ? 'Activity due today' : 'Activity due in future';
-  return <span title={title} style={{ width: 10, height: 10, borderRadius: '50%', background: color, display: 'inline-block' }} />;
+  const glow = state === 'overdue' || state === 'today' ? `0 0 6px ${color}` : 'none';
+  return <span title={title} style={{ width: size, height: size, borderRadius: '50%', background: color, display: 'inline-block', boxShadow: glow }} />;
 }
+
+// ===========================================================================
+// Board card (no initials) + column (drag anywhere, full-height colour)
+// ===========================================================================
 function BoardCard({ deal, onOpen, onDragStart, today }) {
   const st = activityState(deal, today);
   return (
     <div draggable onDragStart={(e) => onDragStart(e, deal.id)} onClick={() => onOpen(deal.id)} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 6, padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
         <div style={{ fontWeight: 600, color: C.text, lineHeight: 1.3, marginBottom: 3 }}>{deal.title}</div>
-        {st && <div style={{ flexShrink: 0, marginTop: 2 }}><Dot state={st} /></div>}
+        {st && <div style={{ flexShrink: 0, marginTop: 1 }}><Dot state={st} size={14} /></div>}
       </div>
       <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.organization || '\u00a0'}</div>
       <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.contact_person || '\u00a0'}</div>
       <div style={{ color: C.dim, marginBottom: 6, fontSize: 11 }}>{shortDate(deal.fields.created)}</div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontWeight: 600, color: C.text }}>{money(deal.fields.value)}</span>
-        <span title={deal.fields.owner || ''} style={{ width: 22, height: 22, borderRadius: '50%', background: '#cfd6dd', color: '#333', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{initials(deal.fields.owner)}</span>
+        {deal.status !== 'open' && <span style={pill(deal.status === 'won' ? C.won : C.lost)}>{deal.status === 'won' ? 'Won' : 'Lost'}</span>}
       </div>
-      {deal.status !== 'open' && <div style={{ marginTop: 6 }}><span style={pill(deal.status === 'won' ? C.won : C.lost)}>{deal.status === 'won' ? 'Won' : 'Lost'}</span></div>}
     </div>
   );
 }
@@ -236,13 +204,18 @@ function BoardColumn({ stage, deals, onOpen, onDragStart, onDrop, today }) {
   const [over, setOver] = useState(false);
   const total = deals.reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
   return (
-    <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { setOver(false); onDrop(e, stage.id); }}
-      style={{ minWidth: 210, maxWidth: 210, flex: '0 0 210px', display: 'flex', flexDirection: 'column', height: '100%', background: over ? '#dbe8fb' : columnBg(stage.id), borderRadius: 8, padding: 8, boxSizing: 'border-box' }}>
+    // column fills full height; the droppable body stretches so you can drop anywhere below the header
+    <div style={{ minWidth: 210, maxWidth: 210, flex: '0 0 210px', display: 'flex', flexDirection: 'column', height: '100%', background: over ? '#dbe8fb' : columnBg(stage.id), borderRadius: 8, padding: 8, boxSizing: 'border-box' }}>
       <div style={{ padding: '4px 4px 10px' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{stage.label}</div>
         <div style={{ fontSize: 11, color: C.dim, marginTop: 2 }}>{money0(total)} · {deals.length} deals</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1 }}>{deals.map((d) => <BoardCard key={d.id} deal={d} onOpen={onOpen} onDragStart={onDragStart} today={today} />)}</div>
+      <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)} onDrop={(e) => { setOver(false); onDrop(e, stage.id); }}
+        style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {deals.map((d) => <BoardCard key={d.id} deal={d} onOpen={onOpen} onDragStart={onDragStart} today={today} />)}
+        {/* invisible filler makes the whole remaining area a drop target */}
+        <div style={{ minHeight: 120 }} />
+      </div>
     </div>
   );
 }
@@ -267,9 +240,124 @@ function TimelineBar({ deal, onMove }) {
 }
 
 // ===========================================================================
+// Editable sidebar field
+// ===========================================================================
+function EditableField({ field, value, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+
+  const display = () => {
+    if (value === null || value === undefined || value === '') return '-';
+    if (field.type === 'currency') return money(value);
+    if (field.type === 'number') return Number(value).toLocaleString('en-GB');
+    if (field.type === 'date') return shortDate(value);
+    if (field.type === 'yesno') return value ? 'Yes' : 'No';
+    return String(value);
+  };
+  const save = () => { onSave(field.key, field.type === 'yesno' ? (draft === 'Yes' || draft === true) : draft); setEditing(false); };
+
+  if (!editing) {
+    return <span style={sideValLink} onClick={() => setEditing(true)}>
+      {field.type === 'select' && value ? <span style={tag}>{value}</span> : display()}
+    </span>;
+  }
+  const commonProps = { autoFocus: true, value: draft, onChange: (e) => setDraft(e.target.value), style: { ...miniInput, width: '100%', boxSizing: 'border-box' } };
+  return (
+    <span style={{ display: 'flex', gap: 4, flexDirection: 'column', width: '100%' }}>
+      {(field.type === 'text' || field.type === 'number' || field.type === 'currency') && <input type={field.type === 'text' ? 'text' : 'number'} {...commonProps} />}
+      {field.type === 'date' && <input type="date" {...commonProps} />}
+      {field.type === 'yesno' && <select {...commonProps}><option>Yes</option><option>No</option></select>}
+      {field.type === 'select' && <select {...commonProps}><option value="">-</option>{(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
+      {field.type === 'multiselect' && (
+        <select multiple value={String(draft || '').split(', ').filter(Boolean)} onChange={(e) => setDraft(Array.from(e.target.selectedOptions).map((o) => o.value).join(', '))} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', height: 90 }}>
+          {(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )}
+      <span style={{ display: 'flex', gap: 4 }}><button onClick={save} style={miniBtn}>Save</button><button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button></span>
+    </span>
+  );
+}
+
+// ===========================================================================
+// Field manager modal (add/remove/edit custom fields)
+// ===========================================================================
+function FieldManager({ schema, onClose, onAdd, onRemove }) {
+  const [label, setLabel] = useState('');
+  const [type, setType] = useState('text');
+  const [group, setGroup] = useState('details');
+  const [opts, setOpts] = useState('');
+  const add = () => {
+    if (!label.trim()) { alert('Field name required'); return; }
+    const key = 'custom_' + label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    onAdd({ key, label: label.trim(), type, group, options: (type === 'select' || type === 'multiselect') ? opts.split(',').map((o) => o.trim()).filter(Boolean) : undefined });
+    setLabel(''); setOpts('');
+  };
+  return (
+    <div style={overlay}>
+      <div style={{ ...modal, maxWidth: 560 }}>
+        <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Customise fields</span><button onClick={onClose} style={xBtn}>✕</button></div>
+        <div style={{ padding: 20, overflowY: 'auto', maxHeight: '70vh' }}>
+          <div style={{ fontSize: 12, color: C.dim, marginBottom: 8, fontWeight: 700 }}>Add a field</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <input placeholder="Field name" value={label} onChange={(e) => setLabel(e.target.value)} style={miniInput} />
+            <select value={group} onChange={(e) => setGroup(e.target.value)} style={miniInput}>
+              <option value="summary">Summary</option><option value="details">Details</option><option value="person">Person</option><option value="organization">Organization</option>
+            </select>
+            <select value={type} onChange={(e) => setType(e.target.value)} style={miniInput}>
+              <option value="text">Text</option><option value="number">Number</option><option value="currency">Currency</option><option value="date">Date</option><option value="select">Dropdown</option><option value="multiselect">Multi-select</option><option value="yesno">Yes/No</option>
+            </select>
+            {(type === 'select' || type === 'multiselect') && <input placeholder="Options, comma-separated" value={opts} onChange={(e) => setOpts(e.target.value)} style={miniInput} />}
+          </div>
+          <button onClick={add} style={primaryBtn}>Add field</button>
+
+          <div style={{ fontSize: 12, color: C.dim, margin: '18px 0 8px', fontWeight: 700 }}>Current fields</div>
+          {['summary','details','person','organization'].map((g) => (
+            <div key={g} style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', color: C.dim, fontWeight: 700, marginBottom: 4 }}>{g}</div>
+              {schema.filter((f) => f.group === g).map((f) => (
+                <div key={f.key + f.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', fontSize: 13, borderBottom: `1px solid ${C.line}` }}>
+                  <span>{f.label} <span style={{ color: C.dim, fontSize: 11 }}>({f.type}{f.options ? `: ${f.options.length} opts` : ''})</span></span>
+                  {f.key.startsWith('custom_') && <button onClick={() => onRemove(f.key)} style={{ ...ghostBtn, padding: '3px 8px', color: C.lost }}>Remove</button>}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={modalFoot}><button onClick={onClose} style={primaryBtn}>Done</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Set-activity popout (used after mark-done, and for editing)
+// ===========================================================================
+function ActivityModal({ initialText, initialDue, onClose, onSave }) {
+  const [text, setText] = useState(initialText || '');
+  const [due, setDue] = useState(initialDue || '');
+  return (
+    <div style={overlay}>
+      <div style={{ ...modal, maxWidth: 460 }}>
+        <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Set next activity</span><button onClick={onClose} style={xBtn}>✕</button></div>
+        <div style={{ padding: 20 }}>
+          <label style={fLbl}>What needs doing? (type @ to notify someone)</label>
+          <div style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: 8, marginBottom: 10 }}>
+            <MentionInput value={text} onChange={setText} placeholder="e.g. Call @Roman to confirm pricing" rows={2} />
+          </div>
+          <label style={fLbl}>Due date</label>
+          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />
+        </div>
+        <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button disabled={!text.trim() || !due} onClick={() => onSave(text.trim(), due)} style={{ ...primaryBtn, opacity: text.trim() && due ? 1 : 0.5 }}>Set activity</button></div>
+      </div>
+    </div>
+  );
+}
+
+// ===========================================================================
 // History feed (editable notes & activities)
 // ===========================================================================
-function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇' })[t] || '•'; }
+function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇', mention: '@' })[t] || '•'; }
 function HistoryFeed({ history, onEdit }) {
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState('');
@@ -285,14 +373,9 @@ function HistoryFeed({ history, onEdit }) {
             {editingId === h.id ? (
               <div style={{ marginTop: 4 }}>
                 <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} style={{ width: '100%', boxSizing: 'border-box', fontSize: 13, border: `1px solid ${C.line}`, borderRadius: 6, padding: 6, fontFamily: 'inherit' }} />
-                <div style={{ marginTop: 4, display: 'flex', gap: 6 }}>
-                  <button onClick={() => { onEdit(h.id, draft); setEditingId(null); }} style={miniBtn}>Save</button>
-                  <button onClick={() => setEditingId(null)} style={ghostBtn}>Cancel</button>
-                </div>
+                <div style={{ marginTop: 4, display: 'flex', gap: 6 }}><button onClick={() => { onEdit(h.id, draft); setEditingId(null); }} style={miniBtn}>Save</button><button onClick={() => setEditingId(null)} style={ghostBtn}>Cancel</button></div>
               </div>
-            ) : (
-              h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>
-            )}
+            ) : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>)}
             <div style={{ fontSize: 11, color: C.dim, marginTop: 3, display: 'flex', gap: 10, alignItems: 'center' }}>
               <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>
               {editable(h) && editingId !== h.id && <span onClick={() => { setEditingId(h.id); setDraft(h.body || ''); }} style={{ color: C.link, cursor: 'pointer' }}>Edit</span>}
@@ -308,110 +391,91 @@ function HistoryFeed({ history, onEdit }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, onBack, onMove, onSetStatus, onAddNote, onEditHistory, onSetActivity, onCompleteActivity, onEditValue, onEditClose, onEditScore }) {
+function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote, onEditHistory, onSetActivity, onCompleteActivity, onEditField, onManageFields }) {
   const [noteText, setNoteText] = useState('');
-  const [actText, setActText] = useState(deal.activity && !deal.activity.done ? deal.activity.text : '');
-  const [actDue, setActDue] = useState(deal.activity && !deal.activity.done ? deal.activity.due : '');
-  const [editingValue, setEditingValue] = useState(false);
-  const [valueDraft, setValueDraft] = useState(String(deal.fields.value ?? ''));
+  const [showActivityModal, setShowActivityModal] = useState(false);
   const st = activityState(deal, today);
-  const person = { name: deal.fields.contact_person, phone: deal.fields.contact_phone, email: deal.fields.contact_email, jobRole: deal.fields.contact_job_role };
-  const orgName = deal.fields.organization;
+  const groupFields = (g) => schema.filter((f) => f.group === g);
 
   return (
     <div style={{ background: C.card, minHeight: '100vh' }}>
-      {/* black nav banner */}
+      {showActivityModal && <ActivityModal initialText="" initialDue="" onClose={() => setShowActivityModal(false)} onSave={(t, d) => { onSetActivity(deal.id, t, d); setShowActivityModal(false); }} />}
+      {/* black nav */}
       <div style={{ background: C.nav, color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={onBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
           <span style={{ fontSize: 17, fontWeight: 700 }}>{deal.title}</span>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff', border: 'none' }}>Won</button>
-          <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff', border: 'none' }}>Lost</button>
+          <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
+          <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}
         </div>
       </div>
 
-      {/* timeline */}
       <div style={{ borderBottom: `1px solid ${C.line}`, padding: '10px 24px' }}>
         <TimelineBar deal={deal} onMove={onMove} />
-        <div style={{ fontSize: 12, color: C.dim }}>Project → {stageLabel(deal.stageId)}
-          {deal.status !== 'open' && <span style={{ marginLeft: 8 }}><span style={pill(deal.status === 'won' ? C.won : C.lost)}>{deal.status === 'won' ? 'Won' : 'Lost'}</span></span>}
-        </div>
+        <div style={{ fontSize: 12, color: C.dim }}>Project → {stageLabel(deal.stageId)}{deal.status !== 'open' && <span style={{ marginLeft: 8 }}><span style={pill(deal.status === 'won' ? C.won : C.lost)}>{deal.status === 'won' ? 'Won' : 'Lost'}</span></span>}</div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        {/* LEFT COLUMN */}
-        <div style={{ width: 310, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 20, boxSizing: 'border-box' }}>
-          <div style={sideHead}>Summary</div>
-          <div style={sideRow}>
-            <span style={sideKey}>Value</span>
-            {editingValue ? (
-              <span style={{ display: 'flex', gap: 4 }}><input value={valueDraft} onChange={(e) => setValueDraft(e.target.value)} style={{ ...miniInput, width: 90 }} /><button onClick={() => { onEditValue(deal.id, Number(valueDraft) || 0); setEditingValue(false); }} style={miniBtn}>Save</button></span>
-            ) : (
-              <span style={sideValLink} onClick={() => { setValueDraft(String(deal.fields.value ?? '')); setEditingValue(true); }}>{money(deal.fields.value)}</span>
-            )}
+        {/* LEFT — editable */}
+        <div style={{ width: 320, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 20, boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 700 }}>Summary</span>
+            <button onClick={onManageFields} style={{ ...ghostBtn, padding: '3px 8px', fontSize: 11 }}>⚙ Fields</button>
           </div>
-          <div style={sideRow}><span style={sideKey}>Organization</span><span style={sideVal}>{orgName || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Contact</span><span style={sideVal}>{person.name || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Owner</span><span style={sideVal}>{deal.fields.owner || '-'}</span></div>
-          <div style={sideRow}>
-            <span style={sideKey}>Project Score</span>
-            <span style={sideValLink} onClick={() => { const v = prompt('Project Score (label):', deal.fields.project_score || ''); if (v !== null) onEditScore(deal.id, v); }}>
-              {deal.fields.project_score ? <span style={{ background: '#eef3fb', border: `1px solid ${C.line}`, borderRadius: 4, padding: '1px 7px', color: C.text }}>{deal.fields.project_score}</span> : '-'}
-            </span>
-          </div>
-          <div style={sideRow}>
-            <span style={sideKey}>Tender Return date</span>
-            <span style={sideValLink} onClick={() => { const v = prompt('Tender Return date (YYYY-MM-DD):', deal.fields.expected_close_date || ''); if (v !== null) onEditClose(deal.id, v); }}>{shortDate(deal.fields.expected_close_date) || '-'}</span>
-          </div>
-
-          <div style={{ ...sideHead, marginTop: 20 }}>Details</div>
-          {DETAIL_FIELDS.map(([k, lbl]) => (
-            <div key={k} style={sideRow}><span style={sideKey}>{lbl}</span><span style={sideVal}>{deal.fields[k] === null || deal.fields[k] === undefined || deal.fields[k] === '' ? '-' : String(deal.fields[k])}</span></div>
+          {groupFields('summary').map((f) => (
+            <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
           ))}
 
-          {/* Person section */}
-          <div style={{ ...sideHead, marginTop: 20 }}>Person</div>
-          <div style={sideRow}><span style={sideKey}>Name</span><span style={sideVal}>{person.name || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(person.name) || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(person.name) || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Phone</span><span style={sideVal}>{person.phone || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Email</span><span style={sideVal}>{person.email || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Job Role</span><span style={sideVal}>{person.jobRole || '-'}</span></div>
+          <div style={{ ...sideHead, marginTop: 20 }}>Details</div>
+          {groupFields('details').map((f) => (
+            <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+          ))}
 
-          {/* Organization section */}
+          <div style={{ ...sideHead, marginTop: 20 }}>Person</div>
+          <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+          <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(deal.fields.contact_person) || '-'}</span></div>
+          <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(deal.fields.contact_person) || '-'}</span></div>
+          {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => (
+            <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+          ))}
+
           <div style={{ ...sideHead, marginTop: 20 }}>Organization</div>
-          <div style={sideRow}><span style={sideKey}>Company name</span><span style={sideVal}>{orgName || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Address</span><span style={sideVal}>{deal.fields.org_address || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Phone</span><span style={sideVal}>{deal.fields.org_phone || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Website</span><span style={sideVal}>{deal.fields.org_website || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Email</span><span style={sideVal}>{deal.fields.org_email || '-'}</span></div>
-          <div style={sideRow}><span style={sideKey}>Registration Number</span><span style={sideVal}>{deal.fields.org_reg_number || '-'}</span></div>
+          <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+          {groupFields('organization').map((f) => (
+            <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
+          ))}
         </div>
 
-        {/* CENTRE — coloured background behind activity + history */}
+        {/* CENTRE */}
         <div style={{ flex: 1, padding: 20, minWidth: 0, background: C.feedBg }}>
-          {/* Activities to do (above history) */}
+          {/* Activities to do — always above history, overdue just flags */}
           <div style={{ background: C.activityBg, border: `1px solid ${st === 'overdue' ? C.red : C.activityBorder}`, borderRadius: 8, padding: 12, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 700 }}>Activities to do</span>
-              {st && <Dot state={st} />}
-              {deal.activity && !deal.activity.done && <span style={{ fontSize: 12, color: C.dim }}>due {shortDate(deal.activity.due)}</span>}
+              {st && <Dot state={st} size={13} />}
+              {st === 'overdue' && <span style={{ fontSize: 11, fontWeight: 700, color: C.red }}>OVERDUE</span>}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input placeholder="What needs doing…" value={actText} onChange={(e) => setActText(e.target.value)} style={{ ...miniInput, flex: 1 }} />
-              <input type="date" value={actDue} onChange={(e) => setActDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
-              <button disabled={!actText.trim() || !actDue} onClick={() => onSetActivity(deal.id, actText.trim(), actDue)} style={{ ...primaryBtn, opacity: actText.trim() && actDue ? 1 : 0.5 }}>Set activity</button>
-            </div>
-            {deal.activity && !deal.activity.done && <div style={{ textAlign: 'right', marginTop: 8 }}><button onClick={() => { onCompleteActivity(deal.id); setActText(''); setActDue(''); }} style={ghostBtn}>Mark done</button></div>}
-            <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>One activity per deal, with a due date (can be in the future).</div>
+            {deal.activity && !deal.activity.done ? (
+              <div>
+                <div style={{ fontSize: 14, marginBottom: 6 }}>{deal.activity.text}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: C.dim }}>Due</span>
+                  <input type="date" value={deal.activity.due} onChange={(e) => onSetActivity(deal.id, deal.activity.text, e.target.value, true)} style={{ ...miniInput, width: 150 }} />
+                  <button onClick={() => onCompleteActivity(deal.id)} style={primaryBtn}>Mark done</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => setShowActivityModal(true)} style={primaryBtn}>+ Set activity</button>
+            )}
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 8 }}>One activity per deal. Due date editable. Marking done prompts you to set the next one.</div>
           </div>
 
-          {/* Note — post-it yellow */}
+          {/* Note — post-it, with @mentions */}
           <div style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12, marginBottom: 20 }}>
-            <textarea placeholder="Take a note…" value={noteText} onChange={(e) => setNoteText(e.target.value)} rows={2} style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }} />
+            <MentionInput value={noteText} onChange={setNoteText} placeholder="Take a note… (type @ to notify someone)" rows={2} bg="transparent" />
             <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
           </div>
 
@@ -434,23 +498,16 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
         <thead>
           <tr>
             <th style={{ ...th, width: 28 }}></th>
-            {columns.map((k) => {
-              const lbl = (FIELDS.find((f) => f[0] === k) || [k, k])[1];
-              const active = sort.key === k;
-              return <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>;
-            })}
+            {columns.map((k) => { const lbl = (LIST_FIELDS.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}</th>; })}
           </tr>
         </thead>
         <tbody>
-          {deals.map((d) => {
-            const stt = activityState(d, today);
-            return (
-              <tr key={d.id} onClick={() => onOpen(d.id)} style={{ cursor: 'pointer', borderBottom: `1px solid ${C.line}` }} onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f9fb')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
-                <td style={{ ...td, textAlign: 'center' }}>{stt && <Dot state={stt} />}</td>
-                {columns.map((k) => <td key={k} style={td}>{displayCell(d, k)}</td>)}
-              </tr>
-            );
-          })}
+          {deals.map((d) => { const stt = activityState(d, today); return (
+            <tr key={d.id} onClick={() => onOpen(d.id)} style={{ cursor: 'pointer', borderBottom: `1px solid ${C.line}` }} onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f9fb')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
+              <td style={{ ...td, textAlign: 'center' }}>{stt && <Dot state={stt} size={13} />}</td>
+              {columns.map((k) => <td key={k} style={td}>{displayCell(d, k)}</td>)}
+            </tr>
+          ); })}
         </tbody>
       </table>
     </div>
@@ -462,108 +519,135 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
 // ===========================================================================
 export default function CRMPage() {
   const today = PREVIEW_TODAY;
+  const router = useRouter();
   const [deals, setDeals] = useState(() => SEED_DEALS.map((d) => ({ ...d, fields: { ...d.fields }, history: [...(d.history || [])], activity: d.activity ? { ...d.activity } : null })));
   const [openId, setOpenId] = useState(null);
   const [view, setView] = useState('pipeline');
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('open');           // open | won | lost | all — default open
-  const [savedFilter, setSavedFilter] = useState(null);               // 'tender' | 'mcsn' | null
-  const [mcsnEstimator, setMcsnEstimator] = useState('all');          // sub-filter for MC Secured & Negotiating
-  const [customFilters, setCustomFilters] = useState([]);             // stacked [{field,value}]
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('open');
+  const [savedFilter, setSavedFilter] = useState(null);
+  const [mcsnEstimator, setMcsnEstimator] = useState('all');
+  const [customFilters, setCustomFilters] = useState([]);
   const [visibleStages, setVisibleStages] = useState(() => new Set(STAGES.map((s) => s.id)));
-  const [showStagePicker, setShowStagePicker] = useState(false);
+  const [stageMode, setStageMode] = useState('all'); // all | estimator
   const [columns, setColumns] = useState(DEFAULT_COLUMNS);
   const [showColPicker, setShowColPicker] = useState(false);
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
   const [confetti, setConfetti] = useState(false);
+  const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
+  const [showFieldMgr, setShowFieldMgr] = useState(false);
   const dragId = useRef(null);
   const nextId = useRef(900000);
 
-  // Status filter
-  const statusOK = (d) => statusFilter === 'all' ? true : d.status === statusFilter;
+  // deep link: open deal from ?deal=
+  useEffect(() => {
+    if (!router.isReady) return;
+    const q = router.query.deal;
+    if (q) setOpenId(Number(q)); 
+  }, [router.isReady, router.query.deal]);
 
-  // Saved filter tests (MC S&N no longer Niall-only)
+  const openDealById = (id) => { setOpenId(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
+  const closeDeal = () => { setOpenId(null); router.push('/crm', undefined, { shallow: true }); };
+
+  // stage mode toggle
+  useEffect(() => { setVisibleStages(new Set(stageMode === 'estimator' ? ESTIMATOR_STAGES : STAGES.map((s) => s.id))); }, [stageMode]);
+
+  const statusOK = (d) => statusFilter === 'all' ? true : d.status === statusFilter;
   const savedOK = (d) => {
     if (savedFilter === 'tender') return ['stage_received','stage_1','stage_2','stage_review'].includes(d.stageId);
     if (savedFilter === 'mcsn') return ['stage_mc_secured','stage_negotiating'].includes(d.stageId);
     return true;
   };
 
-  // Base list after status + saved + search + custom
   const filtered = useMemo(() => {
     let list = deals.filter(statusOK).filter(savedOK);
     const q = query.trim().toLowerCase();
     if (q) list = list.filter((d) => (d.title || '').toLowerCase().includes(q) || (d.fields.organization || '').toLowerCase().includes(q) || (d.fields.contact_person || '').toLowerCase().includes(q));
-    customFilters.forEach((cf) => {
-      if (cf.field && cf.value.trim()) { const cv = cf.value.trim().toLowerCase(); list = list.filter((d) => String(cellValue(d, cf.field)).toLowerCase().includes(cv)); }
-    });
+    customFilters.forEach((cf) => { if (cf.field && cf.value.trim()) { const cv = cf.value.trim().toLowerCase(); list = list.filter((d) => String(cellValue(d, cf.field)).toLowerCase().includes(cv)); } });
     return list;
   }, [deals, statusFilter, savedFilter, query, customFilters]);
 
-  // Estimators available in the MC S&N view (built from the filtered set before the estimator sub-filter)
-  const mcsnEstimators = useMemo(() => {
-    if (savedFilter !== 'mcsn') return [];
-    const set = new Set();
-    filtered.forEach((d) => { const e = d.fields.estimator_responsible; if (e && String(e).trim()) set.add(String(e).trim()); });
-    return Array.from(set).sort();
-  }, [savedFilter, filtered]);
+  const mcsnEstimators = useMemo(() => { if (savedFilter !== 'mcsn') return []; const set = new Set(); filtered.forEach((d) => { const e = d.fields.estimator_responsible; if (e && String(e).trim()) set.add(String(e).trim()); }); return Array.from(set).sort(); }, [savedFilter, filtered]);
 
-  // Apply the MC S&N estimator sub-filter
   const finalList = useMemo(() => {
-    if (savedFilter === 'mcsn' && mcsnEstimator !== 'all') {
-      return filtered.filter((d) => String(d.fields.estimator_responsible || '') === mcsnEstimator);
-    }
+    if (savedFilter === 'mcsn' && mcsnEstimator !== 'all') return filtered.filter((d) => String(d.fields.estimator_responsible || '') === mcsnEstimator);
     return filtered;
   }, [filtered, savedFilter, mcsnEstimator]);
 
+  // search suggestions (companies + projects)
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase(); if (!q) return [];
+    const projMatches = deals.filter((d) => (d.title || '').toLowerCase().includes(q)).slice(0, 5).map((d) => ({ type: 'Project', label: d.title, id: d.id }));
+    const orgSet = new Set(); deals.forEach((d) => { const o = d.fields.organization; if (o && o.toLowerCase().includes(q)) orgSet.add(o); });
+    const orgMatches = Array.from(orgSet).slice(0, 5).map((o) => ({ type: 'Company', label: o }));
+    return [...projMatches, ...orgMatches].slice(0, 8);
+  }, [query, deals]);
+
   const shownStages = STAGES.filter((s) => visibleStages.has(s.id));
-  const byStage = useMemo(() => {
-    const m = {}; shownStages.forEach((s) => (m[s.id] = []));
-    finalList.forEach((d) => { if (m[d.stageId]) m[d.stageId].push(d); });
-    return m;
-  }, [finalList, visibleStages]);
+  const byStage = useMemo(() => { const m = {}; shownStages.forEach((s) => (m[s.id] = [])); finalList.forEach((d) => { if (m[d.stageId]) m[d.stageId].push(d); }); return m; }, [finalList, visibleStages]);
 
   const listRows = useMemo(() => {
     const rows = [...finalList];
+    // Tender Review List default sort: by Estimator Responsible, blanks at top
+    if (savedFilter === 'tender' && sort.key === 'created') {
+      rows.sort((a, b) => {
+        const ea = (a.fields.estimator_responsible || '').trim(), eb = (b.fields.estimator_responsible || '').trim();
+        if (!ea && eb) return -1; if (ea && !eb) return 1;
+        return ea.localeCompare(eb);
+      });
+      return rows;
+    }
     const { key, dir } = sort;
-    rows.sort((a, b) => {
-      let av = cellValue(a, key), bv = cellValue(b, key);
-      if (key === 'value' || key === 'size_m2' || key === 'credit_score') { av = Number(a.fields[key]) || 0; bv = Number(b.fields[key]) || 0; }
-      if (av < bv) return dir === 'asc' ? -1 : 1;
-      if (av > bv) return dir === 'asc' ? 1 : -1;
-      return 0;
-    });
+    rows.sort((a, b) => { let av = cellValue(a, key), bv = cellValue(b, key); if (key === 'value' || key === 'size_m2' || key === 'credit_score') { av = Number(a.fields[key]) || 0; bv = Number(b.fields[key]) || 0; } if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
-  }, [finalList, sort]);
+  }, [finalList, sort, savedFilter]);
 
   const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
   // mutations
   const moveDeal = (id, stageId) => setDeals((prev) => prev.map((d) => d.id !== id || d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: `stage_${Date.now()}`, type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}` }] }));
-  const setStatus = (id, status) => {
+  const setStatus = (id, status) => { setDeals((prev) => prev.map((d) => { if (d.id !== id) return d; const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened'; return { ...d, status, history: [...d.history, { id: `st_${Date.now()}`, type: status === 'open' ? 'note' : status, ts: nowIso(), text }] }; })); if (status === 'won') setConfetti(true); };
+  const addNote = (id, body) => {
+    const mentions = extractMentions(body);
     setDeals((prev) => prev.map((d) => {
       if (d.id !== id) return d;
-      const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened';
-      return { ...d, status, history: [...d.history, { id: `st_${Date.now()}`, type: status === 'open' ? 'note' : status, ts: nowIso(), text }] };
+      const events = [{ id: `note_${Date.now()}`, type: 'note', ts: nowIso(), text: 'Note added', body }];
+      if (mentions.length) events.push({ id: `mn_${Date.now()}`, type: 'mention', ts: nowIso(), text: `Notified: ${mentions.join(', ')} (email would send in live version)` });
+      return { ...d, history: [...d.history, ...events] };
     }));
-    if (status === 'won') setConfetti(true);
   };
-  const addNote = (id, body) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, history: [...d.history, { id: `note_${Date.now()}`, type: 'note', ts: nowIso(), text: 'Note added', body }] } : d));
   const editHistory = (id, hid, body) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) } : d));
-  const setActivity = (id, text, due) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, activity: { text, due, done: false }, history: [...d.history, { id: `act_${Date.now()}`, type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})`, body: text }] } : d));
+  const setActivity = (id, text, due, silent) => {
+    const mentions = extractMentions(text);
+    setDeals((prev) => prev.map((d) => {
+      if (d.id !== id) return d;
+      const events = silent ? [] : [{ id: `act_${Date.now()}`, type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})`, body: text }];
+      if (!silent && mentions.length) events.push({ id: `mn_${Date.now()}`, type: 'mention', ts: nowIso(), text: `Notified: ${mentions.join(', ')} (email would send in live version)` });
+      return { ...d, activity: { text, due, done: false }, history: [...d.history, ...events] };
+    }));
+  };
   const completeActivity = (id) => setDeals((prev) => prev.map((d) => d.id === id && d.activity ? { ...d, activity: { ...d.activity, done: true }, history: [...d.history, { id: `actd_${Date.now()}`, type: 'activity', ts: nowIso(), text: `Activity completed: ${d.activity.text}`, body: d.activity.text }] } : d));
-  const editValue = (id, val) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, fields: { ...d.fields, value: val }, history: [...d.history, { id: `val_${Date.now()}`, type: 'value', ts: nowIso(), text: `Value: ${money(d.fields.value)} → ${money(val)}` }] } : d));
-  const editClose = (id, val) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, fields: { ...d.fields, expected_close_date: val || null }, history: [...d.history, { id: `cl_${Date.now()}`, type: 'close', ts: nowIso(), text: `Tender Return date: ${d.fields.expected_close_date || 'empty'} → ${val || 'empty'}` }] } : d));
-  const editScore = (id, val) => setDeals((prev) => prev.map((d) => d.id === id ? { ...d, fields: { ...d.fields, project_score: val || null } } : d));
+  const editField = (id, key, val) => setDeals((prev) => prev.map((d) => {
+    if (d.id !== id) return d;
+    const old = d.fields[key];
+    const hist = (key === 'value') ? [{ id: `val_${Date.now()}`, type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }]
+      : (key === 'expected_close_date') ? [{ id: `cl_${Date.now()}`, type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }]
+      : [];
+    return { ...d, fields: { ...d.fields, [key]: val }, history: [...d.history, ...hist] };
+  }));
 
   const createProject = (data) => {
     const id = nextId.current++;
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: null, project_score: null };
     ['site_location','site_postcode','region','size_m2','glenigan_id','estimator_responsible','project_type','systems_priced','lead_source','scope_of_works'].forEach((k) => { fields[k] = data[k] || null; });
     const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, activity: null, history: [{ id: `new_${id}`, type: 'note', ts: nowIso(), text: 'Project created' }] };
-    setDeals((prev) => [d, ...prev]); setShowAdd(false); setOpenId(id);
+    setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
   };
+
+  const addField = (f) => setSchema((prev) => [...prev, f]);
+  const removeField = (key) => setSchema((prev) => prev.filter((f) => f.key !== key));
 
   const onDragStart = (e, id) => { dragId.current = id; };
   const onDrop = (e, stageId) => { const id = dragId.current; if (id != null) moveDeal(id, stageId); dragId.current = null; };
@@ -578,15 +662,17 @@ export default function CRMPage() {
     return (
       <div style={{ fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', color: C.text }}>
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
-        <DealView deal={live} today={today} onBack={() => setOpenId(null)} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onEditHistory={editHistory} onSetActivity={setActivity} onCompleteActivity={completeActivity} onEditValue={editValue} onEditClose={editClose} onEditScore={editScore} />
+        {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
+        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onEditHistory={editHistory} onSetActivity={setActivity} onCompleteActivity={completeActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
     );
   }
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', color: C.text, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ background: C.bg, height: '100vh', color: C.text, fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
-      {/* black nav banner */}
+      {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
+      {/* black nav */}
       <div style={{ background: C.nav, color: '#fff', padding: '10px 16px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0, marginRight: 6 }}>Deals</h1>
         <div style={{ display: 'flex', border: `1px solid #444`, borderRadius: 6, overflow: 'hidden' }}>
@@ -595,45 +681,47 @@ export default function CRMPage() {
         </div>
         <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>
         <div style={{ flex: 1 }} />
-        <input placeholder="Search…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ ...miniInput, minWidth: 200 }} />
+        {/* search with suggestions + clear */}
+        <div style={{ position: 'relative', minWidth: 260 }}>
+          <input placeholder="Search…" value={query} onChange={(e) => { setQuery(e.target.value); setShowSuggest(true); }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', paddingRight: 26 }} />
+          {query && <span onClick={() => setQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.dim, fontSize: 14 }}>✕</span>}
+          {showSuggest && suggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 260, overflowY: 'auto' }}>
+              {suggestions.map((s, i) => <div key={i} onMouseDown={() => { if (s.id) openDealById(s.id); else setQuery(s.label); setShowSuggest(false); }} style={{ padding: '8px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5`, display: 'flex', justifyContent: 'space-between', color: C.text }}><span>{s.label}</span><span style={{ fontSize: 11, color: C.dim }}>{s.type}</span></div>)}
+            </div>
+          )}
+        </div>
         <span style={{ fontSize: 13, color: '#cfd6dd' }}>{finalList.length} deals · {money0(totalValue)} open</span>
       </div>
 
-      {/* filter bar (white) */}
+      {/* filter bar */}
       <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* status */}
           <span style={{ fontSize: 12, color: C.dim }}>Status:</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {['open','won','lost','all'].map((s) => <button key={s} onClick={() => setStatusFilter(s)} style={chip(statusFilter === s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}
-          </div>
-          <span style={{ width: 1, height: 22, background: C.line, margin: '0 4px' }} />
-          {/* saved filters */}
+          <div style={{ display: 'flex', gap: 4 }}>{['open','won','lost','all'].map((s) => <button key={s} onClick={() => setStatusFilter(s)} style={chip(statusFilter === s)}>{s[0].toUpperCase() + s.slice(1)}</button>)}</div>
+          <span style={sep} />
           <button onClick={() => { setSavedFilter(savedFilter === 'tender' ? null : 'tender'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'tender')}>Tender Review List</button>
           <button onClick={() => { setSavedFilter(savedFilter === 'mcsn' ? null : 'mcsn'); setMcsnEstimator('all'); }} style={chip(savedFilter === 'mcsn')}>MC Secured &amp; Negotiating</button>
-          {/* estimator sub-dropdown appears when MC S&N active */}
-          {savedFilter === 'mcsn' && (
-            <select value={mcsnEstimator} onChange={(e) => setMcsnEstimator(e.target.value)} style={{ ...miniInput, width: 160 }}>
-              <option value="all">All estimators</option>
-              {mcsnEstimators.map((e) => <option key={e} value={e}>{e}</option>)}
-            </select>
+          {savedFilter === 'mcsn' && <select value={mcsnEstimator} onChange={(e) => setMcsnEstimator(e.target.value)} style={{ ...miniInput, width: 160 }}><option value="all">All estimators</option>{mcsnEstimators.map((e) => <option key={e} value={e}>{e}</option>)}</select>}
+          <span style={sep} />
+          {/* stage toggle (pipeline) — swapped order: Stages then separator then Add filter */}
+          {view === 'pipeline' && (
+            <div style={{ display: 'flex', border: `1px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+              <button onClick={() => setStageMode('all')} style={toggleBtn(stageMode === 'all')}>All Stages</button>
+              <button onClick={() => setStageMode('estimator')} style={toggleBtn(stageMode === 'estimator')}>Estimator Stages Only</button>
+            </div>
           )}
-          <span style={{ width: 1, height: 22, background: C.line, margin: '0 4px' }} />
-          <button onClick={addCustomFilter} style={chip(false)}>+ Add filter</button>
-          {view === 'pipeline' && <button onClick={() => setShowStagePicker((v) => !v)} style={chip(showStagePicker)}>Stages ▾</button>}
           {view === 'list' && <button onClick={() => setShowColPicker((v) => !v)} style={chip(showColPicker)}>Columns ▾</button>}
+          <span style={sep} />
+          <button onClick={addCustomFilter} style={chip(false)}>+ Add filter</button>
         </div>
 
-        {/* stacked custom filters */}
         {customFilters.length > 0 && (
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {customFilters.map((cf, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, color: C.dim, width: 42 }}>{i === 0 ? 'Where' : 'And'}</span>
-                <select value={cf.field} onChange={(e) => updateCustomFilter(i, { field: e.target.value })} style={{ ...miniInput, width: 190 }}>
-                  <option value="">Select field…</option>
-                  {FIELDS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}
-                </select>
+                <select value={cf.field} onChange={(e) => updateCustomFilter(i, { field: e.target.value })} style={{ ...miniInput, width: 190 }}><option value="">Select field…</option>{LIST_FIELDS.map(([k, lbl]) => <option key={k} value={k}>{lbl}</option>)}</select>
                 <span style={{ fontSize: 12, color: C.dim }}>contains</span>
                 <input placeholder="value" value={cf.value} onChange={(e) => updateCustomFilter(i, { value: e.target.value })} style={{ ...miniInput, width: 190 }} />
                 <button onClick={() => removeCustomFilter(i)} style={{ ...ghostBtn, padding: '5px 10px' }}>✕</button>
@@ -642,45 +730,22 @@ export default function CRMPage() {
           </div>
         )}
 
-        {/* stage picker */}
-        {showStagePicker && view === 'pipeline' && (
-          <div style={panel}>
-            <span style={{ fontSize: 12, color: C.dim }}>Show stages:</span>
-            <button onClick={() => setVisibleStages(new Set(STAGES.map((s) => s.id)))} style={miniBtn}>All</button>
-            <button onClick={() => setVisibleStages(new Set(ESTIMATOR_STAGES))} style={miniBtn}>Estimator Stages Only</button>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {STAGES.map((s) => (
-                <label key={s.id} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={visibleStages.has(s.id)} onChange={() => setVisibleStages((prev) => { const n = new Set(prev); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })} />{s.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* column picker */}
         {showColPicker && view === 'list' && (
           <div style={panel}>
             <span style={{ fontSize: 12, color: C.dim }}>Columns:</span>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {FIELDS.map(([k, lbl]) => (
-                <label key={k} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={columns.includes(k)} onChange={() => setColumns((prev) => prev.includes(k) ? prev.filter((c) => c !== k) : [...prev, k])} />{lbl}
-                </label>
-              ))}
-            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{LIST_FIELDS.map(([k, lbl]) => <label key={k} style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}><input type="checkbox" checked={columns.includes(k)} onChange={() => setColumns((prev) => prev.includes(k) ? prev.filter((c) => c !== k) : [...prev, k])} />{lbl}</label>)}</div>
           </div>
         )}
       </div>
 
-      {/* body */}
-      <div style={{ flex: 1, overflow: 'hidden', padding: view === 'pipeline' ? '12px 12px' : 0 }}>
+      {/* body — board fills height so colour + scrollbar reach the bottom */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: view === 'pipeline' ? '12px 12px 0' : 0 }}>
         {view === 'pipeline' ? (
-          <div style={{ display: 'flex', gap: 8, height: '100%', overflowX: 'auto', minHeight: 0 }}>
-            {shownStages.map((s) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={setOpenId} onDragStart={onDragStart} onDrop={onDrop} today={today} />)}
+          <div style={{ display: 'flex', gap: 8, height: '100%', overflowX: 'auto', overflowY: 'hidden', minHeight: 0, paddingBottom: 12 }}>
+            {shownStages.map((s) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={openDealById} onDragStart={onDragStart} onDrop={onDrop} today={today} />)}
           </div>
         ) : (
-          <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={setOpenId} today={today} />
+          <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />
         )}
       </div>
 
@@ -689,22 +754,54 @@ export default function CRMPage() {
   );
 }
 
+// ===========================================================================
+// Add project modal
+// ===========================================================================
+function AddProjectModal({ onClose, onCreate }) {
+  const [f, setF] = useState({});
+  const [org, setOrg] = useState('');
+  const [contact, setContact] = useState('');
+  const [stageId, setStageId] = useState('stage_project_in');
+  const NEW_PROJECT_FIELDS = [['title','Project title', true],['value','Value (£)', false],['site_location','Site Location', false],['site_postcode','Postcode', false],['region','Region', false],['size_m2','Size: m2', false],['glenigan_id','Glenigan Project ID', false],['estimator_responsible','Estimator Responsible', false],['project_type','Project Type', false],['systems_priced','Systems Priced', false],['lead_source','Lead Source', false],['scope_of_works','Scope of Works', false]];
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  const create = () => { if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; } onCreate({ ...f, organization: org, contact_person: contact, stageId }); };
+  return (
+    <div style={overlay}>
+      <div style={{ ...modal, maxWidth: 640 }}>
+        <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Add new project</span><button onClick={onClose} style={xBtn}>✕</button></div>
+        <div style={{ padding: 20, overflowY: 'auto', maxHeight: '70vh' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer (organization)</label><TypeAhead value={org} onChange={setOrg} options={ORGS} placeholder="Type to search customers…" /></div>
+            <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer contact</label><TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" /></div>
+            <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+            {NEW_PROJECT_FIELDS.map(([k, lbl, req]) => <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label><input value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} /></div>)}
+          </div>
+        </div>
+        <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button onClick={create} style={primaryBtn}>Create project</button></div>
+      </div>
+    </div>
+  );
+}
+
 // ---- styles ---------------------------------------------------------------
 const pill = (color) => ({ fontSize: 10, fontWeight: 700, color: '#fff', background: color, padding: '1px 7px', borderRadius: 3 });
 const segBtn = (active) => ({ background: active ? C.link : 'transparent', color: '#fff', border: 'none', padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' });
+const toggleBtn = (active) => ({ background: active ? C.link : '#fff', color: active ? '#fff' : C.text, border: 'none', padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' });
 const chip = (active) => ({ background: active ? '#e5effd' : '#fff', color: active ? C.link : C.text, border: `1px solid ${active ? C.link : C.line}`, borderRadius: 16, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' });
+const sep = { width: 1, height: 22, background: C.line, margin: '0 4px', display: 'inline-block' };
 const panel = { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10, padding: 10, background: '#f7f9fb', border: `1px solid ${C.line}`, borderRadius: 8 };
 const backBtn = { background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: C.text, fontWeight: 600 };
-const wlBtn = { borderRadius: 6, padding: '6px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' };
+const wlBtn = { borderRadius: 6, padding: '6px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', border: 'none' };
 const primaryBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const ghostBtn = { background: '#fff', color: C.text, border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' };
 const miniBtn = { background: C.link, color: '#fff', border: 'none', borderRadius: 5, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
 const miniInput = { border: `1px solid ${C.line}`, borderRadius: 6, padding: '7px 9px', fontSize: 13, color: C.text, outline: 'none', background: '#fff', fontFamily: 'inherit' };
 const sideHead = { fontSize: 13, fontWeight: 700, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${C.line}` };
 const sideRow = { display: 'flex', justifyContent: 'space-between', gap: 10, padding: '6px 0', fontSize: 12, alignItems: 'flex-start' };
-const sideKey = { color: C.dim, flexShrink: 0, maxWidth: 130 };
-const sideVal = { color: C.text, textAlign: 'right', wordBreak: 'break-word' };
-const sideValLink = { color: C.link, textAlign: 'right', wordBreak: 'break-word', cursor: 'pointer' };
+const sideKey = { color: C.dim, flexShrink: 0, maxWidth: 130, paddingTop: 4 };
+const sideVal = { color: C.text, textAlign: 'right', wordBreak: 'break-word', paddingTop: 4 };
+const sideValLink = { color: C.link, textAlign: 'right', wordBreak: 'break-word', cursor: 'pointer', flex: 1, display: 'flex', justifyContent: 'flex-end', paddingTop: 4 };
+const tag = { background: '#eef3fb', border: `1px solid ${C.line}`, borderRadius: 4, padding: '1px 7px', color: C.text };
 const th = { textAlign: 'left', padding: '10px 12px', fontSize: 12, color: C.dim, fontWeight: 700, borderBottom: `2px solid ${C.line}`, background: '#fafbfc', position: 'sticky', top: 0 };
 const td = { padding: '9px 12px', color: C.text, whiteSpace: 'nowrap', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' };
 const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 };
