@@ -102,16 +102,6 @@ const C = {
 // ===========================================================================
 // Confetti
 // ===========================================================================
-function FadeToast({ onDone, message, color }) {
-  useEffect(() => { const t = setTimeout(onDone, 1600); return () => clearTimeout(t); }, [onDone]);
-  return (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 200, display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
-      <style>{`@keyframes crmfade{0%{opacity:0;transform:translateY(-8px)}20%{opacity:1;transform:translateY(0)}80%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-8px)}}`}</style>
-      <div style={{ marginTop: '18vh', fontSize: 26, fontWeight: 800, color: color || C.link, textShadow: '0 2px 8px rgba(0,0,0,.12)', animation: 'crmfade 1.6s ease-in-out forwards', padding: '0 20px', textAlign: 'center' }}>{message}</div>
-    </div>
-  );
-}
-
 function Confetti({ onDone, message = '🎉 Deal Won! 🎉', color }) {
   useEffect(() => { const t = setTimeout(onDone, 2600); return () => clearTimeout(t); }, [onDone]);
   const pieces = useMemo(() => Array.from({ length: 90 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 0.5, dur: 1.8 + Math.random() * 1.2, color: ['#2a862f','#2a7de1','#e6a817','#d64545','#7c4dff','#00bcd4'][i % 6], rot: Math.random() * 360, size: 6 + Math.random() * 8 })), []);
@@ -476,6 +466,8 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
+  const [flash, setFlash] = useState(false);
+  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(false), 800); return () => clearTimeout(t); }, [flash]);
   const [collapsed, setCollapsed] = useState({});
   const toggle = (g) => setCollapsed((p) => ({ ...p, [g]: !p[g] }));
   const groupFields = (g) => schema.filter((f) => f.group === g);
@@ -528,8 +520,9 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
         {/* CENTRE */}
         <div style={{ flex: 1, padding: 20, minWidth: 0, background: deal.status === 'open' ? C.feedBg : statusTint }}>
           {/* Activities to do */}
+          <style>{`@keyframes crmflash{0%{box-shadow:0 0 0 0 rgba(37,194,73,0)}30%{box-shadow:0 0 0 4px rgba(37,194,73,.55)}100%{box-shadow:0 0 0 0 rgba(37,194,73,0)}}`}</style>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Activities to do</div>
-          <div style={{ background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, padding: 14 }}>
+          <div style={{ background: C.activityBg, border: `1px solid ${flash ? C.green : C.activityBorder}`, borderRadius: 8, padding: 14, animation: flash ? 'crmflash .8s ease-out' : 'none' }}>
             {(openActs.length > 0) && <div style={{ textAlign: 'right', marginBottom: 10 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>}
             {(adding || openActs.length === 0) && (
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: openActs.length ? 10 : 0 }}>
@@ -548,7 +541,7 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => { onCompleteActivity(deal.id, id); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -683,7 +676,6 @@ export default function CRMPage() {
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
   const [confetti, setConfetti] = useState(false);
-  const [activityDone, setActivityDone] = useState(false);
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
   const [showFieldMgr, setShowFieldMgr] = useState(false);
   const dragId = useRef(null);
@@ -760,7 +752,7 @@ export default function CRMPage() {
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
   const addActivity = (id, text, due, assignee) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }]; if (assignee) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `${assignee} assigned an activity — email would send in live version` }); if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
-  const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); setActivityDone(true); };
+  const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); };
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
   const editField = (id, key, val) => patch(id, (d) => { const old = d.fields[key]; const hist = (key === 'value') ? [{ id: uid(), type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }] : (key === 'expected_close_date') ? [{ id: uid(), type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }] : []; return { ...d, fields: { ...d.fields, [key]: val }, history: [...d.history, ...hist] }; });
 
@@ -788,7 +780,6 @@ export default function CRMPage() {
       <div style={{ fontFamily: FONT, color: C.text }}>
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
-        {activityDone && <FadeToast onDone={() => setActivityDone(false)} message="Activity done — now set your next one!" color={C.link} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
         <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
