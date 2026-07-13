@@ -100,14 +100,14 @@ const C = {
 // ===========================================================================
 // Confetti
 // ===========================================================================
-function Confetti({ onDone }) {
+function Confetti({ onDone, message = '🎉 Deal Won! 🎉', color }) {
   useEffect(() => { const t = setTimeout(onDone, 2600); return () => clearTimeout(t); }, [onDone]);
   const pieces = useMemo(() => Array.from({ length: 90 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 0.5, dur: 1.8 + Math.random() * 1.2, color: ['#2a862f','#2a7de1','#e6a817','#d64545','#7c4dff','#00bcd4'][i % 6], rot: Math.random() * 360, size: 6 + Math.random() * 8 })), []);
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 200, overflow: 'hidden' }}>
       <style>{`@keyframes crmfall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:.9}}@keyframes crmpop{0%{transform:scale(.6);opacity:0}100%{transform:scale(1);opacity:1}}`}</style>
       {pieces.map((p) => <div key={p.id} style={{ position: 'absolute', top: -20, left: p.left + '%', width: p.size, height: p.size * 0.6, background: p.color, transform: `rotate(${p.rot}deg)`, animation: `crmfall ${p.dur}s ${p.delay}s ease-in forwards` }} />)}
-      <div style={{ position: 'absolute', top: '32%', left: 0, right: 0, textAlign: 'center', fontSize: 42, fontWeight: 800, color: C.won, textShadow: '0 2px 8px rgba(0,0,0,.15)', animation: 'crmpop .4s ease-out' }}>🎉 Deal Won! 🎉</div>
+      <div style={{ position: 'absolute', top: '32%', left: 0, right: 0, textAlign: 'center', fontSize: 36, fontWeight: 800, color: color || C.won, textShadow: '0 2px 8px rgba(0,0,0,.15)', animation: 'crmpop .4s ease-out', padding: '0 20px' }}>{message}</div>
     </div>
   );
 }
@@ -517,9 +517,9 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
           {/* Activities to do */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Activities to do</div>
           <div style={{ background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, padding: 14 }}>
-            <div style={{ textAlign: 'right', marginBottom: openActs.length || adding ? 10 : 0 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>
-            {adding && (
-              <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: 10 }}>
+            {(openActs.length > 0) && <div style={{ textAlign: 'right', marginBottom: 10 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>}
+            {(adding || openActs.length === 0) && (
+              <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: openActs.length ? 10 : 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
                 <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
@@ -530,13 +530,12 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
                     {MENTION_USERS.map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
                   </select>
                   <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue, newAssignee); setNewText(''); setNewDue(''); setNewAssignee(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
-                  <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>
+                  {openActs.length > 0 && <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>}
                 </div>
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => onCompleteActivity(deal.id, id)} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
-            {openActs.length === 0 && !adding && <div style={{ fontSize: 13, color: C.dim }}>No activities. Add one to keep this deal on track.</div>}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => { onCompleteActivity(deal.id, id); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -671,6 +670,7 @@ export default function CRMPage() {
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
   const [confetti, setConfetti] = useState(false);
+  const [activityDone, setActivityDone] = useState(false);
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
   const [showFieldMgr, setShowFieldMgr] = useState(false);
   const dragId = useRef(null);
@@ -747,7 +747,7 @@ export default function CRMPage() {
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
   const addActivity = (id, text, due, assignee) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }]; if (assignee) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `${assignee} assigned an activity — email would send in live version` }); if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
-  const completeActivity = (id, aid) => patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; });
+  const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); setActivityDone(true); };
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
   const editField = (id, key, val) => patch(id, (d) => { const old = d.fields[key]; const hist = (key === 'value') ? [{ id: uid(), type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }] : (key === 'expected_close_date') ? [{ id: uid(), type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }] : []; return { ...d, fields: { ...d.fields, [key]: val }, history: [...d.history, ...hist] }; });
 
@@ -775,6 +775,7 @@ export default function CRMPage() {
       <div style={{ fontFamily: FONT, color: C.text }}>
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
+        {activityDone && <Confetti onDone={() => setActivityDone(false)} message="✅ Activity done — now set your next one!" color={C.link} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
         <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
