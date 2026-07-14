@@ -108,6 +108,9 @@ export default async function handler(req, res) {
         updatedAt: now,
       })
       await saveOpsProjects(projects)
+      if ((p.status || 'active') === 'active') {
+        try { const { notifyNewProject } = await import('../../lib/ramsNotify'); notifyNewProject({ projectNo }) } catch {}
+      }
       return res.json({ ok: true, projectNo })
     }
 
@@ -130,6 +133,11 @@ export default async function handler(req, res) {
       projects.push({ projectNo, data: project, status: status || 'active', createdAt: now, updatedAt: now })
     }
     await saveOpsProjects(projects)
+    // A newly-created active project → notify "all projects" Site App users
+    // (notifyNewProject dedupes so re-saves/IHM edits won't re-send).
+    if ((status || 'active') === 'active' && idx < 0) {
+      try { const { notifyNewProject } = await import('../../lib/ramsNotify'); notifyNewProject({ projectNo }) } catch {}
+    }
     return res.json({ ok: true, projectNo, status: status || 'active' })
   }
 

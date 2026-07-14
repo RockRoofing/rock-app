@@ -1,103 +1,84 @@
-RAMS SIGNING — PHASE 3 (REVISED): Director signs in Site App + Admin "RAMS Director"
-====================================================================================
+RAMS SIGNING — PHASE 4: Email notifications + reminders  (+ 2 fixes)
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully (Xero warnings unrelated)
+NO vercel.json change — still 2 crons (Hobby limit respected).
 
-** This SUPERSEDES the earlier Phase 3 zip. If you deployed that one, note:
-   - DELETE pages/operations/hs/rams-approvals.js from the repo (the Portal
-     Director page has been removed — the Director now signs in the Site App).
-   If you did NOT deploy the earlier Phase 3 zip, just deploy this set. **
+FIXES INCLUDED
+--------------
+1. Site Manager forward: Recipient NAME is now MANDATORY (client + server).
+2. RAMS Matrix pipeline now updates as the chain progresses:
+   - The stage line under each project reflects the live rolled-up stage.
+   - The "Operatives" node turns green once at least one operative has signed;
+     the whole line goes green when everyone shown has signed.
+   - Added a "↻ Refresh" button (top-right of the key) to pull the latest state
+     without a full page reload. (The matrix reads live approval stages; if it
+     looked static before, it was showing a stage that hadn't advanced yet or a
+     tab left open — Refresh confirms current state.)
 
-WHAT CHANGED vs the first Phase 3
---------------------------------
-1. The DIRECTOR NOW SIGNS IN THE SITE APP (not the Portal). The Portal
-   "RAMS Approvals" page and its H&S nav link are removed.
-2. New ADMIN AREA: "RAMS Director" tab (Admin nav, placed BEFORE "App
-   Improvements"). Pick the Director from Portal Users whose job role is
-   "Director". Stored as ops:rams-director = { name, email }.
-3. The Site App recognises the Director by EMAIL: when the logged-in Site App
-   user's email == the designated Director's email, RAMS at the Director stage
-   show an "Approve as Director" button (read-to-bottom -> approve & sign, same
-   as the CM). The Director auto-signs onto the RAMS with the operative statement.
-   IMPORTANT: the chosen Director must also be a Site App user with the SAME email.
+NOTIFICATIONS (Resend — uses RESEND_API_KEY + FORMS_FROM_EMAIL)
+---------------------------------------------------------------
+All best-effort (never block the underlying action). New helper: lib/ramsNotify.js.
 
-THE CHAIN (unchanged, strict, sequential)
------------------------------------------
-  CM (Site App) -> Director (Site App, designated in Admin) -> Site Manager
-  (tokenised email, no login) -> Operatives.
-  No stage unlocks until the previous is signed. Operative "Sign RAMS now" stays
-  locked (with a "waiting on <stage>" note) until the chain reaches operatives.
+1. ALLOCATED TO A PROJECT → the operative gets an email the FIRST time they're
+   added to a project on the Gantt (not on every day-cell). Dedupe store:
+   ops:rams-notified:allocation. If they're later fully removed from the project,
+   the dedupe clears so a future re-allocation notifies again.
 
-ADMIN -> RAMS DIRECTOR
-----------------------
-- New page /admin/rams-director (admin-gated via AdminShell).
-- Lists Portal Users with jobRole === 'Director' (that job role already exists
-  in Portal Users). Choose one and Save. "None" clears it.
-- If no Director is set, the chain will stall at the Director stage (the page
-  warns about this).
+2. NEW PROJECT ADDED → Site App users with "All projects" access are emailed that
+   they now have access. Fires when an ACTIVE project is created (manual-add or
+   IHM). Dedupe: ops:rams-notified:new-project (won't re-send on edits/re-saves).
 
-RAMS MATRIX + GANTT (unchanged from first Phase 3)
---------------------------------------------------
-- Matrix: derived Yes (green) / PS (orange) + key + CM › Director › Site Manager
-  › Operatives pipeline under each project name (current red, done green).
-- Gantt "Installer(s) not on RAMS": only "Yes" counts; "PS" still warns.
+3. RAMS UPLOADED → operatives who can access that project are emailed that RAMS
+   are ready to sign. Fires from /api/project-files when a file with
+   category 'rams' is added (this is how the portal uploads RAMS).
 
-DATA MODEL
-----------
-- ops:rams-director = { name, email }                      (NEW — Admin setting)
-- ops:rams-approvals:<projectNo>[fileId] = { stage, cm, director, siteManager,
-    siteManagerEmail, siteManagerName, token, ... }
-- ops:rams-token:<token> = { projectNo, fileId }
+4. REMINDERS EVERY 2 DAYS → for RAMS whose chain has reached the operatives
+   stage, each accessing operative who hasn't signed is reminded, at most once
+   per 2 days per document. Self-throttled via ops:rams-notified:reminder.
 
-SECURITY
---------
-- director-approve verifies the caller's email == the designated RAMS Director
-  (from ops:rams-director). No portal session needed (it's a Site App action).
-- set-RAMS-Director (POST /api/rams-director) is admin-only (portal session).
-- Site Manager link: unguessable 24-byte token; re-issued if recipient changes.
+CRON (no new slot)
+------------------
+- New endpoint /api/cron/rams-reminders (exports runRamsReminders). Can be hit
+  with ?force=1 to test (ignores the 2-day throttle).
+- It is invoked DAILY from the existing /api/cron/hs-expiry-email cron (07:00),
+  alongside the forms + deliveries jobs. Because runRamsReminders self-throttles
+  to every 2 days per recipient+document, running it daily yields 2-day reminders.
+
+EMAIL/RECIPIENT NOTES
+---------------------
+- Allocation emails use the OPERATIVE ROSTER email (allocations use roster ids).
+- New-project / RAMS-upload / reminder emails use SITE APP USER emails and
+  respect projectAccess ('all' or a list). Keep roster + Site App emails accurate.
+- All emails link to https://siteapp.rockroofing.co.uk.
 
 FILES CHANGED
 -------------
 NEW:
-  • pages/api/rams-director.js               — get/set designated Director (+who=1)
-  • pages/admin/rams-director.js             — Admin RAMS Director page
-  • pages/api/rams-approvals.js              — approval chain
-  • pages/api/rams-token.js                  — public token lookup
-  • pages/rams-approve.js                    — no-login Site Manager page
+  • lib/ramsNotify.js                     — all senders + runRamsReminders
+  • pages/api/cron/rams-reminders.js      — reminders endpoint (also callable ?force=1)
 UPDATED:
-  • lib/db.js                                — approvals + token helpers
-  • middleware.js                            — passthrough/open routes (Site App +
-                                               portal SM page); rams-director added
-  • pages/forms/index.js                     — CM + Director approve, SM picker,
-                                               locked operative sign, pipeline
-  • pages/api/rams-matrix.js                 — derived Yes/PS + stage
-  • pages/operations/hs/rams-matrix.js       — key + PS cells + pipeline
-  • pages/operations/project-management/planning.js — gantt Yes-only gating
-  • components/OperationsNav.js              — (removed the Portal RAMS Approvals tab)
-  • components/AdminShell.js                 — "RAMS Director" tab before App Improvements
-  • pages/admin.js, pages/admin/templates.js — same nav tab added (inline navs)
-REMOVED (delete from repo if present):
-  • pages/operations/hs/rams-approvals.js    — Portal Director page (no longer used)
+  • pages/api/planning.js                 — notify on first allocation; clear on full unassign
+  • pages/api/project-files.js            — notify on RAMS upload
+  • pages/api/ops-projects.js             — notify "all projects" users on new active project
+  • pages/api/cron/hs-expiry-email.js     — runs RAMS reminders daily (no new cron)
+  • pages/forms/index.js                  — Site Manager name mandatory (client)
+  • pages/api/rams-approvals.js           — Site Manager name mandatory (server)
+  • pages/operations/hs/rams-matrix.js    — pipeline progress fix + Refresh button
 
-SETUP AFTER DEPLOY
-------------------
-1. Portal Users: make sure your Director has job role "Director" (and is a Site
-   App user with the same email).
-2. Admin -> RAMS Director: choose them and Save.
+TEST
+----
+• Fixes: try to forward to Site Manager with no name → blocked. Run the chain and
+  watch the matrix pipeline advance (use ↻ Refresh); Operatives node greens once
+  someone signs; whole line green when all shown have signed.
+• Notifications (need RESEND_API_KEY + FORMS_FROM_EMAIL set): allocate an op to a
+  new project → they get an email. Upload a RAMS → accessing ops get an email.
+  Add a new active project → "all projects" users get an email.
+• Reminders: hit /api/cron/rams-reminders?force=1 (while a RAMS is at operatives
+  stage with unsigned ops) → they receive a reminder. Normal daily runs throttle
+  to every 2 days automatically.
 
-TEST (end to end)
------------------
-1. Upload a RAMS to a project (chain starts at CM).
-2. Site App as the CM -> RAMS -> "Approve as Contracts Manager".
-3. Site App as the Director (email matches Admin setting) -> RAMS ->
-   "Approve as Director".
-4. Site App as the CM -> "Send to Site Manager" (pick/confirm email) -> send.
-5. Open emailed link -> approve as Site Manager. Operatives unlock.
-6. Site App as an operative -> "Sign RAMS now".
-7. Portal RAMS Matrix: PS -> Yes; pipeline goes green when all signed.
-8. Gantt: unsigned installer shows "not on RAMS" for PS; clears at Yes.
-
-NEXT (Phase 4)
+NEXT (Phase 5)
 --------------
-Email notifications (allocation / new-project access / RAMS-to-sign) + 2-day
-reminders folded into one daily "master" cron (Hobby 2-cron limit).
+Portal: each RAMS gets a digital signature page appended, listing every signer
+(name, date, signature image) — CM, Director, Site Manager and operatives.

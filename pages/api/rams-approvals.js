@@ -147,6 +147,7 @@ export default async function handler(req, res) {
       if (rec.stage !== 'site-manager') return res.status(409).json({ error: 'This RAMS is not at the Site Manager stage yet.' })
       const email = (body.email || '').trim()
       const smName = (body.name || '').trim()
+      if (!smName) return res.status(400).json({ error: 'Site Manager name is required.' })
       if (!email || !/.+@.+\..+/.test(email)) return res.status(400).json({ error: 'A valid email address is required.' })
 
       // Mint a fresh token each time a recipient is set (invalidates any old link).

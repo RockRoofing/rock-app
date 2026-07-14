@@ -118,6 +118,8 @@ export default async function handler(req, res) {
         const alloc = await getAlloc()
         const clash = wouldClash(alloc, key, date, opId, half)
         if (clash.clash) return res.status(409).json({ error: 'clash', clashKey: clash.pk })
+        // Was this operative already on this project (any day) before now?
+        const wasOnProject = Object.values(alloc[key] || {}).some(day => (day || []).some(e => e.opId === opId))
         alloc[key] = alloc[key] || {}
         alloc[key][date] = alloc[key][date] || []
         // update or add this operative in this project-day
@@ -125,6 +127,14 @@ export default async function handler(req, res) {
         if (existing) existing.half = half
         else alloc[key][date].push({ opId, half })
         await saveAlloc(alloc)
+        // First-time allocation to this project → email the operative (best-effort).
+        if (!wasOnProject) {
+          try {
+            const { notifyAllocation } = await import('../../lib/ramsNotify')
+            const projectNo = key.startsWith('L:') ? key.slice(2) : (key.startsWith('N:') ? '' : key)
+            if (projectNo) notifyAllocation({ projectNo, opId })
+          } catch {}
+        }
         return res.json({ ok: true, day: alloc[key][date] })
       }
 
@@ -137,6 +147,16 @@ export default async function handler(req, res) {
           if (!alloc[key][date].length) delete alloc[key][date]
           if (alloc[key] && !Object.keys(alloc[key]).length) delete alloc[key]
           await saveAlloc(alloc)
+        }
+        // If the operative is no longer on this project at all, clear the
+        // allocation-notice dedupe so a future re-allocation notifies again.
+        const stillOnProject = Object.values(alloc[key] || {}).some(day => (day || []).some(e => e.opId === opId))
+        if (!stillOnProject) {
+          try {
+            const { clearAllocationNotice } = await import('../../lib/ramsNotify')
+            const projectNo = key.startsWith('L:') ? key.slice(2) : ''
+            if (projectNo) clearAllocationNotice({ projectNo, opId })
+          } catch {}
         }
         return res.json({ ok: true })
       }

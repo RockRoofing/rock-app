@@ -1,6 +1,7 @@
 import { get, getTeamMembers } from '../../../lib/db'
 import { runFormsWeeklyNotify } from './forms-weekly-notify'
 import { runDeliveriesNotify } from './deliveries-notify'
+import { runRamsReminders } from '../../../lib/ramsNotify'
 
 // Daily digest dispatcher (Hobby-friendly single daily cron doing two jobs):
 //  - MONDAY: weekly forms digest to CMs (Pre-Start) and Supervisors (Start on Site / Site Diary / WAH).
@@ -36,8 +37,12 @@ export default async function handler(req, res) {
     let deliveriesResult = {}
     try { deliveriesResult = await runDeliveriesNotify({ force }) } catch (e) { deliveriesResult = { ok: false, error: e.message } }
 
+    // ── DAILY: RAMS "still to sign" reminders (self-throttled to every 2 days) ──
+    let ramsResult = {}
+    try { ramsResult = await runRamsReminders({ force }) } catch (e) { ramsResult = { ok: false, error: e.message } }
+
     // ── 1st of month: H&S expiry digest ──
-    if (!force && now.getDate() !== 1) return res.status(200).json({ ok: true, forms: formsResult, deliveries: deliveriesResult, expiry: 'skipped (not 1st)' })
+    if (!force && now.getDate() !== 1) return res.status(200).json({ ok: true, forms: formsResult, deliveries: deliveriesResult, rams: ramsResult, expiry: 'skipped (not 1st)' })
 
     const RESEND_KEY = process.env.RESEND_API_KEY
     const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'

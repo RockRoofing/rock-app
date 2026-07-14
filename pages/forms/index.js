@@ -940,6 +940,7 @@ function SiteManagerPicker({ file, projectNo, existingEmail, existingName, onClo
 
   async function send() {
     setErr('')
+    if (!name.trim()) { setErr('Please enter the Site Manager\u2019s name.'); return }
     if (!email.trim() || !/.+@.+\..+/.test(email)) { setErr('Please enter a valid email address.'); return }
     setBusy(true)
     try {
@@ -978,7 +979,7 @@ function SiteManagerPicker({ file, projectNo, existingEmail, existingName, onClo
                 </div>
               </div>
             )}
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Recipient name (optional)</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Recipient name <span style={{ color: '#dc2626' }}>*</span></div>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Site Manager name"
               style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, marginBottom: 10, outline: 'none' }} />
             <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Recipient email</div>
