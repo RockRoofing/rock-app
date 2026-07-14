@@ -15,6 +15,7 @@ export default function RaiseIssue() {
   const [types, setTypes] = useState([])
   const [otherText, setOtherText] = useState('')
   const [description, setDescription] = useState('')
+  const [requiredDate, setRequiredDate] = useState('')
   const [photos, setPhotos] = useState([])
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -23,9 +24,11 @@ export default function RaiseIssue() {
   useEffect(() => {
     const s = sessionStorage.getItem('ops_operative')
     if (!s) { router.replace('/forms'); return }
-    try { setUser(JSON.parse(s)) } catch {}
+    let u = null; try { u = JSON.parse(s); setUser(u) } catch {}
+    const pa = u?.projectAccess
+    const allowed = (p) => pa == null || pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(p.projectNo)))
     fetch('/api/ops-projects').then(r => r.json()).then(d => {
-      setProjects((d.projects || []).filter(p => p.status === 'active')
+      setProjects((d.projects || []).filter(p => p.status === 'active').filter(allowed)
         .map(p => ({ id: p.projectNo, jobNo: p.projectNo, name: p.projectName, address: p.location || '' })))
     }).catch(() => {})
   }, [])
@@ -57,7 +60,7 @@ export default function RaiseIssue() {
         projectNo: projectId, projectName: selected?.name || '', projectAddress: selected?.address || '',
         createdBy: user?.name || '', issueName: issueName.trim(),
         issueTypes: types, issueOther: types.includes('Other') ? otherText.trim() : '',
-        description: description.trim(), photos,
+        description: description.trim(), requiredDate, photos,
       }
       const r = await fetch('/api/issues', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issue }) })
       const d = await r.json()
@@ -93,8 +96,8 @@ export default function RaiseIssue() {
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <button onClick={() => router.push('/forms')} style={{ background: 'none', border: 'none', color: BRAND, fontSize: 14, cursor: 'pointer', padding: '8px 0' }}>‹ Back</button>
-        <h1 style={{ fontSize: 22, color: INK, margin: '4px 0 2px' }}>Raise an Issue</h1>
-        <p style={{ color: '#888', fontSize: 13, margin: 0 }}>Report a site issue with photos. This goes to the office, not the normal forms list.</p>
+        <h1 style={{ fontSize: 22, color: INK, margin: '4px 0 2px' }}>Report Site Issue</h1>
+        <p style={{ color: '#888', fontSize: 13, margin: 0 }}>Raise a Site Issue. This goes to the office, not the normal forms list.</p>
 
         <div style={label}>Project{star}</div>
         <select value={projectId} onChange={e => setProjectId(e.target.value)} style={input}>
@@ -138,6 +141,9 @@ export default function RaiseIssue() {
         <div style={label}>Issue description{star}</div>
         <textarea value={description} onChange={e => setDescription(e.target.value)} style={{ ...input, minHeight: 110, resize: 'vertical' }} placeholder="Describe the issue" />
         {errors.description && <div style={errStyle}>{errors.description}</div>}
+
+        <div style={label}>Required resolution date <span style={{ fontWeight: 400, color: '#999', fontSize: 12 }}>(optional)</span></div>
+        <input type="date" value={requiredDate} onChange={e => setRequiredDate(e.target.value)} style={input} />
 
         <div style={label}>Photos{star}</div>
         <PhotoField value={photos} onChange={setPhotos} />

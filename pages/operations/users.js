@@ -15,8 +15,16 @@ export default function UsersPage() {
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
+  const [projects, setProjects] = useState([])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadProjects() }, [])
+  async function loadProjects() {
+    try {
+      const d = await fetch('/api/ops-projects').then(r => r.json())
+      setProjects((d.projects || []).map(p => ({ no: p.projectNo, name: p.projectName || '' }))
+        .sort((a, b) => (a.no || '').localeCompare(b.no || '', undefined, { numeric: true })))
+    } catch {}
+  }
   async function load() {
     try { const r = await fetch('/api/ops-users'); const d = await r.json(); setUsers(d.users || []) } catch {}
     setLoading(false)
@@ -73,7 +81,7 @@ export default function UsersPage() {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#faf9f7' }}>
-              {['Name', 'Role', 'Access', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
+              {['Name', 'Role', 'Access', 'Projects', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {users.map(u => (
@@ -83,6 +91,7 @@ export default function UsersPage() {
                   <td style={td}>{u.accessLevel === 'contracts-manager'
                     ? <span style={{ background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>
                     : <span style={{ background: '#f0f4f8', color: '#475569', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Operative</span>}</td>
+                  <td style={{ ...td, fontSize: 12.5, color: '#666' }}>{(u.projectAccess == null || u.projectAccess === 'all') ? 'All' : `${(u.projectAccess || []).length} selected`}</td>
                   <td style={td}>{u.phone || '—'}</td>
                   <td style={td}>{u.email || '—'}</td>
                   <td style={td}>{u.mustResetPin
@@ -120,6 +129,11 @@ export default function UsersPage() {
             <option value="contracts-manager">Contracts Manager</option>
           </select>
           <div style={{ fontSize: 12, color: '#999', marginTop: -6, marginBottom: 4 }}>Contracts Managers see additional features in the Site App.</div>
+          <Lbl>Project access</Lbl>
+          <ProjectAccessPicker projects={projects}
+            value={form.projectAccess}
+            onChange={pa => setForm({ ...form, projectAccess: pa })} />
+          <div style={{ fontSize: 12, color: '#999', marginTop: 4, marginBottom: 4 }}>Controls which projects this user sees and can complete forms for in the Site App.</div>
           <Lbl>Mobile number</Lbl>
           <input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp2} inputMode="tel" placeholder="07…" />
           <Lbl>Email address</Lbl>
@@ -141,5 +155,50 @@ export default function UsersPage() {
         </Modal>
       )}
     </OperationsShell>
+  )
+}
+
+// Tick-box dropdown for project access. Value is 'all' (all current + future
+// projects) or an array of projectNos. Defaults to 'all' when unset.
+function ProjectAccessPicker({ projects, value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const isAll = value === 'all' || value == null
+  const selected = Array.isArray(value) ? value : []
+
+  const toggleAll = () => onChange('all')
+  const toggleProject = (no) => {
+    const base = isAll ? [] : selected
+    const next = base.includes(no) ? base.filter(x => x !== no) : [...base, no]
+    onChange(next)
+  }
+
+  const summary = isAll ? 'All projects (current & future)'
+    : selected.length === 0 ? 'No projects selected'
+    : `${selected.length} project${selected.length === 1 ? '' : 's'} selected`
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ ...inp2, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: isAll || selected.length ? '#1a1a19' : '#c00' }}>{summary}</span>
+        <span style={{ color: '#999' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #ddd', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 280, overflowY: 'auto', padding: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13.5, fontWeight: 700, background: isAll ? '#fffbeb' : 'transparent' }}>
+            <input type="checkbox" checked={isAll} onChange={toggleAll} /> All projects (current &amp; future)
+          </label>
+          <div style={{ borderTop: '1px solid #f0f0f0', margin: '4px 0' }} />
+          {projects.length === 0 && <div style={{ padding: '8px 10px', color: '#aaa', fontSize: 13 }}>No projects.</div>}
+          {projects.map(p => (
+            <label key={p.no} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13.5, opacity: isAll ? 0.5 : 1 }}>
+              <input type="checkbox" disabled={isAll} checked={!isAll && selected.includes(p.no)} onChange={() => toggleProject(p.no)} />
+              {p.no}{p.name && p.name !== p.no ? ` — ${p.name}` : ''}
+            </label>
+          ))}
+          {isAll && <div style={{ padding: '8px 10px', fontSize: 12, color: '#888' }}>Untick "All projects" to choose specific projects.</div>}
+        </div>
+      )}
+    </div>
   )
 }

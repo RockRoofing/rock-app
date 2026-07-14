@@ -32,8 +32,12 @@ export default function Browse() {
           const [rf, rp] = await Promise.all([fetch('/api/forms'), fetch('/api/dashboard')])
           const df = await rf.json(); const dp = await rp.json()
           setForms((df.forms || []).filter(f => f.category === 'project'))
+          let u = null; try { u = JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch {}
+          const pa = u?.projectAccess
+          const allowed = (p) => pa == null || pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(p.jobNo)))
           setProjects((dp.projects || [])
             .filter(p => p.status === 'INPROGRESS')
+            .filter(allowed)
             .map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name, customer: p.customer })))
         } else {
           const r = await fetch('/api/ops-docs'); const d = await r.json()

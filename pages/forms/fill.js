@@ -44,8 +44,12 @@ export default function Fill() {
         const d = await rf.json()
         setForm(d.form)
         const dp = await rp.json()
+        let u = null; try { u = JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch {}
+        const pa = u?.projectAccess
+        const allowed = (p) => pa == null || pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(p.projectNo)))
         setProjects((dp.projects || [])
           .filter(p => p.status === 'active')   // Live only — Complete projects can't be selected
+          .filter(allowed)
           .map(p => ({ id: p.projectNo, jobNo: p.projectNo, name: p.projectName }))
           .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '')))
         if (projectParam) setProjectId(String(projectParam))

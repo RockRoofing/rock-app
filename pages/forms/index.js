@@ -403,7 +403,10 @@ function ProjectDetailsView({ onBack }) {
   useEffect(() => { (async () => {
     try {
       const r = await fetch('/api/ops-projects'); const d = await r.json()
-      setProjects((d.projects || []).filter(p => p.status === 'active').sort((a, b) => (a.projectNo || '').localeCompare(b.projectNo || '')))
+      let u = null; try { u = JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch {}
+      const pa = u?.projectAccess
+      const allowed = (p) => pa == null || pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(p.projectNo)))
+      setProjects((d.projects || []).filter(p => p.status === 'active').filter(allowed).sort((a, b) => (a.projectNo || '').localeCompare(b.projectNo || '')))
     } catch {}
     setLoading(false)
   })() }, [])

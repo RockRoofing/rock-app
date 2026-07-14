@@ -1,26 +1,28 @@
-REPORT LINK — renamed + repositioned everywhere, and SRAT filter version check
+SITE APP — per-project access for Site App users
 
-RENAME: "Report a problem with the app" -> "Report an App improvement" (Portal + Site App).
+ADMIN (Site App Users)  pages/operations/users.js + pages/api/ops-users.js
+  - The Add/Edit user modal has a new "Project access" tick-box dropdown:
+      • "All projects (current & future)" (default) — sees every project incl. any added later, OR
+      • untick "All projects" and tick specific projects.
+  - Stored on the user as projectAccess: 'all' | [projectNo, ...].
+  - New "Projects" column in the users table shows "All" or "N selected".
 
-POSITIONING (no more overlap):
-  pages/index.js (Portal home) — link now sits to the LEFT of "Admin" in the top bar.
-  components/PreContractNav.js — link on the right of the nav (Sales, Scorecards, Project Financials pages)
-    — pushed right, left of any page controls, no overlap.
-  pages/commercial.js — link added to the LEFT of the Budget Tracker / Upload / Xero / Sync controls.
-  components/OperationsNav.js — text renamed (already sat left of "Open Site App").
-  components/ReportProblemButton.js — now MODAL-ONLY (no floating button). Every area has its own inline
-    link that opens the shared modal via the 'open-report-problem' event, so nothing overlaps anymore.
-  pages/forms/index.js (Site App) — link/title renamed to "Report an App improvement".
+SITE APP GATING (uses projectAccess from the logged-in user)
+  lib/cmSiteApp.js — new allowedProjects(user, projects) + canAccessProject(user, no) helpers; useMyProjects
+    now intersects with the user's allowed projects (so CM sections only show their permitted projects).
+  pages/forms/fill.js      — the form project picker only lists permitted projects (so an operative can only
+                             complete forms for projects they're assigned to).
+  pages/forms/issue.js     — Report Site Issue project list limited to permitted projects.
+  pages/forms/index.js     — operative "View Project Details" list limited to permitted projects.
+  pages/forms/browse.js    — project-forms / project docs list limited to permitted projects.
 
-SRAT FILTER (portal):
-  pages/operations/project-management/srat.js — the Project / From / To filter bar IS present and
-    unconditionally rendered (confirmed in code). To prove which version is live, the page title now reads
-    "SRATs · filter v2".
-    AFTER DEPLOY: open Operations > Project Management > SRAT.
-      • If the title says "SRATs · filter v2", the new file is live and the Project + From + To filter bar
-        sits directly under the title (above the list).
-      • If it still says just "SRATs", the deploy didn't take — the file on GitHub isn't updating or Vercel
-        served a cached build (hard refresh / confirm the deployment finished / check the file path is
-        pages/operations/project-management/srat.js, NOT srats.js which is only a redirect).
+BEHAVIOUR
+  - Default (existing users with no setting) = 'all', so nothing changes until you restrict someone.
+  - "All projects" automatically includes future projects (no need to re-edit when new jobs are added).
+  - Set a user to specific projects and they'll only see/those in the Site App and can only submit forms
+    for them.
 
 Deploy all files. No cron/env change.
+
+NOTE: existing users have no projectAccess yet -> treated as "All". To restrict someone, open Site App
+Users, edit them, choose specific projects, Save.

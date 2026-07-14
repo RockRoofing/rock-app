@@ -196,6 +196,7 @@ export default async function handler(req, res) {
       phone: user.phone || '',
       email: user.email || '',
       active: user.active !== false,
+      projectAccess: user.projectAccess === 'all' || user.projectAccess == null ? 'all' : (Array.isArray(user.projectAccess) ? user.projectAccess : 'all'),
       pin: tempPin,
       mustResetPin: true,
       createdAt: Date.now(),
