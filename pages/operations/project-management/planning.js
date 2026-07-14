@@ -349,6 +349,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
           {historicNeedsActual && <span title="Historic dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
+        {missing && projectHasLabour && <div title="No programme start / completion dates set for this project" style={{ fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }}>⚠ Project Programme dates needed!</div>}
         {noProjectSupervisor && <div title="No supervisor assigned in Project Details or allocated on the Gantt" style={{ fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }}>⚠ No supervisor</div>}
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
@@ -608,10 +609,7 @@ function WIVisitEditor({ date, visit, data, ops, comp = {}, onCancel, onSaved, r
         {picked.map(id => { const o = ops.find(x => x.id === id); return <span key={id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#eef6ff', border: '1px solid #cfe4fb', borderRadius: 16, padding: '4px 10px', fontSize: 12.5 }}>{o ? `${o.firstName} ${o.lastName}` : id}<button onClick={() => setPicked(picked.filter(x => x !== id))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button></span> })}
         {picked.length === 0 && <span style={{ fontSize: 12.5, color: '#aaa' }}>None selected.</span>}
       </div>
-      <select value={pick} onChange={e => addPick(e.target.value)} style={{ ...input, fontFamily: 'inherit' }}>
-        <option value="">+ Add installer…</option>
-        {available.map(o => { const c = comp[o.id] || {}; const bad = !c.hasCSCS || !c.hasWAH; return <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}{bad ? ' ⚠ no CSCS/WAH' : ''}</option> })}
-      </select>
+      <OperativeSearchSelect options={available} comp={comp} onPick={id => addPick(id)} placeholder="+ Add installer…" />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
         <span style={lbl}>Unnamed headcount</span>
@@ -897,6 +895,41 @@ function ViewWeekModal({ onClose }) {
 const wth = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#444', textAlign: 'center', borderBottom: '1px solid #eee' }
 const wtd = { padding: '7px 10px', fontSize: 12, color: '#333', verticalAlign: 'top' }
 
+// ── Searchable installer picker: type to filter the roster, click to add ──
+function OperativeSearchSelect({ options, comp = {}, onPick, placeholder = 'Search installer…' }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const ql = q.trim().toLowerCase()
+  const filtered = !ql ? options : options.filter(o => {
+    const name = `${o.firstName} ${o.lastName}`.toLowerCase()
+    const company = (o.company || '').toLowerCase()
+    return name.startsWith(ql) || name.split(/\s+/).some(w => w.startsWith(ql)) || name.includes(ql) || company.includes(ql)
+  })
+  return (
+    <div style={{ position: 'relative' }}>
+      <input value={q} onChange={e => { setQ(e.target.value); setOpen(true) }} onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)} placeholder={placeholder}
+        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }} />
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 40, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #ddd', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto' }}>
+          {filtered.length === 0 && <div style={{ padding: '10px 12px', color: '#aaa', fontSize: 13 }}>No matching installers.</div>}
+          {filtered.map(o => {
+            const c = comp[o.id] || {}; const bad = !c.hasCSCS || !c.hasWAH
+            return (
+              <div key={o.id} onMouseDown={() => { onPick(o.id); setQ(''); setOpen(false) }}
+                style={{ padding: '9px 12px', cursor: 'pointer', fontSize: 13.5, display: 'flex', justifyContent: 'space-between', gap: 8, borderBottom: '1px solid #f4f4f4' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#faf9f7'} onMouseLeave={e => e.currentTarget.style.background = '#fff'}>
+                <span>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}</span>
+                {bad && <span style={{ color: '#dc2626', fontSize: 11, whiteSpace: 'nowrap' }}>⚠ no CSCS/WAH</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Allocate / edit labour for the selected dates ──
 function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClose, onDone, reloadOps }) {
   const isEdit = mode === 'edit'
@@ -1048,10 +1081,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
           {!addOpen ? (
             <div style={{ marginTop: 10 }}>
               <div style={lbl}>Add installer</div>
-              <select value={pick} onChange={e => addPick(e.target.value)} style={input}>
-                <option value="">Select installer…</option>
-                {available.map(o => { const c = comp[o.id] || {}; const bad = !c.hasCSCS || !c.hasWAH; return <option key={o.id} value={o.id}>{o.firstName} {o.lastName}{o.company ? ` (${o.company})` : ''}{bad ? ' ⚠ no CSCS/WAH' : ''}</option> })}
-              </select>
+              <OperativeSearchSelect options={available} comp={comp} onPick={id => addPick(id)} />
               <button onClick={() => setAddOpen(true)} style={{ ...linkBtn, marginTop: 8, paddingLeft: 0 }}>+ Add new operative to the roster</button>
               <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Clashes (same installer already on another project that day) are skipped and reported.</div>
             </div>
