@@ -263,11 +263,78 @@ function FormsHomeMenu({ user }) {
           </>
         )}
       </div>
+
+      <SiteAppReportProblem user={user} />
     </div>
   )
 }
 
-// ── Project details for operatives: pick a live project, view Drawings & RAMS ──
+// Site App "Report a problem" — shown at the bottom of the operative menu.
+function SiteAppReportProblem({ user }) {
+  const [open, setOpen] = useState(false)
+  const [page, setPage] = useState('')
+  const [description, setDescription] = useState('')
+  const [sending, setSending] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function submit() {
+    if (!description.trim()) { setErr('Please describe the problem.'); return }
+    setSending(true); setErr('')
+    try {
+      const r = await fetch('/api/report-problem', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: user?.name || '', platform: 'Site App', page, description }),
+      })
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
+      setDone(true); setSending(false)
+    } catch (e) { setErr(e?.message || 'Could not submit'); setSending(false) }
+  }
+
+  return (
+    <div style={{ marginTop: 28, textAlign: 'center' }}>
+      <button onClick={() => { setPage(''); setDescription(''); setDone(false); setErr(''); setOpen(true) }}
+        style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
+        ⚠ Report a problem with the app
+      </button>
+
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpen(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report a problem</div>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
+            </div>
+            {done ? (
+              <div style={{ textAlign: 'center', padding: '16px 0' }}>
+                <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+                <div style={{ fontSize: 15, color: INK, fontWeight: 600 }}>Thanks — your report has been sent.</div>
+                <button onClick={() => setOpen(false)} style={{ ...bigBtn(false), marginTop: 16 }}>Close</button>
+              </div>
+            ) : (
+              <>
+                <RpField label="Your name"><input value={user?.name || ''} readOnly style={{ ...rpInp, background: '#f7f6f3', color: '#888' }} /></RpField>
+                <RpField label="Where"><input value="Site App" readOnly style={{ ...rpInp, background: '#f7f6f3', color: '#888' }} /></RpField>
+                <RpField label="Page where the issue happened"><input value={page} onChange={e => setPage(e.target.value)} style={rpInp} placeholder="e.g. Deliveries" /></RpField>
+                <RpField label="Describe the problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...rpInp, resize: 'vertical' }} placeholder="What went wrong?" /></RpField>
+                {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
+                <button onClick={submit} disabled={sending} style={bigBtn(sending)}>{sending ? 'Sending…' : 'Send report'}</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+const RpField = ({ label, children }) => (
+  <div style={{ marginBottom: 12 }}>
+    <div style={{ fontSize: 12.5, fontWeight: 600, color: '#555', marginBottom: 5 }}>{label}</div>
+    {children}
+  </div>
+)
+const rpInp = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, fontFamily: 'inherit', outline: 'none' }
 // Shared: is this file an image (used by the drawings grid and the FileViewer).
 function isImage(f) {
   if (!f) return false

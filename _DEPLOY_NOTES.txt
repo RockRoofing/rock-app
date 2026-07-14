@@ -1,37 +1,25 @@
-OPS BATCH 1 — quick fixes (7 items)
+REPORT A PROBLEM — portal (every page) + Site App, with an admin viewer
 
-1. SITE CONTACTS TYPING BUG  (pages/operations/projects.js)
-   ROOT CAUSE: the Section/L wrapper components were defined INSIDE ProjectDetails, so every keystroke
-   re-created them and React remounted the whole subtree — the input lost focus after one character.
-   Fixed by hoisting Section and L to module scope (stable identity). Role/Name/Email/Phone now type
-   normally.
+NEW API — pages/api/report-problem.js
+  POST  { userName, platform, page, description } -> stores under ops:problem-reports + emails the office
+        (to ALERT_EMAIL or FORMS_REPLY_TO if set; email is best-effort and never blocks saving).
+  GET   -> { reports } newest first.
+  PATCH { id, status } -> open/resolved toggle.
 
-2. RISK LOG — TARGET RESOLUTION DATE WARNING  (pages/operations/project-management/risks.js)
-   When no target resolution date is set, shows "Target Resolution Date Required" (same style as the
-   Live Tasks warning).
+PORTAL — every page (components/ReportProblemButton.js + pages/_app.js)
+  - A small "⚠ Report a problem" button is fixed top-right on every PORTAL page (auto-hidden on the Site
+    App). Opens a popup that AUTO-fills the user's name (from portal-auth) and platform (Portal), plus the
+    current page path (editable) and a description box.
 
-3+4. COLOUR KEY — Live Project Tasks & Risk Log  (tasks.js, risks.js, components/pmShared.js)
-   Added a DateColourKey legend (red = overdue/today or past, orange = due within a week, green = more than
-   a week away) at the top of both tables, matching the existing dateCellStyle colours.
+SITE APP — bottom of the operative menu (pages/forms/index.js)
+  - A "⚠ Report a problem with the app" link at the bottom of the Site App home. Popup auto-fills the
+    logged-in operative's name and platform (Site App), plus a page box and description.
 
-5. ISSUES PAGE — default to OPEN  (pages/operations/project-management/issues.js)
-   The Status filter now defaults to "Open" when you land on the page.
+ADMIN VIEWER — pages/admin/problem-reports.js + components/AdminShell.js
+  - New "Problem Reports" tab in the Admin area: lists reports (Open / Resolved / All), shows who/where/
+    page/description, with a "Mark resolved / Reopen" toggle.
 
-6. DELIVERIES (Site App) — Mark as delivered  (pages/forms/deliveries.js)
-   Replaced the bare "actual delivery date" field with a big "✓ Mark as delivered" button that auto-fills
-   today's date (with an "Undo" and an editable date if it needs changing). No more manually entering a
-   date to record a delivery.
+OPTIONAL ENV: set ALERT_EMAIL to control where the notification email goes (falls back to FORMS_REPLY_TO,
+then notifications@rockroofing.co.uk). Not required — reports are always stored and viewable in Admin.
 
-7. SRATs — date-range filter  (pages/forms/cm/srats.js)
-   Added From/To date filters (with Clear) to the SRAT list within a project. (Project filter is already
-   inherent — SRATs is project-first.)
-
-Deploy all files. No cron/env change.
-
-STILL TO COME from your list (bigger pieces, next batches):
-  - Per-project access for Site App users (admin picker + Site App gating)
-  - Water Ingress Report "missing form" logic on the gantt
-  - Gantt: RAMS-not-signed warning, copy/paste cells, searchable operative dropdown, "no programme" warning
-  - Automated weekly labour email to accounts (Sat–Fri, with confirm pop-up)
-  - "Report a problem" button (portal + site app)
-  - Meeting Actions carry-over between Project Concerns
+Deploy all files. No cron change.
