@@ -54,6 +54,8 @@ export default function PlanningPage() {
   const [filters, setFilters] = useState({ project: '', installer: '', from: '', to: '' })
   // selection: { key, dates:Set<iso> }  — active drag project row
   const [sel, setSel] = useState(null)
+  const [clipboard, setClipboard] = useState(null)   // { cells:[{offset,status,unnamed,entries}] }
+  const [pasting, setPasting] = useState(false)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
   const [weekModal, setWeekModal] = useState(null)    // monday iso
   const [viewModal, setViewModal] = useState(false)   // historic viewer
@@ -201,6 +203,63 @@ export default function PlanningPage() {
     setClearing(false)
   }
 
+  // Copy the labour in the selected cells, keyed by day-offset from the first
+  // selected date, so it can be pasted onto another project/week.
+  function copySelection() {
+    if (!sel || !sel.dates.size) return
+    const dates = [...sel.dates].sort()
+    const first = parseISO(dates[0])
+    const alloc = data.allocations[sel.key] || {}
+    const cells = []
+    for (const dk of dates) {
+      const cd = cellData(alloc[dk])
+      if (cd.count <= 0 && cd.entries.length === 0) continue   // skip empties
+      const offset = Math.round((parseISO(dk) - first) / DAY)
+      cells.push({ offset, status: cd.status, unnamed: cd.unnamed, entries: cd.entries.map(e => ({ opId: e.opId, half: e.half || 'full' })) })
+    }
+    if (!cells.length) { window.alert('Nothing to copy — the selected cells have no labour.'); return }
+    setClipboard({ cells })
+  }
+
+  // Paste the clipboard onto the current selection's project, anchored at the
+  // first selected date. Preserves day-offsets (e.g. a Mon–Fri gang pasted from
+  // Monday lands Mon–Fri). Overwrites the target cells.
+  async function pasteToSelection() {
+    if (!clipboard || !sel || !sel.dates.size) return
+    const dates = [...sel.dates].sort()
+    const anchor = parseISO(dates[0])
+    const proj = data.projects.find(p => p.key === sel.key)
+    const targets = clipboard.cells.map(c => ({ ...c, date: iso(addDays(anchor, c.offset)) }))
+    const overwriting = targets.some(t => cellData((data.allocations[sel.key] || {})[t.date]).count > 0)
+    const msg = `Paste ${clipboard.cells.length} day${clipboard.cells.length === 1 ? '' : 's'} of labour onto ${proj?.name || 'this project'} starting ${fmtDMY(anchor)}?` + (overwriting ? '\n\nSome target days already have labour and will be overwritten.' : '')
+    if (!window.confirm(msg)) return
+    setPasting(true)
+    const todayKey = iso(new Date())
+    const clashes = []
+    try {
+      for (const t of targets) {
+        // 'actual' is only valid on past dates — downgrade to confirmed otherwise.
+        const status = (t.status === 'actual' && t.date >= todayKey) ? 'confirmed' : t.status
+        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: sel.key, date: t.date, entries: t.entries, unnamed: t.unnamed, status }) }).catch(() => null)
+        if (r && r.status === 409) {
+          // Clash: retry without the clashing installer(s) so the rest still pastes.
+          let d = {}; try { d = await r.json() } catch {}
+          const filtered = t.entries.filter(e => e.opId !== d.opId)
+          const o = ops.find(x => x.id === d.opId)
+          clashes.push(`${o ? `${o.firstName} ${o.lastName}` : 'An installer'} on ${fmtDMY(parseISO(t.date))}`)
+          if (filtered.length || t.unnamed > 0) {
+            await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: sel.key, date: t.date, entries: filtered, unnamed: t.unnamed, status }) }).catch(() => {})
+          }
+        }
+      }
+      dragging.current = false
+      setSel(null)
+      await load()
+      if (clashes.length) window.alert(`Pasted, but these installers were already booked on another project and were skipped:\n\n${clashes.join('\n')}`)
+    } catch {}
+    setPasting(false)
+  }
+
   return (
     <OperationsShell active="pm:planning" section="pm" title="Planning" wide>
       {/* Top row: heading + all view controls */}
@@ -255,8 +314,11 @@ export default function PlanningPage() {
           </div>
           <button onClick={() => openAllocate('add')} style={primaryBtn}>Allocate labour →</button>
           {selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
+          {selectionHasLabour() && <button onClick={copySelection} style={{ ...ghostBtn, background: '#eef6ff', color: '#1d4ed8', borderColor: '#cfe0fb', fontWeight: 600 }}>Copy</button>}
+          {clipboard && <button onClick={pasteToSelection} disabled={pasting} style={{ ...ghostBtn, background: '#eafaf0', color: '#166534', borderColor: '#c3ecd2', fontWeight: 600 }}>{pasting ? 'Pasting…' : `Paste (${clipboard.cells.length} day${clipboard.cells.length === 1 ? '' : 's'})`}</button>}
           {selectionHasLabour() && <button onClick={clearSelectionLabour} disabled={clearing} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c0c0' }}>{clearing ? 'Clearing…' : 'Clear labour'}</button>}
           <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }} onClick={(e) => { e.stopPropagation(); dragging.current = false; setSel(null) }} style={ghostBtn}>Deselect</button>
+          {clipboard && <button onClick={() => setClipboard(null)} style={{ ...ghostBtn, fontSize: 11, color: '#999' }} title="Clear the copied labour">Clear clipboard</button>}
         </div>
       )}
 
