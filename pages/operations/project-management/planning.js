@@ -79,6 +79,14 @@ export default function PlanningPage() {
     } catch {}
     setLoading(false)
   }
+  // Refresh allocations WITHOUT flipping the loading flag, so the page doesn't
+  // remount/scroll to the top (used after paste / clear).
+  async function refreshData() {
+    try {
+      const pl = await fetch('/api/planning').then(r => r.json()).catch(() => ({}))
+      setData(d => ({ ...(d || {}), projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+    } catch {}
+  }
   useEffect(() => { load() }, [])
 
   // Default forward horizon = 3 years; historic view starts 2 weeks before today
@@ -198,7 +206,7 @@ export default function PlanningPage() {
       }
       dragging.current = false
       setSel(null)
-      await load()
+      await refreshData()
     } catch {}
     setClearing(false)
   }
@@ -246,7 +254,8 @@ export default function PlanningPage() {
           let d = {}; try { d = await r.json() } catch {}
           const filtered = t.entries.filter(e => e.opId !== d.opId)
           const o = ops.find(x => x.id === d.opId)
-          clashes.push(`${o ? `${o.firstName} ${o.lastName}` : 'An installer'} on ${fmtDMY(parseISO(t.date))}`)
+          const other = (data.projects || []).find(p => p.key === d.clashKey)
+          clashes.push(`${o ? `${o.firstName} ${o.lastName}` : 'An installer'} is already on ${other ? other.name : 'another project'} on ${fmtDMY(parseISO(t.date))}`)
           if (filtered.length || t.unnamed > 0) {
             await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: sel.key, date: t.date, entries: filtered, unnamed: t.unnamed, status }) }).catch(() => {})
           }
@@ -254,8 +263,8 @@ export default function PlanningPage() {
       }
       dragging.current = false
       setSel(null)
-      await load()
-      if (clashes.length) window.alert(`Pasted, but these installers were already booked on another project and were skipped:\n\n${clashes.join('\n')}`)
+      await refreshData()
+      if (clashes.length) window.alert(`Pasted. These installers were already booked elsewhere and were skipped:\n\n${clashes.join('\n')}`)
     } catch {}
     setPasting(false)
   }
@@ -1128,10 +1137,18 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, ramsSi
         const dayUnnamed = isEdit ? unnamed : (cellOf(dk).unnamed + unnamed)
         const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-day', key: proj.key, date: dk, entries, unnamed: dayUnnamed, status }) })
         const d = await r.json()
-        if (r.status === 409) clashes.push(`${opName(d.opId)} on ${fmtDMY(parseISO(dk))}`)
+        if (r.status === 409) {
+          const other = (data.projects || []).find(p => p.key === d.clashKey)
+          clashes.push(`${opName(d.opId)} is already allocated to ${other ? other.name : 'another project'} on ${fmtDMY(parseISO(dk))}`)
+        }
         else if (!r.ok) throw new Error(d.error || 'Save failed')
       }
-      if (clashes.length) { setErr(`Some allocations clashed and were skipped: ${clashes.join('; ')}. Those installers are already on another project those days.`); setSaving(false); onDone(); return }
+      if (clashes.length) {
+        // Keep the modal open so the warning is clearly seen; don't reload underneath.
+        setErr(`Could not allocate — already booked elsewhere:\n${clashes.join('\n')}`)
+        setSaving(false)
+        return
+      }
       onDone()
     } catch (e) { setErr(e.message || 'Could not save.') }
     setSaving(false)
@@ -1222,7 +1239,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, ramsSi
             <AddOperativeInline onCancel={() => setAddOpen(false)} onAdded={async (newId) => { const list = await reloadOps(); setOpList(list); setAddOpen(false); if (newId) setPicked(prev => prev.includes(newId) ? prev : [...prev, newId]) }} />
           )}
 
-          {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
+          {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12, whiteSpace: 'pre-line' }}>{err}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
             {(() => {

@@ -1,30 +1,29 @@
-GANTT — copy & paste labour (in the yellow selection bar)
+GANTT — copy/paste fix (no page reload) + clear "already allocated" clash warnings
 
 pages/operations/project-management/planning.js
 
-HOW IT WORKS
-  1. Select the cells you want to copy (a gang across days on a project). The yellow selection bar now has
-     a blue "Copy" button (shows when the selection has labour).
-  2. Click Copy — it captures the labour (named installers, unnamed headcount and status) for those days,
-     keyed by day-offset from the first selected day.
-  3. Select the START cell somewhere else — another project and/or another week (single cell is enough; the
-     paste re-creates the full pattern from that day).
-  4. A green "Paste (N days)" button appears in the bar. Click it to write the copied gang starting at the
-     first selected day, preserving the day pattern (e.g. a Mon–Fri gang pasted from a Monday lands Mon–Fri).
+1) COPY/PASTE NO LONGER RELOADS THE PAGE
+   - Paste (and Clear labour) now refresh the data in place instead of doing a full reload, so the page no
+     longer jumps to the top / loses your scroll position. You stay where you were pasting.
 
-DETAILS
-  - Overwrite: if target days already have labour, you're warned before it overwrites them.
-  - Clashes: if a copied installer is already booked on ANOTHER project that day, they're skipped for that
-    day (the rest still pastes) and you get a summary of who was skipped.
-  - "Actual" status isn't valid on today/future, so pasted "actual" days become "Confirmed" when they land
-    on today or later.
-  - The clipboard stays until you paste again or hit "Clear clipboard", so you can paste to several places.
+2) WHY A PASTE COULD SILENTLY "NOT WORK" — now explained on screen
+   - The planner won't double-book a person: if a copied installer is already allocated to ANOTHER project
+     on that day, that day was being skipped SILENTLY. Now, after paste, you get a clear message naming who
+     was already booked and on which project/day, e.g.:
+       "Joe Bloggs is already on J229 — Bosden on 29/10"
+   - The rest of the paste still lands; only the genuinely-clashing person/day is skipped.
 
-NOTE: this file supersedes all previous gantt drops (searchable dropdown, warnings, historic scroll, RAMS
-warning, layout). It contains everything — deploy just this one.
+3) DUPLICATE ALLOCATION WARNING WHEN ADDING LABOUR
+   - In the Allocate modal, if you try to allocate an installer who is already on another project in that
+     period, it now STOPS and shows a clear message naming the other project and date (and keeps the modal
+     open so you see it), instead of silently dropping them:
+       "Could not allocate — already booked elsewhere:
+        Joe Bloggs is already allocated to J229 — Bosden on 29/10"
+
+NOTE: this file supersedes all previous gantt drops — deploy just this one.
 
 Deploy this file. No cron/env change.
 
-That completes the Gantt batch (searchable dropdown, warning rework, historic scroll, RAMS warning, layout,
-copy/paste). Remaining overall: automated weekly labour email, Water Ingress missing-form logic, Meeting
-Actions carry-over.
+If a paste STILL doesn't land after this and you don't see a clash message, tell me exactly what you
+copied and where you pasted (project + dates) and I'll trace it — but the reload fix should make the result
+visible either way.
