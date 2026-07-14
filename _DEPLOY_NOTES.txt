@@ -1,18 +1,24 @@
-SRAT FILTER — re-check build (the date filter code is confirmed present)
+FAVICON — Rock Roofing logo as the favicon on every page (Portal + Site App)
 
-WHAT'S HERE
-  pages/forms/cm/srats.js — the SRATs page WITH the From/To date-range filter, plus a small "v2" marker
-  next to the "SRATs" title so you can confirm the new file is actually live.
+WHAT'S INCLUDED
+  pages/_document.js  (NEW) — global document that adds the favicon / apple-touch-icon / manifest <link>
+    tags to EVERY page (portal + Site App), so the Rock logo shows in the browser tab everywhere.
+  public/favicon.ico            (16/32/48/64 multi-res)
+  public/favicon-16x16.png
+  public/favicon-32x32.png
+  public/apple-touch-icon.png   (180x180 — iOS "Add to Home Screen" icon)
+  public/favicon-192.png        (Android home-screen)
+  public/favicon-512.png        (PWA/large)
+  public/site.webmanifest       (names the app "Rock Roofing" + home-screen icons)
 
-HOW TO CHECK AFTER DEPLOY
-  1. Open the Site App > Contracts Manager > SRATs and PICK A PROJECT (the filter only shows once a project
-     is selected — the first screen is the project picker).
-  2. If you see "SRATs v2" in the title, the new file IS deployed:
-       - The From / To date inputs appear directly under the "+ New SRAT" button.
-  3. If you DON'T see "v2", the deploy didn't take effect — likely causes:
-       - The file on GitHub didn't actually save to pages/forms/cm/srats.js, or
-       - Vercel served a cached build (try a hard refresh / redeploy), or
-       - You're viewing a different page (this is /forms/cm/srats, reached via the CM "SRATs" card).
+  All generated from public/rock-logo.jpg.
 
-This is a diagnostic drop — deploy this one file. Once we confirm "v2" shows, I'll remove the marker in a
-later update.
+DEPLOY NOTE (important for the binary files)
+  - Put the pages/_document.js file in pages/.
+  - Put ALL the public/* files in the public/ folder at the repo root.
+  - When uploading images via the GitHub web editor, use "Add file > Upload files" and drag the PNGs/ICO in
+    (don't paste them as text — they're binary and will corrupt if pasted).
+  - Browsers cache favicons aggressively; after deploy you may need a hard refresh (or check in a private
+    window) to see the new tab icon.
+
+No cron/env change.
