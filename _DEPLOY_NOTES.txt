@@ -1,18 +1,12 @@
-GANTT — Historic view scroll-back behaviour
+GANTT — re-added "Start and Completion Dates needed" warning
 
 pages/operations/project-management/planning.js
+  - Added a red warning line under the project name: "⚠ Start and Completion Dates needed" — shows whenever
+    the project has no start and/or completion date set (same red style/placement as the other warnings).
+  - All other warnings unchanged (Man day allocation needed / Runs past completion date / Historic dates
+    need confirming actual / No supervisor).
 
-  - Clicking "Historic" now sets the view START POINT to 2 WEEKS BEFORE TODAY (previously it just widened
-    the start slightly while staying anchored on today).
-  - From there you can SCROLL BACK with the ‹ button, ONE WEEK at a time, down to a floor of 6 WEEKS before
-    today — or FURTHER if there are allocations older than that (the floor extends to the earliest allocated
-    week so you can always reach existing data).
-  - The ‹ button disables at the back floor so you can't scroll into empty space.
-  - In normal (non-historic) mode the ‹ / › buttons still jump 12 weeks; in Historic mode they move one
-    week at a time for finer control. "Today" turns Historic off and snaps back to this week.
-
-  NOTE: this file also contains the earlier gantt changes (searchable installer dropdown, reworked warning
-  lines, man-day/overrun/historic-actual logic) — it supersedes gantt-batch-1 and gantt-warnings-rework.
-  Deploy just this one.
+NOTE: this file supersedes the previous gantt drops (searchable dropdown, warning rework, historic scroll)
+— it contains all of them. Deploy just this one.
 
 Deploy this file. No cron/env change.

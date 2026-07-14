@@ -395,6 +395,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
         <div style={{ fontSize: 12.5, fontWeight: overrun ? 700 : 600, color: overrun ? '#dc2626' : (neg ? '#8a6d1a' : INK), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
+        {missing && <div title="No start / completion dates set for this project" style={warnLine}>⚠ Start and Completion Dates needed</div>}
         {!projectHasLabour && <div title="No man days allocated on the Gantt for this project" style={warnLine}>⚠ Man day allocation needed</div>}
         {overrun && <div title="Man days allocated after the contracted completion date" style={warnLine}>⚠ Runs past completion date</div>}
         {historicNeedsActual && <div title="Historic allocations still need confirming as Actual" style={{ ...warnLine, color: '#ea580c' }}>⚑ Historic dates need confirming actual</div>}
