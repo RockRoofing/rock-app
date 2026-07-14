@@ -51,7 +51,7 @@ export default function FormsMissingPage() {
 
   return (
     <OperationsShell active="forms:missing" section="forms" title="Forms — Missing" wide>
-      <PageHeading title="Forms — Missing · v2" sub="Required vs completed tracked forms for the selected weeks, with the person responsible." />
+      <PageHeading title="Forms — Missing" sub="Required vs completed tracked forms for the selected weeks, with the person responsible." />
 
       {/* range */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>

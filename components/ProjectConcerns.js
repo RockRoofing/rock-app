@@ -37,7 +37,7 @@ const emptyMeeting = (projectNo, projectName) => ({
   anotherMeeting: 'no',
   nextMeetingDate: '',
   nextMeetingTime: '09:00',
-  nextMeetingDismissed: false,
+  dismissedDate: '',
 })
 
 export default function ProjectConcerns({ projectNo, projectName }) {
@@ -70,12 +70,16 @@ export default function ProjectConcerns({ projectNo, projectName }) {
 
   // Banner: only ever reflects the MOST RECENTLY ADDED meeting. Older meetings'
   // next-dates are superseded and ignored. (meetings[] is newest-first.)
+  // Banner ALWAYS reflects the last-added meeting's next-meeting date (blue if
+  // future, red if passed). The only thing that hides it is an explicit dismiss
+  // of THAT specific date — stored as dismissedDate, so any new/changed date
+  // automatically re-shows the banner.
   const banner = useMemo(() => {
     const latest = meetings[0]
     if (!latest) return null
     if (latest.anotherMeeting !== 'yes') return null
     if (!latest.nextMeetingDate) return null
-    if (latest.nextMeetingDismissed) return null
+    if (latest.dismissedDate && latest.dismissedDate === latest.nextMeetingDate) return null
     return latest
   }, [meetings])
 
@@ -96,22 +100,32 @@ export default function ProjectConcerns({ projectNo, projectName }) {
 
   async function dismissBanner(m) {
     await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectNo, meeting: { ...m, nextMeetingDismissed: true } }) })
+      body: JSON.stringify({ projectNo, meeting: { ...m, dismissedDate: m.nextMeetingDate } }) })
     load()
   }
 
-  function openNew() { setOpen(emptyMeeting(projectNo, projectName)) }
+  function openNew() {
+    const m = emptyMeeting(projectNo, projectName)
+    // Carry over OPEN action tasks from the most recent previous meeting. Closed
+    // tasks are not carried (they show once on the meeting where they were closed,
+    // then drop off future meetings). The gantt/Live Tasks stay the source of truth
+    // for each task's open/closed state.
+    const latest = meetings[0]
+    if (latest && Array.isArray(latest.actionTaskIds) && latest.actionTaskIds.length) {
+      const openIds = latest.actionTaskIds.filter(id => {
+        const t = allTasks.find(x => x.id === id)
+        return t && !t.closed
+      })
+      if (openIds.length) m.actionTaskIds = openIds
+    }
+    setOpen(m)
+  }
   function openView(m) { setOpen({ ...m }) }
 
   async function saveMeeting(meeting) {
     setSaving(true)
     try {
       const prev = meetings.find(m => m.id === meeting.id) || {}
-      // If the next-meeting date/time differs from what was previously in place,
-      // clear any earlier dismissal so the banner re-evaluates (and shows red if
-      // the new date is in the past). A dismissal only sticks while the date is unchanged.
-      const nmChanged = (prev.nextMeetingDate || '') !== (meeting.nextMeetingDate || '') || (prev.nextMeetingTime || '') !== (meeting.nextMeetingTime || '')
-      if (nmChanged) meeting = { ...meeting, nextMeetingDismissed: false }
       const resp = await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectNo, meeting }) }).then(r => r.json())
       const meetingId = meeting.id || resp.id
@@ -436,7 +450,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
               <L>Date & time of next meeting</L>
               <div style={grey}>Saving with a date & time automatically sends a calendar invite to the meeting attendees (listing the risks, mitigations and actions). Changing the date/time later sends an updated invite; attendees can then edit it in their own calendar.</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input type="date" value={f.nextMeetingDate || ''} onChange={e => set({ nextMeetingDate: e.target.value, nextMeetingDismissed: false })} style={{ ...input, maxWidth: 180 }} />
+                <input type="date" value={f.nextMeetingDate || ''} onChange={e => set({ nextMeetingDate: e.target.value })} style={{ ...input, maxWidth: 180 }} />
                 <input type="time" value={f.nextMeetingTime || '09:00'} onChange={e => set({ nextMeetingTime: e.target.value })} style={{ ...input, maxWidth: 130 }} />
                 {f.nextMeetingDate && <button onClick={() => set({ nextMeetingDate: '' })} style={linkBtn}>Clear</button>}
               </div>

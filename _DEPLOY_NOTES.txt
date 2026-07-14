@@ -1,18 +1,17 @@
-WATER INGRESS — past visits now show as Missing (gantt is the source of truth)
+MEETING ACTIONS CARRY-OVER + remove Forms-Missing "v2" marker
 
-pages/api/forms-missing.js
-  FIX: a water-ingress WIRF is now REQUIRED once the visit has happened — i.e. it's marked Actual OR the
-  visit date has PASSED. Previously only "Actual" counted, so a past visit that wasn't ticked actual
-  silently dropped off the missing list. Now:
-    • Past date (today has passed), not confirmed actual  -> MISSING (required)
-    • Marked Actual                                        -> required
-    • Future within 2 weeks, not actual                    -> "Upcoming" (visibility only)
-    • Future beyond 2 weeks                                -> not shown yet
+1) components/ProjectConcerns.js — Meeting Actions carry over between Project Concerns
+   - When you start a NEW Project Concern meeting, it now pre-populates the action list with the OPEN action
+     tasks from the most recent previous meeting for that project.
+   - CLOSED tasks are NOT carried forward — they remain visible on the meeting where they were actioned, but
+     drop off future meetings (exactly as specified).
+   - Live Tasks remain the source of truth for each task's open/closed state (carry-over reads the live
+     'closed' flag), so a task closed on the Live Tasks page won't carry into the next meeting.
 
-  SOURCE OF TRUTH = THE GANTT: all WIRF requirements are derived live from the gantt water-ingress data
-  (ops:water-ingress) on every request — nothing is stored separately. So if a visit is MOVED on the gantt
-  the required form moves with it, and if it's DELETED the form requirement disappears automatically.
+2) pages/operations/forms-missing.js — removed the temporary "· v2" marker from the page title (back to
+   "Forms — Missing"). The date filter + Water Ingress fixes remain.
 
-  Verified: yesterday(not actual)=Missing, actual=required, +5d=Upcoming, +30d=hidden, today=Upcoming.
+Deploy both files. No cron/env change.
 
-Deploy this file. No cron/env change.
+REMAINING (last item from the Ops App doc): automated weekly labour email to accounts (needs a cron
+decision — you're at the 2-cron Hobby limit).
