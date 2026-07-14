@@ -9,6 +9,7 @@ const fmtLocal = (d) => { const dt = parseLocal(d); return dt ? dt.toLocaleDateS
 const emptySrat = () => ({ projectNo: '', projectName: '', date: todayISO(), situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
 const PAGE_SIZE = 50
 const cellTd = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f0f0f0', verticalAlign: 'top', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }
+const filterInp = { padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff', minWidth: 150 }
 
 export default function SratsPage() {
   const [srats, setSrats] = useState([])
@@ -21,6 +22,9 @@ export default function SratsPage() {
   const [cell, setCell] = useState(null)    // { title, text } single-cell popout
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState({ key: 'date', dir: 'desc' })
+  const [fProject, setFProject] = useState('')
+  const [fFrom, setFFrom] = useState('')
+  const [fTo, setFTo] = useState('')
 
   async function load() {
     setLoading(true)
@@ -42,8 +46,20 @@ export default function SratsPage() {
 
   function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
   const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+  const filtered = useMemo(() => {
+    const dOf = (s) => s.date || (s.createdAt ? new Date(s.createdAt).toISOString().slice(0, 10) : '')
+    return srats.filter(s => {
+      if (fProject && s.projectNo !== fProject) return false
+      const d = dOf(s)
+      if (fFrom && (!d || d < fFrom)) return false
+      if (fTo && (!d || d > fTo)) return false
+      return true
+    })
+  }, [srats, fProject, fFrom, fTo])
+  useEffect(() => { setPage(0) }, [fProject, fFrom, fTo])
+
   const sorted = useMemo(() => {
-    const arr = [...srats]
+    const arr = [...filtered]
     const val = (s) => {
       if (sort.key === 'project') return `${s.projectNo || ''} ${s.projectName || ''}`.toLowerCase()
       if (sort.key === 'date') return s.date || ''
@@ -54,7 +70,7 @@ export default function SratsPage() {
     }
     arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
     return arr
-  }, [srats, sort])
+  }, [filtered, sort])
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
   useEffect(() => { if (page >= pageCount) setPage(0) }, [pageCount, page])
@@ -67,11 +83,34 @@ export default function SratsPage() {
 
   return (
     <OperationsShell active="pm:srat" section="pm" title="SRATs" wide>
-      <PageHeading title="SRATs" sub="Situation, Roadblocks, Actions, Timeline — one per project update."
+      <PageHeading title="SRATs · filter v2" sub="Situation, Roadblocks, Actions, Timeline — one per project update."
         action={<button onClick={() => setEdit(emptySrat())} style={primaryBtn}>+ Add new</button>} />
+
+      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Project</div>
+          <select value={fProject} onChange={e => setFProject(e.target.value)} style={filterInp}>
+            <option value="">All projects</option>
+            {projects.map(p => <option key={p.no} value={p.no}>{[p.no, p.name].filter(Boolean).join(' — ')}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>From</div>
+          <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} style={filterInp} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>To</div>
+          <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} style={filterInp} />
+        </div>
+        {(fProject || fFrom || fTo) && <button onClick={() => { setFProject(''); setFFrom(''); setFTo('') }} style={ghostBtn}>Reset</button>}
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} SRAT{filtered.length === 1 ? '' : 's'}</div>
+      </div>
 
       {loading ? <Loading /> : srats.length === 0 ? (
         <EmptyCard title="No SRATs yet" body="Click “Add new” to create the first SRAT." />
+      ) : filtered.length === 0 ? (
+        <EmptyCard title="No SRATs match these filters" body="Try adjusting the project or date range." />
       ) : (
         <>
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>

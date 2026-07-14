@@ -296,14 +296,14 @@ function SiteAppReportProblem({ user }) {
     <div style={{ marginTop: 28, textAlign: 'center' }}>
       <button onClick={() => { setPage(''); setDescription(''); setDone(false); setErr(''); setOpen(true) }}
         style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
-        ⚠ Report a problem with the app
+        ⚠ Report an App improvement
       </button>
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report a problem</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report an App improvement</div>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
             </div>
             {done ? (

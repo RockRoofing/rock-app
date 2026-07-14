@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 
-// "Report a problem" — opens a popup that captures the issue. The trigger appears:
-//   • as a nav link (left of "Open Site App") on Operations pages, and
-//   • as a small orange link top-right on other PORTAL pages (home, pre-contract,
-//     commercial, admin).
-// Both open the SAME modal (nav link fires an 'open-report-problem' event).
-// Hidden entirely on the Site App (/forms*), which has its own in-app button.
+// "Report an App improvement" — modal only. The trigger link lives in each area's
+// nav / top bar (portal home, OperationsNav, PreContractNav, commercial nav) and
+// opens this modal via the 'open-report-problem' window event. The Site App has
+// its own in-app button. This component renders nothing on /forms.
 export default function ReportProblemButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -21,24 +19,17 @@ export default function ReportProblemButton() {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d?.user?.name) setUserName(d.user.name) }).catch(() => {})
   }, [])
 
-  function openModal() { setPage(router.asPath || ''); setDescription(''); setDone(false); setErr(''); setOpen(true) }
-
-  // Nav links (e.g. OperationsNav) open the modal via this event.
   useEffect(() => {
-    const h = () => openModal()
+    const h = () => { setPage(router.asPath || ''); setDescription(''); setDone(false); setErr(''); setOpen(true) }
     window.addEventListener('open-report-problem', h)
     return () => window.removeEventListener('open-report-problem', h)
   }, [router.asPath])
 
-  const path = router.pathname || ''
-  const onSiteApp = path.startsWith('/forms')
-  const onOperations = path.startsWith('/operations')   // these get the nav link instead
-  const showFloating = !onSiteApp && !onOperations
-
-  if (onSiteApp) return null
+  if ((router.pathname || '').startsWith('/forms')) return null
+  if (!open) return null
 
   async function submit() {
-    if (!description.trim()) { setErr('Please describe the problem.'); return }
+    if (!description.trim()) { setErr('Please describe the improvement.'); return }
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/report-problem', {
@@ -52,41 +43,30 @@ export default function ReportProblemButton() {
   }
 
   return (
-    <>
-      {showFloating && (
-        <button onClick={openModal} title="Report a problem with the app"
-          style={{ position: 'fixed', top: 12, right: 16, zIndex: 900, background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: '#ca8a04', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-          <span>⚠</span> Report a problem with the app
-        </button>
-      )}
-
-      {open && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 460, padding: '20px 20px 24px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a19' }}>Report a problem</div>
-              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
-            </div>
-            {done ? (
-              <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
-                <div style={{ fontSize: 15, color: '#1a1a19', fontWeight: 600 }}>Thanks — your report has been sent.</div>
-                <button onClick={() => setOpen(false)} style={btnPrimary}>Close</button>
-              </div>
-            ) : (
-              <>
-                <Field label="Your name"><input value={userName} onChange={e => setUserName(e.target.value)} style={inp} placeholder="Your name" /></Field>
-                <Field label="Where"><input value="Portal" readOnly style={{ ...inp, background: '#f7f6f3', color: '#888' }} /></Field>
-                <Field label="Page where the issue happened"><input value={page} onChange={e => setPage(e.target.value)} style={inp} placeholder="e.g. Operations › Live Tasks" /></Field>
-                <Field label="Describe the problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...inp, resize: 'vertical' }} placeholder="What went wrong? What were you trying to do?" /></Field>
-                {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
-                <button onClick={submit} disabled={sending} style={{ ...btnPrimary, opacity: sending ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send report'}</button>
-              </>
-            )}
-          </div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setOpen(false)}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 460, padding: '20px 20px 24px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a19' }}>Report an App improvement</div>
+          <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
         </div>
-      )}
-    </>
+        {done ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
+            <div style={{ fontSize: 15, color: '#1a1a19', fontWeight: 600 }}>Thanks — your report has been sent.</div>
+            <button onClick={() => setOpen(false)} style={btnPrimary}>Close</button>
+          </div>
+        ) : (
+          <>
+            <Field label="Your name"><input value={userName} onChange={e => setUserName(e.target.value)} style={inp} placeholder="Your name" /></Field>
+            <Field label="Where"><input value="Portal" readOnly style={{ ...inp, background: '#f7f6f3', color: '#888' }} /></Field>
+            <Field label="Page where the issue happened"><input value={page} onChange={e => setPage(e.target.value)} style={inp} placeholder="e.g. Operations › Live Tasks" /></Field>
+            <Field label="Describe the improvement / problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...inp, resize: 'vertical' }} placeholder="What would you like improved, or what went wrong?" /></Field>
+            {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
+            <button onClick={submit} disabled={sending} style={{ ...btnPrimary, opacity: sending ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send'}</button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 

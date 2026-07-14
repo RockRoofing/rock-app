@@ -1,23 +1,26 @@
-ADMIN DOCUMENTS — fix upload error + single-file UX + in-app viewing
+REPORT LINK — renamed + repositioned everywhere, and SRAT filter version check
 
-THE ERROR ("Unexpected token 'R', 'Request En'... is not valid JSON")
-  Cause: the photo was bigger than Vercel's ~4.5MB serverless request-body limit, so /api/upload-file got
-  a plain-text "Request Entity Too Large" response (not JSON) and the client's r.json() choked.
-  Fix: uploads now go DIRECT from the browser to Vercel Blob (client upload), which bypasses that limit.
+RENAME: "Report a problem with the app" -> "Report an App improvement" (Portal + Site App).
 
-  pages/api/blob-upload.js  (NEW) — token endpoint for direct browser->Blob uploads (handleUpload).
-    Allows images / PDF / Word / Excel / text up to 50MB.
+POSITIONING (no more overlap):
+  pages/index.js (Portal home) — link now sits to the LEFT of "Admin" in the top bar.
+  components/PreContractNav.js — link on the right of the nav (Sales, Scorecards, Project Financials pages)
+    — pushed right, left of any page controls, no overlap.
+  pages/commercial.js — link added to the LEFT of the Budget Tracker / Upload / Xero / Sync controls.
+  components/OperationsNav.js — text renamed (already sat left of "Open Site App").
+  components/ReportProblemButton.js — now MODAL-ONLY (no floating button). Every area has its own inline
+    link that opens the shared modal via the 'open-report-problem' event, so nothing overlaps anymore.
+  pages/forms/index.js (Site App) — link/title renamed to "Report an App improvement".
 
-  pages/admin/documents.js
-   - Uses the client upload() flow (no size error on big photos/docs).
-   - ONE file at a time: "Choose file" -> shows the filename with an × to CLEAR it -> "Upload".
-   - Upload is disabled until a file is chosen. After a successful upload the file + name clear.
-   - Each uploaded card still has Delete (with confirm) and inline rename, as before.
+SRAT FILTER (portal):
+  pages/operations/project-management/srat.js — the Project / From / To filter bar IS present and
+    unconditionally rendered (confirmed in code). To prove which version is live, the page title now reads
+    "SRATs · filter v2".
+    AFTER DEPLOY: open Operations > Project Management > SRAT.
+      • If the title says "SRATs · filter v2", the new file is live and the Project + From + To filter bar
+        sits directly under the title (above the list).
+      • If it still says just "SRATs", the deploy didn't take — the file on GitHub isn't updating or Vercel
+        served a cached build (hard refresh / confirm the deployment finished / check the file path is
+        pages/operations/project-management/srat.js, NOT srats.js which is only a redirect).
 
-SITE APP — documents now viewable IN-APP
-  pages/forms/browse.js
-   - Company Information / Operative Guidance cards now open in the in-app viewer (pdf.js canvas for PDFs,
-     image viewer for images) with prev/next, instead of opening the raw file URL in a new tab (which
-     mobile browsers refuse to render inline).
-
-Deploy all files. No cron/env change (uses the existing BLOB_READ_WRITE_TOKEN).
+Deploy all files. No cron/env change.

@@ -172,6 +172,10 @@ export default function Portal() {
           <div style={{ flex: 1 }} />
           {user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
+                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                <span>⚠</span> Report an App improvement
+              </button>
               {user.role === 'admin' && <a href="/admin" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
               <span style={{ color: '#888', fontSize: 13 }}>{user.name} · {user.role}</span>
               <button onClick={logout} style={{ background: '#2a2a28', color: '#ccc', border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>Log out</button>
