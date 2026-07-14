@@ -808,13 +808,28 @@ export default function CRMPage() {
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
   const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); };
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
-  const editField = (id, key, val) => patch(id, (d) => { const old = d.fields[key]; const hist = (key === 'value') ? [{ id: uid(), type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }] : (key === 'expected_close_date') ? [{ id: uid(), type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }] : []; return { ...d, fields: { ...d.fields, [key]: val }, history: [...d.history, ...hist] }; });
+  const editField = (id, key, val) => patch(id, (d) => {
+    const old = d.fields[key];
+    const hist = (key === 'value') ? [{ id: uid(), type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }]
+      : (key === 'expected_close_date') ? [{ id: uid(), type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }]
+      : [];
+    const fields = { ...d.fields, [key]: val };
+    // Maintain the person↔company link within the deal. When both a contact and a
+    // company are present, record the link so it carries to the global record layer
+    // at persistence. Changing the company updates where this contact "works".
+    let link = d.link || null;
+    if ((key === 'organization' || key === 'contact_person') && fields.contact_person && fields.organization) {
+      link = { person: fields.contact_person, org: fields.organization, ts: nowIso() };
+    }
+    return { ...d, fields, link, history: [...d.history, ...hist] };
+  });
 
   const createProject = (data) => {
     const id = nextId.current++;
-    const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: null, project_score: null };
-    ['site_location','site_postcode','region','size_m2','glenigan_id','estimator_responsible','project_type','systems_priced','lead_source','scope_of_works'].forEach((k) => { fields[k] = data[k] || null; });
-    const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, activities: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
+    const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
+    ['site_location','site_postcode','region','size_m2','credit_score','credit_limit','glenigan_id','estimator_responsible','project_stage','roofing_works_onsite','project_type','systems_priced','lead_source','scope_of_works','general_info','contact_phone','contact_email','contact_job_role','org_address','org_phone','org_website','org_email','org_reg_number','supply_chain_approved'].forEach((k) => { fields[k] = data[k] || null; });
+    const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
+    const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
     setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
   };
 
@@ -943,28 +958,85 @@ function AddProjectModal({ onClose, onCreate }) {
   const [org, setOrg] = useState('');
   const [contact, setContact] = useState('');
   const [stageId, setStageId] = useState('stage_project_in');
+  const [showNewOrg, setShowNewOrg] = useState(false);
+  const [showNewContact, setShowNewContact] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
-  // Field defs pulled from schema so dropdowns render correctly
   const schemaFor = (k) => DEFAULT_FIELD_SCHEMA.find((x) => x.key === k) || { key: k, type: 'text' };
   const systemsOpts = (schemaFor('systems_priced').options) || [];
-  const NPF = [['title','Project title', true],['value','Value (£)', false],['site_location','Site Location', false],['site_postcode','Postcode', false],['region','Region', false],['size_m2','Size: m2', false],['glenigan_id','Glenigan Project ID', false],['estimator_responsible','Estimator Responsible', false],['project_type','Project Type', false],['lead_source','Lead Source', false],['scope_of_works','Scope of Works', false]];
-  const create = () => { if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; } onCreate({ ...f, organization: org, contact_person: contact, stageId }); };
+
+  // Field groups (mirror the sidebar). Person/org detail fields live in their own sections.
+  const PROJECT_FIELDS = [['title','Project title', true],['value','Value (£)', false],['project_score','Project Score', false],['expected_close_date','Tender Return date', false]];
+  const DETAIL_KEYS = ['glenigan_id','site_location','region','size_m2','credit_score','credit_limit','project_stage','roofing_works_onsite','estimator_responsible','scope_of_works','general_info','project_type','lead_source'];
+  const CONTACT_KEYS = [['contact_phone','Phone'],['contact_email','Email'],['contact_job_role','Job Role']];
+  const ORG_KEYS = [['org_address','Address'],['org_phone','Phone'],['org_website','Website'],['org_email','Email'],['org_reg_number','Registration Number'],['supply_chain_approved','Supply Chain Approved?']];
+
   const renderInput = (k) => {
     const def = schemaFor(k);
     if (def.type === 'select') return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option>{(def.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+    if (def.type === 'yesno') return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option><option>Yes</option><option>No</option></select>;
+    if (def.type === 'date') return <input type="date" value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />;
+    if (def.type === 'multiselect') return <MultiSelect value={f[k] || ''} onChange={(v) => set(k, v)} options={def.options || []} placeholder="Select…" />;
     return <input type={def.type === 'number' || def.type === 'currency' ? 'number' : 'text'} value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />;
   };
+  const fieldCell = (k, lbl, req, full) => <div key={k} style={full ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label>{renderInput(k)}</div>;
+
+  const create = () => {
+    if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; }
+    onCreate({ ...f, organization: org, contact_person: contact, stageId });
+  };
+  const grpHdr = { fontSize: 13, fontWeight: 700, margin: '18px 0 8px', paddingBottom: 6, borderBottom: `1px solid ${C.line}` };
+
   return (
-    <div style={overlay}><div style={{ ...modal, maxWidth: 640 }}>
+    <div style={overlay}><div style={{ ...modal, maxWidth: 680 }}>
       <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Add new project</span><button onClick={onClose} style={xBtn}>✕</button></div>
-      <div style={{ padding: 20, overflowY: 'auto', maxHeight: '70vh' }}>
+      <div style={{ padding: 20, overflowY: 'auto', maxHeight: '75vh' }}>
+
+        {/* PROJECT */}
+        <div style={{ ...grpHdr, marginTop: 0 }}>Project</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer (organization)</label><TypeAhead value={org} onChange={setOrg} options={ORGS} placeholder="Type to search customers…" /></div>
-          <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer contact</label><TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" /></div>
+          {fieldCell('title','Project title', true, true)}
+          {fieldCell('value','Value (£)', false)}
           <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-          {NPF.map(([k, lbl, req]) => <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label>{renderInput(k)}</div>)}
+          {fieldCell('project_score','Project Score', false)}
+          {fieldCell('expected_close_date','Tender Return date', false)}
+        </div>
+
+        {/* DETAILS */}
+        <div style={grpHdr}>Details</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {DETAIL_KEYS.map((k) => fieldCell(k, schemaFor(k).label || k, false, k === 'scope_of_works' || k === 'general_info'))}
           <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Systems Priced</label><MultiSelect value={f.systems_priced || ''} onChange={(v) => set('systems_priced', v)} options={systemsOpts} placeholder="Select systems…" /></div>
         </div>
+
+        {/* CUSTOMER CONTACT */}
+        <div style={grpHdr}>Customer Contact</div>
+        <label style={fLbl}>Search existing contact</label>
+        <TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" />
+        <button onClick={() => setShowNewContact((v) => !v)} style={{ ...ghostBtn, marginTop: 8 }}>{showNewContact ? '− Cancel new contact' : '+ Add new customer contact'}</button>
+        {showNewContact && (
+          <div style={{ marginTop: 10, padding: 12, background: C.sideBox, borderRadius: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Full name</label><input value={contact} onChange={(e) => setContact(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} /></div>
+              {CONTACT_KEYS.map(([k, lbl]) => fieldCell(k, lbl, false))}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>This contact will be linked to the company below.</div>
+          </div>
+        )}
+
+        {/* ORGANIZATION */}
+        <div style={grpHdr}>Organization</div>
+        <label style={fLbl}>Search existing customer</label>
+        <TypeAhead value={org} onChange={setOrg} options={ORGS} placeholder="Type to search customers…" />
+        <button onClick={() => setShowNewOrg((v) => !v)} style={{ ...ghostBtn, marginTop: 8 }}>{showNewOrg ? '− Cancel new customer' : '+ Add new customer'}</button>
+        {showNewOrg && (
+          <div style={{ marginTop: 10, padding: 12, background: C.sideBox, borderRadius: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Company name</label><input value={org} onChange={(e) => setOrg(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} /></div>
+              {ORG_KEYS.map(([k, lbl]) => fieldCell(k, lbl, false, k === 'org_address'))}
+            </div>
+            <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>The contact above will be linked to this company.</div>
+          </div>
+        )}
       </div>
       <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button onClick={create} style={primaryBtn}>Create project</button></div>
     </div></div>
