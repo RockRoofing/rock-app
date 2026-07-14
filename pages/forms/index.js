@@ -168,7 +168,7 @@ export default function FormsHome() {
   )
 }
 
-// ── Home: choose Complete a Form or View Project Details ─────────────────────
+// ── Home: Complete a Form / Drawings / RAMS / Deliveries etc. ────────────────
 function FormsHomeMenu({ user }) {
   const router = useRouter()
   const [mode, setMode] = useState('menu')  // menu | forms | details
@@ -176,6 +176,20 @@ function FormsHomeMenu({ user }) {
   const [myProjectNos, setMyProjectNos] = useState(new Set())
   const [issueActionCount, setIssueActionCount] = useState(0)
   const [overdueTaskCount, setOverdueTaskCount] = useState(0)
+  const [ramsBadge, setRamsBadge] = useState(0)
+  const [deliveriesBadge, setDeliveriesBadge] = useState(0)
+  useEffect(() => {
+    if (!user?.id && !user?.name) return
+    (async () => {
+      try {
+        const pa = user?.projectAccess
+        const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
+        const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(user?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
+        setRamsBadge(b.rams || 0)
+        setDeliveriesBadge(b.deliveries || 0)
+      } catch {}
+    })()
+  }, [user])
   useEffect(() => {
     if (!user?.name) return
     (async () => {
@@ -213,7 +227,8 @@ function FormsHomeMenu({ user }) {
   // decides which projects are "theirs", but does not grant CM access.
   const isCM = user?.accessLevel === 'contracts-manager'
   if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
-  if (mode === 'details') return <ProjectDetailsView onBack={() => setMode('menu')} />
+  if (mode === 'drawings') return <ProjectDetailsView only="drawings" onBack={() => setMode('menu')} />
+  if (mode === 'rams') return <ProjectDetailsView only="rams" onBack={() => setMode('menu')} />
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h2 style={{ fontSize: 20, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
@@ -224,9 +239,15 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Complete a Form</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Site diaries, checklists, reports</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
-        <button onClick={() => setMode('details')} style={homeCard}>
+        <button onClick={() => setMode('drawings')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📁</div>
-          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>View Project Details</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings & RAMS for your project</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Drawings</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings for your project</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
+        <button onClick={() => setMode('rams')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>📑</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>RAMS</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Sign your project RAMS</div></div>
+          {ramsBadge > 0 && <span style={homeBadge('#dc2626')}>{ramsBadge}</span>}
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
         <button onClick={() => router.push('/forms/issue')} style={homeCard}>
@@ -237,6 +258,7 @@ function FormsHomeMenu({ user }) {
         <button onClick={() => router.push('/forms/deliveries')} style={homeCard}>
           <div style={{ fontSize: 30 }}>🚚</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Deliveries</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Confirm deliveries & attach proof</div></div>
+          {deliveriesBadge > 0 && <span style={homeBadge('#dc2626')}>{deliveriesBadge}</span>}
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
 
@@ -391,12 +413,13 @@ function PdfCanvas({ url }) {
   )
 }
 
-function ProjectDetailsView({ onBack }) {
+function ProjectDetailsView({ onBack, only }) {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [proj, setProj] = useState(null)
-  const [tab, setTab] = useState('drawings')
+  const [tab, setTab] = useState(only || 'drawings')
   const [files, setFiles] = useState([])
+  const [sigMap, setSigMap] = useState({})   // { [fileId]: true } if current operative signed
   const [filesLoading, setFilesLoading] = useState(false)
   const [viewerIdx, setViewerIdx] = useState(null)   // index into `files`, or null when closed
 
@@ -424,6 +447,19 @@ function ProjectDetailsView({ onBack }) {
         // revision, so keep just the most recent.
         if (tab === 'rams' && list.length > 1) list = [list[0]]
         setFiles(list)
+        // For RAMS, look up which of these the current operative has signed.
+        if (tab === 'rams' && list.length) {
+          try {
+            let u = null; try { u = JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch {}
+            const rs = await fetch(`/api/rams-signatures?no=${encodeURIComponent(proj.projectNo)}`).then(r => r.json())
+            const sigs = rs.signatures || {}
+            const mine = {}
+            for (const f of list) mine[f.id] = !!(u?.id && sigs[f.id] && sigs[f.id][u.id])
+            setSigMap(mine)
+          } catch { setSigMap({}) }
+        } else {
+          setSigMap({})
+        }
       } catch {}
       setFilesLoading(false)
     })()
@@ -435,11 +471,11 @@ function ProjectDetailsView({ onBack }) {
     return (
       <div style={{ maxWidth: 560, margin: '0 auto' }}>
         <button onClick={onBack} style={backLink}>‹ Back</button>
-        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 16px' }}>Select a project</h2>
+        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 16px' }}>{only === 'rams' ? 'RAMS — select a project' : only === 'drawings' ? 'Drawings — select a project' : 'Select a project'}</h2>
         {!projects.length ? <div style={{ color: '#999', fontSize: 14 }}>No live projects.</div> : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {projects.map(p => (
-              <button key={p.projectNo} onClick={() => { setProj(p); setTab('drawings') }} style={homeCard}>
+              <button key={p.projectNo} onClick={() => { setProj(p); setTab(only || 'drawings') }} style={homeCard}>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{p.projectNo}</div><div style={{ fontSize: 13, color: '#888' }}>{p.projectName}</div></div>
                 <div style={{ color: BRAND, fontSize: 22 }}>›</div>
               </button>
@@ -455,8 +491,8 @@ function ProjectDetailsView({ onBack }) {
       <button onClick={() => setProj(null)} style={backLink}>‹ All projects</button>
       <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 2px' }}>{proj.projectNo} — {proj.projectName}</h2>
       <div style={{ display: 'flex', gap: 8, margin: '14px 0' }}>
-        {[['drawings', 'Drawings'], ['rams', 'RAMS']].map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid ' + (tab === k ? BRAND : '#e3e0d9'), background: tab === k ? BRAND : '#fff', color: tab === k ? '#fff' : INK, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>{label}</button>
+        {(only ? [[only, only === 'drawings' ? 'Drawings' : 'RAMS']] : [['drawings', 'Drawings'], ['rams', 'RAMS']]).map(([k, label]) => (
+          <button key={k} onClick={() => !only && setTab(k)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid ' + (tab === k ? BRAND : '#e3e0d9'), background: tab === k ? BRAND : '#fff', color: tab === k ? '#fff' : INK, fontWeight: 600, fontSize: 14, cursor: only ? 'default' : 'pointer' }}>{label}</button>
         ))}
       </div>
       {filesLoading ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading…</div>
@@ -483,7 +519,11 @@ function ProjectDetailsView({ onBack }) {
             {files.map((f, i) => (
               <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div><div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>Current revision</div></div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div>
+                  {sigMap[f.id]
+                    ? <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2, fontWeight: 600 }}>✓ Signed</div>
+                    : <div style={{ fontSize: 12, color: '#dc2626', marginTop: 2, fontWeight: 700 }}>● Not signed</div>}
+                </div>
                 <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
                 <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
               </div>
@@ -577,6 +617,7 @@ async function downloadDrawing(f) {
 const pageNavBtn = { background: 'rgba(255,255,255,0.14)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }
 
 const homeCard = { display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: '18px', cursor: 'pointer', width: '100%' }
+const homeBadge = (colour) => ({ background: colour, color: '#fff', borderRadius: 20, minWidth: 24, height: 24, padding: '0 7px', fontSize: 13, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' })
 const backLink = { background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }
 
 // First-page PDF thumbnail for drawing tiles (pdf.js from CDN)

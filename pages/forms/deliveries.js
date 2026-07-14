@@ -63,6 +63,18 @@ export default function DeliveriesView() {
 
   const selProject = projects.find(p => p.key === projectNo)
 
+  // Per-project count of scheduled-but-not-delivered deliveries (for badges).
+  const scheduledByProject = useMemo(() => {
+    const m = {}
+    for (const d of deliveries) {
+      if (d.actualDeliveryDate) continue
+      const key = d.projectNo || d.projectName || ''
+      if (!key) continue
+      m[key] = (m[key] || 0) + 1
+    }
+    return m
+  }, [deliveries])
+
   if (!ready) return <Shell user={user}><div style={{ textAlign: 'center', color: '#999', paddingTop: 40 }}>Loading…</div></Shell>
 
   return (
@@ -86,6 +98,7 @@ export default function DeliveriesView() {
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{p.projectNo}{p.projectName && p.projectName !== p.projectNo ? ` — ${p.projectName}` : ''}</div>
                       </div>
+                      {scheduledByProject[p.key] > 0 && <span style={{ background: '#dc2626', color: '#fff', borderRadius: 20, minWidth: 24, height: 24, padding: '0 7px', fontSize: 13, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{scheduledByProject[p.key]}</span>}
                       <div style={{ color: BRAND, fontSize: 20 }}>›</div>
                     </button>
                   ))}
