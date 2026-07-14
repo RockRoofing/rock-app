@@ -1,70 +1,115 @@
-RAMS SIGNING — PHASE 2: Operative signing
-=========================================
+RAMS SIGNING — PHASE 3: Strict approval chain + Matrix PS/pipeline + Gantt gating
+=================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully (Xero warnings unrelated)
 
-WHAT THIS DOES
---------------
-Operatives can now SIGN a RAMS in the Site App (siteapp.rockroofing.co.uk).
+THE CHAIN (strict, sequential — no stage until the previous is signed)
+----------------------------------------------------------------------
+  CM (Site App) -> Director/Carl (Portal) -> Customer Site Manager (email) -> Operatives
+- CM and Director APPROVE (safe method / risk-assessed) AND auto-sign onto the
+  RAMS with the same statement operatives use (they appear in signatures/matrix).
+- Operatives' "Sign RAMS now" (Phase 2) is now LOCKED until the chain reaches
+  them; it shows which stage it's waiting on.
 
-In the RAMS folder, each unsigned RAMS shows a red "● Not signed" status and a
-red "✍ Sign RAMS now" button. Tapping it opens a full-screen flow:
+WHAT EACH PERSON SEES
+---------------------
+• CM (Site App → RAMS): each RAMS shows the pipeline line and, at the CM stage,
+  an "Approve as Contracts Manager" button (read-to-bottom → sign). After the
+  Director approves, the CM gets "Send to Site Manager for approval" — a picker
+  that pulls candidates from the project's Site Contacts (any contact whose role
+  contains "manager" is pre-selected), and allows changing or manually entering
+  a name + email. Sends a tokenised email with the RAMS attached.
+• Director/Carl (Portal → Operations → H&S → RAMS Approvals): NEW page listing
+  every RAMS awaiting Director approval. Review (read-to-bottom) → approve & sign.
+  Identified by email DIRECTOR_EMAIL (default carl@rockroofing.co.uk); admins may
+  also approve (fallback). Set DIRECTOR_EMAIL in Vercel env to Carl's exact email.
+• Customer Site Manager: receives the email, clicks the unique link to a no-login
+  page (/rams-approve?token=...) showing the RAMS + an Approve button. They enter
+  their name (pre-filled if known); date auto-fills. On approval, operatives unlock.
 
-  1. READ — the RAMS PDF renders on screen (pdf.js canvas, mobile-safe). The
-     "continue" button stays disabled until the operative scrolls to the BOTTOM
-     of the document ("↓ Keep scrolling" turns into "✓ You've reached the end").
-     Short docs that don't scroll are auto-counted as read.
-  2. CONFIRM & SIGN — the exact RAMS statement is shown; Name (logged-in
-     operative) and Date are auto-filled; a finger/mouse SIGNATURE PAD lets them
-     draw their signature (Clear to redo).
-  3. "Sign & confirm" saves the signature. The row flips to green "✓ Signed"
-     immediately, and the home RAMS badge decrements when they return home.
+RAMS MATRIX (Portal → H&S → RAMS Matrix) — now DERIVED from real data
+--------------------------------------------------------------------
+• Cells: "Yes" (green) = signed all current RAMS; "PS" (orange) = chain has
+  reached operatives and this person hasn't signed; blank = not yet / no RAMS.
+• KEY added at the top (Yes – Signed RAMS · PS – Pending Signature).
+• Under each project name: the pipeline CM › Director › Site Manager › Operatives.
+  Current stage = red+bold; completed = green; all signed = whole line green.
+• Cells are now read-only (auto from signatures); the old manual toggle is retired
+  (its store is kept but unused). Matching is by operative NAME (roster name vs
+  signed name) — keep roster names consistent with Site App user names.
 
-The statement signed (stored with each signature):
-  "I confirm I have read, fully understood and will work to this and any other
-   documents relating to this method statement. If at any point I feel it is
-   unsafe to continue I will stop works and contact my supervisor. Any
-   amendments to this method statement must be made by the person who originally
-   completed it. It must then be communicated to the relevant persons."
+GANTT (Planning) — "Installer(s) not on RAMS" warning
+-----------------------------------------------------
+Now treats ONLY "Yes" (fully signed all current RAMS) as signed. "PS" (pending)
+STILL triggers the warning, per spec.
 
-VERSION RESET (built-in, no extra logic)
-----------------------------------------
-Signatures are keyed by the RAMS file id. Uploading a new RAMS to the project
-mints a new file id (via /api/project-files), so the new version shows as
-"Not signed" for everyone and the badge/notification reappears automatically.
-No separate version-detection needed.
+VERSION RESET (unchanged from Phase 2, applies here too)
+--------------------------------------------------------
+New RAMS upload = new file id = fresh approval chain (starts at CM) + no
+signatures. Matrix/pipeline/badges all reset automatically.
 
-DATA
-----
-Each signature stored at ops:rams-signatures:<projectNo>[fileId][opId] =
-  { name, date, signedAt, statement, signatureImg }
-signatureImg is a PNG data-URL of the drawn signature — Phase 5 uses this to
-build the portal signature page appended to each RAMS.
+DATA MODEL
+----------
+• ops:rams-approvals:<projectNo>[fileId] =
+    { stage, cm, director, siteManager, siteManagerEmail, siteManagerName,
+      token, startedAt, updatedAt }
+    stage ∈ 'cm'|'director'|'site-manager'|'operatives'|'complete'
+    cm/director records include a signatureImg (they auto-sign).
+• ops:rams-token:<token> = { projectNo, fileId }  (Site Manager link lookup)
+
+SECURITY
+--------
+• Site Manager link uses a 24-byte random token (unguessable, one per recipient;
+  re-issued if the CM changes recipient — old link dies).
+• director-approve requires a portal session AND email == DIRECTOR_EMAIL (or admin).
+• sm-approve requires a valid token. cm-approve is trusted from the Site App
+  (consistent with the rest of the Site App, which has no server session).
+
+ENV VARS
+--------
+• DIRECTOR_EMAIL  (optional) — Carl's portal email. Default carl@rockroofing.co.uk.
+• Uses existing RESEND_API_KEY + FORMS_FROM_EMAIL for the Site Manager email.
 
 FILES CHANGED
 -------------
-• pages/forms/index.js          — "Sign RAMS now" button + RamsSignFlow
-                                  (read-to-bottom reader) + SignaturePad
-                                  (finger signature); home badge refetches on
-                                  return to menu so it updates after signing.
-• pages/api/rams-signatures.js  — POST handler to record a signature
-                                  (2mb body limit for the signature PNG).
+• lib/db.js                                    — approvals + token helpers
+• middleware.js                                — Site App passthrough += rams-approvals;
+                                                 portal OPEN += /rams-approve,
+                                                 /api/rams-token, /api/rams-approvals,
+                                                 /api/download (for the no-login page)
+• pages/api/rams-approvals.js                  — NEW: the chain (cm/director/set-SM/sm-approve
+                                                 + pending=director listing)
+• pages/api/rams-token.js                      — NEW: public token lookup
+• pages/api/rams-matrix.js                     — rewritten: derived Yes/PS + stage
+• pages/rams-approve.js                        — NEW: no-login Site Manager page
+• pages/forms/index.js                         — Site App: pipeline line, CM approve,
+                                                 Site Manager picker, locked operative sign
+• pages/operations/hs/rams-approvals.js        — NEW: Director's Portal approval page
+• pages/operations/hs/rams-matrix.js           — key + PS cells + pipeline under name
+• pages/operations/project-management/planning.js — gantt "Yes-only" RAMS gating
+• components/OperationsNav.js                  — "RAMS Approvals" tab under H&S
 
-No middleware change needed (both /api/rams-signatures and /api/download are
-already in the Site App passthrough). No cron changes.
+IMPORTANT — MIDDLEWARE
+----------------------
+This replaces the Phase 1/2 middleware.js (it adds the new passthrough/open
+entries on top). Deploy this version.
 
-TEST
-----
-1. Upload a RAMS to a project (Portal) if none exists.
-2. Site App → RAMS → pick the project → "Sign RAMS now".
-3. Try to continue without scrolling (blocked) → scroll to end → continue.
-4. Draw a signature → Sign & confirm → row shows "✓ Signed".
-5. Back to home → RAMS badge count has dropped by 1.
-6. (Version reset) Upload a new RAMS to that project → it shows "Not signed"
-   again and the badge returns.
+TEST (end to end)
+-----------------
+1. Upload a RAMS to a project (new file id → chain starts at CM).
+2. Site App as a CM on that project → RAMS → "Approve as Contracts Manager"
+   (read to bottom, sign). Pipeline shows Director in red.
+3. Portal as Carl → Operations → H&S → RAMS Approvals → Review & approve.
+   Pipeline shows Site Manager in red.
+4. Back in Site App as CM → "Send to Site Manager" (pick/confirm email) → send.
+5. Open the emailed link → approve as Site Manager. Operatives now unlock.
+6. Site App as an operative → RAMS → "Sign RAMS now" works.
+7. Portal → RAMS Matrix: PS (orange) before signing, Yes (green) after; pipeline
+   under the project name goes green when all signed.
+8. Gantt: allocate an unsigned installer → "Installer(s) not on RAMS" shows for
+   PS; clears only once they're "Yes".
 
-NEXT (Phase 3)
+NEXT (Phase 4)
 --------------
-Strict approval chain (CM in Site App → Director Carl in Portal → Site Manager
-via tokenised email → operatives), RAMS Matrix PS (orange) state + stage
-pipeline line, and gantt "Yes-only" gating.
+Email notifications (allocation, new-project access, RAMS-to-sign) + 2-day
+reminders folded into a single daily "master" cron (Hobby 2-cron limit).

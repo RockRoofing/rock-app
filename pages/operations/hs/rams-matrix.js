@@ -40,26 +40,43 @@ export default function RamsMatrixPage() {
 
   const shownProjects = useMemo(() => projects.filter(p => !filters.project || p.key === filters.project), [projects, filters])
 
-  async function toggle(projectKey, opId) {
-    const cur = !!(signoffs[projectKey] && signoffs[projectKey][opId])
-    // optimistic
-    setSignoffs(prev => {
-      const n = { ...prev, [projectKey]: { ...(prev[projectKey] || {}) } }
-      if (cur) delete n[projectKey][opId]; else n[projectKey][opId] = true
-      return n
-    })
-    await fetch('/api/rams-matrix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'toggle', projectKey, opId, signed: !cur }) }).catch(() => {})
-  }
-
   if (loading) return (
     <OperationsShell active="hs:rams-matrix" section="hs" title="RAMS Matrix" wide><PageHeading title="RAMS Matrix" /><Loading /></OperationsShell>
   )
 
   const opName = (o) => `${o.firstName} ${o.lastName}`
 
+  // Approval-stage pipeline shown under each project name.
+  const STAGE_ORDER = ['cm', 'director', 'site-manager', 'operatives']
+  const StageLine = ({ stage }) => {
+    const labels = [['cm', 'CM'], ['director', 'Director'], ['site-manager', 'Site Manager'], ['operatives', 'Operatives']]
+    const complete = stage === 'complete' || stage === 'operatives-done'
+    const curIdx = complete ? labels.length : STAGE_ORDER.indexOf(stage)
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 2, fontSize: 10 }}>
+        {labels.map(([k, label], i) => {
+          const done = complete || i < curIdx, current = !complete && i === curIdx
+          const colour = done ? '#16a34a' : current ? '#dc2626' : '#bbb'
+          return (
+            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              <span style={{ color: colour, fontWeight: current ? 800 : 500 }}>{label}</span>
+              {i < labels.length - 1 && <span style={{ color: '#ccc' }}>›</span>}
+            </span>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <OperationsShell active="hs:rams-matrix" section="hs" title="RAMS Matrix" wide>
       <PageHeading title="RAMS Matrix" sub="Which installers have signed onto each project's RAMS. Projects down the side, installers across the top." />
+
+      {/* Key */}
+      <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginBottom: 12, fontSize: 12.5 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 18, height: 18, borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 700, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>Yes</span> Signed RAMS</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 18, height: 18, borderRadius: 4, background: '#fed7aa', color: '#9a3412', fontWeight: 700, fontSize: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>PS</span> Pending Signature</span>
+      </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', marginBottom: 12 }}>
         <div><div style={lbl}>Project</div>
@@ -109,15 +126,28 @@ export default function RamsMatrixPage() {
               {/* rows */}
               {shownProjects.map((p, ri) => {
                 const rowBg = ri % 2 === 1 ? ROW_ALT : '#fff'
+                // Chain has reached operatives → everyone not-yet-signed shows PS.
+                const opsReached = p.stage === 'operatives' || p.stage === 'complete'
+                const signerSet = new Set(p.signerKeys || [])
+                const allSigned = opsReached && shownOps.length > 0 && shownOps.every(o => signerSet.has(opName(o).trim().toLowerCase()))
                 return (
                 <div key={p.key} style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch', background: rowBg }}>
-                  <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '1px solid #f0f0f0', padding: '6px 8px', fontSize: 12, fontWeight: 600, color: INK, display: 'flex', alignItems: 'center' }}>{p.name}</div>
+                  <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '1px solid #f0f0f0', padding: '6px 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: INK }}>{p.name}</div>
+                    {p.hasRams
+                      ? <StageLine stage={allSigned ? 'complete' : p.stage} />
+                      : <div style={{ fontSize: 10, color: '#bbb', marginTop: 2 }}>No RAMS uploaded</div>}
+                  </div>
                   {shownOps.map(o => {
-                    const signed = !!(signoffs[p.key] && signoffs[p.key][o.id])
+                    const key = opName(o).trim().toLowerCase()
+                    const signed = signerSet.has(key)
+                    const state = signed ? 'yes' : (opsReached ? 'ps' : '')
+                    const bg = state === 'yes' ? '#dcfce7' : state === 'ps' ? '#fed7aa' : 'transparent'
+                    const fg = state === 'yes' ? '#166534' : state === 'ps' ? '#9a3412' : '#ddd'
                     return (
-                      <div key={o.id} onClick={() => toggle(p.key, o.id)} title={`${p.name} — ${opName(o)}`}
-                        style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '1px solid #f5f5f5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: signed ? '#dcfce7' : 'transparent', fontSize: 12, fontWeight: 700, color: signed ? '#166534' : '#ddd' }}>
-                        {signed ? 'Yes' : ''}
+                      <div key={o.id} title={`${p.name} — ${opName(o)}`}
+                        style={{ width: CELL_W, minWidth: CELL_W, borderLeft: '1px solid #f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', background: bg, fontSize: 11, fontWeight: 700, color: fg }}>
+                        {state === 'yes' ? 'Yes' : state === 'ps' ? 'PS' : ''}
                       </div>
                     )
                   })}
@@ -129,7 +159,7 @@ export default function RamsMatrixPage() {
           </div>
         </div>
       )}
-      <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>Click a cell to toggle whether that installer has signed onto the project's RAMS. Projects and installers populate automatically.</div>
+      <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>Cells update automatically as operatives sign in the Site App. <strong>Yes</strong> = signed all current RAMS; <strong>PS</strong> = RAMS approved through to operatives and awaiting their signature. The line under each project shows the approval stage (current stage in red, completed stages in green).</div>
     </OperationsShell>
   )
 }

@@ -73,9 +73,25 @@ export default function PlanningPage() {
         fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
       ])
       setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
-      setOps(opr.operatives || [])
+      const operatives = opr.operatives || []
+      setOps(operatives)
       setComp(cmp.competency || {})
-      setRams(rm.signoffs || {})
+      // Build "Yes-signed" map: { projectKey: { opId: true } }. Only operatives who
+      // have signed ALL current RAMS (matrix "Yes") count. "PS" (pending) is NOT
+      // included, so it still triggers the gantt "not on RAMS" warning.
+      const signedMap = {}
+      for (const proj of (rm.projects || [])) {
+        const keys = new Set((proj.signerKeys || []))
+        const opsReached = proj.stage === 'operatives' || proj.stage === 'complete'
+        if (!opsReached) { signedMap[proj.key] = {}; continue }
+        const m = {}
+        for (const o of operatives) {
+          const nk = `${o.firstName} ${o.lastName}`.trim().toLowerCase()
+          if (keys.has(nk)) m[o.id] = true
+        }
+        signedMap[proj.key] = m
+      }
+      setRams(signedMap)
     } catch {}
     setLoading(false)
   }
@@ -450,7 +466,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
     if (cd.entries && cd.entries.length > 0) projectHasNamedLabour = true
     if (cd.entries && cd.entries.some(e => comp && comp[e.opId] && comp[e.opId].isSupervisor)) ganttHasSupervisor = true
     // RAMS check on current/future allocations only (past work already happened).
-    if (cd.entries && dk >= todayKey && cd.entries.some(e => e.opId && !rams[e.opId])) anyNotOnRams = true
+    if (cd.entries && dk >= todayKey && cd.entries.some(e => e.opId && !(rams[p.key] && rams[p.key][e.opId]))) anyNotOnRams = true
     const notActual = cd.count > 0 && cd.status !== 'actual'
     if (notActual && dk < todayKey && inRange(dk, thisWeekStart, thisWeekEnd)) unconfirmedThisWeek = true
     if (notActual && (inRange(dk, prevWeekStart, prevWeekEnd) || inRange(dk, prev2WeekStart, prev2WeekEnd))) unconfirmedPriorWeeks = true

@@ -31,6 +31,7 @@ export const NAV = [
     key: 'hs', label: 'H&S', href: '/operations/hs/rams-matrix',
     children: [
       { key: 'hs:rams-builder', label: 'RAMS Builder', href: '/operations/hs/rams-builder' },
+      { key: 'hs:rams-approvals', label: 'RAMS Approvals', href: '/operations/hs/rams-approvals' },
       { key: 'hs:rams-matrix', label: 'RAMS Matrix', href: '/operations/hs/rams-matrix' },
       { key: 'hs:hs-matrix', label: 'H&S Matrix', href: '/operations/hs/hs-matrix' },
       { key: 'hs:operatives', label: 'Operatives', href: '/operations/hs/operatives' },

@@ -421,13 +421,26 @@ function ProjectDetailsView({ onBack, only }) {
   const [tab, setTab] = useState(only || 'drawings')
   const [files, setFiles] = useState([])
   const [sigMap, setSigMap] = useState({})   // { [fileId]: true } if current operative signed
+  const [apprMap, setApprMap] = useState({}) // { [fileId]: approvalRecord }
   const [filesLoading, setFilesLoading] = useState(false)
   const [viewerIdx, setViewerIdx] = useState(null)   // index into `files`, or null when closed
   const [signFile, setSignFile] = useState(null)     // RAMS file currently being signed
+  const [approveFile, setApproveFile] = useState(null) // RAMS file the CM is approving
+  const [smFile, setSmFile] = useState(null)           // RAMS file: CM setting Site Manager recipient
+
+  const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
+  const isCM = user?.accessLevel === 'contracts-manager'
 
   // Called after a successful signature: flip the row to signed without a full reload.
   function markSigned(fileId) {
     setSigMap(m => ({ ...m, [fileId]: true }))
+  }
+  // Refresh a single file's approval record after CM approve.
+  async function refreshApprovals() {
+    try {
+      const ra = await fetch(`/api/rams-approvals?no=${encodeURIComponent(proj.projectNo)}`).then(r => r.json())
+      setApprMap(ra.approvals || {})
+    } catch {}
   }
 
   useEffect(() => { (async () => {
@@ -454,18 +467,24 @@ function ProjectDetailsView({ onBack, only }) {
         // revision, so keep just the most recent.
         if (tab === 'rams' && list.length > 1) list = [list[0]]
         setFiles(list)
-        // For RAMS, look up which of these the current operative has signed.
+        // For RAMS, look up which of these the current operative has signed,
+        // plus the approval-chain stage for each document.
         if (tab === 'rams' && list.length) {
           try {
             let u = null; try { u = JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch {}
-            const rs = await fetch(`/api/rams-signatures?no=${encodeURIComponent(proj.projectNo)}`).then(r => r.json())
+            const [rs, ra] = await Promise.all([
+              fetch(`/api/rams-signatures?no=${encodeURIComponent(proj.projectNo)}`).then(r => r.json()),
+              fetch(`/api/rams-approvals?no=${encodeURIComponent(proj.projectNo)}`).then(r => r.json()),
+            ])
             const sigs = rs.signatures || {}
+            const appr = ra.approvals || {}
             const mine = {}
             for (const f of list) mine[f.id] = !!(u?.id && sigs[f.id] && sigs[f.id][u.id])
             setSigMap(mine)
-          } catch { setSigMap({}) }
+            setApprMap(appr)
+          } catch { setSigMap({}); setApprMap({}) }
         } else {
-          setSigMap({})
+          setSigMap({}); setApprMap({})
         }
       } catch {}
       setFilesLoading(false)
@@ -523,7 +542,11 @@ function ProjectDetailsView({ onBack, only }) {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {files.map((f, i) => (
+            {files.map((f, i) => {
+              const appr = apprMap[f.id] || { stage: 'cm' }
+              const stage = appr.stage || 'cm'
+              const opsUnlocked = stage === 'operatives' || stage === 'complete'
+              return (
               <div key={f.id} style={{ background: '#fff', border: '1px solid ' + (sigMap[f.id] ? '#e3e0d9' : '#fecaca'), borderRadius: 14, padding: '14px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
@@ -535,17 +558,73 @@ function ProjectDetailsView({ onBack, only }) {
                   <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
                   <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
                 </div>
-                {!sigMap[f.id] && (
-                  <button onClick={() => setSignFile(f)} style={{ ...bigBtn(false), marginTop: 12, background: '#dc2626' }}>
-                    ✍ Sign RAMS now
+
+                {/* Approval pipeline line */}
+                <StagePipeline stage={stage} />
+
+                {/* CM approve (Site App) — only when this CM is at the CM stage */}
+                {isCM && stage === 'cm' && (
+                  <button onClick={() => setApproveFile(f)} style={{ ...bigBtn(false), marginTop: 10, background: '#ca8a04' }}>
+                    ✓ Approve as Contracts Manager
                   </button>
                 )}
+
+                {/* Awaiting Director (shown to CM once they've approved) */}
+                {isCM && stage === 'director' && (
+                  <div style={{ marginTop: 10, background: '#f7f6f3', border: '1px solid #e3e0d9', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#777', textAlign: 'center' }}>
+                    ⏳ Awaiting Director approval (Portal)
+                  </div>
+                )}
+
+                {/* CM sets the Site Manager recipient once the Director has approved */}
+                {isCM && stage === 'site-manager' && (
+                  <div style={{ marginTop: 10 }}>
+                    {appr.siteManagerEmail
+                      ? <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#1e40af' }}>
+                          ✉ Sent to Site Manager: <strong>{appr.siteManagerEmail}</strong> — awaiting their approval.
+                          <button onClick={() => setSmFile(f)} style={{ background: 'none', border: 'none', color: BRAND, fontWeight: 600, cursor: 'pointer', marginLeft: 6, fontSize: 13 }}>Resend / change</button>
+                        </div>
+                      : <button onClick={() => setSmFile(f)} style={{ ...bigBtn(false), background: '#ca8a04' }}>✉ Send to Site Manager for approval</button>}
+                  </div>
+                )}
+
+                {/* Operative signing — locked until the chain reaches operatives */}
+                {!sigMap[f.id] && (
+                  opsUnlocked ? (
+                    <button onClick={() => setSignFile(f)} style={{ ...bigBtn(false), marginTop: 10, background: '#dc2626' }}>
+                      ✍ Sign RAMS now
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: 10, background: '#f7f6f3', border: '1px solid #e3e0d9', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#777', textAlign: 'center' }}>
+                      🔒 Awaiting {stageLabel(stage)} approval before operatives can sign
+                    </div>
+                  )
+                )}
               </div>
-            ))}
+            )})}
           </div>
         )}
       {viewerIdx != null && files[viewerIdx] && (
         <FileViewer files={files} index={viewerIdx} onIndex={setViewerIdx} onClose={() => setViewerIdx(null)} />
+      )}
+      {approveFile && (
+        <RamsSignFlow
+          file={approveFile}
+          projectNo={proj.projectNo}
+          mode="cm"
+          onClose={() => setApproveFile(null)}
+          onSigned={() => { setApproveFile(null); refreshApprovals() }}
+        />
+      )}
+      {smFile && (
+        <SiteManagerPicker
+          file={smFile}
+          projectNo={proj.projectNo}
+          existingEmail={(apprMap[smFile.id] || {}).siteManagerEmail || ''}
+          existingName={(apprMap[smFile.id] || {}).siteManagerName || ''}
+          onClose={() => setSmFile(null)}
+          onSent={() => { setSmFile(null); refreshApprovals() }}
+        />
       )}
       {signFile && (
         <RamsSignFlow
@@ -563,7 +642,33 @@ function ProjectDetailsView({ onBack, only }) {
 // The statement operatives sign up to (mirrored server-side in the API).
 const RAMS_STATEMENT = 'I confirm I have read, fully understood and will work to this and any other documents relating to this method statement. If at any point I feel it is unsafe to continue I will stop works and contact my supervisor. Any amendments to this method statement must be made by the person who originally completed it. It must then be communicated to the relevant persons.'
 
-function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
+// Approval-chain stage helpers.
+const STAGE_ORDER = ['cm', 'director', 'site-manager', 'operatives']
+function stageLabel(stage) {
+  return ({ cm: 'Contracts Manager', director: 'Director', 'site-manager': 'Site Manager', operatives: 'Operatives', complete: 'complete' })[stage] || stage
+}
+// Pipeline line: CM › Director › Site Manager › Operatives.
+// Completed stages green; current stage red+bold; upcoming grey.
+function StagePipeline({ stage }) {
+  const labels = [['cm', 'CM'], ['director', 'Director'], ['site-manager', 'Site Manager'], ['operatives', 'Operatives']]
+  const curIdx = stage === 'complete' ? labels.length : STAGE_ORDER.indexOf(stage)
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 8, fontSize: 12 }}>
+      {labels.map(([k, label], i) => {
+        const done = i < curIdx, current = i === curIdx && stage !== 'complete'
+        const colour = done ? '#16a34a' : current ? '#dc2626' : '#bbb'
+        return (
+          <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: colour, fontWeight: current ? 800 : 600 }}>{done ? '✓ ' : ''}{label}</span>
+            {i < labels.length - 1 && <span style={{ color: '#ccc' }}>›</span>}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }) {
   const [step, setStep] = useState('read')        // read | sign
   const [reachedBottom, setReachedBottom] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -571,6 +676,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
   const [sigData, setSigData] = useState('')      // signature PNG data-URL
   const holderRef = useRef()
   const scrollRef = useRef()
+  const isCMmode = mode === 'cm'
 
   // Logged-in operative (name + id auto-filled).
   const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
@@ -639,14 +745,22 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
     if (!user?.id) { setErr('Could not identify your account — please log in again.'); return }
     setSaving(true)
     try {
-      const r = await fetch('/api/rams-signatures', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectNo, fileId: file.id, opId: user.id, name: user.name || '', signatureImg: sigData, statement: RAMS_STATEMENT }),
-      })
+      let r
+      if (isCMmode) {
+        r = await fetch('/api/rams-approvals', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'cm-approve', projectNo, fileId: file.id, name: user.name || '', signatureImg: sigData }),
+        })
+      } else {
+        r = await fetch('/api/rams-signatures', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectNo, fileId: file.id, opId: user.id, name: user.name || '', signatureImg: sigData, statement: RAMS_STATEMENT }),
+        })
+      }
       let d = {}; try { d = await r.json() } catch {}
-      if (!r.ok || !d.ok) { setErr(d.error || 'Could not save your signature.'); setSaving(false); return }
+      if (!r.ok || !d.ok) { setErr(d.error || 'Could not save.'); setSaving(false); return }
       onSigned(file.id)
-    } catch (e) { setErr(e?.message || 'Could not save your signature.'); setSaving(false) }
+    } catch (e) { setErr(e?.message || 'Could not save.'); setSaving(false) }
   }
 
   const overlay = (
@@ -654,7 +768,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
       {/* Header */}
       <div style={{ background: INK, height: 52, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0 }}>
         <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {step === 'read' ? 'Read the RAMS' : 'Sign the RAMS'}
+          {step === 'read' ? 'Read the RAMS' : (isCMmode ? 'Approve & sign the RAMS' : 'Sign the RAMS')}
         </div>
         <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
       </div>
@@ -681,6 +795,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ maxWidth: 560, margin: '0 auto' }}>
             <div style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+              {isCMmode && <div style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>By approving, you confirm this is a safe method of work and has been properly risk-assessed. You also sign onto the RAMS with the statement below.</div>}
               <div style={{ fontSize: 13, color: '#444', lineHeight: 1.5 }}>{RAMS_STATEMENT}</div>
             </div>
 
@@ -702,7 +817,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>‹ Back to document</button>
-              <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : 'Sign & confirm'}</button>
+              <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : (isCMmode ? 'Approve & sign' : 'Sign & confirm')}</button>
             </div>
           </div>
         </div>
@@ -768,6 +883,88 @@ function SignaturePad({ onChange }) {
       </div>
     </div>
   )
+}
+
+// CM picks/confirms the Site Manager recipient and sends the tokenised email.
+function SiteManagerPicker({ file, projectNo, existingEmail, existingName, onClose, onSent }) {
+  const [contacts, setContacts] = useState([])
+  const [email, setEmail] = useState(existingEmail || '')
+  const [name, setName] = useState(existingName || '')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const d = await fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
+        const sc = d?.project?.data?.siteContacts || d?.project?.siteContacts || []
+        setContacts(Array.isArray(sc) ? sc : [])
+        // Pre-select a contact whose role/title mentions "manager" if none chosen yet.
+        if (!existingEmail) {
+          const mgr = (sc || []).find(c => /manager/i.test(c.title || '') && c.email)
+          if (mgr) { setEmail(mgr.email); setName(mgr.name || '') }
+        }
+      } catch {}
+      setLoading(false)
+    })()
+  }, [projectNo])
+
+  async function send() {
+    setErr('')
+    if (!email.trim() || !/.+@.+\..+/.test(email)) { setErr('Please enter a valid email address.'); return }
+    setBusy(true)
+    try {
+      const r = await fetch('/api/rams-approvals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-site-manager', projectNo, fileId: file.id, email: email.trim(), name: name.trim() }),
+      })
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok || !d.ok) { setErr(d.error || 'Could not send.'); setBusy(false); return }
+      onSent()
+    } catch (e) { setErr(e?.message || 'Could not send.'); setBusy(false) }
+  }
+
+  const overlay = (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3600, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Send RAMS to Site Manager</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#777', margin: '0 0 14px' }}>They'll get an email with the RAMS attached and a one-click approval link — no login needed.</p>
+
+        {loading ? <div style={{ color: '#aaa', textAlign: 'center', padding: 16 }}>Loading contacts…</div> : (
+          <>
+            {contacts.filter(c => c.email).length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 6 }}>From the project's Site Contacts</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {contacts.filter(c => c.email).map((c, i) => (
+                    <button key={i} onClick={() => { setEmail(c.email); setName(c.name || '') }}
+                      style={{ textAlign: 'left', border: '1px solid ' + (email === c.email ? BRAND : '#e3e0d9'), background: email === c.email ? '#fffbeb' : '#fff', borderRadius: 12, padding: '10px 12px', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: INK }}>{c.name || c.email}{c.title ? <span style={{ color: '#888', fontWeight: 400 }}> · {c.title}</span> : ''}</div>
+                      <div style={{ fontSize: 12, color: '#888' }}>{c.email}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Recipient name (optional)</div>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Site Manager name"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, marginBottom: 10, outline: 'none' }} />
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Recipient email</div>
+            <input value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" inputMode="email"
+              style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+            {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 10 }}>{err}</div>}
+            <button onClick={send} disabled={busy} style={{ ...bigBtn(busy), marginTop: 16 }}>{busy ? 'Sending…' : '✉ Send for approval'}</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+  if (typeof document === 'undefined') return null
+  return createPortal(overlay, document.body)
 }
 
 // ── Full-screen in-app file viewer with prev/next (buttons, arrow keys, swipe) ──

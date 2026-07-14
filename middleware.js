@@ -38,6 +38,7 @@ export async function middleware(req) {
       pathname.startsWith('/api/project-files') ||
       pathname.startsWith('/api/site-badges') ||
       pathname.startsWith('/api/rams-signatures') ||
+      pathname.startsWith('/api/rams-approvals') ||
       pathname.startsWith('/api/upload-file') ||
       pathname.startsWith('/api/team') ||
       pathname.startsWith('/api/upload-photo') ||
@@ -70,6 +71,10 @@ export async function middleware(req) {
     pathname === '/rock-logo.jpg' ||
     pathname === '/login' ||
     pathname.startsWith('/go/') ||
+    pathname === '/rams-approve' ||
+    pathname === '/api/rams-token' ||
+    pathname === '/api/rams-approvals' ||
+    pathname === '/api/download' ||
     pathname === '/api/portal-auth' ||
     pathname.startsWith('/xero-callback') ||
     pathname.startsWith('/api/xero')
