@@ -106,17 +106,12 @@ export default function ProjectConcerns({ projectNo, projectName }) {
 
   function openNew() {
     const m = emptyMeeting(projectNo, projectName)
-    // Carry over OPEN action tasks from the most recent previous meeting. Closed
-    // tasks are not carried (they show once on the meeting where they were closed,
-    // then drop off future meetings). The gantt/Live Tasks stay the source of truth
-    // for each task's open/closed state.
+    // Carry the previous meeting's action tasks (ANY status — done or not) into the
+    // new meeting, but ONLY if that meeting had "Do we require another meeting? = yes".
+    // If the previous meeting was marked "no", its actions are not carried forward.
     const latest = meetings[0]
-    if (latest && Array.isArray(latest.actionTaskIds) && latest.actionTaskIds.length) {
-      const openIds = latest.actionTaskIds.filter(id => {
-        const t = allTasks.find(x => x.id === id)
-        return t && !t.closed
-      })
-      if (openIds.length) m.actionTaskIds = openIds
+    if (latest && latest.anotherMeeting === 'yes' && Array.isArray(latest.actionTaskIds) && latest.actionTaskIds.length) {
+      m.actionTaskIds = [...latest.actionTaskIds]
     }
     setOpen(m)
   }

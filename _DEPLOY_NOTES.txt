@@ -1,17 +1,10 @@
-MEETING ACTIONS CARRY-OVER + remove Forms-Missing "v2" marker
+PROJECT CONCERNS — meeting actions carry-over rule corrected
 
-1) components/ProjectConcerns.js — Meeting Actions carry over between Project Concerns
-   - When you start a NEW Project Concern meeting, it now pre-populates the action list with the OPEN action
-     tasks from the most recent previous meeting for that project.
-   - CLOSED tasks are NOT carried forward — they remain visible on the meeting where they were actioned, but
-     drop off future meetings (exactly as specified).
-   - Live Tasks remain the source of truth for each task's open/closed state (carry-over reads the live
-     'closed' flag), so a task closed on the Live Tasks page won't carry into the next meeting.
+components/ProjectConcerns.js
+  - When starting a NEW Project Concern meeting, ALL of the previous meeting's action tasks (any status —
+    done or not) are carried into the new meeting's actions list — BUT ONLY IF the previous meeting had
+    "Do we require another meeting? = yes".
+  - If the previous meeting was marked "no", its actions are NOT carried into the next Project Concern.
+  - (Replaces the earlier open/closed-based rule.)
 
-2) pages/operations/forms-missing.js — removed the temporary "· v2" marker from the page title (back to
-   "Forms — Missing"). The date filter + Water Ingress fixes remain.
-
-Deploy both files. No cron/env change.
-
-REMAINING (last item from the Ops App doc): automated weekly labour email to accounts (needs a cron
-decision — you're at the 2-cron Hobby limit).
+Deploy this file. No cron/env change.
