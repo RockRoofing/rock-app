@@ -11,7 +11,6 @@ export default function CmSrats() {
   const [user, setUser] = useState(null); const [ready, setReady] = useState(false)
   const [proj, setProj] = useState(null)
   const [srats, setSrats] = useState([])
-  const [fFrom, setFFrom] = useState(''); const [fTo, setFTo] = useState('')
   const [tasksById, setTasksById] = useState({})
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)   // srat object being created/edited, or null
@@ -48,7 +47,7 @@ export default function CmSrats() {
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <button onClick={() => router.push('/forms')} style={backLink}>‹ Home</button>
-        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 10px' }}>SRATs <span style={{ fontSize: 10, color: '#c9c4b8', fontWeight: 400 }}>v2</span></h2>
+        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 10px' }}>SRATs</h2>
 
         {!proj ? (
           projLoading ? <Loading /> : <ProjectPicker projects={myProjects} onPick={pick} subtitle="Select one of your projects." />
@@ -59,24 +58,10 @@ export default function CmSrats() {
         ) : (
           <>
             <ProjectHeader project={proj} onBack={() => setProj(null)} />
-            <button onClick={() => setEditing({})} style={{ ...bigBtn(false), marginBottom: 12 }}>+ New SRAT</button>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-              <label style={{ fontSize: 12, color: '#666', flex: 1 }}>From<br /><input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} style={{ ...inp, marginTop: 3 }} /></label>
-              <label style={{ fontSize: 12, color: '#666', flex: 1 }}>To<br /><input type="date" value={fTo} onChange={e => setFTo(e.target.value)} style={{ ...inp, marginTop: 3 }} /></label>
-              {(fFrom || fTo) && <button onClick={() => { setFFrom(''); setFTo('') }} style={{ alignSelf: 'flex-end', background: '#f2f2f0', border: 'none', borderRadius: 8, padding: '10px 12px', fontSize: 13, cursor: 'pointer', color: '#555' }}>Clear</button>}
-            </div>
-            {(() => {
-              const inRange = (s) => {
-                if (!s.createdAt) return true
-                const d = new Date(s.createdAt); d.setHours(0, 0, 0, 0)
-                if (fFrom && d < new Date(fFrom)) return false
-                if (fTo) { const t = new Date(fTo); t.setHours(23, 59, 59, 999); if (d > t) return false }
-                return true
-              }
-              const shown = srats.filter(inRange)
-              return loading ? <Loading /> : !shown.length ? <Empty>{srats.length ? 'No SRATs in this date range.' : 'No SRATs for this project yet.'}</Empty> : (
+            <button onClick={() => setEditing({})} style={{ ...bigBtn(false), marginBottom: 16 }}>+ New SRAT</button>
+            {loading ? <Loading /> : !srats.length ? <Empty>No SRATs for this project yet.</Empty> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {shown.map(s => {
+                {srats.map(s => {
                   const linked = (s.actionTaskIds || []).map(id => tasksById[id]).filter(Boolean)
                   return (
                     <div key={s.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 14 }}>
@@ -104,7 +89,7 @@ export default function CmSrats() {
                   )
                 })}
               </div>
-            ) })()}
+            )}
           </>
         )}
       </div>

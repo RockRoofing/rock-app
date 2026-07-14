@@ -1,15 +1,25 @@
-ADMIN — Documents manager (Company Information + Operative Guidance Docs)
+REPORT A PROBLEM — positioning + styling fix, and admin table update
 
-pages/admin/documents.js  (NEW)
-  - New "Documents" page in the Admin centre. Two sections: Company Information and Operative Guidance
-    Documents.
-  - Per section: upload a file, give it a NAME, click Upload -> it appears as a card. Cards can be renamed
-    inline and deleted. "View" opens the document.
-  - Uploads go through the existing /api/upload-file (Vercel Blob) and are saved into ops:docs via
-    /api/ops-docs — the SAME store the Site App reads, so a doc added here appears immediately as a named
-    card in the Site App under Company Information / Operative Guidance Docs.
+PROBLEM
+  The global fixed button was overlapping the "Open Site App ↗" link on Operations pages.
 
-components/AdminShell.js
-  - Added a "Documents" tab to the Admin nav (between Site App Users and Problem Reports).
+FIX
+  components/OperationsNav.js
+   - Added "⚠ Report a problem with the app" (orange text, warning sign) immediately to the LEFT of the
+     "Open Site App ↗" link, in the nav row. It opens the same report popup. The Site App link is
+     untouched and still links to the Site App.
 
-Deploy both files. No cron/env change. (Uses existing Blob upload + ops:docs storage — nothing new to set up.)
+  components/ReportProblemButton.js
+   - No longer draws a floating button on Operations pages (the nav link handles those) or the Site App.
+   - On other portal pages (home, pre-contract, commercial, admin) it shows a small ORANGE
+     "⚠ Report a problem with the app" link top-right (no background box) — no overlap.
+   - Both triggers open the SAME modal (nav link fires an 'open-report-problem' event the component
+     listens for).
+
+  pages/admin/problem-reports.js
+   - Table now has a STATUS column (Open / Resolved). Default view is OPEN, so resolved issues disappear
+     from view (switch Status to Resolved/All to see them).
+   - Filters at the top are USER and STATUS.
+   - "Mark resolved / Reopen" per row.
+
+Deploy all files. No cron/env change.

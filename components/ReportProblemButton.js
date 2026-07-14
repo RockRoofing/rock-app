@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 
-// Floating "Report a problem" button shown on every PORTAL page (top-right).
-// Hidden on the Site App (/forms*) which has its own in-app button.
+// "Report a problem" — opens a popup that captures the issue. The trigger appears:
+//   • as a nav link (left of "Open Site App") on Operations pages, and
+//   • as a small orange link top-right on other PORTAL pages (home, pre-contract,
+//     commercial, admin).
+// Both open the SAME modal (nav link fires an 'open-report-problem' event).
+// Hidden entirely on the Site App (/forms*), which has its own in-app button.
 export default function ReportProblemButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -17,8 +21,21 @@ export default function ReportProblemButton() {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d?.user?.name) setUserName(d.user.name) }).catch(() => {})
   }, [])
 
-  // Don't render on the Site App.
-  if ((router.pathname || '').startsWith('/forms')) return null
+  function openModal() { setPage(router.asPath || ''); setDescription(''); setDone(false); setErr(''); setOpen(true) }
+
+  // Nav links (e.g. OperationsNav) open the modal via this event.
+  useEffect(() => {
+    const h = () => openModal()
+    window.addEventListener('open-report-problem', h)
+    return () => window.removeEventListener('open-report-problem', h)
+  }, [router.asPath])
+
+  const path = router.pathname || ''
+  const onSiteApp = path.startsWith('/forms')
+  const onOperations = path.startsWith('/operations')   // these get the nav link instead
+  const showFloating = !onSiteApp && !onOperations
+
+  if (onSiteApp) return null
 
   async function submit() {
     if (!description.trim()) { setErr('Please describe the problem.'); return }
@@ -34,16 +51,14 @@ export default function ReportProblemButton() {
     } catch (e) { setErr(e?.message || 'Could not submit'); setSending(false) }
   }
 
-  function openModal() {
-    setPage(router.asPath || ''); setDescription(''); setDone(false); setErr(''); setOpen(true)
-  }
-
   return (
     <>
-      <button onClick={openModal} title="Report a problem with the app"
-        style={{ position: 'fixed', top: 12, right: 14, zIndex: 900, background: '#fff', border: '1px solid #e0dcd2', borderRadius: 20, padding: '6px 12px', fontSize: 12.5, fontWeight: 600, color: '#9a3412', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>⚠</span> Report a problem
-      </button>
+      {showFloating && (
+        <button onClick={openModal} title="Report a problem with the app"
+          style={{ position: 'fixed', top: 12, right: 16, zIndex: 900, background: 'none', border: 'none', fontSize: 13, fontWeight: 600, color: '#ca8a04', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span>⚠</span> Report a problem with the app
+        </button>
+      )}
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setOpen(false)}>
