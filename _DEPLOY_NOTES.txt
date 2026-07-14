@@ -1,28 +1,13 @@
-SITE APP — per-project access for Site App users
+"REPORT AN APP IMPROVEMENT" on the commercial sub-pages + SRAT marker removed
 
-ADMIN (Site App Users)  pages/operations/users.js + pages/api/ops-users.js
-  - The Add/Edit user modal has a new "Project access" tick-box dropdown:
-      • "All projects (current & future)" (default) — sees every project incl. any added later, OR
-      • untick "All projects" and tick specific projects.
-  - Stored on the user as projectAccess: 'all' | [projectNo, ...].
-  - New "Projects" column in the users table shows "All" or "N selected".
+  pages/retention.js            — report link added to the nav (left of "+ Add Manual Entry").
+  pages/variations.js           — report link added to the nav (left of "+ Add Variation").
+  pages/application-calendar.js — report link added to the nav (pushed to the right).
+  pages/commercial-scorecard.js — report link added to the nav (right side).
+  All four are orange "⚠ Report an App improvement" and open the same report popup (via the global
+  'open-report-problem' listener already deployed in _app.js / ReportProblemButton).
 
-SITE APP GATING (uses projectAccess from the logged-in user)
-  lib/cmSiteApp.js — new allowedProjects(user, projects) + canAccessProject(user, no) helpers; useMyProjects
-    now intersects with the user's allowed projects (so CM sections only show their permitted projects).
-  pages/forms/fill.js      — the form project picker only lists permitted projects (so an operative can only
-                             complete forms for projects they're assigned to).
-  pages/forms/issue.js     — Report Site Issue project list limited to permitted projects.
-  pages/forms/index.js     — operative "View Project Details" list limited to permitted projects.
-  pages/forms/browse.js    — project-forms / project docs list limited to permitted projects.
-
-BEHAVIOUR
-  - Default (existing users with no setting) = 'all', so nothing changes until you restrict someone.
-  - "All projects" automatically includes future projects (no need to re-edit when new jobs are added).
-  - Set a user to specific projects and they'll only see/those in the Site App and can only submit forms
-    for them.
+  pages/operations/project-management/srat.js — removed the temporary "· filter v2" marker from the title
+  (now just "SRATs") since the filter is confirmed working.
 
 Deploy all files. No cron/env change.
-
-NOTE: existing users have no projectAccess yet -> treated as "All". To restrict someone, open Site App
-Users, edit them, choose specific projects, Save.

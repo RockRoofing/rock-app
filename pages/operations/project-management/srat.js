@@ -83,7 +83,7 @@ export default function SratsPage() {
 
   return (
     <OperationsShell active="pm:srat" section="pm" title="SRATs" wide>
-      <PageHeading title="SRATs · filter v2" sub="Situation, Roadblocks, Actions, Timeline — one per project update."
+      <PageHeading title="SRATs" sub="Situation, Roadblocks, Actions, Timeline — one per project update."
         action={<button onClick={() => setEdit(emptySrat())} style={primaryBtn}>+ Add new</button>} />
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>

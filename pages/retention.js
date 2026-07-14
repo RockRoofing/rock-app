@@ -246,10 +246,14 @@ export default function RetentionPage() {
               <span style={{ color: '#444' }}>|</span>
               <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
             </div>
-            <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
-              style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
-              + Add Manual Entry
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
+                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report an App improvement</button>
+              <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
+                style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
+                + Add Manual Entry
+              </button>
+            </div>
           </div>
         </div>
 
