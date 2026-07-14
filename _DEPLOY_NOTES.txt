@@ -1,22 +1,18 @@
-FORMS — MISSING — date filter diagnostics
+WATER INGRESS — past visits now show as Missing (gantt is the source of truth)
 
-The From/To week filter code is correct (From W/C … To W/C … -> refetches on change, API builds the week
-range from those). I couldn't find a code bug, so this adds visibility to pin down what's happening:
+pages/api/forms-missing.js
+  FIX: a water-ingress WIRF is now REQUIRED once the visit has happened — i.e. it's marked Actual OR the
+  visit date has PASSED. Previously only "Actual" counted, so a past visit that wasn't ticked actual
+  silently dropped off the missing list. Now:
+    • Past date (today has passed), not confirmed actual  -> MISSING (required)
+    • Marked Actual                                        -> required
+    • Future within 2 weeks, not actual                    -> "Upcoming" (visibility only)
+    • Future beyond 2 weeks                                -> not shown yet
 
-pages/operations/forms-missing.js
-  - Title now shows "Forms — Missing · v2" so we can confirm the new file is actually deployed.
-  - Next to the To selector it now shows the ACTIVE RANGE and result count, e.g.
-      "Showing W/C 30 Jun 2025 → W/C 14 Jul 2025 · 12 rows"  (or "· loading…").
-    Change the From/To dropdowns and this line + the row count should update immediately.
+  SOURCE OF TRUTH = THE GANTT: all WIRF requirements are derived live from the gantt water-ingress data
+  (ops:water-ingress) on every request — nothing is stored separately. So if a visit is MOVED on the gantt
+  the required form moves with it, and if it's DELETED the form requirement disappears automatically.
 
-AFTER DEPLOY, please check:
-  1. Does the title say "· v2"?  If NOT -> it's a deploy/cache issue (old file still live); hard-refresh or
-     confirm the Vercel deploy finished.
-  2. If it says v2: change the From / To week dropdowns and watch the "Showing … · N rows" line. Does the
-     range text change? Does the row count change?
-  - Tell me what you see (v2 or not, and whether the count moves) and I'll know exactly where the problem is.
-
-NOTE: the filter is WEEK-COMMENCING dropdowns (not free date pickers). If you expected to type exact dates,
-that's the difference — say the word and I can switch them to date inputs.
+  Verified: yesterday(not actual)=Missing, actual=required, +5d=Upcoming, +30d=hidden, today=Upcoming.
 
 Deploy this file. No cron/env change.

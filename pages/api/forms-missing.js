@@ -171,17 +171,20 @@ export default async function handler(req, res) {
         for (let vi = 0; vi < dayVisits.length; vi++) {
           const v = dayVisits[vi]
           const isActual = (v.status || '') === 'actual'
-          const isUpcoming = !isActual && dObj >= nowD && dObj <= twoWeeks
-          // Only actual visits (solidified) count as required. Upcoming ones are
-          // shown for visibility but don't count toward required/missing yet.
-          if (!isActual && !isUpcoming) continue
+          const isPast = dObj < nowD                    // the visit day has passed
+          const isUpcoming = !isActual && !isPast && dObj <= twoWeeks   // future, within 2 weeks
+          // A WIRF is REQUIRED once the visit has happened (it's actual OR the day has
+          // passed). Future visits within 2 weeks show as "Upcoming" (visibility only).
+          // Future visits beyond 2 weeks are ignored for now.
+          const isRequired = isActual || isPast
+          if (!isRequired && !isUpcoming) continue
 
           const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('water ingress') &&
             ((job.projectNo && job.projectNo !== '—' && ((s.projectName || '').includes(job.projectNo) || (s.projectId || '') === job.projectNo)) || (s.projectName || '').includes(job.name)) &&
             s.submittedAt && new Date(s.submittedAt) >= wStart && new Date(s.submittedAt) < wEnd)
 
           rows.push({ week: visitWeekMon, projectNo: job.projectNo, projectName: `💧 ${job.name}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk, upcoming: isUpcoming })
-          if (isActual) {   // only solidified visits count in the required tally
+          if (isRequired) {   // happened (actual or past) -> counts in the required tally
             byForm['Water Ingress Report'].required++
             if (done) byForm['Water Ingress Report'].completed++
           }
