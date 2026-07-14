@@ -130,27 +130,70 @@ export default async function handler(req, res) {
       }
     }
 
-    // WATER INGRESS REPORT — one required per job-visit (per job per day), attributed to that visit's week.
+    // WATER INGRESS REPORT — WIRF rules:
+    //  • 1 WIRF per water-ingress VISIT EVENT for a job.
+    //  • Consecutive days on the same job = ONE event (only the first day needs a WIRF).
+    //  • A gap of ≥1 day starts a NEW event (needs its own WIRF).
+    //  • 2 separate visits on the SAME day both need a WIRF.
+    //  • Only SOLIDIFIES as "required" once the visit is marked ACTUAL on the Gantt.
+    //  • Visits within the next 2 weeks (not yet actual) show as UPCOMING (not counted
+    //    as required until actual).
+    const nowD = new Date(); nowD.setHours(0, 0, 0, 0)
+    const twoWeeks = new Date(nowD.getTime() + 14 * DAY)
+
+    // Group visit-days by job (projectNo, falling back to jobName).
+    const wiByJob = {}   // jobKey -> { name, projectNo, days: { [dk]: visits[] } }
     for (const [dk, visits] of Object.entries(waterIngress || {})) {
-      const dObj = parseISO(dk); if (!dObj) continue
-      const visitWeekMon = iso(mondayOf(dObj))
-      // only include visits whose week falls in the requested range
-      if (!weeks.includes(visitWeekMon)) continue
-      const wStart = parseISO(visitWeekMon); const wEnd = new Date(wStart.getTime() + 7 * DAY)
+      if (!parseISO(dk)) continue
       for (const v of (visits || [])) {
-        const jobName = v.jobName || 'Water ingress'
-        // done = a Water Ingress Report submission for this job within the visit's week
-        const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('water ingress') &&
-          ((v.projectNo && ((s.projectName || '').includes(v.projectNo) || (s.projectId || '') === v.projectNo)) || (s.projectName || '').includes(jobName.replace(/^💧\s*/, ''))) &&
-          s.submittedAt && new Date(s.submittedAt) >= wStart && new Date(s.submittedAt) < wEnd)
-        rows.push({ week: visitWeekMon, projectNo: v.projectNo || '—', projectName: `💧 ${jobName}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk })
-        byForm['Water Ingress Report'].required++
-        if (done) byForm['Water Ingress Report'].completed++
+        const jobKey = v.projectNo || v.jobName || 'wi'
+        if (!wiByJob[jobKey]) wiByJob[jobKey] = { name: v.jobName || 'Water ingress', projectNo: v.projectNo || '—', days: {} }
+        if (!wiByJob[jobKey].days[dk]) wiByJob[jobKey].days[dk] = []
+        wiByJob[jobKey].days[dk].push(v)
       }
     }
 
-    const required = rows.length
-    const completed = rows.filter(r => r.done).length
+    for (const job of Object.values(wiByJob)) {
+      const sortedDays = Object.keys(job.days).sort()
+      const daySet = new Set(sortedDays)
+      for (const dk of sortedDays) {
+        const dObj = parseISO(dk)
+        const prevDayISO = iso(new Date(dObj.getTime() - DAY))
+        const isRunStart = !daySet.has(prevDayISO)   // no visit the day before -> new event
+        if (!isRunStart) continue                    // consecutive day -> same visit, no extra WIRF
+
+        const visitWeekMon = iso(mondayOf(dObj))
+        if (!weeks.includes(visitWeekMon)) continue
+        const wStart = parseISO(visitWeekMon); const wEnd = new Date(wStart.getTime() + 7 * DAY)
+
+        const dayVisits = job.days[dk]
+        // Each separate visit on a run-start day needs its own WIRF.
+        for (let vi = 0; vi < dayVisits.length; vi++) {
+          const v = dayVisits[vi]
+          const isActual = (v.status || '') === 'actual'
+          const isUpcoming = !isActual && dObj >= nowD && dObj <= twoWeeks
+          // Only actual visits (solidified) count as required. Upcoming ones are
+          // shown for visibility but don't count toward required/missing yet.
+          if (!isActual && !isUpcoming) continue
+
+          const done = (subs || []).some(s => (s.formTitle || '').toLowerCase().includes('water ingress') &&
+            ((job.projectNo && job.projectNo !== '—' && ((s.projectName || '').includes(job.projectNo) || (s.projectId || '') === job.projectNo)) || (s.projectName || '').includes(job.name)) &&
+            s.submittedAt && new Date(s.submittedAt) >= wStart && new Date(s.submittedAt) < wEnd)
+
+          rows.push({ week: visitWeekMon, projectNo: job.projectNo, projectName: `💧 ${job.name}`, formType: 'Water Ingress Report', responsible: '—', role: 'Attending operative', done, day: dk, upcoming: isUpcoming })
+          if (isActual) {   // only solidified visits count in the required tally
+            byForm['Water Ingress Report'].required++
+            if (done) byForm['Water Ingress Report'].completed++
+          }
+        }
+      }
+    }
+
+    // Upcoming (not-yet-actual) water-ingress visits are shown for visibility but
+    // don't count as required/missing until they're marked actual.
+    const countableRows = rows.filter(r => !r.upcoming)
+    const required = countableRows.length
+    const completed = countableRows.filter(r => r.done).length
     const pct = required ? Math.round((completed / required) * 100) : 100
 
     return res.json({ weeks, rows, summary: { required, completed, pct }, byForm })

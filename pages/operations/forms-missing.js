@@ -41,7 +41,7 @@ export default function FormsMissingPage() {
   const rows = useMemo(() => {
     if (!data) return []
     return data.rows.filter(r => {
-      if (showOnly === 'missing' && r.done) return false
+      if (showOnly === 'missing' && (r.done || r.upcoming)) return false
       if (showOnly === 'done' && !r.done) return false
       if (fForm && r.formType !== fForm) return false
       if (fPerson && r.responsible !== fPerson) return false
@@ -130,13 +130,15 @@ export default function FormsMissingPage() {
               <tbody>
                 {rows.length === 0 && <tr><td colSpan={5} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 20 }}>No required forms for this range/filters.</td></tr>}
                 {rows.map((r, i) => (
-                  <tr key={i} style={{ borderTop: '1px solid #f2f2f2', background: r.done ? '#fff' : '#fffaf7' }}>
+                  <tr key={i} style={{ borderTop: '1px solid #f2f2f2', background: r.upcoming ? '#f5fbff' : (r.done ? '#fff' : '#fffaf7') }}>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{parseISO(r.week).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
                     <td style={td}>{r.projectNo}{r.projectName && r.projectName !== r.projectNo ? ` — ${r.projectName}` : ''}</td>
                     <td style={td}>{r.formType}{r.day ? <span style={{ color: '#999', fontSize: 11 }}> · {parseISO(r.day).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}</span> : ''}</td>
                     <td style={td}>{r.responsible}{r.role ? <span style={{ color: '#aaa', fontSize: 11 }}> ({r.role})</span> : ''}</td>
                     <td style={{ ...td, textAlign: 'center' }}>
-                      {r.done
+                      {r.upcoming
+                        ? <span style={{ fontSize: 11.5, color: '#0369a1', background: '#e0f2fe', padding: '2px 10px', borderRadius: 12, fontWeight: 600 }} title="Water-ingress visit within the next 2 weeks — will be required once marked Actual on the Gantt">Upcoming</span>
+                        : r.done
                         ? <span style={{ fontSize: 11.5, color: '#16a34a', background: '#dcfce7', padding: '2px 10px', borderRadius: 12, fontWeight: 600 }}>Completed</span>
                         : <span style={{ fontSize: 11.5, color: '#b91c1c', background: '#fee2e2', padding: '2px 10px', borderRadius: 12, fontWeight: 600 }}>Missing</span>}
                     </td>

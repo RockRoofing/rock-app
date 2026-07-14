@@ -1,18 +1,24 @@
-GANTT — copy auto-deselect + fix cell selecting the row above
+WATER INGRESS — "missing form" (WIRF) logic per your rules
 
-pages/operations/project-management/planning.js
+pages/api/forms-missing.js — reworked the Water Ingress Report requirement:
+  • 1 WIRF per water-ingress VISIT EVENT for a job.
+  • Consecutive days on the same job = ONE event — only the first day needs a WIRF (a continuation day
+    adds nothing).
+  • A gap of ≥1 day starts a NEW event, which needs its own WIRF.
+  • 2 separate visits on the SAME day both need a WIRF.
+  • SOLIDIFIES as "required" only once the visit is marked ACTUAL on the Gantt.
+  • Visits within the NEXT 2 WEEKS that aren't yet actual show as "Upcoming" (visibility/notification) but
+    do NOT count as required/missing until they're marked actual.
+  • "done" = a Water Ingress Report form submitted for that job in the visit's week (unchanged matching).
+  • Upcoming rows are excluded from the required/completed/% summary and the byForm tally.
 
-1) COPY NOW AUTO-DESELECTS
-   - After you click Copy, the copied cells are deselected automatically, so you can click straight into
-     the paste target. (Flow: select gang -> Copy -> click target start cell -> Paste.)
+pages/operations/forms-missing.js (portal Forms — Missing page):
+  • Water-ingress visits due in the next 2 weeks show a blue "Upcoming" badge (tinted row) instead of red
+    "Missing".
+  • The "Missing" filter no longer includes Upcoming rows.
 
-2) CLICKING A CELL NO LONGER SELECTS THE ROW ABOVE
-   - Cause: the yellow selection bar appeared IN the page flow, pushing the gantt down as it appeared — so
-     by the time the click registered, your cursor was over the row above.
-   - Fix: the yellow bar is now a FIXED floating overlay pinned to the top-centre of the screen. Showing/
-     hiding it no longer shifts the gantt at all, so the cell you click is the cell that gets selected. It
-     still stays visible while you scroll (as before).
+Verified with a test: Mon+Tue consecutive + Thu (2 visits) on one job = 3 WIRFs (Mon 1, Tue 0, Thu 2).
 
-NOTE: this file supersedes all previous gantt drops — deploy just this one.
+Deploy both files. No cron/env change.
 
-Deploy this file. No cron/env change.
+REMAINING: automated weekly labour email to accounts, Meeting Actions carry-over.
