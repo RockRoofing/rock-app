@@ -827,7 +827,7 @@ export default function CRMPage() {
   const createProject = (data) => {
     const id = nextId.current++;
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
-    ['site_location','site_postcode','region','size_m2','credit_score','credit_limit','glenigan_id','estimator_responsible','project_stage','roofing_works_onsite','project_type','systems_priced','lead_source','scope_of_works','general_info','contact_phone','contact_email','contact_job_role','org_address','org_phone','org_website','org_email','org_reg_number','supply_chain_approved'].forEach((k) => { fields[k] = data[k] || null; });
+    ['site_location','site_postcode','region','size_m2','credit_score','credit_limit','insured_credit_limit','glenigan_id','estimator_responsible','project_stage','roofing_works_onsite','sales_person','project_start_date','project_type','systems_priced','lead_source','scope_of_works','general_info','contact_phone','contact_email','contact_job_role','org_address','org_phone','org_website','org_email','org_reg_number','supply_chain_approved'].forEach((k) => { fields[k] = data[k] || null; });
     const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
     const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
     setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
@@ -966,7 +966,7 @@ function AddProjectModal({ onClose, onCreate }) {
 
   // Field groups (mirror the sidebar). Person/org detail fields live in their own sections.
   const PROJECT_FIELDS = [['title','Project title', true],['value','Value (£)', false],['project_score','Project Score', false],['expected_close_date','Tender Return date', false]];
-  const DETAIL_KEYS = ['glenigan_id','site_location','region','size_m2','credit_score','credit_limit','project_stage','roofing_works_onsite','estimator_responsible','scope_of_works','general_info','project_type','lead_source'];
+  const DETAIL_KEYS = ['glenigan_id','site_location','region','size_m2','credit_score','credit_limit','insured_credit_limit','project_stage','roofing_works_onsite','estimator_responsible','scope_of_works','general_info','sales_person','project_start_date','project_type','lead_source'];
   const CONTACT_KEYS = [['contact_phone','Phone'],['contact_email','Email'],['contact_job_role','Job Role']];
   const ORG_KEYS = [['org_address','Address'],['org_phone','Phone'],['org_website','Website'],['org_email','Email'],['org_reg_number','Registration Number'],['supply_chain_approved','Supply Chain Approved?']];
 
