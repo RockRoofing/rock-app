@@ -1,25 +1,18 @@
-REPORT A PROBLEM — portal (every page) + Site App, with an admin viewer
+SRAT FILTER — re-check build (the date filter code is confirmed present)
 
-NEW API — pages/api/report-problem.js
-  POST  { userName, platform, page, description } -> stores under ops:problem-reports + emails the office
-        (to ALERT_EMAIL or FORMS_REPLY_TO if set; email is best-effort and never blocks saving).
-  GET   -> { reports } newest first.
-  PATCH { id, status } -> open/resolved toggle.
+WHAT'S HERE
+  pages/forms/cm/srats.js — the SRATs page WITH the From/To date-range filter, plus a small "v2" marker
+  next to the "SRATs" title so you can confirm the new file is actually live.
 
-PORTAL — every page (components/ReportProblemButton.js + pages/_app.js)
-  - A small "⚠ Report a problem" button is fixed top-right on every PORTAL page (auto-hidden on the Site
-    App). Opens a popup that AUTO-fills the user's name (from portal-auth) and platform (Portal), plus the
-    current page path (editable) and a description box.
+HOW TO CHECK AFTER DEPLOY
+  1. Open the Site App > Contracts Manager > SRATs and PICK A PROJECT (the filter only shows once a project
+     is selected — the first screen is the project picker).
+  2. If you see "SRATs v2" in the title, the new file IS deployed:
+       - The From / To date inputs appear directly under the "+ New SRAT" button.
+  3. If you DON'T see "v2", the deploy didn't take effect — likely causes:
+       - The file on GitHub didn't actually save to pages/forms/cm/srats.js, or
+       - Vercel served a cached build (try a hard refresh / redeploy), or
+       - You're viewing a different page (this is /forms/cm/srats, reached via the CM "SRATs" card).
 
-SITE APP — bottom of the operative menu (pages/forms/index.js)
-  - A "⚠ Report a problem with the app" link at the bottom of the Site App home. Popup auto-fills the
-    logged-in operative's name and platform (Site App), plus a page box and description.
-
-ADMIN VIEWER — pages/admin/problem-reports.js + components/AdminShell.js
-  - New "Problem Reports" tab in the Admin area: lists reports (Open / Resolved / All), shows who/where/
-    page/description, with a "Mark resolved / Reopen" toggle.
-
-OPTIONAL ENV: set ALERT_EMAIL to control where the notification email goes (falls back to FORMS_REPLY_TO,
-then notifications@rockroofing.co.uk). Not required — reports are always stored and viewable in Admin.
-
-Deploy all files. No cron change.
+This is a diagnostic drop — deploy this one file. Once we confirm "v2" shows, I'll remove the marker in a
+later update.

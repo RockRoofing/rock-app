@@ -48,7 +48,7 @@ export default function CmSrats() {
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
       <div style={{ maxWidth: 700, margin: '0 auto' }}>
         <button onClick={() => router.push('/forms')} style={backLink}>‹ Home</button>
-        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 10px' }}>SRATs</h2>
+        <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 10px' }}>SRATs <span style={{ fontSize: 10, color: '#c9c4b8', fontWeight: 400 }}>v2</span></h2>
 
         {!proj ? (
           projLoading ? <Loading /> : <ProjectPicker projects={myProjects} onPick={pick} subtitle="Select one of your projects." />
