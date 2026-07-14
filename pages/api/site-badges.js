@@ -52,14 +52,19 @@ export default async function handler(req, res) {
       if (n > 0) { ramsByProject[p.projectNo] = n; rams += n }
     }))
 
-    // ── Deliveries: scheduled (not delivered) on my projects ──
+    // ── Deliveries: overdue or due-today (not delivered) on my projects ──
+    // "Due" = required/scheduled delivery date is today or earlier.
     const deliveries = (await get('ops:deliveries')) || []
     const deliveriesByProject = {}
     let deliveriesCount = 0
+    const today = new Date(); today.setHours(0, 0, 0, 0)
     for (const d of deliveries) {
       if (d.actualDeliveryDate) continue           // already delivered
       const no = d.projectNo || ''
       if (!allowed(no)) continue                   // not one of my projects
+      if (!d.requiredDeliveryDate) continue        // no scheduled date -> not "due" yet
+      const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
+      if (req > today) continue                     // scheduled in the future -> not counted
       deliveriesByProject[no] = (deliveriesByProject[no] || 0) + 1
       deliveriesCount++
     }

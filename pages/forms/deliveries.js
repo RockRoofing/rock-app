@@ -63,11 +63,16 @@ export default function DeliveriesView() {
 
   const selProject = projects.find(p => p.key === projectNo)
 
-  // Per-project count of scheduled-but-not-delivered deliveries (for badges).
+  // Per-project count of OVERDUE / DUE-TODAY deliveries (not delivered) — matches
+  // the home-screen badge rule: required date is today or earlier.
   const scheduledByProject = useMemo(() => {
     const m = {}
+    const today = new Date(); today.setHours(0, 0, 0, 0)
     for (const d of deliveries) {
       if (d.actualDeliveryDate) continue
+      if (!d.requiredDeliveryDate) continue
+      const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
+      if (req > today) continue
       const key = d.projectNo || d.projectName || ''
       if (!key) continue
       m[key] = (m[key] || 0) + 1
@@ -134,7 +139,18 @@ export default function DeliveriesView() {
                       </div>
                       <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{d.supplier || '—'}</div>
                       {d.requiredDeliveryDate
-                        ? <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>Scheduled delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong></div>
+                        ? (() => {
+                            const t = new Date(); t.setHours(0, 0, 0, 0)
+                            const req = new Date(d.requiredDeliveryDate); req.setHours(0, 0, 0, 0)
+                            const overdue = req < t, dueToday = req.getTime() === t.getTime()
+                            return (
+                              <div style={{ fontSize: 12, color: (overdue || dueToday) ? '#dc2626' : '#777', marginTop: 4, fontWeight: (overdue || dueToday) ? 700 : 400 }}>
+                                Scheduled delivery: <strong>{fmtDate(d.requiredDeliveryDate)}</strong>
+                                {overdue && <span style={{ marginLeft: 8, background: '#dc2626', color: '#fff', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>OVERDUE</span>}
+                                {dueToday && <span style={{ marginLeft: 8, background: '#dc2626', color: '#fff', borderRadius: 6, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>DUE TODAY</span>}
+                              </div>
+                            )
+                          })()
                         : <div style={{ fontSize: 12, color: '#c2410c', fontWeight: 600, marginTop: 4 }}>⚠ No scheduled delivery date set</div>}
                       <ItemList items={d.lineItems || []} />
                       {d.comments && <div style={{ fontSize: 12, color: '#666', marginTop: 6, fontStyle: 'italic' }}>“{d.comments}”</div>}

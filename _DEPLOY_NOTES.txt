@@ -1,66 +1,29 @@
-RAMS SIGNING — PHASE 1: Filing restructure + notification badges
-================================================================
-Deploy target: RockRoofing/rock-app  branch main  (GitHub web editor → Vercel)
-Build: `npm run build` → ✓ Compiled successfully (Xero warnings unrelated/harmless)
+RAMS PHASE 1 — DELIVERIES BADGE FIX
+===================================
+Deploy target: RockRoofing/rock-app  branch main
+Build: npm run build -> ✓ Compiled successfully
 
-WHAT THIS DOES
---------------
-1. Site App home (siteapp.rockroofing.co.uk) — "View Project Details" is split
-   into TWO separate top-level cards:
-     • Drawings  (drawings only)
-     • RAMS      (immediately after Drawings — RAMS only)
-   Each opens straight to its own project picker → file list (no tab switcher).
+ISSUE
+-----
+Home Deliveries badge showed 3 but only 1 was overdue when you opened the
+project. Cause: the badge counted ALL not-yet-delivered deliveries, while the
+project view filters to a 2-week look-ahead — different rules.
 
-2. RAMS home card shows a RED notification badge = the number of RAMS documents
-   the logged-in operative has NOT signed, across the projects they're assigned
-   to (respects projectAccess: 'all' or a list). Same badge style as
-   Issues Log / Live Tasks.
+FIX (per your steer)
+--------------------
+Both the home Deliveries badge and the per-project badges in the Deliveries
+page now count ONLY deliveries whose scheduled/required delivery date is
+TODAY or earlier and not yet delivered (i.e. overdue + due today).
+  • Home badge  = total such deliveries across the operative's projects.
+  • Per-project = that project's count.
 
-3. Inside RAMS, each document is labelled "● Not signed" (red) or "✓ Signed"
-   (green) for the current operative. (The actual "Sign RAMS now" flow arrives
-   in Phase 2 — this phase just surfaces the status + counts.)
+The in-project list still shows the useful 2-week look-ahead so operatives can
+see what's coming, BUT overdue / due-today rows are now clearly tagged in red
+("OVERDUE" / "DUE TODAY") so the list visibly reconciles with the badge count.
 
-4. Deliveries home card shows a RED badge = number of scheduled-but-not-delivered
-   deliveries on the operative's assigned projects. Inside Deliveries, each
-   project in the picker shows its own red badge with its scheduled count.
+FILES CHANGED (replaces the same files from the Phase 1 zip)
+-----------------------------------------------------------
+• pages/api/site-badges.js   — deliveries count = required date <= today
+• pages/forms/deliveries.js  — per-project badge same rule + OVERDUE/DUE TODAY tags
 
-DATA MODEL INTRODUCED (used by Phases 2–5)
-------------------------------------------
-• lib/db.js: new helpers getRamsSignatures(projectNo) / saveRamsSignatures(...)
-  Store: ops:rams-signatures:<projectNo> = {
-    [fileId]: { [opId]: { name, date, signedAt, statement } }
-  }
-  Keyed by the RAMS file's id. Because /api/project-files mints a NEW id on
-  every upload, a re-uploaded RAMS (new version) has no signatures and is
-  "Not signed" again automatically — this is how version-reset will work.
-
-FILES CHANGED
--------------
-• lib/db.js                      — added getRamsSignatures / saveRamsSignatures
-• middleware.js                  — Site App passthrough += /api/site-badges,
-                                   /api/rams-signatures
-• pages/forms/index.js           — Drawings + RAMS split cards, badges,
-                                   ProjectDetailsView `only` prop, RAMS
-                                   signed/not-signed labels
-• pages/forms/deliveries.js      — per-project scheduled-delivery badges
-• pages/api/site-badges.js       — NEW: computes RAMS + deliveries badge counts
-                                   for one operative
-• pages/api/rams-signatures.js   — NEW: read RAMS signatures for a project
-                                   (Phase 1 read-only; POST added in Phase 2)
-
-NOTES / EXPECTED BEHAVIOUR
---------------------------
-• Until anyone has signed anything, every RAMS shows "Not signed" and the RAMS
-  badge = total current RAMS docs across your assigned projects. That's correct
-  for Phase 1 — signing lands in Phase 2.
-• Badge fetch uses user.id from the Site App session (sessionStorage
-  'ops_operative'). If an operative record has no id, the RAMS-signed lookup
-  falls back to "not signed" (safe default) but the count still works.
-• No cron changes. No portal RAMS Matrix changes yet (Phase 3 adds PS state +
-  stage pipeline).
-
-NEXT (Phase 2)
---------------
-Operative signing: "Sign RAMS now" → forced read-to-bottom → confirm →
-finger-drawn signature (name+date auto) → the statement → POST to
-/api/rams-signatures → matrix/badge update; re-sign required on new version.
+Deploy on top of the Phase 1 zip (these two files supersede those copies).
