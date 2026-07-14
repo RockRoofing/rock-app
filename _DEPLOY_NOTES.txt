@@ -1,21 +1,28 @@
-GANTT BATCH (part 1 of 2) — searchable installer dropdown + "Programme dates needed" warning
+GANTT — reworked warning system
 
 pages/operations/project-management/planning.js
 
-1) SEARCHABLE OPERATIVE DROPDOWN when adding labour
-   - Both the Allocate modal and the Water Ingress day modal now use a type-ahead search box instead of a
-     long <select>. Start typing a name (or company) and the matching installers filter down; click one to
-     add. Still shows the "⚠ no CSCS/WAH" flag, and "+ Add new operative to the roster" is unchanged.
+WARNINGS NOW ALL SHOW AS RED LINES UNDER THE PROJECT NAME (no more small ⚠/⚑ symbols in front of the name):
 
-2) "PROJECT PROGRAMME DATES NEEDED!" warning
-   - On the Gantt, any project that has labour allocated but NO programme start/completion dates now shows a
-     red "⚠ Project Programme dates needed!" line under the project name (same style as "⚠ No supervisor").
-     (The small ⚠ prefix was there before; this makes it explicit, as requested.)
+1) "⚠ Man day allocation needed"
+   - Shows when the project has NO man days / labour allocated on the Gantt at all.
+   - (Renamed from "Project Programme dates needed!" and re-based on labour, not the date boxes — so
+     Accrington, which HAS labour, no longer shows it.)
+
+2) "⚠ Runs past completion date"
+   - Shows when man days are allocated AFTER the contracted completion date.
+   - PLUS: when this happens, the completion-date field goes RED + BOLD, and the project number/name go
+     RED + BOLD.
+
+3) "⚑ Historic dates need confirming actual"  (orange)
+   - Now only flags when it's THURSDAY ONWARDS and there are unconfirmed (not-Actual) allocations in the
+     CURRENT week…
+   - …EXCEPTION: if the PREVIOUS week or the week before that still has unconfirmed allocations, it flags
+     regardless of the day.
+
+4) "⚠ No supervisor" — unchanged (already a red line).
 
 Deploy this file. No cron/env change.
 
-STILL TO COME (Gantt batch part 2):
-  - Copy/paste cells (select gang -> Copy -> paste to another project/week)
-  - RAMS-not-signed warning (flag allocating an operative not on the project's RAMS Matrix)
-Plus later: automated weekly labour email to accounts, Water Ingress "missing form" logic, Meeting Actions
-carry-over.
+STILL TO COME (Gantt): copy/paste cells, RAMS-not-signed warning. Then: automated weekly labour email,
+Water Ingress "missing form" logic, Meeting Actions carry-over.

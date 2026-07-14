@@ -315,19 +315,37 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
   const startD = parseISO(start), complD = parseISO(compl)
   const missing = !start || !compl
   let lastAlloc = null
-  let historicNeedsActual = false
   let projectHasLabour = false
   let projectHasNamedLabour = false
   let ganttHasSupervisor = false
-  const todayKey = iso(new Date())
+  const today = new Date()
+  const todayKey = iso(today)
+
+  // Week windows for the historic-actual rule.
+  const thisMon = mondayOf(today)
+  const thisWeekStart = iso(thisMon), thisWeekEnd = iso(addDays(thisMon, 6))
+  const prevWeekStart = iso(addDays(thisMon, -7)), prevWeekEnd = iso(addDays(thisMon, -1))
+  const prev2WeekStart = iso(addDays(thisMon, -14)), prev2WeekEnd = iso(addDays(thisMon, -8))
+  const inRange = (dk, a, b) => dk >= a && dk <= b
+  const isThursdayOrLater = today.getDay() === 0 || today.getDay() >= 4   // Thu(4) Fri Sat, plus Sun(0)
+
+  let unconfirmedThisWeek = false        // any not-actual allocation in the current week
+  let unconfirmedPriorWeeks = false      // any not-actual allocation in the previous two weeks
+
   for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
     const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
     const cd = cellData(cell); if (cd.count > 0) projectHasLabour = true
     if (cd.entries && cd.entries.length > 0) projectHasNamedLabour = true
     if (cd.entries && cd.entries.some(e => comp && comp[e.opId] && comp[e.opId].isSupervisor)) ganttHasSupervisor = true
-    // any allocation strictly before today that is NOT marked actual -> needs confirming
-    if (dk < todayKey) { if (cd.count > 0 && cd.status !== 'actual') historicNeedsActual = true }
+    const notActual = cd.count > 0 && cd.status !== 'actual'
+    if (notActual && dk < todayKey && inRange(dk, thisWeekStart, thisWeekEnd)) unconfirmedThisWeek = true
+    if (notActual && (inRange(dk, prevWeekStart, prevWeekEnd) || inRange(dk, prev2WeekStart, prev2WeekEnd))) unconfirmedPriorWeeks = true
   }
+
+  // Flag historic-needs-actual only from Thursday onwards for the current week's
+  // unconfirmed dates — UNLESS a prior week (last week or the one before) still
+  // has unconfirmed inputs, which always flags.
+  const historicNeedsActual = unconfirmedPriorWeeks || (isThursdayOrLater && unconfirmedThisWeek)
   const overrun = complD && lastAlloc && lastAlloc > complD
   // Project-level supervisor flag: live project with NAMED labour but NO supervisor either assigned in
   // Project Details OR allocated on the Gantt. (Never flags with no labour or only unnamed labour.)
@@ -343,14 +361,13 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
       <Frozen w={NAME_W} left={0} style={{ background: neg ? '#fbfaf8' : '#fff', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', display: 'flex' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
-          {missing && <span title="Start / completion date missing" style={{ color: '#dc2626' }}>⚠ </span>}
-          {overrun && <span title="Runs past contracted completion" style={{ color: '#dc2626' }}>⚠ </span>}
-          {historicNeedsActual && <span title="Historic dates need confirming as Actual" style={{ color: '#ea580c' }}>⚑ </span>}
+        <div style={{ fontSize: 12.5, fontWeight: overrun ? 700 : 600, color: overrun ? '#dc2626' : (neg ? '#8a6d1a' : INK), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
           {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
         </div>
-        {missing && projectHasLabour && <div title="No programme start / completion dates set for this project" style={{ fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }}>⚠ Project Programme dates needed!</div>}
-        {noProjectSupervisor && <div title="No supervisor assigned in Project Details or allocated on the Gantt" style={{ fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }}>⚠ No supervisor</div>}
+        {!projectHasLabour && <div title="No man days allocated on the Gantt for this project" style={warnLine}>⚠ Man day allocation needed</div>}
+        {overrun && <div title="Man days allocated after the contracted completion date" style={warnLine}>⚠ Runs past completion date</div>}
+        {historicNeedsActual && <div title="Historic allocations still need confirming as Actual" style={{ ...warnLine, color: '#ea580c' }}>⚑ Historic dates need confirming actual</div>}
+        {noProjectSupervisor && <div title="No supervisor assigned in Project Details or allocated on the Gantt" style={warnLine}>⚠ No supervisor</div>}
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       {/* inline date editors */}
@@ -358,7 +375,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
         <input type="date" value={start} onChange={e => { setStart(e.target.value); saveMeta(e.target.value, compl) }} style={dateInput} />
       </PlainCell>
       <PlainCell w={DATE_W} style={{ background: !compl ? '#fff8f8' : '#fff' }}>
-        <input type="date" value={compl} onChange={e => { setCompl(e.target.value); saveMeta(start, e.target.value) }} style={{ ...dateInput, color: overrun ? '#dc2626' : undefined }} />
+        <input type="date" value={compl} onChange={e => { setCompl(e.target.value); saveMeta(start, e.target.value) }} style={{ ...dateInput, color: overrun ? '#dc2626' : undefined, fontWeight: overrun ? 700 : undefined }} />
       </PlainCell>
 
       {view === 'day'
@@ -662,6 +679,7 @@ const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0
 const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }
 const stepBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #d9d5cc', background: '#fff', fontSize: 16, cursor: 'pointer', lineHeight: '1' }
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
+const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }
 
 // ── Weekly labour pop-out: filters + one stacked table per week + Download/Send ──
 function WeekModal({ monday, onClose }) {
