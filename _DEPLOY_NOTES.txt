@@ -1,30 +1,14 @@
-APP IMPROVEMENTS batch — project-access fix, comments + resolve-email, renames
+ADMIN NAV — Documents + App Improvements tabs now show on every admin page
 
-1) SITE APP USERS — project access picker FIXED  (pages/operations/users.js)
-   BUG: "All projects" couldn't be unticked and individual projects were disabled, so you were locked to
-   "All". Fixed: ticking "All projects" toggles it on/off; unticking switches to specific mode; ticking any
-   individual project selects it (and switches out of "All"). Works for new AND existing users.
+CAUSE: the Portal Users page (pages/admin.js) and the Templates page (pages/admin/templates.js) each have
+their OWN hardcoded copy of the admin tab list — they don't use the shared AdminShell — so they still
+showed only the original 4 tabs (Portal Users, Templates, Form Builder, Site App Users). The newer pages
+(Documents, App Improvements) use AdminShell and already had all 6.
 
-2) APP IMPROVEMENTS — comments + resolve notification
-   pages/api/report-problem.js
-    - Stores the reporter's EMAIL (userEmail) on submit.
-    - PATCH now accepts { comments } and { status }. When a ticket becomes 'resolved', it EMAILS the person
-      who raised it — including your comments (if any), their original message, and a thank-you.
-    - Still emails the office on new submissions.
-   components/ReportProblemButton.js + pages/forms/index.js — the Portal and Site App submitters now send
-    the reporter's email so they can be notified on resolve.
-   pages/admin/problem-reports.js — renamed to "App Improvements"; each ticket now has a COMMENTS box.
-    Buttons: "Save comment" and "Mark resolved & notify" (or just "Mark resolved" if no email on file).
-    Filters: User + Status; resolved items hidden by default. Confirmation shows who will be emailed.
+FIX: added 'Documents' and 'App Improvements' to the inline tab lists on both pages, so all admin pages now
+show the same 6 tabs.
 
-3) RENAMES
-   - Admin tab "Problem Reports" -> "App Improvements"  (components/AdminShell.js)
-   - Link text everywhere "Report an App improvement" -> "Report app improvement"
-     (index.js, commercial.js, retention.js, variations.js, application-calendar.js,
-      commercial-scorecard.js, forms/index.js, PreContractNav.js, OperationsNav.js, ReportProblemButton.js)
+  pages/admin.js
+  pages/admin/templates.js
 
-NOTE ON EMAIL: notifications use RESEND_API_KEY + FORMS_FROM_EMAIL (already configured). Reporters who
-submitted BEFORE this update have no stored email, so they won't be notified on resolve (the admin UI shows
-"no email on file" and the confirm dialog says so). New submissions capture email automatically.
-
-Deploy all files. No cron/env change.
+Deploy both files. No cron/env change.
