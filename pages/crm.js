@@ -164,6 +164,44 @@ function MentionInput({ value, onChange, placeholder, rows }) {
 function extractMentions(text) { const names = MENTION_USERS.map((u) => u.name); return names.filter((n) => new RegExp(`@${n}\\b`, 'i').test(text || '')); }
 
 // ===========================================================================
+// Tick-box multi-select (click to open, tick items, click away to close)
+// ===========================================================================
+function MultiSelect({ value, onChange, options, placeholder }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selected = String(value || '').split(', ').filter(Boolean);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const toggle = (o) => { const next = selected.includes(o) ? selected.filter((x) => x !== o) : [...selected, o]; onChange(next.join(', ')); };
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%' }}>
+      <div onClick={() => setOpen((v) => !v)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', cursor: 'pointer', minHeight: 20, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+        {selected.length === 0 && <span style={{ color: C.dim }}>{placeholder || 'Select…'}</span>}
+        {selected.map((s) => <span key={s} style={{ ...tag, display: 'inline-flex', alignItems: 'center', gap: 4 }}>{s}<span onClick={(e) => { e.stopPropagation(); toggle(s); }} style={{ cursor: 'pointer', color: C.dim }}>✕</span></span>)}
+        <span style={{ marginLeft: 'auto', color: C.dim, fontSize: 11 }}>▾</span>
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginTop: 2, boxShadow: '0 4px 12px rgba(0,0,0,.15)', maxHeight: 240, overflowY: 'auto' }}>
+          {(options || []).map((o) => {
+            const on = selected.includes(o);
+            return (
+              <div key={o} onClick={() => toggle(o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid #f2f3f5` }}>
+                <span style={{ width: 16, height: 16, borderRadius: 4, border: `1.5px solid ${on ? C.link : C.dim}`, background: on ? C.link : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{on ? '✓' : ''}</span>
+                {o}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
 // Dots
 // ===========================================================================
 function Dot({ state, size = 14 }) {
@@ -313,7 +351,7 @@ function EditableField({ field, value, onSave }) {
       {field.type === 'date' && <input type="date" {...cp} />}
       {field.type === 'yesno' && <select {...cp}><option>Yes</option><option>No</option></select>}
       {field.type === 'select' && <select {...cp}><option value="">-</option>{(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
-      {field.type === 'multiselect' && <select multiple value={String(draft || '').split(', ').filter(Boolean)} onChange={(e) => setDraft(Array.from(e.target.selectedOptions).map((o) => o.value).join(', '))} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', height: 110 }}>{(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
+      {field.type === 'multiselect' && <MultiSelect value={draft} onChange={setDraft} options={field.options || []} placeholder="Select…" />}
       <span style={{ display: 'flex', gap: 4 }}><button onClick={() => save(draft)} style={miniBtn}>Save</button><button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button></span>
     </span>
   );
@@ -905,10 +943,17 @@ function AddProjectModal({ onClose, onCreate }) {
   const [org, setOrg] = useState('');
   const [contact, setContact] = useState('');
   const [stageId, setStageId] = useState('stage_project_in');
-  const systemsOpts = (DEFAULT_FIELD_SCHEMA.find((x) => x.key === 'systems_priced') || {}).options || [];
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  // Field defs pulled from schema so dropdowns render correctly
+  const schemaFor = (k) => DEFAULT_FIELD_SCHEMA.find((x) => x.key === k) || { key: k, type: 'text' };
+  const systemsOpts = (schemaFor('systems_priced').options) || [];
   const NPF = [['title','Project title', true],['value','Value (£)', false],['site_location','Site Location', false],['site_postcode','Postcode', false],['region','Region', false],['size_m2','Size: m2', false],['glenigan_id','Glenigan Project ID', false],['estimator_responsible','Estimator Responsible', false],['project_type','Project Type', false],['lead_source','Lead Source', false],['scope_of_works','Scope of Works', false]];
   const create = () => { if (!f.title || !f.title.trim()) { alert('Project title is required.'); return; } onCreate({ ...f, organization: org, contact_person: contact, stageId }); };
+  const renderInput = (k) => {
+    const def = schemaFor(k);
+    if (def.type === 'select') return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option>{(def.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+    return <input type={def.type === 'number' || def.type === 'currency' ? 'number' : 'text'} value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />;
+  };
   return (
     <div style={overlay}><div style={{ ...modal, maxWidth: 640 }}>
       <div style={modalHead}><span style={{ fontSize: 16, fontWeight: 700 }}>Add new project</span><button onClick={onClose} style={xBtn}>✕</button></div>
@@ -917,8 +962,8 @@ function AddProjectModal({ onClose, onCreate }) {
           <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer (organization)</label><TypeAhead value={org} onChange={setOrg} options={ORGS} placeholder="Type to search customers…" /></div>
           <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Customer contact</label><TypeAhead value={contact} onChange={setContact} options={CONTACTS} placeholder="Type to search contacts…" /></div>
           <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
-          {NPF.map(([k, lbl, req]) => <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label><input value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} /></div>)}
-          <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Systems Priced (multi-select)</label><select multiple value={String(f.systems_priced || '').split(', ').filter(Boolean)} onChange={(e) => set('systems_priced', Array.from(e.target.selectedOptions).map((o) => o.value).join(', '))} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', height: 120 }}>{systemsOpts.map((o) => <option key={o} value={o}>{o}</option>)}</select></div>
+          {NPF.map(([k, lbl, req]) => <div key={k} style={k === 'scope_of_works' || k === 'title' ? { gridColumn: '1 / -1' } : {}}><label style={fLbl}>{lbl}{req ? ' *' : ''}</label>{renderInput(k)}</div>)}
+          <div style={{ gridColumn: '1 / -1' }}><label style={fLbl}>Systems Priced</label><MultiSelect value={f.systems_priced || ''} onChange={(v) => set('systems_priced', v)} options={systemsOpts} placeholder="Select systems…" /></div>
         </div>
       </div>
       <div style={modalFoot}><button onClick={onClose} style={ghostBtn}>Cancel</button><button onClick={create} style={primaryBtn}>Create project</button></div>
