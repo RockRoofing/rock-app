@@ -165,7 +165,10 @@ function ProjectAccessPicker({ projects, value, onChange }) {
   const isAll = value === 'all' || value == null
   const selected = Array.isArray(value) ? value : []
 
-  const toggleAll = () => onChange('all')
+  // Ticking "All projects" turns it ON; unticking it switches to specific mode
+  // (empty selection). Ticking any individual project also switches to specific
+  // mode with that project selected.
+  const toggleAll = () => onChange(isAll ? [] : 'all')
   const toggleProject = (no) => {
     const base = isAll ? [] : selected
     const next = base.includes(no) ? base.filter(x => x !== no) : [...base, no]
@@ -191,12 +194,12 @@ function ProjectAccessPicker({ projects, value, onChange }) {
           <div style={{ borderTop: '1px solid #f0f0f0', margin: '4px 0' }} />
           {projects.length === 0 && <div style={{ padding: '8px 10px', color: '#aaa', fontSize: 13 }}>No projects.</div>}
           {projects.map(p => (
-            <label key={p.no} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13.5, opacity: isAll ? 0.5 : 1 }}>
-              <input type="checkbox" disabled={isAll} checked={!isAll && selected.includes(p.no)} onChange={() => toggleProject(p.no)} />
+            <label key={p.no} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13.5 }}>
+              <input type="checkbox" checked={!isAll && selected.includes(p.no)} onChange={() => toggleProject(p.no)} />
               {p.no}{p.name && p.name !== p.no ? ` — ${p.name}` : ''}
             </label>
           ))}
-          {isAll && <div style={{ padding: '8px 10px', fontSize: 12, color: '#888' }}>Untick "All projects" to choose specific projects.</div>}
+          {isAll && <div style={{ padding: '8px 10px', fontSize: 12, color: '#888' }}>Currently all projects. Untick "All projects" or tick a specific project below to restrict access.</div>}
         </div>
       )}
     </div>

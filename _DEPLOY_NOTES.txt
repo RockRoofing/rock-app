@@ -1,13 +1,30 @@
-"REPORT AN APP IMPROVEMENT" on the commercial sub-pages + SRAT marker removed
+APP IMPROVEMENTS batch — project-access fix, comments + resolve-email, renames
 
-  pages/retention.js            — report link added to the nav (left of "+ Add Manual Entry").
-  pages/variations.js           — report link added to the nav (left of "+ Add Variation").
-  pages/application-calendar.js — report link added to the nav (pushed to the right).
-  pages/commercial-scorecard.js — report link added to the nav (right side).
-  All four are orange "⚠ Report an App improvement" and open the same report popup (via the global
-  'open-report-problem' listener already deployed in _app.js / ReportProblemButton).
+1) SITE APP USERS — project access picker FIXED  (pages/operations/users.js)
+   BUG: "All projects" couldn't be unticked and individual projects were disabled, so you were locked to
+   "All". Fixed: ticking "All projects" toggles it on/off; unticking switches to specific mode; ticking any
+   individual project selects it (and switches out of "All"). Works for new AND existing users.
 
-  pages/operations/project-management/srat.js — removed the temporary "· filter v2" marker from the title
-  (now just "SRATs") since the filter is confirmed working.
+2) APP IMPROVEMENTS — comments + resolve notification
+   pages/api/report-problem.js
+    - Stores the reporter's EMAIL (userEmail) on submit.
+    - PATCH now accepts { comments } and { status }. When a ticket becomes 'resolved', it EMAILS the person
+      who raised it — including your comments (if any), their original message, and a thank-you.
+    - Still emails the office on new submissions.
+   components/ReportProblemButton.js + pages/forms/index.js — the Portal and Site App submitters now send
+    the reporter's email so they can be notified on resolve.
+   pages/admin/problem-reports.js — renamed to "App Improvements"; each ticket now has a COMMENTS box.
+    Buttons: "Save comment" and "Mark resolved & notify" (or just "Mark resolved" if no email on file).
+    Filters: User + Status; resolved items hidden by default. Confirmation shows who will be emailed.
+
+3) RENAMES
+   - Admin tab "Problem Reports" -> "App Improvements"  (components/AdminShell.js)
+   - Link text everywhere "Report an App improvement" -> "Report app improvement"
+     (index.js, commercial.js, retention.js, variations.js, application-calendar.js,
+      commercial-scorecard.js, forms/index.js, PreContractNav.js, OperationsNav.js, ReportProblemButton.js)
+
+NOTE ON EMAIL: notifications use RESEND_API_KEY + FORMS_FROM_EMAIL (already configured). Reporters who
+submitted BEFORE this update have no stored email, so they won't be notified on resolve (the admin UI shows
+"no email on file" and the confirm dialog says so). New submissions capture email automatically.
 
 Deploy all files. No cron/env change.

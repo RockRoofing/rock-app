@@ -8,7 +8,7 @@ const TABS = [
   ['Form Builder', '/operations/forms-builder'],
   ['Site App Users', '/operations/users'],
   ['Documents', '/admin/documents'],
-  ['Problem Reports', '/admin/problem-reports'],
+  ['App Improvements', '/admin/problem-reports'],
 ]
 
 // Chrome for Admin-area pages: dark bar + admin sub-nav, admin-gated.

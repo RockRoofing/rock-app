@@ -26,7 +26,7 @@ export default function PreContractNav({ active, children }) {
       <div style={{ flex: 1 }} />
       {children}
       <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-        style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 8 }}>⚠ Report an App improvement</button>
+        style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 8 }}>⚠ Report app improvement</button>
     </div>
   )
 }

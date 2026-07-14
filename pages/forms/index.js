@@ -284,7 +284,7 @@ function SiteAppReportProblem({ user }) {
     try {
       const r = await fetch('/api/report-problem', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName: user?.name || '', platform: 'Site App', page, description }),
+        body: JSON.stringify({ userName: user?.name || '', userEmail: user?.email || '', platform: 'Site App', page, description }),
       })
       let d = {}; try { d = await r.json() } catch {}
       if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
@@ -296,14 +296,14 @@ function SiteAppReportProblem({ user }) {
     <div style={{ marginTop: 28, textAlign: 'center' }}>
       <button onClick={() => { setPage(''); setDescription(''); setDone(false); setErr(''); setOpen(true) }}
         style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
-        ⚠ Report an App improvement
+        ⚠ Report app improvement
       </button>
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpen(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report an App improvement</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report app improvement</div>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
             </div>
             {done ? (

@@ -326,7 +326,7 @@ export default function CommercialScorecard() {
           <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Commercial Scorecard</span>
           <div style={{ flex: 1 }} />
           <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-            style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report an App improvement</button>
+            style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
         </div>
 
         <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>

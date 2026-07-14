@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 
-// "Report an App improvement" — modal only. The trigger link lives in each area's
+// "Report app improvement" — modal only. The trigger link lives in each area's
 // nav / top bar (portal home, OperationsNav, PreContractNav, commercial nav) and
 // opens this modal via the 'open-report-problem' window event. The Site App has
 // its own in-app button. This component renders nothing on /forms.
@@ -9,6 +9,7 @@ export default function ReportProblemButton() {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [userName, setUserName] = useState('')
+  const [userEmail, setUserEmail] = useState('')
   const [page, setPage] = useState('')
   const [description, setDescription] = useState('')
   const [sending, setSending] = useState(false)
@@ -16,7 +17,7 @@ export default function ReportProblemButton() {
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d?.user?.name) setUserName(d.user.name) }).catch(() => {})
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d?.user?.name) setUserName(d.user.name); if (d?.user?.email) setUserEmail(d.user.email) }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -34,7 +35,7 @@ export default function ReportProblemButton() {
     try {
       const r = await fetch('/api/report-problem', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName, platform: 'Portal', page: page || router.asPath, description }),
+        body: JSON.stringify({ userName, userEmail, platform: 'Portal', page: page || router.asPath, description }),
       })
       let d = {}; try { d = await r.json() } catch {}
       if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
@@ -46,7 +47,7 @@ export default function ReportProblemButton() {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setOpen(false)}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 460, padding: '20px 20px 24px', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a19' }}>Report an App improvement</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: '#1a1a19' }}>Report app improvement</div>
           <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
         </div>
         {done ? (
