@@ -1,29 +1,18 @@
-GANTT — copy/paste fix (no page reload) + clear "already allocated" clash warnings
+GANTT — copy auto-deselect + fix cell selecting the row above
 
 pages/operations/project-management/planning.js
 
-1) COPY/PASTE NO LONGER RELOADS THE PAGE
-   - Paste (and Clear labour) now refresh the data in place instead of doing a full reload, so the page no
-     longer jumps to the top / loses your scroll position. You stay where you were pasting.
+1) COPY NOW AUTO-DESELECTS
+   - After you click Copy, the copied cells are deselected automatically, so you can click straight into
+     the paste target. (Flow: select gang -> Copy -> click target start cell -> Paste.)
 
-2) WHY A PASTE COULD SILENTLY "NOT WORK" — now explained on screen
-   - The planner won't double-book a person: if a copied installer is already allocated to ANOTHER project
-     on that day, that day was being skipped SILENTLY. Now, after paste, you get a clear message naming who
-     was already booked and on which project/day, e.g.:
-       "Joe Bloggs is already on J229 — Bosden on 29/10"
-   - The rest of the paste still lands; only the genuinely-clashing person/day is skipped.
-
-3) DUPLICATE ALLOCATION WARNING WHEN ADDING LABOUR
-   - In the Allocate modal, if you try to allocate an installer who is already on another project in that
-     period, it now STOPS and shows a clear message naming the other project and date (and keeps the modal
-     open so you see it), instead of silently dropping them:
-       "Could not allocate — already booked elsewhere:
-        Joe Bloggs is already allocated to J229 — Bosden on 29/10"
+2) CLICKING A CELL NO LONGER SELECTS THE ROW ABOVE
+   - Cause: the yellow selection bar appeared IN the page flow, pushing the gantt down as it appeared — so
+     by the time the click registered, your cursor was over the row above.
+   - Fix: the yellow bar is now a FIXED floating overlay pinned to the top-centre of the screen. Showing/
+     hiding it no longer shifts the gantt at all, so the cell you click is the cell that gets selected. It
+     still stays visible while you scroll (as before).
 
 NOTE: this file supersedes all previous gantt drops — deploy just this one.
 
 Deploy this file. No cron/env change.
-
-If a paste STILL doesn't land after this and you don't see a clash message, tell me exactly what you
-copied and where you pasted (project + dates) and I'll trace it — but the reload fix should make the result
-visible either way.

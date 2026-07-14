@@ -227,6 +227,9 @@ export default function PlanningPage() {
     }
     if (!cells.length) { window.alert('Nothing to copy — the selected cells have no labour.'); return }
     setClipboard({ cells })
+    // Deselect the copied cells so you can click straight into the paste target.
+    dragging.current = false
+    setSel(null)
   }
 
   // Paste the clipboard onto the current selection's project, anchored at the
@@ -315,9 +318,10 @@ export default function PlanningPage() {
           <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
       </div>
 
-      {/* selection action bar (day view) — sticky so it stays visible while scrolling */}
+      {/* selection action bar (day view) — FIXED overlay so showing/hiding it never
+          shifts the gantt (which was causing the click to land on the row above). */}
       {view === 'day' && sel && sel.dates.size > 0 && (
-        <div style={{ position: 'sticky', top: 0, zIndex: 30, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+        <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', maxWidth: 'calc(100vw - 32px)' }}>
           <div style={{ fontSize: 13, color: '#92400e' }}>
             <strong>{data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
           </div>
