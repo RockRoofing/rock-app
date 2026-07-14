@@ -203,9 +203,32 @@ export default function PlanningPage() {
 
   return (
     <OperationsShell active="pm:planning" section="pm" title="Planning" wide>
-      <PageHeading title="Planning" sub="Project programme — installers per project per day. Live projects first, then negotiated (not yet secured)." />
+      {/* Top row: heading + all view controls */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+        <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Planning</h1>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
+          <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
+          <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+            <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
+            <button onClick={() => setView('week')} style={{ ...segBtn, background: view === 'week' ? GOLD : '#fff', color: view === 'week' ? '#fff' : '#555' }}>Week</button>
+          </div>
+          <button onClick={() => setHistoric(h => {
+              const next = !h
+              setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0)))
+              return next
+            })} title="Show past weeks (starts 2 weeks ago; scroll back up to 6 weeks or as far as there's data)"
+            style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
+            {historic ? '✓ Historic' : 'Historic'}
+          </button>
+          <button onClick={() => shift(historic ? -1 : -12)} disabled={historic && !canGoBack} style={{ ...ghostBtn, opacity: (historic && !canGoBack) ? 0.4 : 1 }} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
+          <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
+          <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
+        </div>
+      </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', marginBottom: 12 }}>
+      {/* Filters */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', marginBottom: 10 }}>
         <div><div style={lbl}>Project</div>
           <select value={filters.project} onChange={e => setFilters(f => ({ ...f, project: e.target.value }))} style={{ ...fInput, minWidth: 160, fontFamily: 'inherit' }}>
             <option value="">All projects</option>
@@ -222,32 +245,11 @@ export default function PlanningPage() {
         <div><div style={lbl}>To</div><input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} style={fInput} /></div>
         {(filters.project || filters.installer || filters.from || filters.to) &&
           <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
-          <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
-          <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
-            <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
-            <button onClick={() => setView('week')} style={{ ...segBtn, background: view === 'week' ? GOLD : '#fff', color: view === 'week' ? '#fff' : '#555' }}>Week</button>
-          </div>
-          <button onClick={() => setHistoric(h => {
-              const next = !h
-              // Turning Historic ON: start the view 2 weeks before today. Turning it
-              // OFF: snap back to this week.
-              setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0)))
-              return next
-            })} title="Show past weeks (starts 2 weeks ago; scroll back up to 6 weeks or as far as there's data)"
-            style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
-            {historic ? '✓ Historic' : 'Historic'}
-          </button>
-          <button onClick={() => shift(historic ? -1 : -12)} disabled={historic && !canGoBack} style={{ ...ghostBtn, opacity: (historic && !canGoBack) ? 0.4 : 1 }} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
-          <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
-          <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
-        </div>
       </div>
 
-      {/* selection action bar (day view) */}
+      {/* selection action bar (day view) — sticky so it stays visible while scrolling */}
       {view === 'day' && sel && sel.dates.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', marginBottom: 10 }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 30, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
           <div style={{ fontSize: 13, color: '#92400e' }}>
             <strong>{data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
           </div>

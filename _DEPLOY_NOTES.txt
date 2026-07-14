@@ -1,19 +1,20 @@
-GANTT — RAMS-not-signed warning
+GANTT — layout tidy + sticky selection bar
 
 pages/operations/project-management/planning.js
-  - The Gantt now loads the RAMS Matrix sign-offs (ops:rams-matrix).
-  - ALLOCATE MODAL: when you add an installer who is NOT signed onto that project's RAMS, their row
-    highlights amber with "⚠ Not signed onto this project's RAMS", plus a summary note. You can still
-    allocate them (it's a warning, not a hard block like CSCS/WAH), but it prompts you to get RAMS signed
-    before they start.
-  - PROJECT ROW: a red "⚠ Installer(s) not on RAMS" line appears under the project name when any installer
-    allocated today or in the future isn't signed onto that project's RAMS Matrix.
-  - RAMS status is matched by operative + project against the RAMS Matrix; sign someone on via H&S > RAMS
-    Matrix and the warning clears.
 
-NOTE: this file supersedes all previous gantt drops — it contains the searchable dropdown, the reworked
-warning lines (incl. Start/Completion dates needed, Man day allocation needed, overrun styling, historic-
-actual rule) and the historic scroll-back. Deploy just this one.
+  - "Planning" heading moved to the TOP of the section, on the same row as the view controls.
+  - The right-side controls (Send Weekly Labour Allocation, View Weekly Labour Allocations, Day/Week,
+    Historic, ‹ Today ›) are now up TOP next to the heading — no longer sat above the gantt.
+  - Removed the subtitle text ("Project programme — installers per project per day…").
+  - Filters row (Project / Installer / From / To / Clear) tightened up; gap between the filters and the
+    gantt/labour-edit section closed.
+  - SELECTION ACTION BAR IS NOW STICKY: when you select cells (on any project, including ones low down the
+    list), the yellow "… days selected / Allocate labour / Edit / Clear / Deselect" bar sticks to the top
+    of the screen and stays visible while you scroll — no more selecting on a lower project then scrolling
+    back up to use the buttons.
+
+NOTE: this file supersedes all previous gantt drops (searchable dropdown, warning rework, historic scroll,
+RAMS warning) — it contains everything. Deploy just this one.
 
 Deploy this file. No cron/env change.
 
