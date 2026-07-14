@@ -1,5 +1,5 @@
 import {
-  getOpsProjects, getProjectFiles, getRamsSignatures, get,
+  getOpsProjects, getProjectFiles, getRamsSignatures, getRamsApprovals, get,
 } from '../../lib/db'
 
 // Site App home-screen notification badges for one operative.
@@ -35,18 +35,24 @@ export default async function handler(req, res) {
       access === 'all' || (Array.isArray(access) && access.map(String).includes(String(no)))
     const myProjects = projects.filter(p => allowed(p.projectNo))
 
-    // ── RAMS: unsigned documents across my projects ──
+    // ── RAMS: documents READY for this operative to sign, and unsigned ──
+    // "Ready" = the approval chain has reached the operatives stage. RAMS still
+    // going through CM/Director/Site-Manager approval don't count (they can't
+    // sign yet). CM/Director are recognised by matching the designated director /
+    // project CM, but for the operative badge we simply gate on stage + signed.
     let rams = 0
     const ramsByProject = {}
     await Promise.all(myProjects.map(async (p) => {
       const files = await getProjectFiles(p.projectNo)
       const ramsFiles = (files || []).filter(f => f.category === 'rams')
       if (!ramsFiles.length) return
-      const sigs = await getRamsSignatures(p.projectNo)
+      const [sigs, appr] = await Promise.all([getRamsSignatures(p.projectNo), getRamsApprovals(p.projectNo)])
       let n = 0
       for (const f of ramsFiles) {
+        const stage = (appr[f.id] && appr[f.id].stage) || 'cm'
+        if (stage !== 'operatives' && stage !== 'complete') continue   // not signable yet
         const signedBy = sigs[f.id] || {}
-        if (opId && signedBy[opId]) continue   // this operative already signed this version
+        if (opId && signedBy[opId]) continue   // already signed this version
         n++
       }
       if (n > 0) { ramsByProject[p.projectNo] = n; rams += n }

@@ -50,12 +50,16 @@ export default async function handler(req, res) {
         }
         const stage = Object.keys(STAGE_RANK).find(k => STAGE_RANK[k] === minRank) || 'cm'
 
-        // Who has signed ALL current RAMS docs -> match by lowercased name.
+        // Who (operatives) has signed ALL current RAMS docs -> match by lowercased
+        // name. EXCLUDE the CM/Director auto-signatures (they approve + auto-sign,
+        // but they are not "operatives" for the matrix/pipeline).
         const perOpSignedCount = {}
         for (const f of ramsFiles) {
           const bucket = sigs[f.id] || {}
           for (const opId of Object.keys(bucket)) {
+            if (opId.startsWith('cm:') || opId.startsWith('director:')) continue
             const rec = bucket[opId]
+            if (rec.role === 'Contracts Manager' || rec.role === 'Director') continue
             const nmeKey = (rec.name || '').trim().toLowerCase()
             if (!nmeKey) continue
             perOpSignedCount[nmeKey] = (perOpSignedCount[nmeKey] || 0) + 1

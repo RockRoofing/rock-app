@@ -431,11 +431,20 @@ function ProjectDetailsView({ onBack, only }) {
 
   const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
   const isCM = user?.accessLevel === 'contracts-manager'
-  const [directorEmail, setDirectorEmail] = useState('')
+  const [director, setDirector] = useState(null)   // { name, email } | null
   useEffect(() => {
-    fetch('/api/rams-director?who=1').then(r => r.json()).then(d => setDirectorEmail((d?.director?.email || '').toLowerCase())).catch(() => {})
+    fetch('/api/rams-director?who=1').then(r => r.json()).then(d => setDirector(d?.director || null)).catch(() => {})
   }, [])
-  const isDirector = !!user?.email && !!directorEmail && user.email.toLowerCase() === directorEmail
+  const isDirector = (() => {
+    if (!director || !user) return false
+    const uEmail = (user.email || '').trim().toLowerCase()
+    const dEmail = (director.email || '').trim().toLowerCase()
+    if (uEmail && dEmail && uEmail === dEmail) return true
+    // Fallback: match by name (handles Site App email differing from Portal email).
+    const uName = (user.name || '').trim().toLowerCase()
+    const dName = (director.name || '').trim().toLowerCase()
+    return !!uName && uName === dName
+  })()
 
   // Called after a successful signature: flip the row to signed without a full reload.
   function markSigned(fileId) {
@@ -449,6 +458,7 @@ function ProjectDetailsView({ onBack, only }) {
     } catch {}
   }
 
+  const [ramsByProject, setRamsByProject] = useState({})
   useEffect(() => { (async () => {
     try {
       const r = await fetch('/api/ops-projects'); const d = await r.json()
@@ -456,6 +466,14 @@ function ProjectDetailsView({ onBack, only }) {
       const pa = u?.projectAccess
       const allowed = (p) => pa == null || pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(p.projectNo)))
       setProjects((d.projects || []).filter(p => p.status === 'active').filter(allowed).sort((a, b) => (a.projectNo || '').localeCompare(b.projectNo || '')))
+      // Per-project unsigned RAMS counts (only needed for the RAMS view badges).
+      if (only === 'rams') {
+        try {
+          const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
+          const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(u?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
+          setRamsByProject(b.ramsByProject || {})
+        } catch {}
+      }
     } catch {}
     setLoading(false)
   })() }, [])
@@ -509,6 +527,7 @@ function ProjectDetailsView({ onBack, only }) {
             {projects.map(p => (
               <button key={p.projectNo} onClick={() => { setProj(p); setTab(only || 'drawings') }} style={homeCard}>
                 <div style={{ flex: 1 }}><div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{p.projectNo}</div><div style={{ fontSize: 13, color: '#888' }}>{p.projectName}</div></div>
+                {only === 'rams' && ramsByProject[p.projectNo] > 0 && <span style={homeBadge('#dc2626')}>{ramsByProject[p.projectNo]}</span>}
                 <div style={{ color: BRAND, fontSize: 22 }}>›</div>
               </button>
             ))}

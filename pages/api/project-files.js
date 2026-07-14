@@ -30,11 +30,11 @@ export default async function handler(req, res) {
       uploadedAt: Date.now(),
     })
     await saveProjectFiles(projectNo, files)
-    // New RAMS uploaded → notify operatives on the project to sign (best-effort).
+    // New RAMS uploaded → the CM is first in the chain: ask them to approve.
     if ((file.category || 'drawing') === 'rams') {
       try {
-        const { notifyRamsUploaded } = await import('../../lib/ramsNotify')
-        notifyRamsUploaded({ projectNo, fileName: file.name || '' })
+        const { notifyCmToApprove } = await import('../../lib/ramsNotify')
+        notifyCmToApprove({ projectNo, fileName: file.name || '' })
       } catch {}
     }
     return res.json({ ok: true, files })

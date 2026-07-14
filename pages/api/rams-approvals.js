@@ -2,7 +2,7 @@ import {
   getRamsApprovals, saveRamsApprovals,
   getRamsSignatures, saveRamsSignatures,
   getRamsToken, saveRamsToken,
-  getOpsProject, get,
+  getOpsProject, getProjectFiles, get,
 } from '../../lib/db'
 import crypto from 'crypto'
 
@@ -99,6 +99,12 @@ export default async function handler(req, res) {
       rec.updatedAt = Date.now()
       approvals[ref.fileId] = rec
       await saveRamsApprovals(ref.projectNo, approvals)
+      try {
+        const { notifyOperativesToSign } = await import('../../lib/ramsNotify')
+        const files = await getProjectFiles(ref.projectNo)
+        const f = (files || []).find(x => x.id === ref.fileId)
+        notifyOperativesToSign({ projectNo: ref.projectNo, fileName: f?.name || '' })
+      } catch {}
       return res.json({ ok: true })
     }
 
@@ -119,6 +125,12 @@ export default async function handler(req, res) {
       approvals[fileId] = rec
       await saveRamsApprovals(projectNo, approvals)
       await autoSign(projectNo, fileId, `cm:${name}`, name, signatureImg)
+      try {
+        const { notifyDirectorToApprove } = await import('../../lib/ramsNotify')
+        const files = await getProjectFiles(projectNo)
+        const f = (files || []).find(x => x.id === fileId)
+        notifyDirectorToApprove({ projectNo, fileName: f?.name || '' })
+      } catch {}
       return res.json({ ok: true, approval: rec })
     }
 
@@ -131,7 +143,9 @@ export default async function handler(req, res) {
       if (!signatureImg) return res.status(400).json({ error: 'A signature is required' })
       const designated = (await get('ops:rams-director')) || null
       if (!designated?.email) return res.status(409).json({ error: 'No RAMS Director has been set in Admin yet.' })
-      if ((email || '').toLowerCase() !== designated.email.toLowerCase()) {
+      const emailMatch = (email || '').trim().toLowerCase() === designated.email.trim().toLowerCase()
+      const nameMatch = !!name && !!designated.name && name.trim().toLowerCase() === designated.name.trim().toLowerCase()
+      if (!emailMatch && !nameMatch) {
         return res.status(403).json({ error: 'Only the designated RAMS Director can approve at this stage.' })
       }
       rec.director = { name, date: new Date().toISOString().slice(0, 10), signedAt: Date.now(), signatureImg }
@@ -140,6 +154,12 @@ export default async function handler(req, res) {
       approvals[fileId] = rec
       await saveRamsApprovals(projectNo, approvals)
       await autoSign(projectNo, fileId, `director:${name}`, name, signatureImg)
+      try {
+        const { notifyCmToSendSiteManager } = await import('../../lib/ramsNotify')
+        const files = await getProjectFiles(projectNo)
+        const f = (files || []).find(x => x.id === fileId)
+        notifyCmToSendSiteManager({ projectNo, fileName: f?.name || '' })
+      } catch {}
       return res.json({ ok: true, approval: rec })
     }
 
