@@ -26,3 +26,22 @@ export function procurementLate(requiredOnSite, leadInWeeks) {
   const today = new Date(); today.setHours(0, 0, 0, 0); latestOrder.setHours(0, 0, 0, 0)
   return latestOrder < today
 }
+
+// Colour key legend matching dateCellStyle: red = overdue (today or past),
+// orange = within a week, green = more than a week away.
+export function DateColourKey() {
+  const item = (bg, color, label) => (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#666' }}>
+      <span style={{ width: 14, height: 14, borderRadius: 4, background: bg, border: `1px solid ${color}22` }} />
+      {label}
+    </span>
+  )
+  return (
+    <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center', margin: '0 0 14px', padding: '8px 12px', background: '#fafafa', border: '1px solid #efefef', borderRadius: 10 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: '#888' }}>Key:</span>
+      {item('#fef2f2', '#991b1b', 'Overdue (today or past)')}
+      {item('#fff7ed', '#9a3412', 'Due within a week')}
+      {item('#ecfdf5', '#065f46', 'More than a week away')}
+    </div>
+  )
+}

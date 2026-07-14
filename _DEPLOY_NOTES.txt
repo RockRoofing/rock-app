@@ -1,13 +1,37 @@
-OPERATIONS SCORECARDS — layout matched to pre-contract (full-width graphs + bottom table)
+OPS BATCH 1 — quick fixes (7 items)
 
-pages/operations/scorecards.js  (updated)
-  - Dropped the "current month" column. Each metric is now a single FULL-WIDTH card with the label/value/
-    target on the left and the 12-month trend graph spanning the rest of the width.
-  - Added the RAG Key legend (On target / Close (≥80%) / Below target) next to the date filter, like
-    pre-contract.
-  - Added the bottom TREND TABLE (same as pre-contract): Metric | Target | one column per month, with
-    RAG-coloured values and inline-editable targets. Sticky Metric + Target columns and sticky header.
-  - Point-in-time metrics (Gross margin, Procurement) keep a single value card (no graph) but still appear
-    as a row in the trend table.
+1. SITE CONTACTS TYPING BUG  (pages/operations/projects.js)
+   ROOT CAUSE: the Section/L wrapper components were defined INSIDE ProjectDetails, so every keystroke
+   re-created them and React remounted the whole subtree — the input lost focus after one character.
+   Fixed by hoisting Section and L to module scope (stable identity). Role/Name/Email/Phone now type
+   normally.
 
-Deploy this file. No cron/env change. (Depends on the ops-scorecards API from the previous drop.)
+2. RISK LOG — TARGET RESOLUTION DATE WARNING  (pages/operations/project-management/risks.js)
+   When no target resolution date is set, shows "Target Resolution Date Required" (same style as the
+   Live Tasks warning).
+
+3+4. COLOUR KEY — Live Project Tasks & Risk Log  (tasks.js, risks.js, components/pmShared.js)
+   Added a DateColourKey legend (red = overdue/today or past, orange = due within a week, green = more than
+   a week away) at the top of both tables, matching the existing dateCellStyle colours.
+
+5. ISSUES PAGE — default to OPEN  (pages/operations/project-management/issues.js)
+   The Status filter now defaults to "Open" when you land on the page.
+
+6. DELIVERIES (Site App) — Mark as delivered  (pages/forms/deliveries.js)
+   Replaced the bare "actual delivery date" field with a big "✓ Mark as delivered" button that auto-fills
+   today's date (with an "Undo" and an editable date if it needs changing). No more manually entering a
+   date to record a delivery.
+
+7. SRATs — date-range filter  (pages/forms/cm/srats.js)
+   Added From/To date filters (with Clear) to the SRAT list within a project. (Project filter is already
+   inherent — SRATs is project-first.)
+
+Deploy all files. No cron/env change.
+
+STILL TO COME from your list (bigger pieces, next batches):
+  - Per-project access for Site App users (admin picker + Site App gating)
+  - Water Ingress Report "missing form" logic on the gantt
+  - Gantt: RAMS-not-signed warning, copy/paste cells, searchable operative dropdown, "no programme" warning
+  - Automated weekly labour email to accounts (Sat–Fri, with confirm pop-up)
+  - "Report a problem" button (portal + site app)
+  - Meeting Actions carry-over between Project Concerns

@@ -234,6 +234,17 @@ export default function ProjectsPage() {
 
 // Read-only handover view inside a project
 // ── Project Details — single source of truth (writes the same project.data the IHM uses) ──
+// Module-level so they keep a stable identity across renders. Defining these
+// inside the component remounts their subtree on every keystroke, which is what
+// caused Site Contacts inputs to lose focus after one character.
+const L = ({ children }) => <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '14px 0 6px' }}>{children}</div>
+const Section = ({ title, children }) => (
+  <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 18, marginBottom: 16 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 4 }}>{(title || '').toUpperCase()}</div>
+    {children}
+  </div>
+)
+
 function ProjectDetails({ projectNo, onSaved }) {
   const [d, setD] = useState(null)
   const [team, setTeam] = useState([])
@@ -286,13 +297,6 @@ function ProjectDetails({ projectNo, onSaved }) {
   if (loading || !d) return <Loading />
 
   const input = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
-  const L = ({ children }) => <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '14px 0 6px' }}>{children}</div>
-  const Section = ({ title, children }) => (
-    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 18, marginBottom: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 4 }}>{title.toUpperCase()}</div>
-      {children}
-    </div>
-  )
   const TeamSel = ({ label, field }) => (
     <div>
       <L>{label}</L>

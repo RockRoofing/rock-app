@@ -3,7 +3,7 @@ import OperationsShell, { PageHeading } from '../../../components/OperationsShel
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDate } from '../../../components/opsUI'
 import RowAttachments from '../../../components/RowAttachments'
 import ExpandableText from '../../../components/ExpandableText'
-import { dateCellStyle } from '../../../components/pmShared'
+import { dateCellStyle, DateColourKey } from '../../../components/pmShared'
 
 const PAGE_SIZE = 100
 
@@ -113,6 +113,8 @@ export default function LiveTasks() {
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} task{filtered.length === 1 ? '' : 's'}</div>
       </div>
+
+      <DateColourKey />
 
       {loading ? <Loading /> : !filtered.length ? (
         <EmptyCard title="No tasks to show" body={hasFilters ? 'Try adjusting the filters.' : 'Tasks from Internal Handover Minutes and manually-added tasks appear here.'} />

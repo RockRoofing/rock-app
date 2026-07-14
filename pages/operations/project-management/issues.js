@@ -29,7 +29,7 @@ export default function IssuesPage() {
   const [meName, setMeName] = useState('')
   const [page, setPage] = useState(0)
   const [sort, setSort] = useState({ key: 'createdAt', dir: 'desc' })
-  const [filters, setFilters] = useState({ project: '', status: '', createdBy: '', type: '', from: '', to: '' })
+  const [filters, setFilters] = useState({ project: '', status: 'open', createdBy: '', type: '', from: '', to: '' })
   const setF = (patch) => { setFilters(prev => ({ ...prev, ...patch })); setPage(0) }
 
   async function load() {

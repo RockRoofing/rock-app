@@ -3,7 +3,7 @@ import OperationsShell, { PageHeading } from '../../../components/OperationsShel
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDate } from '../../../components/opsUI'
 import RowAttachments from '../../../components/RowAttachments'
 import ExpandableText from '../../../components/ExpandableText'
-import { dateCellStyle } from '../../../components/pmShared'
+import { dateCellStyle, DateColourKey } from '../../../components/pmShared'
 
 const PAGE_SIZE = 100
 
@@ -115,6 +115,8 @@ export default function RiskLog() {
         <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} risk{filtered.length === 1 ? '' : 's'}</div>
       </div>
 
+      <DateColourKey />
+
       {loading ? <Loading /> : !filtered.length ? (
         <EmptyCard title="No risks to show" body={hasFilters ? 'Try adjusting the filters.' : 'Risks from Internal Handover Minutes and manually-added risks appear here.'} />
       ) : (
@@ -144,6 +146,7 @@ export default function RiskLog() {
                       </td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...(resolved ? greenCell : dateCellStyle(r.closeOutDate)) }}>
                         <input type="date" value={r.closeOutDate || ''} onChange={e => patchRisk(r.id, { closeOutDate: e.target.value })} style={{ ...sel, minWidth: 140, padding: '5px 8px', background: 'transparent', border: '1px solid #e0e0e0' }} />
+                        {!r.closeOutDate && <div style={{ color: '#c2410c', fontWeight: 600, fontSize: 11, marginTop: 3 }}>Target Resolution Date Required</div>}
                       </td>
                       <td style={{ ...td, whiteSpace: 'nowrap', ...greenCell }}>
                         <select value={resolved ? 'yes' : 'no'} onChange={e => patchRisk(r.id, { closed: e.target.value === 'yes' })} style={{ ...sel, minWidth: 80, padding: '5px 8px' }}>

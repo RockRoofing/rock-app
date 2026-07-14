@@ -228,10 +228,24 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
           </div>
           {delivery.requiredDeliveryDate && <Detail label="Scheduled delivery date" value={fmtDate(delivery.requiredDeliveryDate)} />}
 
-          {/* Editable */}
+          {/* Editable — mark delivered auto-fills today's date (amendable) */}
           <div style={{ marginTop: 16 }}>
-            <Lbl>Actual delivery date</Lbl>
-            <input type="date" value={actualDeliveryDate} onChange={e => setActualDeliveryDate(e.target.value)} style={inp} />
+            <Lbl>Delivered?</Lbl>
+            {!actualDeliveryDate ? (
+              <button onClick={() => { const t = new Date(); setActualDeliveryDate(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`) }}
+                style={{ width: '100%', padding: '13px', fontSize: 15, fontWeight: 700, borderRadius: 12, border: '2px solid #16a34a', background: '#16a34a', color: '#fff', cursor: 'pointer' }}>
+                ✓ Mark as delivered
+              </button>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 14, color: '#16a34a', fontWeight: 700 }}>✓ Delivered</span>
+                  <button onClick={() => setActualDeliveryDate('')} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 13, cursor: 'pointer' }}>Undo</button>
+                </div>
+                <Lbl>Delivery date (change if needed)</Lbl>
+                <input type="date" value={actualDeliveryDate} onChange={e => setActualDeliveryDate(e.target.value)} style={inp} />
+              </div>
+            )}
           </div>
           <div style={{ marginTop: 14 }}>
             <Lbl>Comments</Lbl>
