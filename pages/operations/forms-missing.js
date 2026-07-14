@@ -51,7 +51,7 @@ export default function FormsMissingPage() {
 
   return (
     <OperationsShell active="forms:missing" section="forms" title="Forms — Missing" wide>
-      <PageHeading title="Forms — Missing" sub="Required vs completed tracked forms for the selected weeks, with the person responsible." />
+      <PageHeading title="Forms — Missing · v2" sub="Required vs completed tracked forms for the selected weeks, with the person responsible." />
 
       {/* range */}
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
@@ -64,6 +64,9 @@ export default function FormsMissingPage() {
           <select value={toMon} onChange={e => setToMon(e.target.value)} style={{ ...fInput, minWidth: 180, fontFamily: 'inherit' }}>
             {wcOptions.filter(m => parseISO(m) >= parseISO(fromMon)).map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
           </select>
+        </div>
+        <div style={{ fontSize: 12, color: '#888', alignSelf: 'flex-end', paddingBottom: 8 }}>
+          Showing {wcLabel(fromMon)} → {wcLabel(toMon)}{loading ? ' · loading…' : (data ? ` · ${data.rows?.length || 0} rows` : '')}
         </div>
       </div>
 

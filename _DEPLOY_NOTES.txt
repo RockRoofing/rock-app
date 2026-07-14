@@ -1,24 +1,22 @@
-WATER INGRESS — "missing form" (WIRF) logic per your rules
+FORMS — MISSING — date filter diagnostics
 
-pages/api/forms-missing.js — reworked the Water Ingress Report requirement:
-  • 1 WIRF per water-ingress VISIT EVENT for a job.
-  • Consecutive days on the same job = ONE event — only the first day needs a WIRF (a continuation day
-    adds nothing).
-  • A gap of ≥1 day starts a NEW event, which needs its own WIRF.
-  • 2 separate visits on the SAME day both need a WIRF.
-  • SOLIDIFIES as "required" only once the visit is marked ACTUAL on the Gantt.
-  • Visits within the NEXT 2 WEEKS that aren't yet actual show as "Upcoming" (visibility/notification) but
-    do NOT count as required/missing until they're marked actual.
-  • "done" = a Water Ingress Report form submitted for that job in the visit's week (unchanged matching).
-  • Upcoming rows are excluded from the required/completed/% summary and the byForm tally.
+The From/To week filter code is correct (From W/C … To W/C … -> refetches on change, API builds the week
+range from those). I couldn't find a code bug, so this adds visibility to pin down what's happening:
 
-pages/operations/forms-missing.js (portal Forms — Missing page):
-  • Water-ingress visits due in the next 2 weeks show a blue "Upcoming" badge (tinted row) instead of red
-    "Missing".
-  • The "Missing" filter no longer includes Upcoming rows.
+pages/operations/forms-missing.js
+  - Title now shows "Forms — Missing · v2" so we can confirm the new file is actually deployed.
+  - Next to the To selector it now shows the ACTIVE RANGE and result count, e.g.
+      "Showing W/C 30 Jun 2025 → W/C 14 Jul 2025 · 12 rows"  (or "· loading…").
+    Change the From/To dropdowns and this line + the row count should update immediately.
 
-Verified with a test: Mon+Tue consecutive + Thu (2 visits) on one job = 3 WIRFs (Mon 1, Tue 0, Thu 2).
+AFTER DEPLOY, please check:
+  1. Does the title say "· v2"?  If NOT -> it's a deploy/cache issue (old file still live); hard-refresh or
+     confirm the Vercel deploy finished.
+  2. If it says v2: change the From / To week dropdowns and watch the "Showing … · N rows" line. Does the
+     range text change? Does the row count change?
+  - Tell me what you see (v2 or not, and whether the count moves) and I'll know exactly where the problem is.
 
-Deploy both files. No cron/env change.
+NOTE: the filter is WEEK-COMMENCING dropdowns (not free date pickers). If you expected to type exact dates,
+that's the difference — say the word and I can switch them to date inputs.
 
-REMAINING: automated weekly labour email to accounts, Meeting Actions carry-over.
+Deploy this file. No cron/env change.
