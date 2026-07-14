@@ -1,24 +1,15 @@
-FAVICON — Rock Roofing logo as the favicon on every page (Portal + Site App)
+ADMIN — Documents manager (Company Information + Operative Guidance Docs)
 
-WHAT'S INCLUDED
-  pages/_document.js  (NEW) — global document that adds the favicon / apple-touch-icon / manifest <link>
-    tags to EVERY page (portal + Site App), so the Rock logo shows in the browser tab everywhere.
-  public/favicon.ico            (16/32/48/64 multi-res)
-  public/favicon-16x16.png
-  public/favicon-32x32.png
-  public/apple-touch-icon.png   (180x180 — iOS "Add to Home Screen" icon)
-  public/favicon-192.png        (Android home-screen)
-  public/favicon-512.png        (PWA/large)
-  public/site.webmanifest       (names the app "Rock Roofing" + home-screen icons)
+pages/admin/documents.js  (NEW)
+  - New "Documents" page in the Admin centre. Two sections: Company Information and Operative Guidance
+    Documents.
+  - Per section: upload a file, give it a NAME, click Upload -> it appears as a card. Cards can be renamed
+    inline and deleted. "View" opens the document.
+  - Uploads go through the existing /api/upload-file (Vercel Blob) and are saved into ops:docs via
+    /api/ops-docs — the SAME store the Site App reads, so a doc added here appears immediately as a named
+    card in the Site App under Company Information / Operative Guidance Docs.
 
-  All generated from public/rock-logo.jpg.
+components/AdminShell.js
+  - Added a "Documents" tab to the Admin nav (between Site App Users and Problem Reports).
 
-DEPLOY NOTE (important for the binary files)
-  - Put the pages/_document.js file in pages/.
-  - Put ALL the public/* files in the public/ folder at the repo root.
-  - When uploading images via the GitHub web editor, use "Add file > Upload files" and drag the PNGs/ICO in
-    (don't paste them as text — they're binary and will corrupt if pasted).
-  - Browsers cache favicons aggressively; after deploy you may need a hard refresh (or check in a private
-    window) to see the new tab icon.
-
-No cron/env change.
+Deploy both files. No cron/env change. (Uses existing Blob upload + ops:docs storage — nothing new to set up.)
