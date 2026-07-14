@@ -1,29 +1,70 @@
-RAMS PHASE 1 — DELIVERIES BADGE FIX
-===================================
+RAMS SIGNING — PHASE 2: Operative signing
+=========================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully
+Build: npm run build -> ✓ Compiled successfully (Xero warnings unrelated)
 
-ISSUE
------
-Home Deliveries badge showed 3 but only 1 was overdue when you opened the
-project. Cause: the badge counted ALL not-yet-delivered deliveries, while the
-project view filters to a 2-week look-ahead — different rules.
+WHAT THIS DOES
+--------------
+Operatives can now SIGN a RAMS in the Site App (siteapp.rockroofing.co.uk).
 
-FIX (per your steer)
---------------------
-Both the home Deliveries badge and the per-project badges in the Deliveries
-page now count ONLY deliveries whose scheduled/required delivery date is
-TODAY or earlier and not yet delivered (i.e. overdue + due today).
-  • Home badge  = total such deliveries across the operative's projects.
-  • Per-project = that project's count.
+In the RAMS folder, each unsigned RAMS shows a red "● Not signed" status and a
+red "✍ Sign RAMS now" button. Tapping it opens a full-screen flow:
 
-The in-project list still shows the useful 2-week look-ahead so operatives can
-see what's coming, BUT overdue / due-today rows are now clearly tagged in red
-("OVERDUE" / "DUE TODAY") so the list visibly reconciles with the badge count.
+  1. READ — the RAMS PDF renders on screen (pdf.js canvas, mobile-safe). The
+     "continue" button stays disabled until the operative scrolls to the BOTTOM
+     of the document ("↓ Keep scrolling" turns into "✓ You've reached the end").
+     Short docs that don't scroll are auto-counted as read.
+  2. CONFIRM & SIGN — the exact RAMS statement is shown; Name (logged-in
+     operative) and Date are auto-filled; a finger/mouse SIGNATURE PAD lets them
+     draw their signature (Clear to redo).
+  3. "Sign & confirm" saves the signature. The row flips to green "✓ Signed"
+     immediately, and the home RAMS badge decrements when they return home.
 
-FILES CHANGED (replaces the same files from the Phase 1 zip)
------------------------------------------------------------
-• pages/api/site-badges.js   — deliveries count = required date <= today
-• pages/forms/deliveries.js  — per-project badge same rule + OVERDUE/DUE TODAY tags
+The statement signed (stored with each signature):
+  "I confirm I have read, fully understood and will work to this and any other
+   documents relating to this method statement. If at any point I feel it is
+   unsafe to continue I will stop works and contact my supervisor. Any
+   amendments to this method statement must be made by the person who originally
+   completed it. It must then be communicated to the relevant persons."
 
-Deploy on top of the Phase 1 zip (these two files supersede those copies).
+VERSION RESET (built-in, no extra logic)
+----------------------------------------
+Signatures are keyed by the RAMS file id. Uploading a new RAMS to the project
+mints a new file id (via /api/project-files), so the new version shows as
+"Not signed" for everyone and the badge/notification reappears automatically.
+No separate version-detection needed.
+
+DATA
+----
+Each signature stored at ops:rams-signatures:<projectNo>[fileId][opId] =
+  { name, date, signedAt, statement, signatureImg }
+signatureImg is a PNG data-URL of the drawn signature — Phase 5 uses this to
+build the portal signature page appended to each RAMS.
+
+FILES CHANGED
+-------------
+• pages/forms/index.js          — "Sign RAMS now" button + RamsSignFlow
+                                  (read-to-bottom reader) + SignaturePad
+                                  (finger signature); home badge refetches on
+                                  return to menu so it updates after signing.
+• pages/api/rams-signatures.js  — POST handler to record a signature
+                                  (2mb body limit for the signature PNG).
+
+No middleware change needed (both /api/rams-signatures and /api/download are
+already in the Site App passthrough). No cron changes.
+
+TEST
+----
+1. Upload a RAMS to a project (Portal) if none exists.
+2. Site App → RAMS → pick the project → "Sign RAMS now".
+3. Try to continue without scrolling (blocked) → scroll to end → continue.
+4. Draw a signature → Sign & confirm → row shows "✓ Signed".
+5. Back to home → RAMS badge count has dropped by 1.
+6. (Version reset) Upload a new RAMS to that project → it shows "Not signed"
+   again and the badge returns.
+
+NEXT (Phase 3)
+--------------
+Strict approval chain (CM in Site App → Director Carl in Portal → Site Manager
+via tokenised email → operatives), RAMS Matrix PS (orange) state + stage
+pipeline line, and gantt "Yes-only" gating.

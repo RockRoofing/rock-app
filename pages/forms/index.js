@@ -178,18 +178,19 @@ function FormsHomeMenu({ user }) {
   const [overdueTaskCount, setOverdueTaskCount] = useState(0)
   const [ramsBadge, setRamsBadge] = useState(0)
   const [deliveriesBadge, setDeliveriesBadge] = useState(0)
-  useEffect(() => {
+  async function refreshBadges() {
     if (!user?.id && !user?.name) return
-    (async () => {
-      try {
-        const pa = user?.projectAccess
-        const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
-        const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(user?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
-        setRamsBadge(b.rams || 0)
-        setDeliveriesBadge(b.deliveries || 0)
-      } catch {}
-    })()
-  }, [user])
+    try {
+      const pa = user?.projectAccess
+      const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
+      const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(user?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
+      setRamsBadge(b.rams || 0)
+      setDeliveriesBadge(b.deliveries || 0)
+    } catch {}
+  }
+  // Refetch badges on mount and whenever we return to the home menu (e.g. after
+  // signing a RAMS or confirming a delivery).
+  useEffect(() => { if (mode === 'menu') refreshBadges() }, [user, mode])
   useEffect(() => {
     if (!user?.name) return
     (async () => {
@@ -422,6 +423,12 @@ function ProjectDetailsView({ onBack, only }) {
   const [sigMap, setSigMap] = useState({})   // { [fileId]: true } if current operative signed
   const [filesLoading, setFilesLoading] = useState(false)
   const [viewerIdx, setViewerIdx] = useState(null)   // index into `files`, or null when closed
+  const [signFile, setSignFile] = useState(null)     // RAMS file currently being signed
+
+  // Called after a successful signature: flip the row to signed without a full reload.
+  function markSigned(fileId) {
+    setSigMap(m => ({ ...m, [fileId]: true }))
+  }
 
   useEffect(() => { (async () => {
     try {
@@ -517,15 +524,22 @@ function ProjectDetailsView({ onBack, only }) {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {files.map((f, i) => (
-              <div key={f.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div>
-                  {sigMap[f.id]
-                    ? <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2, fontWeight: 600 }}>✓ Signed</div>
-                    : <div style={{ fontSize: 12, color: '#dc2626', marginTop: 2, fontWeight: 700 }}>● Not signed</div>}
+              <div key={f.id} style={{ background: '#fff', border: '1px solid ' + (sigMap[f.id] ? '#e3e0d9' : '#fecaca'), borderRadius: 14, padding: '14px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontSize: 24 }}>{isImage(f) ? '🖼️' : '📄'}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 600, color: INK, wordBreak: 'break-word' }}>{f.name}</div>
+                    {sigMap[f.id]
+                      ? <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2, fontWeight: 600 }}>✓ Signed</div>
+                      : <div style={{ fontSize: 12, color: '#dc2626', marginTop: 2, fontWeight: 700 }}>● Not signed</div>}
+                  </div>
+                  <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
+                  <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
                 </div>
-                <button onClick={() => setViewerIdx(i)} style={{ background: 'transparent', border: 'none', color: BRAND, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>View</button>
-                <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ color: '#666', fontSize: 14, textDecoration: 'none' }}>Download</a>
+                {!sigMap[f.id] && (
+                  <button onClick={() => setSignFile(f)} style={{ ...bigBtn(false), marginTop: 12, background: '#dc2626' }}>
+                    ✍ Sign RAMS now
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -533,6 +547,225 @@ function ProjectDetailsView({ onBack, only }) {
       {viewerIdx != null && files[viewerIdx] && (
         <FileViewer files={files} index={viewerIdx} onIndex={setViewerIdx} onClose={() => setViewerIdx(null)} />
       )}
+      {signFile && (
+        <RamsSignFlow
+          file={signFile}
+          projectNo={proj.projectNo}
+          onClose={() => setSignFile(null)}
+          onSigned={(fileId) => { markSigned(fileId); setSignFile(null) }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── RAMS signing flow: read-to-bottom → confirm → finger signature ──────────
+// The statement operatives sign up to (mirrored server-side in the API).
+const RAMS_STATEMENT = 'I confirm I have read, fully understood and will work to this and any other documents relating to this method statement. If at any point I feel it is unsafe to continue I will stop works and contact my supervisor. Any amendments to this method statement must be made by the person who originally completed it. It must then be communicated to the relevant persons.'
+
+function RamsSignFlow({ file, projectNo, onClose, onSigned }) {
+  const [step, setStep] = useState('read')        // read | sign
+  const [reachedBottom, setReachedBottom] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const [sigData, setSigData] = useState('')      // signature PNG data-URL
+  const holderRef = useRef()
+  const scrollRef = useRef()
+
+  // Logged-in operative (name + id auto-filled).
+  const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  // Render the RAMS PDF into the scrollable holder (pdf.js, canvas — mobile-safe).
+  useEffect(() => {
+    if (step !== 'read') return
+    let cancelled = false
+    setReachedBottom(false)
+    const inlineUrl = `/api/download?inline=1&url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name || '')}`
+    ;(async () => {
+      try {
+        // Images: single scrollable image; bottom = scrolled to end.
+        if (isImage(file)) {
+          const holder = holderRef.current; if (!holder) return
+          holder.innerHTML = ''
+          const img = document.createElement('img')
+          img.src = inlineUrl; img.style.width = '100%'; img.style.display = 'block'
+          img.onerror = () => { img.src = file.url }
+          holder.appendChild(img)
+          return
+        }
+        if (!window.pdfjsLib) {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script')
+            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+            s.onload = resolve; s.onerror = reject; document.body.appendChild(s)
+          })
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        }
+        const pdf = await window.pdfjsLib.getDocument(inlineUrl).promise
+        if (cancelled) return
+        const holder = holderRef.current; if (!holder) return
+        holder.innerHTML = ''
+        const maxW = Math.min(holder.clientWidth || 700, 900)
+        for (let n = 1; n <= pdf.numPages; n++) {
+          const page = await pdf.getPage(n)
+          if (cancelled) return
+          const vp0 = page.getViewport({ scale: 1 })
+          const scale = (maxW / vp0.width) * (window.devicePixelRatio || 1)
+          const viewport = page.getViewport({ scale })
+          const canvas = document.createElement('canvas')
+          canvas.width = viewport.width; canvas.height = viewport.height
+          canvas.style.width = '100%'; canvas.style.height = 'auto'
+          canvas.style.marginBottom = '8px'; canvas.style.borderRadius = '4px'; canvas.style.background = '#fff'
+          holder.appendChild(canvas)
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+        }
+        // If the document is short enough to not scroll, count it as read.
+        if (!cancelled) requestAnimationFrame(checkBottom)
+      } catch { if (!cancelled) setErr('Could not load the document. Use Download to view it, then try again.') }
+    })()
+    return () => { cancelled = true }
+  }, [step, file])
+
+  function checkBottom() {
+    const el = scrollRef.current; if (!el) return
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 24
+    if (atBottom) setReachedBottom(true)
+  }
+
+  async function submit() {
+    setErr('')
+    if (!sigData) { setErr('Please draw your signature.'); return }
+    if (!user?.id) { setErr('Could not identify your account — please log in again.'); return }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/rams-signatures', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectNo, fileId: file.id, opId: user.id, name: user.name || '', signatureImg: sigData, statement: RAMS_STATEMENT }),
+      })
+      let d = {}; try { d = await r.json() } catch {}
+      if (!r.ok || !d.ok) { setErr(d.error || 'Could not save your signature.'); setSaving(false); return }
+      onSigned(file.id)
+    } catch (e) { setErr(e?.message || 'Could not save your signature.'); setSaving(false) }
+  }
+
+  const overlay = (
+    <div style={{ position: 'fixed', inset: 0, background: '#f6f5f2', zIndex: 3500, display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{ background: INK, height: 52, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0 }}>
+        <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {step === 'read' ? 'Read the RAMS' : 'Sign the RAMS'}
+        </div>
+        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
+      </div>
+
+      {step === 'read' ? (
+        <>
+          <div style={{ padding: '10px 14px', background: '#fffbeb', borderBottom: '1px solid #fde68a', fontSize: 13, color: '#92400e', flexShrink: 0 }}>
+            Please read <strong>{file.name}</strong> to the bottom, then continue to sign.
+          </div>
+          <div ref={scrollRef} onScroll={checkBottom} style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+            {err && <div style={{ color: '#dc2626', fontSize: 14, textAlign: 'center', padding: 20 }}>{err}</div>}
+            <div ref={holderRef} style={{ maxWidth: 900, margin: '0 auto' }} />
+            <div style={{ textAlign: 'center', color: reachedBottom ? '#16a34a' : '#bbb', fontSize: 13, padding: '8px 0 24px', fontWeight: 600 }}>
+              {reachedBottom ? '✓ You’ve reached the end' : '↓ Keep scrolling to the end'}
+            </div>
+          </div>
+          <div style={{ padding: '12px 14px', borderTop: '1px solid #e3e0d9', background: '#fff', flexShrink: 0 }}>
+            <button onClick={() => setStep('sign')} disabled={!reachedBottom} style={bigBtn(!reachedBottom)}>
+              {reachedBottom ? 'I confirm I’ve read this — continue' : 'Scroll to the end to continue'}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          <div style={{ maxWidth: 560, margin: '0 auto' }}>
+            <div style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#444', lineHeight: 1.5 }}>{RAMS_STATEMENT}</div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 4 }}>Name</div>
+                <div style={{ background: '#f7f6f3', borderRadius: 10, padding: '11px 12px', fontSize: 15, color: INK, fontWeight: 600 }}>{user?.name || '—'}</div>
+              </div>
+              <div style={{ width: 150 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 4 }}>Date</div>
+                <div style={{ background: '#f7f6f3', borderRadius: 10, padding: '11px 12px', fontSize: 15, color: INK, fontWeight: 600 }}>{today}</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 6 }}>Draw your signature below</div>
+            <SignaturePad onChange={setSigData} />
+
+            {err && <div style={{ color: '#dc2626', fontSize: 14, margin: '12px 0' }}>{err}</div>}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setStep('read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>‹ Back to document</button>
+              <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : 'Sign & confirm'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+  if (typeof document === 'undefined') return null
+  return createPortal(overlay, document.body)
+}
+
+// Finger/mouse signature canvas. Emits a trimmed PNG data-URL via onChange.
+function SignaturePad({ onChange }) {
+  const canvasRef = useRef()
+  const drawing = useRef(false)
+  const last = useRef(null)
+  const hasInk = useRef(false)
+
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const ratio = window.devicePixelRatio || 1
+    const rect = canvas.getBoundingClientRect()
+    canvas.width = rect.width * ratio
+    canvas.height = rect.height * ratio
+    const ctx = canvas.getContext('2d')
+    ctx.scale(ratio, ratio)
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111'
+  }, [])
+
+  function pos(e) {
+    const canvas = canvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const t = e.touches ? e.touches[0] : e
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top }
+  }
+  function start(e) { e.preventDefault(); drawing.current = true; last.current = pos(e) }
+  function move(e) {
+    if (!drawing.current) return
+    e.preventDefault()
+    const ctx = canvasRef.current.getContext('2d')
+    const p = pos(e)
+    ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y); ctx.lineTo(p.x, p.y); ctx.stroke()
+    last.current = p; hasInk.current = true
+  }
+  function end() {
+    if (!drawing.current) return
+    drawing.current = false
+    if (hasInk.current) onChange(canvasRef.current.toDataURL('image/png'))
+  }
+  function clear() {
+    const canvas = canvasRef.current
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height)
+    hasInk.current = false; onChange('')
+  }
+
+  return (
+    <div>
+      <canvas ref={canvasRef}
+        onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+        onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+        style={{ width: '100%', height: 180, background: '#fff', border: '2px dashed #cbb994', borderRadius: 12, touchAction: 'none', display: 'block' }} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
+        <button onClick={clear} style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Clear signature</button>
+      </div>
     </div>
   )
 }
