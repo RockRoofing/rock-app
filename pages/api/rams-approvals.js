@@ -2,9 +2,8 @@ import {
   getRamsApprovals, saveRamsApprovals,
   getRamsSignatures, saveRamsSignatures,
   getRamsToken, saveRamsToken,
-  getOpsProject,
+  getOpsProject, get,
 } from '../../lib/db'
-import { getSessionFromReq } from '../../lib/portalAuth'
 import crypto from 'crypto'
 
 // RAMS approval chain (per RAMS document). Strict sequential order:
@@ -124,16 +123,17 @@ export default async function handler(req, res) {
     }
 
     if (action === 'director-approve') {
-      // Runs on the portal — verify a portal session AND that it's the Director.
-      const session = getSessionFromReq(req)
-      if (!session) return res.status(401).json({ error: 'Please sign in to the portal.' })
-      const directorEmail = (process.env.DIRECTOR_EMAIL || 'carl@rockroofing.co.uk').toLowerCase()
-      const isDirector = (session.email || '').toLowerCase() === directorEmail || session.role === 'admin'
-      if (!isDirector) return res.status(403).json({ error: 'Only the Director can approve at this stage.' })
+      // Now signed in the SITE APP by the designated RAMS Director. Verify the
+      // caller's email matches the designated Director (set in Admin).
       if (rec.stage !== 'director') return res.status(409).json({ error: 'This RAMS is not awaiting Director approval.' })
-      const { name, signatureImg } = body
+      const { name, signatureImg, email } = body
       if (!name) return res.status(400).json({ error: 'Missing name' })
       if (!signatureImg) return res.status(400).json({ error: 'A signature is required' })
+      const designated = (await get('ops:rams-director')) || null
+      if (!designated?.email) return res.status(409).json({ error: 'No RAMS Director has been set in Admin yet.' })
+      if ((email || '').toLowerCase() !== designated.email.toLowerCase()) {
+        return res.status(403).json({ error: 'Only the designated RAMS Director can approve at this stage.' })
+      }
       rec.director = { name, date: new Date().toISOString().slice(0, 10), signedAt: Date.now(), signatureImg }
       rec.stage = 'site-manager'
       rec.updatedAt = Date.now()

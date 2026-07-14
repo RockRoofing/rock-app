@@ -8,6 +8,7 @@ const TABS = [
   ['Form Builder', '/operations/forms-builder'],
   ['Site App Users', '/operations/users'],
   ['Documents', '/admin/documents'],
+  ['RAMS Director', '/admin/rams-director'],
   ['App Improvements', '/admin/problem-reports'],
 ]
 

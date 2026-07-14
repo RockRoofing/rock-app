@@ -426,10 +426,16 @@ function ProjectDetailsView({ onBack, only }) {
   const [viewerIdx, setViewerIdx] = useState(null)   // index into `files`, or null when closed
   const [signFile, setSignFile] = useState(null)     // RAMS file currently being signed
   const [approveFile, setApproveFile] = useState(null) // RAMS file the CM is approving
+  const [directorFile, setDirectorFile] = useState(null) // RAMS file the Director is approving
   const [smFile, setSmFile] = useState(null)           // RAMS file: CM setting Site Manager recipient
 
   const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
   const isCM = user?.accessLevel === 'contracts-manager'
+  const [directorEmail, setDirectorEmail] = useState('')
+  useEffect(() => {
+    fetch('/api/rams-director?who=1').then(r => r.json()).then(d => setDirectorEmail((d?.director?.email || '').toLowerCase())).catch(() => {})
+  }, [])
+  const isDirector = !!user?.email && !!directorEmail && user.email.toLowerCase() === directorEmail
 
   // Called after a successful signature: flip the row to signed without a full reload.
   function markSigned(fileId) {
@@ -569,11 +575,17 @@ function ProjectDetailsView({ onBack, only }) {
                   </button>
                 )}
 
-                {/* Awaiting Director (shown to CM once they've approved) */}
-                {isCM && stage === 'director' && (
-                  <div style={{ marginTop: 10, background: '#f7f6f3', border: '1px solid #e3e0d9', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#777', textAlign: 'center' }}>
-                    ⏳ Awaiting Director approval (Portal)
-                  </div>
+                {/* Director approves in the Site App when they are the designated Director */}
+                {stage === 'director' && (
+                  isDirector ? (
+                    <button onClick={() => setDirectorFile(f)} style={{ ...bigBtn(false), marginTop: 10, background: '#ca8a04' }}>
+                      ✓ Approve as Director
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: 10, background: '#f7f6f3', border: '1px solid #e3e0d9', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#777', textAlign: 'center' }}>
+                      ⏳ Awaiting Director approval
+                    </div>
+                  )
                 )}
 
                 {/* CM sets the Site Manager recipient once the Director has approved */}
@@ -614,6 +626,15 @@ function ProjectDetailsView({ onBack, only }) {
           mode="cm"
           onClose={() => setApproveFile(null)}
           onSigned={() => { setApproveFile(null); refreshApprovals() }}
+        />
+      )}
+      {directorFile && (
+        <RamsSignFlow
+          file={directorFile}
+          projectNo={proj.projectNo}
+          mode="director"
+          onClose={() => setDirectorFile(null)}
+          onSigned={() => { setDirectorFile(null); refreshApprovals() }}
         />
       )}
       {smFile && (
@@ -677,6 +698,8 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
   const holderRef = useRef()
   const scrollRef = useRef()
   const isCMmode = mode === 'cm'
+  const isDirectorMode = mode === 'director'
+  const isApproveMode = isCMmode || isDirectorMode
 
   // Logged-in operative (name + id auto-filled).
   const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
@@ -751,6 +774,11 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'cm-approve', projectNo, fileId: file.id, name: user.name || '', signatureImg: sigData }),
         })
+      } else if (isDirectorMode) {
+        r = await fetch('/api/rams-approvals', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'director-approve', projectNo, fileId: file.id, name: user.name || '', email: user.email || '', signatureImg: sigData }),
+        })
       } else {
         r = await fetch('/api/rams-signatures', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -768,7 +796,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
       {/* Header */}
       <div style={{ background: INK, height: 52, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0 }}>
         <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {step === 'read' ? 'Read the RAMS' : (isCMmode ? 'Approve & sign the RAMS' : 'Sign the RAMS')}
+          {step === 'read' ? 'Read the RAMS' : (isApproveMode ? 'Approve & sign the RAMS' : 'Sign the RAMS')}
         </div>
         <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
       </div>
@@ -795,7 +823,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ maxWidth: 560, margin: '0 auto' }}>
             <div style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-              {isCMmode && <div style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>By approving, you confirm this is a safe method of work and has been properly risk-assessed. You also sign onto the RAMS with the statement below.</div>}
+              {isApproveMode && <div style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>By approving, you confirm this is a safe method of work and has been properly risk-assessed. You also sign onto the RAMS with the statement below.</div>}
               <div style={{ fontSize: 13, color: '#444', lineHeight: 1.5 }}>{RAMS_STATEMENT}</div>
             </div>
 
@@ -817,7 +845,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>‹ Back to document</button>
-              <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : (isCMmode ? 'Approve & sign' : 'Sign & confirm')}</button>
+              <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : (isApproveMode ? 'Approve & sign' : 'Sign & confirm')}</button>
             </div>
           </div>
         </div>

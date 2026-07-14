@@ -1,115 +1,103 @@
-RAMS SIGNING — PHASE 3: Strict approval chain + Matrix PS/pipeline + Gantt gating
-=================================================================================
+RAMS SIGNING — PHASE 3 (REVISED): Director signs in Site App + Admin "RAMS Director"
+====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully (Xero warnings unrelated)
 
-THE CHAIN (strict, sequential — no stage until the previous is signed)
-----------------------------------------------------------------------
-  CM (Site App) -> Director/Carl (Portal) -> Customer Site Manager (email) -> Operatives
-- CM and Director APPROVE (safe method / risk-assessed) AND auto-sign onto the
-  RAMS with the same statement operatives use (they appear in signatures/matrix).
-- Operatives' "Sign RAMS now" (Phase 2) is now LOCKED until the chain reaches
-  them; it shows which stage it's waiting on.
+** This SUPERSEDES the earlier Phase 3 zip. If you deployed that one, note:
+   - DELETE pages/operations/hs/rams-approvals.js from the repo (the Portal
+     Director page has been removed — the Director now signs in the Site App).
+   If you did NOT deploy the earlier Phase 3 zip, just deploy this set. **
 
-WHAT EACH PERSON SEES
----------------------
-• CM (Site App → RAMS): each RAMS shows the pipeline line and, at the CM stage,
-  an "Approve as Contracts Manager" button (read-to-bottom → sign). After the
-  Director approves, the CM gets "Send to Site Manager for approval" — a picker
-  that pulls candidates from the project's Site Contacts (any contact whose role
-  contains "manager" is pre-selected), and allows changing or manually entering
-  a name + email. Sends a tokenised email with the RAMS attached.
-• Director/Carl (Portal → Operations → H&S → RAMS Approvals): NEW page listing
-  every RAMS awaiting Director approval. Review (read-to-bottom) → approve & sign.
-  Identified by email DIRECTOR_EMAIL (default carl@rockroofing.co.uk); admins may
-  also approve (fallback). Set DIRECTOR_EMAIL in Vercel env to Carl's exact email.
-• Customer Site Manager: receives the email, clicks the unique link to a no-login
-  page (/rams-approve?token=...) showing the RAMS + an Approve button. They enter
-  their name (pre-filled if known); date auto-fills. On approval, operatives unlock.
+WHAT CHANGED vs the first Phase 3
+--------------------------------
+1. The DIRECTOR NOW SIGNS IN THE SITE APP (not the Portal). The Portal
+   "RAMS Approvals" page and its H&S nav link are removed.
+2. New ADMIN AREA: "RAMS Director" tab (Admin nav, placed BEFORE "App
+   Improvements"). Pick the Director from Portal Users whose job role is
+   "Director". Stored as ops:rams-director = { name, email }.
+3. The Site App recognises the Director by EMAIL: when the logged-in Site App
+   user's email == the designated Director's email, RAMS at the Director stage
+   show an "Approve as Director" button (read-to-bottom -> approve & sign, same
+   as the CM). The Director auto-signs onto the RAMS with the operative statement.
+   IMPORTANT: the chosen Director must also be a Site App user with the SAME email.
 
-RAMS MATRIX (Portal → H&S → RAMS Matrix) — now DERIVED from real data
---------------------------------------------------------------------
-• Cells: "Yes" (green) = signed all current RAMS; "PS" (orange) = chain has
-  reached operatives and this person hasn't signed; blank = not yet / no RAMS.
-• KEY added at the top (Yes – Signed RAMS · PS – Pending Signature).
-• Under each project name: the pipeline CM › Director › Site Manager › Operatives.
-  Current stage = red+bold; completed = green; all signed = whole line green.
-• Cells are now read-only (auto from signatures); the old manual toggle is retired
-  (its store is kept but unused). Matching is by operative NAME (roster name vs
-  signed name) — keep roster names consistent with Site App user names.
+THE CHAIN (unchanged, strict, sequential)
+-----------------------------------------
+  CM (Site App) -> Director (Site App, designated in Admin) -> Site Manager
+  (tokenised email, no login) -> Operatives.
+  No stage unlocks until the previous is signed. Operative "Sign RAMS now" stays
+  locked (with a "waiting on <stage>" note) until the chain reaches operatives.
 
-GANTT (Planning) — "Installer(s) not on RAMS" warning
------------------------------------------------------
-Now treats ONLY "Yes" (fully signed all current RAMS) as signed. "PS" (pending)
-STILL triggers the warning, per spec.
+ADMIN -> RAMS DIRECTOR
+----------------------
+- New page /admin/rams-director (admin-gated via AdminShell).
+- Lists Portal Users with jobRole === 'Director' (that job role already exists
+  in Portal Users). Choose one and Save. "None" clears it.
+- If no Director is set, the chain will stall at the Director stage (the page
+  warns about this).
 
-VERSION RESET (unchanged from Phase 2, applies here too)
---------------------------------------------------------
-New RAMS upload = new file id = fresh approval chain (starts at CM) + no
-signatures. Matrix/pipeline/badges all reset automatically.
+RAMS MATRIX + GANTT (unchanged from first Phase 3)
+--------------------------------------------------
+- Matrix: derived Yes (green) / PS (orange) + key + CM › Director › Site Manager
+  › Operatives pipeline under each project name (current red, done green).
+- Gantt "Installer(s) not on RAMS": only "Yes" counts; "PS" still warns.
 
 DATA MODEL
 ----------
-• ops:rams-approvals:<projectNo>[fileId] =
-    { stage, cm, director, siteManager, siteManagerEmail, siteManagerName,
-      token, startedAt, updatedAt }
-    stage ∈ 'cm'|'director'|'site-manager'|'operatives'|'complete'
-    cm/director records include a signatureImg (they auto-sign).
-• ops:rams-token:<token> = { projectNo, fileId }  (Site Manager link lookup)
+- ops:rams-director = { name, email }                      (NEW — Admin setting)
+- ops:rams-approvals:<projectNo>[fileId] = { stage, cm, director, siteManager,
+    siteManagerEmail, siteManagerName, token, ... }
+- ops:rams-token:<token> = { projectNo, fileId }
 
 SECURITY
 --------
-• Site Manager link uses a 24-byte random token (unguessable, one per recipient;
-  re-issued if the CM changes recipient — old link dies).
-• director-approve requires a portal session AND email == DIRECTOR_EMAIL (or admin).
-• sm-approve requires a valid token. cm-approve is trusted from the Site App
-  (consistent with the rest of the Site App, which has no server session).
-
-ENV VARS
---------
-• DIRECTOR_EMAIL  (optional) — Carl's portal email. Default carl@rockroofing.co.uk.
-• Uses existing RESEND_API_KEY + FORMS_FROM_EMAIL for the Site Manager email.
+- director-approve verifies the caller's email == the designated RAMS Director
+  (from ops:rams-director). No portal session needed (it's a Site App action).
+- set-RAMS-Director (POST /api/rams-director) is admin-only (portal session).
+- Site Manager link: unguessable 24-byte token; re-issued if recipient changes.
 
 FILES CHANGED
 -------------
-• lib/db.js                                    — approvals + token helpers
-• middleware.js                                — Site App passthrough += rams-approvals;
-                                                 portal OPEN += /rams-approve,
-                                                 /api/rams-token, /api/rams-approvals,
-                                                 /api/download (for the no-login page)
-• pages/api/rams-approvals.js                  — NEW: the chain (cm/director/set-SM/sm-approve
-                                                 + pending=director listing)
-• pages/api/rams-token.js                      — NEW: public token lookup
-• pages/api/rams-matrix.js                     — rewritten: derived Yes/PS + stage
-• pages/rams-approve.js                        — NEW: no-login Site Manager page
-• pages/forms/index.js                         — Site App: pipeline line, CM approve,
-                                                 Site Manager picker, locked operative sign
-• pages/operations/hs/rams-approvals.js        — NEW: Director's Portal approval page
-• pages/operations/hs/rams-matrix.js           — key + PS cells + pipeline under name
-• pages/operations/project-management/planning.js — gantt "Yes-only" RAMS gating
-• components/OperationsNav.js                  — "RAMS Approvals" tab under H&S
+NEW:
+  • pages/api/rams-director.js               — get/set designated Director (+who=1)
+  • pages/admin/rams-director.js             — Admin RAMS Director page
+  • pages/api/rams-approvals.js              — approval chain
+  • pages/api/rams-token.js                  — public token lookup
+  • pages/rams-approve.js                    — no-login Site Manager page
+UPDATED:
+  • lib/db.js                                — approvals + token helpers
+  • middleware.js                            — passthrough/open routes (Site App +
+                                               portal SM page); rams-director added
+  • pages/forms/index.js                     — CM + Director approve, SM picker,
+                                               locked operative sign, pipeline
+  • pages/api/rams-matrix.js                 — derived Yes/PS + stage
+  • pages/operations/hs/rams-matrix.js       — key + PS cells + pipeline
+  • pages/operations/project-management/planning.js — gantt Yes-only gating
+  • components/OperationsNav.js              — (removed the Portal RAMS Approvals tab)
+  • components/AdminShell.js                 — "RAMS Director" tab before App Improvements
+  • pages/admin.js, pages/admin/templates.js — same nav tab added (inline navs)
+REMOVED (delete from repo if present):
+  • pages/operations/hs/rams-approvals.js    — Portal Director page (no longer used)
 
-IMPORTANT — MIDDLEWARE
-----------------------
-This replaces the Phase 1/2 middleware.js (it adds the new passthrough/open
-entries on top). Deploy this version.
+SETUP AFTER DEPLOY
+------------------
+1. Portal Users: make sure your Director has job role "Director" (and is a Site
+   App user with the same email).
+2. Admin -> RAMS Director: choose them and Save.
 
 TEST (end to end)
 -----------------
-1. Upload a RAMS to a project (new file id → chain starts at CM).
-2. Site App as a CM on that project → RAMS → "Approve as Contracts Manager"
-   (read to bottom, sign). Pipeline shows Director in red.
-3. Portal as Carl → Operations → H&S → RAMS Approvals → Review & approve.
-   Pipeline shows Site Manager in red.
-4. Back in Site App as CM → "Send to Site Manager" (pick/confirm email) → send.
-5. Open the emailed link → approve as Site Manager. Operatives now unlock.
-6. Site App as an operative → RAMS → "Sign RAMS now" works.
-7. Portal → RAMS Matrix: PS (orange) before signing, Yes (green) after; pipeline
-   under the project name goes green when all signed.
-8. Gantt: allocate an unsigned installer → "Installer(s) not on RAMS" shows for
-   PS; clears only once they're "Yes".
+1. Upload a RAMS to a project (chain starts at CM).
+2. Site App as the CM -> RAMS -> "Approve as Contracts Manager".
+3. Site App as the Director (email matches Admin setting) -> RAMS ->
+   "Approve as Director".
+4. Site App as the CM -> "Send to Site Manager" (pick/confirm email) -> send.
+5. Open emailed link -> approve as Site Manager. Operatives unlock.
+6. Site App as an operative -> "Sign RAMS now".
+7. Portal RAMS Matrix: PS -> Yes; pipeline goes green when all signed.
+8. Gantt: unsigned installer shows "not on RAMS" for PS; clears at Yes.
 
 NEXT (Phase 4)
 --------------
-Email notifications (allocation, new-project access, RAMS-to-sign) + 2-day
-reminders folded into a single daily "master" cron (Hobby 2-cron limit).
+Email notifications (allocation / new-project access / RAMS-to-sign) + 2-day
+reminders folded into one daily "master" cron (Hobby 2-cron limit).

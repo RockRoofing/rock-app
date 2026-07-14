@@ -39,6 +39,7 @@ export async function middleware(req) {
       pathname.startsWith('/api/site-badges') ||
       pathname.startsWith('/api/rams-signatures') ||
       pathname.startsWith('/api/rams-approvals') ||
+      pathname.startsWith('/api/rams-director') ||
       pathname.startsWith('/api/upload-file') ||
       pathname.startsWith('/api/team') ||
       pathname.startsWith('/api/upload-photo') ||
