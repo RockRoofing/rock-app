@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { upload } from '@vercel/blob/client'
 import AdminShell from '../../components/AdminShell'
 
 const CATS = [
@@ -58,24 +59,25 @@ function DocSection({ label, cat, items, onAdd, onRename, onRemove }) {
   const [err, setErr] = useState('')
   const fileRef = useRef()
 
-  async function upload() {
+  async function doUpload() {
     if (!file) { setErr('Choose a file first.'); return }
     if (!title.trim()) { setErr('Give the document a name.'); return }
     setUploading(true); setErr('')
     try {
-      const buf = await file.arrayBuffer()
-      const r = await fetch('/api/upload-file', {
-        method: 'POST',
-        headers: { 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' },
-        body: buf,
+      // Direct browser -> Blob upload (no 4.5MB serverless limit).
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blob-upload',
+        contentType: file.type || undefined,
       })
-      const d = await r.json()
-      if (!r.ok || !d.url) { setErr(d.error || 'Upload failed'); setUploading(false); return }
-      onAdd({ id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), url: d.url, contentType: d.contentType, uploadedAt: Date.now() })
-      setTitle(''); setFile(null); if (fileRef.current) fileRef.current.value = ''
+      onAdd({ id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), url: blob.url, contentType: file.type, uploadedAt: Date.now() })
+      clearFile()
+      setTitle('')
     } catch (e) { setErr(e?.message || 'Upload failed') }
     setUploading(false)
   }
+
+  function clearFile() { setFile(null); if (fileRef.current) fileRef.current.value = '' }
 
   return (
     <div>
@@ -100,11 +102,19 @@ function DocSection({ label, cat, items, onAdd, onRename, onRemove }) {
         ))}
       </div>
 
-      {/* Upload new */}
+      {/* Upload new — one file at a time */}
       <div style={{ background: '#faf9f7', border: '1px dashed #d9d5cc', borderRadius: 12, padding: 14, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Document name (shown on the card)" style={{ flex: '1 1 220px', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }} />
-        <input ref={fileRef} type="file" onChange={e => setFile(e.target.files?.[0] || null)} style={{ fontSize: 13 }} />
-        <button onClick={upload} disabled={uploading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading…' : 'Upload'}</button>
+        {!file ? (
+          <button onClick={() => fileRef.current?.click()} style={{ background: '#fff', border: '1px solid #d0d0cc', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#555' }}>Choose file</button>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: '7px 10px', fontSize: 12.5, color: '#333', maxWidth: 260 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+            <button onClick={clearFile} title="Clear" style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+          </div>
+        )}
+        <input ref={fileRef} type="file" onChange={e => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+        <button onClick={doUpload} disabled={uploading || !file} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: uploading || !file ? 'default' : 'pointer', opacity: uploading || !file ? 0.5 : 1 }}>{uploading ? 'Uploading…' : 'Upload'}</button>
         {err && <div style={{ color: '#dc2626', fontSize: 12.5, flexBasis: '100%' }}>{err}</div>}
       </div>
     </div>

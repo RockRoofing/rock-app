@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { Shell } from './index'
+import { AttachmentViewer } from '../../components/RowAttachments'
 
 const INK = '#1a1a19', BRAND = '#ca8a04'
 
@@ -105,14 +106,20 @@ export default function Browse() {
 }
 
 function DocList({ docs }) {
+  const [viewIdx, setViewIdx] = useState(null)
+  // Map docs to the viewer's file shape (name/url/type).
+  const files = docs.map(d => ({ name: d.title || d.url, url: d.url, type: d.contentType || '' }))
   return (
-    <List>
-      {docs.map(d => (
-        <a key={d.id} href={d.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-          <Row title={d.title} sub="Tap to view" />
-        </a>
-      ))}
-    </List>
+    <>
+      <List>
+        {docs.map((d, i) => (
+          <Row key={d.id} title={d.title} sub="Tap to view" onClick={() => setViewIdx(i)} />
+        ))}
+      </List>
+      {viewIdx != null && files[viewIdx] && (
+        <AttachmentViewer files={files} index={viewIdx} onIndex={setViewIdx} onClose={() => setViewIdx(null)} />
+      )}
+    </>
   )
 }
 

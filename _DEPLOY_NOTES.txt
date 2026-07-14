@@ -1,25 +1,23 @@
-REPORT A PROBLEM — positioning + styling fix, and admin table update
+ADMIN DOCUMENTS — fix upload error + single-file UX + in-app viewing
 
-PROBLEM
-  The global fixed button was overlapping the "Open Site App ↗" link on Operations pages.
+THE ERROR ("Unexpected token 'R', 'Request En'... is not valid JSON")
+  Cause: the photo was bigger than Vercel's ~4.5MB serverless request-body limit, so /api/upload-file got
+  a plain-text "Request Entity Too Large" response (not JSON) and the client's r.json() choked.
+  Fix: uploads now go DIRECT from the browser to Vercel Blob (client upload), which bypasses that limit.
 
-FIX
-  components/OperationsNav.js
-   - Added "⚠ Report a problem with the app" (orange text, warning sign) immediately to the LEFT of the
-     "Open Site App ↗" link, in the nav row. It opens the same report popup. The Site App link is
-     untouched and still links to the Site App.
+  pages/api/blob-upload.js  (NEW) — token endpoint for direct browser->Blob uploads (handleUpload).
+    Allows images / PDF / Word / Excel / text up to 50MB.
 
-  components/ReportProblemButton.js
-   - No longer draws a floating button on Operations pages (the nav link handles those) or the Site App.
-   - On other portal pages (home, pre-contract, commercial, admin) it shows a small ORANGE
-     "⚠ Report a problem with the app" link top-right (no background box) — no overlap.
-   - Both triggers open the SAME modal (nav link fires an 'open-report-problem' event the component
-     listens for).
+  pages/admin/documents.js
+   - Uses the client upload() flow (no size error on big photos/docs).
+   - ONE file at a time: "Choose file" -> shows the filename with an × to CLEAR it -> "Upload".
+   - Upload is disabled until a file is chosen. After a successful upload the file + name clear.
+   - Each uploaded card still has Delete (with confirm) and inline rename, as before.
 
-  pages/admin/problem-reports.js
-   - Table now has a STATUS column (Open / Resolved). Default view is OPEN, so resolved issues disappear
-     from view (switch Status to Resolved/All to see them).
-   - Filters at the top are USER and STATUS.
-   - "Mark resolved / Reopen" per row.
+SITE APP — documents now viewable IN-APP
+  pages/forms/browse.js
+   - Company Information / Operative Guidance cards now open in the in-app viewer (pdf.js canvas for PDFs,
+     image viewer for images) with prev/next, instead of opening the raw file URL in a new tab (which
+     mobile browsers refuse to render inline).
 
-Deploy all files. No cron/env change.
+Deploy all files. No cron/env change (uses the existing BLOB_READ_WRITE_TOKEN).
