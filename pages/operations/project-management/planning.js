@@ -46,6 +46,7 @@ export default function PlanningPage() {
   const [data, setData] = useState(null)
   const [ops, setOps] = useState([])
   const [comp, setComp] = useState({})   // opId -> { isSupervisor, hasCSCS, hasWAH }
+  const [rams, setRams] = useState({})   // projectKey -> { opId: true } (RAMS sign-offs)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('day')          // 'day' | 'week'
   const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
@@ -63,14 +64,16 @@ export default function PlanningPage() {
   async function load() {
     setLoading(true)
     try {
-      const [pl, opr, cmp] = await Promise.all([
+      const [pl, opr, cmp, rm] = await Promise.all([
         fetch('/api/planning').then(r => r.json()).catch(() => ({})),
         fetch('/api/operatives').then(r => r.json()).catch(() => ({})),
         fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
+        fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
       ])
       setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
       setOps(opr.operatives || [])
       setComp(cmp.competency || {})
+      setRams(rm.signoffs || {})
     } catch {}
     setLoading(false)
   }
@@ -306,7 +309,7 @@ export default function PlanningPage() {
 
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
-            {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp}
+            {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp} rams={rams[p.key] || {}}
               sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
 
             <SectionLabel>WATER INGRESS</SectionLabel>
@@ -327,7 +330,7 @@ export default function PlanningPage() {
           : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
-      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp}
+      {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp} ramsSigned={rams[allocModal.proj?.key] || {}}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
@@ -336,7 +339,7 @@ export default function PlanningPage() {
   )
 }
 
-function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel, onCellDown, onCellEnter, onSaveMeta }) {
+function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta }) {
   const meta = data.meta[p.key] || {}
   const _today = new Date(); const todayCellKey = iso(_today)
   const [start, setStart] = useState(meta.startDate || '')
@@ -362,12 +365,15 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
 
   let unconfirmedThisWeek = false        // any not-actual allocation in the current week
   let unconfirmedPriorWeeks = false      // any not-actual allocation in the previous two weeks
+  let anyNotOnRams = false               // any named installer (today or future) not RAMS-signed
 
   for (const [dk, cell] of Object.entries(data.allocations[p.key] || {})) {
     const dd = parseISO(dk); if (dd && (!lastAlloc || dd > lastAlloc)) lastAlloc = dd
     const cd = cellData(cell); if (cd.count > 0) projectHasLabour = true
     if (cd.entries && cd.entries.length > 0) projectHasNamedLabour = true
     if (cd.entries && cd.entries.some(e => comp && comp[e.opId] && comp[e.opId].isSupervisor)) ganttHasSupervisor = true
+    // RAMS check on current/future allocations only (past work already happened).
+    if (cd.entries && dk >= todayKey && cd.entries.some(e => e.opId && !rams[e.opId])) anyNotOnRams = true
     const notActual = cd.count > 0 && cd.status !== 'actual'
     if (notActual && dk < todayKey && inRange(dk, thisWeekStart, thisWeekEnd)) unconfirmedThisWeek = true
     if (notActual && (inRange(dk, prevWeekStart, prevWeekEnd) || inRange(dk, prev2WeekStart, prev2WeekEnd))) unconfirmedPriorWeeks = true
@@ -400,6 +406,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, sel,
         {overrun && <div title="Man days allocated after the contracted completion date" style={warnLine}>⚠ Runs past completion date</div>}
         {historicNeedsActual && <div title="Historic allocations still need confirming as Actual" style={{ ...warnLine, color: '#ea580c' }}>⚑ Historic dates need confirming actual</div>}
         {noProjectSupervisor && <div title="No supervisor assigned in Project Details or allocated on the Gantt" style={warnLine}>⚠ No supervisor</div>}
+        {anyNotOnRams && <div title="An allocated installer is not signed onto this project's RAMS Matrix" style={{ ...warnLine, color: '#c2410c' }}>⚠ Installer(s) not on RAMS</div>}
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       {/* inline date editors */}
@@ -981,7 +988,7 @@ function OperativeSearchSelect({ options, comp = {}, onPick, placeholder = 'Sear
 }
 
 // ── Allocate / edit labour for the selected dates ──
-function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClose, onDone, reloadOps }) {
+function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, ramsSigned = {}, onClose, onDone, reloadOps }) {
   const isEdit = mode === 'edit'
   // In edit mode, pre-load everyone currently allocated across ANY of the selected dates,
   // plus the max unnamed count and a common status.
@@ -1108,12 +1115,24 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, onClos
 
           <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '8px 0 6px' }}>{isEdit ? 'Installers allocated (full day)' : 'Installers to allocate (full day)'}</div>
           {picked.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', marginBottom: 8 }}>{isEdit ? 'No named installers.' : 'None selected yet.'}</div>}
-          {picked.map(id => (
-            <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#faf9f7', borderRadius: 8, marginBottom: 6 }}>
-              <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{opName(id)}</div>{opTrades(id) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(id)}</div>}</div>
-              <button onClick={() => removePick(id)} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
+          {picked.map(id => {
+            const ramsOk = !!ramsSigned[id]
+            return (
+              <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: ramsOk ? '#faf9f7' : '#fff7ed', borderRadius: 8, marginBottom: 6, border: ramsOk ? '1px solid transparent' : '1px solid #fed7aa' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{opName(id)}</div>
+                  {opTrades(id) && <div style={{ fontSize: 10.5, color: '#999' }}>{opTrades(id)}</div>}
+                  {!ramsOk && <div style={{ fontSize: 10.5, fontWeight: 700, color: '#c2410c', marginTop: 2 }}>⚠ Not signed onto this project's RAMS</div>}
+                </div>
+                <button onClick={() => removePick(id)} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
+              </div>
+            )
+          })}
+          {picked.some(id => !ramsSigned[id]) && (
+            <div style={{ fontSize: 11.5, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 10px', marginBottom: 6 }}>
+              One or more installers aren't signed onto this project's RAMS Matrix. You can still allocate them, but please ensure RAMS are signed before they start on site.
             </div>
-          ))}
+          )}
 
           {/* Unnamed headcount */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, padding: '10px 12px', background: unnamed > 0 ? '#fff7ed' : '#faf9f7', borderRadius: 8, border: unnamed > 0 ? '1px solid #fed7aa' : '1px solid transparent' }}>

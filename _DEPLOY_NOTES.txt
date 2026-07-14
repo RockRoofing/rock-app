@@ -1,12 +1,20 @@
-GANTT — re-added "Start and Completion Dates needed" warning
+GANTT — RAMS-not-signed warning
 
 pages/operations/project-management/planning.js
-  - Added a red warning line under the project name: "⚠ Start and Completion Dates needed" — shows whenever
-    the project has no start and/or completion date set (same red style/placement as the other warnings).
-  - All other warnings unchanged (Man day allocation needed / Runs past completion date / Historic dates
-    need confirming actual / No supervisor).
+  - The Gantt now loads the RAMS Matrix sign-offs (ops:rams-matrix).
+  - ALLOCATE MODAL: when you add an installer who is NOT signed onto that project's RAMS, their row
+    highlights amber with "⚠ Not signed onto this project's RAMS", plus a summary note. You can still
+    allocate them (it's a warning, not a hard block like CSCS/WAH), but it prompts you to get RAMS signed
+    before they start.
+  - PROJECT ROW: a red "⚠ Installer(s) not on RAMS" line appears under the project name when any installer
+    allocated today or in the future isn't signed onto that project's RAMS Matrix.
+  - RAMS status is matched by operative + project against the RAMS Matrix; sign someone on via H&S > RAMS
+    Matrix and the warning clears.
 
-NOTE: this file supersedes the previous gantt drops (searchable dropdown, warning rework, historic scroll)
-— it contains all of them. Deploy just this one.
+NOTE: this file supersedes all previous gantt drops — it contains the searchable dropdown, the reworked
+warning lines (incl. Start/Completion dates needed, Man day allocation needed, overrun styling, historic-
+actual rule) and the historic scroll-back. Deploy just this one.
 
 Deploy this file. No cron/env change.
+
+STILL TO COME (gantt): copy/paste cells.
