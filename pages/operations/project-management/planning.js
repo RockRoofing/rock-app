@@ -76,17 +76,33 @@ export default function PlanningPage() {
   }
   useEffect(() => { load() }, [])
 
-  // Default forward horizon = 3 years; historic pulls the start back 2 weeks.
+  // Default forward horizon = 3 years; historic view starts 2 weeks before today
+  // and can scroll back to 6 weeks (or as far as data exists).
   const RANGE_WEEKS = 156
+
+  // Earliest allocated day across all projects — lets historic scroll back as far
+  // as there is data, beyond the default 6-week floor.
+  const earliestAlloc = useMemo(() => {
+    if (!data) return null
+    let earliest = null
+    for (const alloc of Object.values(data.allocations || {})) {
+      for (const dk of Object.keys(alloc || {})) {
+        const cd = cellData(alloc[dk]); if (cd.count <= 0) continue
+        if (!earliest || dk < earliest) earliest = dk
+      }
+    }
+    return earliest ? mondayOf(parseISO(earliest)) : null
+  }, [data])
+
   const days = useMemo(() => {
-    let start = historic ? mondayOf(addDays(anchorMonday, -2 * 7)) : anchorMonday
+    let start = anchorMonday
     let end = addDays(anchorMonday, RANGE_WEEKS * 7 - 1)
     if (filters.from) { const f = mondayOf(parseISO(filters.from)); if (f) start = f }
     if (filters.to) { const t = parseISO(filters.to); if (t) end = t }
     const out = []
     for (let d = new Date(start); d <= end; d = addDays(d, 1)) out.push(new Date(d))
     return out
-  }, [anchorMonday, historic, filters.from, filters.to])
+  }, [anchorMonday, filters.from, filters.to])
 
   const weekGroups = useMemo(() => {
     const groups = []
@@ -123,7 +139,16 @@ export default function PlanningPage() {
     for (const p of [...liveRows, ...negRows]) t += countOnDay(p, key)
     return t
   }
-  const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
+  // Historic back-scroll floor: 6 weeks before this Monday, or the earliest
+  // allocation if data goes further back.
+  const sixWeekFloor = mondayOf(addDays(new Date(), -42))
+  const backFloor = earliestAlloc && earliestAlloc < sixWeekFloor ? earliestAlloc : sixWeekFloor
+  const canGoBack = !historic || anchorMonday > backFloor
+  const shift = (deltaWeeks) => setAnchorMonday(m => {
+    let next = mondayOf(addDays(m, deltaWeeks * 7))
+    if (historic && deltaWeeks < 0 && next < backFloor) next = backFloor
+    return next
+  })
 
   // selection helpers (day view only)
   const toggleCell = (key, date) => {
@@ -201,13 +226,19 @@ export default function PlanningPage() {
             <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
             <button onClick={() => setView('week')} style={{ ...segBtn, background: view === 'week' ? GOLD : '#fff', color: view === 'week' ? '#fff' : '#555' }}>Week</button>
           </div>
-          <button onClick={() => setHistoric(h => !h)} title="Show past weeks"
+          <button onClick={() => setHistoric(h => {
+              const next = !h
+              // Turning Historic ON: start the view 2 weeks before today. Turning it
+              // OFF: snap back to this week.
+              setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0)))
+              return next
+            })} title="Show past weeks (starts 2 weeks ago; scroll back up to 6 weeks or as far as there's data)"
             style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
             {historic ? '✓ Historic' : 'Historic'}
           </button>
-          <button onClick={() => shift(-12)} style={ghostBtn}>‹</button>
-          <button onClick={() => setAnchorMonday(mondayOf(new Date()))} style={ghostBtn}>Today</button>
-          <button onClick={() => shift(12)} style={ghostBtn}>›</button>
+          <button onClick={() => shift(historic ? -1 : -12)} disabled={historic && !canGoBack} style={{ ...ghostBtn, opacity: (historic && !canGoBack) ? 0.4 : 1 }} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
+          <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
+          <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
         </div>
       </div>
 

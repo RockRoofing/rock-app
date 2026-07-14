@@ -1,28 +1,18 @@
-GANTT — reworked warning system
+GANTT — Historic view scroll-back behaviour
 
 pages/operations/project-management/planning.js
 
-WARNINGS NOW ALL SHOW AS RED LINES UNDER THE PROJECT NAME (no more small ⚠/⚑ symbols in front of the name):
+  - Clicking "Historic" now sets the view START POINT to 2 WEEKS BEFORE TODAY (previously it just widened
+    the start slightly while staying anchored on today).
+  - From there you can SCROLL BACK with the ‹ button, ONE WEEK at a time, down to a floor of 6 WEEKS before
+    today — or FURTHER if there are allocations older than that (the floor extends to the earliest allocated
+    week so you can always reach existing data).
+  - The ‹ button disables at the back floor so you can't scroll into empty space.
+  - In normal (non-historic) mode the ‹ / › buttons still jump 12 weeks; in Historic mode they move one
+    week at a time for finer control. "Today" turns Historic off and snaps back to this week.
 
-1) "⚠ Man day allocation needed"
-   - Shows when the project has NO man days / labour allocated on the Gantt at all.
-   - (Renamed from "Project Programme dates needed!" and re-based on labour, not the date boxes — so
-     Accrington, which HAS labour, no longer shows it.)
-
-2) "⚠ Runs past completion date"
-   - Shows when man days are allocated AFTER the contracted completion date.
-   - PLUS: when this happens, the completion-date field goes RED + BOLD, and the project number/name go
-     RED + BOLD.
-
-3) "⚑ Historic dates need confirming actual"  (orange)
-   - Now only flags when it's THURSDAY ONWARDS and there are unconfirmed (not-Actual) allocations in the
-     CURRENT week…
-   - …EXCEPTION: if the PREVIOUS week or the week before that still has unconfirmed allocations, it flags
-     regardless of the day.
-
-4) "⚠ No supervisor" — unchanged (already a red line).
+  NOTE: this file also contains the earlier gantt changes (searchable installer dropdown, reworked warning
+  lines, man-day/overrun/historic-actual logic) — it supersedes gantt-batch-1 and gantt-warnings-rework.
+  Deploy just this one.
 
 Deploy this file. No cron/env change.
-
-STILL TO COME (Gantt): copy/paste cells, RAMS-not-signed warning. Then: automated weekly labour email,
-Water Ingress "missing form" logic, Meeting Actions carry-over.
