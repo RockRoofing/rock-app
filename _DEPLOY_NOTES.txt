@@ -1,27 +1,28 @@
-Financial App — batch 3b (update): fix input focus bug + Project Name autocomplete
-==================================================================================
+Financial App — batch 3b (update): manual entries stay standalone + no duplicates
+=================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Replaces the batch 3b pages/retention.js (deploy over the top).
 
-1) FIXED: form boxes losing focus after each character
-------------------------------------------------------
-The Add/Edit form was defined *inside* the page component, so every keystroke
-recreated it and React threw away the input (kicking you out after one letter).
-The form is now a top-level component, so inputs keep focus — you can type
-normally.
+1) MANUAL ENTRIES ARE STANDALONE (never touch Project Financials)
+-----------------------------------------------------------------
+Anything added via "Add Manual Entry" now lives ONLY in the Retention Tracker.
+• Using the Project Name autocomplete to pull an existing project's details just
+  COPIES those values into the entry as a snapshot — it does NOT link the entry
+  to the project. So a manual entry never writes back to Project Financials and
+  never appears there.
+• The two-way COMMENTS sync now only applies to rows that come from Project
+  Financials automatically (genuine Xero-sourced rows). Manual entries — even if
+  you auto-filled them from a project — do not sync comments anywhere.
 
-2) "Add existing project" is now an autocomplete on Project Name
----------------------------------------------------------------
-The separate project picker dropdown is gone. Instead, when adding a NEW entry,
-start typing in the Project Name box (e.g. "Far") and matching existing projects
-appear beneath it (matches on project name, ref or customer). Pick one to
-auto-fill Our Ref, Customer, Project Name, Project Value, Final Account,
-Retention %, Completion Date and QS — and link it so comments sync back.
-Typing a fresh name that you don't pick from the list = a normal manual entry.
-The suggestions close when you click away.
+2) NO DUPLICATE PROJECTS
+------------------------
+The autocomplete no longer suggests a project that's already in the tracker —
+whether it's there as an auto/linked row or as an existing manual entry (matched
+on xeroId, ref or project name). So you can only add projects that aren't already
+listed.
 
 FILE CHANGED
 ------------
-• pages/retention.js — EntryForm moved to top level (focus fix); Project Name
-  autocomplete replaces the add-existing-project dropdown.
+• pages/retention.js — manual entries flagged trackerOnly and never linked
+  (no xeroId), autocomplete filters out projects already in the tracker.

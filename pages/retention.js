@@ -11,7 +11,8 @@ const EMPTY_ENTRY = {
   qsName: '', qsEmail: '',
   release1Value: '', release1Date: '', release1Received: false,
   release2Value: '', release2Date: '', release2Received: false,
-  comments: ''
+  comments: '',
+  trackerOnly: true,   // entries created via the Add form live ONLY in the tracker
 }
 
 // Parse a numeric VAT rate from a VAT-type label. Reverse charge / zero-rated /
@@ -297,6 +298,17 @@ export default function RetentionPage() {
 
   const inputStyle = { padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
 
+  // Projects already present in the tracker (so the "add existing project"
+  // autocomplete won't offer duplicates). Match on xeroId for auto/linked rows,
+  // and on ref/name for manual rows (which carry no xeroId).
+  const existingXeroIds = new Set(allEntries.map(e => e.xeroId).filter(Boolean))
+  const existingKeys = new Set(
+    allEntries.flatMap(e => [
+      (e.ourRef || '').trim().toLowerCase(),
+      (e.projectName || '').trim().toLowerCase(),
+    ].filter(Boolean))
+  )
+
   return (
     <>
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
@@ -353,6 +365,7 @@ export default function RetentionPage() {
           {showAddForm && (
             <EntryForm form={addForm} setForm={setAddForm}
               onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
+              existingXeroIds={existingXeroIds} existingKeys={existingKeys}
               onCancel={() => { setShowAddForm(false); setAddForm(EMPTY_ENTRY) }} />
           )}
 
@@ -529,7 +542,7 @@ export default function RetentionPage() {
 // Top-level so it isn't recreated on every keystroke of the parent (which would
 // steal focus from inputs). Project Name is an autocomplete: typing suggests
 // matching existing projects; picking one auto-fills and links the entry.
-function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], allProjects = [], inputStyle }) {
+function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], allProjects = [], inputStyle, existingXeroIds = new Set(), existingKeys = new Set() }) {
   const f = field => e => setForm({ ...form, [field]: e.target.value })
   const fb = field => e => setForm({ ...form, [field]: e.target.checked })
   const [showSuggest, setShowSuggest] = useState(false)
@@ -543,6 +556,9 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
   }, [showSuggest])
 
   const applyProject = (p) => {
+    // Auto-fill the details but DO NOT link (no xeroId): a manual entry lives only
+    // in the Retention Tracker and must never write back to / appear in Project
+    // Financials. It's a standalone snapshot of the values at time of adding.
     setForm({
       ...form,
       ourRef: p.ourRef || '',
@@ -554,7 +570,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
       completionDate: p.completionDate || '',
       qsName: p.qsName || '',
       comments: p.comments || form.comments || '',
-      xeroId: p.xeroId,   // link so comments sync back to the project
+      trackerOnly: true,
     })
     setShowSuggest(false)
   }
@@ -563,11 +579,15 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
   // Only suggest for NEW entries and when the row isn't already linked to a project.
   const canSuggest = !form.id && !form.xeroId
   const matches = canSuggest && q.length >= 1
-    ? allProjects.filter(p =>
-        (p.projectName || '').toLowerCase().includes(q) ||
-        (p.ourRef || '').toLowerCase().includes(q) ||
-        (p.customerName || '').toLowerCase().includes(q)
-      ).slice(0, 8)
+    ? allProjects.filter(p => {
+        // Skip any project already in the tracker (by xeroId, ref or name).
+        if (existingXeroIds.has(p.xeroId)) return false
+        if (existingKeys.has((p.ourRef || '').trim().toLowerCase())) return false
+        if (existingKeys.has((p.projectName || '').trim().toLowerCase())) return false
+        return (p.projectName || '').toLowerCase().includes(q) ||
+               (p.ourRef || '').toLowerCase().includes(q) ||
+               (p.customerName || '').toLowerCase().includes(q)
+      }).slice(0, 8)
     : []
 
   return (
@@ -589,11 +609,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
         <div style={{ position: 'relative' }} ref={suggestRef}>
           <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Project Name</div>
           <input value={form.projectName || ''} autoComplete="off"
-            onChange={e => {
-              // typing a fresh name un-links any previously picked project
-              setForm({ ...form, projectName: e.target.value, ...(form.xeroId && !form.id ? { xeroId: undefined } : {}) })
-              setShowSuggest(true)
-            }}
+            onChange={e => { setForm({ ...form, projectName: e.target.value }); setShowSuggest(true) }}
             onFocus={() => setShowSuggest(true)}
             style={inputStyle} placeholder="Start typing to search…" />
           {showSuggest && matches.length > 0 && (
