@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
+import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
@@ -119,17 +120,25 @@ export default async function handler(req, res) {
     } catch (e) { console.error('project resolve failed:', e) }
 
     let matched = 0, unmatched = 0
+    let totalAdded = 0
     const summary = []
     for (const [tracking, g] of byProject.entries()) {
       const projectId = trackingByName.get(tracking.toLowerCase())
       if (!projectId) { unmatched++; summary.push({ project: tracking, matched: false, total: g.total }); continue }
       matched++
+      // MERGE with any existing bill lines (so partial exports accumulate — Xero
+      // caps exports at 500 lines, so 3 years takes several uploads).
+      const existing = (await redis.get(`costs:bills:${projectId}`).catch(() => null))?.lines || []
+      const { merged, added } = mergeDedupe(existing, g.lines, costLineKey)
+      totalAdded += added
+      const labour = merged.filter(l => LABOUR_ACCOUNT_CODES.includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
+      const materials = merged.filter(l => !LABOUR_ACCOUNT_CODES.includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:bills:${projectId}`, {
-        labourSpend: g.labour, materialsSpend: g.materials, totalCosts: g.total, lines: g.lines,
+        labourSpend: labour, materialsSpend: materials, totalCosts: labour + materials, lines: merged,
         calculatedAt: new Date().toISOString(), source: 'bills_bulk',
       })
       await mergeCosts(redis, projectId)
-      summary.push({ project: tracking, matched: true, labour: g.labour, materials: g.materials, total: g.total, lines: g.lines.length })
+      summary.push({ project: tracking, matched: true, labour, materials, total: labour + materials, lines: merged.length, added })
     }
 
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
@@ -140,7 +149,8 @@ export default async function handler(req, res) {
       projectsMatched: matched,
       projectsUnmatched: unmatched,
       totalLinesProcessed: [...byProject.values()].reduce((s, g) => s + g.lines.length, 0),
-      totalCosts: [...byProject.values()].reduce((s, g) => s + g.total, 0),
+      newLinesAdded: totalAdded,
+      totalCosts: summary.filter(s => s.matched).reduce((s, x) => s + (x.total || 0), 0),
       summary: summary.sort((a, b) => (b.total || 0) - (a.total || 0)),
     })
   } catch (e) {

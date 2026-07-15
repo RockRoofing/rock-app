@@ -1,17 +1,48 @@
-Admin — reorder nav: App Improvements moved to the end
-======================================================
+Financial App — uploads now MERGE (accumulate) instead of overwrite
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces components/AdminShell.js (deploy over the top).
+Merge/dedupe runtime-tested (partial uploads accumulate, re-uploads don't double).
+Deploy over the top of the earlier Financial packages.
 
-CHANGE
-------
-Admin sub-nav order is now:
-Portal Users · Templates · Form Builder · Site App Users · Documents ·
-RAMS Director · Account Categorisation · Xero Upload · App Improvements
+WHY
+---
+Xero caps exports at 500 lines. The uploads previously OVERWROTE each project's
+figures per source, so a partial export (e.g. 1 of 8 batches for 3 years of data)
+would have wiped everything not in that batch. Fixed.
 
-("App Improvements" moved to the end.)
-
-FILE CHANGED
+WHAT CHANGED
 ------------
-• components/AdminShell.js
+• All three bulk uploads (Bills, Direct Wages, Sales Invoices) now MERGE new lines
+  into what's already stored, de-duplicated, instead of overwriting:
+   - Bills   -> deduped by Xero LineItemID if present, else invoice no. + account + amount
+   - Wages   -> deduped by JournalLineID if present, else date + amount + account 320
+   - Invoices-> deduped by INVOICE NUMBER (unique in Xero)
+  A re-uploaded transaction refreshes (e.g. updated paid/due) rather than
+  duplicating. Totals recompute from the full merged set each time.
+• So you can export 3 years in ~8 batches of 500 lines and upload each — they
+  accumulate into the full picture. Nothing earlier is wiped.
+• Shared dedupe logic (lib/costDedupe.js) is now used by BOTH the uploads and the
+  nightly deep-sync, so upload + cron agree on what's "the same" transaction and
+  never double-count each other.
+• Upload result panels now show "New lines added" (vs processed), so repeat
+  uploads clearly show how many were genuinely new.
+• Xero Upload page copy updated: explains uploads accumulate + the 500-line
+  batching approach, and keeps the "select all columns" reminder.
+
+IMPORTANT
+---------
+Because uploads now MERGE (not overwrite), if a transaction is later DELETED in
+Xero it won't automatically disappear from the app (there's nothing to signal its
+removal in a partial export). The nightly deep-sync refreshes recent items within
+its 120-day window. If you ever need a clean slate for a project, that would need
+a manual reset — tell me if you'd like a "reset project costs" button.
+
+FILES CHANGED / ADDED
+---------------------
+• lib/costDedupe.js               (new) — shared dedupe keys + merge helper
+• pages/api/import-bills-bulk.js   — merge instead of overwrite
+• pages/api/import-wages-bulk.js   — merge instead of overwrite
+• pages/api/import-invoices-bulk.js— merge instead of overwrite
+• pages/api/cron/deep-sync.js      — uses the shared dedupe keys
+• pages/admin/xero-upload.js       — copy update + "new lines added" result

@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
+import { invoiceLineKey, mergeDedupe } from '../../lib/costDedupe'
 
 async function getRedis() {
   try {
@@ -155,12 +156,7 @@ export default async function handler(req, res) {
       if (!trackingOptionId) { unmatched++; summary.push({ project: tracking, matched: false, invoices: invoices.length }); continue }
       matched++
 
-      await redis.set(`invoiced:latest:${trackingOptionId}`, {
-        totalInvoiced, invoicedExVat: totalInvoiced - vatTotal, vatTotal, paidTotal, dueTotal,
-        vatRateLabel, invoiceCount: invoices.length,
-        calculatedAt: now, source: 'csv_bulk_import',
-      })
-      const lines = invoices.map(v => ({
+      const newLines = invoices.map(v => ({
         invoiceId: null, invoiceNumber: v.invoiceNumber, date: v.date, dueDate: v.dueDate,
         total: v.total, subTotal: v.total - v.totalTax, totalTax: v.totalTax,
         vatLabel: [...v.taxTypes][0] || '—',
@@ -168,8 +164,27 @@ export default async function handler(req, res) {
         status: v.status, contact: v.contact, reference: v.reference,
         isCredit: v.isCredit, jobNo: tracking,
       }))
-      await redis.set(`invoiced:lines:${trackingOptionId}`, lines)
-      summary.push({ project: tracking, matched: true, invoices: invoices.length, invoiced: totalInvoiced, paid: paidTotal, due: dueTotal, vatRateLabel })
+      // MERGE with any existing invoices (partial exports accumulate — Xero caps
+      // exports at 500 lines). Dedupe by invoice number; a re-uploaded invoice
+      // refreshes its paid/due rather than duplicating.
+      const existing = (await redis.get(`invoiced:lines:${trackingOptionId}`).catch(() => null)) || []
+      const { merged: allLines } = mergeDedupe(existing, newLines, invoiceLineKey)
+
+      // Recompute the summary totals from the FULL merged set.
+      const mTotal = allLines.reduce((s, l) => s + (l.total || 0), 0)
+      const mVat = allLines.reduce((s, l) => s + (l.totalTax || 0), 0)
+      const mPaid = allLines.reduce((s, l) => s + (l.amountPaid || 0), 0)
+      const mDue = allLines.reduce((s, l) => s + (l.amountDue || 0), 0)
+      const mLabels = [...new Set(allLines.map(l => l.vatLabel).filter(x => x && x !== '—'))]
+      const mVatLabel = mLabels.length === 0 ? '—' : mLabels.length === 1 ? mLabels[0] : 'Mixed'
+
+      await redis.set(`invoiced:latest:${trackingOptionId}`, {
+        totalInvoiced: mTotal, invoicedExVat: mTotal - mVat, vatTotal: mVat, paidTotal: mPaid, dueTotal: mDue,
+        vatRateLabel: mVatLabel, invoiceCount: allLines.length,
+        calculatedAt: now, source: 'csv_bulk_import',
+      })
+      await redis.set(`invoiced:lines:${trackingOptionId}`, allLines)
+      summary.push({ project: tracking, matched: true, invoices: allLines.length, invoiced: mTotal, paid: mPaid, due: mDue, vatRateLabel: mVatLabel })
     }
 
     await redis.del('dashboard:cache')

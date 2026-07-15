@@ -20,9 +20,15 @@ export default function XeroUploadPage() {
     <AdminShell active="/admin/xero-upload" title="Xero Upload">
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, color: '#1a1a19', margin: '0 0 6px' }}>Xero Upload</h1>
-        <p style={{ color: '#777', fontSize: 14, margin: '0 0 24px' }}>
-          Upload your Xero exports here to refresh project costs and invoices. All three are <strong>all-projects</strong> uploads — each file contains every project and the app matches each line to its project by the Xero tracking category. Re-uploading refreshes the figures (no duplicates).
+        <p style={{ color: '#777', fontSize: 14, margin: '0 0 16px' }}>
+          Upload your Xero exports here to refresh project costs and invoices. All three are <strong>all-projects</strong> uploads — each file contains every project and the app matches each line to its project by the Xero tracking category. Uploads <strong>accumulate</strong>: they add new transactions and refresh existing ones, and de-duplicate so nothing is counted twice.
         </p>
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 24, fontSize: 13, color: '#92400e' }}>
+          <strong>Xero caps exports at 500 lines.</strong> For a large history (e.g. 3 years), just export it in batches and upload each one — the uploads <strong>merge together</strong> (deduped), so several partial uploads build up the full picture without wiping earlier ones. Keep going until everything's in; the nightly sync then keeps it current.
+        </div>
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 24, fontSize: 13, color: '#1e40af' }}>
+          <strong>Select all columns</strong> when running each Xero report before exporting — the app relies on the <strong>Projects</strong> tracking column plus the account/amount columns to allocate costs. If columns are left out, some data won't be captured.
+        </div>
 
         <UploadArea
           title="Bills (Costs)"
@@ -35,10 +41,10 @@ export default function XeroUploadPage() {
 
         <UploadArea
           title="Direct Wages"
-          blurb={<>Upload the Xero <strong>Account Transactions</strong> export (CSV) for <strong>Direct Wages (320)</strong>. Captures PAYE/direct labour for every project, matched by the tracking category on each wage line.</>}
-          accept=".csv"
+          blurb={<>Upload the Xero <strong>Account Transactions</strong> export for <strong>Direct Wages (320)</strong> (Excel). Captures PAYE/direct labour for every project, matched by the <strong>Projects</strong> tracking column on each line. Only project-tagged lines are imported (the pool/contra lines are ignored automatically).</>}
+          accept=".xlsx,.xls"
           endpoint="/api/import-wages-bulk"
-          howto={<>Accounting → Reports → <strong>Account Transactions</strong> → filter to account <strong>320 Direct Wages</strong> → make sure it's grouped/shown by the Projects tracking category → Export <strong>CSV</strong>.</>}
+          howto={<>Accounting → Reports → <strong>Account Transactions</strong> → account <strong>320 Direct Wages</strong> → set the date range → <strong>select ALL columns</strong> (so the "Projects" tracking column is included) → Export <strong>Excel</strong>.</>}
           renderResult={(r) => <CostResult r={r} label="wages" />}
         />
 
@@ -100,7 +106,7 @@ function CostResult({ r, label }) {
     <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 16, marginTop: 12 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: '#16a34a', marginBottom: 10 }}>✓ {label === 'wages' ? 'Wages' : 'Bills'} imported</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-        <Stat label="Lines" value={r.totalLinesProcessed ?? 0} />
+        <Stat label="New lines added" value={r.newLinesAdded ?? r.totalLinesProcessed ?? 0} />
         <Stat label="Projects matched" value={r.projectsMatched ?? 0} />
         <Stat label="Total costs" value={fmt(r.totalCosts)} />
       </div>

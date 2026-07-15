@@ -2,6 +2,8 @@ import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 import { mergeCosts } from '../../lib/mergeCosts'
+import { costLineKey, mergeDedupe } from '../../lib/costDedupe'
+import * as xlsx from 'xlsx'
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } }
 
@@ -15,31 +17,31 @@ async function getRedis() {
   } catch { return null }
 }
 
-function parseCSVLine(line) {
-  const out = []; let cur = '', q = false
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i]
-    if (q) { if (c === '"') { if (line[i + 1] === '"') { cur += '"'; i++ } else q = false } else cur += c }
-    else { if (c === '"') q = true; else if (c === ',') { out.push(cur); cur = '' } else cur += c }
-  }
-  out.push(cur); return out
-}
-const num = (x) => { const n = parseFloat(String(x || '').replace(/[£,]/g, '')); return isNaN(n) ? 0 : n }
-const parseDate = (s) => {
-  if (!s) return null
-  const t = String(s).trim()
-  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10)
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(t)
+const num = (x) => { const n = parseFloat(String(x ?? '').replace(/[£,]/g, '')); return isNaN(n) ? 0 : n }
+function excelDate(v) {
+  if (!v) return null
+  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  if (typeof v === 'number') { const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000); return d.toISOString().slice(0, 10) }
+  const s = String(v).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s)
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
-  return t
+  return s
 }
 
-// Find a header column by trying several likely names (case-insensitive).
-function findCol(headers, names) {
-  const lower = headers.map(h => h.toLowerCase().trim())
-  for (const n of names) { const i = lower.indexOf(n.toLowerCase()); if (i !== -1) return i }
-  // fuzzy contains
-  for (let i = 0; i < lower.length; i++) for (const n of names) if (lower[i].includes(n.toLowerCase())) return i
+// Header names we accept for each field (from Xero Account Transactions export).
+const H = {
+  date: ['Date'],
+  desc: ['Description'],
+  ref: ['Reference'],
+  debit: ['Debit (GBP)', 'Debit'],
+  credit: ['Credit (GBP)', 'Credit'],
+  net: ['Net (GBP)', 'Gross (GBP)'],
+  projects: ['Projects'],   // the tracking category column
+  code: ['Account Code'],
+}
+function colIndex(headers, names) {
+  for (const n of names) { const i = headers.indexOf(n); if (i !== -1) return i }
   return -1
 }
 
@@ -51,23 +53,23 @@ export default async function handler(req, res) {
     const { fileData } = req.body
     if (!fileData) return res.status(400).json({ error: 'No file provided' })
 
-    const csv = Buffer.from(fileData, 'base64').toString('utf8')
-    const allLines = csv.split(/\r?\n/)
-    // Find the header row (the line containing Date + an amount + a tracking column).
-    let headerIdx = allLines.findIndex(l => /date/i.test(l) && /(gross|amount|debit|net)/i.test(l))
-    if (headerIdx === -1) headerIdx = 0
-    const headers = parseCSVLine(allLines[headerIdx]).map(h => h.trim())
+    const wb = xlsx.read(Buffer.from(fileData, 'base64'), { type: 'buffer', cellDates: true })
+    const sheet = wb.Sheets[wb.SheetNames[0]]
+    const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null })
 
-    const col = {
-      date: findCol(headers, ['Date']),
-      desc: findCol(headers, ['Description', 'Details', 'Narration']),
-      ref: findCol(headers, ['Reference', 'Source']),
-      amount: findCol(headers, ['Gross', 'Amount', 'Net', 'Debit']),
-      credit: findCol(headers, ['Credit']),
-      tracking: findCol(headers, ['TrackingOption1', 'Tracking', 'Project', 'Projects']),
+    // Find the header row (the one containing 'Date' and 'Projects').
+    let hIdx = rows.findIndex(r => Array.isArray(r) && r.includes('Date') && r.includes('Projects'))
+    if (hIdx === -1) {
+      return res.status(400).json({ error: 'Could not find a "Projects" column. Re-run the Account Transactions report with ALL COLUMNS selected (so the Projects tracking column is included), then re-upload.' })
     }
-    if (col.tracking === -1 || col.amount === -1) {
-      return res.status(400).json({ error: 'Could not find a project/tracking column and an amount column in this export. Please export Account Transactions for account 320 with the Projects tracking category shown as a column, then re-upload. (If unsure, send James the file so the columns can be mapped.)' })
+    const headers = rows[hIdx].map(h => (h == null ? '' : String(h).trim()))
+    const col = {
+      date: colIndex(headers, H.date), desc: colIndex(headers, H.desc), ref: colIndex(headers, H.ref),
+      debit: colIndex(headers, H.debit), credit: colIndex(headers, H.credit), net: colIndex(headers, H.net),
+      projects: colIndex(headers, H.projects), code: colIndex(headers, H.code),
+    }
+    if (col.projects === -1) {
+      return res.status(400).json({ error: 'No "Projects" column found. Make sure all columns are selected when exporting.' })
     }
 
     const redis = await getRedis()
@@ -75,25 +77,31 @@ export default async function handler(req, res) {
     const seenAccounts = (await redis.get('costs:seen-accounts').catch(() => null)) || {}
     if (!seenAccounts['320']) seenAccounts['320'] = 'Direct Wages'
 
+    // Only import lines that carry a project tag. Blank-Projects lines are the
+    // contra/pool side of the tracking-transfer journals (and the original lump
+    // journal) — including them would net to zero, so they are skipped.
     const byProject = new Map()
-    for (let i = headerIdx + 1; i < allLines.length; i++) {
-      const raw = allLines[i]
-      if (!raw || !raw.trim()) continue
-      const c = parseCSVLine(raw)
-      const tracking = (c[col.tracking] || '').trim()
-      if (!tracking) continue
-      let amount = num(c[col.amount])
-      if (col.credit !== -1) amount = num(c[col.amount]) - num(c[col.credit])
+    for (let i = hIdx + 1; i < rows.length; i++) {
+      const r = rows[i]
+      if (!Array.isArray(r)) continue
+      const proj = col.projects !== -1 ? r[col.projects] : null
+      if (!proj || !String(proj).trim()) continue
+      const tracking = String(proj).trim()
+
+      // Amount: prefer Debit-Credit (GBP); fall back to Net (GBP).
+      let amount = 0
+      if (col.debit !== -1 || col.credit !== -1) amount = num(r[col.debit]) - num(r[col.credit])
+      else if (col.net !== -1) amount = num(r[col.net])
       if (amount === 0) continue
 
       if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, lines: [] })
       const g = byProject.get(tracking)
       g.labour += amount
       g.lines.push({
-        date: parseDate(c[col.date]),
+        date: excelDate(col.date !== -1 ? r[col.date] : null),
         supplier: 'Direct Wages',
-        description: col.desc !== -1 ? (c[col.desc] || '') : 'Direct Wages',
-        reference: col.ref !== -1 ? (c[col.ref] || '') : '',
+        description: col.desc !== -1 ? String(r[col.desc] || '') : 'Direct Wages',
+        reference: col.ref !== -1 ? String(r[col.ref] || '') : '',
         amount,
         accountCode: '320',
         accountName: 'Direct Wages',
@@ -103,9 +111,10 @@ export default async function handler(req, res) {
     }
 
     if (byProject.size === 0) {
-      return res.status(400).json({ error: 'No project-tagged wage lines found. Make sure the export shows the Projects tracking category against each line.' })
+      return res.status(400).json({ error: 'No project-tagged wage lines found. Check the Projects column is populated in the export.' })
     }
 
+    // Resolve tracking names -> trackingOptionId (cost cache key).
     const trackingByName = new Map()
     try {
       let tokens = await getTokens()
@@ -117,17 +126,22 @@ export default async function handler(req, res) {
     } catch (e) { console.error('project resolve failed:', e) }
 
     let matched = 0, unmatched = 0
+    let totalAdded = 0
     const summary = []
     for (const [tracking, g] of byProject.entries()) {
       const projectId = trackingByName.get(tracking.toLowerCase())
       if (!projectId) { unmatched++; summary.push({ project: tracking, matched: false, total: g.labour }); continue }
       matched++
+      const existing = (await redis.get(`costs:wages:${projectId}`).catch(() => null))?.lines || []
+      const { merged, added } = mergeDedupe(existing, g.lines, costLineKey)
+      totalAdded += added
+      const labour = merged.reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:wages:${projectId}`, {
-        labourSpend: g.labour, materialsSpend: 0, totalCosts: g.labour, lines: g.lines,
+        labourSpend: labour, materialsSpend: 0, totalCosts: labour, lines: merged,
         calculatedAt: new Date().toISOString(), source: 'wages_bulk',
       })
       await mergeCosts(redis, projectId)
-      summary.push({ project: tracking, matched: true, labour: g.labour, total: g.labour, lines: g.lines.length })
+      summary.push({ project: tracking, matched: true, labour, total: labour, lines: merged.length, added })
     }
 
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
@@ -138,7 +152,8 @@ export default async function handler(req, res) {
       projectsMatched: matched,
       projectsUnmatched: unmatched,
       totalLinesProcessed: [...byProject.values()].reduce((s, g) => s + g.lines.length, 0),
-      totalCosts: [...byProject.values()].reduce((s, g) => s + g.labour, 0),
+      newLinesAdded: totalAdded,
+      totalCosts: summary.filter(s => s.matched).reduce((s, x) => s + (x.total || 0), 0),
       summary: summary.sort((a, b) => (b.total || 0) - (a.total || 0)),
     })
   } catch (e) {

@@ -1,6 +1,7 @@
 import { getTokens, saveTokens } from '../../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
 import { mergeCosts } from '../../../lib/mergeCosts'
+import { costLineKey as costKey, invoiceLineKey as invoiceKey } from '../../../lib/costDedupe'
 
 // Nightly incremental Xero sync. Rotates ONE project per run (deep-sync:pointer)
 // and, for that project, tops up the last OVERLAP_DAYS from Xero:
@@ -29,21 +30,6 @@ async function getRedis() {
 const xget = (url, accessToken, tenantId) => fetch(url, {
   headers: { Authorization: `Bearer ${accessToken}`, 'Xero-Tenant-Id': tenantId, Accept: 'application/json' }
 })
-
-// Unique key for a cost line. Prefer the true Xero line GUID (sync-to-sync).
-// Otherwise fall back to a stable business key that also matches UPLOADED lines
-// (uploads carry references/dates but not GUIDs):
-//   • bills  -> invoice number + account + amount
-//   • wages  -> date + amount + account (journal ref formats differ upload vs API)
-function costKey(l) {
-  if (l.xeroLineId) return `L:${l.xeroLineId}`
-  if (l.source === 'wages' || l.accountCode === '320') return `W:${l.date}|${l.amount}|320`
-  return `K:${l.reference || ''}|${l.accountCode || ''}|${l.amount}`
-}
-// Invoices are uniquely identified by their invoice number (unique in Xero).
-function invoiceKey(l) {
-  return l.invoiceNumber ? `N:${l.invoiceNumber}` : (l.xeroInvoiceId ? `I:${l.xeroInvoiceId}` : `${l.date}|${l.total}`)
-}
 
 // ── Bills (ACCPAY): materials + subbie labour, EXCLUDING 320 (wages come via journals) ──
 async function fetchBills(accessToken, tenantId, trackingOptionId, trackingCategoryId, fromDate) {
