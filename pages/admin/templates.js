@@ -119,7 +119,7 @@ export default function TemplatesAdmin() {
           <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Admin</span>
         </div>
         <div style={{ background: '#232321', padding: '0 24px', display: 'flex', gap: 4, height: 44, alignItems: 'center', overflowX: 'auto' }}>
-          {[['Portal Users', '/admin'], ['Templates', '/admin/templates'], ['Form Builder', '/operations/forms-builder'], ['Site App Users', '/operations/users'], ['Documents', '/admin/documents'], ['RAMS Director', '/admin/rams-director'], ['App Improvements', '/admin/problem-reports']].map(([label, href]) => (
+          {[['Portal Users', '/admin'], ['Templates', '/admin/templates'], ['Form Builder', '/operations/forms-builder'], ['Site App Users', '/operations/users'], ['Documents', '/admin/documents'], ['RAMS Director', '/admin/rams-director'], ['Account Categorisation', '/admin/account-categorisation'], ['Xero Upload', '/admin/xero-upload'], ['App Improvements', '/admin/problem-reports']].map(([label, href]) => (
             <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: href === '/admin/templates' ? '#fff' : '#bbb', fontWeight: href === '/admin/templates' ? 600 : 400, borderBottom: href === '/admin/templates' ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
           ))}
         </div>
