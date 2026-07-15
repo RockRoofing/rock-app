@@ -78,6 +78,26 @@ export default async function handler(req, res) {
         if (lines) invoiceLines = lines
       } catch {}
 
+      // Resilient fallback: if the aggregate cache predates the VAT/paid fields,
+      // derive them from the per-invoice lines (which carry total/subTotal/
+      // totalTax/amountPaid). This means values appear even before a full re-sync.
+      if (invoiceLines.length) {
+        if (!paidTotal) paidTotal = invoiceLines.reduce((s, l) => s + (l.amountPaid || 0), 0)
+        if (!vatTotal) vatTotal = invoiceLines.reduce((s, l) => s + (l.totalTax || 0), 0)
+        if (!invoicedExVat) invoicedExVat = invoiceLines.reduce((s, l) => s + (l.subTotal || 0), 0)
+        if (!totalInvoiced) totalInvoiced = invoiceLines.reduce((s, l) => s + (l.total || 0), 0)
+        if (vatRateLabel === '—') {
+          const labels = [...new Set(invoiceLines.map(l => l.vatLabel).filter(x => x && x !== '—'))]
+          if (labels.length === 1) vatRateLabel = labels[0]
+          else if (labels.length > 1) vatRateLabel = 'Mixed'
+          else {
+            const net = invoicedExVat, tax = vatTotal
+            if (net > 0 && tax > 0) vatRateLabel = `${Math.round((tax / net) * 100)}%`
+            else if (net > 0 && tax === 0) vatRateLabel = '0%'
+          }
+        }
+      }
+
       // Last invoice date
       const lastInvoiceDate = invoiceLines.length > 0
         ? invoiceLines.reduce((latest, inv) => inv.date > latest ? inv.date : latest, invoiceLines[0].date)

@@ -147,11 +147,28 @@ export default function RetentionPage() {
     } catch (e) { console.error(e) }
   }
 
-  // Merge xero + manual, xero projects that also have manual overrides use manual data
+  // Merge xero + manual. A manual OVERRIDE (entry with an xeroId) keeps the
+  // manual fields (received flags, dates, comments) but the live Xero financials
+  // (invoiced/vat/vatRateLabel/paid/final account etc.) are always layered on top
+  // so they stay current after each sync and never show stale/zero values.
+  const xeroByXid = new Map(xeroEntries.map(x => [x.xeroId, x]))
+  const mergedEntries = entries.map(e => {
+    if (e.xeroId && xeroByXid.has(e.xeroId)) {
+      const x = xeroByXid.get(e.xeroId)
+      return {
+        ...e,
+        invoiced: x.invoiced, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
+        finalAccount: e.finalAccount || x.finalAccount,
+        projectValue: e.projectValue || x.projectValue,
+        retentionPct: e.retentionPct || x.retentionPct,
+      }
+    }
+    return e
+  })
   const manualIds = new Set(entries.map(e => e.xeroId).filter(Boolean))
   const allEntries = [
     ...xeroEntries.filter(x => !manualIds.has(x.xeroId) && !entries.find(e => e.id === x.xeroId)),
-    ...entries
+    ...mergedEntries
   ].filter(e => {
     const balance = calcBalance(e)
     if (filter === 'overdue') {

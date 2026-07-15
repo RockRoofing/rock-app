@@ -1,51 +1,44 @@
-Financial App — batch 2b: fix invoiced/paid/VAT numbers, add VAT Type, fix Received save
-========================================================================================
+Financial App — batch 2c: VAT Type + Paid populate reliably (cache/fallback fix)
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 2 files (deploy these over the top).
+Deploy on top of batch 2b.
 
-1) INVOICED / VAT / PAID — corrected definitions + why they didn't update
-------------------------------------------------------------------------
-Per your steer, the columns now mean:
-  • Invoiced = TOTAL of all invoices on the system added together (inc VAT)
-  • VAT      = Total VAT across all the project's invoices
-  • Paid     = Total paid (Xero AmountPaid across all invoices)
-(Previously "Invoiced" was showing ex-VAT — now it's the full total of all invoices.)
+WHY VAT TYPE WAS BLANK AND PAID WAS 0
+-------------------------------------
+Two caching issues:
+1) The dashboard serves a 4-hour cached snapshot of all projects. If that snapshot
+   was built before the new fields existed, it had no paid/vat/vatRateLabel — so
+   the tracker showed 0 / blank regardless of a Xero sync.
+2) A manual override row (created when you tick "Received") was freezing a copy of
+   the row WITHOUT the live Xero financials.
 
-Why nothing updated after your sync: these figures are written by the wip-sync
-Xero job, and are only captured once THIS code is deployed. Also the dashboard
-caches results for 4 hours. So after deploying:
-  → run the Xero WIP sync again (wip-sync). It rebuilds the invoice cache with
-    the new totals AND clears the dashboard cache at the end, so the retention
-    page will then show the figures.
-If you sync and still see "—", the sync likely ran on the old code — re-run it
-once this is live.
+WHAT THIS FIXES
+---------------
+• The dashboard now DERIVES paid / VAT / VAT-type / invoiced from the per-invoice
+  lines cache as a fallback when the aggregate is missing them. "Paid" works
+  immediately (AmountPaid has always been cached per invoice). VAT + VAT Type
+  populate from the lines once a sync has stored per-line tax (batch 2b onward).
+• The Retention Tracker now LAYERS the live Xero financials (invoiced/VAT/VAT
+  Type/paid) on top of any manual override, so ticking "Received" no longer wipes
+  those figures — they always reflect the latest Xero data.
 
-2) NEW "VAT TYPE" COLUMN (next to VAT)
---------------------------------------
-Describes the VAT applied to the project's invoices, e.g. "20%", "5%",
-"0% reverse charge", "0% zero-rated", "Exempt", or "Mixed" if invoices differ.
-It's derived from Xero: reverse charge is detected from the invoice line TaxType;
-otherwise the rate is inferred from VAT ÷ net (20/5/0%).
+DEPLOY STEPS (important — do these in order)
+--------------------------------------------
+1) Deploy this batch.
+2) Clear the dashboard cache: visit /api/clear-cache while logged in as admin
+   (or just run the Xero WIP sync, which clears it at the end).
+3) Run the Xero WIP sync once so the per-invoice lines include VAT/tax type.
+4) Open the Retention Tracker:
+   • Paid should now show real figures.
+   • VAT + VAT Type populate for projects whose invoices have been synced with
+     batch 2b+ (VAT Type needs the per-line tax type, captured from that sync on).
 
-3) "RECEIVED" TICK NOT SAVING / NOT COLOURING — fixed
------------------------------------------------------
-Root cause: for a Xero-sourced row, its id was the Xero project id, so saving an
-edit tried to UPDATE a manual record that didn't exist — the change (including the
-Received tick) was silently dropped. Now, editing a Xero row saves a MANUAL
-OVERRIDE keyed to that project (xeroId): the Received flags, dates and any edits
-persist, the row shows your saved values, and the status/colour update correctly.
-Editing the same row again updates that override rather than creating duplicates.
+If VAT Type still shows "—" for a project after a fresh sync, that project's Xero
+invoices genuinely have no VAT lines / tax type we can read — tell me which
+project and I'll check the specific invoice's tax setup.
 
 FILES CHANGED
 -------------
-• pages/api/cron/wip-sync.js — total invoiced (inc VAT), VAT, paid + VAT-type label
-• pages/api/dashboard.js     — expose totalInvoiced / vat / paid / vatRateLabel
-• pages/retention.js         — corrected columns, VAT Type column, Received-save fix
-• pages/api/retention.js     — persist Xero-row overrides (keep xeroId, don't force manual)
-
-AFTER DEPLOY
-------------
-Deploy → run the Xero WIP sync → open the Retention Tracker: Invoiced/VAT/VAT Type/
-Paid populate for Xero projects, and ticking "Received" in Edit now saves and
-colours the 1st/2nd Rcvd columns and the status.
+• pages/api/dashboard.js — fallback aggregation from invoice lines (paid/vat/type)
+• pages/retention.js     — layer live Xero financials over manual overrides
