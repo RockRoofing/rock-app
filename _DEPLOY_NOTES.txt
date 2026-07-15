@@ -1,28 +1,45 @@
-Financial App — batch 1: calendar date fix + retention comments box
-===================================================================
+Financial App — batch 2: Retention Tracker Xero columns (Invoiced / VAT / Paid / Final Bal)
+===========================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
+Deploy on top of batch 1.
 
-Two small, self-contained fixes from the Financial App brief. The larger items
-(retention Xero columns: Invoiced/Paid/VAT/balance; manual-vs-existing-project
-entry with write-back; overdue-invoice list + automated email folded into the
-master sync cron) are coming in the next batch.
+WHAT CHANGED
+------------
+The Retention Tracker now shows four new columns for Xero-synced projects, pulled
+automatically from Xero (no manual entry):
 
-1) APPLICATION CALENDAR — "Payment due" date off-screen
--------------------------------------------------------
-The project popup showed Application / Valuation / Payment-due in a fixed 3-column
-grid; on narrower screens the native date pickers pushed "Payment due" past the
-modal edge. The grid is now responsive (auto-fit, wraps as needed) and the date
-inputs can shrink, so all three dates stay on screen.
+  • Invoiced  — total invoiced EX-VAT (reconciles against the Final Account, which
+                is also ex-VAT), so you can check the retention figure is right.
+  • VAT       — total VAT charged across the project's invoices (sits OUTSIDE the
+                Final Account).
+  • Paid      — total received from the customer (inc VAT), from Xero AmountPaid.
+  • Final Bal — Final Account minus amount paid (ex-VAT). Reaches £0 (shown green)
+                once the whole final account is cleared; positive (blue) while
+                money is still outstanding. VAT is handled correctly: paid ex-VAT
+                = paid inc-VAT minus the VAT charged, so VAT doesn't distort the
+                balance.
 
-2) PROJECT DETAILS — retention comments box
--------------------------------------------
-In Edit Project Details → Retention, under "Defects liability end date", there is
-now a double-height "Retention comments" text box. It saves with the rest of the
-project settings (persists to the project record; no data migration needed).
+HOW IT WORKS
+------------
+• The daily Xero sync (wip-sync cron) now also captures, per project: invoiced
+  ex-VAT (Σ SubTotal), VAT (Σ TotalTax) and paid (Σ AmountPaid), cached alongside
+  the existing invoice totals. Per-invoice subTotal/totalTax are cached too (for
+  the upcoming invoice list).
+• The dashboard API exposes invoicedExVat / vat / paid per project.
+• The Retention Tracker reads them for each Xero project row.
+
+IMPORTANT — first-run timing
+----------------------------
+The new figures populate after the NEXT daily Xero sync runs (the cache is
+rebuilt with the ex-VAT / VAT / paid breakdown). Until then, Invoiced/VAT/Paid/
+Final Bal show "—" for existing rows. You can trigger the sync manually if you
+have the cron endpoint to hand, otherwise they appear after the next run.
+Manual (non-Xero) rows show "—" for these columns — the manual/existing-project
+auto-fill comes in batch 3.
 
 FILES CHANGED
 -------------
-• pages/application-calendar.js — responsive date grid in the popup
-• pages/project/[id].js         — retentionComments textarea in the retention edit
-                                  section (saved via the existing settings POST)
+• pages/api/cron/wip-sync.js — cache invoiced ex-VAT, VAT, paid, due (+ per-invoice)
+• pages/api/dashboard.js     — expose invoicedExVat / vat / paid per project
+• pages/retention.js         — Invoiced / VAT / Paid / Final Bal columns + balance calc

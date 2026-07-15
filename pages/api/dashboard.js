@@ -64,9 +64,15 @@ export default async function handler(req, res) {
 
       // ── Read invoice lines from Redis ─────────────────────────────────────
       let totalInvoiced = 0, invoiceLines = []
+      let invoicedExVat = 0, vatTotal = 0, paidTotal = 0
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
-        if (invCache) totalInvoiced = invCache.totalInvoiced || 0
+        if (invCache) {
+          totalInvoiced = invCache.totalInvoiced || 0
+          invoicedExVat = invCache.invoicedExVat || 0
+          vatTotal = invCache.vatTotal || 0
+          paidTotal = invCache.paidTotal || 0
+        }
         const lines = await redis.get(`invoiced:lines:${id}`)
         if (lines) invoiceLines = lines
       } catch {}
@@ -147,6 +153,9 @@ export default async function handler(req, res) {
         afa,
         // All-time figures
         totalInvoiced,
+        invoicedExVat,
+        vat: vatTotal,
+        paid: paidTotal,
         remainingToClaim,
         totalCosts,
         labourSpend,

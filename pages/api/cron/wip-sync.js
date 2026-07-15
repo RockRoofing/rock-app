@@ -67,8 +67,17 @@ export default async function handler(req, res) {
       try {
         const invoices = await getInvoicesByCategory(tokens.access_token, tenantId, projectId, catId)
         const totalInvoiced = invoices.reduce((s, inv) => s + (inv.Total || 0), 0)
+        // Ex-VAT invoiced (matches the Final Account basis), VAT, and paid totals.
+        const invoicedExVat = invoices.reduce((s, inv) => s + (inv.SubTotal || 0), 0)
+        const vatTotal = invoices.reduce((s, inv) => s + (inv.TotalTax || 0), 0)
+        const paidTotal = invoices.reduce((s, inv) => s + (inv.AmountPaid || 0), 0)
+        const dueTotal = invoices.reduce((s, inv) => s + (inv.AmountDue || 0), 0)
         await redis.set(`invoiced:latest:${projectId}`, {
-          totalInvoiced,
+          totalInvoiced,          // inc VAT (unchanged, for existing consumers)
+          invoicedExVat,          // ex VAT — reconciles with Final Account
+          vatTotal,               // VAT charged
+          paidTotal,              // total received (inc VAT)
+          dueTotal,               // total still outstanding (inc VAT)
           invoiceCount: invoices.length,
           calculatedAt: now.toISOString()
         })
@@ -79,6 +88,8 @@ export default async function handler(req, res) {
           date: inv.DateString || inv.Date,
           dueDate: inv.DueDateString || inv.DueDate,
           total: inv.Total || 0,
+          subTotal: inv.SubTotal || 0,
+          totalTax: inv.TotalTax || 0,
           amountPaid: inv.AmountPaid || 0,
           amountDue: inv.AmountDue || 0,
           fullyPaidOnDate: inv.FullyPaidOnDate || null,

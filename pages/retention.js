@@ -22,6 +22,17 @@ function calcBalance(entry) {
   return total - received
 }
 
+// Final-account balance = Final Account (ex-VAT) minus amount paid (ex-VAT).
+// Reaches £0 once the whole final account has been paid. VAT sits outside the
+// Final Account, so we compare paid ex-VAT (paid inc-VAT minus VAT charged).
+function calcFinalBalance(entry) {
+  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const paidIncVat = parseFloat(entry.paid || 0) || 0
+  const vat = parseFloat(entry.vat || 0) || 0
+  const paidExVat = paidIncVat - vat
+  return fa - paidExVat
+}
+
 function statusBadge(entry) {
   const now = new Date().toISOString().split('T')[0]
   const r1Due = entry.release1Date && !entry.release1Received && entry.release1Date < now
@@ -72,6 +83,9 @@ export default function RetentionPage() {
           pcType: '',
           qsName: p.estimator || '',
           qsEmail: '',
+          invoiced: p.invoicedExVat || 0,
+          vat: p.vat || 0,
+          paid: p.paid || 0,
           release1Value: (p.grossInvoiced - p.totalInvoiced) / 2 || 0,
           release1Date: '',
           release1Received: false,
@@ -306,11 +320,11 @@ export default function RetentionPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                      {['Ref', 'Customer', 'Project', 'Final Account', 'Ret %', 'PC Type', 'QS', 'Status',
+                      {['Ref', 'Customer', 'Project', 'Final Account', 'Invoiced', 'VAT', 'Paid', 'Final Bal', 'Ret %', 'PC Type', 'QS', 'Status',
                         '1st Value', '1st Date', '1st Rcvd',
                         '2nd Value', '2nd Date', '2nd Rcvd',
                         'Balance', 'Comments', ''].map(h => (
-                        <th key={h} style={{ padding: '9px 10px', textAlign: ['1st Value', '2nd Value', 'Final Account', 'Balance'].includes(h) ? 'right' : 'left', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding: '9px 10px', textAlign: ['1st Value', '2nd Value', 'Final Account', 'Balance', 'Invoiced', 'VAT', 'Paid', 'Final Bal'].includes(h) ? 'right' : 'left', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -334,6 +348,11 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.customerName || '—'}</td>
                             <td style={{ padding: '8px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.projectName || '—'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(parseFloat(entry.finalAccount) || parseFloat(entry.projectValue) || null)}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.invoiced != null && entry.invoiced !== '' ? fmt(parseFloat(entry.invoiced)) : '—'}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.vat != null && entry.vat !== '' ? fmt(parseFloat(entry.vat)) : '—'}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.paid != null && entry.paid !== '' ? fmt(parseFloat(entry.paid)) : '—'}</td>
+                            {(() => { const fb = calcFinalBalance(entry); const has = (entry.finalAccount || entry.projectValue) && (entry.paid != null && entry.paid !== '')
+                              return <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: !has ? '#bbb' : Math.abs(fb) < 1 ? '#16a34a' : '#2563eb' }}>{has ? fmtC(fb) : '—'}</td> })()}
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{entry.retentionPct ? `${parseFloat(entry.retentionPct).toFixed(0)}%` : '—'}</td>
                             <td style={{ padding: '8px 10px', color: '#555' }}>{entry.pcType || '—'}</td>
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.qsName || '—'}</td>
@@ -385,7 +404,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={18} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={21} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry}
                                   onCancel={() => setEditingId(null)} />
