@@ -10,8 +10,8 @@ const TABS = [
   ['Documents', '/admin/documents'],
   ['RAMS Director', '/admin/rams-director'],
   ['Account Categorisation', '/admin/account-categorisation'],
-  ['App Improvements', '/admin/problem-reports'],
   ['Xero Upload', '/admin/xero-upload'],
+  ['App Improvements', '/admin/problem-reports'],
 ]
 
 // Chrome for Admin-area pages: dark bar + admin sub-nav, admin-gated.

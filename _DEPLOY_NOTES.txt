@@ -1,32 +1,17 @@
-Financial App — deep-sync with ID-based de-duplication
+Admin — reorder nav: App Improvements moved to the end
 ======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Supersedes the previous deep-sync package. Deploy over the top (incl. vercel.json).
-Requires the Vercel upgrade (3rd cron slot) and the earlier mergeCosts/importers.
+Replaces components/AdminShell.js (deploy over the top).
 
-DE-DUPLICATION NOW USES UNIQUE IDENTIFIERS (your suggestion)
------------------------------------------------------------
-Instead of a fuzzy fingerprint, dedupe now keys on the most reliable identifier
-available:
+CHANGE
+------
+Admin sub-nav order is now:
+Portal Users · Templates · Form Builder · Site App Users · Documents ·
+RAMS Director · Account Categorisation · Xero Upload · App Improvements
 
-• Sales invoices → INVOICE NUMBER (unique in Xero). The sync also stores the
-  Xero InvoiceID. Matches uploaded invoices (which carry the invoice number).
-• Bills → the Xero LineItemID (true GUID) when present, else invoice number +
-  account code + amount. The sync stores InvoiceID + LineItemID on each line.
-• Direct Wages → the Xero JournalLineID (true GUID) when present, else
-  date + amount + account 320. The sync stores ManualJournalID + JournalLineID.
+("App Improvements" moved to the end.)
 
-Why the fallbacks: the Xero CSV/Excel EXPORTS you upload do NOT contain the GUIDs
-(only invoice/journal numbers), so a pure-GUID key couldn't match uploaded rows.
-The sync stores the real GUIDs it gets from the API (so sync-to-sync dedupe is
-exact), and falls back to the business key to line up with uploaded rows. Net
-effect: no transaction is counted twice, whether it came from an upload or the API.
-
-Everything else unchanged from the previous deep-sync package (bills + wages +
-sales, one project/night, 120-day overlap, per-source keys + mergeCosts, 02:00 cron).
-
-FILES CHANGED
--------------
-• pages/api/cron/deep-sync.js — ID-based dedupe + stores Xero GUIDs on lines
-• vercel.json                 — deep-sync 02:00 cron (unchanged from prev package)
+FILE CHANGED
+------------
+• components/AdminShell.js
