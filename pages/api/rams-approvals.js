@@ -121,19 +121,27 @@ export default async function handler(req, res) {
       const editNotes = (notes || '').trim()
       if (!editNotes) return res.status(400).json({ error: 'Please describe the edits required.' })
       const byName = (name || rec.siteManagerName || '').trim()
-      // Record the rejection; the RAMS stays at the site-manager stage (not approved).
+      // Record the rejection and HALT the flow. The RAMS is marked 'rejected' so
+      // the CM can see it must be re-issued; no one can approve this version now.
       rec.siteManagerRejection = { name: byName, notes: editNotes, at: Date.now() }
+      rec.stage = 'rejected'
       rec.updatedAt = Date.now()
       approvals[ref.fileId] = rec
       await saveRamsApprovals(ref.projectNo, approvals)
-      // Invalidate this token so the link can't be reused; the CM must resend a
-      // corrected RAMS / new link after making edits.
+      // Invalidate this approval link so it can't be reused — the CM must upload a
+      // corrected RAMS (a new revision), which restarts the chain from scratch.
+      try { await saveRamsToken(token, null) } catch {}
       try {
         const { notifySiteManagerRejection } = await import('../../lib/ramsNotify')
         const files = await getProjectFiles(ref.projectNo)
         const f = (files || []).find(x => x.id === ref.fileId)
-        notifySiteManagerRejection({ projectNo: ref.projectNo, fileName: f?.name || '', byName, notes: editNotes })
-      } catch {}
+        // Pass the names captured on the approval record — the CM/Director who
+        // actually signed — so we can resolve their emails reliably.
+        await notifySiteManagerRejection({
+          projectNo: ref.projectNo, fileName: f?.name || '', byName, notes: editNotes,
+          cmName: rec.cm?.name || '', directorName: rec.director?.name || '',
+        })
+      } catch (e) { console.error('sm-reject notify failed:', e) }
       return res.json({ ok: true })
     }
 

@@ -55,19 +55,27 @@ export default async function handler(req, res) {
         const stage = (appr[currentFile.id] && appr[currentFile.id].stage) || 'cm'
 
         // Who (operatives) has signed the CURRENT RAMS -> match by lowercased name.
-        // EXCLUDE the CM/Director auto-signatures (they approve + auto-sign, but are
-        // not "operatives" for the matrix/pipeline).
+        // Keep operative signatures separate from CM/Director approval signatures:
+        //  • signerKeys   → operatives (drives the Operatives pipeline node)
+        //  • approverKeys → the CM/Director who signed via approval. Their OWN
+        //    matrix cell shows "Yes" (they've signed the RAMS) but they must NOT
+        //    count toward the Operatives node.
         const signerKeys = []
+        const approverKeys = []
         const bucket = sigs[currentFile.id] || {}
         for (const opId of Object.keys(bucket)) {
-          if (opId.startsWith('cm:') || opId.startsWith('director:')) continue
           const rec = bucket[opId]
-          if (rec.role === 'Contracts Manager' || rec.role === 'Director') continue
           const nmeKey = (rec.name || '').trim().toLowerCase()
-          if (nmeKey && !signerKeys.includes(nmeKey)) signerKeys.push(nmeKey)
+          if (!nmeKey) continue
+          const isApprover = opId.startsWith('cm:') || opId.startsWith('director:') || rec.role === 'Contracts Manager' || rec.role === 'Director'
+          if (isApprover) {
+            if (!approverKeys.includes(nmeKey)) approverKeys.push(nmeKey)
+          } else {
+            if (!signerKeys.includes(nmeKey)) signerKeys.push(nmeKey)
+          }
         }
 
-        projects.push({ key: no, name, hasRams: true, stage, signerKeys })
+        projects.push({ key: no, name, hasRams: true, stage, signerKeys, approverKeys })
       }
 
       projects.sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }))

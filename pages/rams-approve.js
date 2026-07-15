@@ -139,20 +139,18 @@ export default function RamsApprovePage() {
 
                 {/* Do not approve — requires edits */}
                 {!showReject ? (
-                  <div style={{ textAlign: 'center', marginTop: 8, paddingTop: 12, borderTop: '1px solid #eee' }}>
-                    <button onClick={() => { setShowReject(true); setErr('') }} style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 14, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
-                      Do not approve — requires edits
-                    </button>
-                  </div>
+                  <button onClick={() => { setShowReject(true); setErr('') }} style={{ width: '100%', marginTop: 12, padding: '15px 0', fontSize: 16, fontWeight: 700, color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 12, cursor: 'pointer' }}>
+                    Do not approve — requires edits
+                  </button>
                 ) : (
                   <div style={{ marginTop: 12, paddingTop: 14, borderTop: '1px solid #eee' }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>Request edits</div>
-                    <div style={{ fontSize: 12.5, color: '#777', marginBottom: 8 }}>Describe what needs changing. This will be sent to Rock Roofing's Contracts Manager and Director — the RAMS will not be approved.</div>
+                    <div style={{ fontSize: 12.5, color: '#777', marginBottom: 8 }}>Describe what needs changing (required). This will be sent to Rock Roofing's Contracts Manager and Director — the RAMS will not be approved.</div>
                     <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={4} placeholder="What needs to be changed?"
                       style={{ width: '100%', boxSizing: 'border-box', padding: '11px 12px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 15, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }} />
                     <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                       <button onClick={() => { setShowReject(false); setEditNotes(''); setErr('') }} style={{ flex: 1, padding: '12px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, cursor: 'pointer' }}>Cancel</button>
-                      <button onClick={reject} disabled={busy} style={{ flex: 2, padding: '12px 0', fontSize: 15, fontWeight: 700, color: '#fff', background: busy ? '#c9c4ba' : '#dc2626', border: 'none', borderRadius: 12, cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Sending…' : 'Send edit request'}</button>
+                      <button onClick={reject} disabled={busy} style={{ flex: 2, padding: '12px 0', fontSize: 15, fontWeight: 700, color: '#b91c1c', background: busy ? '#f3f4f6' : '#fee2e2', border: '1px solid #fecaca', borderRadius: 12, cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Sending…' : 'Send edit request'}</button>
                     </div>
                   </div>
                 )}
