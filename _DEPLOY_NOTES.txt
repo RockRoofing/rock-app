@@ -1,15 +1,39 @@
-Financial App — batch 3a (update): Mixed VAT warning
-====================================================
+Financial App — batch 3b: add-existing-project + two-way comments sync
+=====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 3a pages/retention.js.
+Deploy on top of batch 3a.
 
-CHANGE
-------
-Mixed-VAT cell now shows "⚠ enter manually" in larger (12.5px), bold red text
-(hover still explains why + prompts entering VAT in Edit). Cell background stays
-blank.
+1) ADD AN EXISTING PROJECT (manual entry)
+-----------------------------------------
+"Add Manual Entry" now has an "Add an existing project" picker at the top of the
+form (shown only when adding, not editing). Selecting a project auto-fills:
+Our Ref, Customer, Project Name, Project Value, Final Account (AFA), Retention %,
+Completion Date and QS — and links the entry to that project (so comments sync).
+Leave the picker alone to enter a brand-new project entirely by hand.
+The picker lists ALL projects from project details (not just invoiced ones), so
+you can add one before it's been invoiced.
 
-FILE CHANGED
-------------
-• pages/retention.js
+2) COMMENTS — TWO-WAY SYNC
+--------------------------
+Comments now sync both ways between the Retention Tracker and Project Details:
+• Edit a project-linked row's comment in the tracker → it writes back to that
+  project's "Retention comments" box in Project Details.
+• Edit the comment in Project Details → it shows on the tracker row (project
+  details is treated as the source of truth on load).
+Only COMMENTS sync back. Everything else (Retention %, AFA, Project Value,
+Completion Date, QS) remains read-only from project details, and the manually
+entered VAT (for Mixed projects) stays only in the tracker — none of these write
+back.
+
+NOTES
+-----
+• Pure manual entries (not linked to a project) don't sync comments anywhere —
+  there's no project to write to.
+• Comment write-back clears the dashboard cache so the change is reflected.
+
+FILES CHANGED
+-------------
+• pages/api/retention.js — write comments back to project:<xeroId> retentionComments
+• pages/retention.js     — "add existing project" picker + layer live project
+                           comment onto linked rows

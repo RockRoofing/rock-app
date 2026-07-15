@@ -1,4 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
+import { getProject, saveProject } from '../../lib/db'
 async function getRedis() {
   try {
     const { Redis } = await import('@upstash/redis')
@@ -38,6 +39,21 @@ export default async function handler(req, res) {
       entries.push(entry)
     }
     await redis.set(KEY, entries)
+
+    // Two-way COMMENTS sync: for a project-linked row (has xeroId), write the
+    // comment back to the project's retentionComments so Project Details stays in
+    // step. (Only comments sync back — all other fields are read-only from the
+    // project; manual VAT stays only in the tracker.)
+    try {
+      if (entry.xeroId && entry.comments != null) {
+        const settings = (await getProject(entry.xeroId)) || {}
+        if ((settings.retentionComments || '') !== entry.comments) {
+          await saveProject(entry.xeroId, { ...settings, retentionComments: entry.comments })
+          try { await redis.del('dashboard:cache') } catch {}
+        }
+      }
+    } catch (e) { console.error('retention comment write-back failed:', e) }
+
     return res.json({ entries })
   }
 

@@ -105,6 +105,7 @@ export default function RetentionPage() {
   const [filter, setFilter] = useState('outstanding') // outstanding | all
   const [importing, setImporting] = useState(false)
   const [qsOptions, setQsOptions] = useState([])
+  const [allProjects, setAllProjects] = useState([])   // for the "add existing project" picker
   const importRef = useRef(null)
   const [search, setSearch] = useState('')
 
@@ -127,7 +128,20 @@ export default function RetentionPage() {
       // Load Xero projects with retention
       const r2 = await fetch('/api/dashboard')
       const d2 = await r2.json()
-      // Show every project that has retention information in its project details
+      // Full project list for the "add existing project" picker (all projects,
+      // regardless of retention filter, so you can add one before it's invoiced).
+      setAllProjects((d2.projects || []).map(p => ({
+        xeroId: p.xeroId,
+        ourRef: p.jobNo || '',
+        customerName: p.customer || '',
+        projectName: p.name || '',
+        projectValue: p.contractValue || 0,
+        finalAccount: p.afa || 0,
+        retentionPct: (p.retentionPct || 0) * 100,
+        completionDate: p.completionDate || p.pcDate || '',
+        qsName: p.qsName || p.estimator || '',
+        comments: p.retentionComments || '',
+      })).sort((a, b) => (a.ourRef || '').localeCompare(b.ourRef || '', undefined, { numeric: true })))
       // (a retention % set), plus any that already have retention outstanding or
       // invoicing under way. This mirrors the project details / EOM data rather
       // than waiting for a project to be invoiced.
@@ -255,6 +269,7 @@ export default function RetentionPage() {
         retentionPct: e.retentionPct || x.retentionPct,
         completionDate: e.completionDate || x.completionDate,
         qsName: e.qsName || x.qsName,
+        comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
       }
     }
     return e
@@ -287,6 +302,37 @@ export default function RetentionPage() {
     const fb = field => e => setForm({ ...form, [field]: e.target.checked })
     return (
       <div style={{ background: '#f8f9fa', border: '1px solid #e5e5e5', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+        {!form.id && (
+          <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px dashed #ddd' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#0f766e', marginBottom: 4 }}>Add an existing project</div>
+            <div style={{ fontSize: 10.5, color: '#888', marginBottom: 6 }}>Pick a project to auto-fill its details, or leave this and enter everything manually below.</div>
+            <select
+              defaultValue=""
+              onChange={e => {
+                const p = allProjects.find(x => x.xeroId === e.target.value)
+                if (!p) return
+                setForm({
+                  ...form,
+                  ourRef: p.ourRef || '',
+                  customerName: p.customerName || '',
+                  projectName: p.projectName || '',
+                  projectValue: p.projectValue || '',
+                  finalAccount: p.finalAccount || '',
+                  retentionPct: p.retentionPct || '',
+                  completionDate: p.completionDate || '',
+                  qsName: p.qsName || '',
+                  comments: p.comments || form.comments || '',
+                  xeroId: p.xeroId,   // link so comments sync back to the project
+                })
+              }}
+              style={{ ...inputStyle, maxWidth: 420 }}>
+              <option value="">— select an existing project —</option>
+              {allProjects.map(p => (
+                <option key={p.xeroId} value={p.xeroId}>{[p.ourRef, p.projectName].filter(Boolean).join(' · ') || p.projectName || p.ourRef}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
           {[['ourRef', 'Our Ref'], ['customerName', 'Customer'], ['projectName', 'Project Name'], ['pcType', 'PC Type (Main/Sub)']].map(([key, label]) => (
             <div key={key}>
