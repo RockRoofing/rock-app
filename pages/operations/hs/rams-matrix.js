@@ -180,8 +180,9 @@ const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
 
 function ResendSiteManagerModal({ projects, onClose, onSent }) {
-  // Only projects whose current RAMS is awaiting the Site Manager can be resent.
-  const eligible = (projects || []).filter(p => p.hasRams && p.stage === 'site-manager')
+  // A Site Manager exists once the Director has signed — so a project can be
+  // (re)sent when its current RAMS is at the Site Manager stage or beyond.
+  const eligible = (projects || []).filter(p => p.hasRams && ['site-manager', 'operatives', 'complete'].includes(p.stage))
   const [projKey, setProjKey] = useState('')
   const [loading, setLoading] = useState(false)
   const [fileId, setFileId] = useState('')
@@ -254,7 +255,7 @@ function ResendSiteManagerModal({ projects, onClose, onSent }) {
                 <option value="">Select a project…</option>
                 {eligible.map(p => <option key={p.key} value={p.key}>{p.name}</option>)}
               </select>
-              {eligible.length === 0 && <div style={{ fontSize: 12.5, color: '#999', marginTop: -8, marginBottom: 12 }}>No projects currently have RAMS awaiting Site Manager approval.</div>}
+              {eligible.length === 0 && <div style={{ fontSize: 12.5, color: '#999', marginTop: -8, marginBottom: 12 }}>No projects are ready to send to a Site Manager yet — the Director must sign the RAMS first.</div>}
 
               {loading ? <div style={{ fontSize: 13, color: '#999', padding: '10px 0' }}>Loading…</div> : projKey && fileId && (
                 <>

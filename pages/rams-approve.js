@@ -119,8 +119,11 @@ export default function RamsApprovePage() {
                 {info.fileUrl && (
                   <div style={{ marginTop: 12 }}>
                     <PdfPreview url={`/api/download?inline=1&url=${encodeURIComponent(info.fileUrl)}&name=${encodeURIComponent(info.fileName || '')}`} rawUrl={info.fileUrl} />
-                    <div style={{ marginTop: 8, textAlign: 'center' }}>
-                      <a href={`/api/download?url=${encodeURIComponent(info.fileUrl)}&name=${encodeURIComponent(info.fileName || 'RAMS.pdf')}`} style={{ color: BRAND, fontSize: 14, fontWeight: 600, textDecoration: 'none' }}>Download the RAMS ({info.fileName})</a>
+                    <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                      <a href={`/api/download?url=${encodeURIComponent(info.fileUrl)}&name=${encodeURIComponent(info.fileName || 'RAMS.pdf')}`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: BRAND, color: '#fff', fontSize: 14, fontWeight: 700, textDecoration: 'none', padding: '10px 18px', borderRadius: 10 }}>
+                        ⬇ Download RAMS
+                      </a>
                     </div>
                   </div>
                 )}

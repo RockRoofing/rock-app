@@ -1,57 +1,38 @@
-RAMS — Matrix resend, CM/Director "Yes", rejection email fix, red edits button
-==============================================================================
+RAMS — Resend dropdown now populated + Download RAMS as a button
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy on top of the previous RAMS fixes.
 
-1) "RESEND RAMS TO SITE MANAGER" — new button in the RAMS Matrix
----------------------------------------------------------------
-Added next to the "Pending Signature" key. Click it →
-  • select a project (only those with RAMS currently awaiting the Site Manager)
-  • reconfirm the Site Manager's details (pick a site contact or edit name/email)
-  • Send → re-issues a fresh approval link and resends the email to the Site
-    Manager (the old link is invalidated).
+1) "RESEND RAMS TO SITE MANAGER" — dropdown was empty
+----------------------------------------------------
+Cause: the dropdown only listed projects whose current RAMS was EXACTLY at the
+Site Manager stage. A project where the Site Manager had already approved (now at
+operatives) — or any project past that point — showed nothing, so the list came
+up empty.
+FIX: a project is now eligible to resend once the DIRECTOR has signed, i.e. its
+current RAMS is at the Site Manager stage OR beyond (site-manager / operatives /
+complete). Sending re-issues a fresh approval link, RE-OPENS the Site Manager
+stage (so their new approval takes effect), invalidates the old link, and emails
+the Site Manager again.
+The server's set-site-manager action was widened to match (allowed once the
+Director has signed; blocked before that and on rejected RAMS).
 
-2) CM & DIRECTOR NOW SHOW "Yes" IN THE MATRIX (no operative sign needed)
------------------------------------------------------------------------
-When the CM and Director approve, they auto-sign onto the RAMS. Previously those
-signatures were excluded from the matrix, so if the CM/Director were also columns
-(installers) their own cell showed PS. Now:
-  • The matrix returns approverKeys (people who signed via CM/Director approval)
-    separately from signerKeys (operatives).
-  • A person's cell shows "Yes" if they signed EITHER as an operative OR via
-    CM/Director approval — so the CM/Director show Yes without signing again.
-  • Those approval signatures still do NOT count toward the Operatives pipeline
-    node (so it won't go green until real operatives sign).
-
-3) "REQUIRES EDITS" EMAIL TO THE CM — now reliable
---------------------------------------------------
-The rejection email wasn't reaching the CM. Cause: the CM was resolved only via
-the project's Contracts Manager name and could come back empty. Now the notifier:
-  • uses the NAME captured on the approval record (the CM/Director who actually
-    signed) and resolves their email across Site App users AND Portal users,
-  • falls back to the designated Director and finally to ALERT_EMAIL so a
-    rejection is never silently lost,
-  • logs precisely which step failed if it still can't send.
-The sm-reject handler now awaits the notifier and logs failures.
-
-4) "DO NOT APPROVE — REQUIRES EDITS" IS NOW A LIGHT-RED BUTTON
--------------------------------------------------------------
-On the Site Manager approval page it's now a full-width light-red button
-(matching the green "Approve this RAMS" button), not an underlined text link.
-Clicking it still reveals the mandatory comments box; "Send edit request" is
-also light-red.
+2) "DOWNLOAD RAMS" IS NOW A BUTTON (Site Manager approval page)
+--------------------------------------------------------------
+On the customer Site Manager page, the download is now a solid gold "⬇ Download
+RAMS" button aligned to the right under the preview (previously a centered text
+link).
 
 FILES CHANGED
 -------------
-• lib/ramsNotify.js                  — robust rejection email (name resolve + fallback)
-• pages/api/rams-approvals.js        — pass CM/Director names to the notifier; await it
-• pages/api/rams-matrix.js           — return approverKeys (CM/Director signatures)
-• pages/operations/hs/rams-matrix.js — Resend button + modal; cells Yes on approver sign
-• pages/rams-approve.js              — light-red "requires edits" button
+• pages/api/rams-approvals.js        — set-site-manager allowed at site-manager+;
+                                       resend re-opens the SM stage + fresh token
+• pages/operations/hs/rams-matrix.js — resend dropdown lists Director-signed-onward
+• pages/rams-approve.js              — Download RAMS as a right-aligned button
 
-NOTE
+TEST
 ----
-If the rejection email still doesn't arrive after this, it's email config:
-confirm RESEND_API_KEY and FORMS_FROM_EMAIL are set in Vercel (and optionally
-ALERT_EMAIL as a catch-all). The server logs will name the failing step.
+Matrix → "Resend RAMS to Site Manager" → the project (e.g. J190) now appears in
+the dropdown → reconfirm details → Send → Site Manager gets a fresh email; the
+project returns to the Site Manager stage awaiting their approval.

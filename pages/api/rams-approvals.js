@@ -215,7 +215,12 @@ export default async function handler(req, res) {
     }
 
     if (action === 'set-site-manager') {
-      if (rec.stage !== 'site-manager') return res.status(409).json({ error: 'This RAMS is not at the Site Manager stage yet.' })
+      // A Site Manager only exists once the Director has signed. Allow (re)sending
+      // when the chain is at the Site Manager stage OR has moved past it (so the
+      // office can re-issue the approval link for a re-sign). Not allowed before
+      // the Director has signed, or on a rejected RAMS.
+      const canSend = !!rec.director && ['site-manager', 'operatives', 'complete'].includes(rec.stage)
+      if (!canSend) return res.status(409).json({ error: 'This RAMS is not ready to send to the Site Manager yet (the Director must sign first).' })
       const email = (body.email || '').trim()
       const smName = (body.name || '').trim()
       if (!smName) return res.status(400).json({ error: 'Site Manager name is required.' })
@@ -226,6 +231,9 @@ export default async function handler(req, res) {
       rec.siteManagerEmail = email
       rec.siteManagerName = smName
       rec.token = token
+      // Re-open the Site Manager stage so a fresh approval takes effect.
+      rec.stage = 'site-manager'
+      rec.siteManager = null
       rec.updatedAt = Date.now()
 
       // Guard against a duplicate send (double request / retry): if we sent to
