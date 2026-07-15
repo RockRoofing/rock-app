@@ -24,6 +24,9 @@ export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   try {
     const { opId } = req.query
+    const accessLevel = req.query.accessLevel || ''
+    const userEmail = (req.query.email || '').trim().toLowerCase()
+    const userName = (req.query.name || '').trim().toLowerCase()
     const rawAccess = req.query.projectAccess || ''
     const access =
       rawAccess === 'all' ? 'all'
@@ -35,11 +38,25 @@ export default async function handler(req, res) {
       access === 'all' || (Array.isArray(access) && access.map(String).includes(String(no)))
     const myProjects = projects.filter(p => allowed(p.projectNo))
 
-    // ── RAMS: documents READY for this operative to sign, and unsigned ──
-    // "Ready" = the approval chain has reached the operatives stage. RAMS still
-    // going through CM/Director/Site-Manager approval don't count (they can't
-    // sign yet). CM/Director are recognised by matching the designated director /
-    // project CM, but for the operative badge we simply gate on stage + signed.
+    // Designated Director (match by email or name).
+    const director = (await get('ops:rams-director')) || null
+    const isDirector = !!director && (
+      (!!userEmail && userEmail === (director.email || '').toLowerCase()) ||
+      (!!userName && userName === (director.name || '').toLowerCase())
+    )
+    const isCMlevel = accessLevel === 'contracts-manager'
+    const nameMatchesCM = (p) => {
+      const cm = (p.data?.contractsManager || '').trim().toLowerCase()
+      if (!cm || !userName) return false
+      if (cm === userName) return true
+      const a = userName.split(/\s+/), b = cm.split(/\s+/)
+      return a.length >= 2 && b.length >= 2 && a[0] === b[0] && a[a.length - 1] === b[b.length - 1]
+    }
+
+    // ── RAMS: documents where THIS user has an action to take ──
+    //   • CM (for their project)  → RAMS at 'cm' stage
+    //   • Director                → RAMS at 'director' stage
+    //   • Operative               → RAMS at 'operatives' stage they haven't signed
     let rams = 0
     const ramsByProject = {}
     await Promise.all(myProjects.map(async (p) => {
@@ -47,13 +64,17 @@ export default async function handler(req, res) {
       const ramsFiles = (files || []).filter(f => f.category === 'rams')
       if (!ramsFiles.length) return
       const [sigs, appr] = await Promise.all([getRamsSignatures(p.projectNo), getRamsApprovals(p.projectNo)])
+      const cmForThis = isCMlevel && nameMatchesCM(p)
       let n = 0
       for (const f of ramsFiles) {
         const stage = (appr[f.id] && appr[f.id].stage) || 'cm'
-        if (stage !== 'operatives' && stage !== 'complete') continue   // not signable yet
-        const signedBy = sigs[f.id] || {}
-        if (opId && signedBy[opId]) continue   // already signed this version
-        n++
+        if (stage === 'cm' && cmForThis) { n++; continue }              // CM's turn
+        if (stage === 'director' && isDirector) { n++; continue }        // Director's turn
+        if (stage === 'operatives' || stage === 'complete') {            // operatives can sign
+          const signedBy = sigs[f.id] || {}
+          if (opId && signedBy[opId]) continue
+          n++
+        }
       }
       if (n > 0) { ramsByProject[p.projectNo] = n; rams += n }
     }))

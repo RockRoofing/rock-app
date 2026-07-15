@@ -1,66 +1,71 @@
-RAMS — FIXES: chain emails, Director signing, matrix pipeline, RAMS badges, CM email
-====================================================================================
+RAMS — FIXES v2: Site Manager link, CM email, dup email, badges, matrix pipeline
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of Phase 4 (these files supersede those copies).
+Deploy on top of the previous RAMS fixes.
 
-1) DIRECTOR EMAIL + FULL CHAIN HANDOFF EMAILS (was: Director got no email)
--------------------------------------------------------------------------
-Emails now fire as the chain advances:
-  • RAMS uploaded  -> emails the project's CONTRACTS MANAGER to approve (chain
-    starts with them; previously it wrongly emailed all operatives).
-  • CM approves    -> emails the designated DIRECTOR to approve/sign in the Site App.
-  • Director approves -> emails the CM to send it to the Site Manager.
-  • Site Manager approves -> emails the OPERATIVES that they can now sign.
-The CM is matched to a Site App user by the project's Contracts Manager name.
-The Director is the Admin → RAMS Director (matched by email OR name).
+1) SITE MANAGER CAN NOW APPROVE (was: stuck — link needed a Site App login)
+--------------------------------------------------------------------------
+The Site Manager approval page (/rams-approve?token=...) is a NO-LOGIN page on
+the MAIN PORTAL domain (app.rockroofing.co.uk) — it always was, but the email
+link was being built from the request host, which was siteapp.rockroofing.co.uk
+when the CM sent it from the Site App (that needs a login -> dead end).
+FIX: the email link is now ALWAYS built against the portal domain
+(app.rockroofing.co.uk), overridable with env RAMS_APPROVE_ORIGIN.
+So the customer's Site Manager:
+  - gets the email (RAMS attached) → clicks "Review & approve RAMS"
+  - lands on the public page (no login), reviews the PDF, enters their name
+  - clicks Approve → operatives unlock.
+No customer login is ever required. If you have a preferred public URL, set
+RAMS_APPROVE_ORIGIN in Vercel (defaults to https://app.rockroofing.co.uk).
 
-2) DIRECTOR SIGNING IN THE SITE APP (was: only "View", no approve button)
--------------------------------------------------------------------------
-The Site App now recognises the Director by email OR by name (so it still works
-if their Site App login email differs from their Portal email). When they open a
-RAMS at the Director stage they get "✓ Approve as Director" (read-to-bottom →
-sign). Server accepts the approval on email OR name match too.
-NOTE: you must still set Admin → RAMS Director, and that person must be a Site
-App user. If nothing appears, check the name/email matches on both records.
+2) DUPLICATE CUSTOMER EMAIL (was: sent twice)
+---------------------------------------------
+set-site-manager now guards against a duplicate send: it won't email the same
+recipient for the same RAMS again within 30 seconds (covers double taps /
+retries). "Resend / change" after that window still works normally.
 
-3) RAMS MATRIX PIPELINE (was: CM red after signing, Operatives green wrongly,
-   Director grey while with him)
-----------------------------------------------------------------------------
-Root cause: CM & Director AUTO-SIGN onto the RAMS when they approve, and those
-auto-signatures were being counted as "operative" signatures — turning the
-Operatives node green and skewing the line. Fixed: the matrix now EXCLUDES the
-CM/Director auto-signatures (tagged by role / cm:/director: ids) from the
-operative signer set. The pipeline now reflects the true stage:
-  completed stages green, current stage red+bold, Operatives node greens only
-  when a real operative signs, whole line green when all shown have signed.
-(Use the ↻ Refresh button to pull the latest state.)
+3) CM EMAIL ON RAMS UPLOAD (was: not sending)
+---------------------------------------------
+Cause: the CM was only matched to a SITE APP user by name; if the CM wasn't a
+Site App user (or the name didn't match), no email was found.
+FIX: findProjectCM now falls back to the matching PORTAL user's email, so the
+"RAMS to approve" email reaches the CM even if they aren't a Site App user.
+(Best results: keep the project's Contracts Manager name consistent with the
+CM's user record.)
 
-4) RED RAMS BADGES ON INDIVIDUAL PROJECTS (was: only the home total)
--------------------------------------------------------------------
-The RAMS section's project picker now shows a red count on each project that has
-RAMS awaiting THIS operative's signature. Badges (home + per-project) now only
-count RAMS that have reached the operatives stage AND are unsigned — so nobody
-gets a red badge for RAMS still going through CM/Director/Site-Manager approval.
+4) NOTIFICATIONS / BADGES ON SITE APP HOME + RAMS PROJECTS (was: nothing showing)
+--------------------------------------------------------------------------------
+The badge is now ROLE-AWARE — it counts RAMS where THIS user actually has an
+action to take:
+  • CM (their project)  → RAMS waiting at the CM stage
+  • Director            → RAMS waiting at the Director stage
+  • Operative           → RAMS at the operatives stage they haven't signed
+So a CM sees a red badge when a RAMS needs their approval, the Director when it's
+their turn, and operatives once it's unlocked for them. (In your screenshot the
+RAMS was at the Site Manager stage — at that point no in-app user has an action,
+so a zero badge there is correct; it will light up for operatives once the Site
+Manager approves.)
+The badge fetch now passes accessLevel/email/name so the API can tell who you are.
 
-5) CM ALLOCATION EMAIL WORDING
-------------------------------
-When the person allocated is the project's Contracts Manager, the email now
-reads "Rock Roofing project allocated" and states they're allocated as
-Contracts Manager (not the generic operative wording).
+5) RAMS MATRIX TIMELINE (was: still wrong)
+------------------------------------------
+The matrix pipeline now uses the EXACT same rendering logic as the Site App
+pipeline you confirmed works (pure stage-driven, ✓ on completed stages, current
+stage red+bold, upcoming grey). Combined with the earlier fix that excludes the
+CM/Director auto-signatures from the operative signer set, the line now matches
+the Site App: e.g. ✓ CM  ✓ Director  Site Manager(red)  Operatives(grey).
+Use ↻ Refresh to pull the latest.
 
 FILES CHANGED
 -------------
-• lib/ramsNotify.js            — chain handoff senders + CM-aware allocation email
-• pages/api/rams-approvals.js  — fire handoff emails; Director match by email/name
-• pages/api/project-files.js   — RAMS upload emails the CM (not all operatives)
-• pages/api/rams-matrix.js     — exclude CM/Director auto-sigs from signer set
-• pages/api/site-badges.js     — badges gate on operatives stage + unsigned
-• pages/forms/index.js         — Director recognised by email/name; per-project
-                                 RAMS badges in the picker
-• pages/operations/hs/rams-matrix.js — (pipeline uses corrected signer data)
+• lib/ramsNotify.js            — CM match falls back to Portal user email
+• pages/api/rams-approvals.js  — SM link forced to portal domain; dup-send guard
+• pages/api/site-badges.js     — role-aware badge counts (CM/Director/operative)
+• pages/forms/index.js         — badge fetches pass accessLevel/email/name
+• pages/operations/hs/rams-matrix.js — pipeline matches the Site App exactly
 
-SETUP REMINDER
+ENV (optional)
 --------------
-• Admin → RAMS Director must be set, and that Director must be a Site App user.
-• RESEND_API_KEY + FORMS_FROM_EMAIL must be set for any emails to send.
+• RAMS_APPROVE_ORIGIN — public origin for the Site Manager approval link.
+  Defaults to https://app.rockroofing.co.uk. Set only if you use a different URL.

@@ -176,13 +176,25 @@ export default async function handler(req, res) {
       rec.siteManagerName = smName
       rec.token = token
       rec.updatedAt = Date.now()
+
+      // Guard against a duplicate send (double request / retry): if we sent to
+      // this same email for this file in the last 30s, don't send again.
+      const now = Date.now()
+      const recentlySent = rec.lastSmEmailTo === email.toLowerCase() && rec.lastSmEmailAt && (now - rec.lastSmEmailAt < 30000)
+
       approvals[fileId] = rec
       await saveRamsApprovals(projectNo, approvals)
       await saveRamsToken(token, { projectNo, fileId })
 
-      // Send the tokenised approval email with the RAMS attached.
-      const sent = await sendSiteManagerEmail({ req, projectNo, fileId, email, smName, token })
-      return res.json({ ok: true, approval: rec, emailSent: sent })
+      let sent = false
+      if (!recentlySent) {
+        sent = await sendSiteManagerEmail({ req, projectNo, fileId, email, smName, token })
+        rec.lastSmEmailTo = email.toLowerCase()
+        rec.lastSmEmailAt = now
+        approvals[fileId] = rec
+        await saveRamsApprovals(projectNo, approvals)
+      }
+      return res.json({ ok: true, approval: rec, emailSent: sent, skipped: recentlySent })
     }
 
     return res.status(400).json({ error: 'Unknown action' })
@@ -197,10 +209,12 @@ async function sendSiteManagerEmail({ req, projectNo, fileId, email, smName, tok
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
   if (!RESEND_KEY) return false
 
-  // Build an absolute approval URL from the request origin.
-  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
-  const host = req.headers['x-forwarded-host'] || req.headers.host || 'app.rockroofing.co.uk'
-  const approveUrl = `${proto}://${host}/rams-approve?token=${encodeURIComponent(token)}`
+  // The approval page is a no-login page that lives on the MAIN PORTAL domain.
+  // The CM usually triggers this from the Site App (siteapp.*), whose host must
+  // NOT be used or the Site Manager would hit a login wall. Always use the portal
+  // domain (override with RAMS_APPROVE_ORIGIN if needed).
+  const origin = process.env.RAMS_APPROVE_ORIGIN || 'https://app.rockroofing.co.uk'
+  const approveUrl = `${origin}/rams-approve?token=${encodeURIComponent(token)}`
 
   let projName = projectNo
   try { const p = await getOpsProject(projectNo); if (p?.data?.projectName) projName = `${projectNo} — ${p.data.projectName}` } catch {}

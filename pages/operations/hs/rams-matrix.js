@@ -48,22 +48,17 @@ export default function RamsMatrixPage() {
 
   // Approval-stage pipeline shown under each project name.
   const STAGE_ORDER = ['cm', 'director', 'site-manager', 'operatives']
-  const StageLine = ({ stage, opsSigned }) => {
+  const StageLine = ({ stage }) => {
     const labels = [['cm', 'CM'], ['director', 'Director'], ['site-manager', 'Site Manager'], ['operatives', 'Operatives']]
-    const complete = stage === 'complete'
-    const curIdx = complete ? labels.length : STAGE_ORDER.indexOf(stage)
+    const curIdx = stage === 'complete' ? labels.length : STAGE_ORDER.indexOf(stage)
     return (
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 2, fontSize: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 3, marginTop: 2, fontSize: 10 }}>
         {labels.map(([k, label], i) => {
-          // A stage node is green when the chain has moved past it. The Operatives
-          // node also turns green once at least one operative has signed.
-          const isOpsNode = k === 'operatives'
-          const done = complete || i < curIdx || (isOpsNode && opsSigned)
-          const current = !complete && i === curIdx && !(isOpsNode && opsSigned)
+          const done = i < curIdx, current = i === curIdx && stage !== 'complete'
           const colour = done ? '#16a34a' : current ? '#dc2626' : '#bbb'
           return (
             <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-              <span style={{ color: colour, fontWeight: current ? 800 : 500 }}>{label}</span>
+              <span style={{ color: colour, fontWeight: current ? 800 : 600 }}>{done ? '✓ ' : ''}{label}</span>
               {i < labels.length - 1 && <span style={{ color: '#ccc' }}>›</span>}
             </span>
           )
@@ -134,14 +129,13 @@ export default function RamsMatrixPage() {
                 // Chain has reached operatives → everyone not-yet-signed shows PS.
                 const opsReached = p.stage === 'operatives' || p.stage === 'complete'
                 const signerSet = new Set(p.signerKeys || [])
-                const opsSigned = signerSet.size > 0
                 const allSigned = opsReached && shownOps.length > 0 && shownOps.every(o => signerSet.has(opName(o).trim().toLowerCase()))
                 return (
                 <div key={p.key} style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch', background: rowBg }}>
                   <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 2, background: rowBg, borderRight: '1px solid #f0f0f0', padding: '6px 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: INK }}>{p.name}</div>
                     {p.hasRams
-                      ? <StageLine stage={allSigned ? 'complete' : p.stage} opsSigned={opsSigned} />
+                      ? <StageLine stage={allSigned ? 'complete' : p.stage} />
                       : <div style={{ fontSize: 10, color: '#bbb', marginTop: 2 }}>No RAMS uploaded</div>}
                   </div>
                   {shownOps.map(o => {

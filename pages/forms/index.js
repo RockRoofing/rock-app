@@ -183,7 +183,11 @@ function FormsHomeMenu({ user }) {
     try {
       const pa = user?.projectAccess
       const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
-      const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(user?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
+      const qs = new URLSearchParams({
+        opId: user?.id || '', projectAccess: paParam,
+        accessLevel: user?.accessLevel || '', email: user?.email || '', name: user?.name || '',
+      }).toString()
+      const b = await fetch(`/api/site-badges?${qs}`).then(r => r.json())
       setRamsBadge(b.rams || 0)
       setDeliveriesBadge(b.deliveries || 0)
     } catch {}
@@ -470,7 +474,11 @@ function ProjectDetailsView({ onBack, only }) {
       if (only === 'rams') {
         try {
           const paParam = pa === 'all' ? 'all' : Array.isArray(pa) ? pa.join(',') : ''
-          const b = await fetch(`/api/site-badges?opId=${encodeURIComponent(u?.id || '')}&projectAccess=${encodeURIComponent(paParam)}`).then(r => r.json())
+          const qs = new URLSearchParams({
+            opId: u?.id || '', projectAccess: paParam,
+            accessLevel: u?.accessLevel || '', email: u?.email || '', name: u?.name || '',
+          }).toString()
+          const b = await fetch(`/api/site-badges?${qs}`).then(r => r.json())
           setRamsByProject(b.ramsByProject || {})
         } catch {}
       }
