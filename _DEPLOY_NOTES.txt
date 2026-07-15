@@ -1,42 +1,60 @@
-Financial App — batch 2e: Retention Tracker shows all projects with retention details
-=====================================================================================
+Financial App — batch 3a: Retention Tracker column restructure
+==============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 2d.
+Deploy on top of batch 2e.
 
-WHY PROJECTS WEREN'T PULLING OVER
----------------------------------
-The Retention Tracker only listed projects that had already been INVOICED
-(retentionOutstanding > 0 OR grossInvoiced > 0). Projects set up in your project
-details (which feed the Budget Tracker / EOM report) but not yet invoiced were
-filtered out — so they never appeared.
+NEW COLUMN ORDER (left → right)
+-------------------------------
+Ref · Customer · Project · Final Account · Applied for · Invoiced Net ·
+Account Remaining · Ret % · PC Type · QS · 1st Value · 1st Date · 2nd Value ·
+2nd Date · VAT · VAT Type · Total Due · Total Paid · Total Remaining (Check) ·
+Comments · (actions)
 
-WHAT CHANGED
+KEY CHANGES
+-----------
+• Applied for — new column. Manual/override for now; will auto-populate from the
+  Application tab once that's built (editable in the Edit form).
+• Invoiced → "Invoiced Net" — total invoiced EX-VAT (Xero for new projects, or
+  the imported Xero CSV for existing).
+• Balance → "Account Remaining" = Final Account − Invoiced Net.
+• VAT = Final Account × the VAT-type rate (20%/5%); reverse charge / 0% = £0.
+• VAT Type — reverse charge / 5% / 20% / zero-rated etc (from Xero; editable).
+• Total Due = Final Account + VAT.
+• Paid → "Total Paid" (inc VAT).
+• Total Remaining (Check) = Total Due − Total Paid. When it hits £0 the whole
+  ROW turns green — the signifier that retention is closed and can be moved off
+  the list (switch the toggle to see closed ones).
+• Status column removed.
+
+RELEASES (1st / 2nd Value)
+--------------------------
+The separate "Rcvd" tick columns are gone. Each release Value cell is now:
+  • ORANGE with "due" underneath when not yet received
+  • GREEN with "received" underneath once marked received
+Mark a release received in the row's Edit form. A colour key sits above the table.
+
+TOGGLE (replaces the All/Pending/Overdue/Released tabs)
+-------------------------------------------------------
+A single toggle: "Outstanding" (default — only rows where Total Remaining ≠ £0)
+and "All" (every project that has/had retention).
+
+HEADER TOOLTIPS
+---------------
+Every column header has an ⓘ hover note explaining where the number comes from /
+how it's calculated.
+
+NOTES
+-----
+• Comments display from the Project Details retention box. Full two-way write-back
+  (edit here → updates Project Details) comes with batch 3b (existing-project
+  entry + write-back).
+• "Applied for", "Invoiced Net" and "VAT Type" are editable in the Edit form so
+  manual entries and overrides work; Xero figures still layer on automatically.
+• As before, after deploy clear the dashboard cache (/api/clear-cache) or run a
+  sync so figures refresh.
+
+FILE CHANGED
 ------------
-• The tracker now shows every project that has a RETENTION % set in its project
-  details, as well as any already invoiced / with retention outstanding. So the
-  list mirrors the project-details data rather than waiting for invoicing.
-• It now auto-fills from project details (via the same dashboard source the EOM
-  report uses):
-    – QS name (falls back to Estimator if QS not set)
-    – Completion date (uses the project's completion date, else the PC date)
-    – Retention comments (the box added in batch 1) flows into the row comments
-  These layer on top of any manual override you've made, so they stay current.
-• Dashboard API now exposes qsName, pcDate, defectsDate, completionDate and
-  retentionComments from project settings.
-
-IMPORTANT — clear the cache after deploy
-----------------------------------------
-The dashboard caches projects for 4 hours, so after deploying:
-  → visit /api/clear-cache (admin) OR run the Xero WIP sync,
-then reload the Retention Tracker. The extra projects + auto-filled fields appear.
-
-If a project still doesn't show, check it has a Retention % set in Edit Project
-Details → Retention. (A project with 0% retention has nothing to track, so it's
-intentionally excluded.)
-
-FILES CHANGED
--------------
-• pages/api/dashboard.js — expose QS/dates/retention comments from project details
-• pages/retention.js     — show all projects with a retention %; auto-fill QS,
-                           completion date and comments from project details
+• pages/retention.js — full column restructure, VAT/Total Due/Total Remaining
+  calcs, orange/green release cells, Outstanding/All toggle, header tooltips.

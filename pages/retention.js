@@ -14,6 +14,40 @@ const EMPTY_ENTRY = {
   comments: ''
 }
 
+// Parse a numeric VAT rate from a VAT-type label. Reverse charge / zero-rated /
+// exempt / no-VAT all = 0. "20%" -> 0.20, "5%" -> 0.05.
+function vatRateFromLabel(label) {
+  const s = (label || '').toLowerCase()
+  if (s.includes('reverse charge') || s.includes('zero') || s.includes('exempt') || s.includes('no vat')) return 0
+  const m = /(\d+(?:\.\d+)?)\s*%/.exec(label || '')
+  return m ? parseFloat(m[1]) / 100 : 0
+}
+// VAT = Final Account × rate (per the VAT type). Reverse charge / 0% = £0.
+function calcVat(entry) {
+  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  return fa * vatRateFromLabel(entry.vatRateLabel)
+}
+// Total Due = Final Account + VAT.
+function calcTotalDue(entry) {
+  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  return fa + calcVat(entry)
+}
+// Account Remaining = Final Account − Invoiced Net (ex-VAT).
+function calcAccountRemaining(entry) {
+  const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+  const invNet = parseFloat(entry.invoicedNet != null ? entry.invoicedNet : entry.invoiced || 0) || 0
+  return fa - invNet
+}
+// Total Remaining (Check) = Total Due (inc VAT) − Total Paid (inc VAT).
+// Hits £0 when everything (incl. VAT) has been paid → retention closed.
+function calcTotalRemaining(entry) {
+  return calcTotalDue(entry) - (parseFloat(entry.paid || 0) || 0)
+}
+const isClosed = (entry) => {
+  const due = calcTotalDue(entry)
+  return due > 0 && Math.abs(calcTotalRemaining(entry)) < 1
+}
+
 function calcBalance(entry) {
   const r1 = parseFloat(entry.release1Value || 0)
   const r2 = parseFloat(entry.release2Value || 0)
@@ -52,7 +86,7 @@ export default function RetentionPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ENTRY)
   const [saving, setSaving] = useState(false)
-  const [filter, setFilter] = useState('all') // all, pending, overdue, released
+  const [filter, setFilter] = useState('outstanding') // outstanding | all
   const [importing, setImporting] = useState(false)
   const importRef = useRef(null)
   const [search, setSearch] = useState('')
@@ -91,9 +125,11 @@ export default function RetentionPage() {
           qsEmail: '',
           comments: p.retentionComments || p.comment || '',
           invoiced: p.totalInvoiced || 0,
+          invoicedNet: p.invoicedExVat || 0,
           vat: p.vat || 0,
           vatRateLabel: p.vatRateLabel || '—',
           paid: p.paid || 0,
+          appliedFor: '',
           release1Value: (p.grossInvoiced - p.totalInvoiced) / 2 || 0,
           release1Date: '',
           release1Received: false,
@@ -190,7 +226,7 @@ export default function RetentionPage() {
       const x = xeroByXid.get(e.xeroId)
       return {
         ...e,
-        invoiced: x.invoiced, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
+        invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
@@ -205,14 +241,9 @@ export default function RetentionPage() {
     ...xeroEntries.filter(x => !manualIds.has(x.xeroId) && !entries.find(e => e.id === x.xeroId)),
     ...mergedEntries
   ].filter(e => {
-    const balance = calcBalance(e)
-    if (filter === 'overdue') {
-      const now = new Date().toISOString().split('T')[0]
-      return (e.release1Date && !e.release1Received && e.release1Date < now) ||
-             (e.release2Date && !e.release2Received && e.release2Date < now)
-    }
-    if (filter === 'pending') return !e.release1Received || !e.release2Received
-    if (filter === 'released') return e.release1Received && e.release2Received
+    // Outstanding = retention not yet fully settled (Total Remaining ≠ £0).
+    // All = every project that has/had retention.
+    if (filter === 'outstanding') return !isClosed(e)
     return true
   }).filter(e => {
     if (!search) return true
@@ -222,12 +253,8 @@ export default function RetentionPage() {
 
   const totals = {
     total: allEntries.reduce((s, e) => s + (parseFloat(e.release1Value || 0) + parseFloat(e.release2Value || 0)), 0),
-    outstanding: allEntries.reduce((s, e) => s + calcBalance(e), 0),
-    overdue: allEntries.filter(e => {
-      const now = new Date().toISOString().split('T')[0]
-      return (e.release1Date && !e.release1Received && e.release1Date < now) ||
-             (e.release2Date && !e.release2Received && e.release2Date < now)
-    }).reduce((s, e) => s + calcBalance(e), 0)
+    remaining: allEntries.reduce((s, e) => s + (calcTotalDue(e) ? calcTotalRemaining(e) : 0), 0),
+    closed: allEntries.filter(isClosed).length,
   }
 
   const inputStyle = { padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
@@ -253,6 +280,23 @@ export default function RetentionPage() {
                 value={form[key] || ''} onChange={f(key)} style={inputStyle} />
             </div>
           ))}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(manual for now)</span></div>
+            <input type="number" value={form.appliedFor || ''} onChange={f('appliedFor')} style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Invoiced Net £ <span style={{ color: '#bbb' }}>(ex-VAT)</span></div>
+            <input type="number" value={form.invoicedNet != null ? form.invoicedNet : (form.invoiced || '')} onChange={f('invoicedNet')} style={inputStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>VAT Type</div>
+            <select value={form.vatRateLabel || ''} onChange={f('vatRateLabel')} style={inputStyle}>
+              <option value="">— select —</option>
+              {['20%', '5%', '0% reverse charge', '0% zero-rated', 'Exempt', 'No VAT'].map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
           <div style={{ background: '#eef2ff', borderRadius: 8, padding: 12 }}>
@@ -349,9 +393,9 @@ export default function RetentionPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'Total Retention', value: fmtC(totals.total), color: '#1a1a2e' },
-              { label: 'Outstanding', value: fmtC(totals.outstanding), color: '#2563eb' },
-              { label: 'Overdue', value: fmtC(totals.overdue), color: totals.overdue > 0 ? '#e63946' : '#888' },
-              { label: 'Projects tracked', value: allEntries.length, raw: true },
+              { label: 'Total Remaining (to be paid)', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a' },
+              { label: 'Closed', value: totals.closed, raw: true, color: '#16a34a' },
+              { label: 'Projects shown', value: allEntries.length, raw: true },
             ].map(card => (
               <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
@@ -368,18 +412,24 @@ export default function RetentionPage() {
           )}
 
           {/* Filters */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', background: '#f0f2f5', borderRadius: 8, overflow: 'hidden' }}>
-              {[['all', 'All'], ['pending', 'Pending'], ['overdue', 'Overdue'], ['released', 'Released']].map(([key, label]) => (
+              {[['outstanding', 'Outstanding'], ['all', 'All']].map(([key, label]) => (
                 <button key={key} onClick={() => setFilter(key)}
-                  style={{ padding: '6px 12px', border: 'none', background: filter === key ? '#1a1a2e' : 'transparent', color: filter === key ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  style={{ padding: '6px 16px', border: 'none', background: filter === key ? '#1a1a2e' : 'transparent', color: filter === key ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                   {label}
                 </button>
               ))}
             </div>
             <input placeholder="Search ref, customer, project..." value={search} onChange={e => setSearch(e.target.value)}
-              style={{ flex: 1, padding: '7px 12px', border: '1px solid #e5e5e5', borderRadius: 8, fontSize: 12 }} />
+              style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid #e5e5e5', borderRadius: 8, fontSize: 12 }} />
             <span style={{ fontSize: 12, color: '#888' }}>{allEntries.length} entries</span>
+            {/* Colour key */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 11, color: '#666', width: '100%', marginTop: 4 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3e0', border: '1px solid #ffb74d' }} /> Release due — not received</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release received</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = retention closed (Total Remaining £0)</span>
+            </div>
           </div>
 
           {/* Table */}
@@ -393,80 +443,108 @@ export default function RetentionPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                      {['Ref', 'Customer', 'Project', 'Final Account', 'Invoiced', 'VAT', 'VAT Type', 'Paid', 'Final Bal', 'Ret %', 'PC Type', 'QS', 'Status',
-                        '1st Value', '1st Date', '1st Rcvd',
-                        '2nd Value', '2nd Date', '2nd Rcvd',
-                        'Balance', 'Comments', ''].map(h => (
-                        <th key={h} style={{ padding: '9px 10px', textAlign: ['1st Value', '2nd Value', 'Final Account', 'Balance', 'Invoiced', 'VAT', 'Paid', 'Final Bal'].includes(h) ? 'right' : 'left', fontWeight: 600, color: '#555', whiteSpace: 'nowrap' }}>{h}</th>
+                      {[
+                        ['Ref', 'left', 'Project reference (job number) from project details.'],
+                        ['Customer', 'left', 'Customer name from project details.'],
+                        ['Project', 'left', 'Project name from project details.'],
+                        ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.'],
+                        ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.'],
+                        ['Invoiced Net', 'right', 'Total invoiced on the project, excluding VAT. From Xero for synced projects, or from the imported Xero CSV.'],
+                        ['Account Remaining', 'right', 'Final Account − Invoiced Net. What is still to be invoiced against the final account.'],
+                        ['Ret %', 'center', 'Retention percentage from project details.'],
+                        ['PC Type', 'left', 'Practical completion type (manual).'],
+                        ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).'],
+                        ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not received, green = received.'],
+                        ['1st Date', 'left', 'Due date of the first retention release (manual).'],
+                        ['2nd Value', 'right', 'Second retention release (half of total retention). Orange = due/not received, green = received.'],
+                        ['2nd Date', 'left', 'Due date of the second retention release (manual).'],
+                        ['VAT', 'right', 'VAT on the Final Account = Final Account × VAT-type rate. Reverse charge / 0% = £0.'],
+                        ['VAT Type', 'left', 'VAT treatment from Xero: reverse charge, 5%, 20%, zero-rated, etc.'],
+                        ['Total Due', 'right', 'Final Account + VAT. The full amount due including VAT.'],
+                        ['Total Paid', 'right', 'Total received from the customer (including VAT). From Xero / the imported CSV.'],
+                        ['Total Remaining (Check)', 'right', 'Total Due − Total Paid. When this reaches £0 everything owed (incl. VAT) has been paid and the retention is closed — the whole row turns green.'],
+                        ['Comments', 'left', 'Synced with the Retention comments box in Project Details.'],
+                        ['', 'left', ''],
+                      ].map(([h, align, tip]) => (
+                        <th key={h || 'actions'} title={tip || undefined}
+                          style={{ padding: '9px 10px', textAlign: align, fontWeight: 600, color: '#555', whiteSpace: 'nowrap', cursor: tip ? 'help' : 'default' }}>
+                          {h}{tip ? <span style={{ color: '#bbb', marginLeft: 3, fontSize: 10 }}>ⓘ</span> : null}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {allEntries.map((entry, i) => {
-                      const balance = calcBalance(entry)
-                      const badge = statusBadge(entry)
                       const isEditing = editingId === entry.id
-                      const now = new Date().toISOString().split('T')[0]
-                      const r1Overdue = entry.release1Date && !entry.release1Received && entry.release1Date < now
-                      const r2Overdue = entry.release2Date && !entry.release2Received && entry.release2Date < now
+                      const closed = isClosed(entry)
+                      const rowBg = closed ? '#dcfce7' : (i % 2 === 0 ? '#fff' : '#fafafa')
+                      const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+                      const invNet = entry.invoicedNet != null ? parseFloat(entry.invoicedNet) : (entry.invoiced != null ? parseFloat(entry.invoiced) : null)
+                      const accRemaining = fa ? fa - (invNet || 0) : null
+                      const vatVal = calcVat(entry)
+                      const totalDue = calcTotalDue(entry)
+                      const totalRemaining = calcTotalRemaining(entry)
+                      const hasPaid = entry.paid != null && entry.paid !== ''
+                      // Release cell: orange fill when due & not received; green + "received" when received.
+                      const releaseCell = (val, received) => {
+                        const has = val != null && val !== '' && !isNaN(parseFloat(val))
+                        if (!has) return <td style={{ padding: '8px 10px', textAlign: 'right', color: '#bbb' }}>—</td>
+                        return (
+                          <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: received ? '#e8f5e9' : '#fff3e0' }}>
+                            <div style={{ fontWeight: 600, color: received ? '#166534' : '#b26a00' }}>{fmt(parseFloat(val))}</div>
+                            <div style={{ fontSize: 9.5, color: received ? '#16a34a' : '#c77700', fontWeight: 600 }}>{received ? 'received' : 'due'}</div>
+                          </td>
+                        )
+                      }
                       return (
                         <>
-                          <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0', background: rowBg }}>
+                            {/* Ref */}
                             <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>
                               {entry.manual === false && entry.xeroId
                                 ? <Link href={`/project/${entry.xeroId}`} style={{ color: '#2563eb' }}>{entry.ourRef}</Link>
                                 : entry.ourRef || '—'}
                               {!entry.manual && <span style={{ marginLeft: 4, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 4px' }}>Xero</span>}
                             </td>
+                            {/* Customer */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.customerName || '—'}</td>
+                            {/* Project */}
                             <td style={{ padding: '8px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.projectName || '—'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(parseFloat(entry.finalAccount) || parseFloat(entry.projectValue) || null)}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.invoiced != null && entry.invoiced !== '' ? fmt(parseFloat(entry.invoiced)) : '—'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.vat != null && entry.vat !== '' ? fmt(parseFloat(entry.vat)) : '—'}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555', fontSize: 11.5 }}>{entry.vatRateLabel && entry.vatRateLabel !== '—' ? entry.vatRateLabel : '—'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.paid != null && entry.paid !== '' ? fmt(parseFloat(entry.paid)) : '—'}</td>
-                            {(() => { const fb = calcFinalBalance(entry); const has = (entry.finalAccount || entry.projectValue) && (entry.paid != null && entry.paid !== '')
-                              return <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: !has ? '#bbb' : Math.abs(fb) < 1 ? '#16a34a' : '#2563eb' }}>{has ? fmtC(fb) : '—'}</td> })()}
+                            {/* Final Account */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(fa || null)}</td>
+                            {/* Applied for (manual override) */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}</td>
+                            {/* Invoiced Net */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
+                            {/* Account Remaining */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
+                            {/* Ret % */}
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{entry.retentionPct ? `${parseFloat(entry.retentionPct).toFixed(0)}%` : '—'}</td>
+                            {/* PC Type */}
                             <td style={{ padding: '8px 10px', color: '#555' }}>{entry.pcType || '—'}</td>
+                            {/* QS */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.qsName || '—'}</td>
-                            <td style={{ padding: '8px 10px' }}>
-                              <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 10, background: badge.bg, color: badge.color, fontWeight: 600, whiteSpace: 'nowrap' }}>{badge.label}</span>
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(parseFloat(entry.release1Value) || null)}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: r1Overdue ? '#e63946' : '#555', fontWeight: r1Overdue ? 600 : 400 }}>
-                              {entry.release1Date || '—'}
-                              {r1Overdue && <span style={{ marginLeft: 4, fontSize: 9, background: '#fef2f2', color: '#e63946', borderRadius: 4, padding: '1px 4px' }}>OVERDUE</span>}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              {entry.manual !== false ? (
-                                <input type="checkbox" checked={!!entry.release1Received}
-                                  onChange={async e => {
-                                    const updated = { ...entry, release1Received: e.target.checked }
-                                    await saveEntry(updated)
-                                  }} style={{ cursor: 'pointer' }} />
-                              ) : (
-                                <span style={{ color: entry.release1Received ? '#16a34a' : '#ddd', fontSize: 14 }}>{entry.release1Received ? '✓' : '○'}</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(parseFloat(entry.release2Value) || null)}</td>
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: r2Overdue ? '#e63946' : '#555', fontWeight: r2Overdue ? 600 : 400 }}>
-                              {entry.release2Date || '—'}
-                              {r2Overdue && <span style={{ marginLeft: 4, fontSize: 9, background: '#fef2f2', color: '#e63946', borderRadius: 4, padding: '1px 4px' }}>OVERDUE</span>}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'center' }}>
-                              {entry.manual !== false ? (
-                                <input type="checkbox" checked={!!entry.release2Received}
-                                  onChange={async e => {
-                                    const updated = { ...entry, release2Received: e.target.checked }
-                                    await saveEntry(updated)
-                                  }} style={{ cursor: 'pointer' }} />
-                              ) : (
-                                <span style={{ color: entry.release2Received ? '#16a34a' : '#ddd', fontSize: 14 }}>{entry.release2Received ? '✓' : '○'}</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 600, color: balance > 0 ? '#2563eb' : '#16a34a', whiteSpace: 'nowrap' }}>{fmtC(balance)}</td>
-                            <td style={{ padding: '8px 10px', color: '#555', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.comments || '—'}</td>
+                            {/* 1st Value (coloured) */}
+                            {releaseCell(entry.release1Value, entry.release1Received)}
+                            {/* 1st Date */}
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release1Date || '—'}</td>
+                            {/* 2nd Value (coloured) */}
+                            {releaseCell(entry.release2Value, entry.release2Received)}
+                            {/* 2nd Date */}
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release2Date || '—'}</td>
+                            {/* VAT */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{fa ? fmtC(vatVal) : '—'}</td>
+                            {/* VAT Type */}
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555', fontSize: 11.5 }}>{entry.vatRateLabel && entry.vatRateLabel !== '—' ? entry.vatRateLabel : '—'}</td>
+                            {/* Total Due */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{fa ? fmtC(totalDue) : '—'}</td>
+                            {/* Total Paid */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{hasPaid ? fmt(parseFloat(entry.paid)) : '—'}</td>
+                            {/* Total Remaining (Check) */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 700, color: !fa ? '#bbb' : closed ? '#16a34a' : '#dc2626' }}>{fa ? fmtC(totalRemaining) : '—'}</td>
+                            {/* Comments */}
+                            <td style={{ padding: '8px 10px', color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={entry.comments || ''}>{entry.comments || '—'}</td>
+                            {/* Actions */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                               <button onClick={() => { setEditingId(entry.id); setEditForm({ ...entry }) }}
                                 style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333', marginRight: 4 }}>Edit</button>
@@ -478,7 +556,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={22} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={21} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry}
                                   onCancel={() => setEditingId(null)} />
