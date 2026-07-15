@@ -1,15 +1,15 @@
-Financial App — batch 3a (update): Mixed VAT cell styling
-========================================================
+Financial App — batch 3a (update): Mixed VAT warning
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 3a pages/retention.js (deploy over the top).
+Replaces the batch 3a pages/retention.js.
 
 CHANGE
 ------
-When VAT Type is "Mixed", the VAT cell no longer has the amber fill/⚠ icon.
-It's now a plain (blank-background) cell showing a small RED "enter manually"
-note (hover still explains why + prompts entering VAT in Edit).
+Mixed-VAT cell now shows "⚠ enter manually" in larger (12.5px), bold red text
+(hover still explains why + prompts entering VAT in Edit). Cell background stays
+blank.
 
 FILE CHANGED
 ------------
-• pages/retention.js — Mixed-VAT cell: blank background, red "enter manually" text
+• pages/retention.js
