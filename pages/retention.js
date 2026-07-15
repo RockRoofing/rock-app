@@ -23,7 +23,22 @@ function vatRateFromLabel(label) {
   return m ? parseFloat(m[1]) / 100 : 0
 }
 // VAT = Final Account × rate (per the VAT type). Reverse charge / 0% = £0.
+// If the VAT type is "Mixed" (invoices carry different treatments), a single rate
+// can't be applied — VAT must be entered manually (vatManual).
+function vatIsMixed(entry) {
+  return (entry.vatRateLabel || '').toLowerCase() === 'mixed'
+}
+function vatNeedsManual(entry) {
+  // Mixed, or a VAT type we can't turn into a rate, with no manual figure yet.
+  if (entry.vatManual != null && entry.vatManual !== '') return false
+  return vatIsMixed(entry)
+}
 function calcVat(entry) {
+  // A manual VAT figure always wins (used for Mixed, or to override).
+  if (entry.vatManual != null && entry.vatManual !== '' && !isNaN(parseFloat(entry.vatManual))) {
+    return parseFloat(entry.vatManual)
+  }
+  if (vatIsMixed(entry)) return 0   // unknown until entered manually
   const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
   return fa * vatRateFromLabel(entry.vatRateLabel)
 }
@@ -44,6 +59,7 @@ function calcTotalRemaining(entry) {
   return calcTotalDue(entry) - (parseFloat(entry.paid || 0) || 0)
 }
 const isClosed = (entry) => {
+  if (vatNeedsManual(entry)) return false   // can't confirm closed until VAT entered
   const due = calcTotalDue(entry)
   return due > 0 && Math.abs(calcTotalRemaining(entry)) < 1
 }
@@ -281,7 +297,7 @@ export default function RetentionPage() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(manual for now)</span></div>
             <input type="number" value={form.appliedFor || ''} onChange={f('appliedFor')} style={inputStyle} />
@@ -294,8 +310,14 @@ export default function RetentionPage() {
             <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>VAT Type</div>
             <select value={form.vatRateLabel || ''} onChange={f('vatRateLabel')} style={inputStyle}>
               <option value="">— select —</option>
-              {['20%', '5%', '0% reverse charge', '0% zero-rated', 'Exempt', 'No VAT'].map(o => <option key={o} value={o}>{o}</option>)}
+              {['20%', '5%', '0% reverse charge', '0% zero-rated', 'Exempt', 'No VAT', 'Mixed'].map(o => <option key={o} value={o}>{o}</option>)}
             </select>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>
+              Manual VAT £ {(form.vatRateLabel || '').toLowerCase() === 'mixed' && <span style={{ color: '#c77700' }}>(required — mixed)</span>}
+            </div>
+            <input type="number" value={form.vatManual || ''} onChange={f('vatManual')} placeholder={(form.vatRateLabel || '').toLowerCase() === 'mixed' ? 'Enter VAT' : 'auto'} style={inputStyle} />
           </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
@@ -533,7 +555,11 @@ export default function RetentionPage() {
                             {/* 2nd Date */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release2Date || '—'}</td>
                             {/* VAT */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{fa ? fmtC(vatVal) : '—'}</td>
+                            {vatNeedsManual(entry)
+                              ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: '#fff3e0' }}>
+                                  <span title="This project has mixed VAT treatments across its invoices, so VAT can't be auto-calculated. Enter it manually in Edit." style={{ color: '#c77700', fontWeight: 600, fontSize: 11, cursor: 'help' }}>⚠ enter manually</span>
+                                </td>
+                              : <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{fa ? fmtC(vatVal) : '—'}</td>}
                             {/* VAT Type */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555', fontSize: 11.5 }}>{entry.vatRateLabel && entry.vatRateLabel !== '—' ? entry.vatRateLabel : '—'}</td>
                             {/* Total Due */}

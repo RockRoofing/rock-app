@@ -1,60 +1,25 @@
-Financial App — batch 3a: Retention Tracker column restructure
-==============================================================
+Financial App — batch 3a (update): Mixed VAT flags for manual entry
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 2e.
+Replaces the batch 3a pages/retention.js (deploy over the top).
 
-NEW COLUMN ORDER (left → right)
--------------------------------
-Ref · Customer · Project · Final Account · Applied for · Invoiced Net ·
-Account Remaining · Ret % · PC Type · QS · 1st Value · 1st Date · 2nd Value ·
-2nd Date · VAT · VAT Type · Total Due · Total Paid · Total Remaining (Check) ·
-Comments · (actions)
+WHAT CHANGED
+------------
+When a project's VAT Type is "Mixed" (its invoices carry different VAT
+treatments), VAT can't be worked out from Final Account × a single rate. So:
 
-KEY CHANGES
------------
-• Applied for — new column. Manual/override for now; will auto-populate from the
-  Application tab once that's built (editable in the Edit form).
-• Invoiced → "Invoiced Net" — total invoiced EX-VAT (Xero for new projects, or
-  the imported Xero CSV for existing).
-• Balance → "Account Remaining" = Final Account − Invoiced Net.
-• VAT = Final Account × the VAT-type rate (20%/5%); reverse charge / 0% = £0.
-• VAT Type — reverse charge / 5% / 20% / zero-rated etc (from Xero; editable).
-• Total Due = Final Account + VAT.
-• Paid → "Total Paid" (inc VAT).
-• Total Remaining (Check) = Total Due − Total Paid. When it hits £0 the whole
-  ROW turns green — the signifier that retention is closed and can be moved off
-  the list (switch the toggle to see closed ones).
-• Status column removed.
-
-RELEASES (1st / 2nd Value)
---------------------------
-The separate "Rcvd" tick columns are gone. Each release Value cell is now:
-  • ORANGE with "due" underneath when not yet received
-  • GREEN with "received" underneath once marked received
-Mark a release received in the row's Edit form. A colour key sits above the table.
-
-TOGGLE (replaces the All/Pending/Overdue/Released tabs)
--------------------------------------------------------
-A single toggle: "Outstanding" (default — only rows where Total Remaining ≠ £0)
-and "All" (every project that has/had retention).
-
-HEADER TOOLTIPS
----------------
-Every column header has an ⓘ hover note explaining where the number comes from /
-how it's calculated.
-
-NOTES
------
-• Comments display from the Project Details retention box. Full two-way write-back
-  (edit here → updates Project Details) comes with batch 3b (existing-project
-  entry + write-back).
-• "Applied for", "Invoiced Net" and "VAT Type" are editable in the Edit form so
-  manual entries and overrides work; Xero figures still layer on automatically.
-• As before, after deploy clear the dashboard cache (/api/clear-cache) or run a
-  sync so figures refresh.
+• The VAT column now shows an amber "⚠ enter manually" flag (with a hover
+  explaining why) instead of a wrong auto-figure.
+• A new "Manual VAT £" field in the Edit form lets you type the correct VAT.
+  It's marked "(required — mixed)" when the type is Mixed. A manual VAT figure
+  always takes precedence (also works as an override for any row).
+• Total Due / Total Remaining use the manual VAT once entered, so they compute
+  correctly.
+• A Mixed project will NOT show as closed (row stays non-green) until its VAT has
+  been entered manually — so nothing is falsely marked settled.
 
 FILE CHANGED
 ------------
-• pages/retention.js — full column restructure, VAT/Total Due/Total Remaining
-  calcs, orange/green release cells, Outstanding/All toggle, header tooltips.
+• pages/retention.js — Mixed-VAT flag in the VAT column + Manual VAT field;
+  closed check waits for manual VAT.
