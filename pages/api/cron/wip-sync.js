@@ -67,17 +67,35 @@ export default async function handler(req, res) {
       try {
         const invoices = await getInvoicesByCategory(tokens.access_token, tenantId, projectId, catId)
         const totalInvoiced = invoices.reduce((s, inv) => s + (inv.Total || 0), 0)
-        // Ex-VAT invoiced (matches the Final Account basis), VAT, and paid totals.
+        // Ex-VAT invoiced, VAT and paid totals.
         const invoicedExVat = invoices.reduce((s, inv) => s + (inv.SubTotal || 0), 0)
         const vatTotal = invoices.reduce((s, inv) => s + (inv.TotalTax || 0), 0)
         const paidTotal = invoices.reduce((s, inv) => s + (inv.AmountPaid || 0), 0)
         const dueTotal = invoices.reduce((s, inv) => s + (inv.AmountDue || 0), 0)
+
+        // Work out what VAT is being applied. Prefer Xero line TaxType (detects
+        // reverse charge); otherwise infer the rate from VAT ÷ net.
+        const vatLabelFor = (inv) => {
+          const types = new Set()
+          for (const li of (inv.LineItems || [])) if (li.TaxType) types.add(li.TaxType)
+          const t = [...types].join(',')
+          if (/REVERSE|RRINPUT|RROUTPUT|REVERSECHARGE|DRC/i.test(t)) return '0% reverse charge'
+          const net = inv.SubTotal || 0, tax = inv.TotalTax || 0
+          if (net <= 0) return tax > 0 ? 'VAT' : '—'
+          const pct = Math.round((tax / net) * 100)
+          if (pct === 0) return /ZERO/i.test(t) ? '0% zero-rated' : (/EXEMPT/i.test(t) ? 'Exempt' : '0%')
+          return `${pct}%`
+        }
+        const vatLabels = [...new Set(invoices.map(vatLabelFor).filter(x => x && x !== '—'))]
+        const vatRateLabel = vatLabels.length === 0 ? '—' : vatLabels.length === 1 ? vatLabels[0] : 'Mixed'
+
         await redis.set(`invoiced:latest:${projectId}`, {
-          totalInvoiced,          // inc VAT (unchanged, for existing consumers)
-          invoicedExVat,          // ex VAT — reconciles with Final Account
-          vatTotal,               // VAT charged
-          paidTotal,              // total received (inc VAT)
-          dueTotal,               // total still outstanding (inc VAT)
+          totalInvoiced,          // ALL invoices inc VAT — "Total Invoices"
+          invoicedExVat,          // ex VAT (kept for reconciliation)
+          vatTotal,               // Total VAT
+          paidTotal,              // Total Paid (inc VAT)
+          dueTotal,               // still outstanding (inc VAT)
+          vatRateLabel,           // e.g. "20%", "0% reverse charge", "Mixed"
           invoiceCount: invoices.length,
           calculatedAt: now.toISOString()
         })
@@ -90,6 +108,7 @@ export default async function handler(req, res) {
           total: inv.Total || 0,
           subTotal: inv.SubTotal || 0,
           totalTax: inv.TotalTax || 0,
+          vatLabel: vatLabelFor(inv),
           amountPaid: inv.AmountPaid || 0,
           amountDue: inv.AmountDue || 0,
           fullyPaidOnDate: inv.FullyPaidOnDate || null,

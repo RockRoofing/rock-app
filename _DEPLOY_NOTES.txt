@@ -1,45 +1,51 @@
-Financial App — batch 2: Retention Tracker Xero columns (Invoiced / VAT / Paid / Final Bal)
-===========================================================================================
+Financial App — batch 2b: fix invoiced/paid/VAT numbers, add VAT Type, fix Received save
+========================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 1.
+Replaces the batch 2 files (deploy these over the top).
 
-WHAT CHANGED
-------------
-The Retention Tracker now shows four new columns for Xero-synced projects, pulled
-automatically from Xero (no manual entry):
+1) INVOICED / VAT / PAID — corrected definitions + why they didn't update
+------------------------------------------------------------------------
+Per your steer, the columns now mean:
+  • Invoiced = TOTAL of all invoices on the system added together (inc VAT)
+  • VAT      = Total VAT across all the project's invoices
+  • Paid     = Total paid (Xero AmountPaid across all invoices)
+(Previously "Invoiced" was showing ex-VAT — now it's the full total of all invoices.)
 
-  • Invoiced  — total invoiced EX-VAT (reconciles against the Final Account, which
-                is also ex-VAT), so you can check the retention figure is right.
-  • VAT       — total VAT charged across the project's invoices (sits OUTSIDE the
-                Final Account).
-  • Paid      — total received from the customer (inc VAT), from Xero AmountPaid.
-  • Final Bal — Final Account minus amount paid (ex-VAT). Reaches £0 (shown green)
-                once the whole final account is cleared; positive (blue) while
-                money is still outstanding. VAT is handled correctly: paid ex-VAT
-                = paid inc-VAT minus the VAT charged, so VAT doesn't distort the
-                balance.
+Why nothing updated after your sync: these figures are written by the wip-sync
+Xero job, and are only captured once THIS code is deployed. Also the dashboard
+caches results for 4 hours. So after deploying:
+  → run the Xero WIP sync again (wip-sync). It rebuilds the invoice cache with
+    the new totals AND clears the dashboard cache at the end, so the retention
+    page will then show the figures.
+If you sync and still see "—", the sync likely ran on the old code — re-run it
+once this is live.
 
-HOW IT WORKS
-------------
-• The daily Xero sync (wip-sync cron) now also captures, per project: invoiced
-  ex-VAT (Σ SubTotal), VAT (Σ TotalTax) and paid (Σ AmountPaid), cached alongside
-  the existing invoice totals. Per-invoice subTotal/totalTax are cached too (for
-  the upcoming invoice list).
-• The dashboard API exposes invoicedExVat / vat / paid per project.
-• The Retention Tracker reads them for each Xero project row.
+2) NEW "VAT TYPE" COLUMN (next to VAT)
+--------------------------------------
+Describes the VAT applied to the project's invoices, e.g. "20%", "5%",
+"0% reverse charge", "0% zero-rated", "Exempt", or "Mixed" if invoices differ.
+It's derived from Xero: reverse charge is detected from the invoice line TaxType;
+otherwise the rate is inferred from VAT ÷ net (20/5/0%).
 
-IMPORTANT — first-run timing
-----------------------------
-The new figures populate after the NEXT daily Xero sync runs (the cache is
-rebuilt with the ex-VAT / VAT / paid breakdown). Until then, Invoiced/VAT/Paid/
-Final Bal show "—" for existing rows. You can trigger the sync manually if you
-have the cron endpoint to hand, otherwise they appear after the next run.
-Manual (non-Xero) rows show "—" for these columns — the manual/existing-project
-auto-fill comes in batch 3.
+3) "RECEIVED" TICK NOT SAVING / NOT COLOURING — fixed
+-----------------------------------------------------
+Root cause: for a Xero-sourced row, its id was the Xero project id, so saving an
+edit tried to UPDATE a manual record that didn't exist — the change (including the
+Received tick) was silently dropped. Now, editing a Xero row saves a MANUAL
+OVERRIDE keyed to that project (xeroId): the Received flags, dates and any edits
+persist, the row shows your saved values, and the status/colour update correctly.
+Editing the same row again updates that override rather than creating duplicates.
 
 FILES CHANGED
 -------------
-• pages/api/cron/wip-sync.js — cache invoiced ex-VAT, VAT, paid, due (+ per-invoice)
-• pages/api/dashboard.js     — expose invoicedExVat / vat / paid per project
-• pages/retention.js         — Invoiced / VAT / Paid / Final Bal columns + balance calc
+• pages/api/cron/wip-sync.js — total invoiced (inc VAT), VAT, paid + VAT-type label
+• pages/api/dashboard.js     — expose totalInvoiced / vat / paid / vatRateLabel
+• pages/retention.js         — corrected columns, VAT Type column, Received-save fix
+• pages/api/retention.js     — persist Xero-row overrides (keep xeroId, don't force manual)
+
+AFTER DEPLOY
+------------
+Deploy → run the Xero WIP sync → open the Retention Tracker: Invoiced/VAT/VAT Type/
+Paid populate for Xero projects, and ticking "Received" in Edit now saves and
+colours the 1st/2nd Rcvd columns and the status.

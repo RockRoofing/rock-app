@@ -64,7 +64,7 @@ export default async function handler(req, res) {
 
       // ── Read invoice lines from Redis ─────────────────────────────────────
       let totalInvoiced = 0, invoiceLines = []
-      let invoicedExVat = 0, vatTotal = 0, paidTotal = 0
+      let invoicedExVat = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—'
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
         if (invCache) {
@@ -72,6 +72,7 @@ export default async function handler(req, res) {
           invoicedExVat = invCache.invoicedExVat || 0
           vatTotal = invCache.vatTotal || 0
           paidTotal = invCache.paidTotal || 0
+          vatRateLabel = invCache.vatRateLabel || '—'
         }
         const lines = await redis.get(`invoiced:lines:${id}`)
         if (lines) invoiceLines = lines
@@ -156,6 +157,7 @@ export default async function handler(req, res) {
         invoicedExVat,
         vat: vatTotal,
         paid: paidTotal,
+        vatRateLabel,
         remainingToClaim,
         totalCosts,
         labourSpend,

@@ -31,9 +31,10 @@ export default async function handler(req, res) {
       // Update existing
       entries = entries.map(e => e.id === entry.id ? { ...e, ...entry } : e)
     } else {
-      // New entry
+      // New entry (either a pure manual row, or a manual OVERRIDE of a Xero row
+      // — the latter carries an xeroId).
       entry.id = `ret_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      entry.manual = true
+      entry.manual = entry.xeroId ? false : true
       entries.push(entry)
     }
     await redis.set(KEY, entries)

@@ -83,8 +83,9 @@ export default function RetentionPage() {
           pcType: '',
           qsName: p.estimator || '',
           qsEmail: '',
-          invoiced: p.invoicedExVat || 0,
+          invoiced: p.totalInvoiced || 0,
           vat: p.vat || 0,
+          vatRateLabel: p.vatRateLabel || '—',
           paid: p.paid || 0,
           release1Value: (p.grossInvoiced - p.totalInvoiced) / 2 || 0,
           release1Date: '',
@@ -104,10 +105,25 @@ export default function RetentionPage() {
   async function saveEntry(entry) {
     setSaving(true)
     try {
+      // A Xero-derived row has manual:false and its id set to the xeroId. Editing
+      // it must create/update a MANUAL OVERRIDE keyed by xeroId, not try to update
+      // a record by that id (which doesn't exist in the manual store). Find any
+      // existing override for this xeroId and reuse its real id; otherwise create
+      // a new override (drop the id so the server generates one) but keep xeroId.
+      let toSave = entry
+      if (entry.manual === false) {
+        const existingOverride = entries.find(e => e.xeroId === entry.xeroId)
+        toSave = {
+          ...entry,
+          id: existingOverride ? existingOverride.id : undefined,
+          xeroId: entry.xeroId || entry.id,
+          manual: false,        // still sourced from Xero, but now has manual overrides
+        }
+      }
       const res = await fetch('/api/retention', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entry })
+        body: JSON.stringify({ entry: toSave })
       })
       const data = await res.json()
       setEntries(data.entries || [])
@@ -320,7 +336,7 @@ export default function RetentionPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                      {['Ref', 'Customer', 'Project', 'Final Account', 'Invoiced', 'VAT', 'Paid', 'Final Bal', 'Ret %', 'PC Type', 'QS', 'Status',
+                      {['Ref', 'Customer', 'Project', 'Final Account', 'Invoiced', 'VAT', 'VAT Type', 'Paid', 'Final Bal', 'Ret %', 'PC Type', 'QS', 'Status',
                         '1st Value', '1st Date', '1st Rcvd',
                         '2nd Value', '2nd Date', '2nd Rcvd',
                         'Balance', 'Comments', ''].map(h => (
@@ -350,6 +366,7 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(parseFloat(entry.finalAccount) || parseFloat(entry.projectValue) || null)}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.invoiced != null && entry.invoiced !== '' ? fmt(parseFloat(entry.invoiced)) : '—'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.vat != null && entry.vat !== '' ? fmt(parseFloat(entry.vat)) : '—'}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555', fontSize: 11.5 }}>{entry.vatRateLabel && entry.vatRateLabel !== '—' ? entry.vatRateLabel : '—'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.paid != null && entry.paid !== '' ? fmt(parseFloat(entry.paid)) : '—'}</td>
                             {(() => { const fb = calcFinalBalance(entry); const has = (entry.finalAccount || entry.projectValue) && (entry.paid != null && entry.paid !== '')
                               return <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: !has ? '#bbb' : Math.abs(fb) < 1 ? '#16a34a' : '#2563eb' }}>{has ? fmtC(fb) : '—'}</td> })()}
@@ -404,7 +421,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={21} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={22} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry}
                                   onCancel={() => setEditingId(null)} />
