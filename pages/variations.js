@@ -315,6 +315,8 @@ export default function VariationTracker() {
               <span style={{ color: '#444' }}>|</span>
               <Link href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</Link>
               <span style={{ color: '#444' }}>|</span>
+              <Link href="/outstanding-invoices" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Outstanding Invoices</Link>
+              <span style={{ color: '#444' }}>|</span>
               <Link href="/retention" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Retention</Link>
               <span style={{ color: '#444' }}>|</span>
               <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Variations</span>

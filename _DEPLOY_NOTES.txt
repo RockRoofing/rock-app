@@ -1,28 +1,69 @@
-Financial App — batch 3b (update): manual entries stay standalone + no duplicates
-=================================================================================
+Financial App — batch 4a: Outstanding Invoices page (table + high-risk + comments)
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 3b pages/retention.js (deploy over the top).
+Deploy on top of the batch 3 files.
 
-1) MANUAL ENTRIES ARE STANDALONE (never touch Project Financials)
------------------------------------------------------------------
-Anything added via "Add Manual Entry" now lives ONLY in the Retention Tracker.
-• Using the Project Name autocomplete to pull an existing project's details just
-  COPIES those values into the entry as a snapshot — it does NOT link the entry
-  to the project. So a manual entry never writes back to Project Financials and
-  never appears there.
-• The two-way COMMENTS sync now only applies to rows that come from Project
-  Financials automatically (genuine Xero-sourced rows). Manual entries — even if
-  you auto-filled them from a project — do not sync comments anywhere.
+NEW PAGE: "Outstanding Invoices"  (/outstanding-invoices)
+--------------------------------------------------------
+Sits in the commercial nav right AFTER Project Financials (link added to the
+Project Financials, Retention, Variations and Application Calendar nav bars).
+Aesthetic matches the existing portal pages.
 
-2) NO DUPLICATE PROJECTS
-------------------------
-The autocomplete no longer suggests a project that's already in the tracker —
-whether it's there as an auto/linked row or as an existing manual entry (matched
-on xeroId, ref or project name). So you can only add projects that aren't already
-listed.
+Columns (mirrors your Xero list in principle):
+  • Inv Number  — invoice number (+ red "HIGH RISK" badge if the customer is flagged)
+  • Ref         — the invoice reference (e.g. "Farmstead Drive - App 3")
+  • To          — customer name
+  • Date        — invoice date
+  • Due Date    — turns RED once passed
+  • Overdue by  — days overdue in red; blank when not overdue
+  • Expected date — manual date entry (saved per invoice)
+  • Paid        — amount paid
+  • Due         — balance outstanding
+  • Comments    — opens a pop-out (see below)
+  • Auto send emails — placeholder ("— soon —"); the chase-email buttons + timeline
+                       come in a later batch once you provide the email content.
 
-FILE CHANGED
+Only invoices with a balance still due are listed. Data comes from the invoice
+cache built by the Xero CSV import / sync — NO extra Xero API calls.
+Summary cards: outstanding count, total due, overdue count, overdue value.
+Search + sort (most overdue / largest due / due date).
+
+COMMENTS POP-OUT (per invoice)
+------------------------------
+• A running chain of submitted comments, each with author + date/time.
+• Add new comments (the chain grows); existing comments are retained.
+• @mention portal users by typing "@" — a picker appears; mentioned users get an
+  in-app notification ("<author> mentioned you on invoice <number>").
+• Comments added via the future email-BCC route will show a "via email" tag
+  (plumbing is in place; the BCC intake itself comes in a later batch).
+
+HIGH-RISK CUSTOMER  (item 5)
+----------------------------
+Edit Project Details → under Customer name there is now a tick box
+"Is this a high risk customer?". When ticked, that customer's invoices show a red
+"HIGH RISK" badge on the Outstanding Invoices page.
+
+STILL TO COME (later batches, as agreed)
+----------------------------------------
+• Auto-send chase emails from the project QS's address, with a RAMS-style timeline
+  (awaiting your email content).
+• BCC-to-comments intake (emails you BCC land in the invoice comments).
+• Weekly report: "Weekly Report" button to add external recipients; weekly PDF
+  (summary + per-invoice appendix) emailed to post-contract/management/admin +
+  extras, folded into the daily cron with a Monday check.
+• Download button (full list, optional comments appendix).
+
+AFTER DEPLOY
 ------------
-• pages/retention.js — manual entries flagged trackerOnly and never linked
-  (no xeroId), autocomplete filters out projects already in the tracker.
+Clear the dashboard cache (/api/clear-cache) or run a sync so highRisk + invoice
+data are fresh, then open Outstanding Invoices.
+
+FILES CHANGED / ADDED
+---------------------
+• pages/outstanding-invoices.js      (new) — the page + comments pop-out
+• pages/api/outstanding-invoices.js   (new) — expected date + comments + mention notify
+• pages/api/dashboard.js             — expose highRisk + qsEmail per project
+• pages/project/[id].js              — high-risk customer tick box
+• pages/commercial.js, retention.js, variations.js, application-calendar.js
+                                     — "Outstanding Invoices" nav link after Project Financials

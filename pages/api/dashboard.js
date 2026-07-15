@@ -166,6 +166,8 @@ export default async function handler(req, res) {
         contractsManager: settings.contractsManager || '',
         estimator: settings.estimator || '',
         qsName: settings.qsName || '',
+        qsEmail: settings.qsEmail || '',
+        highRisk: settings.highRiskCustomer === true,
         pcDate: settings.pcDate || '',
         defectsDate: settings.defectsDate || '',
         completionDate: settings.completionDate || settings.pcDate || '',

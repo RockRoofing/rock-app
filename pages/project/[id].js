@@ -1367,6 +1367,11 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <div style={headingStyle}>Project Details</div>
         <label style={labelStyle}>Customer name</label>
         <input value={form.customerName || ''} onChange={f('customerName')} style={inputStyle} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0 4px', fontSize: 13, cursor: 'pointer', color: form.highRiskCustomer ? '#dc2626' : '#333', fontWeight: form.highRiskCustomer ? 600 : 400 }}>
+          <input type="checkbox" checked={!!form.highRiskCustomer} onChange={e => setForm({ ...form, highRiskCustomer: e.target.checked })} />
+          Is this a high risk customer?
+        </label>
+        {form.highRiskCustomer && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 6 }}>⚠ Invoices for this customer will show a High Risk warning on the Outstanding Invoices page.</div>}
         <label style={labelStyle}>Address</label>
         <input value={form.address || ''} onChange={f('address')} style={inputStyle} />
         <label style={labelStyle}>Region</label>
