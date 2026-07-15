@@ -30,9 +30,19 @@ const xget = (url, accessToken, tenantId) => fetch(url, {
   headers: { Authorization: `Bearer ${accessToken}`, 'Xero-Tenant-Id': tenantId, Accept: 'application/json' }
 })
 
-// Fingerprint a cost line so the same transaction isn't added twice.
+// Unique key for a cost line. Prefer the true Xero line GUID (sync-to-sync).
+// Otherwise fall back to a stable business key that also matches UPLOADED lines
+// (uploads carry references/dates but not GUIDs):
+//   • bills  -> invoice number + account + amount
+//   • wages  -> date + amount + account (journal ref formats differ upload vs API)
 function costKey(l) {
-  return `${l.date}|${l.amount}|${l.accountCode}|${String(l.description || '').slice(0, 30)}`
+  if (l.xeroLineId) return `L:${l.xeroLineId}`
+  if (l.source === 'wages' || l.accountCode === '320') return `W:${l.date}|${l.amount}|320`
+  return `K:${l.reference || ''}|${l.accountCode || ''}|${l.amount}`
+}
+// Invoices are uniquely identified by their invoice number (unique in Xero).
+function invoiceKey(l) {
+  return l.invoiceNumber ? `N:${l.invoiceNumber}` : (l.xeroInvoiceId ? `I:${l.xeroInvoiceId}` : `${l.date}|${l.total}`)
 }
 
 // ── Bills (ACCPAY): materials + subbie labour, EXCLUDING 320 (wages come via journals) ──
@@ -67,6 +77,8 @@ async function fetchBills(accessToken, tenantId, trackingOptionId, trackingCateg
           reference: full.InvoiceNumber || '',
           amount, accountCode: line.AccountCode,
           type: isLabour ? 'Labour' : 'Materials', source: 'bills',
+          xeroLineId: line.LineItemID || null,
+          xeroInvoiceId: full.InvoiceID || null,
         })
       }
     }
@@ -109,9 +121,11 @@ async function fetchWages(accessToken, tenantId, trackingOptionId, fromDate) {
           date: dateStr,
           supplier: 'Direct Wages',
           description: jl.Description || 'Direct Wages',
-          reference: j.Narration || '',
+          reference: j.Narration || j.ManualJournalID || '',
           amount, accountCode: '320',
           type: 'Labour', source: 'wages',
+          xeroLineId: jl.JournalLineID || null,
+          xeroJournalId: j.ManualJournalID || null,
         })
       }
     }
@@ -144,6 +158,7 @@ async function fetchSalesInvoices(accessToken, tenantId, trackingOptionId, track
       if (!tagged) continue
       byNumber.set(full.InvoiceNumber || full.InvoiceID, {
         invoiceNumber: full.InvoiceNumber || '',
+        xeroInvoiceId: full.InvoiceID || null,
         date: full.DateString?.slice(0, 10),
         dueDate: full.DueDateString?.slice(0, 10) || '',
         contact: full.Contact?.Name || '',
@@ -217,10 +232,10 @@ export default async function handler(req, res) {
     // ── 3. Sales Invoices ──
     const salesLines = await fetchSalesInvoices(tokens.access_token, tenantId, projectId, catId, fromDateStr)
     let existingInv = (await redis.get(`invoiced:lines:${projectId}`).catch(() => null)) || []
-    const invMerge = mergeWindow(existingInv, salesLines, fromDateStr, (l) => l.invoiceNumber || `${l.date}|${l.amountDue}`)
+    const invMerge = mergeWindow(existingInv, salesLines, fromDateStr, invoiceKey)
     // Refresh amounts for invoices we already had but that changed (paid/due) in-window.
-    const byNum = new Map(invMerge.merged.map(l => [l.invoiceNumber, l]))
-    for (const s of salesLines) if (s.invoiceNumber) byNum.set(s.invoiceNumber, s)
+    const byNum = new Map(invMerge.merged.map(l => [invoiceKey(l), l]))
+    for (const s of salesLines) byNum.set(invoiceKey(s), s)
     const mergedInv = [...byNum.values()]
     const totalInvoiced = mergedInv.reduce((s, l) => s + (l.total || 0), 0)
     const paidTotal = mergedInv.reduce((s, l) => s + (l.amountPaid || 0), 0)
