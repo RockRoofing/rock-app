@@ -1,37 +1,57 @@
-Site App Users — company autocomplete + de-duplication
-======================================================
+RAMS Phase 5 — Download Signed RAMS (original + appended signature/audit trail)
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of the previous fixes.
+Runtime-tested: PDF merge + signature embedding + all workflow states verified.
+Deploy on top of the previous RAMS fixes.
 
-WHAT CHANGED
-------------
-The Company field on the Add/Edit user form is now an AUTOCOMPLETE:
-  • As you type, it suggests existing companies (already on record) that contain
-    what you've typed — pick one to use its exact spelling.
-  • If what you've typed exactly matches an existing company (ignoring case and
-    surrounding spaces), a green "✓ Matches an existing company — this record
-    will be used" note appears.
-  • On save, if the typed name matches an existing company (case/whitespace-
-    insensitive) it is normalised to the existing canonical spelling — so
-    "rock roofing", "Rock Roofing" and "Rock Roofing " all collapse to the one
-    company already on record instead of creating duplicates.
-  • Suggestion list closes when you click outside it.
+WHAT THIS ADDS
+--------------
+A "⬇ Download Signed RAMS" button next to "+ Upload RAMS" on the project's RAMS
+tab (Operations → Projects → RAMS).
 
-Belt-and-braces: the SERVER also de-duplicates on both create and edit, so a
-duplicate can't slip through even if the client list is stale.
+Click it → a picker lists every RAMS REVISION (newest first, with its stage and
+number of operative signatures). Choose one → it downloads a single PDF that is:
+  • the ORIGINAL RAMS document, followed by
+  • an appended "Signature & Approval Record" showing the full workflow:
+      1. Contracts Manager — name, date/time signed, signature image
+      2. Director — name, date/time signed, signature image
+      3. Customer Site Manager — name, email, date/time approved (typed approval
+         via the secure no-login link) OR, if they requested edits, the rejection
+         with their comments and timestamp
+      • Every OPERATIVE signature — name, date/time, and signature image, plus the
+        confirmation statement they all agreed to
+  • An overall status banner (e.g. STATUS: OPERATIVES, or EDITS REQUIRED) and a
+    per-page footer with generation timestamp.
 
-The company list is derived from existing Site App Users (that's where company
-lives), so it grows automatically as you add new companies.
+This is the electronic-footprint / confirmed-workflow version you were missing —
+one download per revision, on demand (nothing to pre-generate or store).
 
-FILES CHANGED
--------------
-• pages/operations/users.js  — CompanyInput autocomplete; client de-dupe on save
-• pages/api/ops-users.js     — canonicalCompany() de-dupe on create + edit
+DATA USED (all already captured by the workflow)
+------------------------------------------------
+• ops:rams-approvals — cm/director/siteManager (+ rejection) with signedAt times
+• ops:rams-signatures — per-operative name, date, signedAt, statement, signature
+CM/Director auto-signatures are shown in the approval chain (not double-listed
+under operatives). The Site Manager approves by typing their name (no drawn
+signature), so their entry is a typed confirmation with a timestamp.
+
+TECHNICAL NOTES
+---------------
+• Uses pdf-lib (already in the project). The original PDF's pages are copied in,
+  then audit pages appended. If the original can't be embedded (e.g. it's an
+  image RAMS or an unreadable PDF), the record is still produced and notes that.
+• Helvetica can't encode tick/cross glyphs, so status markers are drawn as
+  coloured dots (green = done, red = not approved, outline = pending) — this was
+  verified to avoid a PDF-generation crash.
+
+FILES ADDED / CHANGED
+---------------------
+• lib/signedRamsPdf.js          (new) — builds the merged signed PDF
+• pages/api/rams-signed-pdf.js   (new) — lists revisions; streams the signed PDF
+• pages/operations/projects.js  — "Download Signed RAMS" button + revision picker
 
 TEST
 ----
-Add a user with company "Rock Roofing". Add another and type "rock roofing" —
-the suggestion appears and, whether you pick it or just type it, the saved
-company is the existing "Rock Roofing" (no duplicate). The RAMS Matrix / user
-table company filters then stay clean.
+Operations → Projects → a project with signed RAMS → RAMS tab →
+"⬇ Download Signed RAMS" → pick a revision → the downloaded PDF shows the
+original followed by the signature/approval record with names, dates and times.

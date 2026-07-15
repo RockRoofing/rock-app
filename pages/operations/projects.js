@@ -750,6 +750,7 @@ function RamsTable({ projectNo }) {
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState('')
   const [viewer, setViewer] = useState(null)
+  const [signedOpen, setSignedOpen] = useState(false)
   const inputRef = useRef()
 
   useEffect(() => { load() }, [projectNo])
@@ -788,8 +789,9 @@ function RamsTable({ projectNo }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
         <div><div style={{ fontSize: 16, fontWeight: 700, color: INK }}>RAMS</div><div style={{ fontSize: 13, color: '#999', marginTop: 2 }}>Revisions listed newest first. Visible to operatives in the Forms App.</div></div>
-        <div>
+        <div style={{ display: 'flex', gap: 8 }}>
           <input ref={inputRef} type="file" accept="application/pdf,image/*" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+          <button onClick={() => setSignedOpen(true)} style={{ ...primaryBtn, background: '#fff', color: '#92400e', border: '1px solid #e6b567' }}>⬇ Download Signed RAMS</button>
           <button onClick={() => inputRef.current?.click()} disabled={uploading} style={primaryBtn}>{uploading ? 'Uploading…' : '+ Upload RAMS'}</button>
         </div>
       </div>
@@ -836,6 +838,67 @@ function RamsTable({ projectNo }) {
           </div>
         </div>
       )}
+      {signedOpen && <SignedRamsPicker projectNo={projectNo} onClose={() => setSignedOpen(false)} />}
     </div>
+  )
+}
+
+// Pick a RAMS revision and download the signed version (original + appended
+// signature/approval audit trail).
+function SignedRamsPicker({ projectNo, onClose }) {
+  const [revs, setRevs] = useState(null)
+  const [busyId, setBusyId] = useState('')
+  const [err, setErr] = useState('')
+
+  useEffect(() => { (async () => {
+    try {
+      const d = await fetch(`/api/rams-signed-pdf?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
+      setRevs(d.revisions || [])
+    } catch { setRevs([]); setErr('Could not load revisions.') }
+  })() }, [projectNo])
+
+  async function download(fileId) {
+    setErr(''); setBusyId(fileId)
+    try {
+      const r = await fetch(`/api/rams-signed-pdf?no=${encodeURIComponent(projectNo)}&fileId=${encodeURIComponent(fileId)}`)
+      if (!r.ok) { let m = 'Could not generate the signed RAMS.'; try { m = (await r.json()).error || m } catch {} ; setErr(m); setBusyId(''); return }
+      const blob = await r.blob()
+      const cd = r.headers.get('Content-Disposition') || ''
+      const nameMatch = /filename="?([^"]+)"?/.exec(cd)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = nameMatch ? nameMatch[1] : 'RAMS-signed.pdf'
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } catch (e) { setErr(e?.message || 'Download failed.') }
+    setBusyId('')
+  }
+
+  const stageLabel = (s) => ({ cm: 'Awaiting CM', director: 'Awaiting Director', 'site-manager': 'Awaiting Site Manager', operatives: 'Signing / complete', complete: 'Complete', rejected: 'Edits required' }[s] || s)
+  const total = revs ? revs.length : 0
+
+  return (
+    <Modal onClose={onClose} title="Download Signed RAMS">
+      <div style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>Select a revision to download. The signed file is the original RAMS with the full approval workflow and every signature (names, dates and times) appended to the back.</div>
+      {err && <div style={{ fontSize: 13, color: '#dc2626', marginBottom: 10 }}>{err}</div>}
+      {revs === null ? <div style={{ fontSize: 13, color: '#999', padding: '10px 0' }}>Loading…</div>
+        : revs.length === 0 ? <div style={{ fontSize: 13, color: '#999', padding: '10px 0' }}>No RAMS uploaded for this project yet.</div>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {revs.map((rv, i) => (
+              <div key={rv.fileId} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #ececec', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>
+                    Rev {total - i}{i === 0 && <span style={{ marginLeft: 8, fontSize: 10.5, background: '#065f46', color: '#fff', borderRadius: 20, padding: '1px 8px', fontWeight: 700 }}>CURRENT</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#999', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rv.name}</div>
+                  <div style={{ fontSize: 11.5, color: '#888', marginTop: 2 }}>{stageLabel(rv.stage)} · {rv.signedCount} operative signature{rv.signedCount === 1 ? '' : 's'} · uploaded {rv.uploadedAt ? new Date(rv.uploadedAt).toLocaleDateString('en-GB') : '—'}</div>
+                </div>
+                <button onClick={() => download(rv.fileId)} disabled={!!busyId} style={{ ...primaryBtn, padding: '8px 14px', whiteSpace: 'nowrap' }}>{busyId === rv.fileId ? 'Preparing…' : '⬇ Download'}</button>
+              </div>
+            ))}
+          </div>
+        )}
+    </Modal>
   )
 }
