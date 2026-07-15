@@ -1,44 +1,56 @@
-Financial App — batch 2c: VAT Type + Paid populate reliably (cache/fallback fix)
-================================================================================
+Financial App — batch 2d: Import invoices from Xero CSV (no rate limits)
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 2b.
+Validated against your real Xero export.
+Deploy on top of batch 2c.
 
-WHY VAT TYPE WAS BLANK AND PAID WAS 0
--------------------------------------
-Two caching issues:
-1) The dashboard serves a 4-hour cached snapshot of all projects. If that snapshot
-   was built before the new fields existed, it had no paid/vat/vatRateLabel — so
-   the tracker showed 0 / blank regardless of a Xero sync.
-2) A manual override row (created when you tick "Received") was freezing a copy of
-   the row WITHOUT the live Xero financials.
+WHY
+---
+A full live Xero sync of every invoice hits Xero's rate limit and Vercel's 10s
+function timeout. Instead, you export "Sales Invoices" from Xero to CSV and upload
+it here — the app parses it and fills Invoiced / VAT / VAT Type / Paid / Due for
+ALL projects in one go, with essentially no Xero API calls.
 
-WHAT THIS FIXES
----------------
-• The dashboard now DERIVES paid / VAT / VAT-type / invoiced from the per-invoice
-  lines cache as a fallback when the aggregate is missing them. "Paid" works
-  immediately (AmountPaid has always been cached per invoice). VAT + VAT Type
-  populate from the lines once a sync has stored per-line tax (batch 2b onward).
-• The Retention Tracker now LAYERS the live Xero financials (invoiced/VAT/VAT
-  Type/paid) on top of any manual override, so ticking "Received" no longer wipes
-  those figures — they always reflect the latest Xero data.
+HOW TO USE
+----------
+1) In Xero: Business → Invoices → export the Sales Invoices list to CSV (the file
+   with columns InvoiceNumber, Total, TaxTotal, InvoiceAmountPaid,
+   InvoiceAmountDue, TrackingOption1, TaxType, Status, etc. — i.e. exactly the
+   export you sent me).
+2) In the app: Retention Tracker → "⬆ Import invoices from Xero" → choose the CSV.
+3) It reports how many invoices/projects it imported (and lists any project names
+   in the file that didn't match an app project). The tracker refreshes with the
+   figures.
 
-DEPLOY STEPS (important — do these in order)
---------------------------------------------
-1) Deploy this batch.
-2) Clear the dashboard cache: visit /api/clear-cache while logged in as admin
-   (or just run the Xero WIP sync, which clears it at the end).
-3) Run the Xero WIP sync once so the per-invoice lines include VAT/tax type.
-4) Open the Retention Tracker:
-   • Paid should now show real figures.
-   • VAT + VAT Type populate for projects whose invoices have been synced with
-     batch 2b+ (VAT Type needs the per-line tax type, captured from that sync on).
+WHAT IT DOES (verified on your sample)
+--------------------------------------
+• Reads the line-level export, de-duplicates invoices by InvoiceNumber (Total/
+  Paid/Due are invoice-level and repeat on each line — they are NOT summed per
+  line), and aggregates per project by TrackingOption1 (e.g. "J228-Farmstead
+  Drive").
+• Skips overpayments/prepayments; counts sales invoices, subtracts credit notes.
+• Captures VAT (TaxTotal) and a VAT-type label per project: "20%", "5%",
+  "0% reverse charge", "0% zero-rated", "No VAT", "Exempt", or "Mixed" when a
+  project's invoices differ (your J228 sample = Mixed: reverse-charge + zero-rated).
+• Matches each tracking name to the app's project via one lightweight Xero call
+  (tracking categories only — not the rate-limited per-invoice calls), then writes
+  the same cache the Retention Tracker & dashboard read, and clears the dashboard
+  cache so figures show immediately.
+  (Sample result: J228-Farmstead Drive — 8 invoices, £92,389.85 invoiced,
+   £75,226.55 paid, £17,163.30 due, £0 VAT.)
 
-If VAT Type still shows "—" for a project after a fresh sync, that project's Xero
-invoices genuinely have no VAT lines / tax type we can read — tell me which
-project and I'll check the specific invoice's tax setup.
+NOTES
+-----
+• If a project name in the CSV doesn't match an app project, it's listed as
+  skipped (nothing is silently lost) — usually a naming mismatch we can align.
+• Re-importing simply overwrites with the latest snapshot (safe to run repeatedly).
+• I also made the live Xero retry logic honour Xero's Retry-After header (helps
+  the daily sync recover from throttling), but the CSV import is the reliable
+  route for bulk data.
 
-FILES CHANGED
--------------
-• pages/api/dashboard.js — fallback aggregation from invoice lines (paid/vat/type)
-• pages/retention.js     — layer live Xero financials over manual overrides
+FILES CHANGED / ADDED
+---------------------
+• pages/api/import-invoices-bulk.js  (new) — bulk CSV importer (all projects)
+• pages/retention.js                 — "Import invoices from Xero" upload button
+• lib/xero.js                        — honour Retry-After on 429s (live sync resilience)
