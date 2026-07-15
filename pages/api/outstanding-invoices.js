@@ -92,7 +92,12 @@ export default async function handler(req, res) {
       await redis.set(META_KEY, meta)
       // Notify @mentioned portal users.
       try {
-        if (comment.mentions.length) await notifyMentions(comment.mentions, invoiceNumber, comment)
+        if (comment.mentions.length) {
+          const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+          const host = req.headers['x-forwarded-host'] || req.headers.host
+          const baseUrl = host ? `${proto}://${host}` : null
+          await notifyMentions(comment.mentions, invoiceNumber, comment, baseUrl)
+        }
       } catch (e) { console.error('mention notify failed:', e) }
       return res.json({ ok: true, comment, meta: meta[invoiceNumber] })
     }
@@ -119,7 +124,7 @@ export default async function handler(req, res) {
 }
 
 // Drop an in-app notification AND send an email for each mentioned user (by id).
-async function notifyMentions(userIds, invoiceNumber, comment) {
+async function notifyMentions(userIds, invoiceNumber, comment, baseUrl) {
   const redis = await getRedis()
   if (!redis) return
   // Look up portal users so we can email them.
@@ -146,6 +151,7 @@ async function notifyMentions(userIds, invoiceNumber, comment) {
   const RESEND_KEY = process.env.RESEND_API_KEY
   const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
   if (!RESEND_KEY) return
+  const link = baseUrl ? `${baseUrl}/outstanding-invoices` : null
   for (const uid of userIds) {
     const u = byId[uid]
     if (!u || !u.email) continue
@@ -156,7 +162,7 @@ async function notifyMentions(userIds, invoiceNumber, comment) {
         <p style="font-size:15px">Hi ${first},</p>
         <p style="font-size:15px"><strong>${comment.author}</strong> mentioned you in a comment on invoice <strong>${invoiceNumber}</strong> in the Outstanding Invoices tracker:</p>
         <blockquote style="border-left:3px solid #ca8a04;margin:12px 0;padding:6px 14px;color:#444;font-size:14px">${(comment.text || '').replace(/</g, '&lt;')}</blockquote>
-        <p style="font-size:13px;color:#777">Open the portal → Outstanding Invoices to reply.</p>
+        ${link ? `<p style="text-align:center;margin:22px 0"><a href="${link}" style="background:#1a1a2e;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;display:inline-block">Open Outstanding Invoices</a></p>` : `<p style="font-size:13px;color:#777">Open the portal → Outstanding Invoices to reply.</p>`}
       </div>`
     try {
       await fetch('https://api.resend.com/emails', {
