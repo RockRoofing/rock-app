@@ -38,6 +38,9 @@ export default function OutstandingInvoicesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('overdue')   // overdue | due | dueDate
+  const [view, setView] = useState('outstanding')   // outstanding | all
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 50
   const [commentInvoice, setCommentInvoice] = useState(null)  // invoice object for the pop-out
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [weeklyOpen, setWeeklyOpen] = useState(false)
@@ -57,20 +60,23 @@ export default function OutstandingInvoicesPage() {
       setMembers(teamR.members || [])
       setMe(meR.user || null)
 
-      // Flatten every project's invoice lines into one outstanding list.
+      // Flatten every project's invoice lines. Keep ALL of them (outstanding +
+      // paid); the Outstanding/All toggle filters at display time.
       const rows = []
       for (const p of (dashR.projects || [])) {
         for (const inv of (p._invoiceLines || [])) {
-          const due = inv.amountDue != null ? inv.amountDue : ((inv.total || 0) - (inv.amountPaid || 0))
-          if (!(due > 0.005)) continue   // only outstanding
+          const total = inv.total || 0
+          const paid = inv.amountPaid || 0
+          const due = inv.amountDue != null ? inv.amountDue : (total - paid)
           rows.push({
             invoiceNumber: inv.invoiceNumber || '',
             reference: inv.reference || '',
             customer: inv.contact || p.customer || '',
             date: inv.date || '',
             dueDate: inv.dueDate || '',
-            paid: inv.amountPaid || 0,
+            paid,
             due,
+            settled: !(due > 0.005),   // fully paid / nothing left owing
             jobNo: p.jobNo || '',
             projectName: p.name || '',
             qsName: p.qsName || '',
@@ -102,8 +108,10 @@ export default function OutstandingInvoicesPage() {
       const dd = parseDMY(inv.dueDate)
       const overdueBy = dd ? daysBetween(today, dd) : null
       const m = meta[inv.invoiceNumber] || {}
-      return { ...inv, overdueBy: overdueBy > 0 ? overdueBy : null, expectedDate: m.expectedDate || '', commentCount: (m.comments || []).length }
+      return { ...inv, overdueBy: (overdueBy > 0 && !inv.settled) ? overdueBy : null, expectedDate: m.expectedDate || '', commentCount: (m.comments || []).length }
     })
+    // Outstanding (default) hides settled/paid invoices; All shows everything.
+    if (view === 'outstanding') r = r.filter(x => !x.settled)
     if (search) {
       const q = search.toLowerCase()
       r = r.filter(x => [x.invoiceNumber, x.reference, x.customer, x.jobNo, x.projectName].some(v => (v || '').toLowerCase().includes(q)))
@@ -115,7 +123,12 @@ export default function OutstandingInvoicesPage() {
       return 0
     })
     return r
-  }, [invoices, meta, search, sortBy])
+  }, [invoices, meta, search, sortBy, view])
+
+  // Reset to page 1 whenever the filters change.
+  useEffect(() => { setPage(1) }, [search, sortBy, view])
+  const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE))
+  const pageRows = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   const totals = {
     count: rows.length,
@@ -161,8 +174,8 @@ export default function OutstandingInvoicesPage() {
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: 'Outstanding invoices', value: totals.count, raw: true },
-              { label: 'Total due', value: fmt(totals.due) },
+              { label: view === 'all' ? 'Invoices (all)' : 'Outstanding invoices', value: totals.count, raw: true },
+              { label: view === 'all' ? 'Total due (unpaid)' : 'Total due', value: fmt(totals.due) },
               { label: 'Overdue invoices', value: totals.overdueCount, raw: true, color: totals.overdueCount ? '#dc2626' : '#16a34a' },
               { label: 'Overdue value', value: fmt(totals.overdueDue), color: totals.overdueDue > 0 ? '#dc2626' : '#16a34a' },
             ].map(card => (
@@ -175,6 +188,14 @@ export default function OutstandingInvoicesPage() {
 
           {/* Controls */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', background: '#f0f2f5', borderRadius: 8, overflow: 'hidden' }}>
+              {[['outstanding', 'Outstanding'], ['all', 'All']].map(([key, label]) => (
+                <button key={key} onClick={() => setView(key)}
+                  style={{ padding: '6px 16px', border: 'none', background: view === key ? '#1a1a2e' : 'transparent', color: view === key ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <input placeholder="Search invoice, ref, customer, project…" value={search} onChange={e => setSearch(e.target.value)}
               style={{ flex: 1, minWidth: 220, padding: '7px 12px', border: '1px solid #e5e5e5', borderRadius: 8, fontSize: 12 }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -185,7 +206,7 @@ export default function OutstandingInvoicesPage() {
                 <option value="dueDate">Due date</option>
               </select>
             </div>
-            <span style={{ fontSize: 12, color: '#888' }}>{rows.length} shown</span>
+            <span style={{ fontSize: 12, color: '#888' }}>{rows.length} {view === 'all' ? 'total' : 'outstanding'}{rows.length > PER_PAGE ? ` · showing ${(page - 1) * PER_PAGE + 1}–${Math.min(page * PER_PAGE, rows.length)}` : ''}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
               <button onClick={() => setDownloadOpen(true)}
                 style={{ background: '#fff', color: '#0f766e', border: '1px solid #5eead4', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -201,7 +222,7 @@ export default function OutstandingInvoicesPage() {
           {/* Table */}
           <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
             {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading…</div>
-              : rows.length === 0 ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>No outstanding invoices. (Import invoices from Xero on the Retention Tracker, then check back.)</div>
+              : rows.length === 0 ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>{view === 'all' ? 'No invoices found. (Import invoices from Xero on the Retention Tracker.)' : 'No outstanding invoices. Switch to "All" to see paid ones, or import invoices from Xero on the Retention Tracker.'}</div>
               : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -221,12 +242,13 @@ export default function OutstandingInvoicesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((r, i) => {
+                      {pageRows.map((r, i) => {
                         const overdue = !!r.overdueBy
                         return (
-                          <tr key={`${r.invoiceNumber}-${i}`} style={{ borderBottom: '1px solid #f0f0f0', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          <tr key={`${r.invoiceNumber}-${i}`} style={{ borderBottom: '1px solid #f0f0f0', background: r.settled ? '#f0fdf4' : (i % 2 === 0 ? '#fff' : '#fafafa') }}>
                             <td style={{ ...td, fontWeight: 600, color: '#1a1a2e' }}>
                               {r.invoiceNumber || '—'}
+                              {r.settled && <span title="Fully paid" style={{ marginLeft: 6, fontSize: 9, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>PAID</span>}
                               {r.highRisk && <span title="High risk customer" style={{ marginLeft: 6, fontSize: 9, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>HIGH RISK</span>}
                             </td>
                             <td style={{ ...td, whiteSpace: 'normal', maxWidth: 230 }}>{r.reference || r.projectName || '—'}</td>
@@ -239,7 +261,7 @@ export default function OutstandingInvoicesPage() {
                                 style={{ fontSize: 11, padding: '3px 5px', border: '1px solid #e5e5e5', borderRadius: 5, fontFamily: 'inherit' }} />
                             </td>
                             <td style={{ ...td, textAlign: 'right', color: '#555' }}>{fmt(r.paid)}</td>
-                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: overdue ? '#dc2626' : '#1a1a2e' }}>{fmt(r.due)}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: r.settled ? '#16a34a' : (overdue ? '#dc2626' : '#1a1a2e') }}>{fmt(r.due)}</td>
                             <td style={td}>
                               <button onClick={() => setCommentInvoice(r)}
                                 style={{ background: r.commentCount ? '#eef2ff' : '#f0f2f5', border: '1px solid ' + (r.commentCount ? '#c7d2fe' : '#e5e5e5'), borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', color: r.commentCount ? '#4f46e5' : '#555', fontWeight: 600 }}>
@@ -256,6 +278,15 @@ export default function OutstandingInvoicesPage() {
                   </table>
                 </div>
               )}
+            {!loading && rows.length > PER_PAGE && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '14px', borderTop: '1px solid #f0f0f0' }}>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                  style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>← Prev</button>
+                <span style={{ fontSize: 12, color: '#555' }}>Page {page} of {totalPages}</span>
+                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                  style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}>Next →</button>
+              </div>
+            )}
           </div>
         </div>
       </div>

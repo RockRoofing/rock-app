@@ -1,23 +1,31 @@
-Financial App — Outstanding Invoices: mention email link + live highlighted mentions
-====================================================================================
+Financial App — Outstanding Invoices: Outstanding/All toggle + 50-per-page
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the outstanding-invoices files (deploy over the top).
+Replaces the outstanding-invoices page (deploy over the top).
 
-1) LINK IN THE MENTION EMAIL
-----------------------------
-The "You were mentioned on invoice X" email now includes an "Open Outstanding
-Invoices" button that links straight to the Outstanding Invoices page in the
-portal.
+WHAT CHANGED
+------------
+• PAID INVOICES no longer just vanish. A toggle at the top defaults to
+  "Outstanding" (invoices with a balance due) and can switch to "All" (includes
+  fully-paid invoices). Paid rows show a green "PAID" badge and a green-tinted
+  row; their Due shows £0 in green.
+• PAGINATION: max 50 invoices per page, with Prev / Next and a "Page X of Y"
+  indicator. Page resets to 1 when you change the toggle, search or sort.
+• Summary cards + the count line adapt to the current view.
 
-2) @MENTION HIGHLIGHTED WHILE TYPING
-------------------------------------
-When you insert an @Name in the comment box, it now shows bold + blue in the
-compose box itself (not just after posting), so it's clear the person has been
-selected. (Implemented with a highlight layer behind the input; caret and typing
-behave normally.)
+NOTES (answers to your questions)
+---------------------------------
+• Invoice data comes from the CSV import on the RETENTION TRACKER
+  ("⬆ Import invoices from Xero") — export Sales Invoices from Xero and upload it
+  there. You do NOT upload invoices into Project Financials (that's costs/margins,
+  a different Xero data set). One upload feeds both Retention Tracker and this page.
+• You can re-upload as often as you like. Each import is a full snapshot that
+  OVERWRITES the previous figures per project — so there are no duplicates and no
+  double-counting. Always export the FULL invoice list (not a filtered subset).
+• The downloadable / weekly report remains OUTSTANDING-only (it's a chase report),
+  regardless of the on-screen toggle.
 
-FILES CHANGED
--------------
-• pages/api/outstanding-invoices.js — link button in the mention email
-• pages/outstanding-invoices.js     — live bold-blue @mentions in the compose box
+FILE CHANGED
+------------
+• pages/outstanding-invoices.js
