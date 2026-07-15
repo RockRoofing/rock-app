@@ -1358,6 +1358,10 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <input type="date" value={form.pcDate || ''} onChange={f('pcDate')} style={inputStyle} />
         <label style={labelStyle}>Defects liability end date (2nd half release)</label>
         <input type="date" value={form.defectsDate || ''} onChange={f('defectsDate')} style={inputStyle} />
+        <label style={labelStyle}>Retention comments</label>
+        <textarea value={form.retentionComments || ''} onChange={f('retentionComments')} rows={5}
+          style={{ ...inputStyle, minHeight: 96, resize: 'vertical', fontFamily: 'inherit' }}
+          placeholder="Notes about retention — e.g. confirmations, chase history, agreed release terms…" />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Project Details</div>

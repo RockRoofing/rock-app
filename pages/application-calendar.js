@@ -307,7 +307,7 @@ export default function ApplicationCalendar() {
                     </div>
                   )}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 20 }}>
                     {[
                       { label: 'Application date', key: 'appDate', color: '#1e40af', bg: '#dbeafe' },
                       { label: 'Valuation date', key: 'valDate', color: '#065f46', bg: '#d1fae5' },
@@ -317,7 +317,7 @@ export default function ApplicationCalendar() {
                         <div style={{ fontSize: 10, color: item.color, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>{item.label}</div>
                         <input type="date" value={editDates[item.key] || ''}
                           onChange={e => setEditDates(d => ({ ...d, [item.key]: e.target.value }))}
-                          style={{ width: '100%', fontSize: 12, padding: '5px 6px', border: `1px solid ${item.color}44`, borderRadius: 6, background: '#fff', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                          style={{ width: '100%', minWidth: 0, fontSize: 12, padding: '5px 6px', border: `1px solid ${item.color}44`, borderRadius: 6, background: '#fff', boxSizing: 'border-box', fontFamily: 'inherit' }} />
                       </div>
                     ))}
                   </div>
