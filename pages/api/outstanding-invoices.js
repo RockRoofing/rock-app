@@ -66,6 +66,13 @@ export default async function handler(req, res) {
       return res.json({ ok: true, meta: meta[invoiceNumber] })
     }
 
+    if (action === 'delete-comment') {
+      const { commentId } = req.body
+      meta[invoiceNumber].comments = (meta[invoiceNumber].comments || []).filter(c => c.id !== commentId)
+      await redis.set(META_KEY, meta)
+      return res.json({ ok: true, meta: meta[invoiceNumber] })
+    }
+
     return res.status(400).json({ error: 'Unknown action' })
   }
 

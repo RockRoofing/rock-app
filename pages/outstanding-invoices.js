@@ -292,6 +292,35 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
     setSaving(false)
   }
 
+  const [editingId, setEditingId] = useState(null)
+  const [editText, setEditText] = useState('')
+
+  async function saveEdit(commentId) {
+    const t = editText.trim()
+    if (!t) return
+    try {
+      const r = await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'edit-comment', invoiceNumber: invoice.invoiceNumber, commentId, text: t }),
+      })
+      const d = await r.json()
+      if (d.meta) { setList(d.meta.comments || []); onChanged(invoice.invoiceNumber, { comments: d.meta.comments || [] }) }
+      setEditingId(null); setEditText('')
+    } catch (e) { console.error(e) }
+  }
+
+  async function deleteComment(commentId) {
+    if (!confirm('Delete this comment? This cannot be undone.')) return
+    try {
+      const r = await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete-comment', invoiceNumber: invoice.invoiceNumber, commentId }),
+      })
+      const d = await r.json()
+      if (d.meta) { setList(d.meta.comments || []); onChanged(invoice.invoiceNumber, { comments: d.meta.comments || [] }) }
+    } catch (e) { console.error(e) }
+  }
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 560, maxWidth: '100%', maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
@@ -311,7 +340,24 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>{c.author}{c.source === 'email-bcc' && <span style={{ marginLeft: 6, fontSize: 9, background: '#f0fdf4', color: '#16a34a', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>via email</span>}</span>
                   <span style={{ fontSize: 11, color: '#aaa' }}>{new Date(c.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}{c.editedAt ? ' (edited)' : ''}</span>
                 </div>
-                <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.text}</div>
+                {editingId === c.id ? (
+                  <div>
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={2}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e5e5e5', borderRadius: 8, padding: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical' }} />
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <button onClick={() => saveEdit(c.id)} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer' }}>Save</button>
+                      <button onClick={() => { setEditingId(null); setEditText('') }} style={{ background: '#f0f2f5', color: '#555', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.text}</div>
+                    <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
+                      <button onClick={() => { setEditingId(c.id); setEditText(c.text) }} style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Edit</button>
+                      <button onClick={() => deleteComment(c.id)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Delete</button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
         </div>
