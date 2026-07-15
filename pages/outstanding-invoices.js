@@ -346,6 +346,7 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
     if (el) setTimeout(() => { el.focus(); el.setSelectionRange(newCaret, newCaret) }, 0)
   }
   const mentionMatches = members.filter(m => m.name && m.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
+  const mentionedNames = members.filter(m => m.name && text.toLowerCase().includes('@' + m.name.toLowerCase())).map(m => m.name)
 
   async function addComment() {
     if (!text.trim()) return
@@ -439,30 +440,23 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
 
         <div style={{ padding: 16, borderTop: '1px solid #eee', position: 'relative' }}>
           {showMentions && mentionMatches.length > 0 && (
-            <div style={{ position: 'absolute', bottom: 74, left: 16, right: 16, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 180, overflowY: 'auto', zIndex: 5 }}>
+            <div style={{ position: 'absolute', bottom: 'calc(100% - 8px)', left: 16, right: 16, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 -6px 20px rgba(0,0,0,0.14)', maxHeight: 200, overflowY: 'auto', zIndex: 10 }}>
               <div style={{ fontSize: 10, color: '#999', padding: '6px 10px 2px' }}>Mention someone</div>
               {mentionMatches.map(m => (
-                <button key={m.id} type="button" onClick={() => insertMention(m)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13 }}>{m.name}</button>
+                <button key={m.id} type="button" onClick={() => insertMention(m)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13 }}>{m.name}</button>
               ))}
             </div>
           )}
-          <div style={{ position: 'relative' }}>
-            {/* Mirror layer: shows the same text with @mentions highlighted, sitting
-                exactly behind the transparent-text textarea so it lines up. */}
-            <div aria-hidden="true" style={{
-              position: 'absolute', inset: 0, padding: 10, fontSize: 13, fontFamily: 'inherit',
-              lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflow: 'hidden',
-              color: '#333', pointerEvents: 'none', border: '1px solid transparent', borderRadius: 8,
-            }}>
-              {renderWithMentions(text, members)}{'\u200b'}
+          <textarea ref={taRef} value={text} onChange={onType} rows={2} placeholder="Add a comment… use @ to mention a colleague"
+            style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e5e5e5', borderRadius: 8, padding: 10, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.4, resize: 'vertical' }} />
+          {mentionedNames.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: '#888' }}>Mentioning:</span>
+              {mentionedNames.map(n => (
+                <span key={n} style={{ fontSize: 11, fontWeight: 700, color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '2px 9px' }}>@{n}</span>
+              ))}
             </div>
-            <textarea ref={taRef} value={text} onChange={onType} rows={2} placeholder="Add a comment… use @ to mention a colleague"
-              style={{
-                position: 'relative', width: '100%', boxSizing: 'border-box', border: '1px solid #e5e5e5',
-                borderRadius: 8, padding: 10, fontSize: 13, fontFamily: 'inherit', lineHeight: 1.4,
-                resize: 'vertical', background: 'transparent', color: 'transparent', caretColor: '#1a1a2e',
-              }} />
-          </div>
+          )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <button onClick={addComment} disabled={saving || !text.trim()}
               style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, cursor: saving || !text.trim() ? 'default' : 'pointer', opacity: saving || !text.trim() ? 0.5 : 1 }}>

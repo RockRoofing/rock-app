@@ -1,31 +1,42 @@
-Financial App — Outstanding Invoices: Outstanding/All toggle + 50-per-page
-==========================================================================
+Financial App — Upload page instructions + Upload header + comment box fixes
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the outstanding-invoices page (deploy over the top).
+Deploy over the top.
 
-WHAT CHANGED
-------------
-• PAID INVOICES no longer just vanish. A toggle at the top defaults to
-  "Outstanding" (invoices with a balance due) and can switch to "All" (includes
-  fully-paid invoices). Paid rows show a green "PAID" badge and a green-tinted
-  row; their Due shows £0 in green.
-• PAGINATION: max 50 invoices per page, with Prev / Next and a "Page X of Y"
-  indicator. Page resets to 1 when you change the toggle, search or sort.
-• Summary cards + the count line adapt to the current view.
+DATA UPLOAD PAGE (pages/upload-transactions.js)
+-----------------------------------------------
+• Clear per-section instructions added:
+   - Cost Transactions: explains it's the Xero ACCOUNT TRANSACTIONS report and
+     captures ALL project costs (materials + subcontractor labour 321 + direct
+     wages 320) in one file. Amber note stresses INCLUDING ALL COST ACCOUNTS when
+     running the report (320, 321, 311, etc.) + a wide date range for late entries.
+     Step-by-step "how to run the report" list.
+     (Report type left AS-IS — it captures what we need; no Bills importer added.)
+   - Sales Invoices: step-by-step how-to; notes de-dupe / overwrite behaviour.
+• Header: "← Budget Tracker" relabelled "← Portal" (still goes to portal home);
+  the red "RR" box replaced with the Rock Roofing logo; the "Go to Dashboard →"
+  link (top-right) removed.
 
-NOTES (answers to your questions)
----------------------------------
-• Invoice data comes from the CSV import on the RETENTION TRACKER
-  ("⬆ Import invoices from Xero") — export Sales Invoices from Xero and upload it
-  there. You do NOT upload invoices into Project Financials (that's costs/margins,
-  a different Xero data set). One upload feeds both Retention Tracker and this page.
-• You can re-upload as often as you like. Each import is a full snapshot that
-  OVERWRITES the previous figures per project — so there are no duplicates and no
-  double-counting. Always export the FULL invoice list (not a filtered subset).
-• The downloadable / weekly report remains OUTSTANDING-only (it's a chase report),
-  regardless of the on-screen toggle.
+OUTSTANDING INVOICES — comment box fixes (pages/outstanding-invoices.js)
+-----------------------------------------------------------------------
+• Fixed the caret bug: the comment box is a normal textarea again, so typing sits
+  at the cursor/end correctly (the earlier highlight-overlay was misaligning it).
+• @mention picker now opens ABOVE the compose box so it no longer covers what
+  you're typing (was overlapping at the bottom of the modal).
+• Selected mentions are shown as bold-blue "@Name" chips beneath the box
+  ("Mentioning: @…") so it's clear who's tagged. Posted comments still render
+  @mentions bold + blue in the thread.
 
-FILE CHANGED
-------------
-• pages/outstanding-invoices.js
+WHY NO 3rd "BILLS" UPLOAD
+-------------------------
+The Account Transactions report already includes bills, journals, subcontractor
+labour (321) and direct wages (320) when you tick those accounts — so a separate
+Bills export would double-count. Keeping ONE cost report (Account Transactions)
+is simpler; the on-page note tells you to include all cost accounts so nothing is
+missed.
+
+FILES CHANGED
+-------------
+• pages/upload-transactions.js  — section instructions + header (logo, links)
+• pages/outstanding-invoices.js — comment textarea/caret, mention dropdown, chips
