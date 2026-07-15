@@ -572,8 +572,8 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release2Date || '—'}</td>
                             {/* VAT */}
                             {vatNeedsManual(entry)
-                              ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: '#fff3e0' }}>
-                                  <span title="This project has mixed VAT treatments across its invoices, so VAT can't be auto-calculated. Enter it manually in Edit." style={{ color: '#c77700', fontWeight: 600, fontSize: 11, cursor: 'help' }}>⚠ enter manually</span>
+                              ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                  <span title="This project has mixed VAT treatments across its invoices, so VAT can't be auto-calculated. Enter it manually in Edit." style={{ color: '#dc2626', fontSize: 10.5, cursor: 'help' }}>enter manually</span>
                                 </td>
                               : <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{fa ? fmtC(vatVal) : '—'}</td>}
                             {/* VAT Type */}
