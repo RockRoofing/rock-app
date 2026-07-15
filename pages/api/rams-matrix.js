@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       for (const p of active) {
         const no = p.projectNo
         const files = await getProjectFiles(no)
-        const ramsFiles = (files || []).filter(f => f.category === 'rams')
+        let ramsFiles = (files || []).filter(f => f.category === 'rams')
         const name = p.data?.projectName ? `${no}. ${p.data.projectName}` : no
 
         if (!ramsFiles.length) {
@@ -40,32 +40,32 @@ export default async function handler(req, res) {
           continue
         }
 
+        // Operatives only ever see (and sign) the CURRENT revision, and the Site
+        // App pipeline reflects only that file. The matrix MUST do the same —
+        // otherwise an older revision still at an earlier stage drags the rolled-up
+        // stage backwards (e.g. showing CM as current when the live RAMS is already
+        // with the Site Manager). Use only the newest RAMS file.
+        ramsFiles.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))
+        const currentFile = ramsFiles[0]
+        ramsFiles = [currentFile]
+
         const [sigs, appr] = await Promise.all([getRamsSignatures(no), getRamsApprovals(no)])
 
-        // Rolled-up stage = least-advanced across current docs (strictest view).
-        let minRank = 4
-        for (const f of ramsFiles) {
-          const st = (appr[f.id] && appr[f.id].stage) || 'cm'
-          minRank = Math.min(minRank, STAGE_RANK[st] != null ? STAGE_RANK[st] : 0)
-        }
-        const stage = Object.keys(STAGE_RANK).find(k => STAGE_RANK[k] === minRank) || 'cm'
+        // Stage = the current revision's approval stage (defaults to 'cm').
+        const stage = (appr[currentFile.id] && appr[currentFile.id].stage) || 'cm'
 
-        // Who (operatives) has signed ALL current RAMS docs -> match by lowercased
-        // name. EXCLUDE the CM/Director auto-signatures (they approve + auto-sign,
-        // but they are not "operatives" for the matrix/pipeline).
-        const perOpSignedCount = {}
-        for (const f of ramsFiles) {
-          const bucket = sigs[f.id] || {}
-          for (const opId of Object.keys(bucket)) {
-            if (opId.startsWith('cm:') || opId.startsWith('director:')) continue
-            const rec = bucket[opId]
-            if (rec.role === 'Contracts Manager' || rec.role === 'Director') continue
-            const nmeKey = (rec.name || '').trim().toLowerCase()
-            if (!nmeKey) continue
-            perOpSignedCount[nmeKey] = (perOpSignedCount[nmeKey] || 0) + 1
-          }
+        // Who (operatives) has signed the CURRENT RAMS -> match by lowercased name.
+        // EXCLUDE the CM/Director auto-signatures (they approve + auto-sign, but are
+        // not "operatives" for the matrix/pipeline).
+        const signerKeys = []
+        const bucket = sigs[currentFile.id] || {}
+        for (const opId of Object.keys(bucket)) {
+          if (opId.startsWith('cm:') || opId.startsWith('director:')) continue
+          const rec = bucket[opId]
+          if (rec.role === 'Contracts Manager' || rec.role === 'Director') continue
+          const nmeKey = (rec.name || '').trim().toLowerCase()
+          if (nmeKey && !signerKeys.includes(nmeKey)) signerKeys.push(nmeKey)
         }
-        const signerKeys = Object.keys(perOpSignedCount).filter(k => perOpSignedCount[k] >= ramsFiles.length)
 
         projects.push({ key: no, name, hasRams: true, stage, signerKeys })
       }

@@ -61,20 +61,21 @@ export default async function handler(req, res) {
     const ramsByProject = {}
     await Promise.all(myProjects.map(async (p) => {
       const files = await getProjectFiles(p.projectNo)
-      const ramsFiles = (files || []).filter(f => f.category === 'rams')
+      let ramsFiles = (files || []).filter(f => f.category === 'rams')
       if (!ramsFiles.length) return
+      // Only the CURRENT revision counts — older versions are superseded and no
+      // one signs them, so they must never generate notifications.
+      ramsFiles.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0))
+      const f = ramsFiles[0]
       const [sigs, appr] = await Promise.all([getRamsSignatures(p.projectNo), getRamsApprovals(p.projectNo)])
       const cmForThis = isCMlevel && nameMatchesCM(p)
       let n = 0
-      for (const f of ramsFiles) {
-        const stage = (appr[f.id] && appr[f.id].stage) || 'cm'
-        if (stage === 'cm' && cmForThis) { n++; continue }              // CM's turn
-        if (stage === 'director' && isDirector) { n++; continue }        // Director's turn
-        if (stage === 'operatives' || stage === 'complete') {            // operatives can sign
-          const signedBy = sigs[f.id] || {}
-          if (opId && signedBy[opId]) continue
-          n++
-        }
+      const stage = (appr[f.id] && appr[f.id].stage) || 'cm'
+      if (stage === 'cm' && cmForThis) n++                               // CM's turn
+      else if (stage === 'director' && isDirector) n++                   // Director's turn
+      else if (stage === 'operatives' || stage === 'complete') {         // operatives can sign
+        const signedBy = sigs[f.id] || {}
+        if (!(opId && signedBy[opId])) n++
       }
       if (n > 0) { ramsByProject[p.projectNo] = n; rams += n }
     }))

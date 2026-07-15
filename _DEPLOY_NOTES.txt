@@ -1,71 +1,76 @@
-RAMS — FIXES v2: Site Manager link, CM email, dup email, badges, matrix pipeline
-================================================================================
+RAMS — FIXES v4: revisions, matrix, director email, SM edits, Users↔Operatives merge
+=====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy on top of the previous RAMS fixes.
 
-1) SITE MANAGER CAN NOW APPROVE (was: stuck — link needed a Site App login)
---------------------------------------------------------------------------
-The Site Manager approval page (/rams-approve?token=...) is a NO-LOGIN page on
-the MAIN PORTAL domain (app.rockroofing.co.uk) — it always was, but the email
-link was being built from the request host, which was siteapp.rockroofing.co.uk
-when the CM sent it from the Site App (that needs a login -> dead end).
-FIX: the email link is now ALWAYS built against the portal domain
-(app.rockroofing.co.uk), overridable with env RAMS_APPROVE_ORIGIN.
-So the customer's Site Manager:
-  - gets the email (RAMS attached) → clicks "Review & approve RAMS"
-  - lands on the public page (no login), reviews the PDF, enters their name
-  - clicks Approve → operatives unlock.
-No customer login is ever required. If you have a preferred public URL, set
-RAMS_APPROVE_ORIGIN in Vercel (defaults to https://app.rockroofing.co.uk).
+1) BADGES / MATRIX NOW USE ONLY THE CURRENT RAMS REVISION (root-cause fix)
+-------------------------------------------------------------------------
+THE recurring matrix bug: the matrix rolled up the stage across ALL RAMS files
+for a project and took the LEAST-advanced one. An OLD revision still sitting at
+the CM stage dragged the whole line back to "CM" — while the Site App (which
+only ever looks at the newest revision) correctly showed "Site Manager".
+FIX: the matrix and the badges now consider ONLY the newest RAMS file per
+project (sorted by uploadedAt), exactly like the Site App. The pipeline now
+matches the Site App everywhere.
+This also fixes your revision point: uploading a new RAMS supersedes the old one
+for stage, signatures, badges and the matrix — old-version notifications no
+longer linger (e.g. the Director won't see a badge for a version he can no
+longer access).
 
-2) DUPLICATE CUSTOMER EMAIL (was: sent twice)
----------------------------------------------
-set-site-manager now guards against a duplicate send: it won't email the same
-recipient for the same RAMS again within 30 seconds (covers double taps /
-retries). "Resend / change" after that window still works normally.
+2) DIRECTOR "TO APPROVE" EMAIL — more robust
+--------------------------------------------
+notifyDirectorToApprove now: (a) falls back to a Portal user with jobRole
+"Director" if ops:rams-director has no email, and (b) logs a clear error if the
+send fails (check RESEND_API_KEY / FORMS_FROM_EMAIL / the director's email).
+If it still doesn't arrive, the cause is almost certainly email config or the
+director's stored email — the deploy notes flag exactly what to check.
 
-3) CM EMAIL ON RAMS UPLOAD (was: not sending)
----------------------------------------------
-Cause: the CM was only matched to a SITE APP user by name; if the CM wasn't a
-Site App user (or the name didn't match), no email was found.
-FIX: findProjectCM now falls back to the matching PORTAL user's email, so the
-"RAMS to approve" email reaches the CM even if they aren't a Site App user.
-(Best results: keep the project's Contracts Manager name consistent with the
-CM's user record.)
+3) SITE MANAGER: "DO NOT APPROVE — REQUIRES EDITS"
+--------------------------------------------------
+The no-login Site Manager page now has a "Do not approve — requires edits"
+option. The Site Manager enters their name + a description of the edits; on
+submit the RAMS is NOT approved and an email is sent to BOTH the project's
+Contracts Manager AND the designated Director with the edit notes. (Make the
+edits, re-upload the RAMS to restart the chain.)
 
-4) NOTIFICATIONS / BADGES ON SITE APP HOME + RAMS PROJECTS (was: nothing showing)
---------------------------------------------------------------------------------
-The badge is now ROLE-AWARE — it counts RAMS where THIS user actually has an
-action to take:
-  • CM (their project)  → RAMS waiting at the CM stage
-  • Director            → RAMS waiting at the Director stage
-  • Operative           → RAMS at the operatives stage they haven't signed
-So a CM sees a red badge when a RAMS needs their approval, the Director when it's
-their turn, and operatives once it's unlocked for them. (In your screenshot the
-RAMS was at the Site Manager stage — at that point no in-app user has an action,
-so a zero badge there is correct; it will light up for operatives once the Site
-Manager approves.)
-The badge fetch now passes accessLevel/email/name so the API can tell who you are.
+4) DIRECTOR SIGN = SIGN + AUTO-SEND (already in v3, included)
+------------------------------------------------------------
+When the Director signs, the customer's Site Manager email is sent AUTOMATICALLY
+(recipient chosen by the CM at CM approval). No separate "send" step.
 
-5) RAMS MATRIX TIMELINE (was: still wrong)
-------------------------------------------
-The matrix pipeline now uses the EXACT same rendering logic as the Site App
-pipeline you confirmed works (pure stage-driven, ✓ on completed stages, current
-stage red+bold, upcoming grey). Combined with the earlier fix that excludes the
-CM/Director auto-signatures from the operative signer set, the line now matches
-the Site App: e.g. ✓ CM  ✓ Director  Site Manager(red)  Operatives(grey).
-Use ↻ Refresh to pull the latest.
+5) SITE APP USERS  ⇄  H&S OPERATIVES  — now one list
+---------------------------------------------------
+• Site App Users (Admin) gains COMPANY and TRADE(S) fields. ALL fields are now
+  mandatory when adding a user (name, role, mobile, email, company, ≥1 trade).
+• The H&S → Operatives page is now READ-ONLY and is automatically populated from
+  Site App Users (it shows name, email, phone, company, trade). Add/Edit/Delete
+  there is removed — manage everyone under Admin → Site App Users.
+• /api/operatives now returns a projection of Site App Users, so the Planning
+  Gantt and RAMS Matrix draw their installer list from the same single source.
+
+  ⚠ IMPORTANT — allocations reset: because operatives now use Site App User IDs,
+  any EXISTING Gantt labour allocations tied to the old separate roster will no
+  longer resolve. You confirmed this is fine (few/none yet). New allocations use
+  the unified users going forward. The old roster store (ops:operatives-roster)
+  is simply no longer read.
+
+  ACTION: re-add your installers as Site App Users (with company + trade) if they
+  aren't already there; they'll appear in Operatives, the Gantt and the Matrix.
 
 FILES CHANGED
 -------------
-• lib/ramsNotify.js            — CM match falls back to Portal user email
-• pages/api/rams-approvals.js  — SM link forced to portal domain; dup-send guard
-• pages/api/site-badges.js     — role-aware badge counts (CM/Director/operative)
-• pages/forms/index.js         — badge fetches pass accessLevel/email/name
-• pages/operations/hs/rams-matrix.js — pipeline matches the Site App exactly
+• pages/api/rams-matrix.js        — current-revision-only stage + signers
+• pages/api/site-badges.js        — current-revision-only, role-aware counts
+• lib/ramsNotify.js               — robust Director email; SM-rejection email
+• pages/api/rams-approvals.js     — sm-reject action (requires edits)
+• pages/rams-approve.js           — "Do not approve — requires edits" UI
+• pages/api/operatives.js         — now a READ-ONLY projection of Site App Users
+• pages/operations/hs/operatives.js — read-only page (no add/edit/delete)
+• pages/operations/users.js       — Company + Trade fields (mandatory) + columns
 
-ENV (optional)
---------------
-• RAMS_APPROVE_ORIGIN — public origin for the Site Manager approval link.
-  Defaults to https://app.rockroofing.co.uk. Set only if you use a different URL.
+SETUP AFTER DEPLOY
+------------------
+• Admin → Site App Users: add/confirm each installer with Company + Trade.
+• Admin → RAMS Director must be set (and be a Site App user) for Director emails.
+• RESEND_API_KEY + FORMS_FROM_EMAIL must be set for any emails.

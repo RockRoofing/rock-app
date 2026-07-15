@@ -4,6 +4,7 @@ import { PageHeading } from '../../components/OperationsShell'
 import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
 const ROLES = ['Operative', 'Contracts Manager', 'Quantity Surveyor', 'Operations Manager', 'Estimator', 'Director', 'Other']
+const TRADES = ['Single Ply', 'Felt', 'Liquids', 'Hot Melt', 'Rainscreen', 'Composite Panels', 'Aluminium', 'Standing Seam', 'Labourer', 'Other']
 
 // Works for both new records (firstName/lastName) and any legacy record (name).
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '—'
@@ -36,6 +37,8 @@ export default function UsersPage() {
     if (!form.role) { setErr('Please select a role.'); return }
     if (!form.phone?.trim()) { setErr('Mobile number is required.'); return }
     if (!form.email?.trim() || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email.trim())) { setErr('A valid email address is required.'); return }
+    if (!form.company?.trim()) { setErr('Company is required.'); return }
+    if (!Array.isArray(form.trades) || form.trades.length === 0) { setErr('Please select at least one trade.'); return }
     setSaving(true)
     const r = await fetch('/api/ops-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: form }) })
     const d = await r.json()
@@ -68,7 +71,7 @@ export default function UsersPage() {
   return (
     <OperationsShell active="/operations/users" title="Site App Users">
       <PageHeading title="Site App Users" sub="People who can log into the Site App"
-        action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', active: true }) }} style={primaryBtn}>+ Add user</button>} />
+        action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', company: '', trades: [], active: true }) }} style={primaryBtn}>+ Add user</button>} />
 
       {notice && (
         <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: 10, padding: '12px 14px', marginBottom: 16, fontSize: 13.5, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
@@ -81,7 +84,7 @@ export default function UsersPage() {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#faf9f7' }}>
-              {['Name', 'Role', 'Access', 'Projects', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
+              {['Name', 'Role', 'Access', 'Company', 'Trade', 'Projects', 'Mobile', 'Email', 'PIN', 'Status', ''].map(h => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>
               {users.map(u => (
@@ -91,6 +94,8 @@ export default function UsersPage() {
                   <td style={td}>{u.accessLevel === 'contracts-manager'
                     ? <span style={{ background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>
                     : <span style={{ background: '#f0f4f8', color: '#475569', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Operative</span>}</td>
+                  <td style={td}>{u.company || '—'}</td>
+                  <td style={{ ...td, fontSize: 12.5 }}>{(u.trades || []).length ? (u.trades || []).join(', ') : '—'}</td>
                   <td style={{ ...td, fontSize: 12.5, color: '#666' }}>{(u.projectAccess == null || u.projectAccess === 'all') ? 'All' : `${(u.projectAccess || []).length} selected`}</td>
                   <td style={td}>{u.phone || '—'}</td>
                   <td style={td}>{u.email || '—'}</td>
@@ -138,6 +143,22 @@ export default function UsersPage() {
           <input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp2} inputMode="tel" placeholder="07…" />
           <Lbl>Email address</Lbl>
           <input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp2} inputMode="email" placeholder="name@example.com" />
+          <Lbl>Company</Lbl>
+          <input value={form.company || ''} onChange={e => setForm({ ...form, company: e.target.value })} style={inp2} placeholder="Company name" />
+          <Lbl>Trade(s)</Lbl>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+            {TRADES.map(t => {
+              const on = (form.trades || []).includes(t)
+              return (
+                <button key={t} type="button" onClick={() => {
+                  const cur = form.trades || []
+                  setForm({ ...form, trades: on ? cur.filter(x => x !== t) : [...cur, t] })
+                }} style={{ padding: '6px 11px', borderRadius: 16, border: '1px solid ' + (on ? '#ca8a04' : '#e0e0e0'), background: on ? '#fffbeb' : '#fff', color: on ? '#92400e' : '#666', fontSize: 12.5, fontWeight: on ? 600 : 400, cursor: 'pointer' }}>
+                  {on ? '✓ ' : ''}{t}
+                </button>
+              )
+            })}
+          </div>
           {!form.id && (
             <div style={{ background: '#f2efe8', borderRadius: 8, padding: '10px 12px', fontSize: 12.5, color: '#666', marginTop: 14 }}>
               A temporary PIN will be generated and emailed to the user with a link to the Site App.

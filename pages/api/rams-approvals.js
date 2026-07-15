@@ -108,8 +108,34 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
-    // All other actions need projectNo + fileId.
-    const { projectNo, fileId } = body
+    // ── Site Manager rejects — "Do not approve, requires edits" (no login) ──
+    if (action === 'sm-reject') {
+      const { token, name, notes } = body
+      if (!token) return res.status(400).json({ error: 'Missing token' })
+      const ref = await getRamsToken(token)
+      if (!ref) return res.status(404).json({ error: 'This approval link is invalid or has expired.' })
+      const approvals = await getRamsApprovals(ref.projectNo)
+      const rec = approvals[ref.fileId]
+      if (!rec) return res.status(404).json({ error: 'This RAMS is no longer awaiting approval.' })
+      if (rec.stage !== 'site-manager') return res.status(409).json({ error: 'This RAMS is not awaiting your approval.' })
+      const editNotes = (notes || '').trim()
+      if (!editNotes) return res.status(400).json({ error: 'Please describe the edits required.' })
+      const byName = (name || rec.siteManagerName || '').trim()
+      // Record the rejection; the RAMS stays at the site-manager stage (not approved).
+      rec.siteManagerRejection = { name: byName, notes: editNotes, at: Date.now() }
+      rec.updatedAt = Date.now()
+      approvals[ref.fileId] = rec
+      await saveRamsApprovals(ref.projectNo, approvals)
+      // Invalidate this token so the link can't be reused; the CM must resend a
+      // corrected RAMS / new link after making edits.
+      try {
+        const { notifySiteManagerRejection } = await import('../../lib/ramsNotify')
+        const files = await getProjectFiles(ref.projectNo)
+        const f = (files || []).find(x => x.id === ref.fileId)
+        notifySiteManagerRejection({ projectNo: ref.projectNo, fileName: f?.name || '', byName, notes: editNotes })
+      } catch {}
+      return res.json({ ok: true })
+    }
     if (!projectNo || !fileId) return res.status(400).json({ error: 'Missing projectNo/fileId' })
     const approvals = await getRamsApprovals(projectNo)
     let rec = approvals[fileId] || blankRecord()
@@ -117,9 +143,17 @@ export default async function handler(req, res) {
     if (action === 'cm-approve') {
       if (rec.stage !== 'cm') return res.status(409).json({ error: 'This RAMS is past the CM stage.' })
       const { name, signatureImg } = body
+      const smName = (body.siteManagerName || '').trim()
+      const smEmail = (body.siteManagerEmail || '').trim()
       if (!name) return res.status(400).json({ error: 'Missing name' })
       if (!signatureImg) return res.status(400).json({ error: 'A signature is required' })
+      // The CM MUST specify the customer's Site Manager at approval time. The
+      // email isn't sent yet — it goes out automatically once the Director signs.
+      if (!smName) return res.status(400).json({ error: 'Please enter the customer\u2019s Site Manager name.' })
+      if (!smEmail || !/.+@.+\..+/.test(smEmail)) return res.status(400).json({ error: 'Please enter a valid Site Manager email.' })
       rec.cm = { name, date: new Date().toISOString().slice(0, 10), signedAt: Date.now(), signatureImg }
+      rec.siteManagerName = smName
+      rec.siteManagerEmail = smEmail
       rec.stage = 'director'
       rec.updatedAt = Date.now()
       approvals[fileId] = rec
@@ -135,8 +169,8 @@ export default async function handler(req, res) {
     }
 
     if (action === 'director-approve') {
-      // Now signed in the SITE APP by the designated RAMS Director. Verify the
-      // caller's email matches the designated Director (set in Admin).
+      // Signed in the SITE APP by the designated RAMS Director. On approval, the
+      // Site Manager email (recipient already chosen by the CM) is sent AUTOMATICALLY.
       if (rec.stage !== 'director') return res.status(409).json({ error: 'This RAMS is not awaiting Director approval.' })
       const { name, signatureImg, email } = body
       if (!name) return res.status(400).json({ error: 'Missing name' })
@@ -151,16 +185,21 @@ export default async function handler(req, res) {
       rec.director = { name, date: new Date().toISOString().slice(0, 10), signedAt: Date.now(), signatureImg }
       rec.stage = 'site-manager'
       rec.updatedAt = Date.now()
+
+      // Auto-send the Site Manager approval email (recipient set by the CM).
+      let emailSent = false
+      if (rec.siteManagerEmail) {
+        const token = crypto.randomBytes(24).toString('base64url')
+        rec.token = token
+        await saveRamsToken(token, { projectNo, fileId })
+        emailSent = await sendSiteManagerEmail({ req, projectNo, fileId, email: rec.siteManagerEmail, smName: rec.siteManagerName || '', token })
+        rec.lastSmEmailTo = rec.siteManagerEmail.toLowerCase()
+        rec.lastSmEmailAt = Date.now()
+      }
       approvals[fileId] = rec
       await saveRamsApprovals(projectNo, approvals)
       await autoSign(projectNo, fileId, `director:${name}`, name, signatureImg)
-      try {
-        const { notifyCmToSendSiteManager } = await import('../../lib/ramsNotify')
-        const files = await getProjectFiles(projectNo)
-        const f = (files || []).find(x => x.id === fileId)
-        notifyCmToSendSiteManager({ projectNo, fileName: f?.name || '' })
-      } catch {}
-      return res.json({ ok: true, approval: rec })
+      return res.json({ ok: true, approval: rec, emailSent })
     }
 
     if (action === 'set-site-manager') {
