@@ -1,38 +1,53 @@
-RAMS — Resend dropdown now populated + Download RAMS as a button
-===============================================================
+Site App Users — fixes + RAMS Matrix freeze/wider column
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of the previous RAMS fixes.
+Deploy on top of the previous fixes.
 
-1) "RESEND RAMS TO SITE MANAGER" — dropdown was empty
-----------------------------------------------------
-Cause: the dropdown only listed projects whose current RAMS was EXACTLY at the
-Site Manager stage. A project where the Site Manager had already approved (now at
-operatives) — or any project past that point — showed nothing, so the list came
-up empty.
-FIX: a project is now eligible to resend once the DIRECTOR has signed, i.e. its
-current RAMS is at the Site Manager stage OR beyond (site-manager / operatives /
-complete). Sending re-issues a fresh approval link, RE-OPENS the Site Manager
-stage (so their new approval takes effect), invalidates the old link, and emails
-the Site Manager again.
-The server's set-site-manager action was widened to match (allowed once the
-Director has signed; blocked before that and on rejected RAMS).
+1) COMPANY + TRADE NOT SAVING ON CREATE  (main bug)
+---------------------------------------------------
+When adding a NEW user, the server built the record from an explicit field list
+that omitted company + trades, so they were dropped (edit worked because it
+spreads all fields). Fixed: company + trades are now saved on create, so the
+Site App Users table populates correctly first time — no re-edit needed.
 
-2) "DOWNLOAD RAMS" IS NOW A BUTTON (Site Manager approval page)
---------------------------------------------------------------
-On the customer Site Manager page, the download is now a solid gold "⬇ Download
-RAMS" button aligned to the right under the preview (previously a centered text
-link).
+2) PIN NO LONGER HAS TO BE UNIQUE  (security fix)
+-------------------------------------------------
+Login is by MOBILE NUMBER + PIN, so two users may share a PIN as long as their
+mobiles differ. Removed the "that PIN is already in use" block on the user's
+set-PIN step, and simplified temp-PIN generation (no longer avoids collisions).
+Mobile numbers remain unique (they identify the user at login).
+
+3) WELCOME EMAIL WORDING
+------------------------
+• Subject: "Welcome to the Rock Roofing Site App" (was "…Forms")
+• Body references the Site App, and the button now reads "Open Rock Roofing
+  Site App" (was "Open Rock Roofing Forms"). PIN-reset subject updated too.
+
+4) ADD-USER FORM
+----------------
+• Every field now has a red * (First/Last name, Role, Access level, Project
+  access, Mobile, Email, Company) and Trade(s) shows "* (select at least one)".
+  All are already enforced on save (name, role, mobile, valid email, company,
+  ≥1 trade).
+• Project-access dropdown now CLOSES when you click anywhere outside it.
+• Fixed the cramped spacing: the helper text under Project access now sits with
+  proper spacing (was too close).
+
+5) RAMS MATRIX — wider project column + frozen header & first column
+-------------------------------------------------------------------
+• Project column widened (220→300px) and the stage line no longer wraps, so
+  "… › Operatives" stays on one line.
+• The grid now scrolls in BOTH directions inside a fixed-height viewport, with:
+    – the operative-name HEADER row frozen to the top on vertical scroll, and
+    – the "Project RAMS" column frozen to the left on horizontal scroll
+  (the top-left corner stays pinned above both).
 
 FILES CHANGED
 -------------
-• pages/api/rams-approvals.js        — set-site-manager allowed at site-manager+;
-                                       resend re-opens the SM stage + fresh token
-• pages/operations/hs/rams-matrix.js — resend dropdown lists Director-signed-onward
-• pages/rams-approve.js              — Download RAMS as a right-aligned button
-
-TEST
-----
-Matrix → "Resend RAMS to Site Manager" → the project (e.g. J190) now appears in
-the dropdown → reconfirm details → Send → Site Manager gets a fresh email; the
-project returns to the Site Manager stage awaiting their approval.
+• pages/api/ops-users.js         — save company/trades on create; drop PIN
+                                   uniqueness; simplify temp PIN; email wording
+• pages/operations/users.js      — mandatory asterisks; click-outside to close
+                                   project dropdown; spacing fix
+• pages/operations/hs/rams-matrix.js — wider column, no-wrap stage line, frozen
+                                   header + first column (2-axis sticky scroll)

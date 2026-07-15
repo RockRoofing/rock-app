@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getOpsUsers, saveOpsUsers } from '../../lib/db'
+import { getOpsUsers, saveOpsUsers, getOpsProjects } from '../../lib/db'
 
 // Operative users for forms.rockroofing.co.uk.
 // Flow: admin adds a user -> system generates a unique temporary PIN and emails
@@ -28,18 +28,10 @@ function normalisePhone(p) {
   return d
 }
 
-function genPin(existing) {
-  const taken = new Set(existing.map(u => String(u.pin)))
-  for (let i = 0; i < 500; i++) {
-    const pin = String(Math.floor(1000 + Math.random() * 9000)) // 4-digit
-    if (!taken.has(pin)) return pin
-  }
-  // Fallback to 6-digit if 4-digit space somehow exhausted
-  for (let i = 0; i < 500; i++) {
-    const pin = String(Math.floor(100000 + Math.random() * 900000))
-    if (!taken.has(pin)) return pin
-  }
-  return null
+function genPin() {
+  // Temporary 4-digit PIN. PINs need not be unique (login is by mobile + PIN),
+  // so we simply generate one; the user resets it on first login.
+  return String(Math.floor(1000 + Math.random() * 9000))
 }
 
 async function sendInviteEmail({ to, firstName, pin, isReset }) {
@@ -49,16 +41,16 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
   // send-only subdomain). Override with FORMS_REPLY_TO if it ever changes.
   const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
   if (!RESEND_KEY) return { sent: false, error: 'Email not configured' }
-  const subject = isReset ? 'Your new Rock Roofing Forms PIN' : 'Welcome to Rock Roofing Forms'
+  const subject = isReset ? 'Your new Rock Roofing Site App PIN' : 'Welcome to the Rock Roofing Site App'
   const html = `
     <div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a1a19">
       <h2 style="color:#1a1a19">Hi ${firstName || 'there'},</h2>
-      <p>${isReset ? 'Your PIN has been reset.' : 'You can now complete Rock Roofing forms from your phone.'}</p>
+      <p>${isReset ? 'Your PIN has been reset.' : 'Welcome to the Rock Roofing Site App. You can now access your projects and complete forms from your phone.'}</p>
       <p style="font-size:15px">Your temporary PIN is:</p>
       <div style="font-size:32px;font-weight:700;letter-spacing:6px;background:#faf9f7;border:1px solid #eee;border-radius:12px;padding:16px;text-align:center;margin:12px 0">${pin}</div>
       <p>Open the Site App and log in with your <strong>mobile number</strong> and this PIN. You'll be asked to choose your own PIN the first time.</p>
       <p style="text-align:center;margin:24px 0">
-        <a href="${FORMS_URL}" style="background:#ca8a04;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;display:inline-block">Open Rock Roofing Forms</a>
+        <a href="${FORMS_URL}" style="background:#ca8a04;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;display:inline-block">Open Rock Roofing Site App</a>
       </p>
       <p style="font-size:13px;color:#666">Tip: once it opens, add it to your phone's home screen so you can get to it quickly:
         on iPhone tap Share → "Add to Home Screen"; on Android tap the ⋮ menu → "Add to Home screen".</p>
@@ -78,6 +70,22 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
 }
 
 const strip = (u) => { const { pin, ...rest } = u; return rest }
+
+// Given a user's previous and new records, return the ACTIVE project numbers the
+// user can now access but couldn't before. 'all' means every active project.
+function expandedAccess(prev, after, projects) {
+  const activeNos = projects.filter(p => (p.status || 'active') === 'active').map(p => p.projectNo)
+  const toSet = (pa) => pa === 'all' || pa == null ? 'all' : (Array.isArray(pa) ? pa.map(String) : [])
+  const before = toSet(prev?.projectAccess)
+  const now = toSet(after?.projectAccess)
+  // Was 'all' before → nothing is newly accessible.
+  if (before === 'all') return []
+  // Now 'all' → newly accessible = every active project not already in `before`.
+  if (now === 'all') return activeNos.filter(no => !before.includes(String(no)))
+  // Both are lists → the difference.
+  const beforeSet = new Set(before)
+  return now.filter(no => !beforeSet.has(String(no)) && activeNos.includes(no))
+}
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
@@ -140,9 +148,8 @@ export default async function handler(req, res) {
     if (body.action === 'set-pin') {
       const { id, pin } = body
       if (!pin || !/^\d{4,6}$/.test(String(pin))) return res.status(400).json({ error: 'PIN must be 4–6 digits.' })
-      if (users.some(u => u.id !== id && String(u.pin) === String(pin))) {
-        return res.status(409).json({ error: 'That PIN is already in use — please choose another.' })
-      }
+      // PINs do NOT need to be unique — login is by mobile number + PIN, so two
+      // users may share a PIN as long as their mobiles differ.
       const idx = users.findIndex(u => u.id === id)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })
       users[idx] = { ...users[idx], pin: String(pin), mustResetPin: false }
@@ -157,7 +164,7 @@ export default async function handler(req, res) {
       if (!requireRole(req, res, ['management','admin'])) return;
       const idx = users.findIndex(u => u.id === body.id)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })
-      const tempPin = genPin(users)
+      const tempPin = genPin()
       users[idx] = { ...users[idx], pin: tempPin, mustResetPin: true }
       await saveOpsUsers(users)
       const email = await sendInviteEmail({ to: users[idx].email, firstName: users[idx].firstName, pin: tempPin, isReset: true })
@@ -168,20 +175,32 @@ export default async function handler(req, res) {
     if (!requireRole(req, res, ['management','admin'])) return;
     const { user } = body
     if (!user || !user.firstName || !user.lastName) return res.status(400).json({ error: 'Missing name' })
+    const projects = await getOpsProjects()
 
     // Update existing
     if (user.id) {
       const idx = users.findIndex(u => u.id === user.id)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })
+      const prev = users[idx]
       // Never overwrite pin/mustResetPin via a plain edit
       const { pin, mustResetPin, ...editable } = user
       users[idx] = { ...users[idx], ...editable }
       await saveOpsUsers(users)
+      // If project access has expanded, notify the user about the NEW projects
+      // (and flag any RAMS ready for them to sign).
+      try {
+        const after = users[idx]
+        const newlyAccessible = expandedAccess(prev, after, projects)
+        if (newlyAccessible.length && after.active !== false && after.email) {
+          const { notifyUserAddedToProjects } = await import('../../lib/ramsNotify')
+          notifyUserAddedToProjects({ user: after, projectNos: newlyAccessible })
+        }
+      } catch (e) { console.error('notify on user edit failed:', e) }
       return res.json({ users: users.map(strip) })
     }
 
     // Create new — generate temp PIN, email invite
-    const tempPin = genPin(users)
+    const tempPin = genPin()
     if (!tempPin) return res.status(500).json({ error: 'Could not generate a unique PIN' })
     // Mobile must be unique — it's the login identifier.
     if (normalisePhone(user.phone) && users.some(u => normalisePhone(u.phone) === normalisePhone(user.phone))) {
@@ -195,6 +214,8 @@ export default async function handler(req, res) {
       accessLevel: user.accessLevel === 'contracts-manager' ? 'contracts-manager' : 'operative',
       phone: user.phone || '',
       email: user.email || '',
+      company: user.company || '',
+      trades: Array.isArray(user.trades) ? user.trades : [],
       active: user.active !== false,
       projectAccess: user.projectAccess === 'all' || user.projectAccess == null ? 'all' : (Array.isArray(user.projectAccess) ? user.projectAccess : 'all'),
       pin: tempPin,
@@ -204,6 +225,16 @@ export default async function handler(req, res) {
     users.push(newUser)
     await saveOpsUsers(users)
     const email = await sendInviteEmail({ to: newUser.email, firstName: newUser.firstName, pin: tempPin })
+    // Tell the new user which projects they can access + any RAMS ready to sign.
+    try {
+      const nos = newUser.projectAccess === 'all'
+        ? projects.filter(p => (p.status || 'active') === 'active').map(p => p.projectNo)
+        : (Array.isArray(newUser.projectAccess) ? newUser.projectAccess : [])
+      if (nos.length && newUser.email) {
+        const { notifyUserAddedToProjects } = await import('../../lib/ramsNotify')
+        notifyUserAddedToProjects({ user: newUser, projectNos: nos })
+      }
+    } catch (e) { console.error('notify new user failed:', e) }
     return res.json({ users: users.map(strip), emailSent: email.sent, emailError: email.error, tempPin, email: newUser.email })
   }
 

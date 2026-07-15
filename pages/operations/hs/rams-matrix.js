@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, Loading, ghostBtn } from '../../../components/opsUI'
 
-const NAME_W = 220, CELL_W = 40, ROW_H = 34
+const NAME_W = 300, CELL_W = 40, ROW_H = 34
 const HEADER_ORANGE = '#f5c77e'
 const ROW_ALT = '#f7f6f3'
 
@@ -54,7 +54,7 @@ export default function RamsMatrixPage() {
     const isRejected = stage === 'rejected'
     const curIdx = stage === 'complete' ? labels.length : isRejected ? 2 : STAGE_ORDER.indexOf(stage)
     return (
-      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 3, marginTop: 2, fontSize: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 3, marginTop: 2, fontSize: 10, whiteSpace: 'nowrap' }}>
         {isRejected && <span style={{ color: '#dc2626', fontWeight: 800, marginRight: 4 }}>✗ Edits required —</span>}
         {labels.map(([k, label], i) => {
           const done = i < curIdx, current = i === curIdx && stage !== 'complete'
@@ -118,11 +118,11 @@ export default function RamsMatrixPage() {
         <div style={{ padding: 20, fontSize: 13, color: '#888', background: '#faf9f7', borderRadius: 10 }}>No operatives yet. Add them under H&S → Operatives first.</div>
       ) : (
         <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
             <div style={{ minWidth: NAME_W + shownOps.length * CELL_W }}>
-              {/* header: operative names, rotated */}
-              <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', background: HEADER_ORANGE, alignItems: 'flex-end' }}>
-                <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 3, background: HEADER_ORANGE, padding: '8px', fontSize: 12, fontWeight: 700, color: '#3a2e12', alignSelf: 'flex-end' }}>Project RAMS</div>
+              {/* header: operative names, rotated — frozen to the top on vertical scroll */}
+              <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', background: HEADER_ORANGE, alignItems: 'flex-end', position: 'sticky', top: 0, zIndex: 5 }}>
+                <div style={{ width: NAME_W, minWidth: NAME_W, position: 'sticky', left: 0, zIndex: 6, background: HEADER_ORANGE, padding: '8px', fontSize: 12, fontWeight: 700, color: '#3a2e12', alignSelf: 'flex-end' }}>Project RAMS</div>
                 {shownOps.map(o => (
                   <div key={o.id} title={`${opName(o)}${o.company ? ` · ${o.company}` : ''}`} style={{ width: CELL_W, minWidth: CELL_W, height: 130, position: 'relative', borderLeft: '1px solid #eab968' }}>
                     <div style={{ position: 'absolute', bottom: 8, left: '50%', transformOrigin: 'left bottom', transform: 'rotate(-60deg)', whiteSpace: 'nowrap', fontSize: 10.5, color: '#3a2e12', fontWeight: 600 }}>{opName(o)}</div>

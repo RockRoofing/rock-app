@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import OperationsShell from '../../components/AdminShell'
 import { PageHeading } from '../../components/OperationsShell'
 import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
 
 const ROLES = ['Operative', 'Contracts Manager', 'Quantity Surveyor', 'Operations Manager', 'Estimator', 'Director', 'Other']
 const TRADES = ['Single Ply', 'Felt', 'Liquids', 'Hot Melt', 'Rainscreen', 'Composite Panels', 'Aluminium', 'Standing Seam', 'Labourer', 'Other']
+const Req = () => <span style={{ color: '#dc2626' }}>*</span>
 
 // Works for both new records (firstName/lastName) and any legacy record (name).
 const fullName = (u) => [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '—'
@@ -119,33 +120,33 @@ export default function UsersPage() {
 
       {form && (
         <Modal onClose={() => setForm(null)} title={form.id ? 'Edit user' : 'Add user'}>
-          <Lbl>First name</Lbl>
+          <Lbl>First name <Req /></Lbl>
           <input value={form.firstName || ''} onChange={e => setForm({ ...form, firstName: e.target.value })} style={inp2} />
-          <Lbl>Last name</Lbl>
+          <Lbl>Last name <Req /></Lbl>
           <input value={form.lastName || ''} onChange={e => setForm({ ...form, lastName: e.target.value })} style={inp2} />
-          <Lbl>Role</Lbl>
+          <Lbl>Role <Req /></Lbl>
           <select value={form.role || ''} onChange={e => setForm({ ...form, role: e.target.value })} style={inp2}>
             <option value="">Select role…</option>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
-          <Lbl>Access level</Lbl>
+          <Lbl>Access level <Req /></Lbl>
           <select value={form.accessLevel || 'operative'} onChange={e => setForm({ ...form, accessLevel: e.target.value })} style={inp2}>
             <option value="operative">Operative</option>
             <option value="contracts-manager">Contracts Manager</option>
           </select>
-          <div style={{ fontSize: 12, color: '#999', marginTop: -6, marginBottom: 4 }}>Contracts Managers see additional features in the Site App.</div>
-          <Lbl>Project access</Lbl>
+          <div style={{ fontSize: 12, color: '#999', marginTop: 4, marginBottom: 4 }}>Contracts Managers see additional features in the Site App.</div>
+          <Lbl>Project access <Req /></Lbl>
           <ProjectAccessPicker projects={projects}
             value={form.projectAccess}
             onChange={pa => setForm({ ...form, projectAccess: pa })} />
-          <div style={{ fontSize: 12, color: '#999', marginTop: 4, marginBottom: 4 }}>Controls which projects this user sees and can complete forms for in the Site App.</div>
-          <Lbl>Mobile number</Lbl>
+          <div style={{ fontSize: 12, color: '#999', marginTop: 10, marginBottom: 4 }}>Controls which projects this user sees and can complete forms for in the Site App.</div>
+          <Lbl>Mobile number <Req /></Lbl>
           <input value={form.phone || ''} onChange={e => setForm({ ...form, phone: e.target.value })} style={inp2} inputMode="tel" placeholder="07…" />
-          <Lbl>Email address</Lbl>
+          <Lbl>Email address <Req /></Lbl>
           <input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp2} inputMode="email" placeholder="name@example.com" />
-          <Lbl>Company</Lbl>
+          <Lbl>Company <Req /></Lbl>
           <input value={form.company || ''} onChange={e => setForm({ ...form, company: e.target.value })} style={inp2} placeholder="Company name" />
-          <Lbl>Trade(s)</Lbl>
+          <Lbl>Trade(s) <Req /> <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}>(select at least one)</span></Lbl>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
             {TRADES.map(t => {
               const on = (form.trades || []).includes(t)
@@ -183,8 +184,17 @@ export default function UsersPage() {
 // projects) or an array of projectNos. Defaults to 'all' when unset.
 function ProjectAccessPicker({ projects, value, onChange }) {
   const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
   const isAll = value === 'all' || value == null
   const selected = Array.isArray(value) ? value : []
+
+  // Close the dropdown when clicking anywhere outside it.
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
 
   // Ticking "All projects" turns it ON; unticking it switches to specific mode
   // (empty selection). Ticking any individual project also switches to specific
@@ -201,7 +211,7 @@ function ProjectAccessPicker({ projects, value, onChange }) {
     : `${selected.length} project${selected.length === 1 ? '' : 's'} selected`
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={wrapRef} style={{ position: 'relative' }}>
       <button type="button" onClick={() => setOpen(o => !o)}
         style={{ ...inp2, textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ color: isAll || selected.length ? '#1a1a19' : '#c00' }}>{summary}</span>
