@@ -1,39 +1,27 @@
-Financial App — batch 3b: add-existing-project + two-way comments sync
-=====================================================================
+Financial App — batch 3b (update): fix input focus bug + Project Name autocomplete
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 3a.
+Replaces the batch 3b pages/retention.js (deploy over the top).
 
-1) ADD AN EXISTING PROJECT (manual entry)
------------------------------------------
-"Add Manual Entry" now has an "Add an existing project" picker at the top of the
-form (shown only when adding, not editing). Selecting a project auto-fills:
-Our Ref, Customer, Project Name, Project Value, Final Account (AFA), Retention %,
-Completion Date and QS — and links the entry to that project (so comments sync).
-Leave the picker alone to enter a brand-new project entirely by hand.
-The picker lists ALL projects from project details (not just invoiced ones), so
-you can add one before it's been invoiced.
+1) FIXED: form boxes losing focus after each character
+------------------------------------------------------
+The Add/Edit form was defined *inside* the page component, so every keystroke
+recreated it and React threw away the input (kicking you out after one letter).
+The form is now a top-level component, so inputs keep focus — you can type
+normally.
 
-2) COMMENTS — TWO-WAY SYNC
---------------------------
-Comments now sync both ways between the Retention Tracker and Project Details:
-• Edit a project-linked row's comment in the tracker → it writes back to that
-  project's "Retention comments" box in Project Details.
-• Edit the comment in Project Details → it shows on the tracker row (project
-  details is treated as the source of truth on load).
-Only COMMENTS sync back. Everything else (Retention %, AFA, Project Value,
-Completion Date, QS) remains read-only from project details, and the manually
-entered VAT (for Mixed projects) stays only in the tracker — none of these write
-back.
+2) "Add existing project" is now an autocomplete on Project Name
+---------------------------------------------------------------
+The separate project picker dropdown is gone. Instead, when adding a NEW entry,
+start typing in the Project Name box (e.g. "Far") and matching existing projects
+appear beneath it (matches on project name, ref or customer). Pick one to
+auto-fill Our Ref, Customer, Project Name, Project Value, Final Account,
+Retention %, Completion Date and QS — and link it so comments sync back.
+Typing a fresh name that you don't pick from the list = a normal manual entry.
+The suggestions close when you click away.
 
-NOTES
------
-• Pure manual entries (not linked to a project) don't sync comments anywhere —
-  there's no project to write to.
-• Comment write-back clears the dashboard cache so the change is reflected.
-
-FILES CHANGED
--------------
-• pages/api/retention.js — write comments back to project:<xeroId> retentionComments
-• pages/retention.js     — "add existing project" picker + layer live project
-                           comment onto linked rows
+FILE CHANGED
+------------
+• pages/retention.js — EntryForm moved to top level (focus fix); Project Name
+  autocomplete replaces the add-existing-project dropdown.

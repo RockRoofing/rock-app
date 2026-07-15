@@ -297,145 +297,6 @@ export default function RetentionPage() {
 
   const inputStyle = { padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
 
-  function EntryForm({ form, setForm, onSave, onCancel }) {
-    const f = field => e => setForm({ ...form, [field]: e.target.value })
-    const fb = field => e => setForm({ ...form, [field]: e.target.checked })
-    return (
-      <div style={{ background: '#f8f9fa', border: '1px solid #e5e5e5', borderRadius: 10, padding: 20, marginBottom: 16 }}>
-        {!form.id && (
-          <div style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px dashed #ddd' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#0f766e', marginBottom: 4 }}>Add an existing project</div>
-            <div style={{ fontSize: 10.5, color: '#888', marginBottom: 6 }}>Pick a project to auto-fill its details, or leave this and enter everything manually below.</div>
-            <select
-              defaultValue=""
-              onChange={e => {
-                const p = allProjects.find(x => x.xeroId === e.target.value)
-                if (!p) return
-                setForm({
-                  ...form,
-                  ourRef: p.ourRef || '',
-                  customerName: p.customerName || '',
-                  projectName: p.projectName || '',
-                  projectValue: p.projectValue || '',
-                  finalAccount: p.finalAccount || '',
-                  retentionPct: p.retentionPct || '',
-                  completionDate: p.completionDate || '',
-                  qsName: p.qsName || '',
-                  comments: p.comments || form.comments || '',
-                  xeroId: p.xeroId,   // link so comments sync back to the project
-                })
-              }}
-              style={{ ...inputStyle, maxWidth: 420 }}>
-              <option value="">— select an existing project —</option>
-              {allProjects.map(p => (
-                <option key={p.xeroId} value={p.xeroId}>{[p.ourRef, p.projectName].filter(Boolean).join(' · ') || p.projectName || p.ourRef}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
-          {[['ourRef', 'Our Ref'], ['customerName', 'Customer'], ['projectName', 'Project Name'], ['pcType', 'PC Type (Main/Sub)']].map(([key, label]) => (
-            <div key={key}>
-              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
-              <input value={form[key] || ''} onChange={f(key)} style={inputStyle} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 12 }}>
-          {[['projectValue', 'Project Value £'], ['finalAccount', 'Final Account £'], ['retentionPct', 'Retention %'], ['completionDate', 'Completion Date']].map(([key, label]) => (
-            <div key={key}>
-              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
-              <input type={key.includes('Date') ? 'date' : key.includes('Value') || key.includes('Pct') || key.includes('pct') ? 'number' : 'text'}
-                value={form[key] || ''} onChange={f(key)} style={inputStyle} />
-            </div>
-          ))}
-          <div>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>QS</div>
-            <select value={form.qsName || ''} onChange={f('qsName')} style={inputStyle}>
-              <option value="">— select QS —</option>
-              {qsOptions.map(name => <option key={name} value={name}>{name}</option>)}
-              {/* keep any existing value that isn't in the current list */}
-              {form.qsName && !qsOptions.includes(form.qsName) && <option value={form.qsName}>{form.qsName}</option>}
-            </select>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(manual for now)</span></div>
-            <input type="number" value={form.appliedFor || ''} onChange={f('appliedFor')} style={inputStyle} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Invoiced Net £ <span style={{ color: '#bbb' }}>(ex-VAT)</span></div>
-            <input type="number" value={form.invoicedNet != null ? form.invoicedNet : (form.invoiced || '')} onChange={f('invoicedNet')} style={inputStyle} />
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>VAT Type</div>
-            <select value={form.vatRateLabel || ''} onChange={f('vatRateLabel')} style={inputStyle}>
-              <option value="">— select —</option>
-              {['20%', '5%', '0% reverse charge', '0% zero-rated', 'Exempt', 'No VAT', 'Mixed'].map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </div>
-          <div>
-            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>
-              Manual VAT £ {(form.vatRateLabel || '').toLowerCase() === 'mixed' && <span style={{ color: '#c77700' }}>(required — mixed)</span>}
-            </div>
-            <input type="number" value={form.vatManual || ''} onChange={f('vatManual')} placeholder={(form.vatRateLabel || '').toLowerCase() === 'mixed' ? 'Enter VAT' : 'auto'} style={inputStyle} />
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
-          <div style={{ background: '#eef2ff', borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#4f46e5', marginBottom: 8 }}>1st Retention Release</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Value £</div>
-                <input type="number" value={form.release1Value || ''} onChange={f('release1Value')} style={inputStyle} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Date</div>
-                <input type="date" value={form.release1Date || ''} onChange={f('release1Date')} style={inputStyle} />
-              </div>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!form.release1Received} onChange={fb('release1Received')} />
-              Received
-            </label>
-          </div>
-          <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>2nd Retention Release</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Value £</div>
-                <input type="number" value={form.release2Value || ''} onChange={f('release2Value')} style={inputStyle} />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Date</div>
-                <input type="date" value={form.release2Date || ''} onChange={f('release2Date')} style={inputStyle} />
-              </div>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!form.release2Received} onChange={fb('release2Received')} />
-              Received
-            </label>
-          </div>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Comments</div>
-          <input value={form.comments || ''} onChange={f('comments')} style={inputStyle} placeholder="Any notes..." />
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => onSave(form)} disabled={saving}
-            style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 12 }}>
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-          <button onClick={onCancel}
-            style={{ background: '#f0f2f5', color: '#555', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 12 }}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <>
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
@@ -491,7 +352,7 @@ export default function RetentionPage() {
           {/* Add form */}
           {showAddForm && (
             <EntryForm form={addForm} setForm={setAddForm}
-              onSave={saveEntry}
+              onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
               onCancel={() => { setShowAddForm(false); setAddForm(EMPTY_ENTRY) }} />
           )}
 
@@ -646,7 +507,7 @@ export default function RetentionPage() {
                             <tr key={`edit-${entry.id}`}>
                               <td colSpan={21} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
-                                  onSave={saveEntry}
+                                  onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
                                   onCancel={() => setEditingId(null)} />
                               </td>
                             </tr>
@@ -662,5 +523,187 @@ export default function RetentionPage() {
         </div>
       </div>
     </>
+  )
+}
+
+// Top-level so it isn't recreated on every keystroke of the parent (which would
+// steal focus from inputs). Project Name is an autocomplete: typing suggests
+// matching existing projects; picking one auto-fills and links the entry.
+function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], allProjects = [], inputStyle }) {
+  const f = field => e => setForm({ ...form, [field]: e.target.value })
+  const fb = field => e => setForm({ ...form, [field]: e.target.checked })
+  const [showSuggest, setShowSuggest] = useState(false)
+  const suggestRef = useRef(null)
+
+  useEffect(() => {
+    if (!showSuggest) return
+    const onDown = (e) => { if (suggestRef.current && !suggestRef.current.contains(e.target)) setShowSuggest(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [showSuggest])
+
+  const applyProject = (p) => {
+    setForm({
+      ...form,
+      ourRef: p.ourRef || '',
+      customerName: p.customerName || '',
+      projectName: p.projectName || '',
+      projectValue: p.projectValue || '',
+      finalAccount: p.finalAccount || '',
+      retentionPct: p.retentionPct || '',
+      completionDate: p.completionDate || '',
+      qsName: p.qsName || '',
+      comments: p.comments || form.comments || '',
+      xeroId: p.xeroId,   // link so comments sync back to the project
+    })
+    setShowSuggest(false)
+  }
+
+  const q = (form.projectName || '').trim().toLowerCase()
+  // Only suggest for NEW entries and when the row isn't already linked to a project.
+  const canSuggest = !form.id && !form.xeroId
+  const matches = canSuggest && q.length >= 1
+    ? allProjects.filter(p =>
+        (p.projectName || '').toLowerCase().includes(q) ||
+        (p.ourRef || '').toLowerCase().includes(q) ||
+        (p.customerName || '').toLowerCase().includes(q)
+      ).slice(0, 8)
+    : []
+
+  return (
+    <div style={{ background: '#f8f9fa', border: '1px solid #e5e5e5', borderRadius: 10, padding: 20, marginBottom: 16 }}>
+      {!form.id && (
+        <div style={{ fontSize: 10.5, color: '#0f766e', marginBottom: 10 }}>
+          Tip: start typing a <strong>Project Name</strong> (or ref/customer) below to pull up an existing project and auto-fill its details — or just type everything in manually.
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Our Ref</div>
+          <input value={form.ourRef || ''} onChange={f('ourRef')} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Customer</div>
+          <input value={form.customerName || ''} onChange={f('customerName')} style={inputStyle} />
+        </div>
+        <div style={{ position: 'relative' }} ref={suggestRef}>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Project Name</div>
+          <input value={form.projectName || ''} autoComplete="off"
+            onChange={e => {
+              // typing a fresh name un-links any previously picked project
+              setForm({ ...form, projectName: e.target.value, ...(form.xeroId && !form.id ? { xeroId: undefined } : {}) })
+              setShowSuggest(true)
+            }}
+            onFocus={() => setShowSuggest(true)}
+            style={inputStyle} placeholder="Start typing to search…" />
+          {showSuggest && matches.length > 0 && (
+            <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 240, overflowY: 'auto' }}>
+              <div style={{ fontSize: 10, color: '#999', padding: '6px 10px 2px' }}>Existing projects</div>
+              {matches.map(p => (
+                <button key={p.xeroId} type="button" onClick={() => applyProject(p)}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '7px 10px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 12.5, color: '#1a1a19' }}>
+                  <span style={{ fontWeight: 600 }}>{p.projectName || '(no name)'}</span>
+                  <span style={{ color: '#888' }}>{p.ourRef ? `  ·  ${p.ourRef}` : ''}{p.customerName ? `  ·  ${p.customerName}` : ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>PC Type (Main/Sub)</div>
+          <input value={form.pcType || ''} onChange={f('pcType')} style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 12 }}>
+        {[['projectValue', 'Project Value £'], ['finalAccount', 'Final Account £'], ['retentionPct', 'Retention %'], ['completionDate', 'Completion Date']].map(([key, label]) => (
+          <div key={key}>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
+            <input type={key.includes('Date') ? 'date' : key.includes('Value') || key.includes('Pct') || key.includes('pct') ? 'number' : 'text'}
+              value={form[key] || ''} onChange={f(key)} style={inputStyle} />
+          </div>
+        ))}
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>QS</div>
+          <select value={form.qsName || ''} onChange={f('qsName')} style={inputStyle}>
+            <option value="">— select QS —</option>
+            {qsOptions.map(name => <option key={name} value={name}>{name}</option>)}
+            {form.qsName && !qsOptions.includes(form.qsName) && <option value={form.qsName}>{form.qsName}</option>}
+          </select>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Applied for £ <span style={{ color: '#bbb' }}>(manual for now)</span></div>
+          <input type="number" value={form.appliedFor || ''} onChange={f('appliedFor')} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Invoiced Net £ <span style={{ color: '#bbb' }}>(ex-VAT)</span></div>
+          <input type="number" value={form.invoicedNet != null ? form.invoicedNet : (form.invoiced || '')} onChange={f('invoicedNet')} style={inputStyle} />
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>VAT Type</div>
+          <select value={form.vatRateLabel || ''} onChange={f('vatRateLabel')} style={inputStyle}>
+            <option value="">— select —</option>
+            {['20%', '5%', '0% reverse charge', '0% zero-rated', 'Exempt', 'No VAT', 'Mixed'].map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>
+            Manual VAT £ {(form.vatRateLabel || '').toLowerCase() === 'mixed' && <span style={{ color: '#c77700' }}>(required — mixed)</span>}
+          </div>
+          <input type="number" value={form.vatManual || ''} onChange={f('vatManual')} placeholder={(form.vatRateLabel || '').toLowerCase() === 'mixed' ? 'Enter VAT' : 'auto'} style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 12 }}>
+        <div style={{ background: '#eef2ff', borderRadius: 8, padding: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#4f46e5', marginBottom: 8 }}>1st Retention Release</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Value £</div>
+              <input type="number" value={form.release1Value || ''} onChange={f('release1Value')} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Date</div>
+              <input type="date" value={form.release1Date || ''} onChange={f('release1Date')} style={inputStyle} />
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!form.release1Received} onChange={fb('release1Received')} />
+            Received
+          </label>
+        </div>
+        <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>2nd Retention Release</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Value £</div>
+              <input type="number" value={form.release2Value || ''} onChange={f('release2Value')} style={inputStyle} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Release Date</div>
+              <input type="date" value={form.release2Date || ''} onChange={f('release2Date')} style={inputStyle} />
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!form.release2Received} onChange={fb('release2Received')} />
+            Received
+          </label>
+        </div>
+      </div>
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>Comments</div>
+        <input value={form.comments || ''} onChange={f('comments')} style={inputStyle} placeholder="Any notes..." />
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => onSave(form)} disabled={saving}
+          style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 12 }}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button onClick={onCancel}
+          style={{ background: '#f0f2f5', color: '#555', border: 'none', borderRadius: 6, padding: '7px 16px', cursor: 'pointer', fontSize: 12 }}>
+          Cancel
+        </button>
+      </div>
+    </div>
   )
 }
