@@ -9,6 +9,7 @@ const TABS = [
   ['Site App Users', '/operations/users'],
   ['Documents', '/admin/documents'],
   ['RAMS Director', '/admin/rams-director'],
+  ['Account Categorisation', '/admin/account-categorisation'],
   ['App Improvements', '/admin/problem-reports'],
 ]
 

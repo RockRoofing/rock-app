@@ -34,6 +34,14 @@ const ACCOUNT_CODE_MAP = {
 
 const LABOUR_ACCOUNT_CODES = ['321', '320']
 
+// Resolve a category for an account from the admin config, falling back to the
+// legacy default (320/321 = labour, everything else = materials).
+function categoryFor(code, name, config) {
+  const cfg = config[String(code)] || config[String(name)]
+  if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
+  return LABOUR_ACCOUNT_CODES.includes(String(code)) ? 'labour' : 'materials'
+}
+
 function excelDateToString(val) {
   if (!val) return null
   if (typeof val === 'string') {
@@ -68,6 +76,16 @@ export default async function handler(req, res) {
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true })
 
+    const redis = await getRedis()
+    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+
+    // Admin-configured account categorisation (labour / materials / ignore),
+    // keyed by account code AND name. Defaults apply for anything not configured.
+    const catConfig = (await redis.get('config:account-categorisation').catch(() => null)) || {}
+    // Accounts we've seen across uploads, so the admin page can list + categorise
+    // them even if they weren't in the hardcoded map.
+    const seenAccounts = (await redis.get('costs:seen-accounts').catch(() => null)) || {}
+
     let currentAccount = null
     let currentAccountCode = null
     const lines = []
@@ -84,10 +102,16 @@ export default async function handler(req, res) {
       if (['Account Transactions', 'Date', 'Rock Roofing Limited'].includes(firstStr)) continue
       if (firstStr.toLowerCase().includes('period') || firstStr.toLowerCase().includes('projects is')) continue
 
-      const isHeader = row.slice(1).every(cell => cell === null || cell === undefined || cell === '')
-      if (isHeader && ACCOUNT_CODE_MAP[firstStr]) {
+      // Account header row: first cell has text, the rest of the row is empty, and
+      // it isn't a dated transaction line. Recognise ANY account (not just the
+      // hardcoded map) so new/unmapped accounts are still captured.
+      const restEmpty = row.slice(1).every(cell => cell === null || cell === undefined || cell === '')
+      if (restEmpty && firstStr && !excelDateToString(first)) {
         currentAccount = firstStr
-        currentAccountCode = ACCOUNT_CODE_MAP[firstStr]
+        // Prefer a known code; otherwise key the account by its name.
+        currentAccountCode = ACCOUNT_CODE_MAP[firstStr] || firstStr
+        // Record it as seen (code -> name) for the admin categorisation page.
+        if (!seenAccounts[currentAccountCode]) seenAccounts[currentAccountCode] = currentAccount
         continue
       }
 
@@ -104,7 +128,10 @@ export default async function handler(req, res) {
 
       if (amount === 0) continue
 
-      const isLabour = LABOUR_ACCOUNT_CODES.includes(currentAccountCode)
+      const category = categoryFor(currentAccountCode, currentAccount, catConfig)
+      if (category === 'ignore') continue   // excluded from cost totals by admin
+
+      const isLabour = category === 'labour'
       total += amount
       if (isLabour) labourTotal += amount
       else materialsTotal += amount
@@ -128,8 +155,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No transactions found in file. Make sure you are uploading a Xero Account Transactions export.' })
     }
 
-    const redis = await getRedis()
-    if (!redis) return res.status(500).json({ error: 'No Redis connection' })
+    // Persist newly-seen accounts so Admin → Account Categorisation can list them.
+    try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
 
     const now = new Date().toISOString()
     await redis.set(`costs:latest:${projectId}`, {

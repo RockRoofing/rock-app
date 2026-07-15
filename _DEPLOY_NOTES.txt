@@ -1,42 +1,36 @@
-Financial App — Upload page instructions + Upload header + comment box fixes
-===========================================================================
+Admin — Account Categorisation (Labour vs Materials)
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top.
 
-DATA UPLOAD PAGE (pages/upload-transactions.js)
------------------------------------------------
-• Clear per-section instructions added:
-   - Cost Transactions: explains it's the Xero ACCOUNT TRANSACTIONS report and
-     captures ALL project costs (materials + subcontractor labour 321 + direct
-     wages 320) in one file. Amber note stresses INCLUDING ALL COST ACCOUNTS when
-     running the report (320, 321, 311, etc.) + a wide date range for late entries.
-     Step-by-step "how to run the report" list.
-     (Report type left AS-IS — it captures what we need; no Bills importer added.)
-   - Sales Invoices: step-by-step how-to; notes de-dupe / overwrite behaviour.
-• Header: "← Budget Tracker" relabelled "← Portal" (still goes to portal home);
-  the red "RR" box replaced with the Rock Roofing logo; the "Go to Dashboard →"
-  link (top-right) removed.
+NEW ADMIN AREA: Account Categorisation  (/admin/account-categorisation)
+----------------------------------------------------------------------
+New tab in the Admin sub-nav (after RAMS Director). Admin-only.
 
-OUTSTANDING INVOICES — comment box fixes (pages/outstanding-invoices.js)
------------------------------------------------------------------------
-• Fixed the caret bug: the comment box is a normal textarea again, so typing sits
-  at the cursor/end correctly (the earlier highlight-overlay was misaligning it).
-• @mention picker now opens ABOVE the compose box so it no longer covers what
-  you're typing (was overlapping at the bottom of the modal).
-• Selected mentions are shown as bold-blue "@Name" chips beneath the box
-  ("Mentioning: @…") so it's clear who's tagged. Posted comments still render
-  @mentions bold + blue in the thread.
+• Lists all cost-of-sale account codes + names.
+• For each account, choose: LABOUR / MATERIALS / IGNORE (ignore = excluded from
+  project costs). This controls the Labour vs Materials split across Project
+  Financials — it's now configurable instead of hardcoded.
+• The standard cost accounts (310, 311, 320 Direct Wages, 321 CIS Labour, 322,
+  325, 328–336, etc.) show immediately with sensible defaults (320/321 = Labour,
+  the rest = Materials). Any OTHER account that appears in your Xero cost export
+  is auto-added to this list after the next upload, so nothing is hidden.
+• Save, then re-upload a project's Cost Transactions to recalc its split.
 
-WHY NO 3rd "BILLS" UPLOAD
--------------------------
-The Account Transactions report already includes bills, journals, subcontractor
-labour (321) and direct wages (320) when you tick those accounts — so a separate
-Bills export would double-count. Keeping ONE cost report (Account Transactions)
-is simpler; the on-page note tells you to include all cost accounts so nothing is
-missed.
+IMPORTER CHANGES (pages/api/upload-transactions.js)
+---------------------------------------------------
+• Now recognises ANY account header in the Account Transactions export — not just
+  a hardcoded list — so new/unmapped accounts are captured (previously silently
+  skipped).
+• Records every account it sees (code -> name) so the admin page can list them.
+• Uses the admin categorisation config for the Labour/Materials/Ignore decision,
+  falling back to the old default (320/321 = labour, else materials) when an
+  account hasn't been categorised yet.
 
-FILES CHANGED
--------------
-• pages/upload-transactions.js  — section instructions + header (logo, links)
-• pages/outstanding-invoices.js — comment textarea/caret, mention dropdown, chips
+FILES CHANGED / ADDED
+---------------------
+• components/AdminShell.js                 — new "Account Categorisation" tab
+• pages/admin/account-categorisation.js    (new) — the admin page
+• pages/api/account-categorisation.js      (new) — config GET/POST + seen accounts
+• pages/api/upload-transactions.js         — data-driven account recognition + categories
