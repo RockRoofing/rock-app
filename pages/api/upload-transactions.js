@@ -159,15 +159,17 @@ export default async function handler(req, res) {
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
 
     const now = new Date().toISOString()
-    await redis.set(`costs:latest:${projectId}`, {
+    await redis.set(`costs:manual:${projectId}`, {
       labourSpend: labourTotal,
       materialsSpend: materialsTotal,
       totalCosts: total,
+      lines,
       calculatedAt: now,
       source: 'excel_upload',
       fileName: fileName || 'upload'
     })
-    await redis.set(`costs:lines:${projectId}`, lines)
+    const { mergeCosts } = await import('../../lib/mergeCosts')
+    await mergeCosts(redis, projectId)
     await redis.del('dashboard:cache')
 
     res.json({

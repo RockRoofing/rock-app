@@ -1,36 +1,59 @@
-Admin — Account Categorisation (Labour vs Materials)
-====================================================
+Financial App — Xero Upload moved to Admin + bulk Bills & Wages + nav fix
+========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
+Bills parser runtime-tested on the real export (21 projects, £51,412.96 labour).
 Deploy over the top.
 
-NEW ADMIN AREA: Account Categorisation  (/admin/account-categorisation)
-----------------------------------------------------------------------
-New tab in the Admin sub-nav (after RAMS Director). Admin-only.
+IMPORTANT — DELETE THIS FILE FROM THE REPO:
+  pages/upload-transactions.js   (the old Data Upload page — replaced by the Admin
+  page below). It's removed in this package; delete it in GitHub so the old route
+  goes away.
 
-• Lists all cost-of-sale account codes + names.
-• For each account, choose: LABOUR / MATERIALS / IGNORE (ignore = excluded from
-  project costs). This controls the Labour vs Materials split across Project
-  Financials — it's now configurable instead of hardcoded.
-• The standard cost accounts (310, 311, 320 Direct Wages, 321 CIS Labour, 322,
-  325, 328–336, etc.) show immediately with sensible defaults (320/321 = Labour,
-  the rest = Materials). Any OTHER account that appears in your Xero cost export
-  is auto-added to this list after the next upload, so nothing is hidden.
-• Save, then re-upload a project's Cost Transactions to recalc its split.
+1) XERO UPLOAD MOVED INTO ADMIN
+-------------------------------
+• New page: Admin → "Xero Upload" (/admin/xero-upload), added as the LAST tab in
+  the Admin sub-nav. Admin-only, no separate back link (uses the Admin nav).
+• The "Upload" link has been REMOVED from the Project Financials (commercial) nav.
 
-IMPORTER CHANGES (pages/api/upload-transactions.js)
----------------------------------------------------
-• Now recognises ANY account header in the Account Transactions export — not just
-  a hardcoded list — so new/unmapped accounts are captured (previously silently
-  skipped).
-• Records every account it sees (code -> name) so the admin page can list them.
-• Uses the admin categorisation config for the Labour/Materials/Ignore decision,
-  falling back to the old default (320/321 = labour, else materials) when an
-  account hasn't been categorised yet.
+2) THREE ALL-PROJECTS BULK UPLOADS (one file each, matched by tracking category)
+-------------------------------------------------------------------------------
+• Bills (Costs) — NEW bulk importer: materials + subcontractor labour for every
+  project from the Xero Bills CSV. (Runtime-tested on your file.)
+• Direct Wages — NEW bulk importer: PAYE/direct wages (account 320) from the Xero
+  Account Transactions CSV, matched per line by the Projects tracking category.
+  NOTE: built to the common Account Transactions column layout with flexible
+  column detection. If your wages export columns differ, it returns a clear
+  message asking to map them — send James a sample wages CSV and it'll be tuned.
+• Sales Invoices — the existing bulk importer, now on this page.
+
+3) COSTS NO LONGER OVERWRITE EACH OTHER
+---------------------------------------
+Bills, Wages and the legacy per-project upload now write to SEPARATE keys
+(costs:bills / costs:wages / costs:manual) and are SUMMED into the figure the
+dashboard reads (lib/mergeCosts.js). So uploading Bills won't wipe Wages, and
+vice-versa — they add together per project.
+
+4) NAV FIX
+----------
+The commercial-family nav bars (Retention, Outstanding Invoices, Variations,
+Application Calendar) could clip/hide links on narrower screens. The nav rows now
+scroll horizontally so ALL headers are reachable regardless of which page you're on.
+
+AFTER DEPLOY
+------------
+• Delete pages/upload-transactions.js in GitHub.
+• Upload Bills + Direct Wages + Sales Invoices from Admin → Xero Upload.
+• Set Labour/Materials in Admin → Account Categorisation, then re-upload to apply.
 
 FILES CHANGED / ADDED
 ---------------------
-• components/AdminShell.js                 — new "Account Categorisation" tab
-• pages/admin/account-categorisation.js    (new) — the admin page
-• pages/api/account-categorisation.js      (new) — config GET/POST + seen accounts
-• pages/api/upload-transactions.js         — data-driven account recognition + categories
+• components/AdminShell.js            — Xero Upload tab (last)
+• pages/admin/xero-upload.js          (new) — 3 bulk upload areas
+• pages/api/import-bills-bulk.js      (new) — Bills bulk importer
+• pages/api/import-wages-bulk.js      (new) — Direct Wages bulk importer
+• lib/mergeCosts.js                   (new) — sum cost sources per project
+• pages/api/upload-transactions.js    — writes costs:manual + merges (kept for legacy)
+• pages/commercial.js                 — removed the "Upload" nav link(s)
+• pages/retention.js, outstanding-invoices.js, variations.js, application-calendar.js
+                                      — nav rows scroll horizontally (no hidden links)

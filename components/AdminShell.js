@@ -11,6 +11,7 @@ const TABS = [
   ['RAMS Director', '/admin/rams-director'],
   ['Account Categorisation', '/admin/account-categorisation'],
   ['App Improvements', '/admin/problem-reports'],
+  ['Xero Upload', '/admin/xero-upload'],
 ]
 
 // Chrome for Admin-area pages: dark bar + admin sub-nav, admin-gated.

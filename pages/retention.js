@@ -104,10 +104,9 @@ export default function RetentionPage() {
   const [addForm, setAddForm] = useState(EMPTY_ENTRY)
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('outstanding') // outstanding | all
-  const [importing, setImporting] = useState(false)
   const [qsOptions, setQsOptions] = useState([])
   const [allProjects, setAllProjects] = useState([])   // for the "add existing project" picker
-  const importRef = useRef(null)
+
   const [search, setSearch] = useState('')
 
   useEffect(() => { loadAll() }, [])
@@ -182,32 +181,7 @@ export default function RetentionPage() {
     setLoading(false)
   }
 
-  async function importInvoices(file) {
-    if (!file) return
-    setImporting(true)
-    try {
-      const fileData = await new Promise((resolve, reject) => {
-        const r = new FileReader()
-        r.onload = () => resolve(String(r.result).split(',')[1])
-        r.onerror = () => reject(new Error('Could not read file'))
-        r.readAsDataURL(file)
-      })
-      const res = await fetch('/api/import-invoices-bulk', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileData }),
-      })
-      const d = await res.json()
-      if (!res.ok || !d.ok) { alert(d.error || 'Import failed.'); setImporting(false); if (importRef.current) importRef.current.value = ''; return }
-      let msg = `Imported ${d.totalInvoicesProcessed} invoices across ${d.projectsMatched} project${d.projectsMatched === 1 ? '' : 's'}.`
-      if (d.projectsUnmatched > 0) msg += `\n\n${d.projectsUnmatched} project name(s) in the file didn't match an app project and were skipped:\n` + (d.summary || []).filter(s => !s.matched).map(s => `• ${s.project}`).join('\n')
-      alert(msg)
-      await loadAll()   // refresh with the freshly-imported figures
-    } catch (e) {
-      alert(e?.message || 'Import failed.')
-    }
-    setImporting(false)
-    if (importRef.current) importRef.current.value = ''
-  }
+
 
   async function saveEntry(entry) {
     setSaving(true)
@@ -315,7 +289,7 @@ export default function RetentionPage() {
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
               <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
               <Link href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</Link>
               <span style={{ color: '#444' }}>|</span>
@@ -334,11 +308,6 @@ export default function RetentionPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
                 style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
-              <input ref={importRef} type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={e => importInvoices(e.target.files?.[0])} />
-              <button onClick={() => importRef.current?.click()} disabled={importing}
-                style={{ background: '#fff', color: '#0f766e', border: '1px solid #5eead4', borderRadius: 6, padding: '6px 14px', cursor: importing ? 'default' : 'pointer', fontSize: 13, fontWeight: 600 }}>
-                {importing ? 'Importing…' : '⬆ Import invoices from Xero'}
-              </button>
               <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
                 style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 + Add Manual Entry
