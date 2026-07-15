@@ -104,6 +104,7 @@ export default function RetentionPage() {
   const [saving, setSaving] = useState(false)
   const [filter, setFilter] = useState('outstanding') // outstanding | all
   const [importing, setImporting] = useState(false)
+  const [qsOptions, setQsOptions] = useState([])
   const importRef = useRef(null)
   const [search, setSearch] = useState('')
 
@@ -112,6 +113,12 @@ export default function RetentionPage() {
   async function loadAll() {
     setLoading(true)
     try {
+      // QS dropdown options: portal users with post-contract / management / admin access.
+      try {
+        const rt = await fetch('/api/team'); const dt = await rt.json()
+        const allowed = ['post-contract', 'management', 'admin']
+        setQsOptions((dt.members || []).filter(m => m.active !== false && allowed.includes(m.accessRole) && m.name).map(m => m.name).sort((a, b) => a.localeCompare(b)))
+      } catch {}
       // Load manual entries
       const r1 = await fetch('/api/retention')
       const d1 = await r1.json()
@@ -289,13 +296,22 @@ export default function RetentionPage() {
           ))}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 12 }}>
-          {[['projectValue', 'Project Value £'], ['finalAccount', 'Final Account £'], ['retentionPct', 'Retention %'], ['completionDate', 'Completion Date'], ['qsName', 'QS Name']].map(([key, label]) => (
+          {[['projectValue', 'Project Value £'], ['finalAccount', 'Final Account £'], ['retentionPct', 'Retention %'], ['completionDate', 'Completion Date']].map(([key, label]) => (
             <div key={key}>
               <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{label}</div>
               <input type={key.includes('Date') ? 'date' : key.includes('Value') || key.includes('Pct') || key.includes('pct') ? 'number' : 'text'}
                 value={form[key] || ''} onChange={f(key)} style={inputStyle} />
             </div>
           ))}
+          <div>
+            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>QS</div>
+            <select value={form.qsName || ''} onChange={f('qsName')} style={inputStyle}>
+              <option value="">— select QS —</option>
+              {qsOptions.map(name => <option key={name} value={name}>{name}</option>)}
+              {/* keep any existing value that isn't in the current list */}
+              {form.qsName && !qsOptions.includes(form.qsName) && <option value={form.qsName}>{form.qsName}</option>}
+            </select>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 12 }}>
           <div>

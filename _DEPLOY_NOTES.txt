@@ -1,25 +1,25 @@
-Financial App — batch 3a (update): Mixed VAT flags for manual entry
-==================================================================
+Financial App — batch 3a (update): QS is a dropdown of eligible users
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 3a pages/retention.js (deploy over the top).
+Deploy on top of the batch 3a retention files.
 
 WHAT CHANGED
 ------------
-When a project's VAT Type is "Mixed" (its invoices carry different VAT
-treatments), VAT can't be worked out from Final Account × a single rate. So:
+When manually adding / editing a retention entry, the QS field is now a DROPDOWN
+of portal users who have access rights of:
+  • Standard — Post-Contract
+  • Management
+  • Admin
+(pre-contract users are excluded.)
 
-• The VAT column now shows an amber "⚠ enter manually" flag (with a hover
-  explaining why) instead of a wrong auto-figure.
-• A new "Manual VAT £" field in the Edit form lets you type the correct VAT.
-  It's marked "(required — mixed)" when the type is Mixed. A manual VAT figure
-  always takes precedence (also works as an override for any row).
-• Total Due / Total Remaining use the manual VAT once entered, so they compute
-  correctly.
-• A Mixed project will NOT show as closed (row stays non-green) until its VAT has
-  been entered manually — so nothing is falsely marked settled.
+• The list is pulled live from Portal Users (Admin → Portal Users) and filtered
+  by their access role. Only active users appear.
+• If a row already has a QS name that isn't in the current list (e.g. a legacy
+  value or someone whose access changed), it's preserved as an option so it isn't
+  lost.
 
-FILE CHANGED
-------------
-• pages/retention.js — Mixed-VAT flag in the VAT column + Manual VAT field;
-  closed check waits for manual VAT.
+FILES CHANGED
+-------------
+• pages/api/team.js   — expose each user's accessRole (post-contract/management/admin)
+• pages/retention.js  — QS field is now a dropdown filtered to those access roles

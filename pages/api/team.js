@@ -1,4 +1,5 @@
 import { getPortalUsers } from '../../lib/db'
+import { normRole } from '../../lib/roles'
 
 // Team members now come from Portal Users (the single people list).
 // This endpoint maps portal users into the legacy member shape so all existing
@@ -17,6 +18,7 @@ export default async function handler(req, res) {
       email: u.email || '',
       phone: u.phone || '',
       role: u.jobRole || '',        // descriptive job role for dropdowns
+      accessRole: normRole(u.role), // access level: post-contract / management / admin
       active: u.active !== false,
     }))
     return res.json({ members })
