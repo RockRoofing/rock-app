@@ -1,57 +1,35 @@
-RAMS Phase 5 — Download Signed RAMS (original + appended signature/audit trail)
-==============================================================================
+RAMS — Customer gets a copy of the RAMS when they approve
+=========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Runtime-tested: PDF merge + signature embedding + all workflow states verified.
-Deploy on top of the previous RAMS fixes.
+Requires Phase 5 (lib/signedRamsPdf.js) to be deployed. Deploy on top of it.
 
-WHAT THIS ADDS
---------------
-A "⬇ Download Signed RAMS" button next to "+ Upload RAMS" on the project's RAMS
-tab (Operations → Projects → RAMS).
+WHAT CHANGED
+------------
+When the customer's Site Manager approves the RAMS (via the no-login link), they
+now receive a confirmation email — "Your approved RAMS — <project>" — with a COPY
+of the RAMS attached for their records.
 
-Click it → a picker lists every RAMS REVISION (newest first, with its stage and
-number of operative signatures). Choose one → it downloads a single PDF that is:
-  • the ORIGINAL RAMS document, followed by
-  • an appended "Signature & Approval Record" showing the full workflow:
-      1. Contracts Manager — name, date/time signed, signature image
-      2. Director — name, date/time signed, signature image
-      3. Customer Site Manager — name, email, date/time approved (typed approval
-         via the secure no-login link) OR, if they requested edits, the rejection
-         with their comments and timestamp
-      • Every OPERATIVE signature — name, date/time, and signature image, plus the
-        confirmation statement they all agreed to
-  • An overall status banner (e.g. STATUS: OPERATIVES, or EDITS REQUIRED) and a
-    per-page footer with generation timestamp.
+The attached copy is the SIGNED version: the original RAMS document followed by
+the approval record (Contracts Manager, Director and their own approval, with
+names, dates and times). If the signed build can't be produced for any reason, it
+falls back to attaching the plain original RAMS so the customer always gets a copy.
 
-This is the electronic-footprint / confirmed-workflow version you were missing —
-one download per revision, on demand (nothing to pre-generate or store).
+The email is sent AFTER their approval is recorded, so the approval record in the
+attachment includes their sign-off. Operatives are still notified to sign as
+before; this is an additional email to the Site Manager only.
 
-DATA USED (all already captured by the workflow)
-------------------------------------------------
-• ops:rams-approvals — cm/director/siteManager (+ rejection) with signedAt times
-• ops:rams-signatures — per-operative name, date, signedAt, statement, signature
-CM/Director auto-signatures are shown in the approval chain (not double-listed
-under operatives). The Site Manager approves by typing their name (no drawn
-signature), so their entry is a typed confirmation with a timestamp.
+FILE CHANGED
+------------
+• pages/api/rams-approvals.js — sm-approve now calls sendSiteManagerApprovedCopy()
+  (new helper) which builds the signed PDF and emails it to the Site Manager.
 
-TECHNICAL NOTES
----------------
-• Uses pdf-lib (already in the project). The original PDF's pages are copied in,
-  then audit pages appended. If the original can't be embedded (e.g. it's an
-  image RAMS or an unreadable PDF), the record is still produced and notes that.
-• Helvetica can't encode tick/cross glyphs, so status markers are drawn as
-  coloured dots (green = done, red = not approved, outline = pending) — this was
-  verified to avoid a PDF-generation crash.
-
-FILES ADDED / CHANGED
----------------------
-• lib/signedRamsPdf.js          (new) — builds the merged signed PDF
-• pages/api/rams-signed-pdf.js   (new) — lists revisions; streams the signed PDF
-• pages/operations/projects.js  — "Download Signed RAMS" button + revision picker
+NOTE
+----
+Needs RESEND_API_KEY + FORMS_FROM_EMAIL set in Vercel (as with all RAMS emails).
+Best-effort: approval still succeeds even if the copy email can't send.
 
 TEST
 ----
-Operations → Projects → a project with signed RAMS → RAMS tab →
-"⬇ Download Signed RAMS" → pick a revision → the downloaded PDF shows the
-original followed by the signature/approval record with names, dates and times.
+Approve a RAMS as the Site Manager via the emailed link → they receive
+"Your approved RAMS — <project>" with the signed PDF attached.

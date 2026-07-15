@@ -99,12 +99,15 @@ export default async function handler(req, res) {
       rec.updatedAt = Date.now()
       approvals[ref.fileId] = rec
       await saveRamsApprovals(ref.projectNo, approvals)
+      // Email the operatives they can now sign.
       try {
         const { notifyOperativesToSign } = await import('../../lib/ramsNotify')
         const files = await getProjectFiles(ref.projectNo)
         const f = (files || []).find(x => x.id === ref.fileId)
         notifyOperativesToSign({ projectNo: ref.projectNo, fileName: f?.name || '' })
       } catch {}
+      // Email the Site Manager a copy of the approved RAMS for their records.
+      try { await sendSiteManagerApprovedCopy({ req, projectNo: ref.projectNo, fileId: ref.fileId }) } catch (e) { console.error('SM copy send failed:', e) }
       return res.json({ ok: true })
     }
 
@@ -316,4 +319,67 @@ async function sendSiteManagerEmail({ req, projectNo, fileId, email, smName, tok
     })
     return resp.ok
   } catch { return false }
+}
+
+// After the Site Manager approves, email THEM a copy for their records — the
+// signed RAMS (original + the approval/signature record up to this point).
+async function sendSiteManagerApprovedCopy({ req, projectNo, fileId }) {
+  const RESEND_KEY = process.env.RESEND_API_KEY
+  const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  if (!RESEND_KEY) return false
+  try {
+    const approvals = await getRamsApprovals(projectNo)
+    const rec = approvals[fileId]
+    const email = rec?.siteManagerEmail
+    if (!email) return false
+
+    let projName = projectNo
+    try { const p = await getOpsProject(projectNo); if (p?.data?.projectName) projName = `${projectNo} — ${p.data.projectName}` } catch {}
+
+    const files = await getProjectFiles(projectNo)
+    const f = (files || []).find(x => x.id === fileId)
+
+    // Build the signed copy (original + approval/signature record so far).
+    let attachment = null
+    try {
+      const { buildSignedRamsPDF } = await import('../../lib/signedRamsPdf')
+      const sigs = await getRamsSignatures(projectNo)
+      let ramsBytes = null
+      try { if (f?.url) { const r = await fetch(f.url); if (r.ok) ramsBytes = new Uint8Array(await r.arrayBuffer()) } } catch {}
+      let projectName = ''
+      try { const p = await getOpsProject(projectNo); projectName = p?.data?.projectName || p?.projectName || '' } catch {}
+      const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+      const host = req.headers['x-forwarded-host'] || req.headers.host
+      const logoUrl = host ? `${proto}://${host}/rock-logo.jpg` : null
+      const pdfBytes = await buildSignedRamsPDF({
+        ramsBytes, fileName: f?.name || 'RAMS.pdf',
+        project: { projectNo, projectName },
+        approval: rec, signatures: sigs[fileId] || {}, logoUrl,
+      })
+      const base = (f?.name || 'RAMS').replace(/\.pdf$/i, '')
+      attachment = { filename: `${projectNo} - ${base} - SIGNED.pdf`, content: Buffer.from(pdfBytes).toString('base64') }
+    } catch (e) {
+      // Fall back to attaching the plain original if the signed build fails.
+      console.error('signed copy build failed, attaching original:', e)
+      try { if (f?.url) { const r = await fetch(f.url); if (r.ok) attachment = { filename: f.name || 'RAMS.pdf', content: Buffer.from(await r.arrayBuffer()).toString('base64') } } } catch {}
+    }
+
+    const html = `
+      <div style="font-family:system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;color:#1a1a19">
+        <h2 style="color:#1a1a19">Thank you — RAMS approved</h2>
+        <p style="font-size:15px">Hi ${(rec.siteManagerName || '').split(' ')[0] || 'there'},</p>
+        <p style="font-size:15px">Thank you for approving the RAMS (Risk Assessment &amp; Method Statement) for
+          <strong>${projName}</strong>. A copy is attached for your records, including the approval record.</p>
+        <p style="font-size:13px;color:#777">No action is needed. If you have any questions, please contact your Rock Roofing Contracts Manager.</p>
+      </div>`
+
+    const payload = { from: FROM, to: email, subject: `Your approved RAMS — ${projName}`, html }
+    if (attachment) payload.attachments = [attachment]
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return resp.ok
+  } catch (e) { console.error('sendSiteManagerApprovedCopy failed:', e); return false }
 }
