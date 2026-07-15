@@ -4,10 +4,11 @@ import { runDeliveriesNotify } from './deliveries-notify'
 import { runRamsReminders } from '../../../lib/ramsNotify'
 import { sendWeeklyOverdueReport } from '../../../lib/outstandingInvoicesReport'
 
-// Daily digest dispatcher (Hobby-friendly single daily cron doing two jobs):
-//  - MONDAY: weekly forms digest to CMs (Pre-Start) and Supervisors (Start on Site / Site Diary / WAH).
+// Daily digest dispatcher (Hobby-friendly single daily cron doing several jobs):
+//  - MONDAY: weekly forms digest to CMs (Pre-Start) and Supervisors.
+//  - THURSDAY: weekly Outstanding Invoices report (PDF) to post-contract/mgmt/admin + extras.
 //  - 1st OF MONTH: H&S training expiry digest to Operations Managers.
-// Runs DAILY at 07:00; each job self-guards to its own day. ?force=1 runs both now (testing).
+// Runs DAILY at 08:00; each job self-guards to its own day. ?force=1 runs all now (testing).
 
 const parseISO = (s) => { if (!s) return null; const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
 const fmt = (d) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -34,9 +35,9 @@ export default async function handler(req, res) {
       try { formsResult = await runFormsWeeklyNotify({ force }) } catch (e) { formsResult = { ok: false, error: e.message } }
     }
 
-    // ── Monday: weekly Outstanding Invoices report (PDF to post-contract/mgmt/admin + extras) ──
-    let invoiceReport = { skipped: 'not Monday' }
-    if (force || now.getDay() === 1) {
+    // ── Thursday: weekly Outstanding Invoices report (PDF to post-contract/mgmt/admin + extras) ──
+    let invoiceReport = { skipped: 'not Thursday' }
+    if (force || now.getDay() === 4) {
       try {
         const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
         const host = req.headers['x-forwarded-host'] || req.headers.host

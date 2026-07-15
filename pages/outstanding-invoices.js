@@ -22,7 +22,7 @@ export default function OutstandingInvoicesPage() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('overdue')   // overdue | due | dueDate
   const [commentInvoice, setCommentInvoice] = useState(null)  // invoice object for the pop-out
-  const [dlComments, setDlComments] = useState(false)
+  const [downloadOpen, setDownloadOpen] = useState(false)
   const [weeklyOpen, setWeeklyOpen] = useState(false)
 
   useEffect(() => { loadAll() }, [])
@@ -126,6 +126,12 @@ export default function OutstandingInvoicesPage() {
               <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Outstanding Invoices</span>
               <span style={{ color: '#444' }}>|</span>
               <Link href="/retention" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Retention</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
+              <span style={{ color: '#444' }}>|</span>
+              <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
             </div>
           </div>
         </div>
@@ -160,13 +166,10 @@ export default function OutstandingInvoicesPage() {
             </div>
             <span style={{ fontSize: 12, color: '#888' }}>{rows.length} shown</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
-              <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                <input type="checkbox" checked={dlComments} onChange={e => setDlComments(e.target.checked)} /> incl. comments
-              </label>
-              <a href={`/api/outstanding-invoices?action=download${dlComments ? '&comments=1' : ''}`}
-                style={{ background: '#fff', color: '#0f766e', border: '1px solid #5eead4', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-                ⬇ Download PDF
-              </a>
+              <button onClick={() => setDownloadOpen(true)}
+                style={{ background: '#fff', color: '#0f766e', border: '1px solid #5eead4', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                ⬇ Download Report
+              </button>
               <button onClick={() => setWeeklyOpen(true)}
                 style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 📧 Weekly Report
@@ -246,6 +249,7 @@ export default function OutstandingInvoicesPage() {
           onChanged={(invNo, newMeta) => setMeta(m => ({ ...m, [invNo]: { ...(m[invNo] || {}), ...newMeta } }))}
         />
       )}
+      {downloadOpen && <DownloadModal onClose={() => setDownloadOpen(false)} />}
       {weeklyOpen && <WeeklyReportModal onClose={() => setWeeklyOpen(false)} />}
     </>
   )
@@ -451,7 +455,7 @@ function WeeklyReportModal({ onClose }) {
         </div>
         <div style={{ padding: 20 }}>
           <p style={{ fontSize: 13, color: '#555', marginTop: 0 }}>
-            The weekly report goes out automatically every <strong>Monday</strong> to everyone with Standard&nbsp;— Post-Contract, Management or Admin access, as a PDF (summary + a page per invoice with its comments). Add anyone outside the business who should also receive it below.
+            The weekly report goes out automatically every <strong>Thursday</strong> to everyone with Standard&nbsp;— Post-Contract, Management or Admin access, as a PDF (summary + a page per invoice with its comments). Add anyone outside the business who should also receive it below.
           </p>
 
           <div style={{ fontSize: 11, fontWeight: 600, color: '#888', margin: '14px 0 6px' }}>ADDITIONAL RECIPIENTS</div>
@@ -479,6 +483,31 @@ function WeeklyReportModal({ onClose }) {
             <button onClick={sendNow} disabled={sending} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}>
               {sending ? 'Sending…' : 'Send now'}
             </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Download popout: ask whether to include comments/email correspondence ──────
+function DownloadModal({ onClose }) {
+  const go = (withComments) => {
+    window.location.href = `/api/outstanding-invoices?action=download${withComments ? '&comments=1' : ''}`
+    onClose()
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 460, maxWidth: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Download Report</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: 24 }}>
+          <p style={{ fontSize: 14, color: '#333', marginTop: 0, marginBottom: 20 }}>Do you want all comments and email correspondence included in the report?</p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => go(true)} style={{ flex: 1, background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Yes — include them</button>
+            <button onClick={() => go(false)} style={{ flex: 1, background: '#f0f2f5', color: '#333', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>No — summary only</button>
           </div>
         </div>
       </div>
