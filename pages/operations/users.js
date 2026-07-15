@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import OperationsShell from '../../components/AdminShell'
 import { PageHeading } from '../../components/OperationsShell'
 import { INK, th, td, Loading, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn } from '../../components/opsUI'
@@ -18,6 +18,16 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [projects, setProjects] = useState([])
+
+  // Distinct company names already on record (used for the autocomplete + de-dupe).
+  const knownCompanies = useMemo(() => {
+    const seen = new Map()   // lowercased -> canonical spelling
+    for (const u of users) {
+      const c = (u.company || '').trim()
+      if (c && !seen.has(c.toLowerCase())) seen.set(c.toLowerCase(), c)
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b))
+  }, [users])
 
   useEffect(() => { load(); loadProjects() }, [])
   async function loadProjects() {
@@ -41,7 +51,13 @@ export default function UsersPage() {
     if (!form.company?.trim()) { setErr('Company is required.'); return }
     if (!Array.isArray(form.trades) || form.trades.length === 0) { setErr('Please select at least one trade.'); return }
     setSaving(true)
-    const r = await fetch('/api/ops-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: form }) })
+    // De-dupe: if the typed company matches an existing one (case/whitespace
+    // insensitive), use the existing canonical spelling rather than creating a
+    // near-duplicate.
+    const typed = form.company.trim()
+    const canonical = knownCompanies.find(c => c.toLowerCase() === typed.toLowerCase()) || typed
+    const payload = { ...form, company: canonical }
+    const r = await fetch('/api/ops-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: payload }) })
     const d = await r.json()
     setSaving(false)
     if (!r.ok) { setErr(d.error || 'Error'); return }
@@ -145,7 +161,7 @@ export default function UsersPage() {
           <Lbl>Email address <Req /></Lbl>
           <input value={form.email || ''} onChange={e => setForm({ ...form, email: e.target.value })} style={inp2} inputMode="email" placeholder="name@example.com" />
           <Lbl>Company <Req /></Lbl>
-          <input value={form.company || ''} onChange={e => setForm({ ...form, company: e.target.value })} style={inp2} placeholder="Company name" />
+          <CompanyInput value={form.company || ''} options={knownCompanies} onChange={v => setForm({ ...form, company: v })} />
           <Lbl>Trade(s) <Req /> <span style={{ fontWeight: 400, color: '#999', fontSize: 11 }}>(select at least one)</span></Lbl>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
             {TRADES.map(t => {
@@ -177,6 +193,56 @@ export default function UsersPage() {
         </Modal>
       )}
     </OperationsShell>
+  )
+}
+
+// Company autocomplete. Suggests existing companies as you type so we don't
+// create near-duplicates. Typing a name that matches an existing company (case/
+// whitespace-insensitive) reuses that company on save (handled in save()).
+function CompanyInput({ value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  const q = (value || '').trim().toLowerCase()
+  const matches = q
+    ? options.filter(c => c.toLowerCase().includes(q)).slice(0, 8)
+    : options.slice(0, 8)
+  // Exact (case-insensitive) match already on record?
+  const exact = options.find(c => c.toLowerCase() === q)
+  // Show suggestions only if there are options and no exact-only match.
+  const showList = open && matches.length > 0 && !(matches.length === 1 && exact)
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <input
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        style={inp2}
+        placeholder="Start typing a company name…"
+        autoComplete="off"
+      />
+      {value && exact && (
+        <div style={{ fontSize: 11.5, color: '#16a34a', marginTop: 3 }}>✓ Matches an existing company — this record will be used.</div>
+      )}
+      {showList && (
+        <div style={{ position: 'absolute', zIndex: 30, top: '100%', left: 0, right: 0, marginTop: 4, background: '#fff', border: '1px solid #ddd', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto', padding: 4 }}>
+          <div style={{ fontSize: 11, color: '#999', padding: '4px 10px 2px' }}>Existing companies</div>
+          {matches.map(c => (
+            <button key={c} type="button" onClick={() => { onChange(c); setOpen(false) }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, border: 'none', background: c.toLowerCase() === q ? '#fffbeb' : '#fff', cursor: 'pointer', fontSize: 13.5, color: '#1a1a19' }}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

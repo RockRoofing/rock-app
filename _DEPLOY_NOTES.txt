@@ -1,53 +1,37 @@
-Site App Users — fixes + RAMS Matrix freeze/wider column
-========================================================
+Site App Users — company autocomplete + de-duplication
+======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy on top of the previous fixes.
 
-1) COMPANY + TRADE NOT SAVING ON CREATE  (main bug)
----------------------------------------------------
-When adding a NEW user, the server built the record from an explicit field list
-that omitted company + trades, so they were dropped (edit worked because it
-spreads all fields). Fixed: company + trades are now saved on create, so the
-Site App Users table populates correctly first time — no re-edit needed.
+WHAT CHANGED
+------------
+The Company field on the Add/Edit user form is now an AUTOCOMPLETE:
+  • As you type, it suggests existing companies (already on record) that contain
+    what you've typed — pick one to use its exact spelling.
+  • If what you've typed exactly matches an existing company (ignoring case and
+    surrounding spaces), a green "✓ Matches an existing company — this record
+    will be used" note appears.
+  • On save, if the typed name matches an existing company (case/whitespace-
+    insensitive) it is normalised to the existing canonical spelling — so
+    "rock roofing", "Rock Roofing" and "Rock Roofing " all collapse to the one
+    company already on record instead of creating duplicates.
+  • Suggestion list closes when you click outside it.
 
-2) PIN NO LONGER HAS TO BE UNIQUE  (security fix)
--------------------------------------------------
-Login is by MOBILE NUMBER + PIN, so two users may share a PIN as long as their
-mobiles differ. Removed the "that PIN is already in use" block on the user's
-set-PIN step, and simplified temp-PIN generation (no longer avoids collisions).
-Mobile numbers remain unique (they identify the user at login).
+Belt-and-braces: the SERVER also de-duplicates on both create and edit, so a
+duplicate can't slip through even if the client list is stale.
 
-3) WELCOME EMAIL WORDING
-------------------------
-• Subject: "Welcome to the Rock Roofing Site App" (was "…Forms")
-• Body references the Site App, and the button now reads "Open Rock Roofing
-  Site App" (was "Open Rock Roofing Forms"). PIN-reset subject updated too.
-
-4) ADD-USER FORM
-----------------
-• Every field now has a red * (First/Last name, Role, Access level, Project
-  access, Mobile, Email, Company) and Trade(s) shows "* (select at least one)".
-  All are already enforced on save (name, role, mobile, valid email, company,
-  ≥1 trade).
-• Project-access dropdown now CLOSES when you click anywhere outside it.
-• Fixed the cramped spacing: the helper text under Project access now sits with
-  proper spacing (was too close).
-
-5) RAMS MATRIX — wider project column + frozen header & first column
--------------------------------------------------------------------
-• Project column widened (220→300px) and the stage line no longer wraps, so
-  "… › Operatives" stays on one line.
-• The grid now scrolls in BOTH directions inside a fixed-height viewport, with:
-    – the operative-name HEADER row frozen to the top on vertical scroll, and
-    – the "Project RAMS" column frozen to the left on horizontal scroll
-  (the top-left corner stays pinned above both).
+The company list is derived from existing Site App Users (that's where company
+lives), so it grows automatically as you add new companies.
 
 FILES CHANGED
 -------------
-• pages/api/ops-users.js         — save company/trades on create; drop PIN
-                                   uniqueness; simplify temp PIN; email wording
-• pages/operations/users.js      — mandatory asterisks; click-outside to close
-                                   project dropdown; spacing fix
-• pages/operations/hs/rams-matrix.js — wider column, no-wrap stage line, frozen
-                                   header + first column (2-axis sticky scroll)
+• pages/operations/users.js  — CompanyInput autocomplete; client de-dupe on save
+• pages/api/ops-users.js     — canonicalCompany() de-dupe on create + edit
+
+TEST
+----
+Add a user with company "Rock Roofing". Add another and type "rock roofing" —
+the suggestion appears and, whether you pick it or just type it, the saved
+company is the existing "Rock Roofing" (no duplicate). The RAMS Matrix / user
+table company filters then stay clean.

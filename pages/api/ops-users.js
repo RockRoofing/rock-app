@@ -71,6 +71,16 @@ async function sendInviteEmail({ to, firstName, pin, isReset }) {
 
 const strip = (u) => { const { pin, ...rest } = u; return rest }
 
+// De-dupe company names: if the typed company matches an existing one (case/
+// whitespace-insensitive), return the existing canonical spelling; otherwise the
+// trimmed input. Prevents "Rock Roofing" / "rock roofing ltd" style duplicates.
+function canonicalCompany(users, typedRaw) {
+  const typed = (typedRaw || '').trim()
+  if (!typed) return ''
+  const match = (users || []).find(u => (u.company || '').trim().toLowerCase() === typed.toLowerCase())
+  return match ? match.company : typed
+}
+
 // Given a user's previous and new records, return the ACTIVE project numbers the
 // user can now access but couldn't before. 'all' means every active project.
 function expandedAccess(prev, after, projects) {
@@ -184,6 +194,10 @@ export default async function handler(req, res) {
       const prev = users[idx]
       // Never overwrite pin/mustResetPin via a plain edit
       const { pin, mustResetPin, ...editable } = user
+      // De-dupe company against OTHER users (exclude this record).
+      if (editable.company != null) {
+        editable.company = canonicalCompany(users.filter(u => u.id !== user.id), editable.company)
+      }
       users[idx] = { ...users[idx], ...editable }
       await saveOpsUsers(users)
       // If project access has expanded, notify the user about the NEW projects
@@ -214,7 +228,7 @@ export default async function handler(req, res) {
       accessLevel: user.accessLevel === 'contracts-manager' ? 'contracts-manager' : 'operative',
       phone: user.phone || '',
       email: user.email || '',
-      company: user.company || '',
+      company: canonicalCompany(users, user.company),
       trades: Array.isArray(user.trades) ? user.trades : [],
       active: user.active !== false,
       projectAccess: user.projectAccess === 'all' || user.projectAccess == null ? 'all' : (Array.isArray(user.projectAccess) ? user.projectAccess : 'all'),
