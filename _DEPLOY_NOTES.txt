@@ -1,43 +1,31 @@
-Financial App — batch 4b (update): Thursday report, nav fixes, download popout, email tweaks
-============================================================================================
+Financial App — batch 4b (update): comment @mention fixes
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of batch 4b.
+Replaces the outstanding-invoices files (deploy over the top).
 
-1) WEEKLY REPORT NOW THURSDAY 08:00
------------------------------------
-• The daily digest cron is bumped from 07:00 to 08:00 (its other jobs don't care
-  about the exact hour).
-• The Outstanding Invoices report guard changed from Monday to THURSDAY, so it
-  sends every Thursday at ~08:00. (The forms digest stays Monday; monthly H&S
-  stays 1st.) No new cron slot used.
-⚠ vercel.json is included — deploy it so the 08:00 schedule takes effect.
+1) CURSOR AFTER INSERTED MENTION
+--------------------------------
+After picking a name from the @ menu, the cursor now sits right after the
+inserted "@Name " so you carry on typing there (previously it jumped back to the
+start).
 
-2) NAV FIXES
-------------
-• On the Outstanding Invoices page, the nav now shows the FULL set: Project
-  Financials · Outstanding Invoices · Retention · Variations · Application
-  Calendar · Commercial Scorecard (previously several were missing).
-• On the Commercial Scorecard page, "Outstanding Invoices" now appears in the nav.
+2) MENTIONS SHOWN BOLD + BLUE
+-----------------------------
+Once a comment is posted, any @Name that matches a portal user is rendered in
+bold blue in the comment thread.
 
-3) DOWNLOAD REPORT POPOUT
--------------------------
-• "Download PDF" renamed to "Download Report".
-• Clicking it now opens a popout: "Do you want all comments and email
-  correspondence included in the report?" → Yes (full) / No (summary only) →
-  downloads. (The old inline "incl. comments" tick is gone.)
-
-4) WEEKLY EMAIL CONTENT
------------------------
-• Subject renamed to: "Rock Roofing Outstanding Invoices - Weekly Report (DATE)".
-• Body: the total outstanding value is removed. Instead the body lists every
-  invoice in a table — Inv Number, Ref, To, Due Date, Overdue, Due — with no
-  grand total. The full PDF (with comments + emails) remains attached.
+3) EMAIL NOTIFICATION ON MENTION
+--------------------------------
+Being @mentioned now sends an EMAIL to that person (as well as the in-app
+notification) — "You were mentioned on invoice <number>", including the comment
+text. This is why you didn't get one before: only an in-app notification was
+created, with no email. Requires RESEND_API_KEY + FORMS_FROM_EMAIL in Vercel
+(same as the other emails); it's best-effort and won't block posting the comment.
+Note: the mention must match a portal user's name exactly — using the @ picker
+guarantees this.
 
 FILES CHANGED
 -------------
-• vercel.json                         — cron 07:00 -> 08:00
-• pages/api/cron/hs-expiry-email.js   — report guard Monday -> Thursday
-• lib/outstandingInvoicesReport.js    — email subject + per-invoice body list, no total
-• pages/outstanding-invoices.js       — full nav, Download Report popout, Thursday text
-• pages/commercial-scorecard.js       — Outstanding Invoices nav link
+• pages/outstanding-invoices.js     — caret after mention; bold-blue mention render
+• pages/api/outstanding-invoices.js — email mentioned users (+ existing in-app notif)

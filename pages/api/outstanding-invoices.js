@@ -118,10 +118,15 @@ export default async function handler(req, res) {
   res.status(405).end()
 }
 
-// Drop an in-app notification for each mentioned user (by portal user id).
+// Drop an in-app notification AND send an email for each mentioned user (by id).
 async function notifyMentions(userIds, invoiceNumber, comment) {
   const redis = await getRedis()
   if (!redis) return
+  // Look up portal users so we can email them.
+  let users = []
+  try { const { getPortalUsers } = await import('../../lib/db'); users = await getPortalUsers() } catch {}
+  const byId = Object.fromEntries((users || []).map(u => [u.id, u]))
+
   for (const uid of userIds) {
     const key = `notifications:${uid}`
     let list = []
@@ -135,5 +140,30 @@ async function notifyMentions(userIds, invoiceNumber, comment) {
       read: false,
     })
     await redis.set(key, list.slice(0, 100))
+  }
+
+  // Email each mentioned user (best-effort).
+  const RESEND_KEY = process.env.RESEND_API_KEY
+  const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  if (!RESEND_KEY) return
+  for (const uid of userIds) {
+    const u = byId[uid]
+    if (!u || !u.email) continue
+    const first = (u.firstName || u.name || '').split(' ')[0] || 'there'
+    const html = `
+      <div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#1a1a19">
+        <h2 style="color:#1a1a19">You were mentioned on an invoice</h2>
+        <p style="font-size:15px">Hi ${first},</p>
+        <p style="font-size:15px"><strong>${comment.author}</strong> mentioned you in a comment on invoice <strong>${invoiceNumber}</strong> in the Outstanding Invoices tracker:</p>
+        <blockquote style="border-left:3px solid #ca8a04;margin:12px 0;padding:6px 14px;color:#444;font-size:14px">${(comment.text || '').replace(/</g, '&lt;')}</blockquote>
+        <p style="font-size:13px;color:#777">Open the portal → Outstanding Invoices to reply.</p>
+      </div>`
+    try {
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: FROM, to: u.email, subject: `You were mentioned on invoice ${invoiceNumber}`, html }),
+      })
+    } catch (e) { console.error('mention email failed:', e) }
   }
 }

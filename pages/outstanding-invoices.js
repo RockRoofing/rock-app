@@ -13,6 +13,23 @@ const parseDMY = (s) => {
 const fmtDate = (s) => { const d = parseDMY(s); return d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }
 const daysBetween = (a, b) => Math.floor((a - b) / 86400000)
 
+// Render comment text with @mentions (matching known member names) shown bold+blue.
+function renderWithMentions(text, members = []) {
+  const names = members.map(m => m.name).filter(Boolean).sort((a, b) => b.length - a.length) // longest first
+  if (!names.length || !text) return text
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp('@(' + names.map(esc).join('|') + ')', 'g')
+  const out = []
+  let last = 0, m, key = 0
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index))
+    out.push(<span key={key++} style={{ color: '#2563eb', fontWeight: 700 }}>@{m[1]}</span>)
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push(text.slice(last))
+  return out
+}
+
 export default function OutstandingInvoicesPage() {
   const [invoices, setInvoices] = useState([])
   const [meta, setMeta] = useState({})
@@ -285,10 +302,13 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
   const insertMention = (member) => {
     const el = taRef.current
     const caret = el ? el.selectionStart : text.length
-    const upto = text.slice(0, caret).replace(/@([\w ]{0,30})$/, '@' + member.name + ' ')
-    setText(upto + text.slice(caret))
+    const before = text.slice(0, caret).replace(/@([\w ]{0,30})$/, '@' + member.name + ' ')
+    const after = text.slice(caret)
+    setText(before + after)
     setShowMentions(false)
-    if (el) setTimeout(() => el.focus(), 0)
+    // Put the cursor right after the inserted "@Name " so typing continues there.
+    const newCaret = before.length
+    if (el) setTimeout(() => { el.focus(); el.setSelectionRange(newCaret, newCaret) }, 0)
   }
   const mentionMatches = members.filter(m => m.name && m.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
 
@@ -371,7 +391,7 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
                   </div>
                 ) : (
                   <>
-                    <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{c.text}</div>
+                    <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{renderWithMentions(c.text, members)}</div>
                     <div style={{ display: 'flex', gap: 12, marginTop: 5 }}>
                       <button onClick={() => { setEditingId(c.id); setEditText(c.text) }} style={{ background: 'none', border: 'none', color: '#4f46e5', fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Edit</button>
                       <button onClick={() => deleteComment(c.id)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 11, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Delete</button>
