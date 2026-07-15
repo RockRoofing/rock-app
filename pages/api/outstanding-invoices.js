@@ -1,4 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
+import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport } from '../../lib/outstandingInvoicesReport'
+import { buildOutstandingInvoicesPDF } from '../../lib/outstandingInvoicesPdf'
 
 async function getRedis() {
   try {
@@ -19,6 +21,25 @@ export default async function handler(req, res) {
 
   // Return the manual meta map (expected dates + comments) for all invoices.
   if (req.method === 'GET') {
+    const { action } = req.query
+    if (action === 'recipients') {
+      try { return res.json({ recipients: await getWeeklyRecipients() }) } catch { return res.json({ recipients: [] }) }
+    }
+    if (action === 'download') {
+      // Stream the full outstanding list as a PDF. ?comments=1 appends per-invoice pages.
+      try {
+        const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+        const host = req.headers['x-forwarded-host'] || req.headers.host
+        const baseUrl = host ? `${proto}://${host}` : null
+        const invoices = await gatherOutstandingInvoices({ baseUrl })
+        const includeComments = req.query.comments === '1'
+        const pdfBytes = await buildOutstandingInvoicesPDF({ invoices, includeComments, logoUrl: baseUrl ? `${baseUrl}/rock-logo.jpg` : null })
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', `attachment; filename="Outstanding-Invoices-${new Date().toISOString().slice(0, 10)}.pdf"`)
+        res.setHeader('Cache-Control', 'no-store')
+        return res.send(Buffer.from(pdfBytes))
+      } catch (e) { console.error('download failed:', e); return res.status(500).json({ error: e.message }) }
+    }
     try {
       const meta = (await redis.get(META_KEY)) || {}
       return res.json({ meta })
@@ -27,6 +48,24 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { action, invoiceNumber } = req.body || {}
+
+    // ── Weekly-report recipients + manual send (no invoiceNumber needed) ──
+    if (action === 'get-recipients') {
+      return res.json({ recipients: await getWeeklyRecipients() })
+    }
+    if (action === 'set-recipients') {
+      const list = Array.isArray(req.body.recipients) ? req.body.recipients.map(s => String(s).trim()).filter(Boolean) : []
+      await setWeeklyRecipients([...new Set(list)])
+      return res.json({ ok: true, recipients: list })
+    }
+    if (action === 'send-report-now') {
+      const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+      const host = req.headers['x-forwarded-host'] || req.headers.host
+      const baseUrl = host ? `${proto}://${host}` : null
+      const result = await sendWeeklyOverdueReport({ baseUrl })
+      return res.json(result)
+    }
+
     if (!invoiceNumber) return res.status(400).json({ error: 'invoiceNumber required' })
     let meta = {}
     try { meta = (await redis.get(META_KEY)) || {} } catch {}

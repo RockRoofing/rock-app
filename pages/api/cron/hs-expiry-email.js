@@ -2,6 +2,7 @@ import { get, getTeamMembers } from '../../../lib/db'
 import { runFormsWeeklyNotify } from './forms-weekly-notify'
 import { runDeliveriesNotify } from './deliveries-notify'
 import { runRamsReminders } from '../../../lib/ramsNotify'
+import { sendWeeklyOverdueReport } from '../../../lib/outstandingInvoicesReport'
 
 // Daily digest dispatcher (Hobby-friendly single daily cron doing two jobs):
 //  - MONDAY: weekly forms digest to CMs (Pre-Start) and Supervisors (Start on Site / Site Diary / WAH).
@@ -33,6 +34,17 @@ export default async function handler(req, res) {
       try { formsResult = await runFormsWeeklyNotify({ force }) } catch (e) { formsResult = { ok: false, error: e.message } }
     }
 
+    // ── Monday: weekly Outstanding Invoices report (PDF to post-contract/mgmt/admin + extras) ──
+    let invoiceReport = { skipped: 'not Monday' }
+    if (force || now.getDay() === 1) {
+      try {
+        const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+        const host = req.headers['x-forwarded-host'] || req.headers.host
+        const baseUrl = host ? `${proto}://${host}` : null
+        invoiceReport = await sendWeeklyOverdueReport({ baseUrl })
+      } catch (e) { invoiceReport = { ok: false, error: e.message } }
+    }
+
     // ── DAILY: deliveries expected today -> notify site supervisors ──
     let deliveriesResult = {}
     try { deliveriesResult = await runDeliveriesNotify({ force }) } catch (e) { deliveriesResult = { ok: false, error: e.message } }
@@ -42,7 +54,7 @@ export default async function handler(req, res) {
     try { ramsResult = await runRamsReminders({ force }) } catch (e) { ramsResult = { ok: false, error: e.message } }
 
     // ── 1st of month: H&S expiry digest ──
-    if (!force && now.getDate() !== 1) return res.status(200).json({ ok: true, forms: formsResult, deliveries: deliveriesResult, rams: ramsResult, expiry: 'skipped (not 1st)' })
+    if (!force && now.getDate() !== 1) return res.status(200).json({ ok: true, forms: formsResult, invoiceReport, deliveries: deliveriesResult, rams: ramsResult, expiry: 'skipped (not 1st)' })
 
     const RESEND_KEY = process.env.RESEND_API_KEY
     const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
@@ -96,7 +108,7 @@ export default async function handler(req, res) {
       method: 'POST', headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: FROM, to: recips, subject: `H&S Training expiry digest — ${now.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`, html }),
     })
-    return res.status(200).json({ ok: r.ok, forms: formsResult, deliveries: deliveriesResult, recipients: recips.length, expired: expired.length, soon: soon.length })
+    return res.status(200).json({ ok: r.ok, forms: formsResult, invoiceReport, deliveries: deliveriesResult, recipients: recips.length, expired: expired.length, soon: soon.length })
   } catch (e) {
     console.error('hs-expiry-email error:', e)
     return res.status(500).json({ error: e.message || 'Failed' })

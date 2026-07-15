@@ -1,16 +1,59 @@
-Financial App — batch 4a (update): editable + deletable comments
-================================================================
+Financial App — batch 4b: Outstanding Invoices weekly report + download
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the batch 4a outstanding-invoices files (deploy over the top).
+PDF builder runtime-tested (summary + per-invoice appendix, high-risk, comments).
+Deploy on top of batch 4a.
 
-CHANGE
-------
-Each comment in the invoice comments pop-out now has Edit and Delete controls:
-• Edit — inline edit box with Save / Cancel; edited comments show "(edited)".
-• Delete — removes the comment (with a confirm prompt).
+1) DOWNLOAD BUTTON
+------------------
+On the Outstanding Invoices page: "⬇ Download PDF" downloads the full outstanding
+list as a PDF. A tick box "incl. comments" controls whether a per-invoice
+appendix (details + full comment history + emails-to-date) is appended.
 
-FILES CHANGED
--------------
-• pages/outstanding-invoices.js     — edit/delete controls + inline editor
-• pages/api/outstanding-invoices.js — delete-comment action
+2) WEEKLY REPORT
+----------------
+"📧 Weekly Report" button opens a panel where you can:
+  • See who it goes to automatically (everyone with Standard — Post-Contract,
+    Management or Admin access).
+  • Add / remove ADDITIONAL external recipients (people outside the business).
+  • "Send now" to send this week's report immediately to everyone.
+
+The report is a PDF: a summary front page (all outstanding invoices + totals),
+then a page per invoice with its details, full comment history and emails sent
+to date. It comes from Notifications (FORMS_FROM_EMAIL).
+
+3) AUTOMATED WEEKLY SEND (no new cron)
+--------------------------------------
+Folded into the existing daily digest cron (hs-expiry-email, 07:00). It self-
+guards to MONDAY, so the report goes out every Monday alongside the existing
+weekly forms digest. No new Vercel cron slot used (Hobby limit respected).
+The other jobs in that cron (forms digest, deliveries, RAMS reminders, monthly
+H&S expiry) are unchanged.
+
+DATA SOURCE
+-----------
+Reads the cached dashboard/invoice data (same source as the page) — no extra
+Xero calls. So the Monday email reflects whatever was last imported via the
+Retention Tracker CSV import. Workflow: import the latest CSV, and Monday's
+report is up to date.
+
+REQUIREMENTS
+------------
+RESEND_API_KEY + FORMS_FROM_EMAIL must be set in Vercel (already needed for the
+other emails). If email isn't configured, "Send now" reports that gracefully and
+the download still works.
+
+STILL TO COME (batch 4c, needs your email content)
+--------------------------------------------------
+Per-invoice chase-email buttons from the QS's address + RAMS-style timeline, and
+the BCC-to-comments intake. The report already has an "Emails sent" section ready
+to populate once those are built.
+
+FILES CHANGED / ADDED
+---------------------
+• lib/outstandingInvoicesPdf.js       (new) — report PDF builder
+• lib/outstandingInvoicesReport.js    (new) — gather data, recipients, send email
+• pages/api/outstanding-invoices.js   — download + recipients + send-now actions
+• pages/outstanding-invoices.js       — Download PDF + Weekly Report UI
+• pages/api/cron/hs-expiry-email.js   — Monday overdue-invoices report send

@@ -22,6 +22,8 @@ export default function OutstandingInvoicesPage() {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('overdue')   // overdue | due | dueDate
   const [commentInvoice, setCommentInvoice] = useState(null)  // invoice object for the pop-out
+  const [dlComments, setDlComments] = useState(false)
+  const [weeklyOpen, setWeeklyOpen] = useState(false)
 
   useEffect(() => { loadAll() }, [])
 
@@ -157,6 +159,19 @@ export default function OutstandingInvoicesPage() {
               </select>
             </div>
             <span style={{ fontSize: 12, color: '#888' }}>{rows.length} shown</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+              <label style={{ fontSize: 11, color: '#666', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <input type="checkbox" checked={dlComments} onChange={e => setDlComments(e.target.checked)} /> incl. comments
+              </label>
+              <a href={`/api/outstanding-invoices?action=download${dlComments ? '&comments=1' : ''}`}
+                style={{ background: '#fff', color: '#0f766e', border: '1px solid #5eead4', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+                ⬇ Download PDF
+              </a>
+              <button onClick={() => setWeeklyOpen(true)}
+                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                📧 Weekly Report
+              </button>
+            </div>
           </div>
 
           {/* Table */}
@@ -231,6 +246,7 @@ export default function OutstandingInvoicesPage() {
           onChanged={(invNo, newMeta) => setMeta(m => ({ ...m, [invNo]: { ...(m[invNo] || {}), ...newMeta } }))}
         />
       )}
+      {weeklyOpen && <WeeklyReportModal onClose={() => setWeeklyOpen(false)} />}
     </>
   )
 }
@@ -377,6 +393,91 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
             <button onClick={addComment} disabled={saving || !text.trim()}
               style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, cursor: saving || !text.trim() ? 'default' : 'pointer', opacity: saving || !text.trim() ? 0.5 : 1 }}>
               {saving ? 'Adding…' : 'Add comment'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Weekly report: manage external recipients + send now ──────────────────────
+function WeeklyReportModal({ onClose }) {
+  const [recipients, setRecipients] = useState([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  useEffect(() => { (async () => {
+    try { const d = await fetch('/api/outstanding-invoices?action=recipients').then(r => r.json()); setRecipients(d.recipients || []) } catch {}
+    setLoading(false)
+  })() }, [])
+
+  async function save(list) {
+    setSaving(true)
+    try {
+      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-recipients', recipients: list }) })
+      setRecipients(list)
+    } catch {}
+    setSaving(false)
+  }
+  function addEmail() {
+    const e = input.trim()
+    if (!e || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { setMsg('Enter a valid email address.'); return }
+    if (recipients.includes(e)) { setMsg('Already added.'); return }
+    setMsg(''); setInput('')
+    save([...recipients, e])
+  }
+  function remove(e) { save(recipients.filter(x => x !== e)) }
+
+  async function sendNow() {
+    setSending(true); setMsg('')
+    try {
+      const r = await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-report-now' }) })
+      const d = await r.json()
+      setMsg(d.ok ? `Sent to ${(d.sentTo || []).length} recipient(s).` : (d.note || d.error || 'Could not send.'))
+    } catch (e) { setMsg('Could not send.') }
+    setSending(false)
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 520, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Weekly Report</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>×</button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <p style={{ fontSize: 13, color: '#555', marginTop: 0 }}>
+            The weekly report goes out automatically every <strong>Monday</strong> to everyone with Standard&nbsp;— Post-Contract, Management or Admin access, as a PDF (summary + a page per invoice with its comments). Add anyone outside the business who should also receive it below.
+          </p>
+
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#888', margin: '14px 0 6px' }}>ADDITIONAL RECIPIENTS</div>
+          {loading ? <div style={{ fontSize: 13, color: '#999' }}>Loading…</div> : (
+            <>
+              {recipients.length === 0 && <div style={{ fontSize: 13, color: '#aaa', marginBottom: 8 }}>None yet.</div>}
+              {recipients.map(e => (
+                <div key={e} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#f8f9fa', borderRadius: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 13 }}>{e}</span>
+                  <button onClick={() => remove(e)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 12, cursor: 'pointer' }}>Remove</button>
+                </div>
+              ))}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addEmail()} placeholder="name@company.com"
+                  style={{ flex: 1, padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 8, fontSize: 13 }} />
+                <button onClick={addEmail} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer' }}>Add</button>
+              </div>
+            </>
+          )}
+
+          {msg && <div style={{ fontSize: 12, color: msg.startsWith('Sent') ? '#16a34a' : '#dc2626', marginTop: 10 }}>{msg}</div>}
+
+          <div style={{ borderTop: '1px solid #eee', marginTop: 18, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: '#888' }}>Send this week's report now (to everyone above):</span>
+            <button onClick={sendNow} disabled={sending} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}>
+              {sending ? 'Sending…' : 'Send now'}
             </button>
           </div>
         </div>
