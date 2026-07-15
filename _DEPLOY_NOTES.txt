@@ -1,76 +1,35 @@
-RAMS — FIXES v4: revisions, matrix, director email, SM edits, Users↔Operatives merge
-=====================================================================================
+RAMS — HOTFIX: "projectNo is not defined" when CM signs/approves
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of the previous RAMS fixes.
+Deploy on top of fixes v4.
 
-1) BADGES / MATRIX NOW USE ONLY THE CURRENT RAMS REVISION (root-cause fix)
--------------------------------------------------------------------------
-THE recurring matrix bug: the matrix rolled up the stage across ALL RAMS files
-for a project and took the LEAST-advanced one. An OLD revision still sitting at
-the CM stage dragged the whole line back to "CM" — while the Site App (which
-only ever looks at the newest revision) correctly showed "Site Manager".
-FIX: the matrix and the badges now consider ONLY the newest RAMS file per
-project (sorted by uploadedAt), exactly like the Site App. The pipeline now
-matches the Site App everywhere.
-This also fixes your revision point: uploading a new RAMS supersedes the old one
-for stage, signatures, badges and the matrix — old-version notifications no
-longer linger (e.g. the Director won't see a badge for a version he can no
-longer access).
+BUG
+---
+When the Contracts Manager tried to approve/sign a RAMS, it errored with
+"project no. is not defined" (a JavaScript ReferenceError). Same would have hit
+director-approve and set-site-manager.
 
-2) DIRECTOR "TO APPROVE" EMAIL — more robust
---------------------------------------------
-notifyDirectorToApprove now: (a) falls back to a Portal user with jobRole
-"Director" if ops:rams-director has no email, and (b) logs a clear error if the
-send fails (check RESEND_API_KEY / FORMS_FROM_EMAIL / the director's email).
-If it still doesn't arrive, the cause is almost certainly email config or the
-director's stored email — the deploy notes flag exactly what to check.
+CAUSE
+-----
+In the previous change that added the Site Manager "requires edits" (sm-reject)
+action, the line that reads the project + file from the request —
+  const { projectNo, fileId } = body
+— was accidentally removed. The code just below it still used projectNo/fileId,
+so those actions threw at runtime. (It compiled fine because the error only
+occurs at execution, not at build.)
 
-3) SITE MANAGER: "DO NOT APPROVE — REQUIRES EDITS"
---------------------------------------------------
-The no-login Site Manager page now has a "Do not approve — requires edits"
-option. The Site Manager enters their name + a description of the edits; on
-submit the RAMS is NOT approved and an email is sent to BOTH the project's
-Contracts Manager AND the designated Director with the edit notes. (Make the
-edits, re-upload the RAMS to restart the chain.)
+FIX
+---
+Restored the destructure before the cm-approve / director-approve /
+set-site-manager actions. All three now have projectNo + fileId in scope again.
+Verified with `node --check` and a clean build.
 
-4) DIRECTOR SIGN = SIGN + AUTO-SEND (already in v3, included)
-------------------------------------------------------------
-When the Director signs, the customer's Site Manager email is sent AUTOMATICALLY
-(recipient chosen by the CM at CM approval). No separate "send" step.
+FILE CHANGED
+------------
+• pages/api/rams-approvals.js  — restored `const { projectNo, fileId } = body`
 
-5) SITE APP USERS  ⇄  H&S OPERATIVES  — now one list
----------------------------------------------------
-• Site App Users (Admin) gains COMPANY and TRADE(S) fields. ALL fields are now
-  mandatory when adding a user (name, role, mobile, email, company, ≥1 trade).
-• The H&S → Operatives page is now READ-ONLY and is automatically populated from
-  Site App Users (it shows name, email, phone, company, trade). Add/Edit/Delete
-  there is removed — manage everyone under Admin → Site App Users.
-• /api/operatives now returns a projection of Site App Users, so the Planning
-  Gantt and RAMS Matrix draw their installer list from the same single source.
-
-  ⚠ IMPORTANT — allocations reset: because operatives now use Site App User IDs,
-  any EXISTING Gantt labour allocations tied to the old separate roster will no
-  longer resolve. You confirmed this is fine (few/none yet). New allocations use
-  the unified users going forward. The old roster store (ops:operatives-roster)
-  is simply no longer read.
-
-  ACTION: re-add your installers as Site App Users (with company + trade) if they
-  aren't already there; they'll appear in Operatives, the Gantt and the Matrix.
-
-FILES CHANGED
--------------
-• pages/api/rams-matrix.js        — current-revision-only stage + signers
-• pages/api/site-badges.js        — current-revision-only, role-aware counts
-• lib/ramsNotify.js               — robust Director email; SM-rejection email
-• pages/api/rams-approvals.js     — sm-reject action (requires edits)
-• pages/rams-approve.js           — "Do not approve — requires edits" UI
-• pages/api/operatives.js         — now a READ-ONLY projection of Site App Users
-• pages/operations/hs/operatives.js — read-only page (no add/edit/delete)
-• pages/operations/users.js       — Company + Trade fields (mandatory) + columns
-
-SETUP AFTER DEPLOY
-------------------
-• Admin → Site App Users: add/confirm each installer with Company + Trade.
-• Admin → RAMS Director must be set (and be a Site App user) for Director emails.
-• RESEND_API_KEY + FORMS_FROM_EMAIL must be set for any emails.
+TEST
+----
+CM: open a project's RAMS → Approve as Contracts Manager → read to bottom →
+sign + enter Site Manager → Approve & sign. Should now succeed (stage → Director).

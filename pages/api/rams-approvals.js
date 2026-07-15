@@ -136,6 +136,10 @@ export default async function handler(req, res) {
       } catch {}
       return res.json({ ok: true })
     }
+
+    // ── All remaining actions (cm-approve / director-approve / set-site-manager)
+    //    operate on a specific project + RAMS file. ──
+    const { projectNo, fileId } = body
     if (!projectNo || !fileId) return res.status(400).json({ error: 'Missing projectNo/fileId' })
     const approvals = await getRamsApprovals(projectNo)
     let rec = approvals[fileId] || blankRecord()
