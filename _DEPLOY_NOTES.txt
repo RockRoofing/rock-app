@@ -1,56 +1,42 @@
-Financial App — batch 2d: Import invoices from Xero CSV (no rate limits)
-=======================================================================
+Financial App — batch 2e: Retention Tracker shows all projects with retention details
+=====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Validated against your real Xero export.
-Deploy on top of batch 2c.
+Deploy on top of batch 2d.
 
-WHY
----
-A full live Xero sync of every invoice hits Xero's rate limit and Vercel's 10s
-function timeout. Instead, you export "Sales Invoices" from Xero to CSV and upload
-it here — the app parses it and fills Invoiced / VAT / VAT Type / Paid / Due for
-ALL projects in one go, with essentially no Xero API calls.
+WHY PROJECTS WEREN'T PULLING OVER
+---------------------------------
+The Retention Tracker only listed projects that had already been INVOICED
+(retentionOutstanding > 0 OR grossInvoiced > 0). Projects set up in your project
+details (which feed the Budget Tracker / EOM report) but not yet invoiced were
+filtered out — so they never appeared.
 
-HOW TO USE
-----------
-1) In Xero: Business → Invoices → export the Sales Invoices list to CSV (the file
-   with columns InvoiceNumber, Total, TaxTotal, InvoiceAmountPaid,
-   InvoiceAmountDue, TrackingOption1, TaxType, Status, etc. — i.e. exactly the
-   export you sent me).
-2) In the app: Retention Tracker → "⬆ Import invoices from Xero" → choose the CSV.
-3) It reports how many invoices/projects it imported (and lists any project names
-   in the file that didn't match an app project). The tracker refreshes with the
-   figures.
+WHAT CHANGED
+------------
+• The tracker now shows every project that has a RETENTION % set in its project
+  details, as well as any already invoiced / with retention outstanding. So the
+  list mirrors the project-details data rather than waiting for invoicing.
+• It now auto-fills from project details (via the same dashboard source the EOM
+  report uses):
+    – QS name (falls back to Estimator if QS not set)
+    – Completion date (uses the project's completion date, else the PC date)
+    – Retention comments (the box added in batch 1) flows into the row comments
+  These layer on top of any manual override you've made, so they stay current.
+• Dashboard API now exposes qsName, pcDate, defectsDate, completionDate and
+  retentionComments from project settings.
 
-WHAT IT DOES (verified on your sample)
---------------------------------------
-• Reads the line-level export, de-duplicates invoices by InvoiceNumber (Total/
-  Paid/Due are invoice-level and repeat on each line — they are NOT summed per
-  line), and aggregates per project by TrackingOption1 (e.g. "J228-Farmstead
-  Drive").
-• Skips overpayments/prepayments; counts sales invoices, subtracts credit notes.
-• Captures VAT (TaxTotal) and a VAT-type label per project: "20%", "5%",
-  "0% reverse charge", "0% zero-rated", "No VAT", "Exempt", or "Mixed" when a
-  project's invoices differ (your J228 sample = Mixed: reverse-charge + zero-rated).
-• Matches each tracking name to the app's project via one lightweight Xero call
-  (tracking categories only — not the rate-limited per-invoice calls), then writes
-  the same cache the Retention Tracker & dashboard read, and clears the dashboard
-  cache so figures show immediately.
-  (Sample result: J228-Farmstead Drive — 8 invoices, £92,389.85 invoiced,
-   £75,226.55 paid, £17,163.30 due, £0 VAT.)
+IMPORTANT — clear the cache after deploy
+----------------------------------------
+The dashboard caches projects for 4 hours, so after deploying:
+  → visit /api/clear-cache (admin) OR run the Xero WIP sync,
+then reload the Retention Tracker. The extra projects + auto-filled fields appear.
 
-NOTES
------
-• If a project name in the CSV doesn't match an app project, it's listed as
-  skipped (nothing is silently lost) — usually a naming mismatch we can align.
-• Re-importing simply overwrites with the latest snapshot (safe to run repeatedly).
-• I also made the live Xero retry logic honour Xero's Retry-After header (helps
-  the daily sync recover from throttling), but the CSV import is the reliable
-  route for bulk data.
+If a project still doesn't show, check it has a Retention % set in Edit Project
+Details → Retention. (A project with 0% retention has nothing to track, so it's
+intentionally excluded.)
 
-FILES CHANGED / ADDED
----------------------
-• pages/api/import-invoices-bulk.js  (new) — bulk CSV importer (all projects)
-• pages/retention.js                 — "Import invoices from Xero" upload button
-• lib/xero.js                        — honour Retry-After on 429s (live sync resilience)
+FILES CHANGED
+-------------
+• pages/api/dashboard.js — expose QS/dates/retention comments from project details
+• pages/retention.js     — show all projects with a retention %; auto-fill QS,
+                           completion date and comments from project details

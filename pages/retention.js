@@ -70,8 +70,12 @@ export default function RetentionPage() {
       // Load Xero projects with retention
       const r2 = await fetch('/api/dashboard')
       const d2 = await r2.json()
+      // Show every project that has retention information in its project details
+      // (a retention % set), plus any that already have retention outstanding or
+      // invoicing under way. This mirrors the project details / EOM data rather
+      // than waiting for a project to be invoiced.
       const withRetention = (d2.projects || [])
-        .filter(p => p.retentionOutstanding > 0 || p.grossInvoiced > 0)
+        .filter(p => (parseFloat(p.retentionPct || 0) > 0) || p.retentionOutstanding > 0 || p.grossInvoiced > 0)
         .map(p => ({
           id: p.xeroId,
           xeroId: p.xeroId,
@@ -81,10 +85,11 @@ export default function RetentionPage() {
           projectValue: p.contractValue || 0,
           finalAccount: p.afa || 0,
           retentionPct: (p.retentionPct || 0) * 100,
-          completionDate: '',
+          completionDate: p.completionDate || p.pcDate || '',
           pcType: '',
-          qsName: p.estimator || '',
+          qsName: p.qsName || p.estimator || '',
           qsEmail: '',
+          comments: p.retentionComments || p.comment || '',
           invoiced: p.totalInvoiced || 0,
           vat: p.vat || 0,
           vatRateLabel: p.vatRateLabel || '—',
@@ -95,7 +100,6 @@ export default function RetentionPage() {
           release2Value: (p.grossInvoiced - p.totalInvoiced) / 2 || 0,
           release2Date: '',
           release2Received: false,
-          comments: p.comment || '',
           manual: false,
           status: p.status,
         }))
@@ -190,6 +194,8 @@ export default function RetentionPage() {
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
+        completionDate: e.completionDate || x.completionDate,
+        qsName: e.qsName || x.qsName,
       }
     }
     return e
