@@ -212,18 +212,27 @@ function FormsHomeMenu({ user }) {
         setMyProjectCount(mine.length)
         const nos = new Set(mine.map(p => p.projectNo))
         setMyProjectNos(nos)
-        // Issues needing actioning on my projects (not resolved, no send-to-customer decision yet).
+        // Issues needing action on my projects: not resolved AND either no
+        // send-to-customer decision yet, OR marked "Requires edits" (still needs
+        // the edits doing before it can go to the customer).
         try {
           const di = await fetch('/api/issues').then(r => r.json())
-          const need = (di.issues || []).filter(i => nos.has(i.projectNo) && !i.resolvedDate && !i.sendToCustomer)
+          const need = (di.issues || []).filter(i =>
+            nos.has(i.projectNo) && !i.resolvedDate && (!i.sendToCustomer || i.sendToCustomer === 'edits'))
           setIssueActionCount(need.length)
         } catch {}
-        // Overdue Live Tasks on my projects.
+        // Live Tasks needing attention on my projects: overdue (past close-out
+        // date) OR no target/close-out date set at all.
         try {
           const dt = await fetch('/api/tasks').then(r => r.json())
           const td = new Date(); td.setHours(0, 0, 0, 0)
-          const overdue = (dt.tasks || []).filter(t => nos.has(t.projectNo) && !t.closed && t.closeOutDate && (() => { const d = new Date(t.closeOutDate); d.setHours(0,0,0,0); return d < td })())
-          setOverdueTaskCount(overdue.length)
+          const need = (dt.tasks || []).filter(t => {
+            if (!nos.has(t.projectNo) || t.closed) return false
+            if (!t.closeOutDate) return true            // no target date set
+            const d = new Date(t.closeOutDate); d.setHours(0, 0, 0, 0)
+            return d < td                                // overdue
+          })
+          setOverdueTaskCount(need.length)
         } catch {}
       } catch {}
     })()
@@ -615,15 +624,14 @@ function ProjectDetailsView({ onBack, only }) {
                   )
                 )}
 
-                {/* CM sets the Site Manager recipient once the Director has approved */}
-                {isCM && stage === 'site-manager' && (
+                {/* At Site Manager stage the email was sent automatically when the
+                    Director signed. Show status; CM can resend if it didn't arrive. */}
+                {stage === 'site-manager' && (
                   <div style={{ marginTop: 10 }}>
-                    {appr.siteManagerEmail
-                      ? <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#1e40af' }}>
-                          ✉ Sent to Site Manager: <strong>{appr.siteManagerEmail}</strong> — awaiting their approval.
-                          <button onClick={() => setSmFile(f)} style={{ background: 'none', border: 'none', color: BRAND, fontWeight: 600, cursor: 'pointer', marginLeft: 6, fontSize: 13 }}>Resend / change</button>
-                        </div>
-                      : <button onClick={() => setSmFile(f)} style={{ ...bigBtn(false), background: '#ca8a04' }}>✉ Send to Site Manager for approval</button>}
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '11px 14px', fontSize: 13, color: '#1e40af' }}>
+                      ✉ Sent to Site Manager{appr.siteManagerName ? ` (${appr.siteManagerName})` : ''}: <strong>{appr.siteManagerEmail || '—'}</strong> — awaiting their approval.
+                      {isCM && <button onClick={() => setSmFile(f)} style={{ background: 'none', border: 'none', color: BRAND, fontWeight: 600, cursor: 'pointer', marginLeft: 6, fontSize: 13 }}>Resend</button>}
+                    </div>
                   </div>
                 )}
 
@@ -728,6 +736,20 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
   const isDirectorMode = mode === 'director'
   const isApproveMode = isCMmode || isDirectorMode
 
+  // CM mode also captures the customer's Site Manager (mandatory).
+  const [smName, setSmName] = useState('')
+  const [smEmail, setSmEmail] = useState('')
+  const [smContacts, setSmContacts] = useState([])
+  useEffect(() => {
+    if (!isCMmode) return
+    fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json()).then(d => {
+      const sc = d?.project?.data?.siteContacts || d?.project?.siteContacts || []
+      setSmContacts(Array.isArray(sc) ? sc : [])
+      const mgr = (sc || []).find(c => /manager/i.test(c.title || '') && c.email)
+      if (mgr) { setSmName(mgr.name || ''); setSmEmail(mgr.email || '') }
+    }).catch(() => {})
+  }, [isCMmode, projectNo])
+
   // Logged-in operative (name + id auto-filled).
   const user = (() => { try { return JSON.parse(sessionStorage.getItem('ops_operative') || 'null') } catch { return null } })()
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -793,13 +815,17 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
     setErr('')
     if (!sigData) { setErr('Please draw your signature.'); return }
     if (!user?.id) { setErr('Could not identify your account — please log in again.'); return }
+    if (isCMmode) {
+      if (!smName.trim()) { setErr('Please enter the customer\u2019s Site Manager name.'); return }
+      if (!smEmail.trim() || !/.+@.+\..+/.test(smEmail)) { setErr('Please enter a valid Site Manager email.'); return }
+    }
     setSaving(true)
     try {
       let r
       if (isCMmode) {
         r = await fetch('/api/rams-approvals', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'cm-approve', projectNo, fileId: file.id, name: user.name || '', signatureImg: sigData }),
+          body: JSON.stringify({ action: 'cm-approve', projectNo, fileId: file.id, name: user.name || '', signatureImg: sigData, siteManagerName: smName.trim(), siteManagerEmail: smEmail.trim() }),
         })
       } else if (isDirectorMode) {
         r = await fetch('/api/rams-approvals', {
@@ -823,7 +849,7 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
       {/* Header */}
       <div style={{ background: INK, height: 52, display: 'flex', alignItems: 'center', padding: '0 14px', gap: 10, flexShrink: 0 }}>
         <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {step === 'read' ? 'Read the RAMS' : (isApproveMode ? 'Approve & sign the RAMS' : 'Sign the RAMS')}
+          {step === 'read' ? 'Read the RAMS' : step === 'allocate-sm' ? 'Allocate a Site Manager' : (isApproveMode ? 'Approve & sign the RAMS' : 'Sign the RAMS')}
         </div>
         <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>×</button>
       </div>
@@ -841,9 +867,55 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
             </div>
           </div>
           <div style={{ padding: '12px 14px', borderTop: '1px solid #e3e0d9', background: '#fff', flexShrink: 0 }}>
-            <button onClick={() => setStep('sign')} disabled={!reachedBottom} style={bigBtn(!reachedBottom)}>
-              {reachedBottom ? 'I confirm I’ve read this — continue' : 'Scroll to the end to continue'}
+            <button onClick={() => setStep(isCMmode ? 'allocate-sm' : 'sign')} disabled={!reachedBottom} style={bigBtn(!reachedBottom)}>
+              {reachedBottom ? (isCMmode ? 'I confirm I’ve read this — continue' : 'I confirm I’ve read this — continue') : 'Scroll to the end to continue'}
             </button>
+          </div>
+        </>
+      ) : step === 'allocate-sm' ? (
+        <>
+          <div style={{ flex: 1, overflow: 'auto', padding: '18px 16px' }}>
+            <div style={{ maxWidth: 520, margin: '0 auto' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK, marginBottom: 4 }}>Allocate the customer's Site Manager</div>
+              <div style={{ fontSize: 13.5, color: '#777', marginBottom: 16, lineHeight: 1.5 }}>Choose who will approve the RAMS on behalf of the customer. They'll be emailed automatically <strong>after the Director signs</strong> — nothing is sent now.</div>
+
+              {smContacts.filter(c => c.email).length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 8 }}>Site contacts on this project</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                    {smContacts.filter(c => c.email).map((c, i) => {
+                      const on = smEmail === c.email
+                      return (
+                        <button key={i} onClick={() => { setSmName(c.name || ''); setSmEmail(c.email || '') }}
+                          style={{ textAlign: 'left', border: '2px solid ' + (on ? BRAND : '#e3e0d9'), background: on ? '#fffbeb' : '#fff', borderRadius: 12, padding: '11px 13px', cursor: 'pointer' }}>
+                          <div style={{ fontSize: 14.5, fontWeight: 600, color: INK }}>{on ? '✓ ' : ''}{c.name || c.email}{c.title ? <span style={{ color: '#888', fontWeight: 400 }}> · {c.title}</span> : ''}</div>
+                          <div style={{ fontSize: 12.5, color: '#888' }}>{c.email}</div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#999', marginBottom: 14, textAlign: 'center' }}>— or enter manually —</div>
+                </>
+              )}
+
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Site Manager name <span style={{ color: '#dc2626' }}>*</span></div>
+              <input value={smName} onChange={e => setSmName(e.target.value)} placeholder="Full name"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 16, marginBottom: 14, outline: 'none' }} />
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 5 }}>Site Manager email <span style={{ color: '#dc2626' }}>*</span></div>
+              <input value={smEmail} onChange={e => setSmEmail(e.target.value)} placeholder="name@company.com" inputMode="email"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', border: '2px solid #e3e0d9', borderRadius: 12, fontSize: 16, outline: 'none' }} />
+
+              {err && <div style={{ color: '#dc2626', fontSize: 14, marginTop: 14 }}>{err}</div>}
+            </div>
+          </div>
+          <div style={{ padding: '12px 14px', borderTop: '1px solid #e3e0d9', background: '#fff', flexShrink: 0, display: 'flex', gap: 10 }}>
+            <button onClick={() => setStep('read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>‹ Back</button>
+            <button onClick={() => {
+              setErr('')
+              if (!smName.trim()) { setErr('Please enter the customer’s Site Manager name.'); return }
+              if (!smEmail.trim() || !/.+@.+\..+/.test(smEmail)) { setErr('Please enter a valid Site Manager email.'); return }
+              setStep('sign')
+            }} style={{ ...bigBtn(false), flex: 2 }}>Continue to sign ›</button>
           </div>
         </>
       ) : (
@@ -868,10 +940,16 @@ function RamsSignFlow({ file, projectNo, onClose, onSigned, mode = 'operative' }
             <div style={{ fontSize: 12, fontWeight: 600, color: '#777', marginBottom: 6 }}>Draw your signature below</div>
             <SignaturePad onChange={setSigData} />
 
+            {isCMmode && (
+              <div style={{ marginTop: 14, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#1e40af' }}>
+                Site Manager to approve: <strong>{smName}</strong> ({smEmail}). They'll be emailed after the Director signs.
+              </div>
+            )}
+
             {err && <div style={{ color: '#dc2626', fontSize: 14, margin: '12px 0' }}>{err}</div>}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setStep('read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>‹ Back to document</button>
+              <button onClick={() => setStep(isCMmode ? 'allocate-sm' : 'read')} style={{ flex: 1, padding: '14px 0', fontSize: 15, fontWeight: 600, color: '#555', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, cursor: 'pointer' }}>{isCMmode ? '‹ Back' : '‹ Back to document'}</button>
               <button onClick={submit} disabled={saving || !sigData} style={{ ...bigBtn(saving || !sigData), flex: 2 }}>{saving ? 'Saving…' : (isApproveMode ? 'Approve & sign' : 'Sign & confirm')}</button>
             </div>
           </div>

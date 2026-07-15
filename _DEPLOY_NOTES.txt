@@ -1,35 +1,34 @@
-RAMS — HOTFIX: "projectNo is not defined" when CM signs/approves
-================================================================
+RAMS — CM approval: dedicated "Allocate a Site Manager" step
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy on top of fixes v4.
+Deploy on top of the projectNo hotfix.
 
-BUG
----
-When the Contracts Manager tried to approve/sign a RAMS, it errored with
-"project no. is not defined" (a JavaScript ReferenceError). Same would have hit
-director-approve and set-site-manager.
+WHAT CHANGED
+------------
+Previously the Site Manager name/email were fields at the bottom of the CM's
+sign screen — easy to miss, so approving errored with "please enter the
+customer's Site Manager name".
 
-CAUSE
------
-In the previous change that added the Site Manager "requires edits" (sm-reject)
-action, the line that reads the project + file from the request —
-  const { projectNo, fileId } = body
-— was accidentally removed. The code just below it still used projectNo/fileId,
-so those actions threw at runtime. (It compiled fine because the error only
-occurs at execution, not at build.)
+Now the CM approval is a clear 3-step flow:
+  1) Read the RAMS  (scroll to the bottom)
+  2) ALLOCATE A SITE MANAGER  ← new dedicated screen
+       • pick a project Site Contact, or enter name + email manually
+       • both are mandatory; "Continue to sign" is blocked until valid
+       • clearly states the Site Manager is emailed only AFTER the Director signs
+  3) Sign  (draw signature → Approve & sign)
+     - the sign screen shows a small confirmation of who was allocated
 
-FIX
----
-Restored the destructure before the cm-approve / director-approve /
-set-site-manager actions. All three now have projectNo + fileId in scope again.
-Verified with `node --check` and a clean build.
+This only applies to the Contracts Manager flow. Operatives and the Director
+still go straight Read → Sign.
 
 FILE CHANGED
 ------------
-• pages/api/rams-approvals.js  — restored `const { projectNo, fileId } = body`
+• pages/forms/index.js  — new 'allocate-sm' step in the CM approval flow;
+                          Site Manager fields moved out of the sign screen.
 
 TEST
 ----
-CM: open a project's RAMS → Approve as Contracts Manager → read to bottom →
-sign + enter Site Manager → Approve & sign. Should now succeed (stage → Director).
+CM: open project RAMS → Approve as Contracts Manager → read to bottom →
+"Allocate a Site Manager" (choose contact or type name+email) → Continue to sign
+→ draw signature → Approve & sign. Stage advances to Director; no email sent yet.
