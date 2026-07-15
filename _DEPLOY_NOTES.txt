@@ -1,31 +1,15 @@
-Financial App — batch 4b (update): comment @mention fixes
-========================================================
+Financial App — Outstanding Invoices: add "Report app improvement" button
+=========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Replaces the outstanding-invoices files (deploy over the top).
+Replaces the outstanding-invoices page (deploy over the top).
 
-1) CURSOR AFTER INSERTED MENTION
---------------------------------
-After picking a name from the @ menu, the cursor now sits right after the
-inserted "@Name " so you carry on typing there (previously it jumped back to the
-start).
+CHANGE
+------
+The "⚠ Report app improvement" button was missing from the Outstanding Invoices
+nav. Added it to the top-right, matching the other commercial pages. (The modal
+itself is already mounted globally in _app.js, so the button now opens it.)
 
-2) MENTIONS SHOWN BOLD + BLUE
------------------------------
-Once a comment is posted, any @Name that matches a portal user is rendered in
-bold blue in the comment thread.
-
-3) EMAIL NOTIFICATION ON MENTION
---------------------------------
-Being @mentioned now sends an EMAIL to that person (as well as the in-app
-notification) — "You were mentioned on invoice <number>", including the comment
-text. This is why you didn't get one before: only an in-app notification was
-created, with no email. Requires RESEND_API_KEY + FORMS_FROM_EMAIL in Vercel
-(same as the other emails); it's best-effort and won't block posting the comment.
-Note: the mention must match a portal user's name exactly — using the @ picker
-guarantees this.
-
-FILES CHANGED
--------------
-• pages/outstanding-invoices.js     — caret after mention; bold-blue mention render
-• pages/api/outstanding-invoices.js — email mentioned users (+ existing in-app notif)
+FILE CHANGED
+------------
+• pages/outstanding-invoices.js
