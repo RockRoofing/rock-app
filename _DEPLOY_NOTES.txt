@@ -1,18 +1,42 @@
-Bookkeeping — default to uncategorised items on all tabs
-========================================================
+Bookkeeping — fix wrong Xero figures (P&L section-aware)
+=======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. Frontend only.
+Deploy over the top. AFTER deploying, press "↻ Sync Xero figures" to re-pull the
+benchmark in the new structured format.
 
-CHANGE
-------
-Every tab now opens with the "No category assigned" filter applied, so you land
-straight on the items needing attention (combined with the most-recent-full-month
-default from the previous update). Applies on load and when switching tabs.
+THE BUG (your screenshot)
+-------------------------
+Cost of Sale showed Xero -£967 vs App £145,943 — clearly wrong. Cause: the P&L
+benchmark flattened the ENTIRE Profit & Loss into a single {accountName: amount}
+map with no section context. The page then treated "anything not sales/wages" as
+Bills — so overheads, admin expenses and P&L SUBTOTAL rows all polluted the Bills
+figure (and netted it to near-zero / negative).
 
-To see everything, change the filter to "Categorised & uncategorised" or click
-"Clear filters" (Clear resets to all categories + all months).
+THE FIX
+-------
+• fetchProfitAndLoss now records each account's P&L SECTION and returns section
+  totals: incomeTotal + costOfSalesTotal + a bySection breakdown.
+• The benchmark now stores this structure per month.
+• The Bookkeeping summary now uses ONLY:
+    - Sales   = the Income section total
+    - Costs   = the Cost of Sales section only (overheads/admin EXCLUDED),
+                split into Direct Wages vs Bills by account name.
+  So the three rows now reflect true cost-of-sale, not the whole P&L.
+• Row labels clarified to match intent:
+    "Total in Xero"  |  "Categorised in app"  |  "Still to find"
+  Green when they balance, red when there's still an amount to categorise.
+• Back-compat: if an OLD flat benchmark is still cached, the page falls back to
+  name-based heuristics until you re-sync. Press Sync Xero figures to get the
+  accurate section-based numbers.
 
-FILE CHANGED
-------------
-• pages/bookkeeping.js — assigned filter defaults to 'no' (uncategorised)
+NOTE ON NAMING: the CoS wages split keys on account names containing
+wage/PAYE/salaries/"CIS labour". If your Xero Cost of Sales account names differ,
+tell me the exact names and I'll match them precisely.
+
+FILES CHANGED
+-------------
+• lib/xero.js                  — fetchProfitAndLoss: section-aware + totals
+• pages/api/sync-benchmark.js  — store structured P&L per month
+• pages/api/cron/deep-sync.js  — store structured P&L per month
+• pages/bookkeeping.js         — summary uses section totals; clearer labels

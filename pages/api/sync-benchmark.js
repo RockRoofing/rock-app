@@ -40,7 +40,12 @@ export default async function handler(req, res) {
       const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
       try {
         const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to)
-        months[from.slice(0, 7)] = pl.accounts
+        months[from.slice(0, 7)] = {
+          accounts: pl.accounts,
+          bySection: pl.bySection,
+          incomeTotal: pl.incomeTotal,
+          costOfSalesTotal: pl.costOfSalesTotal,
+        }
         monthsPulled++
         await sleep(250)
       } catch (e) { console.error('P&L pull failed for', from, e.message) }

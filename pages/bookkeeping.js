@@ -311,17 +311,41 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
   const anySpike = chartData.some(d => d.uncategorised > 0)
 
   // Three-row Xero-vs-app summary for the filtered period (or all months).
+  // Uses the P&L's COST OF SALES section only (overheads/admin excluded), split
+  // into Wages vs Bills by account name. Sales = the Income section total.
   const bm = data.benchmark?.months || {}
   const app = data.appCategorised || {}
   const hasBm = Object.keys(bm).length > 0
   const monthsToSum = month ? [month] : [...new Set([...Object.keys(bm), ...Object.keys(app)])]
   let xeroWages = 0, xeroBills = 0, xeroSales = 0
   for (const mo of monthsToSum) {
-    for (const [name, val] of Object.entries(bm[mo] || {})) {
-      const ln = name.toLowerCase()
-      if (ln.includes('sales') || ln.includes('income') || ln.includes('revenue')) xeroSales += val
-      else if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries')) xeroWages += val
-      else xeroBills += val
+    const b = bm[mo]
+    if (!b) continue
+    // Back-compat: old benchmark stored a flat { accountName: val } with no
+    // sections. Detect and handle it with name-based heuristics.
+    const isNew = b.bySection || b.incomeTotal != null || b.costOfSalesTotal != null
+    if (!isNew) {
+      for (const [name, val] of Object.entries(b)) {
+        const ln = name.toLowerCase(); const amt = Math.abs(val || 0)
+        if (ln.includes('sales') || ln.includes('income') || ln.includes('revenue')) xeroSales += amt
+        else if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries') || ln.includes('cis labour')) xeroWages += amt
+        else xeroBills += amt
+      }
+      continue
+    }
+    xeroSales += Math.abs(b.incomeTotal || 0)
+    const cosSection = Object.entries(b.bySection || {}).find(([title]) => {
+      const t = title.toLowerCase()
+      return t.includes('cost of sales') || t.includes('cost of goods') || t.includes('direct costs')
+    })
+    if (cosSection) {
+      for (const [name, val] of Object.entries(cosSection[1])) {
+        const ln = name.toLowerCase(); const amt = Math.abs(val || 0)
+        if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries') || ln.includes('cis labour')) xeroWages += amt
+        else xeroBills += amt
+      }
+    } else if (b.costOfSalesTotal) {
+      xeroBills += Math.abs(b.costOfSalesTotal)
     }
   }
   const inPeriod = (r) => !month || rowMonth(r) === month
@@ -375,9 +399,9 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
             <div key={r.label} style={{ border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px', background: hasBm ? (balanced ? '#f0fdf4' : '#fef2f2') : '#fafafa' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>{r.label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <Fig label="Xero" value={hasBm ? fmtL(r.xero) : '—'} />
-                <Fig label="App" value={fmtL(r.app)} />
-                <Fig label="Difference" value={hasBm ? fmtL(diff) : '—'} color={col} bold />
+                <Fig label="Total in Xero" value={hasBm ? fmtL(r.xero) : '—'} />
+                <Fig label="Categorised in app" value={fmtL(r.app)} />
+                <Fig label="Still to find" value={hasBm ? fmtL(diff) : '—'} color={col} bold />
               </div>
             </div>
           )
