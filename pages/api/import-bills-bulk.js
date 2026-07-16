@@ -146,8 +146,8 @@ export default async function handler(req, res) {
       const existing = (await redis.get(`costs:bills:${projectId}`).catch(() => null))?.lines || []
       const { merged, added } = mergeDedupe(existing, g.lines, costLineKey)
       totalAdded += added
-      const labour = merged.filter(l => LABOUR_ACCOUNT_CODES.includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
-      const materials = merged.filter(l => !LABOUR_ACCOUNT_CODES.includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
+      const labour = merged.filter(l => l.type === 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
+      const materials = merged.filter(l => l.type !== 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:bills:${projectId}`, {
         labourSpend: labour, materialsSpend: materials, totalCosts: labour + materials, lines: merged,
         calculatedAt: new Date().toISOString(), source: 'bills_bulk',

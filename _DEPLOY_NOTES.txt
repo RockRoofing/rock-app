@@ -1,32 +1,34 @@
-Financial — overdue-days match Xero + Unassigned key + upload new/updated counts
-================================================================================
+Financial — FIX: Bills upload crash ("LABOUR_ACCOUNT_CODES is not defined")
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Runtime-tested the merge/recompute path that was crashing.
+Deploy over the top, then RE-UPLOAD your Bills file.
 
-1) OVERDUE-BY NOW MATCHES XERO (off-by-one fixed)
--------------------------------------------------
-Xero counts the overdue period INCLUSIVELY (the day after the due date is "1 day
-overdue"). The app was showing one day fewer. Now adds 1 once past the due date,
-so "Overdue by" matches Xero exactly. (Verified against INV-1683: app was 19,
-Xero 20 — now aligned.)
+THE BUG
+-------
+The Bills importer's merge step referenced LABOUR_ACCOUNT_CODES, which isn't
+defined in that file (it lives in the wages importer / deep-sync). So the Bills
+upload threw "LABOUR_ACCOUNT_CODES is not defined" and stopped BEFORE saving —
+meaning that upload's bills were NOT stored. (Previously-stored bills were
+unaffected; only the failing upload didn't land.)
 
-2) UNASSIGNED KEY ON OUTSTANDING INVOICES PAGE
-----------------------------------------------
-Added an amber "UNASSIGNED" key/legend strip below the summary cards, shown only
-when there are untagged invoices: e.g. "15 invoices (£84,919.55) have no project
-tracking category in Xero… tag them in Xero and re-upload." Explains the badge on
-the rows.
+THE FIX
+-------
+Recompute labour vs materials from each line's existing `type` field
+('Labour'/'Materials'), which is set at parse time using your Account
+Categorisation config. This both fixes the crash AND makes the split correctly
+respect any Labour/Materials/Ignore settings you've configured (rather than a
+hardcoded code list).
 
-3) UPLOAD NOW REPORTS NEW vs UPDATED (invoices)
------------------------------------------------
-The Sales Invoices upload result now shows "New added" and "Updated (already had)"
-instead of just a total — so re-uploading the same file clearly shows 0 new / all
-updated, confirming no duplicates were created. (The dedupe by invoice number was
-already preventing duplicates; this just makes it visible.)
+Only the Bills importer had this bug. Wages importer (all-labour) and deep-sync
+(which defines the constant) were fine.
 
-FILES CHANGED
--------------
-• pages/outstanding-invoices.js   — overdue +1 (Xero-inclusive) + Unassigned key
-• pages/api/import-invoices-bulk.js — return newInvoices / updatedInvoices
-• pages/admin/xero-upload.js      — show New added / Updated on invoice result
+ACTION AFTER DEPLOY
+-------------------
+Re-upload the Bills CSV — the upload that showed the error didn't save, so those
+bills need re-importing. It will merge/dedupe as normal (no duplicates).
+
+FILE CHANGED
+------------
+• pages/api/import-bills-bulk.js — fix undefined var; sum by line type
