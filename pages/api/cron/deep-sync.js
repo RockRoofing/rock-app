@@ -74,7 +74,50 @@ async function fetchBills(accessToken, tenantId, trackingOptionId, trackingCateg
   return lines
 }
 
-// ── Direct Wages (320) via Manual Journals, tagged to this project only ──
+// ── Untagged / overhead bills sweep: ALL ACCPAY bills in the window, keeping
+//    lines that have NO project tracking tag (overheads + untagged cost-of-sale).
+//    Runs once per day (heavier — pulls all bills, not project-filtered).
+async function fetchUntaggedBills(accessToken, tenantId, fromDate) {
+  const lines = []
+  let page = 1
+  while (true) {
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?Type=ACCPAY&page=${page}&pageSize=100&DateFrom=${fromDate}`
+    const res = await xget(url, accessToken, tenantId)
+    if (!res.ok) break
+    const data = await res.json()
+    const invoices = data.Invoices || []
+    if (invoices.length === 0) break
+    for (const inv of invoices) {
+      await sleep(80)
+      const r2 = await xget(`https://api.xero.com/api.xro/2.0/Invoices/${inv.InvoiceID}`, accessToken, tenantId)
+      if (!r2.ok) continue
+      const full = ((await r2.json()).Invoices || [])[0]
+      if (!full) continue
+      for (const line of (full.LineItems || [])) {
+        const hasTag = (line.Tracking || []).length > 0
+        if (hasTag) continue                 // tagged lines are handled per-project
+        const amount = line.LineAmount || 0
+        if (amount === 0) continue
+        if (line.AccountCode === '320') continue   // wages handled separately
+        lines.push({
+          date: full.DateString?.slice(0, 10),
+          supplier: full.Contact?.Name || '',
+          description: line.Description || '',
+          reference: full.InvoiceNumber || '',
+          amount, accountCode: line.AccountCode || '',
+          source: 'bills',
+          xeroLineId: line.LineItemID || null,
+          xeroInvoiceId: full.InvoiceID || null,
+        })
+      }
+    }
+    if (invoices.length < 100) break
+    page++; await sleep(300)
+  }
+  return lines
+}
+
+
 async function fetchWages(accessToken, tenantId, trackingOptionId, fromDate) {
   const lines = []
   let page = 1
@@ -257,12 +300,27 @@ export default async function handler(req, res) {
       }
     } catch (e) { console.error('benchmark error:', e.message) }
 
+    // ── Untagged / overhead bills sweep (once per day) ──
+    let untaggedAdded = 0
+    try {
+      const lastSweep = await redis.get('untagged-sweep:at').catch(() => null)
+      const today = new Date().toISOString().slice(0, 10)
+      if (!lastSweep || String(lastSweep).slice(0, 10) !== today) {
+        const untaggedLines = await fetchUntaggedBills(tokens.access_token, tenantId, fromDateStr)
+        const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
+        const { merged, added } = mergeWindow(existingUn, untaggedLines, fromDateStr, costKey)
+        untaggedAdded = added
+        await redis.set('costs:untagged:bills', merged)
+        await redis.set('untagged-sweep:at', new Date().toISOString())
+      }
+    } catch (e) { console.error('untagged sweep error:', e.message) }
+
     res.json({
       ok: true,
       project: cp.jobNo, fromDate: fromDateStr,
       billsAdded: billsMerge.added, wagesAdded: wagesMerge.added, salesFetched: salesLines.length,
       billLabour, billMaterials, wageTotal, totalInvoiced, dueTotal,
-      benchmarkMonths,
+      benchmarkMonths, untaggedAdded,
       nextProject: active[(pointer + 1) % active.length]?.jobNo,
     })
   } catch (e) {
