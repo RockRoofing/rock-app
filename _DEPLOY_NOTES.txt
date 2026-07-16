@@ -1,29 +1,26 @@
-Financial — upload all Xero files at once (auto-detect + route)
-==============================================================
+Financial — each upload box now accepts MULTIPLE files
+======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Type-detection runtime-tested on your real Bills / Sales / Wages files.
-Deploy over the top.
+Deploy over the top. Supersedes Financial_multi_file_upload.zip (that approach
+removed).
 
-NEW: "Upload all files at once"
-------------------------------
-A single drop-zone at the top of Admin -> Xero Upload accepts MULTIPLE files.
-Each file is auto-detected and routed to the right importer:
-  • .xlsx / .xls                      -> Direct Wages
-  • .csv with Type = "Sales …"        -> Sales Invoices
-  • .csv with Type = "Bill …"         -> Bills (Costs)
-Detection reads the "Type" column values (not just the filename), so a Bills file
-that happens to contain a "Bill credit note" row is still detected as Bills.
+CHANGE (your suggestion — better design)
+----------------------------------------
+Instead of a separate "upload all at once" box with type auto-detection, each of
+the three boxes (Bills, Direct Wages, Sales Invoices) now accepts MULTIPLE files
+of its own type. Select several 500-line batches in one box and they upload one
+after another, each merging/deduping into the same store.
 
-Files process one after another with a per-file status line showing what it was
-detected as and a result summary (e.g. "Bills (Costs) · 120 new, 15 untagged").
-The individual single-type upload areas remain below for one-at-a-time uploads.
+• No auto-detection needed — each box already knows its type (more reliable).
+• Keeps each box's own export instructions and detailed result panel.
+• Per-file result shown under the box (filename + its result), so you can see
+  each batch's "new / untagged / archived" outcome.
+• The separate all-at-once box + detection logic have been removed.
 
-NOTE
-----
-This is purely a front-end convenience — it calls the SAME importers as the
-single areas, so all the merge/dedupe/untagged behaviour is identical.
+So: to load 3 years of Bills, export in ~8 batches and select them all together
+in the Bills box — one click imports the lot.
 
 FILE CHANGED
 ------------
-• pages/admin/xero-upload.js — MultiUpload drop-zone + auto-detect/routing
+• pages/admin/xero-upload.js — UploadArea accepts multiple files; MultiUpload removed

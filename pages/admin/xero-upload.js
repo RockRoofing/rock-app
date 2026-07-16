@@ -24,18 +24,10 @@ export default function XeroUploadPage() {
           Upload your Xero exports here to refresh project costs and invoices. All three are <strong>all-projects</strong> uploads — each file contains every project and the app matches each line to its project by the Xero tracking category. Uploads <strong>accumulate</strong>: they add new transactions and refresh existing ones, and de-duplicate so nothing is counted twice.
         </p>
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 24, fontSize: 13, color: '#92400e' }}>
-          <strong>Xero caps exports at 500 lines.</strong> For a large history (e.g. 3 years), just export it in batches and upload each one — the uploads <strong>merge together</strong> (deduped), so several partial uploads build up the full picture without wiping earlier ones. Keep going until everything's in; the nightly sync then keeps it current.
+          <strong>Xero caps exports at 500 lines.</strong> For a large history (e.g. 3 years), export it in batches — you can select <strong>several files at once</strong> in each box below and they'll all import and merge (deduped), so partial batches build up the full picture without wiping earlier ones. Keep going until everything's in; the nightly sync then keeps it current.
         </div>
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 24, fontSize: 13, color: '#1e40af' }}>
           <strong>Select all columns</strong> when running each Xero report before exporting — the app relies on the <strong>Projects</strong> tracking column plus the account/amount columns to allocate costs. If columns are left out, some data won't be captured.
-        </div>
-
-        <MultiUpload />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 20px' }}>
-          <div style={{ flex: 1, height: 1, background: '#e0e0e0' }} />
-          <span style={{ fontSize: 12, color: '#aaa' }}>or upload one type at a time</span>
-          <div style={{ flex: 1, height: 1, background: '#e0e0e0' }} />
         </div>
 
         <UploadArea
@@ -70,143 +62,63 @@ export default function XeroUploadPage() {
 }
 
 
-// Upload several Xero exports at once — auto-detects each file's type and routes
-// it to the right importer (xlsx -> Wages; CSV with "Bill" rows -> Bills;
-// CSV with "Sales invoice"/"Credit note" rows -> Sales Invoices).
-function MultiUpload() {
-  const [items, setItems] = useState([])   // [{name, status, kind, result, error}]
-  const [busy, setBusy] = useState(false)
-
-  async function detectKind(file) {
-    const name = (file.name || '').toLowerCase()
-    if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'wages'
-    // CSV: read the header + a chunk, find the "Type" column, and inspect its values.
-    const text = await file.slice(0, 300000).text().catch(() => '')
-    const lines = text.split(/\r?\n/).filter(Boolean)
-    if (!lines.length) return 'bills'
-    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
-    const typeIdx = headers.indexOf('type')
-    if (typeIdx !== -1) {
-      let sales = 0, bills = 0
-      for (let i = 1; i < Math.min(lines.length, 60); i++) {
-        const cells = lines[i].split(',')
-        const t = (cells[typeIdx] || '').replace(/^"|"$/g, '').trim().toLowerCase()
-        if (t.startsWith('sales')) sales++
-        else if (t.startsWith('bill')) bills++
-      }
-      if (sales > bills) return 'invoices'
-      if (bills > 0) return 'bills'
-    }
-    // Fallback if there's no Type column: filename hint, else bills.
-    if (name.includes('salesinvoice') || name.includes('sales_invoice') || name.includes('invoice')) return 'invoices'
-    return 'bills'
-  }
-
-  const endpointFor = (kind) => kind === 'wages' ? '/api/import-wages-bulk' : kind === 'invoices' ? '/api/import-invoices-bulk' : '/api/import-bills-bulk'
-  const labelFor = (kind) => kind === 'wages' ? 'Direct Wages' : kind === 'invoices' ? 'Sales Invoices' : 'Bills (Costs)'
-
-  async function handleFiles(fileList) {
-    const files = Array.from(fileList || [])
-    if (!files.length) return
-    setBusy(true)
-    const next = files.map(f => ({ name: f.name, status: 'pending', kind: null, result: null, error: null }))
-    setItems(next)
-
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i]
-      try {
-        const kind = await detectKind(f)
-        next[i] = { ...next[i], kind, status: 'uploading' }
-        setItems([...next])
-        const fileData = await readB64(f)
-        const res = await fetch(endpointFor(kind), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileData }) })
-        const data = await res.json()
-        if (res.ok && data.ok) next[i] = { ...next[i], status: 'done', result: data }
-        else next[i] = { ...next[i], status: 'error', error: data.error || 'Upload failed' }
-      } catch (e) { next[i] = { ...next[i], status: 'error', error: e.message } }
-      setItems([...next])
-    }
-    setBusy(false)
-  }
-
-  return (
-    <div style={{ ...cardStyle, border: '2px solid #1a1a2e' }}>
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: '0 0 6px' }}>Upload all files at once</h2>
-      <p style={{ fontSize: 13, color: '#888', margin: '0 0 16px', lineHeight: 1.6 }}>
-        Drop or select your Bills, Sales Invoices and Direct Wages exports together — each file is detected and imported automatically. (Bills &amp; Sales are CSV; Direct Wages is Excel.)
-      </p>
-      <div onClick={() => !busy && document.getElementById('multi_files')?.click()}
-        style={{ border: '2px dashed #c7c7cc', borderRadius: 8, padding: 24, textAlign: 'center', cursor: busy ? 'default' : 'pointer', background: '#fafafa', marginBottom: 14 }}>
-        <input id="multi_files" type="file" accept=".csv,.xlsx,.xls" multiple style={{ display: 'none' }}
-          onChange={e => handleFiles(e.target.files)} />
-        <div style={{ fontSize: 14, color: '#555', fontWeight: 600 }}>{busy ? 'Uploading…' : 'Click to select multiple files'}</div>
-        <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>You can select Bills, Sales Invoices and Direct Wages all together</div>
-      </div>
-
-      {items.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {items.map((it, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, background: it.status === 'error' ? '#fef2f2' : it.status === 'done' ? '#f0fdf4' : '#f7f7f8', border: '1px solid ' + (it.status === 'error' ? '#fecaca' : it.status === 'done' ? '#bbf7d0' : '#eee') }}>
-              <span style={{ fontSize: 16 }}>{it.status === 'done' ? '✓' : it.status === 'error' ? '✕' : it.status === 'uploading' ? '⏳' : '•'}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</div>
-                <div style={{ fontSize: 12, color: '#888' }}>
-                  {it.kind ? labelFor(it.kind) : 'detecting…'}
-                  {it.status === 'done' && it.result && ' · ' + resultSummary(it.kind, it.result)}
-                  {it.status === 'error' && ' · ' + it.error}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function resultSummary(kind, r) {
-  if (kind === 'invoices') return `${r.newInvoices ?? 0} new, ${r.updatedInvoices ?? 0} updated`
-  const parts = [`${r.newLinesAdded ?? 0} new`]
-  if (r.untaggedLines > 0) parts.push(`${r.untaggedLines} untagged`)
-  if (r.projectsUnmatched > 0) parts.push(`${r.projectsUnmatched} archived/unmatched`)
-  return parts.join(', ')
-}
-
 function UploadArea({ title, blurb, accept, endpoint, howto, renderResult }) {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+  const [results, setResults] = useState([])   // [{name, status, result, error}]
 
   async function upload() {
-    if (!file) return
-    setUploading(true); setResult(null); setError(null)
-    try {
-      const fileData = await readB64(file)
-      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileData }) })
-      const data = await res.json()
-      if (res.ok && data.ok) setResult(data)
-      else setError(data.error || 'Upload failed')
-    } catch (e) { setError(e.message) }
+    if (!files.length) return
+    setUploading(true)
+    const rows = files.map(f => ({ name: f.name, status: 'pending', result: null, error: null }))
+    setResults([...rows])
+    for (let i = 0; i < files.length; i++) {
+      rows[i].status = 'uploading'; setResults([...rows])
+      try {
+        const fileData = await readB64(files[i])
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileData }) })
+        const data = await res.json()
+        if (res.ok && data.ok) { rows[i].status = 'done'; rows[i].result = data }
+        else { rows[i].status = 'error'; rows[i].error = data.error || 'Upload failed' }
+      } catch (e) { rows[i].status = 'error'; rows[i].error = e.message }
+      setResults([...rows])
+    }
     setUploading(false)
   }
 
+  const inputId = 'f_' + title.replace(/\W/g, '')
   return (
     <div style={cardStyle}>
       <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: '0 0 6px' }}>{title}</h2>
       <p style={{ fontSize: 13, color: '#888', margin: '0 0 16px', lineHeight: 1.6 }}>{blurb}</p>
-      <label style={labelStyle}>CSV file (.csv)</label>
-      <div onClick={() => document.getElementById('f_' + title)?.click()}
-        style={{ border: '2px dashed ' + (file ? '#bbf7d0' : '#e5e5e5'), borderRadius: 8, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? '#f0fdf4' : '#fafafa', marginBottom: 14 }}>
-        <input id={'f_' + title} type="file" accept={accept} style={{ display: 'none' }} onChange={e => { setFile(e.target.files?.[0] || null); setResult(null); setError(null) }} />
-        <div style={{ fontSize: 13, color: file ? '#166534' : '#888' }}>{file ? file.name : 'Click to select file'}</div>
+      <label style={labelStyle}>{accept.includes('xlsx') ? 'Excel file(s)' : 'CSV file(s)'} — you can select several (e.g. 500-line batches)</label>
+      <div onClick={() => document.getElementById(inputId)?.click()}
+        style={{ border: '2px dashed ' + (files.length ? '#bbf7d0' : '#e5e5e5'), borderRadius: 8, padding: 20, textAlign: 'center', cursor: 'pointer', background: files.length ? '#f0fdf4' : '#fafafa', marginBottom: 14 }}>
+        <input id={inputId} type="file" accept={accept} multiple style={{ display: 'none' }}
+          onChange={e => { setFiles(Array.from(e.target.files || [])); setResults([]) }} />
+        <div style={{ fontSize: 13, color: files.length ? '#166534' : '#888' }}>
+          {files.length ? `${files.length} file${files.length > 1 ? 's' : ''} selected` : 'Click to select file(s)'}
+        </div>
+        {files.length > 0 && <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{files.map(f => f.name).join(', ')}</div>}
       </div>
-      <button onClick={upload} disabled={!file || uploading}
-        style={{ width: '100%', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 600, cursor: !file || uploading ? 'default' : 'pointer', opacity: !file || uploading ? 0.5 : 1 }}>
-        {uploading ? 'Uploading…' : 'Upload ' + title}
+      <button onClick={upload} disabled={!files.length || uploading}
+        style={{ width: '100%', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 600, cursor: !files.length || uploading ? 'default' : 'pointer', opacity: !files.length || uploading ? 0.5 : 1 }}>
+        {uploading ? 'Uploading…' : `Upload ${title}${files.length > 1 ? ` (${files.length} files)` : ''}`}
       </button>
-      {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#b91c1c' }}>{error}</div>}
-      {result && renderResult(result)}
+
+      {results.map((row, i) => (
+        <div key={i}>
+          {row.status === 'error' && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#b91c1c' }}><strong>{row.name}:</strong> {row.error}</div>}
+          {row.status === 'done' && (
+            <div style={{ marginTop: 12 }}>
+              {results.length > 1 && <div style={{ fontSize: 12, color: '#666', fontWeight: 600, marginBottom: 4 }}>{row.name}</div>}
+              {renderResult(row.result)}
+            </div>
+          )}
+          {(row.status === 'uploading' || row.status === 'pending') && <div style={{ marginTop: 12, fontSize: 13, color: '#888' }}>{row.status === 'uploading' ? '⏳ Uploading' : '• Queued'} {row.name}…</div>}
+        </div>
+      ))}
+
       <div style={{ marginTop: 12, fontSize: 12, color: '#999', lineHeight: 1.6 }}><strong>How to export:</strong> {howto}</div>
     </div>
   )
