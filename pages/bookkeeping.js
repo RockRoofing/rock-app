@@ -82,7 +82,7 @@ export default function BookkeepingPage() {
 
         {loading ? <div style={{ color: '#aaa', padding: 40 }}>Loading…</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
-            <ReconSummary data={data} month={month} tab={tab} total={total} isInvoiceTab={isInvoiceTab} />
+            <ReconPanel data={data} month={month} />
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
@@ -149,7 +149,7 @@ export default function BookkeepingPage() {
                   </thead>
                   <tbody>
                     {filtered.length === 0 ? (
-                      <tr><td colSpan={7} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 30 }}>No items match these filters.</td></tr>
+                      <tr><td colSpan={7} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 30 }}>{rows.length === 0 ? 'Nothing here yet — upload the relevant Xero export.' : 'No items match these filters — try Clear filters.'}</td></tr>
                     ) : pageRows.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 ? '#fcfbf9' : '#fff' }}>
                         <td style={td}>{r.date || '—'}</td>
@@ -219,44 +219,112 @@ function CodeMultiSelect({ options, selected, onChange }) {
   )
 }
 
-function ReconSummary({ data, month, tab, total, isInvoiceTab }) {
+function ReconPanel({ data, month }) {
+  const fmtL = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
+
+  // Last 6 months (YYYY-MM), oldest -> newest.
+  const now = new Date()
+  const sixMonths = []
+  for (let k = 5; k >= 0; k--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
+    sixMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+
+  // Uncategorised value per month = bills + wages + invoices with categorised=false.
+  const allUncat = [...(data.bills || []), ...(data.wages || []), ...(data.ignored || []), ...(data.invoices || [])].filter(r => !r.categorised)
+  const uncatByMonth = {}
+  for (const r of allUncat) {
+    if (!r.month) continue
+    const v = r.amount != null ? Math.abs(r.amount) : Math.abs(r.total || 0)
+    uncatByMonth[r.month] = (uncatByMonth[r.month] || 0) + v
+  }
+  const series = sixMonths.map(m => ({ month: m, value: uncatByMonth[m] || 0 }))
+  const maxV = Math.max(1, ...series.map(s => s.value))
+
+  // Three-row summary for the filtered period (or all months).
   const bm = data.benchmark?.months || {}
   const app = data.appCategorised || {}
-  const hasBenchmark = Object.keys(bm).length > 0
+  const hasBm = Object.keys(bm).length > 0
   const monthsToSum = month ? [month] : [...new Set([...Object.keys(bm), ...Object.keys(app)])]
-  let xeroCost = 0, xeroSales = 0, appCost = 0, appSales = 0
+  let xeroWages = 0, xeroBills = 0, xeroSales = 0
   for (const m of monthsToSum) {
     for (const [name, val] of Object.entries(bm[m] || {})) {
       const ln = name.toLowerCase()
       if (ln.includes('sales') || ln.includes('income') || ln.includes('revenue')) xeroSales += val
-      else xeroCost += val
+      else if (ln.includes('wage') || ln.includes('direct wages') || ln.includes('paye') || ln.includes('salaries')) xeroWages += val
+      else xeroBills += val   // remaining cost of sale = bills/materials/subbies
     }
-    appCost += (app[m]?.cost || 0)
-    appSales += (app[m]?.sales || 0)
   }
-  const xero = isInvoiceTab ? xeroSales : xeroCost
-  const appVal = isInvoiceTab ? appSales : appCost
-  const diff = xero - appVal
-  const matches = Math.abs(diff) < 1
-  const Card = ({ label, value, sub, color }) => (
-    <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-      <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color: color || INK }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>{sub}</div>}
+  const inPeriod = (r) => !month || r.month === month
+  const appBills = (data.bills || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
+  const appWages = (data.wages || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
+  const appInvoices = (data.invoices || []).filter(inPeriod).reduce((s, r) => s + (r.total || 0), 0)
+  const rows = [
+    { label: 'Cost of Sale (Bills)', xero: xeroBills, app: appBills },
+    { label: 'Direct Wages', xero: xeroWages, app: appWages },
+    { label: 'Sales Invoices', xero: xeroSales, app: appInvoices },
+  ]
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+      {/* LEFT: 6-month uncategorised line graph */}
+      <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 4 }}>Uncategorised over 6 months</div>
+        <div style={{ fontSize: 11, color: '#999', marginBottom: 12 }}>Zero when the app matches Xero; spikes to the value of items with no project tag.</div>
+        <LineGraph series={series} maxV={maxV} fmt={fmtL} />
+      </div>
+
+      {/* RIGHT: three figures per type */}
+      <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Xero vs app {month ? `· ${monthLabel(month)}` : '· all months'}</div>
+        {!hasBm && <div style={{ fontSize: 12, color: '#999' }}>Xero benchmark pending — runs after the nightly sync.</div>}
+        {rows.map(r => {
+          const diff = r.xero - r.app
+          const balanced = Math.abs(diff) < 1
+          const col = !hasBm ? '#999' : balanced ? '#16a34a' : '#dc2626'
+          return (
+            <div key={r.label} style={{ border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px', background: hasBm ? (balanced ? '#f0fdf4' : '#fef2f2') : '#fafafa' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>{r.label}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <Fig label="Xero" value={hasBm ? fmtL(r.xero) : '—'} />
+                <Fig label="App" value={fmtL(r.app)} />
+                <Fig label="Difference" value={hasBm ? fmtL(diff) : '—'} color={col} bold />
+              </div>
+            </div>
+          )
+        })}
+        {data.benchmarkUpdatedAt && <div style={{ fontSize: 10, color: '#bbb', marginTop: 'auto' }}>Xero as of {new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB')}. Invoice-date basis.</div>}
+      </div>
     </div>
   )
+}
+
+function Fig({ label, value, color, bold }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-      <Card label={`In Xero (${isInvoiceTab ? 'sales' : 'cost of sale'})`} value={hasBenchmark ? fmt(xero) : '—'} sub={month ? monthLabel(month) : 'all months'} />
-      <Card label="Categorised in app" value={fmt(appVal)} sub="attributed to projects" />
-      <Card label="Difference (Xero − app)" value={hasBenchmark ? fmt(diff) : '—'} color={!hasBenchmark ? '#999' : matches ? '#16a34a' : '#dc2626'} sub={!hasBenchmark ? 'benchmark pending' : matches ? 'reconciles ✓' : 'does not match'} />
-      <Card label="This view" value={fmt(total)} sub="current filter total" />
-      {data.missingCodes && data.missingCodes.length > 0 && (
-        <div style={{ gridColumn: '1 / -1', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', fontSize: 13, color: '#b91c1c' }}>
-          <strong>{data.missingCodes.length} account code(s) not set up in the app:</strong> {data.missingCodes.join(', ')} — add them in Admin → Account Categorisation.
-        </div>
-      )}
-      {data.benchmarkUpdatedAt && <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#bbb' }}>Xero figures as of {new Date(data.benchmarkUpdatedAt).toLocaleString('en-GB')}. Dates are Invoice date (filter Xero by Invoice date to compare).</div>}
+    <div>
+      <div style={{ fontSize: 10, color: '#999' }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: bold ? 700 : 600, color: color || INK }}>{value}</div>
     </div>
+  )
+}
+
+function LineGraph({ series, maxV, fmt }) {
+  const W = 380, H = 150, padL = 8, padR = 8, padT = 10, padB = 22
+  const n = series.length
+  const x = (i) => padL + (i * (W - padL - padR)) / Math.max(1, n - 1)
+  const y = (v) => padT + (H - padT - padB) * (1 - v / maxV)
+  const pts = series.map((s, i) => `${x(i)},${y(s.value)}`).join(' ')
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
+      <line x1={padL} y1={y(0)} x2={W - padR} y2={y(0)} stroke="#e5e5e5" strokeWidth="1" />
+      <polyline points={pts} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {series.map((s, i) => (
+        <g key={i}>
+          <circle cx={x(i)} cy={y(s.value)} r={s.value > 0 ? 4 : 3} fill={s.value > 0 ? '#dc2626' : '#16a34a'} />
+          {s.value > 0 && <text x={x(i)} y={y(s.value) - 8} fontSize="9" fill="#dc2626" textAnchor="middle" fontWeight="700">{fmt(s.value)}</text>}
+          <text x={x(i)} y={H - 6} fontSize="9" fill="#999" textAnchor="middle">{s.month.slice(5)}/{s.month.slice(2, 4)}</text>
+        </g>
+      ))}
+    </svg>
   )
 }

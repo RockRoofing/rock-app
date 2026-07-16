@@ -1,40 +1,44 @@
-Bookkeeping — DIAGNOSTIC build for empty Direct Wages tab
-=========================================================
+Bookkeeping — fix empty Direct Wages tab (matched API+page) + wages date parsing
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Deploy over the top — deploy ALL THREE files together (matched set).
 
-WHY
----
-The Direct Wages tab shows nothing (categorised or uncategorised). Code trace
-shows the data path is correct (importer -> costs:wages:<id> -> mergeCosts ->
-costs:lines:<id>; API reads costs:lines:<id> filtered to 320 + costs:untagged:wages).
-So the likely cause is empty stores or an empty project list — not a display bug.
+DIAGNOSIS (from your _diag output)
+----------------------------------
+_diag showed: wagesTabCount=45, untaggedWagesRaw=45, categorisedWageLines=0.
+=> The 45 untagged wages ARE in the API response, but the tab rendered empty.
+   That's a VERSION MISMATCH: the deployed API returned 45 while an older
+   bookkeeping.js page bundle was live and didn't render them. Deploying the
+   matched pair together fixes it.
+=> categorisedWageLines=0 is a DATA matter, not a bug: no project-tagged wages
+   have been uploaded (only the long untagged 2023–2026 file). Upload the recent
+   TAGGED wages export to populate categorised wages.
 
-WHAT THIS ADDS
---------------
-The /api/bookkeeping response now includes a "_diag" object:
-  • projectsRead        — how many projects the API read (0 = project list empty)
-  • projectListEmpty    — true if it couldn't resolve any projects
-  • untaggedWagesRaw    — rows in costs:untagged:wages
-  • untaggedBillsRaw    — rows in costs:untagged:bills
-  • categorisedWageLines— 320-coded lines found across projects
-  • totalCostLines      — all cost lines read across projects
-  • wagesTabCount       — final count on the Direct Wages tab
+WHAT'S IN THIS PACKAGE
+----------------------
+1. pages/bookkeeping.js + pages/api/bookkeeping.js — the matched, consistent pair
+   (page reads data.wages; API returns wages incl. the 45 untagged). This alone
+   makes the Direct Wages tab show your 45 items.
+   • Clearer empty-state text: "Nothing here yet — upload the relevant export" vs
+     "No items match these filters — try Clear filters".
+   • (_diag left in the API response; harmless. Can remove later.)
 
-HOW TO READ IT
---------------
-Open (while logged in as admin) in the browser:
-    https://app.rockroofing.co.uk/api/bookkeeping
-and look at "_diag". Tell me the numbers. Likely outcomes:
-  • projectListEmpty=true  -> project list couldn't load (dashboard cache empty +
-    Xero token issue). Fix: view the Commercial/dashboard once, or we cache the list.
-  • projectsRead>0 but categorisedWageLines=0 and untaggedWagesRaw=0 -> no wages in
-    the stores; the last wages upload didn't land / needs re-upload.
-  • untaggedWagesRaw>0 but wagesTabCount=0 -> a display bug (unlikely) — tell me.
+2. pages/api/import-wages-bulk.js — BUG FIX: excelDate now parses Xero's text
+   dates like "28 Feb 2023" / "28 Sept 2023". Previously these stored as raw text,
+   so those wage lines had no month and wouldn't group/filter by month. Runtime-
+   tested. NOTE: re-upload the wages file after deploying so dates are re-parsed.
 
-No behaviour change other than the extra diagnostic field.
+ACTIONS AFTER DEPLOY
+--------------------
+• Direct Wages tab should immediately show the 45 untagged items.
+• If you also want the monthly filter/graph to work for old wages: re-upload the
+  long wages file (dates get re-parsed to ISO).
+• To get CATEGORISED (project) wages: upload the recent project-tagged wages
+  export (the tracking-transfer journal style).
 
-FILE CHANGED
-------------
-• pages/api/bookkeeping.js — adds _diag to the response
+FILES CHANGED
+-------------
+• pages/bookkeeping.js          — matched page (empty-state copy)
+• pages/api/bookkeeping.js      — matched API
+• pages/api/import-wages-bulk.js — excelDate text-month parsing fix

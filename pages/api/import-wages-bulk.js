@@ -26,6 +26,13 @@ function excelDate(v) {
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
   const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s)
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  // "28 Feb 2023" / "28 Sept 2023" style (Xero Account Transactions text dates)
+  const MONTHS = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12' }
+  const t = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/.exec(s)
+  if (t) {
+    const mo = MONTHS[t[2].slice(0, 4).toLowerCase()] || MONTHS[t[2].slice(0, 3).toLowerCase()]
+    if (mo) return `${t[3]}-${mo}-${t[1].padStart(2, '0')}`
+  }
   return s
 }
 
