@@ -1,20 +1,27 @@
-Bookkeeping — click a month on the graph to filter the table
-============================================================
+Bookkeeping — align the graph with the "No category assigned" filter
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top. Frontend only.
 
-CHANGES
--------
-1. CLICK-TO-FILTER: click any month on the graph and the table below filters to
-   that month, so you can see exactly what makes up that month's value. The graph
-   caption shows "Showing <Month> — clear" (click to clear back to all months).
-   Works by clicking anywhere in that month's column, or the point.
+WHY THEY DIDN'T MATCH
+---------------------
+Two different sign conventions:
+  • Graph summed ABSOLUTE values (credit notes added).
+  • Table "No category assigned" total sums SIGNED values (credit notes subtract).
+So a month with any credits showed a higher figure on the graph than the table.
 
-2. CONFIRMED PER-TAB (your question): the graph already shows ONLY the current
-   tab's uncategorised items — costs on the Costs tab, sales on Sales, wages on
-   Wages. It does NOT combine all three. (No change needed; confirmed in code.)
+FIX
+---
+• The graph now sums SIGNED amounts, matching the table. Click a month on the
+  graph and the table's "No category assigned" total for that month will equal the
+  graph's point for that month.
+• Y-axis now allows negatives (domain auto), in case a month nets negative.
+• Caption clarified: the graph is the LAST 6 MONTHS. Note this is still a subset
+  of the table when NO month is selected — the table (no month filter) also
+  includes uncategorised items OUTSIDE the last 6 months and any with no parseable
+  date. Selecting a month (or clicking the graph) makes them reconcile exactly.
 
 FILE CHANGED
 ------------
-• pages/bookkeeping.js — graph onClick sets the month filter; clickable caption
+• pages/bookkeeping.js — signed graph amounts + Y-axis domain + caption

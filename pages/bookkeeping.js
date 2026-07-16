@@ -274,7 +274,9 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
   for (const r of tabRows) {
     if (r.categorised) continue
     const m = rowMonth(r); if (!m) continue
-    const v = r.amount != null ? Math.abs(r.amount) : Math.abs(r.total || 0)
+    // Signed amount (credit notes subtract) so this matches the table's
+    // "No category assigned" total exactly when you click through to a month.
+    const v = r.amount != null ? r.amount : (r.total || 0)
     uncatByMonth[m] = (uncatByMonth[m] || 0) + v
   }
   const chartData = sixMonths.map(m => ({
@@ -316,7 +318,7 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
             Uncategorised {tab === 'wages' ? 'wages' : tab === 'invoices' ? 'invoices' : 'costs'} — last 6 months
           </div>
           <div style={{ fontSize: 11, color: '#999', marginBottom: 10 }}>
-            Aim for the dashed line (zero): everything allocated to a project. {month ? <span style={{ color: '#7c3aed', cursor: 'pointer', fontWeight: 600 }} onClick={() => onPickMonth && onPickMonth('')}>Showing {monthLabel(month)} — clear</span> : 'Click a month to filter the table.'}
+            Last 6 months. Aim for the dashed line (zero): everything allocated. {month ? <span style={{ color: '#7c3aed', cursor: 'pointer', fontWeight: 600 }} onClick={() => onPickMonth && onPickMonth('')}>Showing {monthLabel(month)} — clear</span> : 'Click a month to filter the table to it.'}
           </div>
           <div style={{ height: 190 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -325,7 +327,7 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
                 style={{ cursor: 'pointer' }}>
                 <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#999' }} axisLine={{ stroke: '#e5e5e5' }} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#999' }} axisLine={false} tickLine={false} width={56}
-                  tickFormatter={(v) => v >= 1000 ? `£${Math.round(v / 1000)}k` : `£${v}`} domain={[0, 'auto']} />
+                  tickFormatter={(v) => Math.abs(v) >= 1000 ? `£${Math.round(v / 1000)}k` : `£${v}`} domain={['auto', 'auto']} />
                 <Tooltip formatter={(v) => [fmtL(v), 'Uncategorised']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                 <ReferenceLine y={0} stroke="#16a34a" strokeDasharray="5 4" strokeWidth={1.5} />
                 <Line type="monotone" dataKey="uncategorised" stroke="#7c3aed" strokeWidth={2.5}
