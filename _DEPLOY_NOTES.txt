@@ -1,42 +1,40 @@
-Bookkeeping — fix wrong Xero figures (P&L section-aware)
-=======================================================
+Financial — one-time "Reset Direct Wages data" (clear old lump sums)
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. AFTER deploying, press "↻ Sync Xero figures" to re-pull the
-benchmark in the new structured format.
+Deploy over the top.
 
-THE BUG (your screenshot)
--------------------------
-Cost of Sale showed Xero -£967 vs App £145,943 — clearly wrong. Cause: the P&L
-benchmark flattened the ENTIRE Profit & Loss into a single {accountName: amount}
-map with no section context. The page then treated "anything not sales/wages" as
-Bills — so overheads, admin expenses and P&L SUBTOTAL rows all polluted the Bills
-figure (and netted it to near-zero / negative).
+WHY
+---
+Old untagged wage LUMP SUMS are already stored (from the long 2023–2026 file).
+The new correctly-tagged wages file would sit ALONGSIDE them (dedupe can't match a
+lump sum to its per-project split), so wages would double-count. You wanted a
+clean reset — but NORMAL uploads must still merge and never wipe.
 
-THE FIX
--------
-• fetchProfitAndLoss now records each account's P&L SECTION and returns section
-  totals: incomeTotal + costOfSalesTotal + a bySection breakdown.
-• The benchmark now stores this structure per month.
-• The Bookkeeping summary now uses ONLY:
-    - Sales   = the Income section total
-    - Costs   = the Cost of Sales section only (overheads/admin EXCLUDED),
-                split into Direct Wages vs Bills by account name.
-  So the three rows now reflect true cost-of-sale, not the whole P&L.
-• Row labels clarified to match intent:
-    "Total in Xero"  |  "Categorised in app"  |  "Still to find"
-  Green when they balance, red when there's still an amount to categorise.
-• Back-compat: if an OLD flat benchmark is still cached, the page falls back to
-  name-based heuristics until you re-sync. Press Sync Xero figures to get the
-  accurate section-based numbers.
+WHAT THIS ADDS
+--------------
+A "Reset Direct Wages data" panel (red danger zone) at the bottom of
+Admin -> Xero Upload. Admin-only, two-step confirm. When run it:
+  • Deletes every per-project wage source (costs:wages:<id>)
+  • Deletes the untagged wage lump sums (costs:untagged:wages)
+  • Re-runs mergeCosts per project so project cost totals drop the wages
+  • Clears the dashboard cache
+  • Does NOT touch bills or invoices
+The API requires an explicit confirm flag, so it can't fire by accident.
 
-NOTE ON NAMING: the CoS wages split keys on account names containing
-wage/PAYE/salaries/"CIS labour". If your Xero Cost of Sales account names differ,
-tell me the exact names and I'll match them precisely.
+NORMAL UPLOADS ARE UNCHANGED — they still merge/dedupe and never wipe. Only this
+button clears data.
 
-FILES CHANGED
--------------
-• lib/xero.js                  — fetchProfitAndLoss: section-aware + totals
-• pages/api/sync-benchmark.js  — store structured P&L per month
-• pages/api/cron/deep-sync.js  — store structured P&L per month
-• pages/bookkeeping.js         — summary uses section totals; clearer labels
+USAGE
+-----
+1. Deploy.
+2. Admin -> Xero Upload -> "Reset Direct Wages data" -> confirm.
+3. Upload the CORRECT tagged Direct Wages export (the one WITH a "Projects"
+   column — 27 columns). Your April file (Account_Transactions__3_) is the right
+   format: 17 projects, ~£195k tagged + £12,300 genuinely untagged.
+4. Repeat step 3 for any other periods/batches you want tagged.
+
+FILES CHANGED / ADDED
+---------------------
+• pages/api/clear-wages.js  (new) — wages-only reset endpoint (admin, confirm)
+• pages/admin/xero-upload.js       — "Reset Direct Wages data" danger-zone panel

@@ -56,8 +56,58 @@ export default function XeroUploadPage() {
           howto={<>Accounting → <strong>Sales Invoices</strong> → set a wide status/date filter → Export <strong>CSV</strong>.</>}
           renderResult={(r) => <InvoiceResult r={r} />}
         />
+
+        <ClearWages />
       </div>
     </AdminShell>
+  )
+}
+
+// One-time reset for wages data (e.g. to clear old lump sums before re-uploading
+// properly project-tagged wages). Does NOT affect bills or invoices.
+function ClearWages() {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const [confirming, setConfirming] = useState(false)
+
+  async function run() {
+    setBusy(true); setMsg(null)
+    try {
+      const res = await fetch('/api/clear-wages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm: 'CLEAR WAGES' }),
+      })
+      const d = await res.json()
+      if (res.ok && d.ok) setMsg({ ok: true, text: `Cleared wages from ${d.projectsCleared} project(s) and removed untagged lump sums. Now re-upload your tagged Direct Wages file.` })
+      else setMsg({ ok: false, text: d.error || 'Failed to clear.' })
+    } catch (e) { setMsg({ ok: false, text: e.message }) }
+    setBusy(false); setConfirming(false)
+  }
+
+  return (
+    <div style={{ ...cardStyle, border: '1px solid #fecaca', background: '#fff7f7', marginTop: 28 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, color: '#b91c1c', margin: '0 0 6px' }}>Reset Direct Wages data</h2>
+      <p style={{ fontSize: 13, color: '#7f5555', margin: '0 0 14px', lineHeight: 1.6 }}>
+        Removes <strong>all</strong> Direct Wages data — both the untagged lump sums and the per-project wages — then recomputes project costs without wages. <strong>Bills and Sales Invoices are not affected.</strong> Use this once to clear old lump-sum wages, then re-upload the correctly project-tagged Direct Wages export. Normal uploads never wipe anything; only this button does.
+      </p>
+      {!confirming ? (
+        <button onClick={() => setConfirming(true)} disabled={busy}
+          style={{ background: '#fff', color: '#b91c1c', border: '1px solid #f5b5b5', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          Clear all wages data…
+        </button>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>Are you sure? This can't be undone.</span>
+          <button onClick={run} disabled={busy}
+            style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Clearing…' : 'Yes, clear wages'}
+          </button>
+          <button onClick={() => setConfirming(false)} disabled={busy}
+            style={{ background: 'transparent', color: '#666', border: '1px solid #ddd', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: 12, fontSize: 13, color: msg.ok ? '#166534' : '#b91c1c', background: msg.ok ? '#f0fdf4' : '#fef2f2', border: '1px solid ' + (msg.ok ? '#bbf7d0' : '#fecaca'), borderRadius: 8, padding: '10px 12px' }}>{msg.text}</div>}
+    </div>
   )
 }
 
