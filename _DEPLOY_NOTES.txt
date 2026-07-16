@@ -1,45 +1,40 @@
-Financial — unknown/overhead account codes now default to IGNORE
-================================================================
+Bookkeeping — tab/filter/column overhaul
+========================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Default logic runtime-tested. Deploy over the top.
+Deploy over the top.
 
-WHY
----
-Your Bills export contains ALL bills, including overheads (rent, insurance,
-vehicle costs, professional fees — codes like 441, 412, 463, 630, 8xx). These
-appeared on the Account Categorisation page because the app lists every code it
-sees. Previously an unrecognised code defaulted to "materials", so a
-project-tagged overhead could count as a project cost.
+CHANGES
+-------
+Each tab now shows BOTH categorised items (attributed to a project) and
+uncategorised ones (no project tag), so you get the full picture.
 
-CHANGE
-------
-Unknown / unrecognised codes now default to "IGNORE" (excluded from project
-costs) until an admin deliberately categorises them. Known cost-of-sale codes are
-unchanged:
-  • 320, 321                       -> Labour
-  • 310,311,322,325,328–336        -> Materials
-  • anything else (overheads)      -> Ignore  (was: Materials)
+1) COSTS TAB
+   • Only shows costs from account codes marked LABOUR or MATERIALS in Admin
+     (Ignore-category costs now live on the new Ignored tab).
+   • New Labour / Materials filter.
+   • Account-code filter is now MULTI-SELECT with tick boxes in the dropdown.
 
-Applied consistently in: the Account Categorisation page defaults, the Bills
-importer, and the legacy Account-Transactions cost upload.
+2) NEW "IGNORED" TAB (right of Direct Wages)
+   • All costs whose account code is set to IGNORE in Admin — including untagged
+     overheads (rent, insurance, vehicle, professional fees, etc.).
 
-EFFECT
-------
-• Overheads can no longer accidentally inflate project costs, even if a stray
-  overhead bill is tagged to a project.
-• Overheads are STILL captured for the Bookkeeping page (untagged bucket) — this
-  only affects what counts toward PROJECT costs.
-• You can still explicitly set any code to Labour/Materials/Ignore as needed.
+3) SALES INVOICES
+   • Dates use INVOICE DATE (the export has no transaction date). Filter Xero by
+     Invoice date to compare like-for-like. A note on the page states this.
+   • (Transaction date vs Invoice date: invoice date = date on the invoice; 
+     transaction date = date it hits the ledger/P&L. They differ when an invoice
+     is posted to a different accounting period, e.g. month/year-end & retention.)
 
-NOTE: existing already-categorised codes keep whatever you've set. This only
-changes the default for codes you haven't touched. If a previous upload already
-pushed an overhead into a project as "materials", re-upload after deploying (with
-the code left/ set to Ignore) to recompute it out.
+4) ALL TABS
+   • New "Categorised / No category assigned" filter.
+   • New CATEGORY column: shows the PROJECT an item is categorised to, or a
+     "NO CATEGORY" badge if it has no project tag.
+   • Result line shows "X categorised / Y not".
 
 FILES CHANGED
 -------------
-• pages/api/account-categorisation.js — defaultCategoryFor (unknown -> ignore)
-• pages/api/import-bills-bulk.js       — categoryFor unknown -> ignore
-• pages/api/upload-transactions.js     — categoryFor unknown -> ignore
-• pages/admin/account-categorisation.js — page copy explains the default
+• pages/api/bookkeeping.js — serves categorised + uncategorised per tab, with
+  project + category + Ignored bucket
+• pages/bookkeeping.js     — 4 tabs, Category column, multi-select codes,
+  Labour/Materials + Categorised filters

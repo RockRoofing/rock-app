@@ -12,8 +12,18 @@ async function getRedis() {
 
 const monthOf = (dateStr) => (dateStr && /^\d{4}-\d{2}/.test(dateStr)) ? dateStr.slice(0, 7) : ''
 
+const DEFAULT_LABOUR_CODES = ['320', '321']
+const KNOWN_COS_CODES = ['310', '311', '320', '321', '322', '325', '328', '329', '330', '331', '333', '334', '335', '336']
+function categoryOf(code, config) {
+  const cfg = config[String(code)]
+  if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
+  const c = String(code)
+  if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
+  if (KNOWN_COS_CODES.includes(c)) return 'materials'
+  return 'ignore'
+}
+
 export default async function handler(req, res) {
-  // Accounts, Management, Admin.
   if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
@@ -28,22 +38,75 @@ export default async function handler(req, res) {
       redis.get('dashboard:cache').then(v => v || []).catch(() => []),
     ])
 
-    // Tag each untagged bill/wage line with its month + a categorised flag.
     const knownCodes = new Set(Object.keys(catConfig))
-    const tagLine = (l, source) => ({
-      ...l, source,
-      month: monthOf(l.date),
-      hasCode: knownCodes.has(String(l.accountCode)),   // is this account in the app's categorisation?
-    })
-    const bills = (untBills || []).map(l => tagLine(l, 'bills'))
-    const wages = (untWages || []).map(l => tagLine(l, 'wages'))
-    const invoices = (unassignedInv || []).map(l => ({
-      ...l, source: 'invoices', month: monthOf(l.date),
-    }))
 
-    // App-side categorised totals per month + per account (from dashboard cache).
-    // costs:lines carry accountCode; invoiced lines carry total/amountDue.
-    const appCategorised = {}   // month -> { cost, sales }
+    // Four tab datasets. Each line: project (or null), category, categorised, month.
+    const bills = []      // Costs tab: Labour/Materials only
+    const wages = []      // Direct Wages tab
+    const invoices = []   // Sales Invoices tab
+    const ignored = []    // Ignored tab: Ignore-category + untagged overheads
+
+    // 1. Categorised items (from per-project dashboard cache).
+    for (const p of (dash || [])) {
+      if (p.id === '__UNASSIGNED__') continue
+      const project = p.name || p.jobNo || ''
+      for (const l of (p._costLines || [])) {
+        const cat = categoryOf(l.accountCode, catConfig)
+        const rec = {
+          date: l.date || '', month: monthOf(l.date),
+          supplier: l.supplier || '', description: l.description || '', reference: l.reference || '',
+          amount: l.amount || 0, accountCode: l.accountCode || '',
+          category: cat, categorised: true, project,
+          hasCode: knownCodes.has(String(l.accountCode)),
+          source: l.accountCode === '320' ? 'wages' : 'bills',
+        }
+        if (cat === 'ignore') ignored.push(rec)
+        else if (rec.source === 'wages') wages.push(rec)
+        else bills.push(rec)
+      }
+      for (const l of (p._invoiceLines || [])) {
+        invoices.push({
+          date: l.date || '', month: monthOf(l.date),
+          invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
+          total: l.total || 0, amountDue: l.amountDue || 0,
+          categorised: true, project,
+        })
+      }
+    }
+
+    // 2. Uncategorised (untagged) items.
+    for (const l of (untBills || [])) {
+      const cat = categoryOf(l.accountCode, catConfig)
+      const rec = {
+        date: l.date || '', month: monthOf(l.date),
+        supplier: l.supplier || '', description: l.description || '', reference: l.reference || '',
+        amount: l.amount || 0, accountCode: l.accountCode || '',
+        category: cat, categorised: false, project: null,
+        hasCode: knownCodes.has(String(l.accountCode)),
+        source: 'bills',
+      }
+      if (cat === 'ignore') ignored.push(rec)
+      else bills.push(rec)
+    }
+    for (const l of (untWages || [])) {
+      wages.push({
+        date: l.date || '', month: monthOf(l.date),
+        supplier: l.supplier || 'Direct Wages', description: l.description || '', reference: l.reference || '',
+        amount: l.amount || 0, accountCode: '320',
+        category: 'labour', categorised: false, project: null,
+        hasCode: knownCodes.has('320'), source: 'wages',
+      })
+    }
+    for (const l of (unassignedInv || [])) {
+      invoices.push({
+        date: l.date || '', month: monthOf(l.date),
+        invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
+        total: l.total || 0, amountDue: l.amountDue || 0,
+        categorised: false, project: null,
+      })
+    }
+
+    const appCategorised = {}
     for (const p of (dash || [])) {
       for (const l of (p._costLines || [])) {
         const m = monthOf(l.date); if (!m) continue
@@ -57,17 +120,14 @@ export default async function handler(req, res) {
       }
     }
 
-    // Distinct account codes seen in the untagged data but NOT in the app config.
     const missingCodes = [...new Set(
-      [...bills, ...wages].map(l => String(l.accountCode)).filter(c => c && !knownCodes.has(c))
+      [...bills, ...ignored].map(l => String(l.accountCode)).filter(c => c && !knownCodes.has(c))
     )]
 
     res.json({
-      bills, wages, invoices,
-      appCategorised,
-      benchmark,                    // { month: { accounts:{code:total}, costOfSaleTotal, salesTotal }, ... } | null
-      knownCodes: [...knownCodes],
-      missingCodes,
+      bills, wages, invoices, ignored,
+      appCategorised, benchmark,
+      knownCodes: [...knownCodes], missingCodes,
       benchmarkUpdatedAt: benchmark?.updatedAt || null,
     })
   } catch (e) {
