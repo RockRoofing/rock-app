@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 const fmt = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2 }).format(n || 0)
 const INK = '#1a1a2e'
@@ -11,6 +12,19 @@ function monthLabel(m) {
   if (!m) return ''
   const [y, mo] = m.split('-')
   return new Date(parseInt(y), parseInt(mo) - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+}
+// Derive a YYYY-MM month from a row, falling back to parsing a raw date string
+// (handles "28 Feb 2023" style dates that predate the importer date fix).
+const MON = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', sept: '09', oct: '10', nov: '11', dec: '12' }
+function rowMonth(r) {
+  if (r.month) return r.month
+  const s = String(r.date || '')
+  if (/^\d{4}-\d{2}/.test(s)) return s.slice(0, 7)
+  const t = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})/.exec(s)
+  if (t) { const mo = MON[t[2].slice(0, 4).toLowerCase()] || MON[t[2].slice(0, 3).toLowerCase()]; if (mo) return `${t[3]}-${mo}` }
+  const d = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s)
+  if (d) return `${d[3]}-${d[2].padStart(2, '0')}`
+  return ''
 }
 
 export default function BookkeepingPage() {
@@ -37,13 +51,13 @@ export default function BookkeepingPage() {
   const isInvoiceTab = tab === 'invoices'
   const isCostsTab = tab === 'bills'
 
-  const months = useMemo(() => [...new Set(rows.map(r => r.month).filter(Boolean))].sort().reverse(), [rows])
+  const months = useMemo(() => [...new Set(rows.map(r => rowMonth(r)).filter(Boolean))].sort().reverse(), [rows])
   const suppliers = useMemo(() => [...new Set(rows.map(r => (r.supplier || r.contact || '').trim()).filter(Boolean))].sort(), [rows])
   const codeOptions = useMemo(() => [...new Set(rows.map(r => String(r.accountCode || '')).filter(Boolean))].sort(), [rows])
 
   const filtered = useMemo(() => {
     return rows.filter(r => {
-      if (month && r.month !== month) return false
+      if (month && rowMonth(r) !== month) return false
       if (supplier && (r.supplier || r.contact || '').trim() !== supplier) return false
       if (codes.length && !codes.includes(String(r.accountCode || ''))) return false
       if (catFilter && r.category !== catFilter) return false
@@ -82,7 +96,7 @@ export default function BookkeepingPage() {
 
         {loading ? <div style={{ color: '#aaa', padding: 40 }}>Loading…</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
-            <ReconPanel data={data} month={month} />
+            <ReconPanel data={data} month={month} tab={tab} />
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
@@ -219,8 +233,9 @@ function CodeMultiSelect({ options, selected, onChange }) {
   )
 }
 
-function ReconPanel({ data, month }) {
+function ReconPanel({ data, month, tab }) {
   const fmtL = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
+  const showGraph = tab !== 'ignored'   // no graph on Overheads
 
   // Last 6 months (YYYY-MM), oldest -> newest.
   const now = new Date()
@@ -230,32 +245,37 @@ function ReconPanel({ data, month }) {
     sixMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
-  // Uncategorised value per month = bills + wages + invoices with categorised=false.
-  const allUncat = [...(data.bills || []), ...(data.wages || []), ...(data.ignored || []), ...(data.invoices || [])].filter(r => !r.categorised)
+  // Uncategorised value per month FOR THE CURRENT TAB only, so the graph reflects
+  // the tab you're on (Costs / Sales / Wages).
+  const tabRows = tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : (data.bills || [])
   const uncatByMonth = {}
-  for (const r of allUncat) {
-    if (!r.month) continue
+  for (const r of tabRows) {
+    if (r.categorised) continue
+    const m = rowMonth(r); if (!m) continue
     const v = r.amount != null ? Math.abs(r.amount) : Math.abs(r.total || 0)
-    uncatByMonth[r.month] = (uncatByMonth[r.month] || 0) + v
+    uncatByMonth[m] = (uncatByMonth[m] || 0) + v
   }
-  const series = sixMonths.map(m => ({ month: m, value: uncatByMonth[m] || 0 }))
-  const maxV = Math.max(1, ...series.map(s => s.value))
+  const chartData = sixMonths.map(m => ({
+    month: new Date(parseInt(m.slice(0, 4)), parseInt(m.slice(5)) - 1, 1).toLocaleDateString('en-GB', { month: 'short' }),
+    uncategorised: uncatByMonth[m] || 0,
+  }))
+  const anySpike = chartData.some(d => d.uncategorised > 0)
 
-  // Three-row summary for the filtered period (or all months).
+  // Three-row Xero-vs-app summary for the filtered period (or all months).
   const bm = data.benchmark?.months || {}
   const app = data.appCategorised || {}
   const hasBm = Object.keys(bm).length > 0
   const monthsToSum = month ? [month] : [...new Set([...Object.keys(bm), ...Object.keys(app)])]
   let xeroWages = 0, xeroBills = 0, xeroSales = 0
-  for (const m of monthsToSum) {
-    for (const [name, val] of Object.entries(bm[m] || {})) {
+  for (const mo of monthsToSum) {
+    for (const [name, val] of Object.entries(bm[mo] || {})) {
       const ln = name.toLowerCase()
       if (ln.includes('sales') || ln.includes('income') || ln.includes('revenue')) xeroSales += val
-      else if (ln.includes('wage') || ln.includes('direct wages') || ln.includes('paye') || ln.includes('salaries')) xeroWages += val
-      else xeroBills += val   // remaining cost of sale = bills/materials/subbies
+      else if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries')) xeroWages += val
+      else xeroBills += val
     }
   }
-  const inPeriod = (r) => !month || r.month === month
+  const inPeriod = (r) => !month || rowMonth(r) === month
   const appBills = (data.bills || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
   const appWages = (data.wages || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
   const appInvoices = (data.invoices || []).filter(inPeriod).reduce((s, r) => s + (r.total || 0), 0)
@@ -266,15 +286,33 @@ function ReconPanel({ data, month }) {
   ]
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
-      {/* LEFT: 6-month uncategorised line graph */}
-      <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 4 }}>Uncategorised over 6 months</div>
-        <div style={{ fontSize: 11, color: '#999', marginBottom: 12 }}>Zero when the app matches Xero; spikes to the value of items with no project tag.</div>
-        <LineGraph series={series} maxV={maxV} fmt={fmtL} />
-      </div>
+    <div style={{ display: 'grid', gridTemplateColumns: showGraph ? '1fr 1fr' : '1fr', gap: 16, alignItems: 'stretch' }}>
+      {showGraph && (
+        <div style={{ background: '#fff', borderRadius: 12, padding: '16px 16px 8px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: INK, marginBottom: 2 }}>
+            Uncategorised {tab === 'wages' ? 'wages' : tab === 'invoices' ? 'invoices' : 'costs'} — last 6 months
+          </div>
+          <div style={{ fontSize: 11, color: '#999', marginBottom: 10 }}>
+            Aim for the dashed line (zero): everything allocated to a project.
+          </div>
+          <div style={{ height: 190 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#999' }} axisLine={{ stroke: '#e5e5e5' }} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#999' }} axisLine={false} tickLine={false} width={56}
+                  tickFormatter={(v) => v >= 1000 ? `£${Math.round(v / 1000)}k` : `£${v}`} domain={[0, 'auto']} />
+                <Tooltip formatter={(v) => [fmtL(v), 'Uncategorised']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                <ReferenceLine y={0} stroke="#16a34a" strokeDasharray="5 4" strokeWidth={1.5} />
+                <Line type="monotone" dataKey="uncategorised" stroke="#7c3aed" strokeWidth={2.5}
+                  dot={{ r: 3, fill: '#7c3aed' }} activeDot={{ r: 5 }} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {!anySpike && <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, textAlign: 'center', paddingBottom: 6 }}>All allocated — nothing uncategorised ✓</div>}
+        </div>
+      )}
 
-      {/* RIGHT: three figures per type */}
+      {/* Xero vs app — three rows */}
       <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Xero vs app {month ? `· ${monthLabel(month)}` : '· all months'}</div>
         {!hasBm && <div style={{ fontSize: 12, color: '#999' }}>Xero benchmark pending — runs after the nightly sync.</div>}
@@ -305,26 +343,5 @@ function Fig({ label, value, color, bold }) {
       <div style={{ fontSize: 10, color: '#999' }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: bold ? 700 : 600, color: color || INK }}>{value}</div>
     </div>
-  )
-}
-
-function LineGraph({ series, maxV, fmt }) {
-  const W = 380, H = 150, padL = 8, padR = 8, padT = 10, padB = 22
-  const n = series.length
-  const x = (i) => padL + (i * (W - padL - padR)) / Math.max(1, n - 1)
-  const y = (v) => padT + (H - padT - padB) * (1 - v / maxV)
-  const pts = series.map((s, i) => `${x(i)},${y(s.value)}`).join(' ')
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }}>
-      <line x1={padL} y1={y(0)} x2={W - padR} y2={y(0)} stroke="#e5e5e5" strokeWidth="1" />
-      <polyline points={pts} fill="none" stroke="#7c3aed" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
-      {series.map((s, i) => (
-        <g key={i}>
-          <circle cx={x(i)} cy={y(s.value)} r={s.value > 0 ? 4 : 3} fill={s.value > 0 ? '#dc2626' : '#16a34a'} />
-          {s.value > 0 && <text x={x(i)} y={y(s.value) - 8} fontSize="9" fill="#dc2626" textAnchor="middle" fontWeight="700">{fmt(s.value)}</text>}
-          <text x={x(i)} y={H - 6} fontSize="9" fill="#999" textAnchor="middle">{s.month.slice(5)}/{s.month.slice(2, 4)}</text>
-        </g>
-      ))}
-    </svg>
   )
 }

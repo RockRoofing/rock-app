@@ -1,44 +1,33 @@
-Bookkeeping — fix empty Direct Wages tab (matched API+page) + wages date parsing
-================================================================================
+Bookkeeping — graph polish (recharts) + per-tab + target line + robust months
+=============================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully
-Deploy over the top — deploy ALL THREE files together (matched set).
+Build: npm run build -> ✓ Compiled successfully  (recharts already a dependency)
+Deploy over the top. Frontend only.
 
-DIAGNOSIS (from your _diag output)
-----------------------------------
-_diag showed: wagesTabCount=45, untaggedWagesRaw=45, categorisedWageLines=0.
-=> The 45 untagged wages ARE in the API response, but the tab rendered empty.
-   That's a VERSION MISMATCH: the deployed API returned 45 while an older
-   bookkeeping.js page bundle was live and didn't render them. Deploying the
-   matched pair together fixes it.
-=> categorisedWageLines=0 is a DATA matter, not a bug: no project-tagged wages
-   have been uploaded (only the long untagged 2023–2026 file). Upload the recent
-   TAGGED wages export to populate categorised wages.
+FIXED
+-----
+1. GRAPH NOW CHANGES PER TAB — it plots the uncategorised total for the CURRENT
+   tab only (Costs / Sales / Wages), so switching tabs changes the line.
+2. NO GRAPH ON OVERHEADS — the Overheads tab shows the summary only (full width).
+3. PROFESSIONAL STYLING — rebuilt with recharts to match the Scorecards charts:
+   proper X/Y axes, £k Y-axis formatting, tooltip, smooth line, dots.
+4. NUMBERS & DATES NO LONGER CLIPPED — real axes with margins/width fix the
+   out-of-view issue from the hand-drawn SVG.
+5. TARGET LINE — a green dashed reference line at zero ("aim for the dashed line").
+   When the purple line sits on it, everything's allocated. Shows an
+   "All allocated ✓" note when there are no spikes.
+6. ROBUST MONTHS FILTER — the month dropdown/filter now derives the month from the
+   raw date even for old "28 Feb 2023"-format wage lines, so months appear even if
+   a file hasn't been re-uploaded since the date-parsing fix.
 
-WHAT'S IN THIS PACKAGE
-----------------------
-1. pages/bookkeeping.js + pages/api/bookkeeping.js — the matched, consistent pair
-   (page reads data.wages; API returns wages incl. the 45 untagged). This alone
-   makes the Direct Wages tab show your 45 items.
-   • Clearer empty-state text: "Nothing here yet — upload the relevant export" vs
-     "No items match these filters — try Clear filters".
-   • (_diag left in the API response; harmless. Can remove later.)
+STILL A DATA ACTION (not a code issue)
+--------------------------------------
+"No categorised Direct Wages" = no project-tagged wages have been uploaded yet
+(diagnostic showed categorisedWageLines=0). To populate them, upload the RECENT
+project-TAGGED wages export (the tracking-transfer journal style file, e.g. the
+1784157057530-style one). The long 2023–2026 file is all untagged, so it only
+ever fills the uncategorised side.
 
-2. pages/api/import-wages-bulk.js — BUG FIX: excelDate now parses Xero's text
-   dates like "28 Feb 2023" / "28 Sept 2023". Previously these stored as raw text,
-   so those wage lines had no month and wouldn't group/filter by month. Runtime-
-   tested. NOTE: re-upload the wages file after deploying so dates are re-parsed.
-
-ACTIONS AFTER DEPLOY
---------------------
-• Direct Wages tab should immediately show the 45 untagged items.
-• If you also want the monthly filter/graph to work for old wages: re-upload the
-  long wages file (dates get re-parsed to ISO).
-• To get CATEGORISED (project) wages: upload the recent project-tagged wages
-  export (the tracking-transfer journal style).
-
-FILES CHANGED
--------------
-• pages/bookkeeping.js          — matched page (empty-state copy)
-• pages/api/bookkeeping.js      — matched API
-• pages/api/import-wages-bulk.js — excelDate text-month parsing fix
+FILE CHANGED
+------------
+• pages/bookkeeping.js — recharts graph, per-tab series, target line, robust months
