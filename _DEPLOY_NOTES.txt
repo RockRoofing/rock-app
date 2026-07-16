@@ -1,46 +1,32 @@
-COMBINED Financial deploy — everything in one go
-================================================
+Financial — overdue-days match Xero + Unassigned key + upload new/updated counts
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully (full set together)
+Build: npm run build -> ✓ Compiled successfully
+Deploy over the top.
 
-This single package contains the LATEST version of every financial file from the
-recent work, so deploying it guarantees all dependencies are present and
-consistent. Safe to deploy over the top — it supersedes these earlier packages:
-  Admin_account_categorisation, Financial_xero_upload_admin_bulk_costs,
-  Financial_wages_importer_tuned, Financial_deep_sync_reintroduced,
-  Financial_deep_sync_id_dedupe, Financial_uploads_merge_not_overwrite,
-  Admin_nav_reorder, Admin_nav_tabs_fix, Financial_unassigned_invoices,
-  Bookkeeping_reconciliation, App_image_compression.
+1) OVERDUE-BY NOW MATCHES XERO (off-by-one fixed)
+-------------------------------------------------
+Xero counts the overdue period INCLUSIVELY (the day after the due date is "1 day
+overdue"). The app was showing one day fewer. Now adds 1 once past the due date,
+so "Overdue by" matches Xero exactly. (Verified against INV-1683: app was 19,
+Xero 20 — now aligned.)
 
-★★★ AFTER DEPLOYING — YOU MUST RE-UPLOAD ★★★
-The Unassigned-invoices fix changes how invoices are processed ON UPLOAD. Invoices
-already in the database were imported by the OLD code (which dropped untagged ones)
-— deploying does NOT retroactively fix stored data. So:
-  1. Deploy this package.
-  2. Go to Admin -> Xero Upload and RE-UPLOAD the Sales Invoices file
-     (use SalesInvoices...11_56_03.csv — the recent one; the 11_56_54 file is old
-     history and contains NONE of your current outstanding invoices).
-  3. The 15 untagged outstanding invoices will then appear on Outstanding Invoices
-     with an amber "UNASSIGNED" badge (total ~£84,919). All 28 outstanding invoices
-     (~£280,797) will show: 13 under projects + 15 unassigned.
-  4. Also re-upload Bills + Direct Wages so the Bookkeeping page has untagged data.
-  5. Trigger GET /api/cron/deep-sync once to populate the Bookkeeping "In Xero"
-     benchmark immediately (otherwise it fills overnight).
+2) UNASSIGNED KEY ON OUTSTANDING INVOICES PAGE
+----------------------------------------------
+Added an amber "UNASSIGNED" key/legend strip below the summary cards, shown only
+when there are untagged invoices: e.g. "15 invoices (£84,919.55) have no project
+tracking category in Xero… tag them in Xero and re-upload." Explains the badge on
+the rows.
 
-If figures still look stale after re-upload, it's the dashboard cache (4h) — any
-upload clears it, or hit /api/clear-cache.
+3) UPLOAD NOW REPORTS NEW vs UPDATED (invoices)
+-----------------------------------------------
+The Sales Invoices upload result now shows "New added" and "Updated (already had)"
+instead of just a total — so re-uploading the same file clearly shows 0 new / all
+updated, confirming no duplicates were created. (The dedupe by invoice number was
+already preventing duplicates; this just makes it visible.)
 
-WHAT'S INCLUDED (latest of each)
---------------------------------
-• lib: costDedupe.js, mergeCosts.js, compressImage.js, roles.js (Accounts role),
-  xero.js (fetchProfitAndLoss)
-• Importers: bills/wages/invoices bulk (merge+dedupe, capture untagged),
-  upload-transactions (manual costs+merge), account-categorisation
-• cron/deep-sync.js (bills+wages+sales, ID dedupe, nightly P&L benchmark)
-• Pages: bookkeeping (new), outstanding-invoices (unassigned badge),
-  admin/xero-upload, admin/account-categorisation, index (Bookkeeping card),
-  admin + admin/templates (full nav tabs), dashboard (unassigned pseudo-project)
-• components/AdminShell.js (full tab list), vercel.json (3 crons @ 02/06/08)
-
-REQUIRES: Vercel upgrade (3 crons); RESEND_API_KEY + FORMS_FROM_EMAIL for emails.
-Also delete pages/upload-transactions.js in GitHub if not already (old page route).
+FILES CHANGED
+-------------
+• pages/outstanding-invoices.js   — overdue +1 (Xero-inclusive) + Unassigned key
+• pages/api/import-invoices-bulk.js — return newInvoices / updatedInvoices
+• pages/admin/xero-upload.js      — show New added / Updated on invoice result

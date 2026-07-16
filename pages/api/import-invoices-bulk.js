@@ -141,7 +141,7 @@ export default async function handler(req, res) {
 
     const now = new Date().toISOString()
     const summary = []
-    let matched = 0, unmatched = 0
+    let matched = 0, unmatched = 0, totalNew = 0
 
     for (const [tracking, invMap] of byProject.entries()) {
       const invoices = [...invMap.values()]
@@ -172,7 +172,8 @@ export default async function handler(req, res) {
       // exports at 500 lines). Dedupe by invoice number; a re-uploaded invoice
       // refreshes its paid/due rather than duplicating.
       const existing = (await redis.get(`invoiced:lines:${trackingOptionId}`).catch(() => null)) || []
-      const { merged: allLines } = mergeDedupe(existing, newLines, invoiceLineKey)
+      const { merged: allLines, added } = mergeDedupe(existing, newLines, invoiceLineKey)
+      totalNew += added
 
       // Recompute the summary totals from the FULL merged set.
       const mTotal = allLines.reduce((s, l) => s + (l.total || 0), 0)
@@ -193,11 +194,14 @@ export default async function handler(req, res) {
 
     await redis.del('dashboard:cache')
 
+    const totalProcessed = [...byProject.values()].reduce((s, m) => s + m.size, 0)
     return res.json({
       ok: true,
       projectsMatched: matched,
       projectsUnmatched: unmatched,
-      totalInvoicesProcessed: [...byProject.values()].reduce((s, m) => s + m.size, 0),
+      totalInvoicesProcessed: totalProcessed,
+      newInvoices: totalNew,
+      updatedInvoices: Math.max(0, totalProcessed - totalNew),
       summary: summary.sort((a, b) => (b.invoiced || 0) - (a.invoiced || 0)),
     })
   } catch (e) {

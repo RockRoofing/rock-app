@@ -107,7 +107,10 @@ export default function OutstandingInvoicesPage() {
   const rows = useMemo(() => {
     let r = invoices.map(inv => {
       const dd = parseDMY(inv.dueDate)
-      const overdueBy = dd ? daysBetween(today, dd) : null
+      // Xero counts the overdue period inclusively (the day after the due date is
+      // "1 day overdue"), so add 1 once past the due date to match Xero exactly.
+      const gap = dd ? daysBetween(today, dd) : null
+      const overdueBy = gap != null && gap >= 0 ? gap + 1 : gap
       const m = meta[inv.invoiceNumber] || {}
       return { ...inv, overdueBy: (overdueBy > 0 && !inv.settled) ? overdueBy : null, expectedDate: m.expectedDate || '', commentCount: (m.comments || []).length }
     })
@@ -136,6 +139,8 @@ export default function OutstandingInvoicesPage() {
     due: rows.reduce((s, r) => s + (r.due || 0), 0),
     overdueCount: rows.filter(r => r.overdueBy).length,
     overdueDue: rows.filter(r => r.overdueBy).reduce((s, r) => s + (r.due || 0), 0),
+    unassignedCount: rows.filter(r => r.unassigned).length,
+    unassignedDue: rows.filter(r => r.unassigned).reduce((s, r) => s + (r.due || 0), 0),
   }
 
   const th = { padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: '#555', whiteSpace: 'nowrap', fontSize: 12 }
@@ -186,6 +191,14 @@ export default function OutstandingInvoicesPage() {
               </div>
             ))}
           </div>
+
+          {/* Key: Unassigned invoices (no project tag in Xero) */}
+          {totals.unassignedCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
+              <span style={{ fontSize: 9, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>UNASSIGNED</span>
+              <span><strong>{totals.unassignedCount}</strong> invoice{totals.unassignedCount !== 1 ? 's' : ''} ({fmt(totals.unassignedDue)}) have no project tracking category in Xero, so they aren't attributed to a project. Tag them in Xero and re-upload to move them onto their project.</span>
+            </div>
+          )}
 
           {/* Controls */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>

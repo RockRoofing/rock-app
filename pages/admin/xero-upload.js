@@ -120,8 +120,8 @@ function InvoiceResult({ r }) {
     <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 16, marginTop: 12 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: '#16a34a', marginBottom: 10 }}>✓ Invoices imported</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-        <Stat label="Invoices" value={r.totalInvoicesProcessed ?? 0} />
-        <Stat label="Projects matched" value={r.projectsMatched ?? 0} />
+        <Stat label="New added" value={r.newInvoices ?? r.totalInvoicesProcessed ?? 0} />
+        <Stat label="Updated (already had)" value={r.updatedInvoices ?? 0} />
         <Stat label="Total invoiced" value={fmt(totalInvoiced)} />
       </div>
       {r.projectsUnmatched > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 10 }}>{r.projectsUnmatched} project tag(s) didn't match and were skipped.</div>}
