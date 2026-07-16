@@ -1,40 +1,29 @@
-Bookkeeping — FIX: cost bills appearing under Sales Invoices
-============================================================
+Bookkeeping — FIX: Sync Invoices only pulling ~2 months instead of the full window
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy, THEN clear + re-sync (steps below).
+Deploy, then re-run Sync Invoices.
 
 THE BUG
 -------
-Sales Invoices tab showed cost/bank items (Fuel card, Bibby, reimbursements) and
-"loads of cost bills", across old dates too — bills had polluted the sales data.
+A 6-month sync only returned ~2 months. Cause: the fetch ordered invoices
+"newest-first" and STOPPED paging as soon as it hit a page with nothing in the
+window. But Xero's sort order is unreliable — so it hit a page that looked
+out-of-window and bailed early, missing older in-window invoices.
 
-THE FIX (two guards)
---------------------
-"Type guard" = only accept genuine SALES invoices. In Xero, sales = ACCREC,
-bills = ACCPAY. Both entry points now reject anything that isn't a real sales
-invoice:
-• Sync Invoices (API): skips any record where Type !== 'ACCREC', and skips
-  DELETED/VOIDED. So a re-sync can never pull a bill into Sales again.
-• CSV invoice upload: explicitly skips rows whose Type contains "bill" (fixes a
-  hole where "Bill credit note" slipped through the credit-note check).
+THE FIX
+-------
+Now uses Xero's server-side WHERE filter so the API only returns sales invoices
+dated on/after the window start:
+  where = Type=="ACCREC" AND Date>=DateTime(YYYY,M,D)
+and pages through ALL results (no fragile early-exit). So the full selected window
+comes back (6/12/24 months as chosen).
 
-CLEARING THE EXISTING POLLUTION (important — old dates too)
-----------------------------------------------------------
-The guards stop NEW pollution but don't remove what's already stored (you saw
-wrong items on Jan 2026 and earlier). So after deploying:
-
-1. Deploy this.
-2. Bookkeeping Admin -> Data Management -> Clear Sales Invoices (type CLEAR).
-   (Clear scans ALL keys incl. archived projects, so it removes every polluted
-   item, old and recent.)
-3. Bookkeeping dashboard -> set "Sync last" to the window you want (e.g. 24 mo to
-   get older sales back) -> press ↻ Sync Invoices.
-
-Result: Sales will contain ONLY genuine ACCREC sales invoices, matched to
-projects by tracking name. Header will show "X matched, Y unassigned (of Z)".
+AFTER DEPLOYING
+---------------
+Re-run ↻ Sync Invoices with your chosen window. It'll now pull the whole period.
+(If you want more than 6 months, pick 12 or 24 in the "Sync last" selector.)
 
 FILES CHANGED
 -------------
-• pages/api/sync-invoices.js        — ACCREC-only guard + skip deleted/voided
-• pages/api/import-invoices-bulk.js — CSV: exclude bills (incl. bill credit notes)
+• pages/api/sync-invoices.js — server-side date filter, removed early-exit

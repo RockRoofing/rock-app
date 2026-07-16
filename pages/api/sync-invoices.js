@@ -22,18 +22,22 @@ async function getRedis() {
 async function fetchAllSalesInvoices(at, tid, fromDate) {
   const out = []            // { invoiceNumber, ..., trackingNames:[] }
   let page = 1
+  // Build a Xero where-filter so the API only returns invoices dated on/after the
+  // window start. Format: Date >= DateTime(YYYY, M, D). Do NOT rely on sort order
+  // for an early-exit (Xero's ordering is unreliable) — page through everything
+  // the filter returns.
+  const [wy, wm, wd] = fromDate.split('-').map(n => parseInt(n, 10))
+  const where = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${wy},${wm},${wd})`)
   while (true) {
-    const url = `https://api.xero.com/api.xro/2.0/Invoices?Type=ACCREC&page=${page}&pageSize=100&order=Date%20DESC`
+    const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${where}&page=${page}&pageSize=100`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
     if (!res.ok) break
     const data = await res.json()
     const invoices = data.Invoices || []
     if (invoices.length === 0) break
-    let anyInWindow = false
     for (const inv of invoices) {
       const dateStr = inv.DateString?.slice(0, 10) || (inv.Date && String(inv.Date).match(/\d{4}-\d{2}-\d{2}/) ? String(inv.Date).slice(0, 10) : null)
-      if (dateStr && dateStr < fromDate) continue   // older than window — skip
-      anyInWindow = true
+      if (dateStr && dateStr < fromDate) continue   // belt-and-braces
       // The paged list often omits LineItems — re-fetch full invoice for tracking.
       await sleep(80)
       const r2 = await xget(`https://api.xero.com/api.xro/2.0/Invoices/${inv.InvoiceID}`, at, tid)
@@ -45,8 +49,6 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
       const trackingNames = new Set()
       for (const line of (full.LineItems || [])) {
         for (const t of (line.Tracking || [])) {
-          // t.Option is the option label, e.g. "J242-Winnersh". t.Name is the
-          // category ("Projects"). Match on the option label by name.
           if (t.Option) trackingNames.add(String(t.Option).trim().toLowerCase())
         }
       }
@@ -59,7 +61,6 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
       })
     }
     if (invoices.length < 100) break
-    if (!anyInWindow) break   // sorted newest-first: no more in window
     page++; await sleep(300)
   }
   return out
