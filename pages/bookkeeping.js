@@ -72,7 +72,7 @@ export default function BookkeepingPage() {
       const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: syncMonths }) })
       const d = await res.json()
       if (res.ok && d.ok) {
-        const detail = kind === 'invoices' ? `${d.projectsDone} projects, ${d.invoicesRefreshed} invoices`
+        const detail = kind === 'invoices' ? `${d.invoicesMatched} matched to projects, ${d.invoicesUnassigned} unassigned (of ${d.invoicesFetched})`
           : kind === 'wages' ? `${d.projectsDone} projects, ${d.wageLinesRefreshed} wage lines`
           : `${d.monthsPulled} months`
         setSyncMsg(`${label}: ${detail}.`)
