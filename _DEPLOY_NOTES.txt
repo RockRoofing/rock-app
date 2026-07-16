@@ -1,35 +1,46 @@
-Financial — FIX: Clear didn't remove old projects + noisy "days not covered" warning
-====================================================================================
+Bookkeeping — Sync buttons (Invoices, Wages, Xero figures) + Upload Bills link
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top.
 
-BUG 1 — "Clear all" left old data behind (your March 2024 bills)
----------------------------------------------------------------
-The clear only deleted data for CURRENT Xero projects (from getProjectsFromCategories).
-Bills for ARCHIVED/old/completed projects are stored under tracking IDs that aren't
-in the current list, so they survived the clear — which is why March 2024 (£126k on
-28 Mar etc.) still showed after you "cleared all".
+FIXES YOUR SALES ISSUE
+----------------------
+"Bookkeeper categorised sales in Xero but the app still shows them unassigned":
+press ↻ Sync Invoices. It re-pulls sales for ALL projects from Xero over the
+selected window (default 6 months) and exact-mirrors them, so newly-categorised
+invoices move onto their project and drop off the unassigned list.
 
-FIX: the clear now SCANS all matching Redis keys (costs:bills:*, costs:wages:*,
-invoiced:lines:*, invoiced:latest:*) and deletes every one — archived projects
-included. So "Clear" now truly removes everything of that type.
-ACTION: run Data Management -> Clear Bills (type CLEAR) again after deploying to
-remove the leftover old bills, then re-upload.
+NEW ON THE BOOKKEEPING DASHBOARD (header)
+-----------------------------------------
+• "Sync last [3/6/12/18/24 mo]" selector (default 6).
+• ↻ Sync Invoices  — re-pulls sales, all projects, exact-mirror in window.
+• ↻ Sync Wages     — re-pulls Direct Wages (320) journals, all projects.
+• ↻ Sync Xero figures — the P&L benchmark (the "Total in Xero" numbers), as before.
+• ⬆ Upload Bills (admin) — jumps to the Bills upload page.
+• ⚙ Bookkeeping Admin (admin) — the financial-admin hub.
+All refresh the page data on completion and show a result summary.
+Sync Invoices/Wages available to Accounts/Management/Admin; Upload Bills &
+Bookkeeping Admin are admin-only.
 
-BUG 2 — "471 days not in this file" warning on every upload
------------------------------------------------------------
-The warning listed EVERY day in the app not in the file — so a 1-month upload
-always flagged all ~3 years of other days. Correct logic, useless in practice.
+API SAFETY
+----------
+• Windowed (default 6 months) so pulls stay light.
+• Sales/Wages are batched endpoints — a few calls per project; well under limits.
+• 45-second cooldown per button (429 if pressed again too soon) to avoid
+  accidental double-clicks tripping Xero's concurrency limit. No daily cap needed.
+• Nightly global sync still refreshes sales+wages for all projects automatically;
+  these buttons are the on-demand version.
 
-FIX: the warning now only flags days WITHIN the file's own date span (between its
-earliest and latest date) that the file skipped — i.e. genuine gaps in the period
-you actually uploaded (e.g. file covers June but missed 14 June). Days outside the
-file's period are no longer listed. This makes the warning meaningful and quiet.
+NOTE ON "XERO VS APP" CARDS
+---------------------------
+Those cards read the P&L benchmark (Sync Xero figures) for the Xero side and your
+categorised data for the app side. If they still look off after this, press all
+three sync buttons once, then tell me exactly which row/number looks wrong and
+what Xero shows — I'll reconcile it precisely.
 
-FILES CHANGED
--------------
-• pages/api/clear-financial-data.js — scan-and-delete ALL keys (incl. archived)
-• pages/api/import-bills-bulk.js     — scope days-not-covered to file's own span
-• pages/admin/xero-upload.js         — reworded warning
-• pages/admin/data-management.js     — result wording (records cleared)
+FILES CHANGED / ADDED
+---------------------
+• pages/api/sync-invoices.js (new) — on-demand sales sync, all projects, windowed
+• pages/api/sync-wages.js    (new) — on-demand wages sync, all projects, windowed
+• pages/bookkeeping.js             — sync buttons + window selector + upload link

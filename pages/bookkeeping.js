@@ -7,6 +7,7 @@ const INK = '#1a1a2e'
 const th = { textAlign: 'left', padding: '10px 12px', fontSize: 11, color: '#777', fontWeight: 600, borderBottom: '2px solid #eee', whiteSpace: 'nowrap' }
 const td = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f2f0ec' }
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
+const syncBtn = (busy) => ({ background: busy ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
 
 // Rows for a given tab (matches the page's tab->data mapping).
 function tabRowsFor(tab, data) {
@@ -56,21 +57,30 @@ export default function BookkeepingPage() {
   const [assigned, setAssigned] = useState('no')   // default: No category assigned
   const [page, setPage] = useState(1)
   const PER_PAGE = 50
-  const [syncing, setSyncing] = useState(false)
+  const [syncing, setSyncing] = useState('')     // '' | 'benchmark' | 'invoices' | 'wages'
   const [syncMsg, setSyncMsg] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [syncMonths, setSyncMonths] = useState(6)
 
-  async function syncXero() {
-    setSyncing(true); setSyncMsg('')
+  useEffect(() => {
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d.user?.role === 'admin') setIsAdmin(true) }).catch(() => {})
+  }, [])
+
+  async function runSync(kind, endpoint, label) {
+    setSyncing(kind); setSyncMsg('')
     try {
-      const res = await fetch('/api/sync-benchmark', { method: 'POST' })
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months: syncMonths }) })
       const d = await res.json()
       if (res.ok && d.ok) {
-        setSyncMsg(`Synced ${d.monthsPulled} month${d.monthsPulled !== 1 ? 's' : ''}.`)
+        const detail = kind === 'invoices' ? `${d.projectsDone} projects, ${d.invoicesRefreshed} invoices`
+          : kind === 'wages' ? `${d.projectsDone} projects, ${d.wageLinesRefreshed} wage lines`
+          : `${d.monthsPulled} months`
+        setSyncMsg(`${label}: ${detail}.`)
         const fresh = await fetch('/api/bookkeeping').then(r => r.json())
         setData(fresh)
-      } else setSyncMsg(d.error || 'Sync failed.')
-    } catch (e) { setSyncMsg('Sync failed.') }
-    setSyncing(false)
+      } else setSyncMsg(d.error || `${label} failed.`)
+    } catch (e) { setSyncMsg(`${label} failed.`) }
+    setSyncing('')
   }
 
   useEffect(() => {
@@ -128,10 +138,27 @@ export default function BookkeepingPage() {
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>Bookkeeping</span>
           <div style={{ flex: 1 }} />
           {syncMsg && <span style={{ color: '#9fe3b0', fontSize: 12, whiteSpace: 'nowrap' }}>{syncMsg}</span>}
-          <button onClick={syncXero} disabled={syncing}
-            style={{ background: syncing ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-            {syncing ? 'Syncing Xero…' : '↻ Sync Xero figures'}
-          </button>
+          <span style={{ color: '#888', fontSize: 12 }}>Sync last</span>
+          <select value={syncMonths} onChange={e => setSyncMonths(parseInt(e.target.value))}
+            style={{ background: '#2d2d44', color: '#fff', border: '1px solid #444', borderRadius: 6, padding: '5px 6px', fontSize: 12 }}>
+            {[3, 6, 12, 18, 24].map(m => <option key={m} value={m}>{m} mo</option>)}
+          </select>
+          <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing}
+            style={syncBtn(syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : '↻ Sync Invoices'}</button>
+          <button onClick={() => runSync('wages', '/api/sync-wages', 'Wages')} disabled={!!syncing}
+            style={syncBtn(syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : '↻ Sync Wages'}</button>
+          <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing}
+            style={syncBtn(syncing === 'benchmark')}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
+          {isAdmin && (
+            <Link href="/admin/xero-upload" style={{ background: '#0f766e', color: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              ⬆ Upload Bills
+            </Link>
+          )}
+          {isAdmin && (
+            <Link href="/bookkeeping/admin" style={{ background: '#2d2d44', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+              ⚙ Bookkeeping Admin
+            </Link>
+          )}
         </div>
       </div>
 
