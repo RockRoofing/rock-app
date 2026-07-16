@@ -1,15 +1,27 @@
-Roles — remove Commercial access from the Accounts role
-=======================================================
+Bookkeeping — fix categorised items not showing + 50 per page
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top.
 
-CHANGE
-------
-The "Accounts" role no longer has access to the Commercial (Project Financials)
-area. Accounts now sees only Bookkeeping (plus the universal areas: Lessons
-Learnt, HR). Management and Admin are unchanged and still have both.
+1) CATEGORISED ITEMS NOW SHOW (root cause fixed)
+------------------------------------------------
+The page's categorised items depended on the DASHBOARD CACHE, which is only
+rebuilt when someone views the dashboard/commercial page and can be empty/stale
+for up to 4 hours after an upload — so categorised items often didn't appear.
 
-FILE CHANGED
-------------
-• lib/roles.js — AREA_ACCESS.commercial no longer includes 'accounts'
+Fix: the Bookkeeping API now reads the per-project cost/invoice lines DIRECTLY
+from Redis (costs:lines:* / invoiced:lines:*), so it's always current regardless
+of the dashboard cache. It resolves the project list from the dashboard cache if
+present, else from Xero (cached 1h as projects:list) so it doesn't add a Xero
+call on every load.
+
+2) 50 ITEMS PER PAGE
+--------------------
+All tabs now paginate at 50 rows with Prev / Next controls and a
+"Page X of Y · N items" indicator. Page resets when you change tab or filters.
+
+FILES CHANGED
+-------------
+• pages/api/bookkeeping.js — read per-project lines directly (not via dashboard cache)
+• pages/bookkeeping.js     — 50-per-page pagination

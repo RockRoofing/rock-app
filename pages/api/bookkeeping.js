@@ -1,4 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
+import { getTokens, saveTokens, getAllProjectSettings } from '../../lib/db'
+import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -40,17 +42,49 @@ export default async function handler(req, res) {
 
     const knownCodes = new Set(Object.keys(catConfig))
 
+    // ── Resolve the project list (name per trackingOptionId). Prefer the
+    //    dashboard cache; if empty, get it from Xero and cache for an hour so we
+    //    don't depend on the dashboard having been viewed recently. ──
+    let projectList = []   // [{ id, name }]
+    if (Array.isArray(dash) && dash.length) {
+      projectList = dash.filter(p => p.id && p.id !== '__UNASSIGNED__').map(p => ({ id: p.id, name: p.name || p.jobNo || '' }))
+    }
+    if (projectList.length === 0) {
+      const cachedList = await redis.get('projects:list').catch(() => null)
+      if (Array.isArray(cachedList) && cachedList.length) projectList = cachedList
+      else {
+        try {
+          let tokens = await getTokens()
+          if (tokens?.refresh_token) {
+            try { const nt = await refreshXeroToken(tokens.refresh_token); tokens = { ...tokens, ...nt }; await saveTokens(tokens) } catch {}
+            const cats = await getProjectsFromCategories(tokens.access_token, tokens.tenant_id)
+            projectList = cats.map(cp => ({ id: cp.trackingOptionId, name: cp.name || cp.jobNo || '' }))
+            await redis.set('projects:list', projectList, { ex: 60 * 60 })
+          }
+        } catch (e) { console.error('project list fetch failed:', e.message) }
+      }
+    }
+
+    // Read per-project cost + invoice lines DIRECTLY from Redis (always current,
+    // independent of the dashboard cache freshness).
+    const perProject = await Promise.all(projectList.map(async (p) => {
+      const [cLines, iLines] = await Promise.all([
+        redis.get(`costs:lines:${p.id}`).then(v => v || []).catch(() => []),
+        redis.get(`invoiced:lines:${p.id}`).then(v => v || []).catch(() => []),
+      ])
+      return { name: p.name, costLines: cLines, invoiceLines: iLines }
+    }))
+
     // Four tab datasets. Each line: project (or null), category, categorised, month.
     const bills = []      // Costs tab: Labour/Materials only
     const wages = []      // Direct Wages tab
     const invoices = []   // Sales Invoices tab
     const ignored = []    // Ignored tab: Ignore-category + untagged overheads
 
-    // 1. Categorised items (from per-project dashboard cache).
-    for (const p of (dash || [])) {
-      if (p.id === '__UNASSIGNED__') continue
-      const project = p.name || p.jobNo || ''
-      for (const l of (p._costLines || [])) {
+    // 1. Categorised items (per-project, read directly above).
+    for (const p of perProject) {
+      const project = p.name
+      for (const l of (p.costLines || [])) {
         const cat = categoryOf(l.accountCode, catConfig)
         const rec = {
           date: l.date || '', month: monthOf(l.date),
@@ -64,7 +98,7 @@ export default async function handler(req, res) {
         else if (rec.source === 'wages') wages.push(rec)
         else bills.push(rec)
       }
-      for (const l of (p._invoiceLines || [])) {
+      for (const l of (p.invoiceLines || [])) {
         invoices.push({
           date: l.date || '', month: monthOf(l.date),
           invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
@@ -107,13 +141,13 @@ export default async function handler(req, res) {
     }
 
     const appCategorised = {}
-    for (const p of (dash || [])) {
-      for (const l of (p._costLines || [])) {
+    for (const p of perProject) {
+      for (const l of (p.costLines || [])) {
         const m = monthOf(l.date); if (!m) continue
         appCategorised[m] = appCategorised[m] || { cost: 0, sales: 0 }
         appCategorised[m].cost += (l.amount || 0)
       }
-      for (const l of (p._invoiceLines || [])) {
+      for (const l of (p.invoiceLines || [])) {
         const m = monthOf(l.date); if (!m) continue
         appCategorised[m] = appCategorised[m] || { cost: 0, sales: 0 }
         appCategorised[m].sales += (l.total || 0)

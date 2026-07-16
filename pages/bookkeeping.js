@@ -22,6 +22,8 @@ export default function BookkeepingPage() {
   const [codes, setCodes] = useState([])          // multi-select account codes
   const [catFilter, setCatFilter] = useState('') // '' | labour | materials  (Costs tab)
   const [assigned, setAssigned] = useState('')   // '' | yes | no
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 50
 
   useEffect(() => {
     fetch('/api/bookkeeping').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
@@ -54,6 +56,10 @@ export default function BookkeepingPage() {
   const total = useMemo(() => filtered.reduce((s, r) => s + (r.amount != null ? r.amount : (r.total || 0)), 0), [filtered])
   const assignedCount = filtered.filter(r => r.categorised).length
   const unassignedCount = filtered.length - assignedCount
+
+  useEffect(() => { setPage(1) }, [tab, month, supplier, codes, catFilter, assigned])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  const pageRows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   function resetFilters() { setMonth(''); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('') }
   function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter('') }
@@ -144,7 +150,7 @@ export default function BookkeepingPage() {
                   <tbody>
                     {filtered.length === 0 ? (
                       <tr><td colSpan={7} style={{ ...td, color: '#aaa', textAlign: 'center', padding: 30 }}>No items match these filters.</td></tr>
-                    ) : filtered.map((r, i) => (
+                    ) : pageRows.map((r, i) => (
                       <tr key={i} style={{ background: i % 2 ? '#fcfbf9' : '#fff' }}>
                         <td style={td}>{r.date || '—'}</td>
                         <td style={td}>{r.supplier || r.contact || '—'}</td>
@@ -167,6 +173,16 @@ export default function BookkeepingPage() {
                   </tbody>
                 </table>
               </div>
+
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 }}>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                    style={{ ...sel, cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.5 : 1 }}>← Prev</button>
+                  <span style={{ fontSize: 13, color: '#666' }}>Page {page} of {totalPages} · {filtered.length} items</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                    style={{ ...sel, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}>Next →</button>
+                </div>
+              )}
             </div>
           </>
         )}
