@@ -1,33 +1,20 @@
-Bookkeeping — "Sync Xero figures" button (on-demand P&L benchmark)
-==================================================================
+Bookkeeping — click a month on the graph to filter the table
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Deploy over the top. Frontend only.
 
-WHY
----
-The "In Xero" figures come from the P&L benchmark, which was only pulled by the
-nightly sync — so until it ran, Xero figures showed "—" (your _diag had
-benchmark:null). This adds an on-demand refresh.
+CHANGES
+-------
+1. CLICK-TO-FILTER: click any month on the graph and the table below filters to
+   that month, so you can see exactly what makes up that month's value. The graph
+   caption shows "Showing <Month> — clear" (click to clear back to all months).
+   Works by clicking anywhere in that month's column, or the point.
 
-NEW: "↻ Sync Xero figures" button (top-right of the Bookkeeping page)
---------------------------------------------------------------------
-• Pulls ONLY the Profit & Loss benchmark for the last 6 months — cheap
-  (~6 Xero API calls, one per month), so it's safe to press whenever you like.
-  It does NOT run the heavy full deep-sync (no per-project rotation / bill sweep).
-• Refreshes the page data on completion, so the Xero column + graph benchmark
-  populate immediately. Shows "Synced N months" / an error message.
-• Merges with any existing benchmark months (won't lose older months).
-• Accounts / Management / Admin only.
+2. CONFIRMED PER-TAB (your question): the graph already shows ONLY the current
+   tab's uncategorised items — costs on the Costs tab, sales on Sales, wages on
+   Wages. It does NOT combine all three. (No change needed; confirmed in code.)
 
-ALTERNATIVE (no button needed): you can still force the FULL nightly sync by
-visiting /api/cron/deep-sync while logged in — but that's heavier and slower.
-The button is the lightweight option for just the Xero figures.
-
-NOTE: needs Xero connected with a valid refresh token. If it says "reconnect
-Xero", the token has expired and needs re-authorising in the Xero settings.
-
-FILES CHANGED
--------------
-• pages/api/sync-benchmark.js  (new) — lightweight P&L-only sync endpoint
-• pages/bookkeeping.js               — Sync Xero figures button + refresh
+FILE CHANGED
+------------
+• pages/bookkeeping.js — graph onClick sets the month filter; clickable caption

@@ -118,7 +118,7 @@ export default function BookkeepingPage() {
 
         {loading ? <div style={{ color: '#aaa', padding: 40 }}>Loading…</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
-            <ReconPanel data={data} month={month} tab={tab} />
+            <ReconPanel data={data} month={month} tab={tab} onPickMonth={setMonth} />
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
@@ -255,7 +255,7 @@ function CodeMultiSelect({ options, selected, onChange }) {
   )
 }
 
-function ReconPanel({ data, month, tab }) {
+function ReconPanel({ data, month, tab, onPickMonth }) {
   const fmtL = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
   const showGraph = tab !== 'ignored'   // no graph on Overheads
 
@@ -279,6 +279,7 @@ function ReconPanel({ data, month, tab }) {
   }
   const chartData = sixMonths.map(m => ({
     month: new Date(parseInt(m.slice(0, 4)), parseInt(m.slice(5)) - 1, 1).toLocaleDateString('en-GB', { month: 'short' }),
+    ym: m,
     uncategorised: uncatByMonth[m] || 0,
   }))
   const anySpike = chartData.some(d => d.uncategorised > 0)
@@ -315,18 +316,20 @@ function ReconPanel({ data, month, tab }) {
             Uncategorised {tab === 'wages' ? 'wages' : tab === 'invoices' ? 'invoices' : 'costs'} — last 6 months
           </div>
           <div style={{ fontSize: 11, color: '#999', marginBottom: 10 }}>
-            Aim for the dashed line (zero): everything allocated to a project.
+            Aim for the dashed line (zero): everything allocated to a project. {month ? <span style={{ color: '#7c3aed', cursor: 'pointer', fontWeight: 600 }} onClick={() => onPickMonth && onPickMonth('')}>Showing {monthLabel(month)} — clear</span> : 'Click a month to filter the table.'}
           </div>
           <div style={{ height: 190 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}>
+              <LineChart data={chartData} margin={{ top: 12, right: 18, bottom: 4, left: 8 }}
+                onClick={(e) => { const p = e && e.activePayload && e.activePayload[0]; if (p && p.payload && onPickMonth) onPickMonth(p.payload.ym) }}
+                style={{ cursor: 'pointer' }}>
                 <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#999' }} axisLine={{ stroke: '#e5e5e5' }} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#999' }} axisLine={false} tickLine={false} width={56}
                   tickFormatter={(v) => v >= 1000 ? `£${Math.round(v / 1000)}k` : `£${v}`} domain={[0, 'auto']} />
                 <Tooltip formatter={(v) => [fmtL(v), 'Uncategorised']} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11, borderRadius: 8 }} />
                 <ReferenceLine y={0} stroke="#16a34a" strokeDasharray="5 4" strokeWidth={1.5} />
                 <Line type="monotone" dataKey="uncategorised" stroke="#7c3aed" strokeWidth={2.5}
-                  dot={{ r: 3, fill: '#7c3aed' }} activeDot={{ r: 5 }} isAnimationActive={false} />
+                  dot={{ r: 3, fill: '#7c3aed' }} activeDot={{ r: 6, cursor: 'pointer' }} isAnimationActive={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
