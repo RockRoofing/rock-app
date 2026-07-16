@@ -40,6 +40,8 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
       if (!r2.ok) continue
       const full = ((await r2.json()).Invoices || [])[0]
       if (!full) continue
+      if (full.Type !== 'ACCREC') continue        // sales invoices ONLY — never bills
+      if (full.Status === 'DELETED' || full.Status === 'VOIDED') continue
       const trackingNames = new Set()
       for (const line of (full.LineItems || [])) {
         for (const t of (line.Tracking || [])) {

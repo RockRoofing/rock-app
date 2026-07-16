@@ -83,7 +83,9 @@ export default async function handler(req, res) {
       const c = parseCSVLine(rows[i])
       if (c.length < 3) continue
       const type = (c[col.type] || '').toLowerCase()
-      // Only real sales invoices + credit notes count toward invoiced totals.
+      // Only real SALES invoices + SALES credit notes. Explicitly exclude bills
+      // ("Bill", "Bill credit note") so a bills export can't pollute Sales.
+      if (type.includes('bill')) continue
       const isInvoice = type.includes('sales invoice')
       const isCredit = type.includes('credit note')
       if (!isInvoice && !isCredit) continue          // skip overpayments/prepayments

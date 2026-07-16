@@ -1,44 +1,40 @@
-Bookkeeping — FIX: Sync Invoices returned 0 (matched by GUID, now matches by name)
-==================================================================================
+Bookkeeping — FIX: cost bills appearing under Sales Invoices
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top, then press ↻ Sync Invoices.
+Deploy, THEN clear + re-sync (steps below).
 
 THE BUG
 -------
-Sync Invoices ran across all 26 projects but returned 0 invoices, so Sales
-"Categorised in app" stayed £0 — even though invoices ARE project-tagged in Xero
-(confirmed from your June export: INV-1695 -> J242-Winnersh, etc.).
+Sales Invoices tab showed cost/bank items (Fuel card, Bibby, reimbursements) and
+"loads of cost bills", across old dates too — bills had polluted the sales data.
 
-Cause: the API path matched invoices to projects by tracking-option GUID
-(line.Tracking[].TrackingOptionID === trackingOptionId). That comparison was
-returning nothing. Meanwhile the CSV path matches by NAME ("J242-Winnersh") and
-works. Two different mechanisms for the same goal — the GUID one was broken.
+THE FIX (two guards)
+--------------------
+"Type guard" = only accept genuine SALES invoices. In Xero, sales = ACCREC,
+bills = ACCPAY. Both entry points now reject anything that isn't a real sales
+invoice:
+• Sync Invoices (API): skips any record where Type !== 'ACCREC', and skips
+  DELETED/VOIDED. So a re-sync can never pull a bill into Sales again.
+• CSV invoice upload: explicitly skips rows whose Type contains "bill" (fixes a
+  hole where "Bill credit note" slipped through the credit-note check).
 
-THE FIX
--------
-Sync Invoices now matches by tracking-option NAME — the same reliable text match
-the CSV upload uses:
-  • ONE pass: fetch all ACCREC (sales) invoices, newest-first, stopping once past
-    the window (default 6 months) — far fewer API calls than the old per-project
-    scan.
-  • For each invoice, read its line-item tracking OPTION label (e.g.
-    "J242-Winnersh") and match to the project by name.
-  • Group per project; unmatched -> Unassigned. Exact-mirror within the window
-    (older invoices preserved).
-Result message now shows: "X matched to projects, Y unassigned (of Z)".
+CLEARING THE EXISTING POLLUTION (important — old dates too)
+----------------------------------------------------------
+The guards stop NEW pollution but don't remove what's already stored (you saw
+wrong items on Jan 2026 and earlier). So after deploying:
 
-AFTER DEPLOYING
----------------
-Press ↻ Sync Invoices (6 mo). Your June invoices should move from NO CATEGORY to
-their projects, and Sales "Categorised in app" should populate. The 45s cooldown
-still applies.
+1. Deploy this.
+2. Bookkeeping Admin -> Data Management -> Clear Sales Invoices (type CLEAR).
+   (Clear scans ALL keys incl. archived projects, so it removes every polluted
+   item, old and recent.)
+3. Bookkeeping dashboard -> set "Sync last" to the window you want (e.g. 24 mo to
+   get older sales back) -> press ↻ Sync Invoices.
 
-KNOWN / NEXT: the nightly global sync and Sync Wages still match wages/sales by
-GUID internally. If Wages also come back 0 after syncing, tell me and I'll apply
-the same name-based fix to the wages journal match and the nightly job.
+Result: Sales will contain ONLY genuine ACCREC sales invoices, matched to
+projects by tracking name. Header will show "X matched, Y unassigned (of Z)".
 
 FILES CHANGED
 -------------
-• pages/api/sync-invoices.js — one-pass, match by tracking NAME (was GUID)
-• pages/bookkeeping.js       — result message wording
+• pages/api/sync-invoices.js        — ACCREC-only guard + skip deleted/voided
+• pages/api/import-invoices-bulk.js — CSV: exclude bills (incl. bill credit notes)
