@@ -1,37 +1,65 @@
-Financial App — show untagged invoices as "Unassigned" (don't hide them)
-=======================================================================
+Bookkeeping reconciliation page + "Accounts" role
+==================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Runtime-tested on your real Sales Invoices export.
-Deploy over the top of the earlier Financial packages.
+Untagged capture runtime-tested on your real Bills export.
+Deploy over the top of the earlier Financial packages (needs lib/costDedupe.js,
+lib/mergeCosts.js from those).
 
-THE PROBLEM YOU SPOTTED
+NEW "ACCOUNTS" ROLE
+-------------------
+• Added a new access role: "Accounts" (lib/roles.js). Selectable in Admin ->
+  Portal Users like any other role.
+• New "bookkeeping" area = Accounts + Management + Admin (as requested — Management
+  and Admin get it automatically).
+• Accounts role also gets the Commercial (Project Financials) area.
+
+NEW BOOKKEEPING CARD + PAGE  (/bookkeeping)
+-------------------------------------------
+Purple "Bookkeeping" card on the portal home (visible to Accounts/Management/Admin).
+The page lists transactions that have NO project tracking category in Xero — i.e.
+costs/sales/wages that aren't attributed to a project — so you can reconcile the
+app against Xero each month and fix tags at source.
+
+• THREE TABS: Costs (Bills) | Sales Invoices | Direct Wages.
+• FILTERS: month, supplier/customer, and account (cost) code.
+• RECONCILIATION SUMMARY at the top (per selected month or all):
+   - In Xero (cost of sale / sales)  — from the P&L benchmark (see below)
+   - Categorised in app              — what's attributed to projects
+   - Difference (Xero − app)         — green "reconciles ✓" or red "does not match"
+   - Untagged in this view           — the leakage total for the current filter
+   - Missing account codes           — cost-of-sale codes seen in Xero data but NOT
+     set up in Admin -> Account Categorisation (so you can add them). Untagged
+     lines whose code isn't in the app also show a red "NOT IN APP" badge.
+
+HOW THE DATA GETS THERE
 -----------------------
-Invoices in Xero that don't carry the Projects tracking category (many retention
-invoices — e.g. Christchurch, Russell Hill, Glenvale Park) were being SILENTLY
-DROPPED on import, because the app matches invoices to projects via that tag.
-That's why Xero showed them but the app didn't. (Also note: one of the two CSVs
-you uploaded — the 11_56_54 file — was effectively empty of outstanding balances;
-use the full export, i.e. the 11_56_03-style one.)
+• The Bills and Direct Wages importers now CAPTURE untagged lines (previously they
+  were silently skipped) into costs:untagged:bills / costs:untagged:wages
+  (merged/deduped). Untagged sales invoices already flow via the __UNASSIGNED__
+  bucket. Real-file test: 132 untagged bill lines (£54,102), including cost-of-sale
+  codes 311 & 330 that had no project tag — exactly the leakage to catch.
+• XERO BENCHMARK: a Profit & Loss pull (lib/xero.js fetchProfitAndLoss) gives the
+  month's account totals in ONE API call per month. Folded into the nightly
+  deep-sync (current + previous 3 months, once/day) and cached at xero:pl-benchmark
+  — so it does NOT hammer the Xero API and needs no extra cron slot.
 
-THE FIX (your choice: show them, don't guess)
----------------------------------------------
-• Invoices with NO Projects tag are now collected into a reserved "Unassigned"
-  bucket instead of being dropped.
-• They appear in Outstanding Invoices like any other invoice, with an amber
-  "UNASSIGNED" badge and the project name "Unassigned (no project tag in Xero)".
-• No guessing / auto-assignment — they're shown exactly as-is so nothing is hidden.
-• On your real file this surfaces ~15 outstanding untagged invoices (and 297
-  untagged invoices in total) that were previously invisible.
+NOTES
+-----
+• The "In Xero" and "Difference" figures appear after the first overnight deep-sync
+  runs (or trigger GET /api/cron/deep-sync once to populate immediately).
+• Sales vs cost split in the P&L is inferred by account name (Sales/Income/Revenue
+  -> sales; else cost). If your chart of accounts uses unusual names we can refine
+  the classification.
 
-TO PROPERLY ATTRIBUTE THEM
---------------------------
-Tag the invoice with the Projects tracking category in Xero, then re-upload — it
-will move from "Unassigned" to its project automatically. (Uploads merge/dedupe,
-so re-uploading is safe.)
-
-FILES CHANGED
--------------
-• pages/api/import-invoices-bulk.js — untagged -> __UNASSIGNED__ bucket (not dropped)
-• pages/api/dashboard.js            — exposes an "Unassigned" pseudo-project
-• pages/outstanding-invoices.js     — carries the flag + amber UNASSIGNED badge
+FILES CHANGED / ADDED
+---------------------
+• lib/roles.js                     — new "accounts" role + "bookkeeping" area
+• lib/xero.js                      — fetchProfitAndLoss (P&L benchmark, 1 call/month)
+• pages/api/bookkeeping.js  (new)  — serves untagged data + reconciliation
+• pages/bookkeeping.js      (new)  — the page (tabs, filters, reconciliation)
+• pages/api/import-bills-bulk.js   — capture untagged bill lines
+• pages/api/import-wages-bulk.js   — capture untagged (unallocated) wage lines
+• pages/api/cron/deep-sync.js      — nightly P&L benchmark pull
+• pages/index.js                   — Bookkeeping portal card
+• pages/admin.js                   — role list text (Accounts now selectable)

@@ -81,18 +81,33 @@ export default async function handler(req, res) {
     // contra/pool side of the tracking-transfer journals (and the original lump
     // journal) — including them would net to zero, so they are skipped.
     const byProject = new Map()
+    const untagged = []   // wage debits with NO project tag (unallocated)
     for (let i = hIdx + 1; i < rows.length; i++) {
       const r = rows[i]
       if (!Array.isArray(r)) continue
       const proj = col.projects !== -1 ? r[col.projects] : null
-      if (!proj || !String(proj).trim()) continue
-      const tracking = String(proj).trim()
 
       // Amount: prefer Debit-Credit (GBP); fall back to Net (GBP).
       let amount = 0
       if (col.debit !== -1 || col.credit !== -1) amount = num(r[col.debit]) - num(r[col.credit])
       else if (col.net !== -1) amount = num(r[col.net])
       if (amount === 0) continue
+
+      if (!proj || !String(proj).trim()) {
+        // Untagged wage line. Only positive (debit) amounts represent unallocated
+        // cost; the negative contra lines are the transfer reversals — skip those.
+        if (amount > 0) {
+          untagged.push({
+            date: excelDate(col.date !== -1 ? r[col.date] : null),
+            supplier: 'Direct Wages',
+            description: col.desc !== -1 ? String(r[col.desc] || '') : 'Direct Wages',
+            reference: col.ref !== -1 ? String(r[col.ref] || '') : '',
+            amount, accountCode: '320', accountName: 'Direct Wages', source: 'wages',
+          })
+        }
+        continue
+      }
+      const tracking = String(proj).trim()
 
       if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, lines: [] })
       const g = byProject.get(tracking)
@@ -110,8 +125,14 @@ export default async function handler(req, res) {
       })
     }
 
-    if (byProject.size === 0) {
-      return res.status(400).json({ error: 'No project-tagged wage lines found. Check the Projects column is populated in the export.' })
+    if (untagged.length) {
+      const existingUn = (await redis.get('costs:untagged:wages').catch(() => null)) || []
+      const { merged } = mergeDedupe(existingUn, untagged, costLineKey)
+      await redis.set('costs:untagged:wages', merged)
+    }
+
+    if (byProject.size === 0 && untagged.length === 0) {
+      return res.status(400).json({ error: 'No wage lines found. Check the Projects column is populated in the export.' })
     }
 
     // Resolve tracking names -> trackingOptionId (cost cache key).

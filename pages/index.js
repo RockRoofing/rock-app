@@ -108,6 +108,23 @@ const departments = [
     ),
   },
   {
+    key: 'bookkeeping',
+    label: 'Bookkeeping',
+    description: 'Reconcile Xero vs the app — untagged bills, invoices & wages',
+    href: '/bookkeeping',
+    color: '#7c3aed',
+    lightColor: '#f5f3ff',
+    borderColor: '#ddd6fe',
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <rect x="7" y="6" width="26" height="28" rx="3" stroke="#7c3aed" strokeWidth="2" fill="none"/>
+        <line x1="13" y1="13" x2="27" y2="13" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="13" y1="19" x2="27" y2="19" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="13" y1="25" x2="21" y2="25" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     key: 'business-financials',
     label: 'Business Financials',
     description: 'Company P&L, overheads & turnover (Admin only) — coming soon',

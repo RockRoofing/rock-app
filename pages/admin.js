@@ -89,7 +89,7 @@ export default function AdminPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22, color: '#1a1a19' }}>Portal Users</h1>
-              <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Pre-Contract · Post-Contract · Management · Admin.</div>
+              <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>Create logins and assign roles. Pre-Contract · Post-Contract · Accounts · Management · Admin.</div>
             </div>
             <button onClick={() => { setNotice(''); setErr(''); setForm({ firstName: '', lastName: '', email: '', phone: '', jobRole: '', role: 'post-contract', active: true }) }} style={btn}>+ Add user</button>
           </div>

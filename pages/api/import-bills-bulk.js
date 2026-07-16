@@ -70,28 +70,23 @@ export default async function handler(req, res) {
     const catConfig = (await redis.get('config:account-categorisation').catch(() => null)) || {}
     const seenAccounts = (await redis.get('costs:seen-accounts').catch(() => null)) || {}
 
-    // Group cost lines by project (TrackingOption1).
+    // Group cost lines by project (TrackingOption1). Untagged lines are captured
+    // separately for the Bookkeeping reconciliation page (not silently dropped).
     const byProject = new Map()   // tracking -> { labour, materials, total, lines:[] }
+    const untagged = []           // bill lines with NO tracking category
+    let allCosCount = 0           // count of all cost-of-sale lines seen
     for (let i = 1; i < lines.length; i++) {
       const c = parseCSVLine(lines[i])
       const tracking = (c[col.tracking] || '').trim()
-      if (!tracking) continue                        // untagged (e.g. CIS deductions, Internal) -> skip
       const code = (c[col.accountCode] || '').trim()
       if (!code) continue
       const amount = num(c[col.lineAmount])
       if (amount === 0) continue
 
-      if (!seenAccounts[code]) seenAccounts[code] = ''  // record the code (name comes from Account Transactions)
+      if (!seenAccounts[code]) seenAccounts[code] = ''
       const category = categoryFor(code, '', catConfig)
-      if (category === 'ignore') continue
-
-      if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, materials: 0, total: 0, lines: [] })
-      const g = byProject.get(tracking)
-      const isLabour = category === 'labour'
-      g.total += amount
-      if (isLabour) g.labour += amount; else g.materials += amount
       const description = c[col.desc] || ''
-      g.lines.push({
+      const lineRec = {
         date: parseDate(c[col.date]),
         supplier: (c[col.contact] || '').trim() || description.split(' - ')[0] || '',
         description,
@@ -99,13 +94,33 @@ export default async function handler(req, res) {
         amount,
         accountCode: code,
         accountName: '',
-        type: isLabour ? 'Labour' : 'Materials',
         source: 'bills',
-      })
+      }
+
+      if (!tracking) {
+        // No project tag — record for reconciliation, keep out of project costs.
+        untagged.push({ ...lineRec, category })
+        continue
+      }
+      if (category === 'ignore') continue
+
+      if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, materials: 0, total: 0, lines: [] })
+      const g = byProject.get(tracking)
+      const isLabour = category === 'labour'
+      g.total += amount
+      if (isLabour) g.labour += amount; else g.materials += amount
+      g.lines.push({ ...lineRec, accountName: '', type: isLabour ? 'Labour' : 'Materials' })
     }
 
-    if (byProject.size === 0) {
-      return res.status(400).json({ error: 'No project-tagged bill lines found. Make sure the export includes the Projects tracking category.' })
+    // Store untagged bills (merged/deduped) for the Bookkeeping page.
+    if (untagged.length) {
+      const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
+      const { merged } = mergeDedupe(existingUn, untagged, costLineKey)
+      await redis.set('costs:untagged:bills', merged)
+    }
+
+    if (byProject.size === 0 && untagged.length === 0) {
+      return res.status(400).json({ error: 'No bill lines found. Make sure the export includes the Projects tracking category.' })
     }
 
     // Resolve tracking names -> trackingOptionId (the cost cache key).

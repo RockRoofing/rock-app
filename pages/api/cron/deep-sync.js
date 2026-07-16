@@ -1,5 +1,5 @@
 import { getTokens, saveTokens } from '../../../lib/db'
-import { refreshXeroToken, getProjectsFromCategories } from '../../../lib/xero'
+import { refreshXeroToken, getProjectsFromCategories, fetchProfitAndLoss } from '../../../lib/xero'
 import { mergeCosts } from '../../../lib/mergeCosts'
 import { costLineKey as costKey, invoiceLineKey as invoiceKey } from '../../../lib/costDedupe'
 
@@ -232,11 +232,37 @@ export default async function handler(req, res) {
     await redis.set('deep-sync:pointer', (pointer + 1) % active.length)
     await redis.del('dashboard:cache')
 
+    // ── Bookkeeping benchmark: pull P&L per month (cheap — 1 call/month) ──
+    // Only refresh once per day (guard so it doesn't run on every manual trigger).
+    let benchmarkMonths = 0
+    try {
+      const lastBench = await redis.get('xero:pl-benchmark').catch(() => null)
+      const today = new Date().toISOString().slice(0, 10)
+      if (!lastBench || (lastBench.updatedAt || '').slice(0, 10) !== today) {
+        const months = {}
+        const now2 = new Date()
+        for (let k = 0; k < 4; k++) {   // current + previous 3 months
+          const d = new Date(now2.getFullYear(), now2.getMonth() - k, 1)
+          const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+          const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+          const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
+          try {
+            const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to)
+            months[from.slice(0, 7)] = pl.accounts
+            benchmarkMonths++
+            await sleep(300)
+          } catch (e) { console.error('P&L pull failed for', from, e.message) }
+        }
+        await redis.set('xero:pl-benchmark', { months, updatedAt: new Date().toISOString() })
+      }
+    } catch (e) { console.error('benchmark error:', e.message) }
+
     res.json({
       ok: true,
       project: cp.jobNo, fromDate: fromDateStr,
       billsAdded: billsMerge.added, wagesAdded: wagesMerge.added, salesFetched: salesLines.length,
       billLabour, billMaterials, wageTotal, totalInvoiced, dueTotal,
+      benchmarkMonths,
       nextProject: active[(pointer + 1) % active.length]?.jobNo,
     })
   } catch (e) {
