@@ -1,26 +1,45 @@
-Financial — each upload box now accepts MULTIPLE files
-======================================================
+Financial — unknown/overhead account codes now default to IGNORE
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. Supersedes Financial_multi_file_upload.zip (that approach
-removed).
+Default logic runtime-tested. Deploy over the top.
 
-CHANGE (your suggestion — better design)
-----------------------------------------
-Instead of a separate "upload all at once" box with type auto-detection, each of
-the three boxes (Bills, Direct Wages, Sales Invoices) now accepts MULTIPLE files
-of its own type. Select several 500-line batches in one box and they upload one
-after another, each merging/deduping into the same store.
+WHY
+---
+Your Bills export contains ALL bills, including overheads (rent, insurance,
+vehicle costs, professional fees — codes like 441, 412, 463, 630, 8xx). These
+appeared on the Account Categorisation page because the app lists every code it
+sees. Previously an unrecognised code defaulted to "materials", so a
+project-tagged overhead could count as a project cost.
 
-• No auto-detection needed — each box already knows its type (more reliable).
-• Keeps each box's own export instructions and detailed result panel.
-• Per-file result shown under the box (filename + its result), so you can see
-  each batch's "new / untagged / archived" outcome.
-• The separate all-at-once box + detection logic have been removed.
+CHANGE
+------
+Unknown / unrecognised codes now default to "IGNORE" (excluded from project
+costs) until an admin deliberately categorises them. Known cost-of-sale codes are
+unchanged:
+  • 320, 321                       -> Labour
+  • 310,311,322,325,328–336        -> Materials
+  • anything else (overheads)      -> Ignore  (was: Materials)
 
-So: to load 3 years of Bills, export in ~8 batches and select them all together
-in the Bills box — one click imports the lot.
+Applied consistently in: the Account Categorisation page defaults, the Bills
+importer, and the legacy Account-Transactions cost upload.
 
-FILE CHANGED
-------------
-• pages/admin/xero-upload.js — UploadArea accepts multiple files; MultiUpload removed
+EFFECT
+------
+• Overheads can no longer accidentally inflate project costs, even if a stray
+  overhead bill is tagged to a project.
+• Overheads are STILL captured for the Bookkeeping page (untagged bucket) — this
+  only affects what counts toward PROJECT costs.
+• You can still explicitly set any code to Labour/Materials/Ignore as needed.
+
+NOTE: existing already-categorised codes keep whatever you've set. This only
+changes the default for codes you haven't touched. If a previous upload already
+pushed an overhead into a project as "materials", re-upload after deploying (with
+the code left/ set to Ignore) to recompute it out.
+
+FILES CHANGED
+-------------
+• pages/api/account-categorisation.js — defaultCategoryFor (unknown -> ignore)
+• pages/api/import-bills-bulk.js       — categoryFor unknown -> ignore
+• pages/api/upload-transactions.js     — categoryFor unknown -> ignore
+• pages/admin/account-categorisation.js — page copy explains the default

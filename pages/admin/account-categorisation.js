@@ -58,7 +58,7 @@ export default function AccountCategorisationPage() {
       <div style={{ maxWidth: 820 }}>
         <h1 style={{ fontSize: 22, color: INK, margin: '0 0 6px' }}>Account Categorisation</h1>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>
-          Assign each cost-of-sale account to <strong>Labour</strong> or <strong>Materials</strong> (or <strong>Ignore</strong> to exclude it from project costs). This drives the Labour/Materials split used across Project Financials. Accounts appear here automatically once they've been seen in a Cost Transactions upload.
+          Assign each cost-of-sale account to <strong>Labour</strong> or <strong>Materials</strong> (or <strong>Ignore</strong> to exclude it from project costs). This drives the Labour/Materials split used across Project Financials. Accounts appear here automatically once they've been seen in a Cost Transactions upload. <strong>New/unrecognised codes default to Ignore</strong> — so overheads never count toward project costs until you deliberately set them.
         </p>
 
         {notice && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534' }}>{notice}</div>}

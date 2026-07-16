@@ -34,10 +34,14 @@ const parseDate = (s) => {
 }
 
 const DEFAULT_LABOUR_CODES = ['320', '321']
+const KNOWN_COS_CODES = ['310', '311', '320', '321', '322', '325', '328', '329', '330', '331', '333', '334', '335', '336']
 function categoryFor(code, name, config) {
   const cfg = config[String(code)] || config[String(name)]
   if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
-  return DEFAULT_LABOUR_CODES.includes(String(code)) ? 'labour' : 'materials'
+  const c = String(code)
+  if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
+  if (KNOWN_COS_CODES.includes(c)) return 'materials'
+  return 'ignore'   // unknown / overhead codes excluded until categorised
 }
 
 export default async function handler(req, res) {

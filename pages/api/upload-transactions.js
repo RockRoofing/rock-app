@@ -33,13 +33,18 @@ const ACCOUNT_CODE_MAP = {
 }
 
 const LABOUR_ACCOUNT_CODES = ['321', '320']
+const KNOWN_COS_CODES = ['310', '311', '320', '321', '322', '325', '328', '329', '330', '331', '333', '334', '335', '336']
 
-// Resolve a category for an account from the admin config, falling back to the
-// legacy default (320/321 = labour, everything else = materials).
+// Resolve a category for an account from the admin config. Known cost-of-sale
+// codes default to labour/materials; unknown/overhead codes default to "ignore"
+// so they never count toward project costs until an admin categorises them.
 function categoryFor(code, name, config) {
   const cfg = config[String(code)] || config[String(name)]
   if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
-  return LABOUR_ACCOUNT_CODES.includes(String(code)) ? 'labour' : 'materials'
+  const c = String(code)
+  if (LABOUR_ACCOUNT_CODES.includes(c)) return 'labour'
+  if (KNOWN_COS_CODES.includes(c)) return 'materials'
+  return 'ignore'
 }
 
 function excelDateToString(val) {

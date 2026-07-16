@@ -34,6 +34,17 @@ const BASE_ACCOUNTS = {
   '335': 'Vehicle fines',
   '336': 'Design Services',
 }
+// Codes we KNOW are cost-of-sale (safe to default to labour/materials). Anything
+// else is treated as an overhead and defaults to "ignore" so it can never count
+// toward project costs until an admin explicitly categorises it.
+export const KNOWN_COS_CODES = Object.keys(BASE_ACCOUNTS)
+
+export function defaultCategoryFor(code) {
+  const c = String(code)
+  if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
+  if (KNOWN_COS_CODES.includes(c)) return 'materials'
+  return 'ignore'   // unknown / overhead codes are excluded by default
+}
 
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return
@@ -49,7 +60,7 @@ export default async function handler(req, res) {
     const codes = new Set([...Object.keys(BASE_ACCOUNTS), ...Object.keys(seen), ...Object.keys(config)])
     const accounts = [...codes].map(code => {
       const cfg = config[code] || {}
-      const category = cfg.category || (DEFAULT_LABOUR_CODES.includes(code) ? 'labour' : 'materials')
+      const category = cfg.category || defaultCategoryFor(code)
       return { code, name: cfg.name || seen[code] || BASE_ACCOUNTS[code] || '', category }
     }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
     return res.json({ accounts })
