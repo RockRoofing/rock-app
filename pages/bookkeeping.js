@@ -53,7 +53,7 @@ export default function BookkeepingPage() {
   const [supplier, setSupplier] = useState('')
   const [codes, setCodes] = useState([])          // multi-select account codes
   const [catFilter, setCatFilter] = useState('') // '' | labour | materials  (Costs tab)
-  const [assigned, setAssigned] = useState('')   // '' | yes | no
+  const [assigned, setAssigned] = useState('no')   // default: No category assigned
   const [page, setPage] = useState(1)
   const PER_PAGE = 50
   const [syncing, setSyncing] = useState(false)
@@ -116,7 +116,7 @@ export default function BookkeepingPage() {
   const pageRows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   function resetFilters() { setMonth(''); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('') }
-  function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter(''); setMonth(defaultMonthFor(t, data)) }
+  function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('no'); setMonth(defaultMonthFor(t, data)) }
 
   return (
     <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f0f2f5' }}>

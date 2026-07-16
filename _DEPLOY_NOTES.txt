@@ -1,23 +1,18 @@
-Bookkeeping — default to the most recent full month per tab
-===========================================================
+Bookkeeping — default to uncategorised items on all tabs
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top. Frontend only.
 
 CHANGE
 ------
-Each tab now opens with the month filter pre-set to the most recent COMPLETE month
-(the previous calendar month — the current month is partial), instead of "all
-months".
+Every tab now opens with the "No category assigned" filter applied, so you land
+straight on the items needing attention (combined with the most-recent-full-month
+default from the previous update). Applies on load and when switching tabs.
 
-Fallback logic (so it never lands on an empty view):
-  • If that tab has data for last full month -> use it.
-  • Else -> the newest month present in that tab's data.
-  • Else (no dated data) -> all months.
-
-Applies on first load and whenever you switch tabs (each tab picks its own most-
-recent full month). You can still change the month or pick "All months" manually.
+To see everything, change the filter to "Categorised & uncategorised" or click
+"Clear filters" (Clear resets to all categories + all months).
 
 FILE CHANGED
 ------------
-• pages/bookkeeping.js — defaultMonthFor() applied on load + tab switch
+• pages/bookkeeping.js — assigned filter defaults to 'no' (uncategorised)
