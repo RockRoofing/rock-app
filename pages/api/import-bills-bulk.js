@@ -113,9 +113,11 @@ export default async function handler(req, res) {
     }
 
     // Store untagged bills (merged/deduped) for the Bookkeeping page.
+    let untaggedAdded = 0
     if (untagged.length) {
       const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
-      const { merged } = mergeDedupe(existingUn, untagged, costLineKey)
+      const { merged, added } = mergeDedupe(existingUn, untagged, costLineKey)
+      untaggedAdded = added
       await redis.set('costs:untagged:bills', merged)
     }
 
@@ -165,6 +167,9 @@ export default async function handler(req, res) {
       projectsUnmatched: unmatched,
       totalLinesProcessed: [...byProject.values()].reduce((s, g) => s + g.lines.length, 0),
       newLinesAdded: totalAdded,
+      untaggedLines: untagged.length,
+      untaggedAdded,
+      unmatchedProjects: unmatched,
       totalCosts: summary.filter(s => s.matched).reduce((s, x) => s + (x.total || 0), 0),
       summary: summary.sort((a, b) => (b.total || 0) - (a.total || 0)),
     })

@@ -110,7 +110,9 @@ function CostResult({ r, label }) {
         <Stat label="Projects matched" value={r.projectsMatched ?? 0} />
         <Stat label="Total costs" value={fmt(r.totalCosts)} />
       </div>
-      {r.projectsUnmatched > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 10 }}>{r.projectsUnmatched} project tag(s) didn't match a project and were skipped.</div>}
+      {r.projectsUnmatched > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 10 }}>{r.projectsUnmatched} project tag(s) didn't match a current project (e.g. archived) and were skipped.</div>}
+      {r.untaggedLines > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 8 }}>{r.untaggedLines} line(s) had no project tag ({r.untaggedAdded ?? 0} new) — captured under Bookkeeping → {label === 'wages' ? 'Direct Wages' : 'Costs (Bills)'} as unassigned.</div>}
+      {(r.newLinesAdded === 0 && (r.untaggedLines > 0 || r.projectsUnmatched > 0)) && <div style={{ fontSize: 12, color: '#555', marginTop: 8 }}>0 added to projects here doesn't mean nothing imported — these lines are either already present, untagged, or tied to archived projects. See Bookkeeping for untagged items.</div>}
     </div>
   )
 }

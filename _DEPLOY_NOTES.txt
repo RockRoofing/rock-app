@@ -1,34 +1,31 @@
-Financial — FIX: Bills upload crash ("LABOUR_ACCOUNT_CODES is not defined")
-===========================================================================
+Financial — clearer upload result (why "0 imported" happens)
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Runtime-tested the merge/recompute path that was crashing.
-Deploy over the top, then RE-UPLOAD your Bills file.
+Deploy over the top.
 
-THE BUG
--------
-The Bills importer's merge step referenced LABOUR_ACCOUNT_CODES, which isn't
-defined in that file (it lives in the wages importer / deep-sync). So the Bills
-upload threw "LABOUR_ACCOUNT_CODES is not defined" and stopped BEFORE saving —
-meaning that upload's bills were NOT stored. (Previously-stored bills were
-unaffected; only the failing upload didn't land.)
+WHY YOU SAW "0 BILLS IMPORTED" FOR 2023
+---------------------------------------
+"New lines added" only counts bills that matched a CURRENT project. For a 2023
+file, most lines are either:
+  • untagged (no Projects tracking category — common for older bills), or
+  • tagged to projects that are now ARCHIVED (so they don't match a live project).
+Either way, nothing lands against a current project -> "0". BUT the untagged lines
+ARE still captured — into the Bookkeeping page (Costs (Bills) tab) as unassigned.
+So "0 imported" was the message, not lost data.
 
-THE FIX
--------
-Recompute labour vs materials from each line's existing `type` field
-('Labour'/'Materials'), which is set at parse time using your Account
-Categorisation config. This both fixes the crash AND makes the split correctly
-respect any Labour/Materials/Ignore settings you've configured (rather than a
-hardcoded code list).
-
-Only the Bills importer had this bug. Wages importer (all-labour) and deep-sync
-(which defines the constant) were fine.
-
-ACTION AFTER DEPLOY
--------------------
-Re-upload the Bills CSV — the upload that showed the error didn't save, so those
-bills need re-importing. It will merge/dedupe as normal (no duplicates).
-
-FILE CHANGED
+WHAT CHANGED
 ------------
-• pages/api/import-bills-bulk.js — fix undefined var; sum by line type
+The Bills/Wages upload result now spells this out, so 0 is never ambiguous:
+  • "N line(s) had no project tag (X new) — captured under Bookkeeping … as unassigned."
+  • "N project tag(s) didn't match a current project (e.g. archived) and were skipped."
+  • When new-added is 0 but there were untagged/unmatched lines, a note explains
+    it doesn't mean nothing imported.
+
+So for your 2023 bills: check the Bookkeeping page -> Costs (Bills) tab -> filter to
+2023 months; the untagged older bills will be listed there.
+
+FILES CHANGED
+-------------
+• pages/api/import-bills-bulk.js — report untagged/unmatched counts
+• pages/admin/xero-upload.js     — show them in the result panel
