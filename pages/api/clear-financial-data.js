@@ -38,19 +38,38 @@ export default async function handler(req, res) {
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
   try {
-    const ids = await projectIds(redis)
+    // Scan ALL keys of each type (not just current projects) so archived/old
+    // projects' data is also removed — otherwise old bills survive a "clear".
+    async function scanKeys(pattern) {
+      const found = []
+      let cursor = 0
+      do {
+        const [next, batch] = await redis.scan(cursor, { match: pattern, count: 500 })
+        cursor = typeof next === 'string' ? parseInt(next) : next
+        if (Array.isArray(batch)) found.push(...batch)
+      } while (cursor !== 0)
+      return found
+    }
+
     let cleared = 0
 
     const clearBills = async () => {
-      for (const id of ids) { await redis.del(`costs:bills:${id}`); await mergeCosts(redis, id); cleared++ }
+      const keys = await scanKeys('costs:bills:*')
+      for (const k of keys) { await redis.del(k); cleared++ }
       await redis.del('costs:untagged:bills')
+      // Recompute merged totals for affected projects.
+      for (const k of keys) { const id = k.replace('costs:bills:', ''); await mergeCosts(redis, id) }
     }
     const clearWages = async () => {
-      for (const id of ids) { await redis.del(`costs:wages:${id}`); await mergeCosts(redis, id); cleared++ }
+      const keys = await scanKeys('costs:wages:*')
+      for (const k of keys) { await redis.del(k); cleared++ }
       await redis.del('costs:untagged:wages')
+      for (const k of keys) { const id = k.replace('costs:wages:', ''); await mergeCosts(redis, id) }
     }
     const clearSales = async () => {
-      for (const id of ids) { await redis.del(`invoiced:lines:${id}`); await redis.del(`invoiced:latest:${id}`); cleared++ }
+      const lineKeys = await scanKeys('invoiced:lines:*')
+      const latestKeys = await scanKeys('invoiced:latest:*')
+      for (const k of [...lineKeys, ...latestKeys]) { await redis.del(k); cleared++ }
       await redis.del('invoiced:lines:__UNASSIGNED__')
     }
     const clearOverheads = async () => {
@@ -65,7 +84,7 @@ export default async function handler(req, res) {
     else if (type === 'all') { await clearBills(); await clearWages(); await clearSales() }
 
     await redis.del('dashboard:cache')
-    res.json({ ok: true, type, projectsAffected: ids.length })
+    res.json({ ok: true, type, keysCleared: cleared })
   } catch (e) {
     console.error('clear-financial-data error:', e)
     res.status(500).json({ error: e.message })

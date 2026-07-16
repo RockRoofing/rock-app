@@ -1,54 +1,35 @@
-Financial (2/2) — per-day replace (no data loss) + Data Management wipe panel + warning
-=======================================================================================
+Financial — FIX: Clear didn't remove old projects + noisy "days not covered" warning
+====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Runtime-tested the stray-date scenario. Deploy over the top of part 1.
+Deploy over the top.
 
-CRITICAL FIX — PER-DAY REPLACE (was wiping older data)
-------------------------------------------------------
-The previous replace-by-range used the file's min..max span. A single stray-dated
-line in a file (e.g. a corrected 2024 bill inside a "June 2026" export) made the
-span 2024→2026 and WIPED everything in between across all projects. THIS is why
-your older bills/wages vanished.
+BUG 1 — "Clear all" left old data behind (your March 2024 bills)
+---------------------------------------------------------------
+The clear only deleted data for CURRENT Xero projects (from getProjectsFromCategories).
+Bills for ARCHIVED/old/completed projects are stored under tracking IDs that aren't
+in the current list, so they survived the clear — which is why March 2024 (£126k on
+28 Mar etc.) still showed after you "cleared all".
 
-Now it replaces ONLY the exact DAYS present in the file:
-  • Build a set of the distinct dates in the file.
-  • Clear existing lines only on those exact days (across projects + untagged).
-  • A stray date can only ever affect its own single day — never a span.
-Runtime-tested: a June file containing one stray 2024-03-10 line updates only that
-one day; 2025-11 and everything else survive.
+FIX: the clear now SCANS all matching Redis keys (costs:bills:*, costs:wages:*,
+invoiced:lines:*, invoiced:latest:*) and deletes every one — archived projects
+included. So "Clear" now truly removes everything of that type.
+ACTION: run Data Management -> Clear Bills (type CLEAR) again after deploying to
+remove the leftover old bills, then re-upload.
 
-DATA MANAGEMENT PANEL (Admin -> Data Management)
-------------------------------------------------
-New admin tab with wipe buttons for a clean rebuild:
-  • Bills (Costs) | Direct Wages | Sales Invoices | Overheads — each with a
-    "all X data will be permanently deleted" warning.
-  • "Clear ALL financial data" for a full reset.
-  • Each requires typing CLEAR to confirm. Admin-only. Does not touch projects,
-    forms, users or non-financial data.
-Recommended clean-rebuild flow: clear the type -> re-upload the Xero exports.
+BUG 2 — "471 days not in this file" warning on every upload
+-----------------------------------------------------------
+The warning listed EVERY day in the app not in the file — so a 1-month upload
+always flagged all ~3 years of other days. Correct logic, useless in practice.
 
-"DAYS NOT COVERED" WARNING (on bill uploads)
---------------------------------------------
-After a bills upload, if the app has bills on days the file DIDN'T cover, it lists
-them (date + value) with an explanation: the upload only changed the days it
-contained; if any of those other days were edited/deleted in Xero, upload a file
-covering them or check Xero. Turns the one residual per-day edge case into a
-visible, checkable list.
+FIX: the warning now only flags days WITHIN the file's own date span (between its
+earliest and latest date) that the file skipped — i.e. genuine gaps in the period
+you actually uploaded (e.g. file covers June but missed 14 June). Days outside the
+file's period are no longer listed. This makes the warning meaningful and quiet.
 
-RECOMMENDED NEXT STEPS (your clean rebuild)
--------------------------------------------
-1. Deploy this + part 1.
-2. Admin -> Data Management -> Clear Bills (type CLEAR). Repeat for Wages if
-   rebuilding those too.
-3. Re-upload your bill exports period-by-period (any order). Each replaces only
-   its own days, so nothing collides or wipes.
-4. Wages: re-upload the correctly project-tagged exports (Projects column).
-
-FILES CHANGED / ADDED
----------------------
-• pages/api/import-bills-bulk.js       — per-day replace + daysNotCovered warning
-• pages/api/clear-financial-data.js (new) — per-type wipe (typed CLEAR confirm)
-• pages/admin/data-management.js    (new) — wipe panel
-• pages/admin/xero-upload.js           — result shows range + days-not-covered
-• components/AdminShell.js             — Data Management tab
+FILES CHANGED
+-------------
+• pages/api/clear-financial-data.js — scan-and-delete ALL keys (incl. archived)
+• pages/api/import-bills-bulk.js     — scope days-not-covered to file's own span
+• pages/admin/xero-upload.js         — reworded warning
+• pages/admin/data-management.js     — result wording (records cleared)

@@ -211,12 +211,14 @@ export default async function handler(req, res) {
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
     await redis.del('dashboard:cache')
 
-    // Days that have bill data in the app but are NOT covered by this file — left
-    // unchanged. Surfaced so the user can cross-check Xero for edits/deletions.
-    const daysNotCovered = Object.entries(existingDayValue)
-      .filter(([d]) => !fileDates.has(d))
+    // Days that have bill data in the app but are NOT covered by this file — but
+    // ONLY flag gaps WITHIN the file's own date span (between its earliest and
+    // latest date). Days far outside the file's period aren't relevant and would
+    // otherwise list all of history on every single-month upload.
+    const daysNotCovered = (rangeFrom && rangeTo) ? Object.entries(existingDayValue)
+      .filter(([d]) => !fileDates.has(d) && d >= rangeFrom && d <= rangeTo)
       .map(([date, value]) => ({ date, value }))
-      .sort((a, b) => b.date.localeCompare(a.date))
+      .sort((a, b) => b.date.localeCompare(a.date)) : []
 
     return res.json({
       ok: true,

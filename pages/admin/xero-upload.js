@@ -190,9 +190,9 @@ function CostResult({ r, label }) {
 
       {Array.isArray(r.daysNotCovered) && r.daysNotCovered.length > 0 && (
         <div style={{ marginTop: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>⚠ {r.daysNotCovered.length} day(s) in the app were NOT in this file — left unchanged</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>⚠ {r.daysNotCovered.length} day(s) WITHIN this file's period have app bills the file didn't include</div>
           <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8, lineHeight: 1.5 }}>
-            This upload only changed the days it contained. The days below still have bills in the app that this file didn't cover, so they were left as they were. <strong>If any of these were edited or deleted in Xero, upload a file covering those dates (or check them in Xero).</strong> This is expected when you upload period-by-period.
+            These days fall inside the date range this file covers ({fmtD(r.rangeFrom)} → {fmtD(r.rangeTo)}) but weren't in the file, so they were left unchanged. <strong>If these bills were deleted in Xero, they should be removed — check them and re-upload a file covering these dates.</strong> If the file was simply a partial export, ignore this.
           </div>
           <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 12 }}>
             {r.daysNotCovered.map((d, i) => (

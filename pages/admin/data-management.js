@@ -43,7 +43,7 @@ function WipeCard({ type, title, desc, danger }) {
         body: JSON.stringify({ type, confirm: 'CLEAR' }),
       })
       const d = await res.json()
-      if (res.ok && d.ok) setMsg({ ok: true, text: `Cleared ${title} across ${d.projectsAffected} project(s). Re-upload on the Xero Upload tab.` })
+      if (res.ok && d.ok) setMsg({ ok: true, text: `Cleared ${title} (${d.keysCleared ?? 0} record set(s) removed). Re-upload on the Xero Upload tab.` })
       else setMsg({ ok: false, text: d.error || 'Failed.' })
     } catch (e) { setMsg({ ok: false, text: e.message }) }
     setBusy(false); setText('')
