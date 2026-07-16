@@ -1,40 +1,15 @@
-Bookkeeping — tab/filter/column overhaul
-========================================
+Roles — remove Commercial access from the Accounts role
+=======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top.
 
-CHANGES
--------
-Each tab now shows BOTH categorised items (attributed to a project) and
-uncategorised ones (no project tag), so you get the full picture.
+CHANGE
+------
+The "Accounts" role no longer has access to the Commercial (Project Financials)
+area. Accounts now sees only Bookkeeping (plus the universal areas: Lessons
+Learnt, HR). Management and Admin are unchanged and still have both.
 
-1) COSTS TAB
-   • Only shows costs from account codes marked LABOUR or MATERIALS in Admin
-     (Ignore-category costs now live on the new Ignored tab).
-   • New Labour / Materials filter.
-   • Account-code filter is now MULTI-SELECT with tick boxes in the dropdown.
-
-2) NEW "IGNORED" TAB (right of Direct Wages)
-   • All costs whose account code is set to IGNORE in Admin — including untagged
-     overheads (rent, insurance, vehicle, professional fees, etc.).
-
-3) SALES INVOICES
-   • Dates use INVOICE DATE (the export has no transaction date). Filter Xero by
-     Invoice date to compare like-for-like. A note on the page states this.
-   • (Transaction date vs Invoice date: invoice date = date on the invoice; 
-     transaction date = date it hits the ledger/P&L. They differ when an invoice
-     is posted to a different accounting period, e.g. month/year-end & retention.)
-
-4) ALL TABS
-   • New "Categorised / No category assigned" filter.
-   • New CATEGORY column: shows the PROJECT an item is categorised to, or a
-     "NO CATEGORY" badge if it has no project tag.
-   • Result line shows "X categorised / Y not".
-
-FILES CHANGED
--------------
-• pages/api/bookkeeping.js — serves categorised + uncategorised per tab, with
-  project + category + Ignored bucket
-• pages/bookkeeping.js     — 4 tabs, Category column, multi-select codes,
-  Labour/Materials + Categorised filters
+FILE CHANGED
+------------
+• lib/roles.js — AREA_ACCESS.commercial no longer includes 'accounts'
