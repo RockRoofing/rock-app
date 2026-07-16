@@ -163,6 +163,15 @@ export default async function handler(req, res) {
       appCategorised, benchmark,
       knownCodes: [...knownCodes], missingCodes,
       benchmarkUpdatedAt: benchmark?.updatedAt || null,
+      _diag: {
+        projectsRead: perProject.length,
+        projectListEmpty: projectList.length === 0,
+        untaggedWagesRaw: (untWages || []).length,
+        untaggedBillsRaw: (untBills || []).length,
+        categorisedWageLines: perProject.reduce((s, p) => s + (p.costLines || []).filter(l => String(l.accountCode) === '320').length, 0),
+        totalCostLines: perProject.reduce((s, p) => s + (p.costLines || []).length, 0),
+        wagesTabCount: wages.length,
+      },
     })
   } catch (e) {
     console.error('bookkeeping error:', e)

@@ -1,33 +1,40 @@
-Bookkeeping — rename Ignored -> Overheads + nightly sync feeds overheads/untagged
-=================================================================================
+Bookkeeping — DIAGNOSTIC build for empty Direct Wages tab
+=========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top.
 
-1) TAB RENAMED
-   "Ignored" tab is now labelled "Overheads". (Data/plumbing unchanged — it still
-   shows Ignore-category costs + untagged overheads.)
+WHY
+---
+The Direct Wages tab shows nothing (categorised or uncategorised). Code trace
+shows the data path is correct (importer -> costs:wages:<id> -> mergeCosts ->
+costs:lines:<id>; API reads costs:lines:<id> filtered to 320 + costs:untagged:wages).
+So the likely cause is empty stores or an empty project list — not a display bug.
 
-2) NIGHTLY SYNC NOW FEEDS OVERHEADS / UNTAGGED INTO BOOKKEEPING
-   Previously the nightly deep-sync only captured project-tagged cost-of-sale
-   lines, so the Overheads/untagged view only stayed current via manual uploads.
-   Now the sync also runs a once-per-day "untagged bills sweep":
-     • Pulls ALL ACCPAY bills in the 120-day window
-     • Keeps lines with NO project tracking tag (overheads + untagged cost-of-sale)
-     • Merges them into costs:untagged:bills (deduped by Xero LineItemID / business key)
-   So the Overheads tab now stays current automatically.
+WHAT THIS ADDS
+--------------
+The /api/bookkeeping response now includes a "_diag" object:
+  • projectsRead        — how many projects the API read (0 = project list empty)
+  • projectListEmpty    — true if it couldn't resolve any projects
+  • untaggedWagesRaw    — rows in costs:untagged:wages
+  • untaggedBillsRaw    — rows in costs:untagged:bills
+  • categorisedWageLines— 320-coded lines found across projects
+  • totalCostLines      — all cost lines read across projects
+  • wagesTabCount       — final count on the Direct Wages tab
 
-   API COST: this is heavier than the per-project fetch (it reads all bills, not
-   just one project's), which is why it runs ONCE PER DAY total (guarded by
-   'untagged-sweep:at'), not on every project rotation. It reuses the same 120-day
-   window + dedupe, so it won't double-count. Still well within Xero's daily limit,
-   but it's the most API-intensive part of the sync — worth watching the first few
-   runs (the response now reports 'untaggedAdded').
+HOW TO READ IT
+--------------
+Open (while logged in as admin) in the browser:
+    https://app.rockroofing.co.uk/api/bookkeeping
+and look at "_diag". Tell me the numbers. Likely outcomes:
+  • projectListEmpty=true  -> project list couldn't load (dashboard cache empty +
+    Xero token issue). Fix: view the Commercial/dashboard once, or we cache the list.
+  • projectsRead>0 but categorisedWageLines=0 and untaggedWagesRaw=0 -> no wages in
+    the stores; the last wages upload didn't land / needs re-upload.
+  • untaggedWagesRaw>0 but wagesTabCount=0 -> a display bug (unlikely) — tell me.
 
-   NOTE: untagged WAGES are not swept (wage journals are project-tagged transfers);
-   overhead capture is for bills. Manual wage uploads still feed the wages side.
+No behaviour change other than the extra diagnostic field.
 
-FILES CHANGED
--------------
-• pages/bookkeeping.js         — tab label Ignored -> Overheads
-• pages/api/cron/deep-sync.js  — once-daily untagged/overhead bills sweep
+FILE CHANGED
+------------
+• pages/api/bookkeeping.js — adds _diag to the response
