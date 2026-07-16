@@ -116,24 +116,37 @@ export default async function handler(req, res) {
       g.lines.push({ ...lineRec, accountName: '', type: isLabour ? 'Labour' : 'Materials' })
     }
 
-    // ── Date range covered by this file (min..max across ALL parsed lines) ──
-    const allDates = []
-    for (const g of byProject.values()) for (const l of g.lines) if (l.date) allDates.push(l.date)
-    for (const l of untagged) if (l.date) allDates.push(l.date)
-    allDates.sort()
-    const rangeFrom = allDates[0] || null
-    const rangeTo = allDates[allDates.length - 1] || null
-    const inRange = (d) => d && rangeFrom && rangeTo && d >= rangeFrom && d <= rangeTo
+    // ── Dates PRESENT in this file (replace per-day, NOT a min..max span, so a
+    //    stray outlier date can only ever affect its own day) ──
+    const fileDates = new Set()
+    for (const g of byProject.values()) for (const l of g.lines) if (l.date) fileDates.add(l.date)
+    for (const l of untagged) if (l.date) fileDates.add(l.date)
+    const inRange = (d) => d && fileDates.has(d)   // "in range" == a day the file covers
+    const rangeFrom = [...fileDates].sort()[0] || null
+    const rangeTo = [...fileDates].sort().slice(-1)[0] || null
 
-    // Store untagged bills — REPLACE the file's date range, keep everything outside.
-    let untaggedKept = 0, untaggedNew = untagged.length
-    if (rangeFrom) {
+    // For the "days in app not covered by this file" warning: gather the days that
+    // currently have bill data in the app (across projects + untagged) BEFORE we
+    // replace anything, so we can tell the user which days this upload left alone.
+    const existingDayValue = {}   // 'YYYY-MM-DD' -> total £ currently in app
+    try {
+      const allIds = [...new Set([...(await redis.get('projects:list').catch(() => null) || []).map(p => p.id)])].filter(Boolean)
+      for (const id of allIds) {
+        const rec = await redis.get(`costs:bills:${id}`).catch(() => null)
+        for (const l of (rec?.lines || [])) if (l.date) existingDayValue[l.date] = (existingDayValue[l.date] || 0) + (l.amount || 0)
+      }
+      const un = (await redis.get('costs:untagged:bills').catch(() => null)) || []
+      for (const l of un) if (l.date) existingDayValue[l.date] = (existingDayValue[l.date] || 0) + (l.amount || 0)
+    } catch {}
+
+    // Store untagged bills — replace only the DAYS present in the file; keep the rest.
+    let untaggedKept = 0
+    if (fileDates.size) {
       const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
       const outside = existingUn.filter(l => !inRange(l.date))
       untaggedKept = outside.length
       await redis.set('costs:untagged:bills', [...outside, ...untagged])
     } else if (untagged.length) {
-      // No dates at all — fall back to append (shouldn't normally happen).
       const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
       await redis.set('costs:untagged:bills', [...existingUn, ...untagged])
     }
@@ -198,6 +211,13 @@ export default async function handler(req, res) {
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
     await redis.del('dashboard:cache')
 
+    // Days that have bill data in the app but are NOT covered by this file — left
+    // unchanged. Surfaced so the user can cross-check Xero for edits/deletions.
+    const daysNotCovered = Object.entries(existingDayValue)
+      .filter(([d]) => !fileDates.has(d))
+      .map(([date, value]) => ({ date, value }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+
     return res.json({
       ok: true,
       mode: 'replace-by-range',
@@ -210,6 +230,8 @@ export default async function handler(req, res) {
       untaggedLines: untagged.length,
       untaggedKept,
       unmatchedProjects: unmatched,
+      daysCovered: fileDates.size,
+      daysNotCovered,
       totalCosts: summary.filter(s => s.matched).reduce((s, x) => s + (x.total || 0), 0),
       summary: summary.sort((a, b) => (b.total || 0) - (a.total || 0)),
     })

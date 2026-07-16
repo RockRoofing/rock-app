@@ -175,17 +175,34 @@ function UploadArea({ title, blurb, accept, endpoint, howto, renderResult }) {
 }
 
 function CostResult({ r, label }) {
+  const fmtD = (d) => { try { return new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) } catch { return d } }
   return (
     <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: 16, marginTop: 12 }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: '#16a34a', marginBottom: 10 }}>✓ {label === 'wages' ? 'Wages' : 'Bills'} imported</div>
+      {r.rangeFrom && <div style={{ fontSize: 12, color: '#555', marginBottom: 10 }}>Replaced {fmtD(r.rangeFrom)} → {fmtD(r.rangeTo)} (exact mirror of the file for the days it covers).</div>}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-        <Stat label="New lines added" value={r.newLinesAdded ?? r.totalLinesProcessed ?? 0} />
+        <Stat label="Lines loaded" value={r.linesReplacedInRange ?? r.newLinesAdded ?? r.totalLinesProcessed ?? 0} />
         <Stat label="Projects matched" value={r.projectsMatched ?? 0} />
         <Stat label="Total costs" value={fmt(r.totalCosts)} />
       </div>
       {r.projectsUnmatched > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 10 }}>{r.projectsUnmatched} project tag(s) didn't match a current project (e.g. archived) and were skipped.</div>}
-      {r.untaggedLines > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 8 }}>{r.untaggedLines} line(s) had no project tag ({r.untaggedAdded ?? 0} new) — captured under Bookkeeping → {label === 'wages' ? 'Direct Wages' : 'Costs (Bills)'} as unassigned.</div>}
-      {(r.newLinesAdded === 0 && (r.untaggedLines > 0 || r.projectsUnmatched > 0)) && <div style={{ fontSize: 12, color: '#555', marginTop: 8 }}>0 added to projects here doesn't mean nothing imported — these lines are either already present, untagged, or tied to archived projects. See Bookkeeping for untagged items.</div>}
+      {r.untaggedLines > 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 8 }}>{r.untaggedLines} line(s) had no project tag — captured under Bookkeeping → Overheads / unassigned.</div>}
+
+      {Array.isArray(r.daysNotCovered) && r.daysNotCovered.length > 0 && (
+        <div style={{ marginTop: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>⚠ {r.daysNotCovered.length} day(s) in the app were NOT in this file — left unchanged</div>
+          <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8, lineHeight: 1.5 }}>
+            This upload only changed the days it contained. The days below still have bills in the app that this file didn't cover, so they were left as they were. <strong>If any of these were edited or deleted in Xero, upload a file covering those dates (or check them in Xero).</strong> This is expected when you upload period-by-period.
+          </div>
+          <div style={{ maxHeight: 160, overflowY: 'auto', fontSize: 12 }}>
+            {r.daysNotCovered.map((d, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', borderBottom: '1px solid #fef3c7' }}>
+                <span>{fmtD(d.date)}</span><span style={{ fontWeight: 600 }}>{fmt(d.value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

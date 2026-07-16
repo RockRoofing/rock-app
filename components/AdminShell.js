@@ -11,6 +11,7 @@ const TABS = [
   ['RAMS Director', '/admin/rams-director'],
   ['Account Categorisation', '/admin/account-categorisation'],
   ['Xero Upload', '/admin/xero-upload'],
+  ['Data Management', '/admin/data-management'],
   ['App Improvements', '/admin/problem-reports'],
 ]
 

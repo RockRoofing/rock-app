@@ -1,48 +1,54 @@
-Financial (1/2) — Bills replace-by-range (exact mirror) + global nightly Sales/Wages
-====================================================================================
+Financial (2/2) — per-day replace (no data loss) + Data Management wipe panel + warning
+=======================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Runtime-tested on Darren Dalgliesh's real file. Deploy over the top.
+Runtime-tested the stray-date scenario. Deploy over the top of part 1.
 
-THE DARREN BUG — FIXED
-----------------------
-Root cause: bill dedupe key was reference|accountCode|amount, which COLLAPSED
-genuinely-distinct lines (multi-project invoices, and fortnightly repeats on one
-invoice number). Darren had 4 real June lines (£650, £1500, £800, £800 = £3,750)
-but only £650 showed.
+CRITICAL FIX — PER-DAY REPLACE (was wiping older data)
+------------------------------------------------------
+The previous replace-by-range used the file's min..max span. A single stray-dated
+line in a file (e.g. a corrected 2024 bill inside a "June 2026" export) made the
+span 2024→2026 and WIPED everything in between across all projects. THIS is why
+your older bills/wages vanished.
 
-NEW BEHAVIOUR — REPLACE BY DATE RANGE (Bills)
----------------------------------------------
-Bills upload now makes the app an EXACT MIRROR of the file for the period it
-covers:
-  • Detects the file's date range (min..max InvoiceDate).
-  • For that range, across ALL projects, it REPLACES existing bills with the
-    file's lines verbatim (no dedupe guessing — genuine repeats kept).
-  • Lines OUTSIDE the range are untouched (older uploads preserved).
-  • Projects NOT in the file lose their in-range bills (exact mirror: if it's not
-    in Xero's export for that range, it's not in the app).
-  • Untagged/overhead bills handled the same way (replace-by-range).
-Runtime-tested: Darren J243 June now stores all 4 lines = £3,750.
-Response reports: rangeFrom/rangeTo, linesReplacedInRange, projectsClearedInRange.
+Now it replaces ONLY the exact DAYS present in the file:
+  • Build a set of the distinct dates in the file.
+  • Clear existing lines only on those exact days (across projects + untagged).
+  • A stray date can only ever affect its own single day — never a span.
+Runtime-tested: a June file containing one stray 2024-03-10 line updates only that
+one day; 2025-11 and everything else survive.
 
-NO WARNING/CONFIRM: per your instruction — if it's not in Xero it shouldn't be in
-the app, so the replace just happens and the result reports what changed.
+DATA MANAGEMENT PANEL (Admin -> Data Management)
+------------------------------------------------
+New admin tab with wipe buttons for a clean rebuild:
+  • Bills (Costs) | Direct Wages | Sales Invoices | Overheads — each with a
+    "all X data will be permanently deleted" warning.
+  • "Clear ALL financial data" for a full reset.
+  • Each requires typing CLEAR to confirm. Admin-only. Does not touch projects,
+    forms, users or non-financial data.
+Recommended clean-rebuild flow: clear the type -> re-upload the Xero exports.
 
-GLOBAL NIGHTLY SALES + WAGES (all projects, 6-month window)
------------------------------------------------------------
-Previously the nightly sync refreshed sales/wages for only ONE project per night
-(rotation), so a project's newly-categorised sales could take ~weeks to appear.
-Now, once per day, the sync refreshes SALES and WAGES for EVERY project over a
-6-month window (exact-mirror within the window; older data preserved). Bills stay
-on the per-project nightly rotation (per-bill detail is the expensive call).
-API cost: sales/wages are batched endpoints (~6-15 calls each across all
-projects) — well within limits. Guarded once/day via 'global-sync:at'.
-Response reports globalSalesProjects / globalWagesProjects.
+"DAYS NOT COVERED" WARNING (on bill uploads)
+--------------------------------------------
+After a bills upload, if the app has bills on days the file DIDN'T cover, it lists
+them (date + value) with an explanation: the upload only changed the days it
+contained; if any of those other days were edited/deleted in Xero, upload a file
+covering them or check Xero. Turns the one residual per-day edge case into a
+visible, checkable list.
 
-NOTE: This fixes "categorised sales in Xero not showing" within a day
-automatically. The on-demand Sync buttons come in part 2/2.
+RECOMMENDED NEXT STEPS (your clean rebuild)
+-------------------------------------------
+1. Deploy this + part 1.
+2. Admin -> Data Management -> Clear Bills (type CLEAR). Repeat for Wages if
+   rebuilding those too.
+3. Re-upload your bill exports period-by-period (any order). Each replaces only
+   its own days, so nothing collides or wipes.
+4. Wages: re-upload the correctly project-tagged exports (Projects column).
 
-FILES CHANGED
--------------
-• pages/api/import-bills-bulk.js — replace-by-range (exact mirror)
-• pages/api/cron/deep-sync.js    — global daily sales+wages across all projects
+FILES CHANGED / ADDED
+---------------------
+• pages/api/import-bills-bulk.js       — per-day replace + daysNotCovered warning
+• pages/api/clear-financial-data.js (new) — per-type wipe (typed CLEAR confirm)
+• pages/admin/data-management.js    (new) — wipe panel
+• pages/admin/xero-upload.js           — result shows range + days-not-covered
+• components/AdminShell.js             — Data Management tab
