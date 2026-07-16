@@ -1,40 +1,33 @@
-Financial — one-time "Reset Direct Wages data" (clear old lump sums)
-====================================================================
+Bookkeeping — fix "Categorised in app" overstating (it included uncategorised)
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Deploy over the top. Frontend only.
 
-WHY
+THE BUG (your June screenshot)
+------------------------------
+"Categorised in app" was LARGER than "Total in Xero" (giving negative "still to
+find" on Bills −£28,865 and Sales −£147,803). Cause: the app figure summed the
+whole tab dataset (data.bills / data.wages / data.invoices), which contains BOTH
+categorised AND uncategorised items — so it double-counted the untagged ones into
+the "categorised" figure.
+
+FIX
 ---
-Old untagged wage LUMP SUMS are already stored (from the long 2023–2026 file).
-The new correctly-tagged wages file would sit ALONGSIDE them (dedupe can't match a
-lump sum to its per-project split), so wages would double-count. You wanted a
-clean reset — but NORMAL uploads must still merge and never wipe.
+"Categorised in app" now sums ONLY items where categorised === true. So:
+  • Total in Xero        = the P&L figure
+  • Categorised in app   = only what's actually allocated to a project
+  • Still to find        = Xero − categorised (the amount left to allocate)
+This makes "still to find" the true outstanding amount, and it should now be
+positive (or zero when fully allocated), matching the uncategorised total.
 
-WHAT THIS ADDS
---------------
-A "Reset Direct Wages data" panel (red danger zone) at the bottom of
-Admin -> Xero Upload. Admin-only, two-step confirm. When run it:
-  • Deletes every per-project wage source (costs:wages:<id>)
-  • Deletes the untagged wage lump sums (costs:untagged:wages)
-  • Re-runs mergeCosts per project so project cost totals drop the wages
-  • Clears the dashboard cache
-  • Does NOT touch bills or invoices
-The API requires an explicit confirm flag, so it can't fire by accident.
+REMAINING HONEST CAVEAT (Sales)
+-------------------------------
+Sales may still not tie to the penny because the app uses INVOICE DATE while the
+Xero P&L income is TRANSACTION-DATE based (as previously agreed). Bills & Wages
+should tie closely. If exact Sales reconciliation matters, we'd need a
+transaction-date sales export.
 
-NORMAL UPLOADS ARE UNCHANGED — they still merge/dedupe and never wipe. Only this
-button clears data.
-
-USAGE
------
-1. Deploy.
-2. Admin -> Xero Upload -> "Reset Direct Wages data" -> confirm.
-3. Upload the CORRECT tagged Direct Wages export (the one WITH a "Projects"
-   column — 27 columns). Your April file (Account_Transactions__3_) is the right
-   format: 17 projects, ~£195k tagged + £12,300 genuinely untagged.
-4. Repeat step 3 for any other periods/batches you want tagged.
-
-FILES CHANGED / ADDED
----------------------
-• pages/api/clear-wages.js  (new) — wages-only reset endpoint (admin, confirm)
-• pages/admin/xero-upload.js       — "Reset Direct Wages data" danger-zone panel
+FILE CHANGED
+------------
+• pages/bookkeeping.js — "Categorised in app" counts categorised items only

@@ -348,7 +348,7 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
       xeroBills += Math.abs(b.costOfSalesTotal)
     }
   }
-  const inPeriod = (r) => !month || rowMonth(r) === month
+  const inPeriod = (r) => (!month || rowMonth(r) === month) && r.categorised
   const appBills = (data.bills || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
   const appWages = (data.wages || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
   const appInvoices = (data.invoices || []).filter(inPeriod).reduce((s, r) => s + (r.total || 0), 0)
