@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { compressImage } from '../lib/compressImage'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, linkBtn } from './opsUI'
 
 // Reusable file manager for a project + category (drawing | rams | handover).
@@ -26,7 +27,8 @@ export default function ProjectFiles({ projectNo, category, title, note, accept 
     setErr(''); setUploading(true)
     let failed = 0
     let lastErr = ''
-    for (const file of Array.from(fileList)) {
+    for (const original of Array.from(fileList)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', {
           method: 'POST',

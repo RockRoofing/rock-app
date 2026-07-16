@@ -1,24 +1,37 @@
-Admin — fix missing nav tabs on Portal Users & Templates
-========================================================
+Financial App — show untagged invoices as "Unassigned" (don't hide them)
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Runtime-tested on your real Sales Invoices export.
+Deploy over the top of the earlier Financial packages.
 
-CAUSE
------
-Portal Users (pages/admin.js) and Templates (pages/admin/templates.js) have their
-OWN hardcoded nav arrays (they don't use the shared AdminShell). Those arrays were
-stale — missing "Account Categorisation" and "Xero Upload" — so the full menu
-didn't show on those two pages.
+THE PROBLEM YOU SPOTTED
+-----------------------
+Invoices in Xero that don't carry the Projects tracking category (many retention
+invoices — e.g. Christchurch, Russell Hill, Glenvale Park) were being SILENTLY
+DROPPED on import, because the app matches invoices to projects via that tag.
+That's why Xero showed them but the app didn't. (Also note: one of the two CSVs
+you uploaded — the 11_56_54 file — was effectively empty of outstanding balances;
+use the full export, i.e. the 11_56_03-style one.)
 
-FIX
----
-Both inline nav arrays now match the full Admin tab list, in order:
-Portal Users · Templates · Form Builder · Site App Users · Documents ·
-RAMS Director · Account Categorisation · Xero Upload · App Improvements
-(Both nav bars already scroll horizontally, so the longer menu isn't clipped.)
+THE FIX (your choice: show them, don't guess)
+---------------------------------------------
+• Invoices with NO Projects tag are now collected into a reserved "Unassigned"
+  bucket instead of being dropped.
+• They appear in Outstanding Invoices like any other invoice, with an amber
+  "UNASSIGNED" badge and the project name "Unassigned (no project tag in Xero)".
+• No guessing / auto-assignment — they're shown exactly as-is so nothing is hidden.
+• On your real file this surfaces ~15 outstanding untagged invoices (and 297
+  untagged invoices in total) that were previously invisible.
+
+TO PROPERLY ATTRIBUTE THEM
+--------------------------
+Tag the invoice with the Projects tracking category in Xero, then re-upload — it
+will move from "Unassigned" to its project automatically. (Uploads merge/dedupe,
+so re-uploading is safe.)
 
 FILES CHANGED
 -------------
-• pages/admin.js            — full nav tab list
-• pages/admin/templates.js  — full nav tab list
+• pages/api/import-invoices-bulk.js — untagged -> __UNASSIGNED__ bucket (not dropped)
+• pages/api/dashboard.js            — exposes an "Unassigned" pseudo-project
+• pages/outstanding-invoices.js     — carries the flag + amber UNASSIGNED badge

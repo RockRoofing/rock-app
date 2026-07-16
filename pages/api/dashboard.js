@@ -208,6 +208,29 @@ export default async function handler(req, res) {
       }
     }))
 
+    // Append a pseudo-project holding invoices that had no Projects tag in Xero,
+    // so they surface (e.g. in Outstanding Invoices) rather than disappearing.
+    try {
+      const unLines = await redis.get('invoiced:lines:__UNASSIGNED__')
+      if (Array.isArray(unLines) && unLines.length) {
+        const totalInvoiced = unLines.reduce((s, l) => s + (l.total || 0), 0)
+        const paidTotal = unLines.reduce((s, l) => s + (l.amountPaid || 0), 0)
+        const dueTotal = unLines.reduce((s, l) => s + (l.amountDue || 0), 0)
+        projects.push({
+          id: '__UNASSIGNED__',
+          jobNo: '',
+          name: 'Unassigned (no project tag in Xero)',
+          projectName: 'Unassigned (no project tag in Xero)',
+          unassigned: true,
+          totalInvoiced,
+          allPaid: paidTotal,
+          amountOutstanding: dueTotal,
+          _costLines: [],
+          _invoiceLines: unLines,
+        })
+      }
+    } catch {}
+
     await redis.set('dashboard:cache', projects, { ex: 60 * 60 * 4 })
     res.json({ projects })
 

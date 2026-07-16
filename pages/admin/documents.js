@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { upload } from '@vercel/blob/client'
+import { compressImage } from '../../lib/compressImage'
 import AdminShell from '../../components/AdminShell'
 
 const CATS = [
@@ -64,13 +65,15 @@ function DocSection({ label, cat, items, onAdd, onRename, onRemove }) {
     if (!title.trim()) { setErr('Give the document a name.'); return }
     setUploading(true); setErr('')
     try {
+      // Compress if it's an image; PDFs and other files pass through untouched.
+      const toUpload = await compressImage(file)
       // Direct browser -> Blob upload (no 4.5MB serverless limit).
-      const blob = await upload(file.name, file, {
+      const blob = await upload(toUpload.name, toUpload, {
         access: 'public',
         handleUploadUrl: '/api/blob-upload',
-        contentType: file.type || undefined,
+        contentType: toUpload.type || undefined,
       })
-      onAdd({ id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), url: blob.url, contentType: file.type, uploadedAt: Date.now() })
+      onAdd({ id: `doc_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, title: title.trim(), url: blob.url, contentType: toUpload.type, uploadedAt: Date.now() })
       clearFile()
       setTitle('')
     } catch (e) { setErr(e?.message || 'Upload failed') }

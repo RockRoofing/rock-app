@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { compressImage } from '../../lib/compressImage'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
 import ProjectFiles from '../../components/ProjectFiles'
@@ -763,7 +764,8 @@ function RamsTable({ projectNo }) {
     if (!list || !list.length) return
     setErr(''); setUploading(true)
     let failed = 0, lastErr = ''
-    for (const file of Array.from(list)) {
+    for (const original of Array.from(list)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
         const ud = await up.json()

@@ -88,8 +88,10 @@ export default async function handler(req, res) {
       const isCredit = type.includes('credit note')
       if (!isInvoice && !isCredit) continue          // skip overpayments/prepayments
 
-      const tracking = (c[col.trackingOption1] || '').trim()
-      if (!tracking) continue                         // not tied to a project
+      // Invoices with no Projects tag can't be attributed to a project — collect
+      // them under a reserved "Unassigned" bucket so they're still visible (e.g.
+      // retention invoices raised without the tracking category).
+      const tracking = (c[col.trackingOption1] || '').trim() || '__UNASSIGNED__'
 
       const invNo = (c[col.invoiceNumber] || '').trim()
       if (!invNo) continue
@@ -150,9 +152,11 @@ export default async function handler(req, res) {
       const labels = [...new Set(invoices.flatMap(v => [...v.taxTypes]).filter(x => x && x !== '—'))]
       const vatRateLabel = labels.length === 0 ? '—' : labels.length === 1 ? labels[0] : 'Mixed'
 
-      // Resolve the cache key (trackingOptionId). Fall back to the tracking name
-      // itself if we couldn't match (so nothing is silently lost).
-      const trackingOptionId = trackingByName.get(tracking.toLowerCase())
+      // Resolve the cache key (trackingOptionId). The reserved Unassigned bucket
+      // stores under a fixed key; a genuinely unmatched project is skipped.
+      const trackingOptionId = tracking === '__UNASSIGNED__'
+        ? '__UNASSIGNED__'
+        : trackingByName.get(tracking.toLowerCase())
       if (!trackingOptionId) { unmatched++; summary.push({ project: tracking, matched: false, invoices: invoices.length }); continue }
       matched++
 

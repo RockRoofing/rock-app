@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { compressImage } from '../../../lib/compressImage'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn } from '../../../components/opsUI'
 import { useRouter } from 'next/router'
@@ -408,7 +409,8 @@ function CreateModal({ projects, createdBy, onClose, onSaved }) {
     if (!files || !files.length) return
     setUploading(true)
     const next = [...f.photos]
-    for (const file of Array.from(files)) {
+    for (const original of Array.from(files)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name || `photo-${Date.now()}.jpg`), 'x-content-type': file.type || 'image/jpeg' }, body: file })
         const d = await up.json(); if (up.ok && d.url) next.push(d.url)

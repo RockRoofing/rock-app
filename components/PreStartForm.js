@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { compressImage } from '../lib/compressImage'
 import { PRESTART_SECTIONS as DEFAULT_SECTIONS } from '../lib/preStartSchema'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, inp2, fmtDateTime } from './opsUI'
 
@@ -388,7 +389,8 @@ function FileGrid({ files, editing, onView, onChange, readOnly, allowRemoveOnly 
     if (!fileList?.length) return
     setUploading(true)
     const next = [...files]
-    for (const file of Array.from(fileList)) {
+    for (const original of Array.from(fileList)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
         const d = await up.json(); if (up.ok && d.url) next.push({ url: d.url, name: file.name, type: file.type })

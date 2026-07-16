@@ -82,6 +82,7 @@ export default function OutstandingInvoicesPage() {
             qsName: p.qsName || '',
             qsEmail: p.qsEmail || '',
             highRisk: !!p.highRisk,
+            unassigned: !!p.unassigned,
           })
         }
       }
@@ -251,7 +252,7 @@ export default function OutstandingInvoicesPage() {
                               {r.settled && <span title="Fully paid" style={{ marginLeft: 6, fontSize: 9, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>PAID</span>}
                               {r.highRisk && <span title="High risk customer" style={{ marginLeft: 6, fontSize: 9, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>HIGH RISK</span>}
                             </td>
-                            <td style={{ ...td, whiteSpace: 'normal', maxWidth: 230 }}>{r.reference || r.projectName || '—'}</td>
+                            <td style={{ ...td, whiteSpace: 'normal', maxWidth: 230 }}>{r.reference || r.projectName || '—'}{r.unassigned && <span title="No Projects tracking tag in Xero — tag it in Xero and re-upload to attribute it to a project" style={{ marginLeft: 6, fontSize: 9, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>UNASSIGNED</span>}</td>
                             <td style={{ ...td, whiteSpace: 'normal', maxWidth: 180 }}>{r.customer || '—'}</td>
                             <td style={td}>{fmtDate(r.date)}</td>
                             <td style={{ ...td, color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(r.dueDate)}</td>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import PreContractNav from '../../components/PreContractNav'
@@ -434,7 +435,8 @@ function FilesField({ label, value, onChange }) {
   async function handle(files) {
     setUploading(true)
     const next = [...value]
-    for (const file of Array.from(files)) {
+    for (const original of Array.from(files)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', { method: 'POST', headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name), 'x-content-type': file.type || 'application/octet-stream' }, body: file })
         const d = await up.json()

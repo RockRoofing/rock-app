@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
+import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
 
@@ -169,7 +170,8 @@ function PhotoField({ value, onChange }) {
     if (!files || !files.length) return
     setErr(''); setUploading(true)
     const next = [...photos]; let failed = 0
-    for (const file of Array.from(files)) {
+    for (const original of Array.from(files)) {
+      const file = await compressImage(original)
       try {
         const up = await fetch('/api/upload-file', {
           method: 'POST',

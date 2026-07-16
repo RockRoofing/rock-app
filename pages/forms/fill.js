@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
+import { compressImage } from '../../lib/compressImage'
 
 const INK = '#1a1a19', BRAND = '#ca8a04'
 
@@ -439,8 +440,9 @@ function PhotoField({ value, onChange }) {
     setUploading(true)
     const next = [...photos]
     let failed = 0
-    for (const file of Array.from(files)) {
+    for (const original of Array.from(files)) {
       try {
+        const file = await compressImage(original)
         const up = await fetch('/api/upload-file', {
           method: 'POST',
           headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name || `photo-${Date.now()}.jpg`), 'x-content-type': file.type || 'image/jpeg' },

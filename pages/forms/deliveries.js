@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
+import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
 import { AttachmentViewer, downloadFile } from '../../components/RowAttachments'
@@ -193,8 +194,9 @@ function DeliveryEditor({ delivery, onClose, onSaved }) {
     if (!files || !files.length) return
     setUploading(true); setErr('')
     let failed = 0
-    for (const file of Array.from(files)) {
+    for (const original of Array.from(files)) {
       try {
+        const file = await compressImage(original)
         // upload-file expects RAW bytes with the name/type in headers (NOT FormData).
         const up = await fetch('/api/upload-file', {
           method: 'POST',
