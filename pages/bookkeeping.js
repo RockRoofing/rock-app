@@ -8,6 +8,24 @@ const th = { textAlign: 'left', padding: '10px 12px', fontSize: 11, color: '#777
 const td = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f2f0ec' }
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
 
+// Rows for a given tab (matches the page's tab->data mapping).
+function tabRowsFor(tab, data) {
+  if (!data) return []
+  return tab === 'wages' ? (data.wages || []) : tab === 'invoices' ? (data.invoices || []) : tab === 'ignored' ? (data.ignored || []) : (data.bills || [])
+}
+// The most recent COMPLETE month (previous calendar month) if that tab has data
+// for it; else the newest month present; else '' (all months).
+function defaultMonthFor(tab, data) {
+  const rows = tabRowsFor(tab, data)
+  const present = [...new Set(rows.map(r => rowMonth(r)).filter(Boolean))].sort()   // ascending
+  if (present.length === 0) return ''
+  const now = new Date()
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastFull = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`
+  if (present.includes(lastFull)) return lastFull
+  return present[present.length - 1]   // newest available
+}
+
 function monthLabel(m) {
   if (!m) return ''
   const [y, mo] = m.split('-')
@@ -56,7 +74,13 @@ export default function BookkeepingPage() {
   }
 
   useEffect(() => {
-    fetch('/api/bookkeeping').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+    fetch('/api/bookkeeping').then(r => r.json()).then(d => {
+      setData(d)
+      setLoading(false)
+      // Default the month filter to the most recent COMPLETE month for the
+      // starting tab (falls back to newest available, else all months).
+      if (d) setMonth(defaultMonthFor('bills', d))
+    }).catch(() => setLoading(false))
   }, [])
 
   const rows = useMemo(() => {
@@ -92,7 +116,7 @@ export default function BookkeepingPage() {
   const pageRows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   function resetFilters() { setMonth(''); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('') }
-  function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter('') }
+  function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter(''); setMonth(defaultMonthFor(t, data)) }
 
   return (
     <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f0f2f5' }}>

@@ -1,27 +1,23 @@
-Bookkeeping — align the graph with the "No category assigned" filter
-====================================================================
+Bookkeeping — default to the most recent full month per tab
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy over the top. Frontend only.
 
-WHY THEY DIDN'T MATCH
----------------------
-Two different sign conventions:
-  • Graph summed ABSOLUTE values (credit notes added).
-  • Table "No category assigned" total sums SIGNED values (credit notes subtract).
-So a month with any credits showed a higher figure on the graph than the table.
+CHANGE
+------
+Each tab now opens with the month filter pre-set to the most recent COMPLETE month
+(the previous calendar month — the current month is partial), instead of "all
+months".
 
-FIX
----
-• The graph now sums SIGNED amounts, matching the table. Click a month on the
-  graph and the table's "No category assigned" total for that month will equal the
-  graph's point for that month.
-• Y-axis now allows negatives (domain auto), in case a month nets negative.
-• Caption clarified: the graph is the LAST 6 MONTHS. Note this is still a subset
-  of the table when NO month is selected — the table (no month filter) also
-  includes uncategorised items OUTSIDE the last 6 months and any with no parseable
-  date. Selecting a month (or clicking the graph) makes them reconcile exactly.
+Fallback logic (so it never lands on an empty view):
+  • If that tab has data for last full month -> use it.
+  • Else -> the newest month present in that tab's data.
+  • Else (no dated data) -> all months.
+
+Applies on first load and whenever you switch tabs (each tab picks its own most-
+recent full month). You can still change the month or pick "All months" manually.
 
 FILE CHANGED
 ------------
-• pages/bookkeeping.js — signed graph amounts + Y-axis domain + caption
+• pages/bookkeeping.js — defaultMonthFor() applied on load + tab switch
