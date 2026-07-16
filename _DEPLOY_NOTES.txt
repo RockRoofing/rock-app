@@ -1,33 +1,33 @@
-Bookkeeping — graph polish (recharts) + per-tab + target line + robust months
-=============================================================================
+Bookkeeping — "Sync Xero figures" button (on-demand P&L benchmark)
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully  (recharts already a dependency)
-Deploy over the top. Frontend only.
+Build: npm run build -> ✓ Compiled successfully
+Deploy over the top.
 
-FIXED
------
-1. GRAPH NOW CHANGES PER TAB — it plots the uncategorised total for the CURRENT
-   tab only (Costs / Sales / Wages), so switching tabs changes the line.
-2. NO GRAPH ON OVERHEADS — the Overheads tab shows the summary only (full width).
-3. PROFESSIONAL STYLING — rebuilt with recharts to match the Scorecards charts:
-   proper X/Y axes, £k Y-axis formatting, tooltip, smooth line, dots.
-4. NUMBERS & DATES NO LONGER CLIPPED — real axes with margins/width fix the
-   out-of-view issue from the hand-drawn SVG.
-5. TARGET LINE — a green dashed reference line at zero ("aim for the dashed line").
-   When the purple line sits on it, everything's allocated. Shows an
-   "All allocated ✓" note when there are no spikes.
-6. ROBUST MONTHS FILTER — the month dropdown/filter now derives the month from the
-   raw date even for old "28 Feb 2023"-format wage lines, so months appear even if
-   a file hasn't been re-uploaded since the date-parsing fix.
+WHY
+---
+The "In Xero" figures come from the P&L benchmark, which was only pulled by the
+nightly sync — so until it ran, Xero figures showed "—" (your _diag had
+benchmark:null). This adds an on-demand refresh.
 
-STILL A DATA ACTION (not a code issue)
---------------------------------------
-"No categorised Direct Wages" = no project-tagged wages have been uploaded yet
-(diagnostic showed categorisedWageLines=0). To populate them, upload the RECENT
-project-TAGGED wages export (the tracking-transfer journal style file, e.g. the
-1784157057530-style one). The long 2023–2026 file is all untagged, so it only
-ever fills the uncategorised side.
+NEW: "↻ Sync Xero figures" button (top-right of the Bookkeeping page)
+--------------------------------------------------------------------
+• Pulls ONLY the Profit & Loss benchmark for the last 6 months — cheap
+  (~6 Xero API calls, one per month), so it's safe to press whenever you like.
+  It does NOT run the heavy full deep-sync (no per-project rotation / bill sweep).
+• Refreshes the page data on completion, so the Xero column + graph benchmark
+  populate immediately. Shows "Synced N months" / an error message.
+• Merges with any existing benchmark months (won't lose older months).
+• Accounts / Management / Admin only.
 
-FILE CHANGED
-------------
-• pages/bookkeeping.js — recharts graph, per-tab series, target line, robust months
+ALTERNATIVE (no button needed): you can still force the FULL nightly sync by
+visiting /api/cron/deep-sync while logged in — but that's heavier and slower.
+The button is the lightweight option for just the Xero figures.
+
+NOTE: needs Xero connected with a valid refresh token. If it says "reconnect
+Xero", the token has expired and needs re-authorising in the Xero settings.
+
+FILES CHANGED
+-------------
+• pages/api/sync-benchmark.js  (new) — lightweight P&L-only sync endpoint
+• pages/bookkeeping.js               — Sync Xero figures button + refresh

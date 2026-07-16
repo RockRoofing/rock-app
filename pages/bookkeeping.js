@@ -38,6 +38,22 @@ export default function BookkeepingPage() {
   const [assigned, setAssigned] = useState('')   // '' | yes | no
   const [page, setPage] = useState(1)
   const PER_PAGE = 50
+  const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+
+  async function syncXero() {
+    setSyncing(true); setSyncMsg('')
+    try {
+      const res = await fetch('/api/sync-benchmark', { method: 'POST' })
+      const d = await res.json()
+      if (res.ok && d.ok) {
+        setSyncMsg(`Synced ${d.monthsPulled} month${d.monthsPulled !== 1 ? 's' : ''}.`)
+        const fresh = await fetch('/api/bookkeeping').then(r => r.json())
+        setData(fresh)
+      } else setSyncMsg(d.error || 'Sync failed.')
+    } catch (e) { setSyncMsg('Sync failed.') }
+    setSyncing(false)
+  }
 
   useEffect(() => {
     fetch('/api/bookkeeping').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
@@ -86,6 +102,12 @@ export default function BookkeepingPage() {
           <Link href="/" style={{ color: '#aaa', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>← Portal</Link>
           <span style={{ color: '#444' }}>|</span>
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>Bookkeeping</span>
+          <div style={{ flex: 1 }} />
+          {syncMsg && <span style={{ color: '#9fe3b0', fontSize: 12, whiteSpace: 'nowrap' }}>{syncMsg}</span>}
+          <button onClick={syncXero} disabled={syncing}
+            style={{ background: syncing ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: syncing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+            {syncing ? 'Syncing Xero…' : '↻ Sync Xero figures'}
+          </button>
         </div>
       </div>
 
