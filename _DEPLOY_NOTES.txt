@@ -1,65 +1,46 @@
-Bookkeeping reconciliation page + "Accounts" role
-==================================================
+COMBINED Financial deploy — everything in one go
+================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully
-Untagged capture runtime-tested on your real Bills export.
-Deploy over the top of the earlier Financial packages (needs lib/costDedupe.js,
-lib/mergeCosts.js from those).
+Build: npm run build -> ✓ Compiled successfully (full set together)
 
-NEW "ACCOUNTS" ROLE
--------------------
-• Added a new access role: "Accounts" (lib/roles.js). Selectable in Admin ->
-  Portal Users like any other role.
-• New "bookkeeping" area = Accounts + Management + Admin (as requested — Management
-  and Admin get it automatically).
-• Accounts role also gets the Commercial (Project Financials) area.
+This single package contains the LATEST version of every financial file from the
+recent work, so deploying it guarantees all dependencies are present and
+consistent. Safe to deploy over the top — it supersedes these earlier packages:
+  Admin_account_categorisation, Financial_xero_upload_admin_bulk_costs,
+  Financial_wages_importer_tuned, Financial_deep_sync_reintroduced,
+  Financial_deep_sync_id_dedupe, Financial_uploads_merge_not_overwrite,
+  Admin_nav_reorder, Admin_nav_tabs_fix, Financial_unassigned_invoices,
+  Bookkeeping_reconciliation, App_image_compression.
 
-NEW BOOKKEEPING CARD + PAGE  (/bookkeeping)
--------------------------------------------
-Purple "Bookkeeping" card on the portal home (visible to Accounts/Management/Admin).
-The page lists transactions that have NO project tracking category in Xero — i.e.
-costs/sales/wages that aren't attributed to a project — so you can reconcile the
-app against Xero each month and fix tags at source.
+★★★ AFTER DEPLOYING — YOU MUST RE-UPLOAD ★★★
+The Unassigned-invoices fix changes how invoices are processed ON UPLOAD. Invoices
+already in the database were imported by the OLD code (which dropped untagged ones)
+— deploying does NOT retroactively fix stored data. So:
+  1. Deploy this package.
+  2. Go to Admin -> Xero Upload and RE-UPLOAD the Sales Invoices file
+     (use SalesInvoices...11_56_03.csv — the recent one; the 11_56_54 file is old
+     history and contains NONE of your current outstanding invoices).
+  3. The 15 untagged outstanding invoices will then appear on Outstanding Invoices
+     with an amber "UNASSIGNED" badge (total ~£84,919). All 28 outstanding invoices
+     (~£280,797) will show: 13 under projects + 15 unassigned.
+  4. Also re-upload Bills + Direct Wages so the Bookkeeping page has untagged data.
+  5. Trigger GET /api/cron/deep-sync once to populate the Bookkeeping "In Xero"
+     benchmark immediately (otherwise it fills overnight).
 
-• THREE TABS: Costs (Bills) | Sales Invoices | Direct Wages.
-• FILTERS: month, supplier/customer, and account (cost) code.
-• RECONCILIATION SUMMARY at the top (per selected month or all):
-   - In Xero (cost of sale / sales)  — from the P&L benchmark (see below)
-   - Categorised in app              — what's attributed to projects
-   - Difference (Xero − app)         — green "reconciles ✓" or red "does not match"
-   - Untagged in this view           — the leakage total for the current filter
-   - Missing account codes           — cost-of-sale codes seen in Xero data but NOT
-     set up in Admin -> Account Categorisation (so you can add them). Untagged
-     lines whose code isn't in the app also show a red "NOT IN APP" badge.
+If figures still look stale after re-upload, it's the dashboard cache (4h) — any
+upload clears it, or hit /api/clear-cache.
 
-HOW THE DATA GETS THERE
------------------------
-• The Bills and Direct Wages importers now CAPTURE untagged lines (previously they
-  were silently skipped) into costs:untagged:bills / costs:untagged:wages
-  (merged/deduped). Untagged sales invoices already flow via the __UNASSIGNED__
-  bucket. Real-file test: 132 untagged bill lines (£54,102), including cost-of-sale
-  codes 311 & 330 that had no project tag — exactly the leakage to catch.
-• XERO BENCHMARK: a Profit & Loss pull (lib/xero.js fetchProfitAndLoss) gives the
-  month's account totals in ONE API call per month. Folded into the nightly
-  deep-sync (current + previous 3 months, once/day) and cached at xero:pl-benchmark
-  — so it does NOT hammer the Xero API and needs no extra cron slot.
+WHAT'S INCLUDED (latest of each)
+--------------------------------
+• lib: costDedupe.js, mergeCosts.js, compressImage.js, roles.js (Accounts role),
+  xero.js (fetchProfitAndLoss)
+• Importers: bills/wages/invoices bulk (merge+dedupe, capture untagged),
+  upload-transactions (manual costs+merge), account-categorisation
+• cron/deep-sync.js (bills+wages+sales, ID dedupe, nightly P&L benchmark)
+• Pages: bookkeeping (new), outstanding-invoices (unassigned badge),
+  admin/xero-upload, admin/account-categorisation, index (Bookkeeping card),
+  admin + admin/templates (full nav tabs), dashboard (unassigned pseudo-project)
+• components/AdminShell.js (full tab list), vercel.json (3 crons @ 02/06/08)
 
-NOTES
------
-• The "In Xero" and "Difference" figures appear after the first overnight deep-sync
-  runs (or trigger GET /api/cron/deep-sync once to populate immediately).
-• Sales vs cost split in the P&L is inferred by account name (Sales/Income/Revenue
-  -> sales; else cost). If your chart of accounts uses unusual names we can refine
-  the classification.
-
-FILES CHANGED / ADDED
----------------------
-• lib/roles.js                     — new "accounts" role + "bookkeeping" area
-• lib/xero.js                      — fetchProfitAndLoss (P&L benchmark, 1 call/month)
-• pages/api/bookkeeping.js  (new)  — serves untagged data + reconciliation
-• pages/bookkeeping.js      (new)  — the page (tabs, filters, reconciliation)
-• pages/api/import-bills-bulk.js   — capture untagged bill lines
-• pages/api/import-wages-bulk.js   — capture untagged (unallocated) wage lines
-• pages/api/cron/deep-sync.js      — nightly P&L benchmark pull
-• pages/index.js                   — Bookkeeping portal card
-• pages/admin.js                   — role list text (Accounts now selectable)
+REQUIRES: Vercel upgrade (3 crons); RESEND_API_KEY + FORMS_FROM_EMAIL for emails.
+Also delete pages/upload-transactions.js in GitHub if not already (old page route).
