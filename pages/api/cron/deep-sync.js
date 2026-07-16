@@ -318,12 +318,58 @@ export default async function handler(req, res) {
       }
     } catch (e) { console.error('untagged sweep error:', e.message) }
 
+    // ── Global Sales + Wages refresh across ALL projects (once per day) ──
+    // Bills stay per-project rotation (expensive per-bill detail); sales & wages
+    // are cheap (batched endpoints), so we refresh every project daily using a
+    // 6-month window. Exact-mirror per project within the window.
+    let globalSalesProjects = 0, globalWagesProjects = 0
+    try {
+      const lastGlobal = await redis.get('global-sync:at').catch(() => null)
+      const today = new Date().toISOString().slice(0, 10)
+      if (!lastGlobal || String(lastGlobal).slice(0, 10) !== today) {
+        const winDays = 183   // ~6 months
+        const win = new Date(); win.setDate(win.getDate() - winDays)
+        const winStr = win.toISOString().split('T')[0]
+        for (const p of active) {
+          const pid = p.trackingOptionId, pcat = p.trackingCategoryId
+          // Sales
+          try {
+            const sLines = await fetchSalesInvoices(tokens.access_token, tenantId, pid, pcat, winStr)
+            const existing = (await redis.get(`invoiced:lines:${pid}`).catch(() => null)) || []
+            const outside = existing.filter(l => !l.date || l.date < winStr)   // keep older than window
+            const mergedInv = [...outside, ...sLines]
+            const tot = mergedInv.reduce((s, l) => s + (l.total || 0), 0)
+            const paid = mergedInv.reduce((s, l) => s + (l.amountPaid || 0), 0)
+            const due = mergedInv.reduce((s, l) => s + (l.amountDue || 0), 0)
+            await redis.set(`invoiced:lines:${pid}`, mergedInv)
+            await redis.set(`invoiced:latest:${pid}`, { totalInvoiced: tot, paidTotal: paid, dueTotal: due, invoiceCount: mergedInv.length, calculatedAt: new Date().toISOString(), source: 'global_sync' })
+            globalSalesProjects++
+            await sleep(120)
+          } catch (e) { console.error('global sales failed', p.jobNo, e.message) }
+          // Wages
+          try {
+            const wLines = await fetchWages(tokens.access_token, tenantId, pid, winStr)
+            const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
+            const outside = existing.filter(l => !l.date || l.date < winStr)
+            const combined = [...outside, ...wLines]
+            const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)
+            await redis.set(`costs:wages:${pid}`, { labourSpend: wTot, materialsSpend: 0, totalCosts: wTot, lines: combined, calculatedAt: new Date().toISOString(), source: 'global_sync' })
+            await mergeCosts(redis, pid)
+            globalWagesProjects++
+            await sleep(120)
+          } catch (e) { console.error('global wages failed', p.jobNo, e.message) }
+        }
+        await redis.set('global-sync:at', new Date().toISOString())
+      }
+    } catch (e) { console.error('global sync error:', e.message) }
+
     res.json({
       ok: true,
       project: cp.jobNo, fromDate: fromDateStr,
       billsAdded: billsMerge.added, wagesAdded: wagesMerge.added, salesFetched: salesLines.length,
       billLabour, billMaterials, wageTotal, totalInvoiced, dueTotal,
       benchmarkMonths, untaggedAdded,
+      globalSalesProjects, globalWagesProjects,
       nextProject: active[(pointer + 1) % active.length]?.jobNo,
     })
   } catch (e) {

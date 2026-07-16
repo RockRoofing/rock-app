@@ -116,13 +116,26 @@ export default async function handler(req, res) {
       g.lines.push({ ...lineRec, accountName: '', type: isLabour ? 'Labour' : 'Materials' })
     }
 
-    // Store untagged bills (merged/deduped) for the Bookkeeping page.
-    let untaggedAdded = 0
-    if (untagged.length) {
+    // ── Date range covered by this file (min..max across ALL parsed lines) ──
+    const allDates = []
+    for (const g of byProject.values()) for (const l of g.lines) if (l.date) allDates.push(l.date)
+    for (const l of untagged) if (l.date) allDates.push(l.date)
+    allDates.sort()
+    const rangeFrom = allDates[0] || null
+    const rangeTo = allDates[allDates.length - 1] || null
+    const inRange = (d) => d && rangeFrom && rangeTo && d >= rangeFrom && d <= rangeTo
+
+    // Store untagged bills — REPLACE the file's date range, keep everything outside.
+    let untaggedKept = 0, untaggedNew = untagged.length
+    if (rangeFrom) {
       const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
-      const { merged, added } = mergeDedupe(existingUn, untagged, costLineKey)
-      untaggedAdded = added
-      await redis.set('costs:untagged:bills', merged)
+      const outside = existingUn.filter(l => !inRange(l.date))
+      untaggedKept = outside.length
+      await redis.set('costs:untagged:bills', [...outside, ...untagged])
+    } else if (untagged.length) {
+      // No dates at all — fall back to append (shouldn't normally happen).
+      const existingUn = (await redis.get('costs:untagged:bills').catch(() => null)) || []
+      await redis.set('costs:untagged:bills', [...existingUn, ...untagged])
     }
 
     if (byProject.size === 0 && untagged.length === 0) {
@@ -141,25 +154,45 @@ export default async function handler(req, res) {
     } catch (e) { console.error('project resolve failed:', e) }
 
     let matched = 0, unmatched = 0
-    let totalAdded = 0
+    let totalReplaced = 0, projectsCleared = 0
     const summary = []
+
+    // Build a set of all known projectIds (so we can clear the range even for
+    // projects NOT present in this file — exact mirror: if it's not in Xero's
+    // export for this range, it shouldn't remain in the app for this range).
+    const allProjectIds = new Set([...trackingByName.values()])
+    // Map tracking name -> lines from this file.
+    const fileByProjectId = new Map()
     for (const [tracking, g] of byProject.entries()) {
       const projectId = trackingByName.get(tracking.toLowerCase())
       if (!projectId) { unmatched++; summary.push({ project: tracking, matched: false, total: g.total }); continue }
       matched++
-      // MERGE with any existing bill lines (so partial exports accumulate — Xero
-      // caps exports at 500 lines, so 3 years takes several uploads).
+      fileByProjectId.set(projectId, { tracking, lines: g.lines })
+    }
+
+    for (const projectId of allProjectIds) {
+      const fileEntry = fileByProjectId.get(projectId)
+      const fileLines = fileEntry ? fileEntry.lines : []
       const existing = (await redis.get(`costs:bills:${projectId}`).catch(() => null))?.lines || []
-      const { merged, added } = mergeDedupe(existing, g.lines, costLineKey)
-      totalAdded += added
-      const labour = merged.filter(l => l.type === 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
-      const materials = merged.filter(l => l.type !== 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
+      // Keep existing lines OUTSIDE the file's date range; replace INSIDE with file lines.
+      const outside = rangeFrom ? existing.filter(l => !inRange(l.date)) : existing
+      const removedInRange = existing.length - outside.length
+      const combined = [...outside, ...fileLines]
+
+      // If nothing changed for this project (no file lines, nothing removed), skip write.
+      if (fileLines.length === 0 && removedInRange === 0) continue
+
+      if (fileLines.length === 0 && removedInRange > 0) projectsCleared++
+      totalReplaced += fileLines.length
+
+      const labour = combined.filter(l => l.type === 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
+      const materials = combined.filter(l => l.type !== 'Labour').reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:bills:${projectId}`, {
-        labourSpend: labour, materialsSpend: materials, totalCosts: labour + materials, lines: merged,
+        labourSpend: labour, materialsSpend: materials, totalCosts: labour + materials, lines: combined,
         calculatedAt: new Date().toISOString(), source: 'bills_bulk',
       })
       await mergeCosts(redis, projectId)
-      summary.push({ project: tracking, matched: true, labour, materials, total: labour + materials, lines: merged.length, added })
+      if (fileEntry) summary.push({ project: fileEntry.tracking, matched: true, labour, materials, total: labour + materials, lines: combined.length, replacedInRange: fileLines.length, removedInRange })
     }
 
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
@@ -167,12 +200,15 @@ export default async function handler(req, res) {
 
     return res.json({
       ok: true,
+      mode: 'replace-by-range',
+      rangeFrom, rangeTo,
       projectsMatched: matched,
       projectsUnmatched: unmatched,
       totalLinesProcessed: [...byProject.values()].reduce((s, g) => s + g.lines.length, 0),
-      newLinesAdded: totalAdded,
+      linesReplacedInRange: totalReplaced,
+      projectsClearedInRange: projectsCleared,
       untaggedLines: untagged.length,
-      untaggedAdded,
+      untaggedKept,
       unmatchedProjects: unmatched,
       totalCosts: summary.filter(s => s.matched).reduce((s, x) => s + (x.total || 0), 0),
       summary: summary.sort((a, b) => (b.total || 0) - (a.total || 0)),

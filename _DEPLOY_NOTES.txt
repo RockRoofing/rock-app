@@ -1,33 +1,48 @@
-Bookkeeping — fix "Categorised in app" overstating (it included uncategorised)
-==============================================================================
+Financial (1/2) — Bills replace-by-range (exact mirror) + global nightly Sales/Wages
+====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. Frontend only.
+Runtime-tested on Darren Dalgliesh's real file. Deploy over the top.
 
-THE BUG (your June screenshot)
-------------------------------
-"Categorised in app" was LARGER than "Total in Xero" (giving negative "still to
-find" on Bills −£28,865 and Sales −£147,803). Cause: the app figure summed the
-whole tab dataset (data.bills / data.wages / data.invoices), which contains BOTH
-categorised AND uncategorised items — so it double-counted the untagged ones into
-the "categorised" figure.
+THE DARREN BUG — FIXED
+----------------------
+Root cause: bill dedupe key was reference|accountCode|amount, which COLLAPSED
+genuinely-distinct lines (multi-project invoices, and fortnightly repeats on one
+invoice number). Darren had 4 real June lines (£650, £1500, £800, £800 = £3,750)
+but only £650 showed.
 
-FIX
----
-"Categorised in app" now sums ONLY items where categorised === true. So:
-  • Total in Xero        = the P&L figure
-  • Categorised in app   = only what's actually allocated to a project
-  • Still to find        = Xero − categorised (the amount left to allocate)
-This makes "still to find" the true outstanding amount, and it should now be
-positive (or zero when fully allocated), matching the uncategorised total.
+NEW BEHAVIOUR — REPLACE BY DATE RANGE (Bills)
+---------------------------------------------
+Bills upload now makes the app an EXACT MIRROR of the file for the period it
+covers:
+  • Detects the file's date range (min..max InvoiceDate).
+  • For that range, across ALL projects, it REPLACES existing bills with the
+    file's lines verbatim (no dedupe guessing — genuine repeats kept).
+  • Lines OUTSIDE the range are untouched (older uploads preserved).
+  • Projects NOT in the file lose their in-range bills (exact mirror: if it's not
+    in Xero's export for that range, it's not in the app).
+  • Untagged/overhead bills handled the same way (replace-by-range).
+Runtime-tested: Darren J243 June now stores all 4 lines = £3,750.
+Response reports: rangeFrom/rangeTo, linesReplacedInRange, projectsClearedInRange.
 
-REMAINING HONEST CAVEAT (Sales)
--------------------------------
-Sales may still not tie to the penny because the app uses INVOICE DATE while the
-Xero P&L income is TRANSACTION-DATE based (as previously agreed). Bills & Wages
-should tie closely. If exact Sales reconciliation matters, we'd need a
-transaction-date sales export.
+NO WARNING/CONFIRM: per your instruction — if it's not in Xero it shouldn't be in
+the app, so the replace just happens and the result reports what changed.
 
-FILE CHANGED
-------------
-• pages/bookkeeping.js — "Categorised in app" counts categorised items only
+GLOBAL NIGHTLY SALES + WAGES (all projects, 6-month window)
+-----------------------------------------------------------
+Previously the nightly sync refreshed sales/wages for only ONE project per night
+(rotation), so a project's newly-categorised sales could take ~weeks to appear.
+Now, once per day, the sync refreshes SALES and WAGES for EVERY project over a
+6-month window (exact-mirror within the window; older data preserved). Bills stay
+on the per-project nightly rotation (per-bill detail is the expensive call).
+API cost: sales/wages are batched endpoints (~6-15 calls each across all
+projects) — well within limits. Guarded once/day via 'global-sync:at'.
+Response reports globalSalesProjects / globalWagesProjects.
+
+NOTE: This fixes "categorised sales in Xero not showing" within a day
+automatically. The on-demand Sync buttons come in part 2/2.
+
+FILES CHANGED
+-------------
+• pages/api/import-bills-bulk.js — replace-by-range (exact mirror)
+• pages/api/cron/deep-sync.js    — global daily sales+wages across all projects
