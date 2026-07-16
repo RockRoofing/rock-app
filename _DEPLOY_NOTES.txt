@@ -1,31 +1,29 @@
-Financial — clearer upload result (why "0 imported" happens)
-============================================================
+Financial — upload all Xero files at once (auto-detect + route)
+==============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
+Type-detection runtime-tested on your real Bills / Sales / Wages files.
 Deploy over the top.
 
-WHY YOU SAW "0 BILLS IMPORTED" FOR 2023
----------------------------------------
-"New lines added" only counts bills that matched a CURRENT project. For a 2023
-file, most lines are either:
-  • untagged (no Projects tracking category — common for older bills), or
-  • tagged to projects that are now ARCHIVED (so they don't match a live project).
-Either way, nothing lands against a current project -> "0". BUT the untagged lines
-ARE still captured — into the Bookkeeping page (Costs (Bills) tab) as unassigned.
-So "0 imported" was the message, not lost data.
+NEW: "Upload all files at once"
+------------------------------
+A single drop-zone at the top of Admin -> Xero Upload accepts MULTIPLE files.
+Each file is auto-detected and routed to the right importer:
+  • .xlsx / .xls                      -> Direct Wages
+  • .csv with Type = "Sales …"        -> Sales Invoices
+  • .csv with Type = "Bill …"         -> Bills (Costs)
+Detection reads the "Type" column values (not just the filename), so a Bills file
+that happens to contain a "Bill credit note" row is still detected as Bills.
 
-WHAT CHANGED
+Files process one after another with a per-file status line showing what it was
+detected as and a result summary (e.g. "Bills (Costs) · 120 new, 15 untagged").
+The individual single-type upload areas remain below for one-at-a-time uploads.
+
+NOTE
+----
+This is purely a front-end convenience — it calls the SAME importers as the
+single areas, so all the merge/dedupe/untagged behaviour is identical.
+
+FILE CHANGED
 ------------
-The Bills/Wages upload result now spells this out, so 0 is never ambiguous:
-  • "N line(s) had no project tag (X new) — captured under Bookkeeping … as unassigned."
-  • "N project tag(s) didn't match a current project (e.g. archived) and were skipped."
-  • When new-added is 0 but there were untagged/unmatched lines, a note explains
-    it doesn't mean nothing imported.
-
-So for your 2023 bills: check the Bookkeeping page -> Costs (Bills) tab -> filter to
-2023 months; the untagged older bills will be listed there.
-
-FILES CHANGED
--------------
-• pages/api/import-bills-bulk.js — report untagged/unmatched counts
-• pages/admin/xero-upload.js     — show them in the result panel
+• pages/admin/xero-upload.js — MultiUpload drop-zone + auto-detect/routing

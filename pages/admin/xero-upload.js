@@ -30,6 +30,14 @@ export default function XeroUploadPage() {
           <strong>Select all columns</strong> when running each Xero report before exporting — the app relies on the <strong>Projects</strong> tracking column plus the account/amount columns to allocate costs. If columns are left out, some data won't be captured.
         </div>
 
+        <MultiUpload />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '28px 0 20px' }}>
+          <div style={{ flex: 1, height: 1, background: '#e0e0e0' }} />
+          <span style={{ fontSize: 12, color: '#aaa' }}>or upload one type at a time</span>
+          <div style={{ flex: 1, height: 1, background: '#e0e0e0' }} />
+        </div>
+
         <UploadArea
           title="Bills (Costs)"
           blurb={<>Upload the Xero <strong>Bills</strong> export (CSV) containing all bills. Captures <strong>materials</strong> and <strong>subcontractor labour</strong> for every project, split by the account categorisation. Doesn't include PAYE Direct Wages — upload those below.</>}
@@ -59,6 +67,109 @@ export default function XeroUploadPage() {
       </div>
     </AdminShell>
   )
+}
+
+
+// Upload several Xero exports at once — auto-detects each file's type and routes
+// it to the right importer (xlsx -> Wages; CSV with "Bill" rows -> Bills;
+// CSV with "Sales invoice"/"Credit note" rows -> Sales Invoices).
+function MultiUpload() {
+  const [items, setItems] = useState([])   // [{name, status, kind, result, error}]
+  const [busy, setBusy] = useState(false)
+
+  async function detectKind(file) {
+    const name = (file.name || '').toLowerCase()
+    if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'wages'
+    // CSV: read the header + a chunk, find the "Type" column, and inspect its values.
+    const text = await file.slice(0, 300000).text().catch(() => '')
+    const lines = text.split(/\r?\n/).filter(Boolean)
+    if (!lines.length) return 'bills'
+    const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+    const typeIdx = headers.indexOf('type')
+    if (typeIdx !== -1) {
+      let sales = 0, bills = 0
+      for (let i = 1; i < Math.min(lines.length, 60); i++) {
+        const cells = lines[i].split(',')
+        const t = (cells[typeIdx] || '').replace(/^"|"$/g, '').trim().toLowerCase()
+        if (t.startsWith('sales')) sales++
+        else if (t.startsWith('bill')) bills++
+      }
+      if (sales > bills) return 'invoices'
+      if (bills > 0) return 'bills'
+    }
+    // Fallback if there's no Type column: filename hint, else bills.
+    if (name.includes('salesinvoice') || name.includes('sales_invoice') || name.includes('invoice')) return 'invoices'
+    return 'bills'
+  }
+
+  const endpointFor = (kind) => kind === 'wages' ? '/api/import-wages-bulk' : kind === 'invoices' ? '/api/import-invoices-bulk' : '/api/import-bills-bulk'
+  const labelFor = (kind) => kind === 'wages' ? 'Direct Wages' : kind === 'invoices' ? 'Sales Invoices' : 'Bills (Costs)'
+
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || [])
+    if (!files.length) return
+    setBusy(true)
+    const next = files.map(f => ({ name: f.name, status: 'pending', kind: null, result: null, error: null }))
+    setItems(next)
+
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]
+      try {
+        const kind = await detectKind(f)
+        next[i] = { ...next[i], kind, status: 'uploading' }
+        setItems([...next])
+        const fileData = await readB64(f)
+        const res = await fetch(endpointFor(kind), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileData }) })
+        const data = await res.json()
+        if (res.ok && data.ok) next[i] = { ...next[i], status: 'done', result: data }
+        else next[i] = { ...next[i], status: 'error', error: data.error || 'Upload failed' }
+      } catch (e) { next[i] = { ...next[i], status: 'error', error: e.message } }
+      setItems([...next])
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div style={{ ...cardStyle, border: '2px solid #1a1a2e' }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', margin: '0 0 6px' }}>Upload all files at once</h2>
+      <p style={{ fontSize: 13, color: '#888', margin: '0 0 16px', lineHeight: 1.6 }}>
+        Drop or select your Bills, Sales Invoices and Direct Wages exports together — each file is detected and imported automatically. (Bills &amp; Sales are CSV; Direct Wages is Excel.)
+      </p>
+      <div onClick={() => !busy && document.getElementById('multi_files')?.click()}
+        style={{ border: '2px dashed #c7c7cc', borderRadius: 8, padding: 24, textAlign: 'center', cursor: busy ? 'default' : 'pointer', background: '#fafafa', marginBottom: 14 }}>
+        <input id="multi_files" type="file" accept=".csv,.xlsx,.xls" multiple style={{ display: 'none' }}
+          onChange={e => handleFiles(e.target.files)} />
+        <div style={{ fontSize: 14, color: '#555', fontWeight: 600 }}>{busy ? 'Uploading…' : 'Click to select multiple files'}</div>
+        <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>You can select Bills, Sales Invoices and Direct Wages all together</div>
+      </div>
+
+      {items.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map((it, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, background: it.status === 'error' ? '#fef2f2' : it.status === 'done' ? '#f0fdf4' : '#f7f7f8', border: '1px solid ' + (it.status === 'error' ? '#fecaca' : it.status === 'done' ? '#bbf7d0' : '#eee') }}>
+              <span style={{ fontSize: 16 }}>{it.status === 'done' ? '✓' : it.status === 'error' ? '✕' : it.status === 'uploading' ? '⏳' : '•'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#333', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>
+                  {it.kind ? labelFor(it.kind) : 'detecting…'}
+                  {it.status === 'done' && it.result && ' · ' + resultSummary(it.kind, it.result)}
+                  {it.status === 'error' && ' · ' + it.error}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function resultSummary(kind, r) {
+  if (kind === 'invoices') return `${r.newInvoices ?? 0} new, ${r.updatedInvoices ?? 0} updated`
+  const parts = [`${r.newLinesAdded ?? 0} new`]
+  if (r.untaggedLines > 0) parts.push(`${r.untaggedLines} untagged`)
+  if (r.projectsUnmatched > 0) parts.push(`${r.projectsUnmatched} archived/unmatched`)
+  return parts.join(', ')
 }
 
 function UploadArea({ title, blurb, accept, endpoint, howto, renderResult }) {
