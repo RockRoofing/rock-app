@@ -15,26 +15,31 @@ async function getRedis() {
   } catch { return null }
 }
 
-// ONE pass over ManualJournals in the window. For each 320 (Direct Wages) line
-// that is project-tagged, return it WITH the tracking option NAME (e.g.
-// "J242-Winnersh") so we can match by name (not GUID, which was failing) — the
-// same approach as the fixed invoice sync. Rate-limit-safe (429 backoff).
+// ONE pass over ManualJournals, DATE-FILTERED to the window via a `where` clause
+// so we only pull journals in range (not all history) — this is the speed fix.
+// The list usually carries Date; if a journal's lines are omitted we fetch that
+// one by ID (rare, and now over a small set). Match tracking by NAME (not GUID).
+// Rate-limit-safe (429 backoff).
 async function fetchAllWageLines(at, tid, fromDate) {
   const out = []
+  // Xero `where` wants Date >= DateTime(y,m,d)
+  const [fy, fm, fd] = fromDate.split('-').map(n => parseInt(n, 10))
+  const where = encodeURIComponent(`Date>=DateTime(${fy},${fm},${fd})`)
   let page = 1
-  while (true) {
-    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?page=${page}&pageSize=100`
+  let guard = 0
+  while (guard++ < 100) {
+    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?where=${where}&page=${page}&pageSize=100`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
-    if (res.status === 429) { await sleep(2000); continue }
+    if (res.status === 429) { await sleep((parseInt(res.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
     if (!res.ok) break
     const data = await res.json()
     const journals = data.ManualJournals || []
     if (journals.length === 0) break
     for (const j of journals) {
       let dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
-      // The ManualJournals LIST often omits JournalLines AND the date — fetch the
-      // journal by ID to get its lines, tracking AND a reliable header date.
       let jLines = j.JournalLines
+      // Only fetch by ID if this journal's lines OR date are missing (rare now that
+      // we're date-filtered to a small set).
       if (!Array.isArray(jLines) || jLines.length === 0 || !dateStr) {
         for (let a = 0; a < 4; a++) {
           const r = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${j.ManualJournalID}`, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
@@ -42,18 +47,15 @@ async function fetchAllWageLines(at, tid, fromDate) {
           if (!r.ok) { jLines = jLines || []; break }
           const full = (((await r.json()).ManualJournals || [])[0] || {})
           jLines = full.JournalLines || jLines || []
-          // Recompute date from the detail response (list often lacks it).
-          if (!dateStr) {
-            dateStr = (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(full.Date).slice(0, 10) : (full.DateString ? full.DateString.slice(0, 10) : null)
-          }
-          await sleep(400); break
+          if (!dateStr) dateStr = (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(full.Date).slice(0, 10) : (full.DateString ? full.DateString.slice(0, 10) : null)
+          await sleep(300); break
         }
       }
       if (dateStr && dateStr < fromDate) continue
       for (const jl of (jLines || [])) {
         if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
-        if (amount <= 0) continue                 // keep positive (debit) project lines
+        if (amount <= 0) continue
         const trackingNames = []
         for (const t of (jl.Tracking || [])) { if (t.Option) trackingNames.push(String(t.Option).trim().toLowerCase()) }
         out.push({
@@ -65,7 +67,7 @@ async function fetchAllWageLines(at, tid, fromDate) {
       }
     }
     if (journals.length < 100) break
-    page++; await sleep(1200)
+    page++; await sleep(600)
   }
   return out
 }

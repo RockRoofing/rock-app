@@ -1,31 +1,41 @@
-Bookkeeping — FIX wages have no date (can't filter/assess by date)
-==================================================================
+Bookkeeping — SPEED UP wages sync (date-filtered ManualJournals)
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy, then re-run Sync Wages.
 
-WHAT WAS WRONG
---------------
-Wages now pull in line-by-line (great!) but with NO date, so they can't be
-filtered or assessed by month.
+WHY THE PREVIOUS RUN WAS SLOW / TIMED OUT
+-----------------------------------------
+The date-fix forced a fetch-by-ID for EVERY journal across ALL history, at ~400ms
+each -> minutes, hitting the Vercel function timeout (partial saves).
 
-Cause: the ManualJournals LIST response often omits BOTH the line detail AND the
-header date. The code took the date from the list entry (null) and stamped that
-null onto every line. When it re-fetched the journal by ID for the lines, it
-ignored the fuller detail's date.
+WHY WE CAN'T USE THE FASTER /Journals ENDPOINT
+----------------------------------------------
+The /Journals endpoint needs scope accounting.transactions.read. Under Xero's NEW
+granular scopes (this app is on them), that broad scope no longer exists — the
+app's allowed list only has granular ones (banktransactions.read, manualjournals.
+read). So /Journals is not accessible. ManualJournals (accounting.manualjournals.
+read, which we now have) is the correct endpoint.
 
-THE FIX
--------
-When fetching a journal by ID (for lines/tracking), also read the header date from
-that detail response and use it. The by-ID detail reliably carries Date/DateString.
-So every wage line now gets its correct journal date. Also triggers the by-ID
-fetch when the list entry lacks a date (rate-limit safe).
+THE SPEED FIX
+-------------
+Query ManualJournals with a date-filtered `where` clause:
+    Date>=DateTime(y,m,d)
+so we only pull journals in the selected window instead of paging through all
+history. Per-item fetch-by-ID now only happens for the rare journal missing
+lines/date, and only over that small window set. Tighter, rate-limit-safe sleeps.
+
+NOTE
+----
+connect.js was momentarily set to also request accounting.transactions.read then
+REVERTED (that scope can't be granted on this app). No connect.js change ships in
+this zip — scopes are already correct on your token. Only sync-wages.js changes.
 
 AFTER DEPLOYING
 ---------------
-Re-run Sync Wages. Wage lines should now show their dates and be filterable by
-month, and land in the correct month on the Direct Wages card/graph.
+Re-run Sync Wages. Should complete quickly now, wages WITH dates, filterable by
+month. Confirm June shows the individual project-tagged lines with dates.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — stamp correct journal date on each wage line
+• pages/api/sync-wages.js — date-filtered ManualJournals query (speed) + dates
