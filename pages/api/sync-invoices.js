@@ -62,7 +62,9 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
         invoiceNumber: full.InvoiceNumber || '', xeroInvoiceId: full.InvoiceID || null,
         date: dateStr, dueDate: full.DueDateString?.slice(0, 10) || '',
         contact: full.Contact?.Name || '', reference: full.Reference || '',
-        total: full.Total || 0, amountPaid: full.AmountPaid || 0, amountDue: full.AmountDue || 0,
+        total: full.Total || 0, subTotal: full.SubTotal != null ? full.SubTotal : (full.Total || 0),
+        totalTax: full.TotalTax || 0,
+        amountPaid: full.AmountPaid || 0, amountDue: full.AmountDue || 0,
         status: full.Status || '', trackingNames: [...trackingNames],
       })
     }

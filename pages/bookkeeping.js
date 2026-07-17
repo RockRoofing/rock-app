@@ -338,54 +338,51 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
   }))
   const anySpike = chartData.some(d => d.uncategorised > 0)
 
-  // Three-row Xero-vs-app summary for the filtered period (or all months).
-  // Uses the P&L's COST OF SALES section only (overheads/admin excluded), split
-  // into Wages vs Bills by account name. Sales = the Income section total.
+  // ── Card figures: reconcile WITHIN each source (net of VAT) ──
+  // Main line per card: Total (all rows in source) − Categorised = Still to find.
+  // This is the categorisation check and reaches zero when everything is tagged.
+  // Below it we show the P&L figure (scoped to that category's codes) in grey as
+  // a separate cross-check, clickable to investigate.
+  const inMonth = (r) => !month || rowMonth(r) === month
+  // Bills & wages: stored line amounts are already net (ex-VAT). Invoices: use net (subTotal).
+  const billsRows = (data.bills || []).filter(inMonth)
+  const wagesRows = (data.wages || []).filter(inMonth)
+  const invRows = (data.invoices || []).filter(inMonth)
+  const sumBills = (arr) => arr.reduce((s, r) => s + (r.amount || 0), 0)
+  const sumInv = (arr) => arr.reduce((s, r) => s + (r.subTotal != null ? r.subTotal : (r.total || 0)), 0)
+
+  const billsTotal = sumBills(billsRows),  billsCat = sumBills(billsRows.filter(r => r.categorised))
+  const wagesTotal = sumBills(wagesRows),  wagesCat = sumBills(wagesRows.filter(r => r.categorised))
+  const invTotal = sumInv(invRows),        invCat = sumInv(invRows.filter(r => r.categorised))
+
+  // P&L reference (grey), scoped to each category's account codes, from the
+  // section-aware benchmark. Kept as a cross-check, not part of "still to find".
   const bm = data.benchmark?.months || {}
-  const app = data.appCategorised || {}
   const hasBm = Object.keys(bm).length > 0
-  const monthsToSum = month ? [month] : [...new Set([...Object.keys(bm), ...Object.keys(app)])]
-  let xeroWages = 0, xeroBills = 0, xeroSales = 0
+  const monthsToSum = month ? [month] : Object.keys(bm)
+  const LABOUR_WAGE_CODES = ['320']
+  let plSales = 0, plWages = 0, plBills = 0
   for (const mo of monthsToSum) {
-    const b = bm[mo]
-    if (!b) continue
-    // Back-compat: old benchmark stored a flat { accountName: val } with no
-    // sections. Detect and handle it with name-based heuristics.
-    const isNew = b.bySection || b.incomeTotal != null || b.costOfSalesTotal != null
-    if (!isNew) {
-      for (const [name, val] of Object.entries(b)) {
-        const ln = name.toLowerCase(); const amt = Math.abs(val || 0)
-        if (ln.includes('sales') || ln.includes('income') || ln.includes('revenue')) xeroSales += amt
-        else if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries') || ln.includes('cis labour')) xeroWages += amt
-        else xeroBills += amt
+    const b = bm[mo]; if (!b) continue
+    // Prefer code-level data if present; else fall back to section totals.
+    if (b.byCode) {
+      for (const [code, val] of Object.entries(b.byCode)) {
+        const amt = Math.abs(val || 0); const c = String(code)
+        if (c === '200') plSales += amt
+        else if (c === '320') plWages += amt
+        else plBills += amt   // other cost-of-sale codes (labour/materials)
       }
-      continue
-    }
-    xeroSales += Math.abs(b.incomeTotal || 0)
-    const cosSection = Object.entries(b.bySection || {}).find(([title]) => {
-      const t = title.toLowerCase()
-      return t.includes('cost of sales') || t.includes('cost of goods') || t.includes('direct costs')
-    })
-    if (cosSection) {
-      for (const [name, val] of Object.entries(cosSection[1])) {
-        const ln = name.toLowerCase(); const amt = Math.abs(val || 0)
-        if (ln.includes('wage') || ln.includes('paye') || ln.includes('salaries') || ln.includes('cis labour')) xeroWages += amt
-        else xeroBills += amt
-      }
-    } else if (b.costOfSalesTotal) {
-      xeroBills += Math.abs(b.costOfSalesTotal)
+    } else {
+      plSales += Math.abs(b.incomeTotal || 0)
+      plBills += Math.abs(b.costOfSalesTotal || 0)
     }
   }
-  const inPeriod = (r) => (!month || rowMonth(r) === month) && r.categorised
-  const appBills = (data.bills || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
-  const appWages = (data.wages || []).filter(inPeriod).reduce((s, r) => s + (r.amount || 0), 0)
-  const appInvoices = (data.invoices || []).filter(inPeriod).reduce((s, r) => s + (r.total || 0), 0)
-  const rows = [
-    { label: 'Cost of Sale (Bills)', xero: xeroBills, app: appBills },
-    { label: 'Direct Wages', xero: xeroWages, app: appWages },
-    { label: 'Sales Invoices', xero: xeroSales, app: appInvoices },
-  ]
 
+  const rows = [
+    { label: 'Cost of Sale (Bills)', total: billsTotal, cat: billsCat, pl: plBills },
+    { label: 'Direct Wages', total: wagesTotal, cat: wagesCat, pl: plWages },
+    { label: 'Sales Invoices', total: invTotal, cat: invCat, pl: plSales },
+  ]
   return (
     <div style={{ display: 'grid', gridTemplateColumns: showGraph ? '1fr 1fr' : '1fr', gap: 16, alignItems: 'stretch' }}>
       {showGraph && (
@@ -415,26 +412,33 @@ function ReconPanel({ data, month, tab, onPickMonth }) {
         </div>
       )}
 
-      {/* Xero vs app — three rows */}
+      {/* Reconciliation — Total − Categorised = Still to find (net of VAT) */}
       <div style={{ background: '#fff', borderRadius: 12, padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Xero vs app {month ? `· ${monthLabel(month)}` : '· all months'}</div>
-        {!hasBm && <div style={{ fontSize: 12, color: '#999' }}>Xero benchmark pending — runs after the nightly sync.</div>}
+        <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Categorisation check {month ? `· ${monthLabel(month)}` : '· all months'} <span style={{ fontWeight: 400, color: '#999' }}>(net of VAT)</span></div>
         {rows.map(r => {
-          const diff = r.xero - r.app
-          const balanced = Math.abs(diff) < 1
-          const col = !hasBm ? '#999' : balanced ? '#16a34a' : '#dc2626'
+          const toFind = r.total - r.cat
+          const balanced = Math.abs(toFind) < 1
+          const col = balanced ? '#16a34a' : '#dc2626'
           return (
-            <div key={r.label} style={{ border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px', background: hasBm ? (balanced ? '#f0fdf4' : '#fef2f2') : '#fafafa' }}>
+            <div key={r.label} style={{ border: '1px solid #f0f0f0', borderRadius: 10, padding: '10px 12px', background: balanced ? '#f0fdf4' : '#fef2f2' }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>{r.label}</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <Fig label="Total in Xero" value={hasBm ? fmtL(r.xero) : '—'} />
-                <Fig label="Categorised in app" value={fmtL(r.app)} />
-                <Fig label="Still to find" value={hasBm ? fmtL(diff) : '—'} color={col} bold />
+                <Fig label="Total" value={fmtL(r.total)} />
+                <Fig label="Categorised" value={fmtL(r.cat)} />
+                <Fig label="Still to find" value={fmtL(toFind)} color={col} bold />
               </div>
+              {hasBm && (
+                <div
+                  onClick={() => onPickPL && onPickPL(r.label)}
+                  title={onPickPL ? 'Click to investigate the P&L detail for this category' : ''}
+                  style={{ fontSize: 11, color: '#aaa', marginTop: 6, cursor: onPickPL ? 'pointer' : 'default' }}>
+                  P&L (Xero): {fmtL(r.pl)}{onPickPL ? <span style={{ textDecoration: 'underline' }}> investigate ›</span> : ''}
+                </div>
+              )}
             </div>
           )
         })}
-        {data.benchmarkUpdatedAt && <div style={{ fontSize: 10, color: '#bbb', marginTop: 'auto' }}>Xero as of {new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB')}. Invoice-date basis.</div>}
+        {data.benchmarkUpdatedAt && <div style={{ fontSize: 10, color: '#bbb', marginTop: 'auto' }}>P&L reference as of {new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB')}. Main figures from synced/uploaded data, net of VAT.</div>}
       </div>
     </div>
   )

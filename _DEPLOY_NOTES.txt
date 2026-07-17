@@ -1,26 +1,36 @@
-Bookkeeping — financial pages now show BOOKKEEPING chrome, not Admin
-===================================================================
+Bookkeeping — cards rebuilt: Total − Categorised = Still to find (net of VAT)
+============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. Single file.
+Deploy over the top. After deploying, re-run Sync Invoices so invoices carry net.
 
-WHAT WAS WRONG
---------------
-Account Categorisation, Xero Upload and Data Management were removed from the
-Admin nav, but the PAGES still rendered inside the Admin shell — so opening them
-dropped you into the dark "Admin" bar ("← Portal | Admin"). Visually they were
-still in the Admin section.
+WHAT CHANGED (the card design you asked for)
+--------------------------------------------
+Each card now reconciles WITHIN its own source, net of VAT:
+  • Total       = everything in that source (bills / wages / invoices)
+  • Categorised = the part tagged to a project
+  • Still to find = Total − Categorised  (reaches ZERO when all tagged)
+No more comparing to the P&L for the main figure (which could never balance
+because of WIP journals / VAT / date basis).
 
-FIX
----
-When AdminShell renders those three pages it now shows BOOKKEEPING chrome:
-  • Top bar: "← Bookkeeping | Bookkeeping Tools" (was "← Portal | Admin")
-  • Back link goes to /bookkeeping (not the portal/admin home)
-  • Sub-nav: the three bookkeeping tools + "← All tools" (no Admin tabs)
-The route stays /admin/... under the hood (no link-breaking file move), but
-visually and navigationally these pages are now fully inside Bookkeeping — no
-Admin chrome anywhere.
+Net of VAT: bills & wages line amounts are already net; invoices now use net
+(SubTotal). The Sync Invoices endpoint now captures SubTotal/TotalTax, so
+RE-RUN SYNC INVOICES after deploying so synced invoices carry the net figure
+(otherwise Sales net falls back to gross−tax=gross for older synced rows).
+
+P&L REFERENCE (grey, per your idea)
+-----------------------------------
+Under each card's figures, a light-grey "P&L (Xero): £X" line shows the P&L
+amount scoped to that category's codes (200 Sales / 320 Wages / other
+cost-of-sale codes for Bills) — as a SEPARATE cross-check, not part of "still to
+find". (It uses per-code benchmark data when available, else section totals.)
+
+PHASE 2 (next, not in this build): making that P&L figure CLICKABLE to drill into
+the P&L transactions for the category — showing each item and whether it's
+categorised and where. The hook is stubbed (no dead link shown until it's wired).
 
 FILES CHANGED
 -------------
-• components/AdminShell.js — Bookkeeping chrome for the three financial pages
+• pages/bookkeeping.js       — cards rebuilt (net Total/Categorised/Still to find)
+• pages/api/bookkeeping.js   — invoice rows now expose net (subTotal)
+• pages/api/sync-invoices.js — capture SubTotal/TotalTax from Xero
