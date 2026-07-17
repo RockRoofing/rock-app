@@ -1,40 +1,31 @@
-Bookkeeping — FIX: Direct Wages sync (lump not replaced, not categorising)
-==========================================================================
+Bookkeeping — sync-wages.js (fixed version) — SINGLE FILE re-deploy
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully
-Deploy, then re-run Sync Wages.
+Deploy this ONE file: pages/api/sync-wages.js
 
-THE PROBLEM
------------
-June wages showed as ONE uploaded lump (£10,445, ref #94282, NO CATEGORY), while
-Xero has them as 12 project-tagged journal lines (ref #96453). Syncing didn't fix
-it. The wages sync had the SAME bugs the invoice sync had before its fix:
-  1. Matched projects by tracking GUID (was failing) instead of by NAME.
-  2. Re-fetched ALL ManualJournals once PER project (26+ times) with no 429
-     handling -> hit Xero's 60/min rate limit -> silently returned nothing ->
-     the old uploaded lump was never replaced.
+WHY
+---
+Your last sync showed "Wages: undefined projects, undefined wage lines". That
+means the dashboard (bookkeeping.js) updated to the new version but this API file
+did NOT — so it returned the old field names and the new message showed
+"undefined". This is just a deploy mismatch.
 
-THE FIX (mirrors the invoice fix)
----------------------------------
-• ONE pass over ManualJournals in the window (not per-project), 429-safe.
-• Match each 320 wage line to its project by tracking OPTION NAME (e.g.
-  "J242-Winnersh") — the reliable text match, same as CSV import.
-• Group tagged lines per project; untagged -> unassigned wages bucket.
-• Replace in-window wages for ALL projects + the untagged bucket (keep older than
-  window). This REPLACES the old uploaded lump with the correctly-tagged journal
-  lines.
-Result message: "X tagged to projects, Y unassigned (of Z)".
+CONFIRM IT'S THE RIGHT FILE
+---------------------------
+The LAST line of the handler must read:
+  res.json({ ok: true, months, wageLinesFetched: all.length,
+             taggedToProjects: taggedCount, untagged: untagged.length,
+             projectsTouched: byProject.size })
+If GitHub's copy still says projectsDone / wageLinesRefreshed, it's the old file —
+replace it with this one.
 
 AFTER DEPLOYING
 ---------------
-Re-run ↻ Sync Wages. June wages should switch from the single NO-CATEGORY lump to
-the individual project-tagged lines, and Direct Wages "Categorised" should jump
-up (still-to-find drops). Any genuinely untagged wages remain in unassigned.
+Re-run ↻ Sync Wages. The message should read
+"X tagged to projects, Y unassigned (of Z)" (no "undefined"), and June wages
+should switch from the single lump to project-tagged lines.
 
-NOTE: the nightly global sync still uses the old GUID match for wages; if needed
-I'll apply the same fix there next. The button is now correct.
-
-FILES CHANGED
--------------
-• pages/api/sync-wages.js — one-pass, name-match, rate-safe, replaces lump
-• pages/bookkeeping.js     — wages sync result wording
+FILE
+----
+• pages/api/sync-wages.js — one-pass, match by tracking NAME, rate-limit safe,
+  replaces the old uploaded lump within the window.
