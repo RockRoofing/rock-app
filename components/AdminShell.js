@@ -40,7 +40,6 @@ export default function AdminShell({ active, title, children, wide, allow }) {
         <div style={{ background: '#232321', padding: '0 24px', display: 'flex', gap: 4, height: 44, alignItems: 'center', overflowX: 'auto' }}>
           {isBk ? (
             <>
-              <a href="/bookkeeping/admin" style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', color: '#bbb' }}>← All tools</a>
               {[['Account Categorisation', '/admin/account-categorisation'], ['Xero Upload', '/admin/xero-upload'], ['Data Management', '/admin/data-management']].map(([label, href]) => (
                 <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
               ))}

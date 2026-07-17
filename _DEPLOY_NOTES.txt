@@ -1,35 +1,22 @@
-Disable nightly deep-sync cron (move to manual syncing)
-=======================================================
+Bookkeeping — Upload Bills as an in-page pop-up (multi-file)
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
-
-WHY
----
-The overnight deep-sync was the only unattended process writing to every
-project's cost keys, and it's the main drift/risk. Manual syncs (transaction
-upload, wages sync, invoice sync, "Sync Xero figures") all work and are fast, so
-we're switching to manual-only.
+Build: ✓ Compiled successfully
 
 CHANGE
 ------
-vercel.json: removed the deep-sync cron entry. The endpoint /api/cron/deep-sync
-STILL EXISTS and can be triggered manually if ever needed — it's just no longer
-scheduled. The other two crons (deliveries-sync, hs-expiry-email) are unchanged.
+The "⬆ Upload Bills" button on the Bookkeeping page used to navigate away to the
+Xero Upload tool. It now opens a MODAL on the same page:
+ • Select one OR several Bills CSV exports at once (multi-file).
+ • Each file is posted to /api/import-bills-bulk (exact same logic as the Xero
+   Upload tool — per-day replace, tagged lines -> projects, untagged -> Overheads).
+ • Per-file progress + result shown in the modal.
+ • On "Done", the page's figures refresh automatically (re-fetches /api/bookkeeping)
+   so new bills/overheads appear without a manual reload.
 
-WHAT NOW UPDATES MANUALLY (all confirmed covered)
--------------------------------------------------
-• Project bills      -> manual Bills export/import (import-bills-bulk)
-• Untagged/OVERHEADS -> SAME bills import: untagged lines are routed to
-                        costs:untagged:bills automatically. Export all bills for
-                        a date range and overheads are included. (verified)
-• Wages              -> manual Sync Wages
-• Sales invoices     -> manual invoice sync/upload
-• Grey P&L figures   -> "↻ Sync Xero figures" button
-
-NOTE (Vercel Hobby/Pro cron limits)
------------------------------------
-Fewer crons is always safe. If a future vercel.json change ever stops deploys,
-suspect a cron-count/schedule limit — not relevant here since we're REMOVING one.
+No API changes — reuses the existing, working import endpoint. The full Xero
+Upload tool (wages, invoices, etc.) is still available via Bookkeeping Tools.
 
 FILE CHANGED
 ------------
-• vercel.json
+• pages/bookkeeping.js  (added BillsUploadModal + readB64; button opens it)

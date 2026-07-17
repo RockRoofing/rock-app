@@ -9,6 +9,98 @@ const td = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f2f0ec
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
 const syncBtn = (busy) => ({ background: busy ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
 
+// Read a File -> base64 (no data: prefix)
+function readB64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result).split(',')[1])
+    r.onerror = () => reject(new Error('Could not read file'))
+    r.readAsDataURL(file)
+  })
+}
+
+// In-page multi-file Bills upload modal. Posts each file to /api/import-bills-bulk
+// (same endpoint/logic as the Xero Upload tool) so you never leave the page.
+function BillsUploadModal({ onClose, onUploaded }) {
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [results, setResults] = useState([])   // [{name, status, result, error}]
+  const [anyDone, setAnyDone] = useState(false)
+
+  async function upload() {
+    if (!files.length) return
+    setUploading(true)
+    const rows = files.map(f => ({ name: f.name, status: 'pending', result: null, error: null }))
+    setResults([...rows])
+    let done = false
+    for (let i = 0; i < files.length; i++) {
+      rows[i].status = 'uploading'; setResults([...rows])
+      try {
+        const fileData = await readB64(files[i])
+        const res = await fetch('/api/import-bills-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fileData }) })
+        const data = await res.json()
+        if (res.ok && data.ok) { rows[i].status = 'done'; rows[i].result = data; done = true }
+        else { rows[i].status = 'error'; rows[i].error = data.error || 'Upload failed' }
+      } catch (e) { rows[i].status = 'error'; rows[i].error = e.message }
+      setResults([...rows])
+    }
+    setUploading(false)
+    if (done) setAnyDone(true)
+  }
+
+  function closeAndRefresh() {
+    if (anyDone && onUploaded) onUploaded()
+    onClose()
+  }
+
+  return (
+    <div onClick={closeAndRefresh} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560, boxShadow: '0 12px 40px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Upload Bills</div>
+          <button onClick={closeAndRefresh} style={{ background: 'transparent', border: 'none', fontSize: 22, lineHeight: 1, color: '#999', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ padding: 20 }}>
+          <p style={{ fontSize: 13, color: '#888', margin: '0 0 14px', lineHeight: 1.6 }}>
+            Upload the Xero <strong>Bills</strong> export (CSV). Captures materials and subcontractor labour for every project (and untagged overheads), split by the account categorisation. Bills use exact per-day replace. You can select several files.
+          </p>
+          <div onClick={() => document.getElementById('bk_bills_file')?.click()}
+            style={{ border: '2px dashed ' + (files.length ? '#bbf7d0' : '#e5e5e5'), borderRadius: 8, padding: 22, textAlign: 'center', cursor: 'pointer', background: files.length ? '#f0fdf4' : '#fafafa', marginBottom: 14 }}>
+            <input id="bk_bills_file" type="file" accept=".csv,text/csv" multiple style={{ display: 'none' }}
+              onChange={e => { setFiles(Array.from(e.target.files || [])); setResults([]); setAnyDone(false) }} />
+            <div style={{ fontSize: 13, color: files.length ? '#166534' : '#888' }}>
+              {files.length ? `${files.length} file${files.length > 1 ? 's' : ''} selected` : 'Click to select CSV file(s)'}
+            </div>
+            {files.length > 0 && <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>{files.map(f => f.name).join(', ')}</div>}
+          </div>
+          <button onClick={upload} disabled={!files.length || uploading}
+            style={{ width: '100%', background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 600, cursor: !files.length || uploading ? 'default' : 'pointer', opacity: !files.length || uploading ? 0.5 : 1 }}>
+            {uploading ? 'Uploading…' : `Upload Bills${files.length > 1 ? ` (${files.length} files)` : ''}`}
+          </button>
+
+          {results.map((row, i) => (
+            <div key={i}>
+              {row.status === 'error' && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#b91c1c' }}><strong>{row.name}:</strong> {row.error}</div>}
+              {row.status === 'done' && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#166534' }}>
+                  <strong>✓ {results.length > 1 ? row.name + ': ' : ''}Bills imported.</strong>
+                  {typeof row.result?.projectsMatched === 'number' && <> {row.result.projectsMatched} project(s) updated{typeof row.result?.untaggedLines === 'number' ? `, ${row.result.untaggedLines} overhead/untagged line(s)` : ''}.</>}
+                </div>
+              )}
+              {(row.status === 'uploading' || row.status === 'pending') && <div style={{ marginTop: 12, fontSize: 13, color: '#888' }}>{row.status === 'uploading' ? '⏳ Uploading' : '• Queued'} {row.name}…</div>}
+            </div>
+          ))}
+
+          {anyDone && (
+            <button onClick={closeAndRefresh} style={{ width: '100%', marginTop: 14, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done — refresh figures</button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 // Rows for a given tab (matches the page's tab->data mapping).
 function tabRowsFor(tab, data) {
   if (!data) return []
@@ -61,6 +153,7 @@ export default function BookkeepingPage() {
   const [syncMsg, setSyncMsg] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [canTools, setCanTools] = useState(false)   // accounts/management/admin
+  const [showBillsUpload, setShowBillsUpload] = useState(false)
   const [syncMonths, setSyncMonths] = useState(6)
 
   useEffect(() => {
@@ -158,17 +251,24 @@ export default function BookkeepingPage() {
           <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing}
             style={syncBtn(syncing === 'benchmark')}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
           {canTools && (
-            <Link href="/admin/xero-upload" style={{ background: '#0f766e', color: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            <button onClick={() => setShowBillsUpload(true)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ⬆ Upload Bills
-            </Link>
+            </button>
           )}
           {canTools && (
-            <Link href="/bookkeeping/admin" style={{ background: '#2d2d44', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            <Link href="/admin/account-categorisation" style={{ background: '#2d2d44', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
               ⚙ Bookkeeping Tools
             </Link>
           )}
         </div>
       </div>
+
+      {showBillsUpload && (
+        <BillsUploadModal
+          onClose={() => setShowBillsUpload(false)}
+          onUploaded={async () => { const fresh = await fetch('/api/bookkeeping').then(r => r.json()); setData(fresh) }}
+        />
+      )}
 
       <div style={{ maxWidth: 1240, margin: '24px auto', padding: '0 24px' }}>
         <p style={{ color: '#666', fontSize: 14, margin: '0 0 20px' }}>
