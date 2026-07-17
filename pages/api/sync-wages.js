@@ -104,18 +104,28 @@ export default async function handler(req, res) {
       try { body = await r.json() } catch {}
       const journals = body.ManualJournals || []
       const sample = journals.slice(0, 5).map(j => ({
-        id: j.ManualJournalID, date: j.DateString || j.Date, status: j.Status,
+        id: j.ManualJournalID,
+        Date_raw: j.Date, DateString_raw: j.DateString,
+        topLevelKeys: Object.keys(j),
+        status: j.Status,
         narration: (j.Narration || '').slice(0, 40),
         hasLines: Array.isArray(j.JournalLines), lineCount: (j.JournalLines || []).length,
         codes: [...new Set((j.JournalLines || []).map(l => String(l.AccountCode)))],
       }))
-      // Also fetch first journal's detail to see if lines appear by-ID
+      // Also fetch first journal's detail to see if lines + date appear by-ID
       let detailSample = null
       if (journals[0]?.ManualJournalID) {
         const rd = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${journals[0].ManualJournalID}`, { headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-Tenant-Id': tenantId2, Accept: 'application/json' } })
         if (rd.ok) {
           const jd = ((await rd.json()).ManualJournals || [])[0]
-          detailSample = { lineCount: (jd?.JournalLines || []).length, codes: [...new Set((jd?.JournalLines || []).map(l => String(l.AccountCode)))], firstLineTracking: (jd?.JournalLines || [])[0]?.Tracking || [] }
+          detailSample = {
+            Date_raw: jd?.Date, DateString_raw: jd?.DateString,
+            topLevelKeys: jd ? Object.keys(jd) : [],
+            lineCount: (jd?.JournalLines || []).length,
+            codes: [...new Set((jd?.JournalLines || []).map(l => String(l.AccountCode)))],
+            firstLineKeys: (jd?.JournalLines || [])[0] ? Object.keys((jd.JournalLines)[0]) : [],
+            firstLineTracking: (jd?.JournalLines || [])[0]?.Tracking || [],
+          }
         }
       }
       return res.json({ debug: true, listStatus: status, totalJournalsPage1: journals.length, windowFrom: winStr, sample, detailSample })

@@ -1,41 +1,22 @@
-Bookkeeping — SPEED UP wages sync (date-filtered ManualJournals)
-================================================================
+Bookkeeping — DIAGNOSTIC v2 (find where the wage date lives)
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: npm run build -> ✓ Compiled successfully
-Deploy, then re-run Sync Wages.
+Build: ✓ Compiled successfully
 
-WHY THE PREVIOUS RUN WAS SLOW / TIMED OUT
------------------------------------------
-The date-fix forced a fetch-by-ID for EVERY journal across ALL history, at ~400ms
-each -> minutes, hitting the Vercel function timeout (partial saves).
+Wages still have no date and sync is slow -> the ManualJournals list is omitting
+lines AND date for this tenant, and the by-ID date isn't landing either. Rather
+than guess the field shape, this enriches ?debug=1 to show the RAW date fields and
+object keys on both the list entry and the by-ID detail.
 
-WHY WE CAN'T USE THE FASTER /Journals ENDPOINT
-----------------------------------------------
-The /Journals endpoint needs scope accounting.transactions.read. Under Xero's NEW
-granular scopes (this app is on them), that broad scope no longer exists — the
-app's allowed list only has granular ones (banktransactions.read, manualjournals.
-read). So /Journals is not accessible. ManualJournals (accounting.manualjournals.
-read, which we now have) is the correct endpoint.
+RUN THIS (writes nothing):
+    https://app.rockroofing.co.uk/api/sync-wages?debug=1
 
-THE SPEED FIX
--------------
-Query ManualJournals with a date-filtered `where` clause:
-    Date>=DateTime(y,m,d)
-so we only pull journals in the selected window instead of paging through all
-history. Per-item fetch-by-ID now only happens for the rare journal missing
-lines/date, and only over that small window set. Tighter, rate-limit-safe sleeps.
-
-NOTE
-----
-connect.js was momentarily set to also request accounting.transactions.read then
-REVERTED (that scope can't be granted on this app). No connect.js change ships in
-this zip — scopes are already correct on your token. Only sync-wages.js changes.
-
-AFTER DEPLOYING
----------------
-Re-run Sync Wages. Should complete quickly now, wages WITH dates, filterable by
-month. Confirm June shows the individual project-tagged lines with dates.
+Paste the whole JSON back. It now shows, for the list sample and the detail:
+  - Date_raw / DateString_raw  (exact date values, or null)
+  - topLevelKeys               (every field name present)
+  - firstLineKeys              (line-level field names)
+Once I can see where the date actually is, I'll fix the parse + speed for good.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — date-filtered ManualJournals query (speed) + dates
+• pages/api/sync-wages.js — richer debug output (no behaviour change to real sync)
