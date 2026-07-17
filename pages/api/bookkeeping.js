@@ -102,7 +102,7 @@ export default async function handler(req, res) {
         invoices.push({
           date: l.date || '', month: monthOf(l.date),
           invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
-          total: l.total || 0, subTotal: (l.subTotal != null ? l.subTotal : (l.total || 0) - (l.totalTax || 0)), amountDue: l.amountDue || 0,
+          total: l.total || 0, amountDue: l.amountDue || 0,
           categorised: true, project,
         })
       }
@@ -135,7 +135,7 @@ export default async function handler(req, res) {
       invoices.push({
         date: l.date || '', month: monthOf(l.date),
         invoiceNumber: l.invoiceNumber || '', contact: l.contact || '', reference: l.reference || '',
-        total: l.total || 0, subTotal: (l.subTotal != null ? l.subTotal : (l.total || 0) - (l.totalTax || 0)), amountDue: l.amountDue || 0,
+        total: l.total || 0, amountDue: l.amountDue || 0,
         categorised: false, project: null,
       })
     }

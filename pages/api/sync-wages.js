@@ -70,8 +70,9 @@ export default async function handler(req, res) {
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
+  const isDebug = req.query?.debug === '1' || req.body?.debug === true
   const last = await redis.get('sync-wages:at').catch(() => null)
-  if (last && Date.now() - new Date(last).getTime() < 45000) {
+  if (!isDebug && last && Date.now() - new Date(last).getTime() < 45000) {
     return res.status(429).json({ error: 'Just synced — please wait a moment before syncing again.' })
   }
 
@@ -85,6 +86,33 @@ export default async function handler(req, res) {
     const months = Math.min(24, Math.max(1, parseInt(req.body?.months) || 6))
     const win = new Date(); win.setMonth(win.getMonth() - months)
     const winStr = win.toISOString().split('T')[0]
+
+    // DIAGNOSTIC: ?debug=1 returns raw facts about what Xero gives us, without
+    // writing anything — so we can see WHY the fetch is empty.
+    if (req.query?.debug === '1' || req.body?.debug === true) {
+      const tenantId2 = tokens.tenant_id
+      const r = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals?page=1&pageSize=100`, { headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-Tenant-Id': tenantId2, Accept: 'application/json' } })
+      const status = r.status
+      let body = {}
+      try { body = await r.json() } catch {}
+      const journals = body.ManualJournals || []
+      const sample = journals.slice(0, 5).map(j => ({
+        id: j.ManualJournalID, date: j.DateString || j.Date, status: j.Status,
+        narration: (j.Narration || '').slice(0, 40),
+        hasLines: Array.isArray(j.JournalLines), lineCount: (j.JournalLines || []).length,
+        codes: [...new Set((j.JournalLines || []).map(l => String(l.AccountCode)))],
+      }))
+      // Also fetch first journal's detail to see if lines appear by-ID
+      let detailSample = null
+      if (journals[0]?.ManualJournalID) {
+        const rd = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${journals[0].ManualJournalID}`, { headers: { Authorization: `Bearer ${tokens.access_token}`, 'Xero-Tenant-Id': tenantId2, Accept: 'application/json' } })
+        if (rd.ok) {
+          const jd = ((await rd.json()).ManualJournals || [])[0]
+          detailSample = { lineCount: (jd?.JournalLines || []).length, codes: [...new Set((jd?.JournalLines || []).map(l => String(l.AccountCode)))], firstLineTracking: (jd?.JournalLines || [])[0]?.Tracking || [] }
+        }
+      }
+      return res.json({ debug: true, listStatus: status, totalJournalsPage1: journals.length, windowFrom: winStr, sample, detailSample })
+    }
 
     // Map tracking-option NAME -> project id (same basis as CSV import).
     const cats = await getProjectsFromCategories(tokens.access_token, tenantId)

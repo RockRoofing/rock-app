@@ -1,36 +1,35 @@
-Bookkeeping — URGENT FIX: wages sync WIPED data + root cause (empty fetch)
-=========================================================================
+Bookkeeping — wages sync DIAGNOSTIC (find why it returns 0)
+==========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-DEPLOY THIS ASAP, then re-run Sync Wages to repopulate.
+Deploy, then hit the debug URL below and send me the output.
 
-WHAT WENT WRONG
----------------
-Sync Wages deleted your wage data. Two faults combined:
-1. ROOT CAUSE: the ManualJournals LIST endpoint returns journals WITHOUT their
-   line detail (JournalLines/Tracking) — so the fetch found no 320 lines and
-   returned EMPTY.
-2. The store loop then cleared in-window wages for every project and replaced
-   them with nothing (empty) = wiped.
+WHY
+---
+Sync Wages returns "0 of 0" — the fetch finds no wage journal lines at all. Before
+guessing further, this build adds a DEBUG mode that reports exactly what Xero
+returns, WITHOUT writing/wiping anything.
 
-THE FIXES
----------
-1. fetchAllWageLines now fetches each journal BY ID when the list omits its lines
-   (429-safe), so it actually gets the 320 tagged lines. This is why it was empty.
-2. SAFETY GUARDS so a bad/empty pull can NEVER wipe data again:
-   • If the whole fetch returns 0 lines -> abort, change nothing, report a note.
-   • A project is only overwritten if the fetch returned lines FOR THAT PROJECT;
-     otherwise its existing data is left untouched.
-   • The untagged bucket is only replaced if untagged lines were actually fetched.
+HOW TO RUN THE DIAGNOSTIC
+-------------------------
+After deploying, open this URL in your browser while logged in:
+  https://app.rockroofing.co.uk/api/sync-wages?debug=1
+(It's a POST endpoint but debug also works via GET query. If it errors on GET,
+tell me and I'll switch it.)
 
-TO RECOVER YOUR WAGES
----------------------
-1. Deploy this.
-2. Re-run ↻ Sync Wages. It should now fetch the journal lines properly and
-   repopulate ("X tagged to projects, Y unassigned (of Z)").
-3. If any period still looks short, re-upload that period's correct wages export
-   (27-col, with Projects column) as the fallback.
+It returns JSON like:
+  { listStatus, totalJournalsPage1, sample:[{date,status,lineCount,codes}],
+    detailSample:{lineCount,codes,firstLineTracking} }
+
+COPY THAT JSON AND SEND IT TO ME. It tells us:
+• whether Xero returns any manual journals at all (totalJournalsPage1)
+• whether the list includes line detail (hasLines/lineCount)
+• what account codes are on them (is 320 there?)
+• whether fetching one journal BY ID returns lines + tracking (detailSample)
+
+This pinpoints why it's empty. The debug mode writes nothing and ignores the
+45-second cooldown.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — journal-detail fetch + no-wipe safety guards
+• pages/api/sync-wages.js — adds ?debug=1 diagnostic (no data changes)
