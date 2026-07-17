@@ -20,50 +20,75 @@ async function getRedis() {
 // NAME (e.g. "J242-Winnersh") — the same reliable text match the CSV upload uses,
 // NOT by tracking-option GUID (which was returning 0).
 async function fetchAllSalesInvoices(at, tid, fromDate) {
-  const out = []            // { invoiceNumber, ..., trackingNames:[] }
+  const out = []
   let page = 1
-  // Build a Xero where-filter so the API only returns invoices dated on/after the
-  // window start. Format: Date >= DateTime(YYYY, M, D). Do NOT rely on sort order
-  // for an early-exit (Xero's ordering is unreliable) — page through everything
-  // the filter returns.
   const [wy, wm, wd] = fromDate.split('-').map(n => parseInt(n, 10))
   const where = encodeURIComponent(`Type=="ACCREC" AND Date>=DateTime(${wy},${wm},${wd})`)
   while (true) {
+    // The Invoices list endpoint returns full LineItems (incl. Tracking) per
+    // invoice — so we read tracking straight from the page. NO per-invoice
+    // re-fetch (that fired hundreds of calls and hit Xero's 60/min rate limit,
+    // silently dropping invoices). One paged call = 100 invoices with tracking.
     const url = `https://api.xero.com/api.xro/2.0/Invoices?where=${where}&page=${page}&pageSize=100`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
-    if (!res.ok) break
+    if (!res.ok) {
+      // If rate-limited on the LIST call, wait and retry the same page.
+      if (res.status === 429) { await sleep(2000); continue }
+      break
+    }
     const data = await res.json()
     const invoices = data.Invoices || []
     if (invoices.length === 0) break
-    for (const inv of invoices) {
-      const dateStr = inv.DateString?.slice(0, 10) || (inv.Date && String(inv.Date).match(/\d{4}-\d{2}-\d{2}/) ? String(inv.Date).slice(0, 10) : null)
-      if (dateStr && dateStr < fromDate) continue   // belt-and-braces
-      // The paged list often omits LineItems — re-fetch full invoice for tracking.
-      await sleep(80)
-      const r2 = await xget(`https://api.xero.com/api.xro/2.0/Invoices/${inv.InvoiceID}`, at, tid)
-      if (!r2.ok) continue
-      const full = ((await r2.json()).Invoices || [])[0]
-      if (!full) continue
-      if (full.Type !== 'ACCREC') continue        // sales invoices ONLY — never bills
+    for (const full of invoices) {
+      const dateStr = full.DateString?.slice(0, 10) || (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/) ? String(full.Date).slice(0, 10) : null)
+      if (dateStr && dateStr < fromDate) continue
+      if (full.Type !== 'ACCREC') continue
       if (full.Status === 'DELETED' || full.Status === 'VOIDED') continue
+
+      // Read tracking from the list row. If this invoice row has NO line items at
+      // all (Xero sometimes omits them on list pages), re-fetch just this one —
+      // with 429 backoff so we never silently drop it.
+      let lineItems = full.LineItems
+      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+        lineItems = await fetchInvoiceLineItems(at, tid, full.InvoiceID)
+      }
       const trackingNames = new Set()
-      for (const line of (full.LineItems || [])) {
+      for (const line of (lineItems || [])) {
         for (const t of (line.Tracking || [])) {
           if (t.Option) trackingNames.add(String(t.Option).trim().toLowerCase())
         }
       }
       out.push({
         invoiceNumber: full.InvoiceNumber || '', xeroInvoiceId: full.InvoiceID || null,
-        date: full.DateString?.slice(0, 10), dueDate: full.DueDateString?.slice(0, 10) || '',
+        date: dateStr, dueDate: full.DueDateString?.slice(0, 10) || '',
         contact: full.Contact?.Name || '', reference: full.Reference || '',
         total: full.Total || 0, amountPaid: full.AmountPaid || 0, amountDue: full.AmountDue || 0,
         status: full.Status || '', trackingNames: [...trackingNames],
       })
     }
     if (invoices.length < 100) break
-    page++; await sleep(300)
+    page++; await sleep(1200)   // ~well under 60/min on the list calls
   }
   return out
+}
+
+// Re-fetch one invoice's line items, retrying on 429 so it's never dropped.
+async function fetchInvoiceLineItems(at, tid, invoiceId) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = await fetch(`https://api.xero.com/api.xro/2.0/Invoices/${invoiceId}`, {
+      headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' }
+    })
+    if (r.status === 429) {
+      const retry = parseInt(r.headers.get('Retry-After') || '2', 10)
+      await sleep((retry + 1) * 1000)
+      continue
+    }
+    if (!r.ok) return []
+    const full = ((await r.json()).Invoices || [])[0]
+    await sleep(400)   // gentle spacing between individual fetches
+    return full?.LineItems || []
+  }
+  return []
 }
 
 // On-demand: refresh Sales Invoices for ALL projects over a window (default 6 mo).

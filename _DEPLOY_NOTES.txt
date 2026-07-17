@@ -1,29 +1,37 @@
-Bookkeeping — FIX: Sync Invoices only pulling ~2 months instead of the full window
-==================================================================================
+Bookkeeping — FIX: sync dropped 9 of 16 June invoices (Xero rate-limit)
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
 Deploy, then re-run Sync Invoices.
 
 THE BUG
 -------
-A 6-month sync only returned ~2 months. Cause: the fetch ordered invoices
-"newest-first" and STOPPED paging as soon as it hit a page with nothing in the
-window. But Xero's sort order is unreliable — so it hit a page that looked
-out-of-window and bailed early, missing older in-window invoices.
+Your Xero Sales export has 16 June invoices (£258,124.71) but the app showed only
+7 (£43,775.86). Missing incl. the big ones (Winnersh £93k, Christchurch £30k,
+Market Drayton £34k).
+
+Cause: the sync re-fetched EACH invoice individually to read tracking, ~80ms
+apart. That's ~750 calls/min — Xero's limit is 60/min. After ~60 calls Xero
+returned 429 (rate limited); the code treated a failed fetch as "skip" and
+SILENTLY DROPPED those invoices. So over half of June vanished.
 
 THE FIX
 -------
-Now uses Xero's server-side WHERE filter so the API only returns sales invoices
-dated on/after the window start:
-  where = Type=="ACCREC" AND Date>=DateTime(YYYY,M,D)
-and pages through ALL results (no fragile early-exit). So the full selected window
-comes back (6/12/24 months as chosen).
+• Read line-item TRACKING straight from the Invoices LIST response (one paged
+  call returns 100 invoices WITH their tracking) — no per-invoice re-fetch for
+  the normal case. This removes the flood of calls that caused the rate-limiting.
+• Only if a specific invoice row comes back with no line items does it re-fetch
+  that ONE invoice — and even then it honours Xero's 429 "Retry-After" with
+  backoff and retries, so an invoice is NEVER silently dropped.
+• List paging spaced to stay well under 60/min; 429 on a list page waits & retries
+  the same page.
 
-AFTER DEPLOYING
----------------
-Re-run ↻ Sync Invoices with your chosen window. It'll now pull the whole period.
-(If you want more than 6 months, pick 12 or 24 in the "Sync last" selector.)
+RESULT
+------
+After deploying, re-run Sync Invoices. June should now return all 16 invoices
+(~£258k), matching your Sales export. Header "X matched, Y unassigned (of Z)" — Z
+should jump to the full count.
 
 FILES CHANGED
 -------------
-• pages/api/sync-invoices.js — server-side date filter, removed early-exit
+• pages/api/sync-invoices.js — tracking from list; rate-limit-safe re-fetch
