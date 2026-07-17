@@ -342,10 +342,7 @@ export default function Dashboard() {
             </div>
           )}
           <div style={{ flex: 1 }} />
-          <Link href="/connect" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Xero</Link>
-          <button onClick={syncXero} disabled={syncing} style={{ background: syncing ? '#333' : '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
-            {syncing ? 'Syncing...' : 'Sync Xero'}
-          </button>
+          <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
         </div>
         ) : (
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
@@ -387,21 +384,13 @@ export default function Dashboard() {
                 <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
               </div>
 
-              <Link href="/connect" style={{ color: '#aaa', fontSize: 13, padding: '4px 10px', borderRadius: 6, border: '1px solid #333' }}>Xero</Link>
-              <button onClick={syncXero} disabled={syncing} style={{ background: syncing ? '#333' : '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
-                {syncing ? 'Syncing...' : 'Sync Xero'}
-              </button>
+              <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
             </div>
           </div>
         </div>
         )}
 
         <div style={{ padding: '24px' }}>
-
-          {/* Xero data sync — feeds Budget Tracker & EOM Report */}
-          <div style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
-          </div>
 
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 20 }}>

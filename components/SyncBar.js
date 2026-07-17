@@ -108,7 +108,7 @@ export function BillsUploadModal({ onClose, onUploaded }) {
   )
 }
 
-export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months = 6, onDone, showBench = false, canUpload = true }) {
+export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months = 6, onDone, showBench = false, canUpload = true, compact = true }) {
   const [syncing, setSyncing] = useState('')
   const [msg, setMsg] = useState('')
   const [showBills, setShowBills] = useState(false)
@@ -138,23 +138,41 @@ export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months 
 
   const label = { invoices: '↻ Sync Invoices', wages: '↻ Sync Wages', bills: '⬆ Upload Bills' }
   const whenKey = { invoices: 'invoices', wages: 'wages', bills: 'bills' }
+  // Most-recent stamp across the shown types, for the compact nav tooltip.
+  const stamps = show.map(k => `${k === 'bills' ? 'Bills' : k === 'wages' ? 'Wages' : 'Invoices'}: ${fmtWhen(status[whenKey[k]])}`).join('  ·  ')
+
+  const buttons = (
+    <>
+      {show.includes('invoices') && (
+        <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing} style={grn(GREENS.invoices, syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : label.invoices}</button>
+      )}
+      {show.includes('wages') && (
+        <button onClick={() => runSync('wages', '/api/sync-wages', 'Wages')} disabled={!!syncing} style={grn(GREENS.wages, syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : label.wages}</button>
+      )}
+      {show.includes('bills') && canUpload && (
+        <button onClick={() => setShowBills(true)} disabled={!!syncing} style={grn(GREENS.bills, false)}>{label.bills}</button>
+      )}
+      {showBench && (
+        <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing} style={{ ...grn(XERO_BLUE, syncing === 'benchmark'), background: syncing === 'benchmark' ? '#0d8fbd' : XERO_BLUE }}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
+      )}
+    </>
+  )
+
+  if (compact) {
+    // Inline row suited to a nav bar: buttons + a small visible stamp.
+    const newest = show.map(k => status[whenKey[k]]).filter(Boolean).sort().slice(-1)[0]
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={stamps}>
+        {buttons}
+        <span style={{ fontSize: 10, color: '#8a8a99', whiteSpace: 'nowrap' }}>synced {fmtWhen(newest)}</span>
+        {showBills && <BillsUploadModal onClose={() => setShowBills(false)} onUploaded={async () => { await loadStatus(); if (onDone) await onDone() }} />}
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {show.includes('invoices') && (
-          <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing} style={grn(GREENS.invoices, syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : label.invoices}</button>
-        )}
-        {show.includes('wages') && (
-          <button onClick={() => runSync('wages', '/api/sync-wages', 'Wages')} disabled={!!syncing} style={grn(GREENS.wages, syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : label.wages}</button>
-        )}
-        {show.includes('bills') && canUpload && (
-          <button onClick={() => setShowBills(true)} disabled={!!syncing} style={grn(GREENS.bills, false)}>{label.bills}</button>
-        )}
-        {showBench && (
-          <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing} style={{ ...grn(XERO_BLUE, syncing === 'benchmark'), background: syncing === 'benchmark' ? '#0d8fbd' : XERO_BLUE }}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
-        )}
-      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>{buttons}</div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 11, color: '#8a8a99' }}>
         {show.map(k => (
           <span key={k}>Last {k === 'bills' ? 'bills upload' : `${k} sync`}: <strong style={{ color: '#6b6b7b' }}>{fmtWhen(status[whenKey[k]])}</strong></span>

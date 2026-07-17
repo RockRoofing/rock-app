@@ -309,6 +309,7 @@ export default function RetentionPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
                 style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
+              <SyncBar show={['invoices']} months={6} onDone={() => loadAll()} />
               <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
                 style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 + Add Manual Entry
@@ -318,9 +319,6 @@ export default function RetentionPage() {
         </div>
 
         <div style={{ padding: 24 }}>
-          <div style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <SyncBar show={['invoices']} months={6} onDone={() => loadAll()} />
-          </div>
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[

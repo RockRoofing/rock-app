@@ -1,50 +1,47 @@
-Commercial + Bookkeeping — sync buttons on Commercial pages + "last synced" stamps
-==================================================================================
+Commercial — move sync buttons into the main nav; Xero connection -> Admin
+=========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-BACKGROUND
-----------
-Confirmed Commercial reads the SAME data as Bookkeeping (both trace to
-costs:latest/costs:lines via mergeCosts, and invoiced:latest/lines). Bookkeeping
-syncs already clear dashboard:cache, so figures flow through. This adds the sync
-controls directly onto the Commercial pages so you don't have to hop to
-Bookkeeping, plus a "last synced" stamp everywhere.
+REQUIRES the earlier "Commercial_sync_buttons_and_stamps" deploy to be in first
+(it added components/SyncBar.js, /api/sync-status, sync-bills:at). This deploy
+updates SyncBar and moves it into the navs. If deploying together, take THIS
+SyncBar.js (it's newer — adds the compact nav layout).
 
-WHAT'S ADDED
-------------
-• components/SyncBar.js  (NEW, shared) — green Sync Invoices / Sync Wages /
-  Upload Bills buttons (same styling as Bookkeeping), each page picks which to
-  show. Shows a "last synced" stamp per type. On success it force-refreshes the
-  host page's data.
-• pages/api/sync-status.js  (NEW) — returns last-synced timestamps
-  {invoices, wages, bills, benchmark}.
-• pages/api/import-bills-bulk.js — now writes sync-bills:at timestamp.
-  (sync-invoices and sync-wages already wrote their timestamps.)
+CHANGES
+-------
+Project Financials (commercial.js — Budget Tracker & EOM):
+ • The new sync buttons (Sync Invoices / Sync Wages / Upload Bills) now live in
+   the MAIN NAV, replacing the old red "Sync Xero" button.
+ • "Report app improvement" stays to their LEFT (unchanged position).
+ • The "Xero" connection link is REMOVED from this nav (moved to Admin — below).
+ • A small "synced <when>" stamp shows next to the buttons; hover shows per-type
+   detail. Syncing force-refreshes the dashboard so figures update immediately.
+ • (The old red button ran a legacy bills-costing sync via /api/xero/sync — now
+   superseded by the new Invoices/Wages/Bills flow. Its function syncXero() is
+   left in the file but unused; harmless.)
 
-WIRED IN
---------
-• commercial.js (Budget Tracker + EOM Report — same page) → all 3 buttons.
-  onDone = loadDashboard(true) → force-refresh so numbers update immediately.
-• outstanding-invoices.js → Sync Invoices only.
-• retention.js → Sync Invoices only.
-• bookkeeping.js → added the "last synced" stamp row under its existing buttons
-  (invoices / wages / bills / Xero figures).
+Admin centre (admin.js):
+ • Added a "Xero Connection" tab (-> /connect) to the admin sub-nav, so the Xero
+   connect/reauthorise link now lives in Admin.
 
-NOTES
------
-• Bills is a multi-file upload modal (same as Bookkeeping), not a one-click sync.
-• Commercial's SyncBar force-refreshes the 4h dashboard cache on success, so
-  Budget Tracker/EOM show fresh figures right after a sync.
-• Upload Bills shows for all users of these pages; if you want it gated to
-  accounts/management only on Commercial, say and I'll add a role check.
+Retention (retention.js):
+ • Sync Invoices button moved into the header, BETWEEN "Report app improvement"
+   (left) and "+ Add Manual Entry" (right).
+
+Outstanding Invoices (outstanding-invoices.js):
+ • Sync Invoices button moved into the header, to the RIGHT of "Report app
+   improvement".
+
+SyncBar (components/SyncBar.js):
+ • New compact=true (default) inline layout for nav bars: buttons + small stamp,
+   full per-type detail on hover. compact=false keeps the stacked layout with a
+   full stamp row (used where there's room).
 
 FILES
 -----
-• components/SyncBar.js (new)
-• pages/api/sync-status.js (new)
-• pages/api/import-bills-bulk.js
+• components/SyncBar.js
 • pages/commercial.js
-• pages/outstanding-invoices.js
 • pages/retention.js
-• pages/bookkeeping.js
+• pages/outstanding-invoices.js
+• pages/admin.js
