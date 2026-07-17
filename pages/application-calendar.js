@@ -280,7 +280,7 @@ export default function ApplicationCalendar() {
         {modal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             onClick={() => setModal(null)}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '100%', maxWidth: 620, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                 <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>

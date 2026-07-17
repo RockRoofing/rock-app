@@ -1,26 +1,13 @@
-Application Calendar — missing-dates popup rebuilt (fixed days + manual months)
-==============================================================================
+Application Calendar — widen the missing-dates popup
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-WHAT WAS WRONG
---------------
-Clicking a project with missing dates opened a popup with three date boxes that
-LOOKED like they set the dates but actually saved a one-off override for whatever
-month the entered date fell in — confusing and inconsistent with Project Details.
-
-NEW POPUP (mirrors Project Details)
------------------------------------
-1) FIXED MONTHLY DATES — three "day of month" fields (Application day / Valuation
-   day / Payment day), clearly labelled, with a note that they apply to every
-   month unless overridden. Saved to applicationDay / valuationDay / paymentDay.
-   Pre-filled from the project's current settings when the popup opens.
-2) "＋ Add monthly dates manually" — toggles open the SAME per-month override
-   table as Project Details (last 2 + 12 months ahead; each date box constrained
-   to its own month so the picker opens on that month). Saved to dateOverrides.
-
-Save writes both the recurring days and the manual overrides, and updates the
-calendar immediately.
+CHANGE
+------
+The Payment date column in the manual monthly-dates table was clipped at the right
+edge. Modal max width increased 480 -> 620px so all three date columns (App / Val
+/ Pay) fit comfortably. On mobile it still fits to the screen (width:100%).
 
 FILE CHANGED
 ------------
