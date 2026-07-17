@@ -163,7 +163,7 @@ export default function ProjectPage() {
     const nums = existing.map(v => v.varNumber || '').filter(Boolean).map(n => parseInt(n.replace(/[^0-9]/g, ''))).filter(n => !isNaN(n))
     const max = nums.length ? Math.max(...nums) : 0
     const nextNum = `V${String(max + 1).padStart(2, '0')}`
-    setForm({ ...form, variations: [...existing, { varNumber: nextNum, description: '', instructed: true }] })
+    setForm({ ...form, variations: [...existing, { varNumber: nextNum, description: '', instructed: false }] })
   }
 
   function updateVariation(i, field, value) {

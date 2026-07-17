@@ -1,28 +1,19 @@
-Commercial cards — Under-Target-Margin card, EOM order swap, remove Budget retention
-====================================================================================
+Project Details — new variations default to Not Instructed
+==========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGES (pages/commercial.js — top summary cards)
--------------------------------------------------
-1. NEW "Projects Under Target Margin (< X%)" card — BOTH modes, placed just before
-   "Remaining to Claim (Ex. Retention)".
-   • Adjustable threshold: type a % right in the card label (default 25). Editing
-     it doesn't trigger the card's click (won't toggle the filter).
-   • Clickable: click the card to filter the table to only projects under target;
-     click again (or the number input aside) to clear.
-   • Counts/filters by the margin relevant to the view: EOM uses the selected
-     month's valuation margin; Budget Tracker uses the live current margin. £0/
-     un-invoiced projects (no margin yet) are not counted.
+CHANGE (pages/project/[id].js)
+------------------------------
+"+ Add variation" now creates the variation as NOT instructed by default (was
+instructed). Tick it instructed once it's confirmed. Only instructed variations
+count toward AFA/budgets, so this avoids new variations inflating the final
+account before they're agreed.
 
-2. EOM Report: "Remaining to Claim (Ex. Retention)" and the "WIP" card are SWAPPED
-   — WIP now shows first, then Remaining (Ex.), then Remaining (Inc.).
-
-3. Budget Tracker: "Retention Outstanding" card REMOVED. Order is now: …Under
-   Target, Remaining (Ex.), Remaining (Inc.).
-
-Card grid now sizes to the number of cards (7 in Budget Tracker, 8 in EOM).
+(This file also carries the earlier Project Details changes — Costs-tab filters,
+last-2+12 date table, picker-opens-on-month, auto-open overrides. Latest full
+version of the file.)
 
 FILE CHANGED
 ------------
-• pages/commercial.js
+• pages/project/[id].js
