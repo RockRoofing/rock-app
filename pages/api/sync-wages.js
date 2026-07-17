@@ -15,47 +15,43 @@ async function getRedis() {
   } catch { return null }
 }
 
-// ONE pass over ManualJournals, DATE-FILTERED to the window via a `where` clause
-// so we only pull journals in range (not all history) — this is the speed fix.
-// The list usually carries Date; if a journal's lines are omitted we fetch that
-// one by ID (rare, and now over a small set). Match tracking by NAME (not GUID).
-// Rate-limit-safe (429 backoff).
+// Parse Xero's Microsoft-JSON date "/Date(1551312000000+0000)/" -> "YYYY-MM-DD".
+// (The ManualJournals list gives ONLY this format in `Date`; there is no DateString.)
+function parseXeroDate(v) {
+  if (!v) return null
+  const s = String(v)
+  const m = s.match(/\/Date\((-?\d+)/)          // /Date(1551312000000+0000)/
+  if (m) return new Date(parseInt(m[1], 10)).toISOString().slice(0, 10)
+  const iso = s.match(/\d{4}-\d{2}-\d{2}/)       // already ISO (fallback)
+  return iso ? iso[0] : null
+}
+
+// ONE pass over ManualJournals. The list ALREADY includes JournalLines and the
+// date (in /Date(ms)/ format) — confirmed via diagnostic — so NO per-item fetch
+// (that was the slowness). Filter to the window in code. For each 320 (Direct
+// Wages) project-tagged line, return it WITH the tracking option NAME (match by
+// name, not GUID). Rate-limit-safe (429 backoff).
 async function fetchAllWageLines(at, tid, fromDate) {
   const out = []
-  // Xero `where` wants Date >= DateTime(y,m,d)
-  const [fy, fm, fd] = fromDate.split('-').map(n => parseInt(n, 10))
-  const where = encodeURIComponent(`Date>=DateTime(${fy},${fm},${fd})`)
   let page = 1
   let guard = 0
   while (guard++ < 100) {
-    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?where=${where}&page=${page}&pageSize=100`
+    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?order=${encodeURIComponent('Date DESC')}&page=${page}&pageSize=100`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
     if (res.status === 429) { await sleep((parseInt(res.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
     if (!res.ok) break
     const data = await res.json()
     const journals = data.ManualJournals || []
     if (journals.length === 0) break
+    let allOlderThanWindow = journals.length > 0
     for (const j of journals) {
-      let dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
-      let jLines = j.JournalLines
-      // Only fetch by ID if this journal's lines OR date are missing (rare now that
-      // we're date-filtered to a small set).
-      if (!Array.isArray(jLines) || jLines.length === 0 || !dateStr) {
-        for (let a = 0; a < 4; a++) {
-          const r = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${j.ManualJournalID}`, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
-          if (r.status === 429) { await sleep((parseInt(r.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
-          if (!r.ok) { jLines = jLines || []; break }
-          const full = (((await r.json()).ManualJournals || [])[0] || {})
-          jLines = full.JournalLines || jLines || []
-          if (!dateStr) dateStr = (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(full.Date).slice(0, 10) : (full.DateString ? full.DateString.slice(0, 10) : null)
-          await sleep(300); break
-        }
-      }
-      if (dateStr && dateStr < fromDate) continue
-      for (const jl of (jLines || [])) {
+      const dateStr = parseXeroDate(j.Date)
+      if (dateStr && dateStr >= fromDate) allOlderThanWindow = false
+      if (dateStr && dateStr < fromDate) continue        // outside window
+      for (const jl of (j.JournalLines || [])) {
         if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
-        if (amount <= 0) continue
+        if (amount <= 0) continue                          // keep positive (debit) project lines
         const trackingNames = []
         for (const t of (jl.Tracking || [])) { if (t.Option) trackingNames.push(String(t.Option).trim().toLowerCase()) }
         out.push({
@@ -66,8 +62,10 @@ async function fetchAllWageLines(at, tid, fromDate) {
         })
       }
     }
+    // Newest-first: once an entire page is older than the window, we're done.
+    if (allOlderThanWindow) break
     if (journals.length < 100) break
-    page++; await sleep(600)
+    page++; await sleep(400)
   }
   return out
 }

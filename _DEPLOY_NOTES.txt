@@ -1,22 +1,32 @@
-Bookkeeping — DIAGNOSTIC v2 (find where the wage date lives)
-===========================================================
+Bookkeeping — FIX wages dates + speed (the real root cause)
+==========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Deploy, then re-run Sync Wages.
 
-Wages still have no date and sync is slow -> the ManualJournals list is omitting
-lines AND date for this tenant, and the by-ID date isn't landing either. Rather
-than guess the field shape, this enriches ?debug=1 to show the RAW date fields and
-object keys on both the list entry and the by-ID detail.
+WHAT THE DIAGNOSTIC REVEALED
+----------------------------
+1. The date IS in the list, but in Microsoft-JSON format: "/Date(1551312000000+0000)/".
+   Our old code checked for YYYY-MM-DD, which never matched -> date came out null.
+   => THAT is why wages had no dates.
+2. The list ALREADY includes JournalLines (hasLines:true, lineCount:6). So the
+   per-item fetch-by-ID was pointless -> THAT is why it was slow.
+3. The list returns OLDEST-first (Feb 2019 on page 1) -> paging through all history
+   made it slower still.
 
-RUN THIS (writes nothing):
-    https://app.rockroofing.co.uk/api/sync-wages?debug=1
+THE FIX
+-------
+• parseXeroDate() converts "/Date(ms)/" -> "YYYY-MM-DD"  (dates now populate)
+• Read JournalLines straight from the list — NO per-item fetch  (fast)
+• Request order=Date DESC (newest first) and STOP once a whole page is older than
+  the window  (for a 6-month sync it stops after 1-2 pages)
+• Filter to the window in code using the parsed date
 
-Paste the whole JSON back. It now shows, for the list sample and the detail:
-  - Date_raw / DateString_raw  (exact date values, or null)
-  - topLevelKeys               (every field name present)
-  - firstLineKeys              (line-level field names)
-Once I can see where the date actually is, I'll fix the parse + speed for good.
+RESULT
+------
+Sync should now be quick AND every wage line has its correct date, filterable by
+month. June should show the individual project-tagged 320 lines with dates.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — richer debug output (no behaviour change to real sync)
+• pages/api/sync-wages.js — date parse + list-lines + newest-first early exit
