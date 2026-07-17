@@ -1295,7 +1295,9 @@ function RetentionTab({ p, settings, atDate }) {
 
 function DetailsForm({ form, setForm, addVariation, updateVariation, removeVariation, afa, currentMargin, teamMembers, onAddMember, onRemoveMember }) {
   const f = (field) => (e) => setForm({ ...form, [field]: e.target.value })
-  const [showDateOverrides, setShowDateOverrides] = React.useState(false)
+  // Open the monthly override table by default if the project already has any
+  // manual dates set, so the user sees what's there.
+  const [showDateOverrides, setShowDateOverrides] = React.useState(() => Object.keys(form?.dateOverrides || {}).length > 0)
   const inputStyle = { width: '100%', padding: '7px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }
   const labelStyle = { fontSize: 11, color: '#888', marginBottom: 2, display: 'block' }
   const sectionStyle = { marginBottom: 20 }

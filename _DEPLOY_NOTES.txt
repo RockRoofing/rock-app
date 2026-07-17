@@ -1,42 +1,31 @@
-Commercial — hide projects across the commercial views (shared setting)
-=======================================================================
+Application dates — Project Details shows the completed table; EOM uses overrides
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-WHAT
-----
-A settings-icon (⚙) dropdown on Project Financials (next to the project count)
-lets any logged-in user tick/untick which projects are visible. The list is SHARED
-(stored server-side) so one user's change is seen by everyone. Default = visible;
-a newly-added project shows everywhere until someone hides it.
+PART 1 — Project Details reflects calendar-entered dates
+--------------------------------------------------------
+Dates entered via the Application Calendar (fixed days AND manual monthly
+overrides) already persist to the same project settings, so they show in Project
+Details. Change: the monthly override table now OPENS BY DEFAULT (pre-filled with
+the existing dates) whenever the project already has any manual dates — so the
+user immediately sees what the dates are based on, rather than a collapsed/blank
+table.
+  [pages/project/[id].js — showDateOverrides defaults open when dateOverrides exist]
 
-Hiding a project removes it from:
-  • Project Financials (Budget Tracker + EOM)
-  • Retention
-  • Application Calendar
-  • Commercial Scorecard (metrics recomputed without hidden projects)
+PART 2 — EOM report date resolution (bug fix)
+---------------------------------------------
+The EOM report resolved each project's valuation date from the FIXED valuation
+day only, and returned nothing if no fixed day was set — so projects with only a
+MANUAL monthly date dropped out of EOM, and a manual override never took
+precedence over the fixed day.
+Fix (pages/commercial.js — calcAtValDate): same precedence as the calendar —
+  1) manual per-month override (dateOverrides[month].valuationDate) wins;
+  2) else the fixed valuationDay (clamped to month length);
+  3) if neither, no valuation date for that month.
+So EOM now works whether dates are fixed-per-month OR entered manually per month.
 
-Use it to hide non-project categories that aren't relevant (Internal, Stock Metal,
-Overheads, etc.).
-
-HOW IT WORKS
-------------
-• pages/api/hidden-projects.js (NEW) — GET/POST a shared array of hidden project
-  ids at config:hidden-projects.
-• components/HideProjectsDropdown.js (NEW) — the ⚙ dropdown: search, tick/untick,
-  Show all / Hide all, Save. Ticked = visible.
-• commercial.js — icon added by the project count; baseFiltered excludes hidden.
-• retention.js — excludes hidden from the list, picker and merged entries.
-• application-calendar.js — excludes hidden in-progress projects.
-• commercial-metrics.js — scorecard metrics exclude hidden projects.
-
-The edit UI lives only on Project Financials; the other pages just honour the list.
-
-FILES
------
-• pages/api/hidden-projects.js (new)
-• components/HideProjectsDropdown.js (new)
+FILES CHANGED
+-------------
 • pages/commercial.js
-• pages/retention.js
-• pages/application-calendar.js
-• pages/api/commercial-metrics.js
+• pages/project/[id].js

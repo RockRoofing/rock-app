@@ -23,11 +23,22 @@ const GROUP = {
 function calcAtValDate(project, monthKey) {
   const costLines = project._costLines || []
   const invoiceLines = project._invoiceLines || []
-  const valuationDay = project.valuationDay
-  if (!valuationDay || !monthKey) return null
+  if (!monthKey) return null
   const [year, month] = monthKey.split('-').map(Number)
-  const valDate = new Date(Date.UTC(year, month - 1, parseInt(valuationDay)))
-  const vDateStr = valDate.toISOString().split('T')[0]
+
+  // Resolve the valuation date for this month with the SAME precedence as the
+  // Application Calendar: a manual per-month override wins; otherwise the fixed
+  // valuation day-of-month. If neither is set, there's no valuation date.
+  const override = project.dateOverrides?.[monthKey]?.valuationDate
+  let vDateStr = null
+  if (override) {
+    vDateStr = override
+  } else if (project.valuationDay) {
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const day = Math.min(parseInt(project.valuationDay), daysInMonth)
+    vDateStr = new Date(Date.UTC(year, month - 1, day)).toISOString().split('T')[0]
+  }
+  if (!vDateStr) return null
 
   const costsToDate = costLines.filter(l => l.date && l.date <= vDateStr).reduce((s, l) => s + (l.amount || 0), 0)
   const labourToDate = costLines.filter(l => l.date && l.date <= vDateStr && ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
