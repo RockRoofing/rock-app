@@ -118,34 +118,47 @@ async function fetchUntaggedBills(accessToken, tenantId, fromDate) {
 }
 
 
-async function fetchWages(accessToken, tenantId, trackingOptionId, fromDate) {
+// Parse Xero's Microsoft-JSON date "/Date(1551312000000+0000)/" -> "YYYY-MM-DD".
+// The ManualJournals list gives ONLY this format in `Date` (no DateString).
+function parseXeroJournalDate(v) {
+  if (!v) return null
+  const s = String(v)
+  const m = s.match(/\/Date\((-?\d+)/)
+  if (m) return new Date(parseInt(m[1], 10)).toISOString().slice(0, 10)
+  const iso = s.match(/\d{4}-\d{2}-\d{2}/)
+  return iso ? iso[0] : null
+}
+
+// Nightly wages for ONE project. Mirrors the fixed manual sync-wages:
+//  • date parsed from /Date(ms)/  (was null before)
+//  • JournalLines read straight from the LIST  (no per-item fetch)
+//  • tracking matched by NAME, not GUID  (GUID silently returned 0 before)
+//  • order=Date DESC + early-exit once past the window  (fast)
+async function fetchWages(accessToken, tenantId, projectName, fromDate) {
   const lines = []
+  const wantName = String(projectName || '').trim().toLowerCase()
+  if (!wantName) return lines
   let page = 1
-  // Only pull journals modified in the overlap window (keeps paging light).
-  const modifiedSince = new Date(fromDate + 'T00:00:00Z').toUTCString()
-  while (true) {
-    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?page=${page}&pageSize=100`
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`, 'Xero-Tenant-Id': tenantId, Accept: 'application/json',
-        'If-Modified-Since': modifiedSince,
-      }
-    })
+  let guard = 0
+  while (guard++ < 100) {
+    const url = `https://api.xero.com/api.xro/2.0/ManualJournals?order=${encodeURIComponent('Date DESC')}&page=${page}&pageSize=100`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}`, 'Xero-Tenant-Id': tenantId, Accept: 'application/json' } })
+    if (res.status === 429) { await sleep((parseInt(res.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
     if (!res.ok) break
     const data = await res.json()
     const journals = data.ManualJournals || []
     if (journals.length === 0) break
+    let allOlder = journals.length > 0
     for (const j of journals) {
-      const dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10)
-        : (j.DateString ? j.DateString.slice(0, 10) : null)
+      const dateStr = parseXeroJournalDate(j.Date)
+      if (dateStr && dateStr >= fromDate) allOlder = false
       if (dateStr && dateStr < fromDate) continue
       for (const jl of (j.JournalLines || [])) {
-        if (jl.AccountCode !== '320') continue
-        const tagged = (jl.Tracking || []).some(t => t.TrackingOptionID === trackingOptionId)
-        if (!tagged) continue                 // only project-tagged wage lines
-        // In tracking-transfer journals the project line is a debit (positive).
+        if (String(jl.AccountCode) !== '320') continue
+        const tagged = (jl.Tracking || []).some(t => t.Option && String(t.Option).trim().toLowerCase() === wantName)
+        if (!tagged) continue                 // only lines tracked to THIS project (by name)
         const amount = (jl.LineAmount || 0)
-        if (amount <= 0) continue             // skip the contra/credit side
+        if (amount <= 0) continue             // debit (project cost) side only
         lines.push({
           date: dateStr,
           supplier: 'Direct Wages',
@@ -158,8 +171,9 @@ async function fetchWages(accessToken, tenantId, trackingOptionId, fromDate) {
         })
       }
     }
+    if (allOlder) break                        // newest-first: whole page older than window -> done
     if (journals.length < 100) break
-    page++; await sleep(300)
+    page++; await sleep(400)
   }
   return lines
 }
@@ -249,7 +263,7 @@ export default async function handler(req, res) {
     await redis.set(`costs:bills:${projectId}`, { labourSpend: billLabour, materialsSpend: billMaterials, totalCosts: billLabour + billMaterials, lines: billsMerge.merged, calculatedAt: new Date().toISOString(), source: 'deep_sync' })
 
     // ── 2. Direct Wages ──
-    const wageLines = await fetchWages(tokens.access_token, tenantId, projectId, fromDateStr)
+    const wageLines = await fetchWages(tokens.access_token, tenantId, cp.name, fromDateStr)
     let existingWages = (await redis.get(`costs:wages:${projectId}`).catch(() => null))?.lines || []
     const wagesMerge = mergeWindow(existingWages, wageLines, fromDateStr, costKey)
     const wageTotal = wagesMerge.merged.reduce((s, l) => s + l.amount, 0)
@@ -348,8 +362,11 @@ export default async function handler(req, res) {
           } catch (e) { console.error('global sales failed', p.jobNo, e.message) }
           // Wages
           try {
-            const wLines = await fetchWages(tokens.access_token, tenantId, pid, winStr)
+            const wLines = await fetchWages(tokens.access_token, tenantId, p.name, winStr)
             const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
+            // NO-WIPE GUARD: if the fetch returned nothing, leave existing wages
+            // untouched rather than dropping in-window lines.
+            if (wLines.length === 0) { await sleep(120); continue }
             const outside = existing.filter(l => !l.date || l.date < winStr)
             const combined = [...outside, ...wLines]
             const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)

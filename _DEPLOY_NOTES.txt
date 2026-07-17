@@ -1,32 +1,51 @@
-Bookkeeping — FIX wages dates + speed (the real root cause)
-==========================================================
+Bookkeeping — FIX overnight (deep-sync) wages to match the fixed manual sync
+============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy, then re-run Sync Wages.
 
-WHAT THE DIAGNOSTIC REVEALED
-----------------------------
-1. The date IS in the list, but in Microsoft-JSON format: "/Date(1551312000000+0000)/".
-   Our old code checked for YYYY-MM-DD, which never matched -> date came out null.
-   => THAT is why wages had no dates.
-2. The list ALREADY includes JournalLines (hasLines:true, lineCount:6). So the
-   per-item fetch-by-ID was pointless -> THAT is why it was slow.
-3. The list returns OLDEST-first (Feb 2019 on page 1) -> paging through all history
-   made it slower still.
-
-THE FIX
+CONTEXT
 -------
-• parseXeroDate() converts "/Date(ms)/" -> "YYYY-MM-DD"  (dates now populate)
-• Read JournalLines straight from the list — NO per-item fetch  (fast)
-• Request order=Date DESC (newest first) and STOP once a whole page is older than
-  the window  (for a 6-month sync it stops after 1-2 pages)
-• Filter to the window in code using the parsed date
+The nightly deep-sync ran the OLD wage fetcher, which had the same two bugs we
+fixed in the manual sync today:
+  1. Date read with a YYYY-MM-DD regex -> never matched Xero's "/Date(ms)/" format
+     -> new wage lines imported with NULL dates (unfilterable by month).
+  2. Tracking matched by GUID (TrackingOptionID) -> silently returned 0, so the
+     nightly job imported NO new wages for most projects.
 
-RESULT
-------
-Sync should now be quick AND every wage line has its correct date, filterable by
-month. June should show the individual project-tagged 320 lines with dates.
+WIPE-RISK CHECK (as requested)
+------------------------------
+• Main nightly run uses mergeWindow() which is ADDITIVE (keeps old + recent +
+  new, dedup by xeroLineId) — it will NOT wipe tonight's correctly-dated wages.
+• The separate GLOBAL daily block replaced in-window lines with freshly fetched
+  ones — which WOULD drop data if a fetch came back empty. Added a NO-WIPE GUARD:
+  if the wage fetch returns nothing, existing wages are left untouched.
+
+FIXES IN THIS FILE
+------------------
+• fetchWages() rewritten to mirror the fixed manual sync:
+    - parseXeroJournalDate() converts "/Date(ms)/" -> YYYY-MM-DD  (dates populate)
+    - JournalLines read straight from the LIST (no per-item fetch) — fast
+    - tracking matched by NAME (not GUID) — actually finds the lines
+    - order=Date DESC + early-exit once past the window — fast
+• Both callers now pass the project NAME (cp.name / p.name) instead of the GUID.
+• NO-WIPE GUARD added to the global-sync wages block.
+• Deleted dead, never-called fetchAllWageLinesGlobal / fetchAllSalesInvoicesGlobal
+  (one still had the old date bug) — clutter/risk removed.
+
+NOT CHANGED (confirmed already correct)
+---------------------------------------
+• Bills (fetchBills): already per-line, per-category, per-project — a single
+  invoice with multiple line items across multiple categories/projects is split
+  correctly. No change needed.
+• Sales (fetchSalesInvoices): uses invoice DateString (invoices DO carry it), and
+  mergeWindow is additive. Left as-is this round.
+
+AFTER DEPLOYING
+---------------
+Nothing to do — the nightly cron will now import wages correctly (dated,
+name-matched) and can't wipe good data. You can also trigger deep-sync manually
+to verify if you like.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — date parse + list-lines + newest-first early exit
+• pages/api/cron/deep-sync.js
