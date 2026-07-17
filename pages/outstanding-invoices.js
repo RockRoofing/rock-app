@@ -173,7 +173,7 @@ export default function OutstandingInvoicesPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
                 style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
-              <SyncBar show={['invoices']} months={6} onDone={() => loadAll()} />
+              <SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />
             </div>
           </div>
         </div>

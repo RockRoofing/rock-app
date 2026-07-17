@@ -342,7 +342,7 @@ export default function Dashboard() {
             </div>
           )}
           <div style={{ flex: 1 }} />
-          <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
+          <SyncBar show={['invoices', 'wages', 'bills']} months={12} onDone={() => loadDashboard(true)} />
         </div>
         ) : (
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
@@ -384,7 +384,7 @@ export default function Dashboard() {
                 <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
               </div>
 
-              <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
+              <SyncBar show={['invoices', 'wages', 'bills']} months={12} onDone={() => loadDashboard(true)} />
             </div>
           </div>
         </div>

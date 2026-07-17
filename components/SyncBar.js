@@ -108,11 +108,12 @@ export function BillsUploadModal({ onClose, onUploaded }) {
   )
 }
 
-export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months = 6, onDone, showBench = false, canUpload = true, compact = true }) {
+export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months: defaultMonths = 12, onDone, showBench = false, canUpload = true, compact = true, showPeriod = true }) {
   const [syncing, setSyncing] = useState('')
   const [msg, setMsg] = useState('')
   const [showBills, setShowBills] = useState(false)
   const [status, setStatus] = useState({})
+  const [months, setMonths] = useState(defaultMonths)
 
   async function loadStatus() {
     try { setStatus(await fetch('/api/sync-status').then(r => r.json())) } catch {}
@@ -143,6 +144,15 @@ export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months 
 
   const buttons = (
     <>
+      {showPeriod && (show.includes('invoices') || show.includes('wages')) && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#8a8a99', whiteSpace: 'nowrap' }}>Sync last</span>
+          <select value={months} onChange={e => setMonths(parseInt(e.target.value))} disabled={!!syncing}
+            style={{ background: '#2d2d44', color: '#fff', border: '1px solid #444', borderRadius: 6, padding: '5px 6px', fontSize: 12, cursor: syncing ? 'default' : 'pointer' }}>
+            {[3, 6, 12, 18, 24].map(m => <option key={m} value={m}>{m} mo</option>)}
+          </select>
+        </span>
+      )}
       {show.includes('invoices') && (
         <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing} style={grn(GREENS.invoices, syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : label.invoices}</button>
       )}
