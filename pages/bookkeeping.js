@@ -307,7 +307,7 @@ function CodeMultiSelect({ options, selected, onChange }) {
   )
 }
 
-function ReconPanel({ data, month, tab, onPickMonth }) {
+function ReconPanel({ data, month, tab, onPickMonth, onPickPL }) {
   const fmtL = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
   const showGraph = tab !== 'ignored'   // no graph on Overheads
 

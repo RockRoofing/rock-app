@@ -1,36 +1,23 @@
-Bookkeeping — cards rebuilt: Total − Categorised = Still to find (net of VAT)
-============================================================================
+Bookkeeping — FIX client-side crash (onPickPL is not defined)
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. After deploying, re-run Sync Invoices so invoices carry net.
+Deploy over the top. Single file.
 
-WHAT CHANGED (the card design you asked for)
---------------------------------------------
-Each card now reconciles WITHIN its own source, net of VAT:
-  • Total       = everything in that source (bills / wages / invoices)
-  • Categorised = the part tagged to a project
-  • Still to find = Total − Categorised  (reaches ZERO when all tagged)
-No more comparing to the P&L for the main figure (which could never balance
-because of WIP journals / VAT / date basis).
+THE BUG
+-------
+The rebuilt cards referenced `onPickPL` (the future P&L drill-down handler) in the
+JSX, but it wasn't declared as a ReconPanel parameter. Referencing an undeclared
+VARIABLE throws a ReferenceError (unlike an undefined object property), which
+crashed the whole Bookkeeping page: "onPickPL is not defined".
 
-Net of VAT: bills & wages line amounts are already net; invoices now use net
-(SubTotal). The Sync Invoices endpoint now captures SubTotal/TotalTax, so
-RE-RUN SYNC INVOICES after deploying so synced invoices carry the net figure
-(otherwise Sales net falls back to gross−tax=gross for older synced rows).
+THE FIX
+-------
+Added onPickPL to the ReconPanel parameter list. It's still not passed by the
+caller (drill-down is Phase 2), so it's simply undefined — the `onPickPL && ...`
+guards now evaluate safely and the grey "P&L (Xero): £X" line shows WITHOUT the
+"investigate" link, exactly as intended for this phase.
 
-P&L REFERENCE (grey, per your idea)
------------------------------------
-Under each card's figures, a light-grey "P&L (Xero): £X" line shows the P&L
-amount scoped to that category's codes (200 Sales / 320 Wages / other
-cost-of-sale codes for Bills) — as a SEPARATE cross-check, not part of "still to
-find". (It uses per-code benchmark data when available, else section totals.)
-
-PHASE 2 (next, not in this build): making that P&L figure CLICKABLE to drill into
-the P&L transactions for the category — showing each item and whether it's
-categorised and where. The hook is stubbed (no dead link shown until it's wired).
-
-FILES CHANGED
--------------
-• pages/bookkeeping.js       — cards rebuilt (net Total/Categorised/Still to find)
-• pages/api/bookkeeping.js   — invoice rows now expose net (subTotal)
-• pages/api/sync-invoices.js — capture SubTotal/TotalTax from Xero
+FILE CHANGED
+------------
+• pages/bookkeeping.js — ReconPanel now declares onPickPL param
