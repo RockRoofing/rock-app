@@ -1,31 +1,29 @@
-Application dates — Project Details shows the completed table; EOM uses overrides
-================================================================================
+EOM Report — keep visibility of margin for Defects/Closed projects
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-PART 1 — Project Details reflects calendar-entered dates
---------------------------------------------------------
-Dates entered via the Application Calendar (fixed days AND manual monthly
-overrides) already persist to the same project settings, so they show in Project
-Details. Change: the monthly override table now OPENS BY DEFAULT (pre-filled with
-the existing dates) whenever the project already has any manual dates — so the
-user immediately sees what the dates are based on, rather than a collapsed/blank
-table.
-  [pages/project/[id].js — showDateOverrides defaults open when dateOverrides exist]
+THE PROBLEM
+-----------
+EOM figures are calculated "as at the valuation date of the selected month". A
+Defects/Closed project's works are finished, so the current month has no
+application/valuation date -> calcAtValDate returned null -> the project showed
+blank and you lost sight of the final margin.
 
-PART 2 — EOM report date resolution (bug fix)
----------------------------------------------
-The EOM report resolved each project's valuation date from the FIXED valuation
-day only, and returned nothing if no fixed day was set — so projects with only a
-MANUAL monthly date dropped out of EOM, and a manual override never took
-precedence over the fixed day.
-Fix (pages/commercial.js — calcAtValDate): same precedence as the calendar —
-  1) manual per-month override (dateOverrides[month].valuationDate) wins;
-  2) else the fixed valuationDay (clamped to month length);
-  3) if neither, no valuation date for that month.
-So EOM now works whether dates are fixed-per-month OR entered manually per month.
+THE FIX (as agreed)
+-------------------
+In calcAtValDate:
+ • DEFECTS / CLOSED projects: if there's no valuation date for the selected month,
+   show ALL-TO-DATE figures (no date cutoff). This preserves the final margin and
+   captures any later return-visit/defect costs. Their date cell reads "To date",
+   and WIP is 0 (nothing is "after" the cutoff).
+ • IN PROGRESS projects: unchanged — still strict. No valuation date for the month
+   => the project is omitted, which correctly FLAGS that a valuation date hasn't
+   been set.
 
-FILES CHANGED
--------------
+So finished projects always show their latest position; live projects still flag
+missing valuation dates.
+
+FILE CHANGED
+------------
 • pages/commercial.js
-• pages/project/[id].js

@@ -19,16 +19,22 @@ const GROUP = {
   none:      { bg: '#ffffff', border: '#eeeeee' },
 }
 
-// Calculate figures for a project at its valuation date for a given month
+// Calculate figures for a project at its valuation date for a given month.
+// For DEFECTS/CLOSED projects (works complete) there's usually no valuation date
+// in the current month, so we show ALL-TO-DATE figures instead — this preserves
+// the final margin and captures any later return-visit costs. IN PROGRESS
+// projects stay strict: no valuation date for the month => null (flags the gap).
 function calcAtValDate(project, monthKey) {
   const costLines = project._costLines || []
   const invoiceLines = project._invoiceLines || []
   if (!monthKey) return null
   const [year, month] = monthKey.split('-').map(Number)
 
+  const isComplete = project.status === 'DEFECTS' || project.status === 'CLOSED'
+
   // Resolve the valuation date for this month with the SAME precedence as the
   // Application Calendar: a manual per-month override wins; otherwise the fixed
-  // valuation day-of-month. If neither is set, there's no valuation date.
+  // valuation day-of-month.
   const override = project.dateOverrides?.[monthKey]?.valuationDate
   let vDateStr = null
   if (override) {
@@ -38,12 +44,16 @@ function calcAtValDate(project, monthKey) {
     const day = Math.min(parseInt(project.valuationDay), daysInMonth)
     vDateStr = new Date(Date.UTC(year, month - 1, day)).toISOString().split('T')[0]
   }
-  if (!vDateStr) return null
+  // In progress + no valuation date this month => flag as a gap (null).
+  // Defects/Closed => fall through with vDateStr = null meaning "all to date".
+  if (!vDateStr && !isComplete) return null
 
-  const costsToDate = costLines.filter(l => l.date && l.date <= vDateStr).reduce((s, l) => s + (l.amount || 0), 0)
-  const labourToDate = costLines.filter(l => l.date && l.date <= vDateStr && ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
+  // When vDateStr is null (completed project), include everything to date.
+  const withinDate = (d) => !vDateStr || (d && d <= vDateStr)
+  const costsToDate = costLines.filter(l => withinDate(l.date) && l.date).reduce((s, l) => s + (l.amount || 0), 0)
+  const labourToDate = costLines.filter(l => l.date && withinDate(l.date) && ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
   const materialsToDate = costsToDate - labourToDate
-  const invoicedToDate = invoiceLines.filter(i => i.date && i.date <= vDateStr).reduce((s, i) => s + (i.total || 0), 0)
+  const invoicedToDate = invoiceLines.filter(i => i.date && withinDate(i.date)).reduce((s, i) => s + (i.total || 0), 0)
 
   const retPct = parseFloat(project.retentionPct || 0)
   const retention = retPct > 0 ? invoicedToDate * retPct / (1 - retPct) : 0
@@ -51,7 +61,8 @@ function calcAtValDate(project, monthKey) {
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
   const remainingToClaim = project.afa - invoicedToDate
 
-  const costsAfterDate = costLines.filter(l => l.date && l.date > vDateStr).reduce((s, l) => s + (l.amount || 0), 0)
+  // No cutoff (completed project) => nothing is "after" the date, so WIP is 0.
+  const costsAfterDate = vDateStr ? costLines.filter(l => l.date && l.date > vDateStr).reduce((s, l) => s + (l.amount || 0), 0) : 0
   const effectiveMargin = project.wipMarginOverride ? parseFloat(project.wipMarginOverride) / 100 : margin
   const wip = effectiveMargin != null && effectiveMargin < 1 && costsAfterDate > 0
     ? costsAfterDate / (1 - effectiveMargin) : 0
@@ -63,7 +74,8 @@ function calcAtValDate(project, monthKey) {
     invoicedToDate, grossInvoiced, retention,
     margin, remainingToClaim, wip, effectiveMargin,
     profit, profitPct: grossInvoiced > 0 ? profit / grossInvoiced : null,
-    vDateStr
+    vDateStr,
+    vDateLabel: vDateStr || 'To date',   // completed projects show all-to-date
   }
 }
 
@@ -843,7 +855,7 @@ export default function Dashboard() {
                           </td>
                           {isColVisible('cm') && <td style={{ padding: '7px 8px', fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>{p.contractsManager || '—'}</td>}
                           {isColVisible('estimator') && <td style={{ padding: '7px 8px', fontSize: 11, color: '#555', whiteSpace: 'nowrap' }}>{p.estimator || '—'}</td>}
-                          <td style={{ padding: '7px 8px', fontSize: 10, color: '#888', whiteSpace: 'nowrap' }}>{e?.vDateStr || (p.valuationDay ? `${p.valuationDay}th` : '—')}</td>
+                          <td style={{ padding: '7px 8px', fontSize: 10, color: '#888', whiteSpace: 'nowrap' }}>{e?.vDateLabel || e?.vDateStr || (p.valuationDay ? `${p.valuationDay}th` : '—')}</td>
                           {visibleEomCols.filter(c => c.group !== 'none').map(col => {
                             const g = groupColors[col.group]
                             const bgC = bg ? g.bg : col.group === 'contract' ? '#eef0fc' : col.group === 'labour' ? '#e8faf0' : col.group === 'materials' ? '#fff3e8' : col.group === 'budget' ? '#ede8fc' : col.group === 'profit' ? '#faedf6' : '#fef9c3'
