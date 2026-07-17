@@ -1347,9 +1347,16 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                   return (
                     <tr key={key} style={{ borderBottom: '0.5px solid #f0f0f0' }}>
                       <td style={{ padding: '6px 10px', fontWeight: 500, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{label}</td>
-                      {['applicationDate', 'valuationDate', 'paymentDate'].map(field => (
+                      {['applicationDate', 'valuationDate', 'paymentDate'].map(field => {
+                        // Constrain each row's picker to its own month so the native
+                        // date picker OPENS on that month (e.g. a November row opens
+                        // November) and only that month's dates can be entered.
+                        const [ky, km] = key.split('-').map(n => parseInt(n, 10))
+                        const monthMin = `${key}-01`
+                        const monthMax = `${key}-${String(new Date(ky, km, 0).getDate()).padStart(2, '0')}`
+                        return (
                         <td key={field} style={{ padding: '4px 8px' }}>
-                          <input type="date" value={row[field] || ''}
+                          <input type="date" value={row[field] || ''} min={monthMin} max={monthMax}
                             onChange={e => {
                               const newOverrides = { ...overrides, [key]: { ...row, [field]: e.target.value || undefined } }
                               // Clean up empty rows
@@ -1358,7 +1365,8 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                             }}
                             style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #e5e5e5', borderRadius: 4, fontFamily: 'inherit', width: '100%' }} />
                         </td>
-                      ))}
+                        )
+                      })}
                     </tr>
                   )
                 })}

@@ -1,16 +1,18 @@
-Project Details — monthly application-date overrides now include the last 2 months
-==================================================================================
+Project Details — date-override picker opens on the row's own month
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
 CHANGE (pages/project/[id].js)
 ------------------------------
-The "monthly date overrides" table (where you enter/adjust Application, Valuation
-and Payment dates per month) started at the CURRENT month and ran 12 months ahead,
-so you couldn't set dates for a month that had just passed.
+In the monthly application/valuation/payment date-override table, each date box is
+now constrained to its own month via min/max (first & last day of that row's
+month). So the native date picker OPENS on the correct month — e.g. clicking a
+November box opens November, not today's month — and only that month's dates can
+be entered.
 
-It now starts 2 months EARLIER and still runs 12 months ahead — i.e. current−2
-through current+11 (14 rows). Label updated to "last 2 + 12 months ahead".
+Includes the earlier changes to this file (Costs-tab filters, and the table
+showing the last 2 + 12 months ahead). This is the latest full version of the file.
 
 FILE CHANGED
 ------------
