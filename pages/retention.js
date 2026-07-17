@@ -98,6 +98,7 @@ function statusBadge(entry) {
 export default function RetentionPage() {
   const [entries, setEntries] = useState([])
   const [xeroEntries, setXeroEntries] = useState([])
+  const [hiddenIds, setHiddenIds] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_ENTRY)
@@ -129,9 +130,15 @@ export default function RetentionPage() {
       // Load Xero projects with retention
       const r2 = await fetch('/api/dashboard')
       const d2 = await r2.json()
+      // Shared hidden-projects list (set on Project Financials) — applied here too.
+      let hiddenIds = []
+      try { hiddenIds = (await fetch('/api/hidden-projects').then(r => r.json())).hidden || [] } catch {}
+      setHiddenIds(hiddenIds)
+      const hiddenSet = new Set(hiddenIds.map(String))
+      const visibleProjects = (d2.projects || []).filter(p => !hiddenSet.has(String(p.xeroId)))
       // Full project list for the "add existing project" picker (all projects,
       // regardless of retention filter, so you can add one before it's invoiced).
-      setAllProjects((d2.projects || []).map(p => ({
+      setAllProjects(visibleProjects.map(p => ({
         xeroId: p.xeroId,
         ourRef: p.jobNo || '',
         customerName: p.customer || '',
@@ -146,7 +153,7 @@ export default function RetentionPage() {
       // (a retention % set), plus any that already have retention outstanding or
       // invoicing under way. This mirrors the project details / EOM data rather
       // than waiting for a project to be invoiced.
-      const withRetention = (d2.projects || [])
+      const withRetention = visibleProjects
         .filter(p => (parseFloat(p.retentionPct || 0) > 0) || p.retentionOutstanding > 0 || p.grossInvoiced > 0)
         .map(p => ({
           id: p.xeroId,
@@ -251,10 +258,11 @@ export default function RetentionPage() {
     return e
   })
   const manualIds = new Set(entries.map(e => e.xeroId).filter(Boolean))
+  const hiddenEntrySet = new Set(hiddenIds.map(String))
   const allEntries = [
     ...xeroEntries.filter(x => !manualIds.has(x.xeroId) && !entries.find(e => e.id === x.xeroId)),
     ...mergedEntries
-  ].filter(e => {
+  ].filter(e => !(e.xeroId && hiddenEntrySet.has(String(e.xeroId)))).filter(e => {
     // Outstanding = retention not yet fully settled (Total Remaining ≠ £0).
     // All = every project that has/had retention.
     if (filter === 'outstanding') return !isClosed(e)

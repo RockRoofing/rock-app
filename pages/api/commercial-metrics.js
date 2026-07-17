@@ -31,9 +31,11 @@ export default async function handler(req, res) {
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
   try {
-    // Get all live projects from dashboard cache
+    // Get all live projects from dashboard cache, excluding the shared hidden list.
     const cached = await redis.get('dashboard:cache')
-    const projects = (cached || []).filter(p => p.status === 'INPROGRESS')
+    const hiddenIds = (await redis.get('config:hidden-projects').catch(() => null)) || []
+    const hiddenSet = new Set(hiddenIds.map(String))
+    const projects = (cached || []).filter(p => p.status === 'INPROGRESS' && !hiddenSet.has(String(p.xeroId)))
 
     // Collect all invoice lines across all projects
     const allInvoiceLines = []

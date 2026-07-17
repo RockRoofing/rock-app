@@ -142,7 +142,10 @@ export default function ApplicationCalendar() {
     try {
       const res = await fetch('/api/dashboard')
       const data = await res.json()
-      setProjects((data.projects || []).filter(p => p.status === 'INPROGRESS'))
+      let hiddenIds = []
+      try { hiddenIds = (await fetch('/api/hidden-projects').then(r => r.json())).hidden || [] } catch {}
+      const hiddenSet = new Set(hiddenIds.map(String))
+      setProjects((data.projects || []).filter(p => p.status === 'INPROGRESS' && !hiddenSet.has(String(p.xeroId))))
     } catch (e) { console.error(e) }
     setLoading(false)
   }

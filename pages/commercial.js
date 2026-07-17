@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import SyncBar from '../components/SyncBar'
+import HideProjectsDropdown from '../components/HideProjectsDropdown'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
@@ -63,6 +64,7 @@ export default function Dashboard() {
   const [cardFilter, setCardFilter] = useState(null)
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('jobNo')
+  const [hiddenProjects, setHiddenProjects] = useState([])
   const [eomMode, setEomMode] = useState(false)
   const [editingComment, setEditingComment] = useState(null)
   const [commentText, setCommentText] = useState('')
@@ -127,6 +129,7 @@ export default function Dashboard() {
       const res = await fetch(forceSync ? '/api/dashboard?sync=true' : '/api/dashboard')
       const data = await res.json()
       setProjects(data.projects || [])
+      try { const h = await fetch('/api/hidden-projects').then(r => r.json()); setHiddenProjects(h.hidden || []) } catch {}
     } catch (e) { console.error(e) }
     setLoading(false)
   }
@@ -186,6 +189,7 @@ export default function Dashboard() {
 
   // Base filter: stage + date range (by last invoice date)
   const baseFiltered = projects
+    .filter(p => !hiddenProjects.includes(String(p.xeroId)))   // shared hide list
     .filter(p => stageFilter.includes('ALL') || stageFilter.includes(p.status))
     .filter(p => !search ||
       p.jobNo?.toLowerCase().includes(search.toLowerCase()) ||
@@ -493,6 +497,11 @@ export default function Dashboard() {
               <option value="remaining">Sort: Remaining</option>
             </select>
             <span style={{ fontSize: 12, color: '#888' }}>{filtered.length} projects</span>
+            <HideProjectsDropdown
+              projects={projects.map(p => ({ id: p.xeroId, jobNo: p.jobNo, name: p.name }))}
+              hidden={hiddenProjects}
+              onChange={setHiddenProjects}
+            />
           </div>
 
           {cardFilter && (
