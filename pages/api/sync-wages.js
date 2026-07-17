@@ -33,7 +33,19 @@ async function fetchAllWageLines(at, tid, fromDate) {
     for (const j of journals) {
       const dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
       if (dateStr && dateStr < fromDate) continue
-      for (const jl of (j.JournalLines || [])) {
+      // The ManualJournals LIST often omits JournalLines — fetch the journal by ID
+      // to get its lines + tracking. 429-safe so we never silently skip.
+      let jLines = j.JournalLines
+      if (!Array.isArray(jLines) || jLines.length === 0) {
+        for (let a = 0; a < 4; a++) {
+          const r = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${j.ManualJournalID}`, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
+          if (r.status === 429) { await sleep((parseInt(r.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
+          if (!r.ok) { jLines = []; break }
+          jLines = (((await r.json()).ManualJournals || [])[0] || {}).JournalLines || []
+          await sleep(400); break
+        }
+      }
+      for (const jl of (jLines || [])) {
         if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
         if (amount <= 0) continue                 // keep positive (debit) project lines
@@ -93,24 +105,37 @@ export default async function handler(req, res) {
       else untagged.push(l)
     }
 
-    // Store per project — exact-mirror within window (replace in-window, keep older).
-    // Clear in-window wages for ALL known projects first so removed tags disappear.
+    // SAFETY: if the fetch returned nothing at all, treat it as a failed pull and
+    // do NOT wipe anything (rate-limit / error / empty response should never
+    // delete existing wages). Abort cleanly.
+    if (all.length === 0) {
+      await redis.set('sync-wages:at', new Date().toISOString())
+      return res.json({ ok: true, months, wageLinesFetched: 0, taggedToProjects: 0, untagged: 0, projectsTouched: 0, note: 'No wage journal lines returned from Xero — nothing changed (existing data left intact).' })
+    }
+
+    // Store per project — exact-mirror within window, but ONLY replace a project's
+    // in-window wages when the fetch actually returned lines FOR THAT PROJECT.
+    // If a project has no fresh lines, leave its existing data untouched (never
+    // wipe on an empty result).
     for (const cp of cats) {
       const pid = cp.trackingOptionId
       const fresh = byProject.get(pid) || []
+      if (fresh.length === 0) continue          // nothing fetched for this project -> leave as-is
       const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
       const older = existing.filter(l => !l.date || l.date < winStr)
       const combined = [...older, ...fresh]
-      if (combined.length === 0 && existing.length === 0) continue
       const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:wages:${pid}`, { labourSpend: wTot, materialsSpend: 0, totalCosts: wTot, lines: combined, calculatedAt: new Date().toISOString(), source: 'sync_button' })
       await mergeCosts(redis, pid)
     }
 
-    // Untagged wages -> unassigned bucket (replace in-window, keep older).
-    const existingUn = (await redis.get('costs:untagged:wages').catch(() => null)) || []
-    const olderUn = existingUn.filter(l => !l.date || l.date < winStr)
-    await redis.set('costs:untagged:wages', [...olderUn, ...untagged])
+    // Untagged wages -> unassigned bucket. Only replace in-window if we actually
+    // fetched untagged lines; otherwise leave the existing bucket intact.
+    if (untagged.length > 0) {
+      const existingUn = (await redis.get('costs:untagged:wages').catch(() => null)) || []
+      const olderUn = existingUn.filter(l => !l.date || l.date < winStr)
+      await redis.set('costs:untagged:wages', [...olderUn, ...untagged])
+    }
 
     await redis.del('dashboard:cache')
     await redis.set('sync-wages:at', new Date().toISOString())

@@ -1,31 +1,36 @@
-Bookkeeping — sync-wages.js (fixed version) — SINGLE FILE re-deploy
-==================================================================
+Bookkeeping — URGENT FIX: wages sync WIPED data + root cause (empty fetch)
+=========================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Deploy this ONE file: pages/api/sync-wages.js
+Build: npm run build -> ✓ Compiled successfully
+DEPLOY THIS ASAP, then re-run Sync Wages to repopulate.
 
-WHY
----
-Your last sync showed "Wages: undefined projects, undefined wage lines". That
-means the dashboard (bookkeeping.js) updated to the new version but this API file
-did NOT — so it returned the old field names and the new message showed
-"undefined". This is just a deploy mismatch.
-
-CONFIRM IT'S THE RIGHT FILE
----------------------------
-The LAST line of the handler must read:
-  res.json({ ok: true, months, wageLinesFetched: all.length,
-             taggedToProjects: taggedCount, untagged: untagged.length,
-             projectsTouched: byProject.size })
-If GitHub's copy still says projectsDone / wageLinesRefreshed, it's the old file —
-replace it with this one.
-
-AFTER DEPLOYING
+WHAT WENT WRONG
 ---------------
-Re-run ↻ Sync Wages. The message should read
-"X tagged to projects, Y unassigned (of Z)" (no "undefined"), and June wages
-should switch from the single lump to project-tagged lines.
+Sync Wages deleted your wage data. Two faults combined:
+1. ROOT CAUSE: the ManualJournals LIST endpoint returns journals WITHOUT their
+   line detail (JournalLines/Tracking) — so the fetch found no 320 lines and
+   returned EMPTY.
+2. The store loop then cleared in-window wages for every project and replaced
+   them with nothing (empty) = wiped.
 
-FILE
-----
-• pages/api/sync-wages.js — one-pass, match by tracking NAME, rate-limit safe,
-  replaces the old uploaded lump within the window.
+THE FIXES
+---------
+1. fetchAllWageLines now fetches each journal BY ID when the list omits its lines
+   (429-safe), so it actually gets the 320 tagged lines. This is why it was empty.
+2. SAFETY GUARDS so a bad/empty pull can NEVER wipe data again:
+   • If the whole fetch returns 0 lines -> abort, change nothing, report a note.
+   • A project is only overwritten if the fetch returned lines FOR THAT PROJECT;
+     otherwise its existing data is left untouched.
+   • The untagged bucket is only replaced if untagged lines were actually fetched.
+
+TO RECOVER YOUR WAGES
+---------------------
+1. Deploy this.
+2. Re-run ↻ Sync Wages. It should now fetch the journal lines properly and
+   repopulate ("X tagged to projects, Y unassigned (of Z)").
+3. If any period still looks short, re-upload that period's correct wages export
+   (27-col, with Projects column) as the fallback.
+
+FILE CHANGED
+------------
+• pages/api/sync-wages.js — journal-detail fetch + no-wipe safety guards
