@@ -1,23 +1,52 @@
-Bookkeeping — Overheads default + searchable supplier filter
-============================================================
+Bookkeeping — grey "P&L (Xero)" reference now matches your rule (code-based)
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGES
--------
-1. OVERHEADS TAB DEFAULT
-   Switching to the Overheads tab now defaults to:
-     • Categorised only  (was "No category assigned")
-     • All months        (was the tab's default month)
-   Other tabs unchanged (still default to uncategorised + their default month).
-   [pages/bookkeeping.js -> switchTab(): special-cases 'ignored']
+WHY THE APP AND XERO DIDN'T MATCH (your question)
+-------------------------------------------------
+The grey "P&L (Xero)" figure under the COST OF SALE (BILLS) card was showing the
+WHOLE Cost of Sales (£117,011) — which INCLUDES Direct Wages (£10,445) and every
+cost-of-sale line regardless of your categorisation. That's why it didn't line up
+with the Bills card (which excludes wages and only counts Materials/Labour codes).
 
-2. SEARCHABLE SUPPLIER / CUSTOMER FILTER
-   The supplier (and customer, on Sales tab) dropdown is now a type-to-search
-   combobox: click it, start typing, and the list filters live by what you type.
-   Click a match to select; the top row clears back to "All suppliers/customers".
-   [pages/bookkeeping.js -> new SupplierPicker component replaces the <select>]
+THE RULE WE'RE NOW APPLYING (as you specified)
+----------------------------------------------
+• Cost of Sale (Bills) grey P&L = sum of P&L cost lines whose ACCOUNT CODE is
+  marked Materials or Labour in the app's Account Categorisation, EXCLUDING
+  Direct Wages (320).
+• Direct Wages grey P&L = P&L code 320 only.
+• Sales grey P&L = P&L code 200. (unchanged — was already correct)
 
-FILE CHANGED
-------------
+WHAT HAD TO CHANGE (the P&L benchmark didn't store account codes)
+-----------------------------------------------------------------
+The P&L benchmark only stored account NAMES, so it couldn't be filtered by your
+(code-based) categorisation. Now:
+• lib/xero.js: new fetchAccountCodeMap() (Chart of Accounts -> code); fetchProfit
+  AndLoss() now also returns byCode { code: amount }.
+• deep-sync.js + sync-benchmark.js: fetch the code map once and store byCode in
+  xero:pl-benchmark.
+• bookkeeping.js (front-end): grey P&L per card computed from byCode filtered by
+  config:account-categorisation (materials/labour), 320 excluded from Bills,
+  320-only for Wages, 200 for Sales.
+
+*** ACTION REQUIRED AFTER DEPLOY ***
+Click "↻ Sync Xero figures" on the Bookkeeping page ONCE. This re-pulls the P&L
+WITH account codes (byCode) so the grey references recompute to the new rule.
+Until that re-sync runs, the grey Bills figure falls back to the old section total.
+
+NOTE ON THE REMAINING SMALL GAP
+-------------------------------
+After this, the grey Bills P&L reference will only include codes you've marked
+Materials/Labour. If Fuel/Hotels/Design etc. are NOT marked Materials/Labour in
+Account Categorisation, they won't be in the grey figure (correct per your rule).
+If you DO want them counted, mark their codes as Materials/Labour in Admin ->
+Account Categorisation.
+
+FILES CHANGED
+-------------
+• lib/xero.js
+• pages/api/cron/deep-sync.js
+• pages/api/bookkeeping.js
+• pages/api/sync-benchmark.js
 • pages/bookkeeping.js

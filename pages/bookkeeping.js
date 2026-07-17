@@ -400,24 +400,34 @@ function ReconPanel({ data, month, tab, onPickMonth, onPickPL }) {
   const wagesTotal = sumBills(wagesRows),  wagesCat = sumBills(wagesRows.filter(r => r.categorised))
   const invTotal = sumInv(invRows),        invCat = sumInv(invRows.filter(r => r.categorised))
 
-  // P&L reference (grey), scoped to each category's account codes, from the
-  // section-aware benchmark. Kept as a cross-check, not part of "still to find".
+  // P&L reference (grey), computed to the SAME rule as the app's Account
+  // Categorisation (which is code-based):
+  //  • Cost of Sale (Bills) = P&L cost lines whose code is marked Materials or
+  //    Labour in Account Categorisation, EXCLUDING Direct Wages (320).
+  //  • Direct Wages = P&L code 320 only.
+  //  • Sales = P&L code 200.
   const bm = data.benchmark?.months || {}
   const hasBm = Object.keys(bm).length > 0
   const monthsToSum = month ? [month] : Object.keys(bm)
-  const LABOUR_WAGE_CODES = ['320']
+  const catCfg = data.categorisation || {}          // { code: { category: 'labour'|'materials'|'ignore' } }
+  const isBillCode = (code) => {
+    const c = String(code)
+    if (c === '320') return false                   // wages handled on its own card
+    const cat = catCfg[c]?.category
+    return cat === 'materials' || cat === 'labour'
+  }
   let plSales = 0, plWages = 0, plBills = 0
   for (const mo of monthsToSum) {
     const b = bm[mo]; if (!b) continue
-    // Prefer code-level data if present; else fall back to section totals.
     if (b.byCode) {
       for (const [code, val] of Object.entries(b.byCode)) {
         const amt = Math.abs(val || 0); const c = String(code)
         if (c === '200') plSales += amt
         else if (c === '320') plWages += amt
-        else plBills += amt   // other cost-of-sale codes (labour/materials)
+        else if (isBillCode(c)) plBills += amt        // only Materials/Labour-categorised codes
       }
     } else {
+      // No per-code data yet (benchmark not re-synced). Fall back to section totals.
       plSales += Math.abs(b.incomeTotal || 0)
       plBills += Math.abs(b.costOfSalesTotal || 0)
     }

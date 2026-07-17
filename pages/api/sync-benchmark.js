@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken, fetchProfitAndLoss } from '../../lib/xero'
+import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -33,16 +33,20 @@ export default async function handler(req, res) {
     const months = {}
     let monthsPulled = 0
     const now = new Date()
+    // One Chart-of-Accounts fetch so P&L lines carry account CODES (lets the grey
+    // P&L reference respect the app's code-based Account Categorisation).
+    const nameToCode = await fetchAccountCodeMap(tokens.access_token, tenantId).catch(() => ({}))
     for (let k = 0; k < 6; k++) {   // current + previous 5 months (matches the graph)
       const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
       const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
       const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
       const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
       try {
-        const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to)
+        const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to, nameToCode)
         months[from.slice(0, 7)] = {
           accounts: pl.accounts,
           bySection: pl.bySection,
+          byCode: pl.byCode,
           incomeTotal: pl.incomeTotal,
           costOfSalesTotal: pl.costOfSalesTotal,
         }

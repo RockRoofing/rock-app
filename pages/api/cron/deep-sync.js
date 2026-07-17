@@ -1,5 +1,5 @@
 import { getTokens, saveTokens } from '../../../lib/db'
-import { refreshXeroToken, getProjectsFromCategories, fetchProfitAndLoss } from '../../../lib/xero'
+import { refreshXeroToken, getProjectsFromCategories, fetchProfitAndLoss, fetchAccountCodeMap } from '../../../lib/xero'
 import { mergeCosts } from '../../../lib/mergeCosts'
 import { costLineKey as costKey, invoiceLineKey as invoiceKey } from '../../../lib/costDedupe'
 
@@ -298,15 +298,18 @@ export default async function handler(req, res) {
       if (!lastBench || (lastBench.updatedAt || '').slice(0, 10) !== today) {
         const months = {}
         const now2 = new Date()
+        // One Chart-of-Accounts fetch so P&L lines can carry account CODES,
+        // letting the grey P&L reference respect the app's (code-based) categorisation.
+        const nameToCode = await fetchAccountCodeMap(tokens.access_token, tenantId).catch(() => ({}))
         for (let k = 0; k < 4; k++) {   // current + previous 3 months
           const d = new Date(now2.getFullYear(), now2.getMonth() - k, 1)
           const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
           const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
           const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`
           try {
-            const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to)
+            const pl = await fetchProfitAndLoss(tokens.access_token, tenantId, from, to, nameToCode)
             months[from.slice(0, 7)] = {
-              accounts: pl.accounts, bySection: pl.bySection,
+              accounts: pl.accounts, bySection: pl.bySection, byCode: pl.byCode,
               incomeTotal: pl.incomeTotal, costOfSalesTotal: pl.costOfSalesTotal,
             }
             benchmarkMonths++
