@@ -86,6 +86,7 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false)
   const [stageFilter, setStageFilter] = useState(['INPROGRESS'])
   const [cardFilter, setCardFilter] = useState(null)
+  const [targetMargin, setTargetMargin] = useState(25)   // % target; projects below flag on the card
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('jobNo')
   const [hiddenProjects, setHiddenProjects] = useState([])
@@ -230,6 +231,15 @@ export default function Dashboard() {
       return true
     })
 
+  // Margin for a project in the current view: EOM uses the month's valuation
+  // margin, Budget Tracker uses the live current margin. Only count projects that
+  // actually have a margin (invoiced > 0) so £0 projects don't false-flag.
+  const marginOf = (p) => eomMode ? (eomData[p.xeroId]?.margin) : p.currentMargin
+  const isUnderTarget = (p) => {
+    const m = marginOf(p)
+    return m != null && m < (targetMargin / 100)
+  }
+
   // Card filter on top
   const filtered = baseFiltered
     .filter(p => {
@@ -240,6 +250,7 @@ export default function Dashboard() {
       if (cardFilter === 'over_labour') return p.labourBudget > 0 && labourLeft < 0
       if (cardFilter === 'over_materials') return p.materialsBudget > 0 && matsLeft < 0
       if (cardFilter === 'over_total') return p.totalBudget > 0 && totalLeft < 0
+      if (cardFilter === 'under_target') return isUnderTarget(p)
       return true
     })
     .sort((a, b) => {
@@ -255,6 +266,7 @@ export default function Dashboard() {
   const overLabour = baseFiltered.filter(p => p.labourBudget > 0 && (p.labourBudget - (p.labourSpend || 0)) < 0).length
   const overMaterials = baseFiltered.filter(p => p.materialsBudget > 0 && (p.materialsBudget - (p.materialsSpend || 0)) < 0).length
   const overTotal = baseFiltered.filter(p => p.totalBudget > 0 && (p.totalBudget - (p.totalCosts || 0)) < 0).length
+  const underTarget = baseFiltered.filter(isUnderTarget).length
 
   // Totals from filtered
   const totals = {
@@ -282,18 +294,23 @@ export default function Dashboard() {
     setCardFilter(cardFilter === key ? null : key)
   }
 
+  const monthLbl = monthOptions.find(m => m.key === selectedMonth)?.label || ''
+  const underTargetCard = { key: 'under_target', label: `Projects Under Target Margin`, value: underTarget, raw: true, clickable: true, warn: underTarget > 0, targetControl: true }
+  const remainingExCard = { key: 'remaining', label: 'Remaining to Claim (Ex. Retention)', value: fmt(totals.remainingToClaim), highlight: true, clickable: false }
+  const remainingIncCard = { key: 'remaining_gross', label: 'Remaining to Claim (Inc. Retention)', value: fmt(totals.remainingGross), highlight: true, clickable: false }
+  const wipCard = { key: 'wip', label: 'WIP', value: fmt(totals.eomWip), highlight: true, clickable: false, sub: `to end of ${monthLbl}` }
+  const retentionCard = { key: 'retention', label: 'Retention Outstanding', value: fmt(totals.retention), warn: totals.retention > 0, clickable: false }
+
   const cards = [
     { key: 'active', label: 'Active Projects', value: baseFiltered.length, raw: true, clickable: false,
       sub: `${baseFiltered.filter(p => p.status === 'INPROGRESS').length} in progress · ${baseFiltered.filter(p => p.status === 'DEFECTS').length} defects · ${baseFiltered.filter(p => p.status === 'CLOSED').length} closed` },
     { key: 'over_materials', label: 'Over Budget (Materials)', value: overMaterials, raw: true, clickable: true, warn: overMaterials > 0 },
     { key: 'over_labour', label: 'Over Budget (Labour)', value: overLabour, raw: true, clickable: true, warn: overLabour > 0 },
     { key: 'over_total', label: 'Over Budget (Total)', value: overTotal, raw: true, clickable: true, warn: overTotal > 0 },
-    { key: 'remaining', label: 'Remaining to Claim (Ex. Retention)', value: fmt(totals.remainingToClaim), highlight: true, clickable: false },
-    eomMode
-      ? { key: 'wip', label: 'WIP', value: fmt(totals.eomWip), highlight: true, clickable: false,
-          sub: `to end of ${monthOptions.find(m => m.key === selectedMonth)?.label || ''}` }
-      : { key: 'retention', label: 'Retention Outstanding', value: fmt(totals.retention), warn: totals.retention > 0, clickable: false },
-    { key: 'remaining_gross', label: 'Remaining to Claim (Inc. Retention)', value: fmt(totals.remainingGross), highlight: true, clickable: false },
+    underTargetCard,
+    // EOM: WIP then Remaining (Ex.). Budget Tracker: Remaining (Ex.) only (no retention card).
+    ...(eomMode ? [wipCard, remainingExCard] : [remainingExCard]),
+    remainingIncCard,
   ]
 
   const cell = (group, color, bold) => ({
@@ -424,7 +441,7 @@ export default function Dashboard() {
         <div style={{ padding: '24px' }}>
 
           {/* Summary cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cards.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
             {cards.map(card => {
               const isActive = cardFilter === card.key
               return (
@@ -434,7 +451,15 @@ export default function Dashboard() {
                     border: isActive ? '2px solid #1a1a2e' : card.clickable ? '2px solid #e5e5e5' : '2px solid transparent',
                     position: 'relative' }}>
                   {card.clickable && <div style={{ position: 'absolute', top: 6, right: 8, fontSize: 9, color: isActive ? '#aaa' : '#ccc' }}>{isActive ? 'click to clear' : 'click to filter'}</div>}
-                  <div style={{ fontSize: 11, color: isActive ? '#aaa' : '#888', marginBottom: 4 }}>{card.label}</div>
+                  <div style={{ fontSize: 11, color: isActive ? '#aaa' : '#888', marginBottom: 4 }}>
+                    {card.label}
+                    {card.targetControl && (
+                      <> (&lt;<input type="number" min="0" max="100" value={targetMargin}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => setTargetMargin(e.target.value === '' ? 0 : Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                        style={{ width: 34, fontSize: 11, padding: '1px 3px', border: `1px solid ${isActive ? '#555' : '#ddd'}`, borderRadius: 4, background: isActive ? '#2a2a3e' : '#fff', color: isActive ? '#fff' : '#1a1a2e', textAlign: 'center' }} />%)</>
+                    )}
+                  </div>
                   <div style={{ fontSize: card.raw ? 26 : 18, fontWeight: 700, color: isActive ? '#fff' : card.warn ? '#e63946' : card.highlight ? '#2563eb' : '#1a1a1a' }}>{card.value}</div>
                   {card.sub && <div style={{ fontSize: 10, color: isActive ? '#aaa' : '#888', marginTop: 3 }}>{card.sub}</div>}
                   {card.clickable && !isActive && card.value > 0 && <div style={{ fontSize: 10, color: '#e63946', marginTop: 2 }}>{card.value === 1 ? '1 project' : `${card.value} projects`}</div>}
@@ -533,7 +558,7 @@ export default function Dashboard() {
 
           {cardFilter && (
             <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 16px', marginBottom: 12, fontSize: 13, color: '#e63946', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Showing {filtered.length} project{filtered.length !== 1 ? 's' : ''} — {cardFilter === 'over_labour' ? 'over budget on Labour' : cardFilter === 'over_materials' ? 'over budget on Materials' : 'over budget on Total'}</span>
+              <span>Showing {filtered.length} project{filtered.length !== 1 ? 's' : ''} — {cardFilter === 'over_labour' ? 'over budget on Labour' : cardFilter === 'over_materials' ? 'over budget on Materials' : cardFilter === 'under_target' ? `under target margin (< ${targetMargin}%)` : 'over budget on Total'}</span>
               <button onClick={() => setCardFilter(null)} style={{ background: 'none', border: 'none', color: '#e63946', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Clear ✕</button>
             </div>
           )}
