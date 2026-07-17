@@ -4,9 +4,13 @@ export default async function handler(req, res) {
   const { code } = req.query
   if (!code) return res.status(400).json({ error: 'No code provided' })
 
-  const redirectUri = process.env.NEXT_PUBLIC_APP_URL    
-    ? `${process.env.NEXT_PUBLIC_APP_URL}/xero-callback`   
-    : 'https://rockroofing-app.vercel.app/xero-callback'
+  // The redirect_uri in the token exchange MUST exactly match the one used at the
+  // authorize step. The connect page builds it from the browser origin, so derive
+  // it here from the request host. (Do NOT use NEXT_PUBLIC_APP_URL — it was set to
+  // an old domain and caused "invalid_grant / Invalid redirect_uri".)
+  const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
+  const host = req.headers['x-forwarded-host'] || req.headers.host
+  const redirectUri = `${proto}://${host}/xero-callback`
 
   try {
     const tokenRes = await fetch('https://identity.xero.com/connect/token', {

@@ -1,37 +1,35 @@
-Bookkeeping — FIX Xero reconnect (invalid_scope) — CORRECTED
-============================================================
+Bookkeeping — FIX Xero token exchange (invalid_grant / Invalid redirect_uri)
+============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy, then /connect -> Reconnect Xero.
+Deploy, then /connect -> Reconnect Xero -> approve.
 
-ROOT CAUSE (confirmed from Xero's allowed-scopes list)
-------------------------------------------------------
-Xero is migrating to granular scopes (their banner: broad scopes retire Sep 2027;
-new granular names apply). The reconnect failed with invalid_scope because the
-connect page asked for the WRONG name for reading wages.
+THE LAST STEP
+-------------
+Consent now works (Manual journals scope is granted ✓). But the token exchange
+failed with: invalid_grant / "Invalid redirect_uri".
 
-The correct scope for Manual Journals (wages) is:
-    accounting.manualjournals.read     ← was missing / wrongly named before
-(NOT accounting.transactions.read — that's not in this app's allowed list.)
+Cause: the callback built its redirect_uri from NEXT_PUBLIC_APP_URL, falling back
+to an OLD domain (rockroofing-app.vercel.app). Xero requires the token-exchange
+redirect_uri to EXACTLY match the one used at authorize (app.rockroofing.co.uk).
+Mismatch -> invalid_grant.
 
-Also confirmed accounting.reports.profitandloss.read IS valid (it's in the list),
-so that stays.
-
-FINAL SCOPE STRING NOW REQUESTED
---------------------------------
-openid offline_access accounting.invoices.read accounting.contacts.read
-accounting.reports.profitandloss.read accounting.settings.read
-accounting.manualjournals.read projects.read
-
-Every one of these appears in the app's allowed-scopes list, so invalid_scope
-should be gone.
+FIX
+---
+The callback now derives redirect_uri from the actual request host
+(app.rockroofing.co.uk) instead of the stale env var, so it always matches the
+authorize step. No env var needed.
 
 AFTER DEPLOYING
 ---------------
-1. /connect -> Reconnect Xero -> should reach the consent screen now. Approve.
-2. /api/xero/status -> scope should include accounting.manualjournals.read
-3. Run Sync Wages -> 401 gone, journal lines pull through, wages categorise.
+1. /connect -> Reconnect Xero -> approve "Continue with 1 organisation".
+2. Should now redirect back successfully (no "Connection failed").
+3. /api/xero/status -> scope should include accounting.manualjournals.read
+4. Run Sync Wages -> journal lines pull through, wages categorise.
+
+(If it still says Invalid redirect_uri, ensure NEXT_PUBLIC_APP_URL is NOT set to
+an old domain in Vercel — this fix ignores it, but a redeploy must complete first.)
 
 FILE CHANGED
 ------------
-• pages/connect.js — request accounting.manualjournals.read (correct wages scope)
+• pages/api/xero/callback.js — redirect_uri derived from request host
