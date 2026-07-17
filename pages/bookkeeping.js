@@ -127,7 +127,14 @@ export default function BookkeepingPage() {
   const pageRows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
   function resetFilters() { setMonth(''); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('') }
-  function switchTab(t) { setTab(t); setSupplier(''); setCodes([]); setCatFilter(''); setAssigned('no'); setMonth(defaultMonthFor(t, data)) }
+  function switchTab(t) {
+    setTab(t); setSupplier(''); setCodes([]); setCatFilter('')
+    if (t === 'ignored') {           // Overheads: default to Categorised + all months
+      setAssigned('yes'); setMonth('')
+    } else {
+      setAssigned('no'); setMonth(defaultMonthFor(t, data))
+    }
+  }
 
   return (
     <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#f0f2f5' }}>
@@ -188,10 +195,12 @@ export default function BookkeepingPage() {
                   <option value="">All months</option>
                   {months.map(m => <option key={m} value={m}>{monthLabel(m)}</option>)}
                 </select>
-                <select value={supplier} onChange={e => setSupplier(e.target.value)} style={sel}>
-                  <option value="">{isInvoiceTab ? 'All customers' : 'All suppliers'}</option>
-                  {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <SupplierPicker
+                  value={supplier}
+                  options={suppliers}
+                  onChange={setSupplier}
+                  placeholder={isInvoiceTab ? 'All customers' : 'All suppliers'}
+                />
 
                 {/* Categorised / No-category filter (all tabs) */}
                 <select value={assigned} onChange={e => setAssigned(e.target.value)} style={sel}>
@@ -280,6 +289,42 @@ export default function BookkeepingPage() {
 }
 
 // Multi-select account codes with tick boxes in a dropdown.
+function SupplierPicker({ value, options, onChange, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [])
+  // When a value is selected, show it in the box; typing filters the list.
+  const shown = open ? q : (value || '')
+  const needle = q.trim().toLowerCase()
+  const matches = (needle ? options.filter(s => s.toLowerCase().includes(needle)) : options).slice(0, 200)
+  const pick = (s) => { onChange(s); setQ(''); setOpen(false) }
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input
+        value={shown}
+        placeholder={placeholder}
+        onFocus={() => { setOpen(true); setQ('') }}
+        onChange={e => { setQ(e.target.value); setOpen(true) }}
+        style={{ ...sel, minWidth: 180, cursor: 'text' }}
+      />
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 30, maxHeight: 280, overflowY: 'auto', minWidth: 220, padding: 6 }}>
+          <div onClick={() => pick('')} style={{ padding: '6px 10px', fontSize: 12, color: value ? '#b45309' : '#666', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}>{placeholder}</div>
+          {matches.length === 0
+            ? <div style={{ padding: 10, fontSize: 12, color: '#aaa' }}>No matches</div>
+            : matches.map(s => (
+                <div key={s} onClick={() => pick(s)} style={{ padding: '6px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 6, background: s === value ? '#f5f3ff' : 'transparent', fontWeight: s === value ? 700 : 400 }}>{s}</div>
+              ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CodeMultiSelect({ options, selected, onChange }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)

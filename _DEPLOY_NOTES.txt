@@ -1,51 +1,23 @@
-Bookkeeping — FIX overnight (deep-sync) wages to match the fixed manual sync
-============================================================================
+Bookkeeping — Overheads default + searchable supplier filter
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CONTEXT
+CHANGES
 -------
-The nightly deep-sync ran the OLD wage fetcher, which had the same two bugs we
-fixed in the manual sync today:
-  1. Date read with a YYYY-MM-DD regex -> never matched Xero's "/Date(ms)/" format
-     -> new wage lines imported with NULL dates (unfilterable by month).
-  2. Tracking matched by GUID (TrackingOptionID) -> silently returned 0, so the
-     nightly job imported NO new wages for most projects.
+1. OVERHEADS TAB DEFAULT
+   Switching to the Overheads tab now defaults to:
+     • Categorised only  (was "No category assigned")
+     • All months        (was the tab's default month)
+   Other tabs unchanged (still default to uncategorised + their default month).
+   [pages/bookkeeping.js -> switchTab(): special-cases 'ignored']
 
-WIPE-RISK CHECK (as requested)
-------------------------------
-• Main nightly run uses mergeWindow() which is ADDITIVE (keeps old + recent +
-  new, dedup by xeroLineId) — it will NOT wipe tonight's correctly-dated wages.
-• The separate GLOBAL daily block replaced in-window lines with freshly fetched
-  ones — which WOULD drop data if a fetch came back empty. Added a NO-WIPE GUARD:
-  if the wage fetch returns nothing, existing wages are left untouched.
-
-FIXES IN THIS FILE
-------------------
-• fetchWages() rewritten to mirror the fixed manual sync:
-    - parseXeroJournalDate() converts "/Date(ms)/" -> YYYY-MM-DD  (dates populate)
-    - JournalLines read straight from the LIST (no per-item fetch) — fast
-    - tracking matched by NAME (not GUID) — actually finds the lines
-    - order=Date DESC + early-exit once past the window — fast
-• Both callers now pass the project NAME (cp.name / p.name) instead of the GUID.
-• NO-WIPE GUARD added to the global-sync wages block.
-• Deleted dead, never-called fetchAllWageLinesGlobal / fetchAllSalesInvoicesGlobal
-  (one still had the old date bug) — clutter/risk removed.
-
-NOT CHANGED (confirmed already correct)
----------------------------------------
-• Bills (fetchBills): already per-line, per-category, per-project — a single
-  invoice with multiple line items across multiple categories/projects is split
-  correctly. No change needed.
-• Sales (fetchSalesInvoices): uses invoice DateString (invoices DO carry it), and
-  mergeWindow is additive. Left as-is this round.
-
-AFTER DEPLOYING
----------------
-Nothing to do — the nightly cron will now import wages correctly (dated,
-name-matched) and can't wipe good data. You can also trigger deep-sync manually
-to verify if you like.
+2. SEARCHABLE SUPPLIER / CUSTOMER FILTER
+   The supplier (and customer, on Sales tab) dropdown is now a type-to-search
+   combobox: click it, start typing, and the list filters live by what you type.
+   Click a match to select; the top row clears back to "All suppliers/customers".
+   [pages/bookkeeping.js -> new SupplierPicker component replaces the <select>]
 
 FILE CHANGED
 ------------
-• pages/api/cron/deep-sync.js
+• pages/bookkeeping.js
