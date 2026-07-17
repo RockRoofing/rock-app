@@ -74,7 +74,7 @@ export default function BookkeepingPage() {
       const d = await res.json()
       if (res.ok && d.ok) {
         const detail = kind === 'invoices' ? `${d.invoicesMatched} matched to projects, ${d.invoicesUnassigned} unassigned (of ${d.invoicesFetched})`
-          : kind === 'wages' ? `${d.projectsDone} projects, ${d.wageLinesRefreshed} wage lines`
+          : kind === 'wages' ? `${d.taggedToProjects} tagged to projects, ${d.untagged} unassigned (of ${d.wageLinesFetched})`
           : `${d.monthsPulled} months`
         setSyncMsg(`${label}: ${detail}.`)
         const fresh = await fetch('/api/bookkeeping').then(r => r.json())

@@ -1,23 +1,40 @@
-Bookkeeping — FIX client-side crash (onPickPL is not defined)
-=============================================================
+Bookkeeping — FIX: Direct Wages sync (lump not replaced, not categorising)
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top. Single file.
+Deploy, then re-run Sync Wages.
 
-THE BUG
--------
-The rebuilt cards referenced `onPickPL` (the future P&L drill-down handler) in the
-JSX, but it wasn't declared as a ReconPanel parameter. Referencing an undeclared
-VARIABLE throws a ReferenceError (unlike an undefined object property), which
-crashed the whole Bookkeeping page: "onPickPL is not defined".
+THE PROBLEM
+-----------
+June wages showed as ONE uploaded lump (£10,445, ref #94282, NO CATEGORY), while
+Xero has them as 12 project-tagged journal lines (ref #96453). Syncing didn't fix
+it. The wages sync had the SAME bugs the invoice sync had before its fix:
+  1. Matched projects by tracking GUID (was failing) instead of by NAME.
+  2. Re-fetched ALL ManualJournals once PER project (26+ times) with no 429
+     handling -> hit Xero's 60/min rate limit -> silently returned nothing ->
+     the old uploaded lump was never replaced.
 
-THE FIX
--------
-Added onPickPL to the ReconPanel parameter list. It's still not passed by the
-caller (drill-down is Phase 2), so it's simply undefined — the `onPickPL && ...`
-guards now evaluate safely and the grey "P&L (Xero): £X" line shows WITHOUT the
-"investigate" link, exactly as intended for this phase.
+THE FIX (mirrors the invoice fix)
+---------------------------------
+• ONE pass over ManualJournals in the window (not per-project), 429-safe.
+• Match each 320 wage line to its project by tracking OPTION NAME (e.g.
+  "J242-Winnersh") — the reliable text match, same as CSV import.
+• Group tagged lines per project; untagged -> unassigned wages bucket.
+• Replace in-window wages for ALL projects + the untagged bucket (keep older than
+  window). This REPLACES the old uploaded lump with the correctly-tagged journal
+  lines.
+Result message: "X tagged to projects, Y unassigned (of Z)".
 
-FILE CHANGED
-------------
-• pages/bookkeeping.js — ReconPanel now declares onPickPL param
+AFTER DEPLOYING
+---------------
+Re-run ↻ Sync Wages. June wages should switch from the single NO-CATEGORY lump to
+the individual project-tagged lines, and Direct Wages "Categorised" should jump
+up (still-to-find drops). Any genuinely untagged wages remain in unassigned.
+
+NOTE: the nightly global sync still uses the old GUID match for wages; if needed
+I'll apply the same fix there next. The button is now correct.
+
+FILES CHANGED
+-------------
+• pages/api/sync-wages.js — one-pass, name-match, rate-safe, replaces lump
+• pages/bookkeeping.js     — wages sync result wording

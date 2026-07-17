@@ -15,13 +15,17 @@ async function getRedis() {
   } catch { return null }
 }
 
-async function fetchWages(at, tid, trackingOptionId, fromDate) {
-  const lines = []
+// ONE pass over ManualJournals in the window. For each 320 (Direct Wages) line
+// that is project-tagged, return it WITH the tracking option NAME (e.g.
+// "J242-Winnersh") so we can match by name (not GUID, which was failing) — the
+// same approach as the fixed invoice sync. Rate-limit-safe (429 backoff).
+async function fetchAllWageLines(at, tid, fromDate) {
+  const out = []
   let page = 1
-  const modifiedSince = new Date(fromDate + 'T00:00:00Z').toUTCString()
   while (true) {
     const url = `https://api.xero.com/api.xro/2.0/ManualJournals?page=${page}&pageSize=100`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json', 'If-Modified-Since': modifiedSince } })
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
+    if (res.status === 429) { await sleep(2000); continue }
     if (!res.ok) break
     const data = await res.json()
     const journals = data.ManualJournals || []
@@ -30,22 +34,23 @@ async function fetchWages(at, tid, trackingOptionId, fromDate) {
       const dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
       if (dateStr && dateStr < fromDate) continue
       for (const jl of (j.JournalLines || [])) {
-        if (jl.AccountCode !== '320') continue
-        const tagged = (jl.Tracking || []).some(t => t.TrackingOptionID === trackingOptionId)
-        if (!tagged) continue
+        if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
-        if (amount <= 0) continue
-        lines.push({
+        if (amount <= 0) continue                 // keep positive (debit) project lines
+        const trackingNames = []
+        for (const t of (jl.Tracking || [])) { if (t.Option) trackingNames.push(String(t.Option).trim().toLowerCase()) }
+        out.push({
           date: dateStr, supplier: 'Direct Wages', description: jl.Description || 'Direct Wages',
           reference: j.Narration || j.ManualJournalID || '', amount, accountCode: '320',
           type: 'Labour', source: 'wages', xeroLineId: jl.JournalLineID || null, xeroJournalId: j.ManualJournalID || null,
+          trackingNames,
         })
       }
     }
     if (journals.length < 100) break
-    page++; await sleep(300)
+    page++; await sleep(1200)
   }
-  return lines
+  return out
 }
 
 export default async function handler(req, res) {
@@ -69,26 +74,47 @@ export default async function handler(req, res) {
     const win = new Date(); win.setMonth(win.getMonth() - months)
     const winStr = win.toISOString().split('T')[0]
 
+    // Map tracking-option NAME -> project id (same basis as CSV import).
     const cats = await getProjectsFromCategories(tokens.access_token, tenantId)
-    let projectsDone = 0, wageLinesTotal = 0
+    const nameToId = new Map()
+    for (const cp of cats) nameToId.set((cp.name || '').trim().toLowerCase(), cp.trackingOptionId)
+
+    // One pass over all wage journal lines in the window.
+    const all = await fetchAllWageLines(tokens.access_token, tenantId, winStr)
+
+    // Group tagged lines per project; collect untagged for the unassigned bucket.
+    const byProject = new Map()
+    const untagged = []
+    let taggedCount = 0
+    for (const l of all) {
+      let pid = null
+      for (const tn of l.trackingNames) { if (nameToId.has(tn)) { pid = nameToId.get(tn); break } }
+      if (pid) { if (!byProject.has(pid)) byProject.set(pid, []); byProject.get(pid).push(l); taggedCount++ }
+      else untagged.push(l)
+    }
+
+    // Store per project — exact-mirror within window (replace in-window, keep older).
+    // Clear in-window wages for ALL known projects first so removed tags disappear.
     for (const cp of cats) {
       const pid = cp.trackingOptionId
-      try {
-        const wLines = await fetchWages(tokens.access_token, tenantId, pid, winStr)
-        const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
-        const outside = existing.filter(l => !l.date || l.date < winStr)
-        const combined = [...outside, ...wLines]
-        const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)
-        await redis.set(`costs:wages:${pid}`, { labourSpend: wTot, materialsSpend: 0, totalCosts: wTot, lines: combined, calculatedAt: new Date().toISOString(), source: 'sync_button' })
-        await mergeCosts(redis, pid)
-        projectsDone++; wageLinesTotal += wLines.length
-        await sleep(120)
-      } catch (e) { console.error('sync wages failed', cp.jobNo, e.message) }
+      const fresh = byProject.get(pid) || []
+      const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
+      const older = existing.filter(l => !l.date || l.date < winStr)
+      const combined = [...older, ...fresh]
+      if (combined.length === 0 && existing.length === 0) continue
+      const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)
+      await redis.set(`costs:wages:${pid}`, { labourSpend: wTot, materialsSpend: 0, totalCosts: wTot, lines: combined, calculatedAt: new Date().toISOString(), source: 'sync_button' })
+      await mergeCosts(redis, pid)
     }
+
+    // Untagged wages -> unassigned bucket (replace in-window, keep older).
+    const existingUn = (await redis.get('costs:untagged:wages').catch(() => null)) || []
+    const olderUn = existingUn.filter(l => !l.date || l.date < winStr)
+    await redis.set('costs:untagged:wages', [...olderUn, ...untagged])
 
     await redis.del('dashboard:cache')
     await redis.set('sync-wages:at', new Date().toISOString())
-    res.json({ ok: true, months, projectsDone, wageLinesRefreshed: wageLinesTotal })
+    res.json({ ok: true, months, wageLinesFetched: all.length, taggedToProjects: taggedCount, untagged: untagged.length, projectsTouched: byProject.size })
   } catch (e) {
     console.error('sync-wages error:', e)
     res.status(500).json({ error: e.message })
