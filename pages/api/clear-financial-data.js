@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
   const { type, confirm } = req.body || {}
   if (confirm !== 'CLEAR') return res.status(400).json({ error: 'Type CLEAR to confirm.' })
-  if (!['bills', 'wages', 'sales', 'overheads', 'all'].includes(type)) return res.status(400).json({ error: 'Invalid type.' })
+  if (!['bills', 'wages', 'sales', 'overheads', 'manual', 'all'].includes(type)) return res.status(400).json({ error: 'Invalid type.' })
 
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
@@ -76,12 +76,21 @@ export default async function handler(req, res) {
       // Overheads == the ignore-category items, which live in the untagged bills store.
       await redis.del('costs:untagged:bills')
     }
+    // Legacy Account-Transactions upload data. This is no longer merged into
+    // project spend, but old records can linger and inflate figures — this wipes
+    // them and recomputes each affected project from bills + wages only.
+    const clearManual = async () => {
+      const keys = await scanKeys('costs:manual:*')
+      for (const k of keys) { await redis.del(k); cleared++ }
+      for (const k of keys) { const id = k.replace('costs:manual:', ''); await mergeCosts(redis, id) }
+    }
 
     if (type === 'bills') await clearBills()
     else if (type === 'wages') await clearWages()
     else if (type === 'sales') await clearSales()
     else if (type === 'overheads') await clearOverheads()
-    else if (type === 'all') { await clearBills(); await clearWages(); await clearSales() }
+    else if (type === 'manual') await clearManual()
+    else if (type === 'all') { await clearBills(); await clearWages(); await clearSales(); await clearManual() }
 
     await redis.del('dashboard:cache')
     res.json({ ok: true, type, keysCleared: cleared })

@@ -6,6 +6,7 @@ const CARDS = [
   { type: 'wages', title: 'Direct Wages', desc: 'Deletes ALL project-tagged wages and untagged wage lump sums.' },
   { type: 'sales', title: 'Sales Invoices', desc: 'Deletes ALL sales invoices (per project and unassigned).' },
   { type: 'overheads', title: 'Overheads', desc: 'Deletes the untagged/overhead bills captured for the Overheads tab.' },
+  { type: 'manual', title: 'Legacy Transaction Data', desc: 'Deletes OLD data from the previous per-project Account Transactions upload. This data is no longer used but can linger and inflate labour/materials spend. Clearing it recomputes each project from the new Bills + Wages only. Recommended one-off cleanup.' },
 ]
 
 export default function DataManagement() {
