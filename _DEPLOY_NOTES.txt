@@ -1,28 +1,14 @@
-EOM Report — keep visibility of margin for Defects/Closed projects
-==================================================================
+EOM summary bar — add Total Invoiced
+====================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-THE PROBLEM
------------
-EOM figures are calculated "as at the valuation date of the selected month". A
-Defects/Closed project's works are finished, so the current month has no
-application/valuation date -> calcAtValDate returned null -> the project showed
-blank and you lost sight of the final margin.
-
-THE FIX (as agreed)
--------------------
-In calcAtValDate:
- • DEFECTS / CLOSED projects: if there's no valuation date for the selected month,
-   show ALL-TO-DATE figures (no date cutoff). This preserves the final margin and
-   captures any later return-visit/defect costs. Their date cell reads "To date",
-   and WIP is 0 (nothing is "after" the cutoff).
- • IN PROGRESS projects: unchanged — still strict. No valuation date for the month
-   => the project is omitted, which correctly FLAGS that a valuation date hasn't
-   been set.
-
-So finished projects always show their latest position; live projects still flag
-missing valuation dates.
+CHANGE (pages/commercial.js)
+----------------------------
+The EOM aggregation bar showed Profit £, Profit % and WIP £. Added "Invoiced £"
+(shown first) = total invoiced across the shown/selected projects (the 200-based
+net-of-VAT, incl-retention figure, consistent with the Invoiced column). Respects
+the project selection and the hidden-projects filter like the other totals.
 
 FILE CHANGED
 ------------

@@ -610,6 +610,10 @@ export default function Dashboard() {
                   <div style={{ background: GROUP.profit.bg, border: `1px solid ${GROUP.profit.border}`, borderRadius: 8, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
                     <span style={{ fontSize: 11, color: '#888' }}>{isSelection ? `${selectedProjects.size} selected` : `All ${filtered.length} projects`} — to val. date in {monthOptions.find(m => m.key === selectedMonth)?.label}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12, color: '#888' }}>Invoiced £</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{fmt(selGrossInv)}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#888' }}>Profit £</span>
                       <span style={{ fontSize: 18, fontWeight: 700, color: selProfit >= 0 ? '#16a34a' : '#e63946' }}>{fmt(selProfit)}</span>
                     </div>
