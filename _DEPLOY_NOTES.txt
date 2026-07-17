@@ -1,49 +1,26 @@
-Bookkeeping — Accounts role access to tools + fix Bookkeeping hub 404
-====================================================================
+Bookkeeping — financial pages now show BOOKKEEPING chrome, not Admin
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy over the top.
+Deploy over the top. Single file.
 
-IMPORTANT — THE 404 FIX
------------------------
-The "Bookkeeping Admin" 404 was because pages/bookkeeping/admin.js wasn't in
-GitHub. This package includes it. In the GitHub web editor: Add file -> Create new
-file -> type the path  pages/bookkeeping/admin.js  (the "/" makes the folder) ->
-paste the contents. Make sure it sits ALONGSIDE the existing pages/bookkeeping.js.
+WHAT WAS WRONG
+--------------
+Account Categorisation, Xero Upload and Data Management were removed from the
+Admin nav, but the PAGES still rendered inside the Admin shell — so opening them
+dropped you into the dark "Admin" bar ("← Portal | Admin"). Visually they were
+still in the Admin section.
 
-ACCESS CHANGES (as requested)
------------------------------
-The bookkeeper (Accounts role) can now use the financial tools; only WIPE stays
-admin-only:
-• Xero Upload            -> Accounts, Management, Admin
-• Account Categorisation -> Accounts, Management, Admin
-• Data Management (wipe) -> Admin ONLY (unchanged)
-Enforced on BOTH the pages (AdminShell now takes an `allow` prop) and the APIs
-(requireRole updated). Import APIs previously allowed 'post-contract' — now
-'accounts' instead.
-
-RELOCATED UNDER BOOKKEEPING
----------------------------
-• The hub is renamed "Bookkeeping Tools" (was "Bookkeeping Admin").
-• Reached from the Bookkeeping dashboard buttons (⬆ Upload Bills, ⚙ Bookkeeping
-  Tools) — now shown to Accounts/Management/Admin (was admin-only).
-• The hub shows Account Categorisation + Xero Upload to all allowed roles; the
-  Data Management (wipe) card shows to ADMINS ONLY.
-• These three pages already sit outside the general Admin nav (shown with a
-  "← Bookkeeping Tools" context bar).
-
-NOTE: the black top bar on those pages still reads "Admin" and the Data Management
-tab may appear in the context bar for non-admins (clicking it redirects them, as
-it's admin-only). Harmless; can tidy later if you want.
+FIX
+---
+When AdminShell renders those three pages it now shows BOOKKEEPING chrome:
+  • Top bar: "← Bookkeeping | Bookkeeping Tools" (was "← Portal | Admin")
+  • Back link goes to /bookkeeping (not the portal/admin home)
+  • Sub-nav: the three bookkeeping tools + "← All tools" (no Admin tabs)
+The route stays /admin/... under the hood (no link-breaking file move), but
+visually and navigationally these pages are now fully inside Bookkeeping — no
+Admin chrome anywhere.
 
 FILES CHANGED
 -------------
-• components/AdminShell.js               — `allow` prop for role-gating
-• pages/admin/xero-upload.js             — allow accounts/management/admin
-• pages/admin/account-categorisation.js  — allow accounts/management/admin
-• pages/bookkeeping/admin.js       (NEW) — hub, renamed, Data Mgmt admin-only card
-• pages/bookkeeping.js                   — tool buttons shown to accounts+
-• pages/api/import-bills-bulk.js         — allow accounts
-• pages/api/import-wages-bulk.js         — allow accounts
-• pages/api/import-invoices-bulk.js      — allow accounts
-• pages/api/account-categorisation.js    — allow accounts
+• components/AdminShell.js — Bookkeeping chrome for the three financial pages

@@ -27,19 +27,20 @@ export default function AdminShell({ active, title, children, wide, allow }) {
     }).catch(() => router.replace('/login'))
   }, [])
   if (!ok) return null
+  const isBk = ['/admin/account-categorisation', '/admin/xero-upload', '/admin/data-management'].includes(active)
   return (
     <>
-      <Head><title>Rock Roofing — {title || 'Admin'}</title></Head>
+      <Head><title>Rock Roofing — {title || (isBk ? 'Bookkeeping' : 'Admin')}</title></Head>
       <div style={{ fontFamily: 'system-ui,-apple-system,sans-serif', minHeight: '100vh', background: '#fafaf9' }}>
         <div style={{ background: '#1a1a19', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none' }}>← Portal</a>
+          <a href={isBk ? '/bookkeeping' : '/'} style={{ color: '#888', fontSize: 13, textDecoration: 'none' }}>{isBk ? '← Bookkeeping' : '← Portal'}</a>
           <span style={{ color: '#3a3a38' }}>|</span>
-          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Admin</span>
+          <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{isBk ? 'Bookkeeping Tools' : 'Admin'}</span>
         </div>
         <div style={{ background: '#232321', padding: '0 24px', display: 'flex', gap: 4, height: 44, alignItems: 'center', overflowX: 'auto' }}>
-          {['/admin/account-categorisation', '/admin/xero-upload', '/admin/data-management'].includes(active) ? (
+          {isBk ? (
             <>
-              <a href="/bookkeeping/admin" style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', color: '#bbb' }}>← Bookkeeping Tools</a>
+              <a href="/bookkeeping/admin" style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', color: '#bbb' }}>← All tools</a>
               {[['Account Categorisation', '/admin/account-categorisation'], ['Xero Upload', '/admin/xero-upload'], ['Data Management', '/admin/data-management']].map(([label, href]) => (
                 <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
               ))}
