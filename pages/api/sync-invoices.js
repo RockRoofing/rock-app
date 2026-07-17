@@ -144,8 +144,15 @@ export default async function handler(req, res) {
       const tot = merged.reduce((s, l) => s + (l.total || 0), 0)
       const paid = merged.reduce((s, l) => s + (l.amountPaid || 0), 0)
       const due = merged.reduce((s, l) => s + (l.amountDue || 0), 0)
+      // Ex-VAT (net) total + VAT — needed by the Retention page's "Invoiced Net"
+      // and by the dashboard. Previously omitted, so Invoiced Net went stale.
+      const exVat = merged.reduce((s, l) => s + (l.subTotal != null ? l.subTotal : (l.total || 0)), 0)
+      const vat = merged.reduce((s, l) => s + (l.totalTax || 0), 0)
+      let vatRateLabel = '—'
+      if (exVat > 0 && vat > 0) vatRateLabel = `${Math.round((vat / exVat) * 100)}%`
+      else if (exVat > 0 && vat === 0) vatRateLabel = '0%'
       await redis.set(`invoiced:lines:${pid}`, merged)
-      await redis.set(`invoiced:latest:${pid}`, { totalInvoiced: tot, paidTotal: paid, dueTotal: due, invoiceCount: merged.length, calculatedAt: new Date().toISOString(), source: 'sync_button' })
+      await redis.set(`invoiced:latest:${pid}`, { totalInvoiced: tot, invoicedExVat: exVat, vatTotal: vat, vatRateLabel, paidTotal: paid, dueTotal: due, invoiceCount: merged.length, calculatedAt: new Date().toISOString(), source: 'sync_button' })
     }
 
     await redis.del('dashboard:cache')

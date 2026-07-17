@@ -1,47 +1,43 @@
-Commercial — move sync buttons into the main nav; Xero connection -> Admin
-=========================================================================
+Commercial — fix Invoiced Net sync + make Gross Invoiced net-of-VAT
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+After deploy: run Sync Invoices once (repopulates the ex-VAT figure), then the
+Commercial pages force-refresh on sync so numbers update.
 
-REQUIRES the earlier "Commercial_sync_buttons_and_stamps" deploy to be in first
-(it added components/SyncBar.js, /api/sync-status, sync-bills:at). This deploy
-updates SyncBar and moves it into the navs. If deploying together, take THIS
-SyncBar.js (it's newer — adds the compact nav layout).
+FIX A — Retention "Invoiced Net" wasn't updating on Sync Invoices
+-----------------------------------------------------------------
+Cause: sync-invoices stored totalInvoiced (VAT-inclusive) but NOT the ex-VAT
+(net) total, VAT total, or VAT label. The Retention page's "Invoiced Net" reads
+invoicedExVat, which the sync left stale/zero.
+Fix (pages/api/sync-invoices.js): the sync now also computes and stores:
+  • invoicedExVat = Σ line SubTotal  (net of VAT)
+  • vatTotal      = Σ line TotalTax
+  • vatRateLabel  (derived, e.g. "20%", "0%")
+So Sync Invoices now updates Invoiced Net correctly.
 
-CHANGES
--------
-Project Financials (commercial.js — Budget Tracker & EOM):
- • The new sync buttons (Sync Invoices / Sync Wages / Upload Bills) now live in
-   the MAIN NAV, replacing the old red "Sync Xero" button.
- • "Report app improvement" stays to their LEFT (unchanged position).
- • The "Xero" connection link is REMOVED from this nav (moved to Admin — below).
- • A small "synced <when>" stamp shows next to the buttons; hover shows per-type
-   detail. Syncing force-refreshes the dashboard so figures update immediately.
- • (The old red button ran a legacy bills-costing sync via /api/xero/sync — now
-   superseded by the new Invoices/Wages/Bills flow. Its function syncXero() is
-   left in the file but unused; harmless.)
+Confirmed definition (as you specified): Invoiced Net = net of VAT (SubTotal),
+NOT net of retention. That was already the intended reading; it just wasn't being
+fed by the sync.
 
-Admin centre (admin.js):
- • Added a "Xero Connection" tab (-> /connect) to the admin sub-nav, so the Xero
-   connect/reauthorise link now lives in Admin.
+FIX B — Budget Tracker "Gross Invoiced" now NET of VAT, including retention
+--------------------------------------------------------------------------
+Was: totalInvoiced (VAT-INCLUSIVE) + retentionOutstanding.
+Now: invoicedExVat (NET of VAT) + retentionOutstanding.
+For consistency (AFA and retention are net concepts), the dashboard now bases
+these all on the net figure:
+  • totalRetention   = invoicedExVat × pct/(1−pct)   (was on VAT-inclusive)
+  • grossInvoiced    = invoicedExVat + retentionOutstanding
+  • remainingToClaim = afa − invoicedExVat            (afa is net; was mixing net vs gross)
+  • "fully invoiced/closed" check now compares invoicedExVat vs afa
+totalInvoiced (VAT-inclusive) is still returned for anything that needs the gross.
 
-Retention (retention.js):
- • Sync Invoices button moved into the header, BETWEEN "Report app improvement"
-   (left) and "+ Add Manual Entry" (right).
+Knock-on fixed: Retention page seeded release values as (grossInvoiced −
+totalInvoiced)/2, which broke once grossInvoiced became net-based. Dashboard now
+returns totalRetention; Retention uses totalRetention/2 per release.
 
-Outstanding Invoices (outstanding-invoices.js):
- • Sync Invoices button moved into the header, to the RIGHT of "Report app
-   improvement".
-
-SyncBar (components/SyncBar.js):
- • New compact=true (default) inline layout for nav bars: buttons + small stamp,
-   full per-type detail on hover. compact=false keeps the stacked layout with a
-   full stamp row (used where there's room).
-
-FILES
------
-• components/SyncBar.js
-• pages/commercial.js
+FILES CHANGED
+-------------
+• pages/api/sync-invoices.js
+• pages/api/dashboard.js
 • pages/retention.js
-• pages/outstanding-invoices.js
-• pages/admin.js

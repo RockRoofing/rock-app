@@ -115,16 +115,20 @@ export default async function handler(req, res) {
       const afa = contractValue + instructedVars
 
       // ── Retention (all-time) ──────────────────────────────────────────────
+      // Retention is a % of the NET (ex-VAT) work value, and AFA/remaining are
+      // net figures, so all of these are computed on invoicedExVat (net), not the
+      // VAT-inclusive total.
       const retPct = parseFloat(settings.retentionPct || 0)
-      const totalRetention = retPct > 0 ? totalInvoiced * retPct / (1 - retPct) : 0
+      const totalRetention = retPct > 0 ? invoicedExVat * retPct / (1 - retPct) : 0
       const now = new Date()
       const pc1 = settings.pcDate ? new Date(settings.pcDate) : null
       const pc2 = settings.defectsDate ? new Date(settings.defectsDate) : null
       const retentionReleased = (pc1 && pc1 <= now ? totalRetention / 2 : 0) + (pc2 && pc2 <= now ? totalRetention / 2 : 0)
       const retentionOutstanding = totalRetention - retentionReleased
-      const grossInvoiced = totalInvoiced + retentionOutstanding
+      // Gross Invoiced = net-of-VAT invoiced value with retention added back on.
+      const grossInvoiced = invoicedExVat + retentionOutstanding
       const currentMargin = grossInvoiced > 0 ? (grossInvoiced - totalCosts) / grossInvoiced : null
-      const remainingToClaim = afa - totalInvoiced
+      const remainingToClaim = afa - invoicedExVat
 
       // ── Budgets (inc. instructed variations) ─────────────────────────────
       const labourBudget = parseFloat(settings.labourBudget || 0) +
@@ -149,7 +153,7 @@ export default async function handler(req, res) {
 
       // ── Project stage ─────────────────────────────────────────────────────
       let stage = 'INPROGRESS'
-      if (afa > 0 && totalInvoiced >= afa * 0.999 && allPaid) {
+      if (afa > 0 && invoicedExVat >= afa * 0.999 && allPaid) {
         stage = 'CLOSED'
       } else if (afa > 0 && remainingToClaim <= retentionOutstanding + 1) {
         stage = 'DEFECTS'
@@ -193,6 +197,7 @@ export default async function handler(req, res) {
         labourBudget,
         materialsBudget,
         retentionOutstanding,
+        totalRetention,
         grossInvoiced,
         currentMargin,
         wip,
