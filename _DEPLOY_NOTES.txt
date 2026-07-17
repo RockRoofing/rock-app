@@ -1,39 +1,32 @@
-Fix inflated labour/materials spend — drop legacy data, use only new bills+wages
-================================================================================
+Project Details — Costs tab filters (labour/materials, searchable supplier,
+working multi-select account codes)
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-THE CAUSE
----------
-Project labour/materials spend was exorbitant because mergeCosts summed THREE
-sources: bills + wages + a legacy 'manual' source (the OLD per-project Account
-Transactions upload). Where old manual data still existed, it was added ON TOP OF
-the new Bills data → double-counting / inflation.
+CHANGES (pages/project/[id].js — Costs tab)
+-------------------------------------------
+1. LABOUR / MATERIALS FILTER
+   New dropdown: "Labour & Materials" / "Labour only" / "Materials only".
+   (Clicking the budget rows still toggles it too — both drive the same filter.)
 
-THE FIX (two parts)
--------------------
-1) lib/mergeCosts.js — SOURCES is now ['bills','wages'] only. The legacy 'manual'
-   source is no longer merged. Labour/materials now come ONLY from the new Bills
-   and Wages, categorised per Account Categorisation in Admin.
-2) A one-off cleanup to remove the lingering old data:
-   • pages/api/clear-financial-data.js — new type 'manual' scans costs:manual:*,
-     deletes them, and recomputes each affected project (bills+wages only).
-   • pages/admin/data-management.js — new "Legacy Transaction Data" card to run it.
+2. SEARCHABLE SUPPLIER FILTER
+   The supplier dropdown is now a type-to-search combobox (same as Bookkeeping):
+   click, type, list narrows; pick one; "All suppliers" clears.
 
-*** ACTION AFTER DEPLOY (one-off) ***
-1. Admin → Bookkeeping Tools → Data Management.
-2. Click "Legacy Transaction Data" → type CLEAR → confirm.
-   (This deletes the old Account-Transactions data and recomputes every project
-    from Bills + Wages only. Non-destructive to your new bills/wages/invoices.)
-3. The dashboard cache is cleared automatically; hard-refresh Project Financials
-   and the spend figures should drop to the correct Bills+Wages-only totals.
+3. ACCOUNT FILTER — FIXED + MULTI-SELECT BY CODE
+   The old "All accounts" did nothing because it filtered on accountName, which
+   is blank on most cost lines (they carry accountCode). It now:
+     • lists account CODES actually present (shows "code — name" where a name
+       exists),
+     • is MULTI-SELECT via checkboxes in the dropdown,
+     • has a search box to find a code/name,
+     • filters the lines to the ticked codes.
+   This is what you'll use to spot a wrongly-categorised high-value code driving
+   the inflated labour/materials spend.
 
-If any project still looks high after this, it'll be a categorisation issue (a
-high-value account code marked Labour/Materials that shouldn't be) — fixable in
-Admin → Account Categorisation, no re-upload needed.
+Note: the WIP tab's own (separate) filters are unchanged.
 
-FILES CHANGED
--------------
-• lib/mergeCosts.js
-• pages/api/clear-financial-data.js
-• pages/admin/data-management.js
+FILE CHANGED
+------------
+• pages/project/[id].js

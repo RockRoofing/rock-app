@@ -1,5 +1,5 @@
 // v10 - wip valDate fix, colour key, label changes
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -521,6 +521,70 @@ function OverviewTab({ p, settings, atDate, trendData, vDateLabel, costLines, in
   )
 }
 
+// Searchable supplier combobox for the Costs tab.
+function CostSupplierPicker({ value, options, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const needle = q.trim().toLowerCase()
+  const matches = (needle ? options.filter(s => s.toLowerCase().includes(needle)) : options).slice(0, 200)
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input value={open ? q : (value || '')} placeholder="All suppliers"
+        onFocus={() => { setOpen(true); setQ('') }}
+        onChange={e => { setQ(e.target.value); setOpen(true) }}
+        style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff', minWidth: 150 }} />
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 30, maxHeight: 260, overflowY: 'auto', minWidth: 200, padding: 6 }}>
+          <div onClick={() => { onChange(''); setQ(''); setOpen(false) }} style={{ padding: '6px 10px', fontSize: 12, color: value ? '#b45309' : '#666', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}>All suppliers</div>
+          {matches.length === 0 ? <div style={{ padding: 10, fontSize: 12, color: '#aaa' }}>No matches</div>
+            : matches.map(s => <div key={s} onClick={() => { onChange(s); setQ(''); setOpen(false) }} style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', borderRadius: 6, background: s === value ? '#f5f3ff' : 'transparent', fontWeight: s === value ? 700 : 400 }}>{s}</div>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Multi-select account-code picker (checkboxes) for the Costs tab.
+function CostAccountPicker({ codes, codeName, selected, onChange }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const ref = useRef(null)
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const needle = q.trim().toLowerCase()
+  const matches = codes.filter(c => !needle || c.toLowerCase().includes(needle) || (codeName[c] || '').toLowerCase().includes(needle))
+  const toggle = (c) => onChange(selected.includes(c) ? selected.filter(x => x !== c) : [...selected, c])
+  const labelText = selected.length === 0 ? 'All account codes' : `${selected.length} code${selected.length > 1 ? 's' : ''} selected`
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff', cursor: 'pointer', minWidth: 150, textAlign: 'left', color: selected.length ? '#1a1a2e' : '#666' }}>
+        {labelText} ▾
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 30, maxHeight: 300, overflowY: 'auto', minWidth: 240, padding: 6 }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search code or name…" autoFocus
+            style={{ width: '100%', padding: '6px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, boxSizing: 'border-box', marginBottom: 6 }} />
+          {selected.length > 0 && <div onClick={() => onChange([])} style={{ padding: '4px 8px', fontSize: 11, color: '#b45309', cursor: 'pointer' }}>Clear selection</div>}
+          {matches.length === 0 ? <div style={{ padding: 10, fontSize: 12, color: '#aaa' }}>No codes</div>
+            : matches.map(c => (
+              <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer', borderRadius: 6, background: selected.includes(c) ? '#f5f3ff' : 'transparent' }}>
+                <input type="checkbox" checked={selected.includes(c)} onChange={() => toggle(c)} />
+                <span><strong>{c}</strong>{codeName[c] ? ` — ${codeName[c]}` : ''}</span>
+              </label>
+            ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CostsTab({ costLines, atDate, settings }) {
   const twoYearsAgo = new Date()
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2)
@@ -528,7 +592,7 @@ function CostsTab({ costLines, atDate, settings }) {
   const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0])
   const [typeFilter, setTypeFilter] = useState('all')
   const [supplierFilter, setSupplierFilter] = useState('')
-  const [accountFilter, setAccountFilter] = useState('')
+  const [accountCodes, setAccountCodes] = useState([])   // multi-select by account code
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
   const [expandedInvoice, setExpandedInvoice] = useState(null)
@@ -540,11 +604,15 @@ function CostsTab({ costLines, atDate, settings }) {
     return true
   })
   const suppliers = [...new Set(dateFiltered.map(l => l.supplier).filter(Boolean))].sort()
-  const accounts = [...new Set(dateFiltered.map(l => l.accountName).filter(Boolean))].sort()
+  // Account CODES present (cost lines carry accountCode; accountName is often blank).
+  // Show "code — name" where a name exists.
+  const codeName = {}
+  for (const l of dateFiltered) { if (l.accountCode && l.accountName && !codeName[l.accountCode]) codeName[l.accountCode] = l.accountName }
+  const accountCodeList = [...new Set(dateFiltered.map(l => String(l.accountCode || '')).filter(Boolean))].sort()
   const filtered = dateFiltered.filter(l => {
     if (typeFilter !== 'all' && l.type !== typeFilter) return false
     if (supplierFilter && l.supplier !== supplierFilter) return false
-    if (accountFilter && l.accountName !== accountFilter) return false
+    if (accountCodes.length && !accountCodes.includes(String(l.accountCode || ''))) return false
     return true
   })
 
@@ -644,16 +712,15 @@ function CostsTab({ costLines, atDate, settings }) {
           <span style={{ fontSize: 12, color: '#666' }}>To:</span>
           <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }} />
         </div>
-        <select value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
-          <option value="">All suppliers</option>
-          {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
+          <option value="all">Labour &amp; Materials</option>
+          <option value="Labour">Labour only</option>
+          <option value="Materials">Materials only</option>
         </select>
-        <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
-          <option value="">All accounts</option>
-          {accounts.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        {(typeFilter !== 'all' || supplierFilter || accountFilter) && (
-          <button onClick={() => { setTypeFilter('all'); setSupplierFilter(''); setAccountFilter('') }} style={{ padding: '5px 10px', background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#555' }}>Clear filters</button>
+        <CostSupplierPicker value={supplierFilter} options={suppliers} onChange={setSupplierFilter} />
+        <CostAccountPicker codes={accountCodeList} codeName={codeName} selected={accountCodes} onChange={setAccountCodes} />
+        {(typeFilter !== 'all' || supplierFilter || accountCodes.length > 0) && (
+          <button onClick={() => { setTypeFilter('all'); setSupplierFilter(''); setAccountCodes([]) }} style={{ padding: '5px 10px', background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#555' }}>Clear filters</button>
         )}
       </div>
 
@@ -662,7 +729,7 @@ function CostsTab({ costLines, atDate, settings }) {
           <strong>{sorted.length}</strong> invoices · <strong>{filtered.length}</strong> line items
           {typeFilter !== 'all' && <span style={{ color: '#6366f1' }}> · {typeFilter} only</span>}
           {supplierFilter && <span style={{ color: '#6366f1' }}> · {supplierFilter}</span>}
-          {accountFilter && <span style={{ color: '#6366f1' }}> · {accountFilter}</span>}
+          {accountCodes.length > 0 && <span style={{ color: '#6366f1' }}> · {accountCodes.length} account code{accountCodes.length > 1 ? 's' : ''}</span>}
         </span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Total: {fmtC(filteredTotal)}</span>
       </div>
