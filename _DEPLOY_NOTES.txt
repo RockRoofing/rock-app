@@ -1,35 +1,31 @@
-Bookkeeping — FIX Xero token exchange (invalid_grant / Invalid redirect_uri)
-============================================================================
+Bookkeeping — FIX wages have no date (can't filter/assess by date)
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy, then /connect -> Reconnect Xero -> approve.
+Deploy, then re-run Sync Wages.
 
-THE LAST STEP
--------------
-Consent now works (Manual journals scope is granted ✓). But the token exchange
-failed with: invalid_grant / "Invalid redirect_uri".
+WHAT WAS WRONG
+--------------
+Wages now pull in line-by-line (great!) but with NO date, so they can't be
+filtered or assessed by month.
 
-Cause: the callback built its redirect_uri from NEXT_PUBLIC_APP_URL, falling back
-to an OLD domain (rockroofing-app.vercel.app). Xero requires the token-exchange
-redirect_uri to EXACTLY match the one used at authorize (app.rockroofing.co.uk).
-Mismatch -> invalid_grant.
+Cause: the ManualJournals LIST response often omits BOTH the line detail AND the
+header date. The code took the date from the list entry (null) and stamped that
+null onto every line. When it re-fetched the journal by ID for the lines, it
+ignored the fuller detail's date.
 
-FIX
----
-The callback now derives redirect_uri from the actual request host
-(app.rockroofing.co.uk) instead of the stale env var, so it always matches the
-authorize step. No env var needed.
+THE FIX
+-------
+When fetching a journal by ID (for lines/tracking), also read the header date from
+that detail response and use it. The by-ID detail reliably carries Date/DateString.
+So every wage line now gets its correct journal date. Also triggers the by-ID
+fetch when the list entry lacks a date (rate-limit safe).
 
 AFTER DEPLOYING
 ---------------
-1. /connect -> Reconnect Xero -> approve "Continue with 1 organisation".
-2. Should now redirect back successfully (no "Connection failed").
-3. /api/xero/status -> scope should include accounting.manualjournals.read
-4. Run Sync Wages -> journal lines pull through, wages categorise.
-
-(If it still says Invalid redirect_uri, ensure NEXT_PUBLIC_APP_URL is NOT set to
-an old domain in Vercel — this fix ignores it, but a redeploy must complete first.)
+Re-run Sync Wages. Wage lines should now show their dates and be filterable by
+month, and land in the correct month on the Direct Wages card/graph.
 
 FILE CHANGED
 ------------
-• pages/api/xero/callback.js — redirect_uri derived from request host
+• pages/api/sync-wages.js — stamp correct journal date on each wage line

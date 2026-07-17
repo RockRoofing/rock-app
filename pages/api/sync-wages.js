@@ -31,20 +31,25 @@ async function fetchAllWageLines(at, tid, fromDate) {
     const journals = data.ManualJournals || []
     if (journals.length === 0) break
     for (const j of journals) {
-      const dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
-      if (dateStr && dateStr < fromDate) continue
-      // The ManualJournals LIST often omits JournalLines — fetch the journal by ID
-      // to get its lines + tracking. 429-safe so we never silently skip.
+      let dateStr = (j.Date && String(j.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(j.Date).slice(0, 10) : (j.DateString ? j.DateString.slice(0, 10) : null)
+      // The ManualJournals LIST often omits JournalLines AND the date — fetch the
+      // journal by ID to get its lines, tracking AND a reliable header date.
       let jLines = j.JournalLines
-      if (!Array.isArray(jLines) || jLines.length === 0) {
+      if (!Array.isArray(jLines) || jLines.length === 0 || !dateStr) {
         for (let a = 0; a < 4; a++) {
           const r = await fetch(`https://api.xero.com/api.xro/2.0/ManualJournals/${j.ManualJournalID}`, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
           if (r.status === 429) { await sleep((parseInt(r.headers.get('Retry-After') || '2', 10) + 1) * 1000); continue }
-          if (!r.ok) { jLines = []; break }
-          jLines = (((await r.json()).ManualJournals || [])[0] || {}).JournalLines || []
+          if (!r.ok) { jLines = jLines || []; break }
+          const full = (((await r.json()).ManualJournals || [])[0] || {})
+          jLines = full.JournalLines || jLines || []
+          // Recompute date from the detail response (list often lacks it).
+          if (!dateStr) {
+            dateStr = (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/)) ? String(full.Date).slice(0, 10) : (full.DateString ? full.DateString.slice(0, 10) : null)
+          }
           await sleep(400); break
         }
       }
+      if (dateStr && dateStr < fromDate) continue
       for (const jl of (jLines || [])) {
         if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
