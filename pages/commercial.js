@@ -68,11 +68,12 @@ function calcAtValDate(project, monthKey) {
     ? costsAfterDate / (1 - effectiveMargin) : 0
 
   const profit = grossInvoiced - costsToDate
+  const wipProfit = wip - costsAfterDate   // profit portion of WIP (revenue − its cost)
 
   return {
     costsToDate, labourToDate, materialsToDate,
     invoicedToDate, grossInvoiced, retention,
-    margin, remainingToClaim, wip, effectiveMargin,
+    margin, remainingToClaim, wip, effectiveMargin, costsAfterDate, wipProfit,
     profit, profitPct: grossInvoiced > 0 ? profit / grossInvoiced : null,
     vDateStr,
     vDateLabel: vDateStr || 'To date',   // completed projects show all-to-date
@@ -288,7 +289,10 @@ export default function Dashboard() {
     { key: 'over_labour', label: 'Over Budget (Labour)', value: overLabour, raw: true, clickable: true, warn: overLabour > 0 },
     { key: 'over_total', label: 'Over Budget (Total)', value: overTotal, raw: true, clickable: true, warn: overTotal > 0 },
     { key: 'remaining', label: 'Remaining to Claim (Ex. Retention)', value: fmt(totals.remainingToClaim), highlight: true, clickable: false },
-    { key: 'retention', label: 'Retention Outstanding', value: fmt(totals.retention), warn: totals.retention > 0, clickable: false },
+    eomMode
+      ? { key: 'wip', label: 'WIP', value: fmt(totals.eomWip), highlight: true, clickable: false,
+          sub: `to end of ${monthOptions.find(m => m.key === selectedMonth)?.label || ''}` }
+      : { key: 'retention', label: 'Retention Outstanding', value: fmt(totals.retention), warn: totals.retention > 0, clickable: false },
     { key: 'remaining_gross', label: 'Remaining to Claim (Inc. Retention)', value: fmt(totals.remainingGross), highlight: true, clickable: false },
   ]
 
@@ -601,25 +605,34 @@ export default function Dashboard() {
               : filtered
             const selProfit = selArr.reduce((s, p) => s + (eomData[p.xeroId]?.profit || 0), 0)
             const selGrossInv = selArr.reduce((s, p) => s + (eomData[p.xeroId]?.grossInvoiced || 0), 0)
-            const selProfitPct = selGrossInv > 0 ? selProfit / selGrossInv : null
             const selWip = selArr.reduce((s, p) => s + (eomData[p.xeroId]?.wip || 0), 0)
+            const selWipProfit = selArr.reduce((s, p) => s + (eomData[p.xeroId]?.wipProfit || 0), 0)
+            // Figures INCLUDING WIP:
+            //  Invoiced = invoiced to val date + WIP (work done, to be invoiced to EOM)
+            //  Profit   = profit to val date + profit portion of WIP
+            //  Profit % = (profit + wipProfit) / (invoiced + wip)
+            const invoicedInclWip = selGrossInv + selWip
+            const profitInclWip = selProfit + selWipProfit
+            const profitPctInclWip = invoicedInclWip > 0 ? profitInclWip / invoicedInclWip : null
             const isSelection = selectedProjects.size > 0
+            const monthLabel = monthOptions.find(m => m.key === selectedMonth)?.label
+            const barTip = `Total invoiced and profit for ${isSelection ? 'the ticked' : 'all listed'} projects, INCLUDING WIP (work done but not yet invoiced), to the end of ${monthLabel}. Invoiced = invoiced to valuation date + WIP. Profit = profit to date + profit on WIP. Profit % = profit ÷ invoiced (both incl. WIP).`
             return (
               <div style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ background: GROUP.profit.bg, border: `1px solid ${GROUP.profit.border}`, borderRadius: 8, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <span style={{ fontSize: 11, color: '#888' }}>{isSelection ? `${selectedProjects.size} selected` : `All ${filtered.length} projects`} — to val. date in {monthOptions.find(m => m.key === selectedMonth)?.label}</span>
+                  <div title={barTip} style={{ background: GROUP.profit.bg, border: `1px solid ${GROUP.profit.border}`, borderRadius: 8, padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <span style={{ fontSize: 11, color: '#888' }}>{isSelection ? `${selectedProjects.size} selected` : `All ${filtered.length} projects`} — incl. WIP, to end of {monthLabel}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#888' }}>Invoiced £</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{fmt(selGrossInv)}</span>
+                      <span style={{ fontSize: 12, color: '#888' }}>Invoiced £ (inc WIP)</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>{fmt(invoicedInclWip)}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: 12, color: '#888' }}>Profit £</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: selProfit >= 0 ? '#16a34a' : '#e63946' }}>{fmt(selProfit)}</span>
+                      <span style={{ fontSize: 12, color: '#888' }}>Profit £ (inc WIP)</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: profitInclWip >= 0 ? '#16a34a' : '#e63946' }}>{fmt(profitInclWip)}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#888' }}>Profit %</span>
-                      <span style={{ fontSize: 18, fontWeight: 700, color: selProfitPct != null ? (selProfitPct >= 0.25 ? '#16a34a' : selProfitPct >= 0.21 ? '#ca8a04' : '#e63946') : '#888' }}>{selProfitPct != null ? (selProfitPct * 100).toFixed(1) + '%' : '—'}</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: profitPctInclWip != null ? (profitPctInclWip >= 0.25 ? '#16a34a' : profitPctInclWip >= 0.21 ? '#ca8a04' : '#e63946') : '#888' }}>{profitPctInclWip != null ? (profitPctInclWip * 100).toFixed(1) + '%' : '—'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 12, color: '#888' }}>WIP £</span>

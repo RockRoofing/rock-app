@@ -1,14 +1,25 @@
-EOM summary bar — add Total Invoiced
-====================================
+EOM — WIP card (replaces Retention Outstanding) + WIP folded into pink-bar figures
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE (pages/commercial.js)
-----------------------------
-The EOM aggregation bar showed Profit £, Profit % and WIP £. Added "Invoiced £"
-(shown first) = total invoiced across the shown/selected projects (the 200-based
-net-of-VAT, incl-retention figure, consistent with the Invoiced column). Respects
-the project selection and the hidden-projects filter like the other totals.
+1) TOP CARDS (EOM mode only)
+   "Retention Outstanding" card is REPLACED by a "WIP" card showing total WIP and
+   the month it applies to ("to end of <Month>"). In Budget Tracker mode the
+   Retention Outstanding card is unchanged.
+
+2) PINK SUMMARY BAR now INCLUDES WIP (per your spec)
+   • Invoiced £ (inc WIP) = invoiced to valuation date + WIP
+   • Profit £ (inc WIP)   = profit to date + profit portion of WIP
+       (WIP profit = WIP − costs incurred after the valuation date)
+   • Profit %             = (profit + WIP profit) ÷ (invoiced + WIP)
+   • WIP £                = total WIP (matches the new WIP card)
+   Label now reads "… incl. WIP, to end of <Month>".
+   Hover tooltip on the box explains it: "Total invoiced and profit for the
+   ticked/all listed projects, INCLUDING WIP (work done but not yet invoiced), to
+   the end of <Month>…". Respects project selection + hidden filter.
+
+   (calcAtValDate now also returns costsAfterDate and wipProfit.)
 
 FILE CHANGED
 ------------
