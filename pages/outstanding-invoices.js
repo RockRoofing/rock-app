@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import SyncBar from '../components/SyncBar'
 
 const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 const parseDMY = (s) => {
@@ -177,6 +178,9 @@ export default function OutstandingInvoicesPage() {
         </div>
 
         <div style={{ padding: 24 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <SyncBar show={['invoices']} months={6} onDone={() => loadAll()} />
+          </div>
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[

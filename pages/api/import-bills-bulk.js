@@ -210,6 +210,7 @@ export default async function handler(req, res) {
 
     try { await redis.set('costs:seen-accounts', seenAccounts) } catch {}
     await redis.del('dashboard:cache')
+    await redis.set('sync-bills:at', new Date().toISOString())
 
     // Days that have bill data in the app but are NOT covered by this file — but
     // ONLY flag gaps WITHIN the file's own date span (between its earliest and

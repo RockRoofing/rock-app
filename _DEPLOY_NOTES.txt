@@ -1,20 +1,50 @@
-Bookkeeping — tighten the green gradient (Sync Invoices was too different)
-=========================================================================
+Commercial + Bookkeeping — sync buttons on Commercial pages + "last synced" stamps
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE
-------
-Sync Invoices was #14b8a6 (a bright mint/teal) — too far from the deeper greens
-of Sync Wages and Upload Bills, so it looked like a different button. Moved it to
-#0d9488 so the three read as one tight light->dark set:
+BACKGROUND
+----------
+Confirmed Commercial reads the SAME data as Bookkeeping (both trace to
+costs:latest/costs:lines via mergeCosts, and invoiced:latest/lines). Bookkeeping
+syncs already clear dashboard:cache, so figures flow through. This adds the sync
+controls directly onto the Commercial pages so you don't have to hop to
+Bookkeeping, plus a "last synced" stamp everywhere.
 
-  Sync Invoices  #0d9488  (light)
-  Sync Wages     #0f766e  (mid)
-  Upload Bills   #0b5c55  (dark)
-
-Sync Xero figures (Xero blue #13B5EA) and Bookkeeping Tools unchanged.
-
-FILE CHANGED
+WHAT'S ADDED
 ------------
+• components/SyncBar.js  (NEW, shared) — green Sync Invoices / Sync Wages /
+  Upload Bills buttons (same styling as Bookkeeping), each page picks which to
+  show. Shows a "last synced" stamp per type. On success it force-refreshes the
+  host page's data.
+• pages/api/sync-status.js  (NEW) — returns last-synced timestamps
+  {invoices, wages, bills, benchmark}.
+• pages/api/import-bills-bulk.js — now writes sync-bills:at timestamp.
+  (sync-invoices and sync-wages already wrote their timestamps.)
+
+WIRED IN
+--------
+• commercial.js (Budget Tracker + EOM Report — same page) → all 3 buttons.
+  onDone = loadDashboard(true) → force-refresh so numbers update immediately.
+• outstanding-invoices.js → Sync Invoices only.
+• retention.js → Sync Invoices only.
+• bookkeeping.js → added the "last synced" stamp row under its existing buttons
+  (invoices / wages / bills / Xero figures).
+
+NOTES
+-----
+• Bills is a multi-file upload modal (same as Bookkeeping), not a one-click sync.
+• Commercial's SyncBar force-refreshes the 4h dashboard cache on success, so
+  Budget Tracker/EOM show fresh figures right after a sync.
+• Upload Bills shows for all users of these pages; if you want it gated to
+  accounts/management only on Commercial, say and I'll add a role check.
+
+FILES
+-----
+• components/SyncBar.js (new)
+• pages/api/sync-status.js (new)
+• pages/api/import-bills-bulk.js
+• pages/commercial.js
+• pages/outstanding-invoices.js
+• pages/retention.js
 • pages/bookkeeping.js

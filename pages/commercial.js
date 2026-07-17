@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
+import SyncBar from '../components/SyncBar'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
@@ -396,6 +397,11 @@ export default function Dashboard() {
         )}
 
         <div style={{ padding: '24px' }}>
+
+          {/* Xero data sync — feeds Budget Tracker & EOM Report */}
+          <div style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <SyncBar show={['invoices', 'wages', 'bills']} months={6} onDone={() => loadDashboard(true)} />
+          </div>
 
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 20 }}>

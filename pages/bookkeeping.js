@@ -9,6 +9,13 @@ const td = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f2f0ec
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
 const syncBtn = (busy) => ({ background: busy ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
 const grnBtn = (bg, busy) => ({ background: busy ? '#333' : bg, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
+function fmtSyncWhen(iso) {
+  if (!iso) return 'never'
+  const d = new Date(iso), now = new Date()
+  const t = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return `today ${t}`
+  return `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} ${t}`
+}
 
 // Read a File -> base64 (no data: prefix)
 function readB64(file) {
@@ -164,6 +171,7 @@ export default function BookkeepingPage() {
   const PER_PAGE = 50
   const [syncing, setSyncing] = useState('')     // '' | 'benchmark' | 'invoices' | 'wages'
   const [syncMsg, setSyncMsg] = useState('')
+  const [syncStatus, setSyncStatus] = useState({})
   const [isAdmin, setIsAdmin] = useState(false)
   const [canTools, setCanTools] = useState(false)   // accounts/management/admin
   const [showBillsUpload, setShowBillsUpload] = useState(false)
@@ -172,6 +180,10 @@ export default function BookkeepingPage() {
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d.user?.role === 'admin') setIsAdmin(true); if (['accounts', 'management', 'admin'].includes(d.user?.role)) setCanTools(true) }).catch(() => {})
   }, [])
+
+  async function loadSyncStatus() {
+    try { setSyncStatus(await fetch('/api/sync-status').then(r => r.json())) } catch {}
+  }
 
   async function runSync(kind, endpoint, label) {
     setSyncing(kind); setSyncMsg('')
@@ -185,10 +197,13 @@ export default function BookkeepingPage() {
         setSyncMsg(`${label}: ${detail}.`)
         const fresh = await fetch('/api/bookkeeping').then(r => r.json())
         setData(fresh)
+        loadSyncStatus()
       } else setSyncMsg(d.error || `${label} failed.`)
     } catch (e) { setSyncMsg(`${label} failed.`) }
     setSyncing('')
   }
+
+  useEffect(() => { loadSyncStatus() }, [])
 
   useEffect(() => {
     fetch('/api/bookkeeping').then(r => r.json()).then(d => {
@@ -274,12 +289,18 @@ export default function BookkeepingPage() {
             </Link>
           )}
         </div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11, color: '#8a8a99', padding: '0 2px 8px' }}>
+          <span>Last invoices sync: <strong style={{ color: '#bbb' }}>{fmtSyncWhen(syncStatus.invoices)}</strong></span>
+          <span>Last wages sync: <strong style={{ color: '#bbb' }}>{fmtSyncWhen(syncStatus.wages)}</strong></span>
+          <span>Last bills upload: <strong style={{ color: '#bbb' }}>{fmtSyncWhen(syncStatus.bills)}</strong></span>
+          <span>Last Xero figures: <strong style={{ color: '#bbb' }}>{fmtSyncWhen(syncStatus.benchmark)}</strong></span>
+        </div>
       </div>
 
       {showBillsUpload && (
         <BillsUploadModal
           onClose={() => setShowBillsUpload(false)}
-          onUploaded={async () => { const fresh = await fetch('/api/bookkeeping').then(r => r.json()); setData(fresh) }}
+          onUploaded={async () => { const fresh = await fetch('/api/bookkeeping').then(r => r.json()); setData(fresh); loadSyncStatus() }}
         />
       )}
 
