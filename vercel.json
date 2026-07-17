@@ -1,7 +1,6 @@
 {
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/deep-sync", "schedule": "0 2 * * *" },
     { "path": "/api/cron/deliveries-sync", "schedule": "0 6 * * *" },
     { "path": "/api/cron/hs-expiry-email", "schedule": "0 8 * * *" }
   ]
