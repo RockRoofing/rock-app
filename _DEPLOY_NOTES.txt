@@ -1,35 +1,37 @@
-Bookkeeping — wages sync DIAGNOSTIC (find why it returns 0)
-==========================================================
+Bookkeeping — FIX Xero reconnect (invalid_scope) — CORRECTED
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy, then hit the debug URL below and send me the output.
+Deploy, then /connect -> Reconnect Xero.
 
-WHY
----
-Sync Wages returns "0 of 0" — the fetch finds no wage journal lines at all. Before
-guessing further, this build adds a DEBUG mode that reports exactly what Xero
-returns, WITHOUT writing/wiping anything.
+ROOT CAUSE (confirmed from Xero's allowed-scopes list)
+------------------------------------------------------
+Xero is migrating to granular scopes (their banner: broad scopes retire Sep 2027;
+new granular names apply). The reconnect failed with invalid_scope because the
+connect page asked for the WRONG name for reading wages.
 
-HOW TO RUN THE DIAGNOSTIC
--------------------------
-After deploying, open this URL in your browser while logged in:
-  https://app.rockroofing.co.uk/api/sync-wages?debug=1
-(It's a POST endpoint but debug also works via GET query. If it errors on GET,
-tell me and I'll switch it.)
+The correct scope for Manual Journals (wages) is:
+    accounting.manualjournals.read     ← was missing / wrongly named before
+(NOT accounting.transactions.read — that's not in this app's allowed list.)
 
-It returns JSON like:
-  { listStatus, totalJournalsPage1, sample:[{date,status,lineCount,codes}],
-    detailSample:{lineCount,codes,firstLineTracking} }
+Also confirmed accounting.reports.profitandloss.read IS valid (it's in the list),
+so that stays.
 
-COPY THAT JSON AND SEND IT TO ME. It tells us:
-• whether Xero returns any manual journals at all (totalJournalsPage1)
-• whether the list includes line detail (hasLines/lineCount)
-• what account codes are on them (is 320 there?)
-• whether fetching one journal BY ID returns lines + tracking (detailSample)
+FINAL SCOPE STRING NOW REQUESTED
+--------------------------------
+openid offline_access accounting.invoices.read accounting.contacts.read
+accounting.reports.profitandloss.read accounting.settings.read
+accounting.manualjournals.read projects.read
 
-This pinpoints why it's empty. The debug mode writes nothing and ignores the
-45-second cooldown.
+Every one of these appears in the app's allowed-scopes list, so invalid_scope
+should be gone.
+
+AFTER DEPLOYING
+---------------
+1. /connect -> Reconnect Xero -> should reach the consent screen now. Approve.
+2. /api/xero/status -> scope should include accounting.manualjournals.read
+3. Run Sync Wages -> 401 gone, journal lines pull through, wages categorise.
 
 FILE CHANGED
 ------------
-• pages/api/sync-wages.js — adds ?debug=1 diagnostic (no data changes)
+• pages/connect.js — request accounting.manualjournals.read (correct wages scope)
