@@ -9,20 +9,20 @@ const TABS = [
   ['Site App Users', '/operations/users'],
   ['Documents', '/admin/documents'],
   ['RAMS Director', '/admin/rams-director'],
-  ['Account Categorisation', '/admin/account-categorisation'],
-  ['Xero Upload', '/admin/xero-upload'],
-  ['Data Management', '/admin/data-management'],
   ['App Improvements', '/admin/problem-reports'],
 ]
 
 // Chrome for Admin-area pages: dark bar + admin sub-nav, admin-gated.
-export default function AdminShell({ active, title, children, wide }) {
+export default function AdminShell({ active, title, children, wide, allow }) {
   const router = useRouter()
   const [ok, setOk] = useState(false)
+  // Roles permitted on this page. Defaults to admin-only; pages can widen it
+  // (e.g. Bookkeeping upload/categorisation allow the Accounts role too).
+  const allowed = allow || ['admin']
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
       if (!d.user) { router.replace('/login'); return }
-      if (d.user.role !== 'admin') { router.replace('/'); return }
+      if (!allowed.includes(d.user.role)) { router.replace('/'); return }
       setOk(true)
     }).catch(() => router.replace('/login'))
   }, [])
@@ -37,7 +37,14 @@ export default function AdminShell({ active, title, children, wide }) {
           <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Admin</span>
         </div>
         <div style={{ background: '#232321', padding: '0 24px', display: 'flex', gap: 4, height: 44, alignItems: 'center', overflowX: 'auto' }}>
-          {TABS.map(([label, href]) => (
+          {['/admin/account-categorisation', '/admin/xero-upload', '/admin/data-management'].includes(active) ? (
+            <>
+              <a href="/bookkeeping/admin" style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', color: '#bbb' }}>← Bookkeeping Tools</a>
+              {[['Account Categorisation', '/admin/account-categorisation'], ['Xero Upload', '/admin/xero-upload'], ['Data Management', '/admin/data-management']].map(([label, href]) => (
+                <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
+              ))}
+            </>
+          ) : TABS.map(([label, href]) => (
             <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
           ))}
         </div>

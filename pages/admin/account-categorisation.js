@@ -54,7 +54,7 @@ export default function AccountCategorisationPage() {
   })
 
   return (
-    <AdminShell active="/admin/account-categorisation" title="Account Categorisation">
+    <AdminShell active="/admin/account-categorisation" title="Account Categorisation" allow={['accounts', 'management', 'admin']}>
       <div style={{ maxWidth: 820 }}>
         <h1 style={{ fontSize: 22, color: INK, margin: '0 0 6px' }}>Account Categorisation</h1>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>

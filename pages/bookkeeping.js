@@ -60,10 +60,11 @@ export default function BookkeepingPage() {
   const [syncing, setSyncing] = useState('')     // '' | 'benchmark' | 'invoices' | 'wages'
   const [syncMsg, setSyncMsg] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canTools, setCanTools] = useState(false)   // accounts/management/admin
   const [syncMonths, setSyncMonths] = useState(6)
 
   useEffect(() => {
-    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d.user?.role === 'admin') setIsAdmin(true) }).catch(() => {})
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => { if (d.user?.role === 'admin') setIsAdmin(true); if (['accounts', 'management', 'admin'].includes(d.user?.role)) setCanTools(true) }).catch(() => {})
   }, [])
 
   async function runSync(kind, endpoint, label) {
@@ -149,14 +150,14 @@ export default function BookkeepingPage() {
             style={syncBtn(syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : '↻ Sync Wages'}</button>
           <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing}
             style={syncBtn(syncing === 'benchmark')}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
-          {isAdmin && (
+          {canTools && (
             <Link href="/admin/xero-upload" style={{ background: '#0f766e', color: '#fff', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
               ⬆ Upload Bills
             </Link>
           )}
-          {isAdmin && (
+          {canTools && (
             <Link href="/bookkeeping/admin" style={{ background: '#2d2d44', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-              ⚙ Bookkeeping Admin
+              ⚙ Bookkeeping Tools
             </Link>
           )}
         </div>

@@ -47,7 +47,7 @@ export function defaultCategoryFor(code) {
 }
 
 export default async function handler(req, res) {
-  if (!requireRole(req, res, ['admin'])) return
+  if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 

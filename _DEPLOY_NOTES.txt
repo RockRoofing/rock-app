@@ -1,37 +1,49 @@
-Bookkeeping — FIX: sync dropped 9 of 16 June invoices (Xero rate-limit)
-======================================================================
+Bookkeeping — Accounts role access to tools + fix Bookkeeping hub 404
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: npm run build -> ✓ Compiled successfully
-Deploy, then re-run Sync Invoices.
+Deploy over the top.
 
-THE BUG
--------
-Your Xero Sales export has 16 June invoices (£258,124.71) but the app showed only
-7 (£43,775.86). Missing incl. the big ones (Winnersh £93k, Christchurch £30k,
-Market Drayton £34k).
+IMPORTANT — THE 404 FIX
+-----------------------
+The "Bookkeeping Admin" 404 was because pages/bookkeeping/admin.js wasn't in
+GitHub. This package includes it. In the GitHub web editor: Add file -> Create new
+file -> type the path  pages/bookkeeping/admin.js  (the "/" makes the folder) ->
+paste the contents. Make sure it sits ALONGSIDE the existing pages/bookkeeping.js.
 
-Cause: the sync re-fetched EACH invoice individually to read tracking, ~80ms
-apart. That's ~750 calls/min — Xero's limit is 60/min. After ~60 calls Xero
-returned 429 (rate limited); the code treated a failed fetch as "skip" and
-SILENTLY DROPPED those invoices. So over half of June vanished.
+ACCESS CHANGES (as requested)
+-----------------------------
+The bookkeeper (Accounts role) can now use the financial tools; only WIPE stays
+admin-only:
+• Xero Upload            -> Accounts, Management, Admin
+• Account Categorisation -> Accounts, Management, Admin
+• Data Management (wipe) -> Admin ONLY (unchanged)
+Enforced on BOTH the pages (AdminShell now takes an `allow` prop) and the APIs
+(requireRole updated). Import APIs previously allowed 'post-contract' — now
+'accounts' instead.
 
-THE FIX
--------
-• Read line-item TRACKING straight from the Invoices LIST response (one paged
-  call returns 100 invoices WITH their tracking) — no per-invoice re-fetch for
-  the normal case. This removes the flood of calls that caused the rate-limiting.
-• Only if a specific invoice row comes back with no line items does it re-fetch
-  that ONE invoice — and even then it honours Xero's 429 "Retry-After" with
-  backoff and retries, so an invoice is NEVER silently dropped.
-• List paging spaced to stay well under 60/min; 429 on a list page waits & retries
-  the same page.
+RELOCATED UNDER BOOKKEEPING
+---------------------------
+• The hub is renamed "Bookkeeping Tools" (was "Bookkeeping Admin").
+• Reached from the Bookkeeping dashboard buttons (⬆ Upload Bills, ⚙ Bookkeeping
+  Tools) — now shown to Accounts/Management/Admin (was admin-only).
+• The hub shows Account Categorisation + Xero Upload to all allowed roles; the
+  Data Management (wipe) card shows to ADMINS ONLY.
+• These three pages already sit outside the general Admin nav (shown with a
+  "← Bookkeeping Tools" context bar).
 
-RESULT
-------
-After deploying, re-run Sync Invoices. June should now return all 16 invoices
-(~£258k), matching your Sales export. Header "X matched, Y unassigned (of Z)" — Z
-should jump to the full count.
+NOTE: the black top bar on those pages still reads "Admin" and the Data Management
+tab may appear in the context bar for non-admins (clicking it redirects them, as
+it's admin-only). Harmless; can tidy later if you want.
 
 FILES CHANGED
 -------------
-• pages/api/sync-invoices.js — tracking from list; rate-limit-safe re-fetch
+• components/AdminShell.js               — `allow` prop for role-gating
+• pages/admin/xero-upload.js             — allow accounts/management/admin
+• pages/admin/account-categorisation.js  — allow accounts/management/admin
+• pages/bookkeeping/admin.js       (NEW) — hub, renamed, Data Mgmt admin-only card
+• pages/bookkeeping.js                   — tool buttons shown to accounts+
+• pages/api/import-bills-bulk.js         — allow accounts
+• pages/api/import-wages-bulk.js         — allow accounts
+• pages/api/import-invoices-bulk.js      — allow accounts
+• pages/api/account-categorisation.js    — allow accounts

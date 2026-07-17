@@ -17,7 +17,7 @@ function readB64(file) {
 
 export default function XeroUploadPage() {
   return (
-    <AdminShell active="/admin/xero-upload" title="Xero Upload">
+    <AdminShell active="/admin/xero-upload" title="Xero Upload" allow={['accounts', 'management', 'admin']}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, color: '#1a1a19', margin: '0 0 6px' }}>Xero Upload</h1>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 16px' }}>
