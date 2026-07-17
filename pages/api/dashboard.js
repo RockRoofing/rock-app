@@ -64,12 +64,13 @@ export default async function handler(req, res) {
 
       // ── Read invoice lines from Redis ─────────────────────────────────────
       let totalInvoiced = 0, invoiceLines = []
-      let invoicedExVat = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—'
+      let invoicedExVat = 0, invoicedSales200 = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—'
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
         if (invCache) {
           totalInvoiced = invCache.totalInvoiced || 0
           invoicedExVat = invCache.invoicedExVat || 0
+          invoicedSales200 = invCache.invoicedSales200 || 0
           vatTotal = invCache.vatTotal || 0
           paidTotal = invCache.paidTotal || 0
           vatRateLabel = invCache.vatRateLabel || '—'
@@ -85,6 +86,7 @@ export default async function handler(req, res) {
         if (!paidTotal) paidTotal = invoiceLines.reduce((s, l) => s + (l.amountPaid || 0), 0)
         if (!vatTotal) vatTotal = invoiceLines.reduce((s, l) => s + (l.totalTax || 0), 0)
         if (!invoicedExVat) invoicedExVat = invoiceLines.reduce((s, l) => s + (l.subTotal || 0), 0)
+        if (!invoicedSales200) invoicedSales200 = invoiceLines.reduce((s, l) => s + (l.sales200 || 0), 0)
         if (!totalInvoiced) totalInvoiced = invoiceLines.reduce((s, l) => s + (l.total || 0), 0)
         if (vatRateLabel === '—') {
           const labels = [...new Set(invoiceLines.map(l => l.vatLabel).filter(x => x && x !== '—'))]
@@ -114,21 +116,27 @@ export default async function handler(req, res) {
         .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
       const afa = contractValue + instructedVars
 
-      // ── Retention (all-time) ──────────────────────────────────────────────
-      // Retention is a % of the NET (ex-VAT) work value, and AFA/remaining are
-      // net figures, so all of these are computed on invoicedExVat (net), not the
-      // VAT-inclusive total.
+      // ── Invoiced value & retention ────────────────────────────────────────
+      // invoicedSales200 = sum of account-code-200 (Sales) lines: NET of VAT and
+      // INCLUDING retention (retention is moved to a separate 612 line, so it's
+      // already part of the 200 total). This is the accurate "invoiced" figure.
+      // Fall back to the older ex-VAT+retention reconstruction only if 200 data
+      // isn't present yet (pre-resync).
       const retPct = parseFloat(settings.retentionPct || 0)
-      const totalRetention = retPct > 0 ? invoicedExVat * retPct / (1 - retPct) : 0
+      // Net value EXCLUDING retention (what's on the invoices' SubTotal after the
+      // 612 deduction) — used to derive retention amounts for display.
+      const netExRetention = invoicedSales200 > 0 ? invoicedSales200 * (1 - retPct) : invoicedExVat
+      const totalRetention = invoicedSales200 > 0 ? invoicedSales200 * retPct : (retPct > 0 ? invoicedExVat * retPct / (1 - retPct) : 0)
       const now = new Date()
       const pc1 = settings.pcDate ? new Date(settings.pcDate) : null
       const pc2 = settings.defectsDate ? new Date(settings.defectsDate) : null
       const retentionReleased = (pc1 && pc1 <= now ? totalRetention / 2 : 0) + (pc2 && pc2 <= now ? totalRetention / 2 : 0)
       const retentionOutstanding = totalRetention - retentionReleased
-      // Gross Invoiced = net-of-VAT invoiced value with retention added back on.
-      const grossInvoiced = invoicedExVat + retentionOutstanding
+      // Gross Invoiced = net-of-VAT invoiced value INCLUDING retention. When we
+      // have the 200 total that's exactly it; otherwise reconstruct.
+      const grossInvoiced = invoicedSales200 > 0 ? invoicedSales200 : (invoicedExVat + retentionOutstanding)
       const currentMargin = grossInvoiced > 0 ? (grossInvoiced - totalCosts) / grossInvoiced : null
-      const remainingToClaim = afa - invoicedExVat
+      const remainingToClaim = afa - grossInvoiced
 
       // ── Budgets (inc. instructed variations) ─────────────────────────────
       const labourBudget = parseFloat(settings.labourBudget || 0) +
@@ -153,7 +161,7 @@ export default async function handler(req, res) {
 
       // ── Project stage ─────────────────────────────────────────────────────
       let stage = 'INPROGRESS'
-      if (afa > 0 && invoicedExVat >= afa * 0.999 && allPaid) {
+      if (afa > 0 && grossInvoiced >= afa * 0.999 && allPaid) {
         stage = 'CLOSED'
       } else if (afa > 0 && remainingToClaim <= retentionOutstanding + 1) {
         stage = 'DEFECTS'
@@ -186,6 +194,7 @@ export default async function handler(req, res) {
         // All-time figures
         totalInvoiced,
         invoicedExVat,
+        invoicedSales200,
         vat: vatTotal,
         paid: paidTotal,
         vatRateLabel,

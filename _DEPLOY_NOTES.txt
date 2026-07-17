@@ -1,43 +1,55 @@
-Commercial — fix Invoiced Net sync + make Gross Invoiced net-of-VAT
-==================================================================
+Commercial — Invoiced value from account code 200 (net of VAT, incl retention)
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-After deploy: run Sync Invoices once (repopulates the ex-VAT figure), then the
-Commercial pages force-refresh on sync so numbers update.
+*** AFTER DEPLOY: run Sync Invoices once (repopulates the new 200-based figure). ***
 
-FIX A — Retention "Invoiced Net" wasn't updating on Sync Invoices
------------------------------------------------------------------
-Cause: sync-invoices stored totalInvoiced (VAT-inclusive) but NOT the ex-VAT
-(net) total, VAT total, or VAT label. The Retention page's "Invoiced Net" reads
-invoicedExVat, which the sync left stale/zero.
-Fix (pages/api/sync-invoices.js): the sync now also computes and stores:
-  • invoicedExVat = Σ line SubTotal  (net of VAT)
-  • vatTotal      = Σ line TotalTax
-  • vatRateLabel  (derived, e.g. "20%", "0%")
-So Sync Invoices now updates Invoiced Net correctly.
+THE BETTER APPROACH (your steer)
+--------------------------------
+Instead of reconstructing "net incl retention" as (ex-VAT subtotal + retention),
+we now sum the invoice lines coded 200 (Sales) directly. On your invoices the 200
+line carries the FULL work value net of VAT WITH retention still in it; retention
+is posted to a separate account (612), so the 200 total already includes it. No
+adding retention back on — more accurate, and it moves correctly when you edit
+invoices in Xero.
 
-Confirmed definition (as you specified): Invoiced Net = net of VAT (SubTotal),
-NOT net of retention. That was already the intended reading; it just wasn't being
-fed by the sync.
+CHANGES
+-------
+• pages/api/sync-invoices.js — while reading each invoice's line items (already
+  fetched for tracking), also sum lines where AccountCode==200 -> per-invoice
+  `sales200`, aggregated to `invoicedSales200` per project and stored.
+• pages/api/dashboard.js — uses invoicedSales200 as the invoiced figure:
+    - grossInvoiced   = invoicedSales200            (net of VAT, incl retention)
+    - remainingToClaim = afa − grossInvoiced
+    - retention amounts derived for display (totalRetention = sales200 × pct)
+    - "fully invoiced/closed" check compares grossInvoiced vs afa
+  Falls back to the previous ex-VAT+retention method if 200 data isn't present
+  yet (i.e. before the first re-sync).
+• pages/retention.js — "Invoiced Net" column RENAMED to "Invoiced"; its value is
+  now the 200-based figure (grossInvoiced). Header tooltip explains: sum of
+  account-code-200 Sales lines, net of VAT, including retention.
+• pages/commercial.js — Budget Tracker "Gross Invoiced" column RENAMED to
+  "Invoiced" with a hover tooltip describing the same (net of VAT, incl retention,
+  from code 200). Column-customiser label updated too.
 
-FIX B — Budget Tracker "Gross Invoiced" now NET of VAT, including retention
---------------------------------------------------------------------------
-Was: totalInvoiced (VAT-INCLUSIVE) + retentionOutstanding.
-Now: invoicedExVat (NET of VAT) + retentionOutstanding.
-For consistency (AFA and retention are net concepts), the dashboard now bases
-these all on the net figure:
-  • totalRetention   = invoicedExVat × pct/(1−pct)   (was on VAT-inclusive)
-  • grossInvoiced    = invoicedExVat + retentionOutstanding
-  • remainingToClaim = afa − invoicedExVat            (afa is net; was mixing net vs gross)
-  • "fully invoiced/closed" check now compares invoicedExVat vs afa
-totalInvoiced (VAT-inclusive) is still returned for anything that needs the gross.
+WHY WINNERSH WASN'T UPDATING (your report)
+------------------------------------------
+The retention MERGE logic was correct (it layers live figures over saved entries),
+but the figure it layered was the old ex-VAT reconstruction. With the 200-based
+value, editing Winnersh invoices in Xero and running Sync Invoices will now flow
+through to both pages. If a figure still looks old after syncing: check the sync
+WINDOW covers the invoice dates (bump to 12/24 mo if the invoices are older), and
+hard-refresh so the 4h dashboard cache (which the sync clears) is re-read.
 
-Knock-on fixed: Retention page seeded release values as (grossInvoiced −
-totalInvoiced)/2, which broke once grossInvoiced became net-based. Dashboard now
-returns totalRetention; Retention uses totalRetention/2 per release.
+NOTE (unchanged this round)
+---------------------------
+EOM Report mode computes its own month-scoped grossInvoiced (invoicedToDate +
+retention). That's a separate monthly calc; left as-is. If you want EOM to also
+use the 200 basis per month, that's a follow-up (needs per-month 200 totals).
 
 FILES CHANGED
 -------------
 • pages/api/sync-invoices.js
 • pages/api/dashboard.js
 • pages/retention.js
+• pages/commercial.js

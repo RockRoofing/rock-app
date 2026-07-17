@@ -290,7 +290,7 @@ export default function Dashboard() {
     { key: 'cm', label: 'CM', group: 'none', fixed: true },
     { key: 'estimator', label: 'Estimator', group: 'none', fixed: true },
     { key: 'afa', label: 'AFA', group: 'contract' },
-    { key: 'grossInvoiced', label: 'Gross Invoiced', group: 'contract' },
+    { key: 'grossInvoiced', label: 'Invoiced', group: 'contract' },
     { key: 'retention', label: 'Retention', group: 'contract' },
     { key: 'remaining', label: 'Remaining (Ex.)', group: 'contract' },
     { key: 'remainingInc', label: 'Remaining (Inc.)', group: 'contract' },
@@ -635,7 +635,13 @@ export default function Dashboard() {
                     </tr>
                     <tr>
                       {['Job No', 'Project', 'CM'].map(h => <th key={h} style={thStyle(GROUP.none, true)}>{h}</th>)}
-                      {['AFA', 'Gross Invoiced', 'Retention', 'Remaining (Ex.)', 'Remaining (Inc.)'].map(h => <th key={h} style={thStyle(GROUP.contract)}>{h}</th>)}
+                      {[
+                        ['AFA', 'Agreed Final Account = contract value + instructed variations (net of VAT).'],
+                        ['Invoiced', 'Total invoiced: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it).'],
+                        ['Retention', 'Retention outstanding (not yet released) on the invoiced value.'],
+                        ['Remaining (Ex.)', 'Final Account − Invoiced. Still to invoice, excluding retention already applied.'],
+                        ['Remaining (Inc.)', 'Remaining to claim including retention outstanding.'],
+                      ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.contract)} title={tip}>{h}</th>)}
                       {['Lab Spend', 'Lab Budget', 'Lab Left £', 'Lab Left %'].map(h => <th key={h} style={thStyle(GROUP.labour)}>{h}</th>)}
                       {['Mat Spend', 'Mat Budget', 'Mat Left £', 'Mat Left %'].map(h => <th key={h} style={thStyle(GROUP.materials)}>{h}</th>)}
                       {['Total Spend', 'Total Budget', 'Total Left £', 'Total Left %'].map(h => <th key={h} style={thStyle(GROUP.budget)}>{h}</th>)}

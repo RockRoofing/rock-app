@@ -53,7 +53,13 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
         lineItems = await fetchInvoiceLineItems(at, tid, full.InvoiceID)
       }
       const trackingNames = new Set()
+      // Sum of SALES lines (account code 200) on this invoice. These carry the
+      // full work value NET of VAT and INCLUDING retention (retention is moved to
+      // a separate 612 line, so the 200 total already includes it). LineAmount is
+      // the net (ex-VAT) amount.
+      let sales200 = 0
       for (const line of (lineItems || [])) {
+        if (String(line.AccountCode) === '200') sales200 += (line.LineAmount || 0)
         for (const t of (line.Tracking || [])) {
           if (t.Option) trackingNames.add(String(t.Option).trim().toLowerCase())
         }
@@ -63,7 +69,7 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
         date: dateStr, dueDate: full.DueDateString?.slice(0, 10) || '',
         contact: full.Contact?.Name || '', reference: full.Reference || '',
         total: full.Total || 0, subTotal: full.SubTotal != null ? full.SubTotal : (full.Total || 0),
-        totalTax: full.TotalTax || 0,
+        totalTax: full.TotalTax || 0, sales200,
         amountPaid: full.AmountPaid || 0, amountDue: full.AmountDue || 0,
         status: full.Status || '', trackingNames: [...trackingNames],
       })
@@ -148,11 +154,14 @@ export default async function handler(req, res) {
       // and by the dashboard. Previously omitted, so Invoiced Net went stale.
       const exVat = merged.reduce((s, l) => s + (l.subTotal != null ? l.subTotal : (l.total || 0)), 0)
       const vat = merged.reduce((s, l) => s + (l.totalTax || 0), 0)
+      // Sales value from account code 200: net of VAT, INCLUDING retention.
+      // Falls back to ex-VAT subtotal for older lines that predate this field.
+      const sales200 = merged.reduce((s, l) => s + (l.sales200 != null ? l.sales200 : 0), 0)
       let vatRateLabel = '—'
       if (exVat > 0 && vat > 0) vatRateLabel = `${Math.round((vat / exVat) * 100)}%`
       else if (exVat > 0 && vat === 0) vatRateLabel = '0%'
       await redis.set(`invoiced:lines:${pid}`, merged)
-      await redis.set(`invoiced:latest:${pid}`, { totalInvoiced: tot, invoicedExVat: exVat, vatTotal: vat, vatRateLabel, paidTotal: paid, dueTotal: due, invoiceCount: merged.length, calculatedAt: new Date().toISOString(), source: 'sync_button' })
+      await redis.set(`invoiced:latest:${pid}`, { totalInvoiced: tot, invoicedExVat: exVat, invoicedSales200: sales200, vatTotal: vat, vatRateLabel, paidTotal: paid, dueTotal: due, invoiceCount: merged.length, calculatedAt: new Date().toISOString(), source: 'sync_button' })
     }
 
     await redis.del('dashboard:cache')
