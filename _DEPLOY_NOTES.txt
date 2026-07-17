@@ -1,19 +1,27 @@
-Project Details — date-override picker opens on the row's own month
-==================================================================
+Application Calendar — missing-dates popup rebuilt (fixed days + manual months)
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE (pages/project/[id].js)
-------------------------------
-In the monthly application/valuation/payment date-override table, each date box is
-now constrained to its own month via min/max (first & last day of that row's
-month). So the native date picker OPENS on the correct month — e.g. clicking a
-November box opens November, not today's month — and only that month's dates can
-be entered.
+WHAT WAS WRONG
+--------------
+Clicking a project with missing dates opened a popup with three date boxes that
+LOOKED like they set the dates but actually saved a one-off override for whatever
+month the entered date fell in — confusing and inconsistent with Project Details.
 
-Includes the earlier changes to this file (Costs-tab filters, and the table
-showing the last 2 + 12 months ahead). This is the latest full version of the file.
+NEW POPUP (mirrors Project Details)
+-----------------------------------
+1) FIXED MONTHLY DATES — three "day of month" fields (Application day / Valuation
+   day / Payment day), clearly labelled, with a note that they apply to every
+   month unless overridden. Saved to applicationDay / valuationDay / paymentDay.
+   Pre-filled from the project's current settings when the popup opens.
+2) "＋ Add monthly dates manually" — toggles open the SAME per-month override
+   table as Project Details (last 2 + 12 months ahead; each date box constrained
+   to its own month so the picker opens on that month). Saved to dateOverrides.
+
+Save writes both the recurring days and the manual overrides, and updates the
+calendar immediately.
 
 FILE CHANGED
 ------------
-• pages/project/[id].js
+• pages/application-calendar.js
