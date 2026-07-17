@@ -8,6 +8,7 @@ const th = { textAlign: 'left', padding: '10px 12px', fontSize: 11, color: '#777
 const td = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f2f0ec' }
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' }
 const syncBtn = (busy) => ({ background: busy ? '#333' : '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
+const grnBtn = (bg, busy) => ({ background: busy ? '#333' : bg, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' })
 
 // Read a File -> base64 (no data: prefix)
 function readB64(file) {
@@ -245,16 +246,16 @@ export default function BookkeepingPage() {
             {[3, 6, 12, 18, 24].map(m => <option key={m} value={m}>{m} mo</option>)}
           </select>
           <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing}
-            style={syncBtn(syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : '↻ Sync Invoices'}</button>
+            style={grnBtn('#14b8a6', syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : '↻ Sync Invoices'}</button>
           <button onClick={() => runSync('wages', '/api/sync-wages', 'Wages')} disabled={!!syncing}
-            style={syncBtn(syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : '↻ Sync Wages'}</button>
-          <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing}
-            style={syncBtn(syncing === 'benchmark')}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
+            style={grnBtn('#0f766e', syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : '↻ Sync Wages'}</button>
           {canTools && (
-            <button onClick={() => setShowBillsUpload(true)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <button onClick={() => setShowBillsUpload(true)} style={grnBtn('#0b5c55', false)}>
               ⬆ Upload Bills
             </button>
           )}
+          <button onClick={() => runSync('benchmark', '/api/sync-benchmark', 'Xero figures')} disabled={!!syncing}
+            style={{ background: syncing === 'benchmark' ? '#0d8fbd' : '#13B5EA', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: syncing === 'benchmark' ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{syncing === 'benchmark' ? 'Syncing…' : '↻ Sync Xero figures'}</button>
           {canTools && (
             <Link href="/admin/account-categorisation" style={{ background: '#2d2d44', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
               ⚙ Bookkeeping Tools

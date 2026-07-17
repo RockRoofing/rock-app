@@ -1,22 +1,22 @@
-Bookkeeping — Upload Bills as an in-page pop-up (multi-file)
-===========================================================
+Bookkeeping — reorder + recolour sync/upload buttons
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE
-------
-The "⬆ Upload Bills" button on the Bookkeeping page used to navigate away to the
-Xero Upload tool. It now opens a MODAL on the same page:
- • Select one OR several Bills CSV exports at once (multi-file).
- • Each file is posted to /api/import-bills-bulk (exact same logic as the Xero
-   Upload tool — per-day replace, tagged lines -> projects, untagged -> Overheads).
- • Per-file progress + result shown in the modal.
- • On "Done", the page's figures refresh automatically (re-fetches /api/bookkeeping)
-   so new bills/overheads appear without a manual reload.
+CHANGES (pages/bookkeeping.js)
+------------------------------
+Order is now:
+  Sync Invoices → Sync Wages → Upload Bills → Sync Xero figures → Bookkeeping Tools
 
-No API changes — reuses the existing, working import endpoint. The full Xero
-Upload tool (wages, invoices, etc.) is still available via Bookkeeping Tools.
+Colours:
+ • Sync Invoices  green (light)  #14b8a6
+ • Sync Wages     green (mid)    #0f766e
+ • Upload Bills   green (dark)   #0b5c55   (base green from the old Upload Bills)
+ • Sync Xero figures  Xero blue  #13B5EA  (busy state #0d8fbd)
+ • Bookkeeping Tools  unchanged (dark navy)
+
+Added a small grnBtn(bg, busy) style helper for the three green buttons.
 
 FILE CHANGED
 ------------
-• pages/bookkeeping.js  (added BillsUploadModal + readB64; button opens it)
+• pages/bookkeeping.js
