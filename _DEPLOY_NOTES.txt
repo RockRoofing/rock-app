@@ -1,31 +1,16 @@
-Project Details — Costs tab filters (labour/materials, searchable supplier,
-working multi-select account codes)
-==========================================================================
+Project Details — monthly application-date overrides now include the last 2 months
+==================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGES (pages/project/[id].js — Costs tab)
--------------------------------------------
-1. LABOUR / MATERIALS FILTER
-   New dropdown: "Labour & Materials" / "Labour only" / "Materials only".
-   (Clicking the budget rows still toggles it too — both drive the same filter.)
+CHANGE (pages/project/[id].js)
+------------------------------
+The "monthly date overrides" table (where you enter/adjust Application, Valuation
+and Payment dates per month) started at the CURRENT month and ran 12 months ahead,
+so you couldn't set dates for a month that had just passed.
 
-2. SEARCHABLE SUPPLIER FILTER
-   The supplier dropdown is now a type-to-search combobox (same as Bookkeeping):
-   click, type, list narrows; pick one; "All suppliers" clears.
-
-3. ACCOUNT FILTER — FIXED + MULTI-SELECT BY CODE
-   The old "All accounts" did nothing because it filtered on accountName, which
-   is blank on most cost lines (they carry accountCode). It now:
-     • lists account CODES actually present (shows "code — name" where a name
-       exists),
-     • is MULTI-SELECT via checkboxes in the dropdown,
-     • has a search box to find a code/name,
-     • filters the lines to the ticked codes.
-   This is what you'll use to spot a wrongly-categorised high-value code driving
-   the inflated labour/materials spend.
-
-Note: the WIP tab's own (separate) filters are unchanged.
+It now starts 2 months EARLIER and still runs 12 months ahead — i.e. current−2
+through current+11 (14 rows). Label updated to "last 2 + 12 months ahead".
 
 FILE CHANGED
 ------------

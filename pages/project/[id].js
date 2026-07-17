@@ -1322,7 +1322,7 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         </div>
         <button type="button" onClick={() => setShowDateOverrides(!showDateOverrides)}
           style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#f8f9fa', cursor: 'pointer', marginBottom: 12, fontFamily: 'inherit', color: '#555' }}>
-          {showDateOverrides ? '▲ Hide' : '▼ Show'} monthly date overrides (12 months ahead)
+          {showDateOverrides ? '▲ Hide' : '▼ Show'} monthly date overrides (last 2 + 12 months ahead)
         </button>
         {showDateOverrides && (
           <div style={{ marginBottom: 12, border: '1px solid #e5e5e5', borderRadius: 8, overflow: 'hidden' }}>
@@ -1336,10 +1336,10 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: 12 }, (_, i) => {
+                {Array.from({ length: 14 }, (_, i) => {
                   const d = new Date()
                   d.setDate(1)
-                  d.setMonth(d.getMonth() + i)
+                  d.setMonth(d.getMonth() - 2 + i)   // start 2 months earlier, run 12 ahead
                   const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
                   const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
                   const overrides = form.dateOverrides || {}
