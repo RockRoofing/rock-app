@@ -1,21 +1,19 @@
-Bookkeeping — reorder + recolour sync/upload buttons
-====================================================
+Bookkeeping — tighten the green gradient (Sync Invoices was too different)
+=========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGES (pages/bookkeeping.js)
-------------------------------
-Order is now:
-  Sync Invoices → Sync Wages → Upload Bills → Sync Xero figures → Bookkeeping Tools
+CHANGE
+------
+Sync Invoices was #14b8a6 (a bright mint/teal) — too far from the deeper greens
+of Sync Wages and Upload Bills, so it looked like a different button. Moved it to
+#0d9488 so the three read as one tight light->dark set:
 
-Colours:
- • Sync Invoices  green (light)  #14b8a6
- • Sync Wages     green (mid)    #0f766e
- • Upload Bills   green (dark)   #0b5c55   (base green from the old Upload Bills)
- • Sync Xero figures  Xero blue  #13B5EA  (busy state #0d8fbd)
- • Bookkeeping Tools  unchanged (dark navy)
+  Sync Invoices  #0d9488  (light)
+  Sync Wages     #0f766e  (mid)
+  Upload Bills   #0b5c55  (dark)
 
-Added a small grnBtn(bg, busy) style helper for the three green buttons.
+Sync Xero figures (Xero blue #13B5EA) and Bookkeeping Tools unchanged.
 
 FILE CHANGED
 ------------

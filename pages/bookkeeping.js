@@ -85,7 +85,19 @@ function BillsUploadModal({ onClose, onUploaded }) {
               {row.status === 'done' && (
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#166534' }}>
                   <strong>✓ {results.length > 1 ? row.name + ': ' : ''}Bills imported.</strong>
-                  {typeof row.result?.projectsMatched === 'number' && <> {row.result.projectsMatched} project(s) updated{typeof row.result?.untaggedLines === 'number' ? `, ${row.result.untaggedLines} overhead/untagged line(s)` : ''}.</>}
+                  {row.result && (() => {
+                    const r = row.result
+                    const proj = r.totalLinesProcessed || 0
+                    const overhead = r.untaggedLines || 0
+                    const total = proj + overhead
+                    const replaced = r.linesReplacedInRange || 0
+                    return <> {total} line{total === 1 ? '' : 's'} imported ({proj} to project{proj === 1 ? '' : 's'}, {overhead} overhead/untagged){replaced ? `, replacing ${replaced} previous line${replaced === 1 ? '' : 's'}` : ''}{typeof r.daysCovered === 'number' ? ` across ${r.daysCovered} day${r.daysCovered === 1 ? '' : 's'}` : ''}.</>
+                  })()}
+                  {row.result?.daysNotCovered?.length > 0 && (
+                    <div style={{ marginTop: 6, color: '#92400e', fontSize: 12 }}>
+                      ⚠ {row.result.daysNotCovered.length} day(s) inside this file's range had app bills the file didn't include — left unchanged. If those bills were deleted in Xero, re-upload a file covering those dates.
+                    </div>
+                  )}
                 </div>
               )}
               {(row.status === 'uploading' || row.status === 'pending') && <div style={{ marginTop: 12, fontSize: 13, color: '#888' }}>{row.status === 'uploading' ? '⏳ Uploading' : '• Queued'} {row.name}…</div>}
@@ -246,7 +258,7 @@ export default function BookkeepingPage() {
             {[3, 6, 12, 18, 24].map(m => <option key={m} value={m}>{m} mo</option>)}
           </select>
           <button onClick={() => runSync('invoices', '/api/sync-invoices', 'Invoices')} disabled={!!syncing}
-            style={grnBtn('#14b8a6', syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : '↻ Sync Invoices'}</button>
+            style={grnBtn('#0d9488', syncing === 'invoices')}>{syncing === 'invoices' ? 'Syncing…' : '↻ Sync Invoices'}</button>
           <button onClick={() => runSync('wages', '/api/sync-wages', 'Wages')} disabled={!!syncing}
             style={grnBtn('#0f766e', syncing === 'wages')}>{syncing === 'wages' ? 'Syncing…' : '↻ Sync Wages'}</button>
           {canTools && (
