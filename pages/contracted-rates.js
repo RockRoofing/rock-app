@@ -519,7 +519,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v14</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v15</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -575,6 +575,7 @@ export default function ContractedRatesPage() {
                         onChange={e => { setDiscountPct(e.target.value === '' ? 0 : parseFloat(e.target.value)); setDirty(true) }}
                         style={{ width: 72, padding: '6px 8px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 13, textAlign: 'right', background: editable ? '#fff' : '#f5f5f5' }} />
                       <span style={{ fontSize: 13, color: '#555' }}>%</span>
+                      {editable && <button onClick={save} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 6, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: dirty ? 'pointer' : 'default', marginLeft: 4 }}>{saving ? 'Saving…' : 'Save'}</button>}
                     </div>
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#555', cursor: 'pointer' }}>
                       <input type="checkbox" checked={showNet} onChange={e => setShowNet(e.target.checked)} />

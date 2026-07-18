@@ -1,36 +1,15 @@
-Applications tweaks + Contracted Rates discount/MCD
-===================================================
+Contracted Rates — Save button on the Discount applicable box
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Markers: Applications "· v2", Contracted Rates "· v14"
-Deploy on top of Phase 2.
+Build: ✓ Compiled successfully  ·  tab shows "· v15"
 
-APPLICATIONS
-------------
-1) DELETE DRAFTS: draft applications now have a Delete button in the list. Only
-   drafts can be deleted (sent ones are protected, server-side too).
-2) DRAFT UNTIL SENT: an application stays a DRAFT until it's sent / marked sent.
-   The old "Submit" button is now "Mark as sent" (status -> 'sent', locks it).
-   Statuses shown as Draft / Sent. (Real send is Phase 4; "Mark as sent" is the
-   manual equivalent for now.)
-3) TICK-TO-100: each % Complete box has a green ✓ button beside it; clicking sets
-   that line to 100%. The tick shows solid green when the line is at 100%.
-4) MCD DEFAULT 0%: new applications default MCD to 0% (was 2.5%). Retention still
-   defaults to the project's retention % (else 5%).
-
-CONTRACTED RATES
-----------------
-5) DISCOUNT APPLICABLE (MCD): a "Discount applicable (MCD) %" box on the page
-   (editable while unlocked, saved with the rates).
-6) WITH / WITHOUT MCD TOGGLE: "Show rates net of discount" checkbox. When ON,
-   every displayed rate/total/materials/labour and the totals + cards are shown
-   reduced by rate × (1 − discount%). This is VIEW-ONLY — stored rates stay gross,
-   and Applications remain gross (the discount is applied separately as MCD on the
-   application Summary), exactly as agreed.
+CHANGE
+------
+A Save button now sits right next to the "Discount applicable (MCD) %" box. It
+saves the discount (and any other pending edits) without scrolling to the main
+toolbar. Enabled only when unlocked and there are unsaved changes; greys out once
+saved.
 
 FILES
 -----
-• pages/applications.js           (delete drafts, mark-as-sent, tick-to-100, MCD 0%; v2)
-• pages/api/applications.js       (MCD 0% default, sent status, draft-only delete/edit)
-• pages/contracted-rates.js       (discount box + net-view toggle; v14)
-• pages/api/contracted-rates.js   (persist discountPct)
+• pages/contracted-rates.js
