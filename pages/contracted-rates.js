@@ -16,6 +16,8 @@ export default function ContractedRatesPage() {
   const [cr, setCr] = useState(null)          // { items, locked, fileName, sourceTotal }
   const [items, setItems] = useState([])
   const [locked, setLocked] = useState(false)
+  const [discountPct, setDiscountPct] = useState(0)      // MCD / main-contractor discount %
+  const [showNet, setShowNet] = useState(false)          // view toggle: show rates net of discount
   const [fileName, setFileName] = useState('')
   const [sourceTotal, setSourceTotal] = useState(null)
   const [dirty, setDirty] = useState(false)
@@ -56,6 +58,7 @@ export default function ContractedRatesPage() {
     setLocked(!!rates?.locked)
     setFileName(rates?.fileName || '')
     setSourceTotal(rates?.sourceTotal ?? null)
+    setDiscountPct(rates?.discountPct != null ? rates.discountPct : 0)
     setDirty(false)
     setEditRow(null)
     setSelected(new Set())
@@ -64,6 +67,12 @@ export default function ContractedRatesPage() {
 
   const totals = useMemo(() => computeRateTotals(items), [items])
   const editable = !locked
+
+  // When the "net of discount" view is on, displayed rates/totals are reduced by
+  // the discount %. Stored values remain gross; this is view-only.
+  const discFactor = showNet ? (1 - (parseFloat(discountPct) || 0) / 100) : 1
+  const dRate = (v) => v == null ? v : v * discFactor
+  const dMoney = (v) => (v || 0) * discFactor
 
   // Selection: totals for ticked items, split by section.
   const toggleSel = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -309,7 +318,7 @@ export default function ContractedRatesPage() {
     try {
       const d = await fetch('/api/contracted-rates', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projectId, items, locked, fileName, sourceTotal, author: me?.name || '' }),
+        body: JSON.stringify({ action: 'save', projectId, items, locked, fileName, sourceTotal, discountPct, author: me?.name || '' }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Save failed.'); setSaving(false); return }
       applyCr(d.contractedRates)
@@ -323,7 +332,7 @@ export default function ContractedRatesPage() {
     try {
       const d = await fetch('/api/contracted-rates', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projectId, items, locked: next, fileName, sourceTotal, author: me?.name || '' }),
+        body: JSON.stringify({ action: 'save', projectId, items, locked: next, fileName, sourceTotal, discountPct, author: me?.name || '' }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Failed.'); setSaving(false); return }
       applyCr(d.contractedRates)
@@ -382,7 +391,7 @@ export default function ContractedRatesPage() {
       )
     }
     if (x.totalMode === 'text') return <span style={{ color: '#a16207', fontStyle: 'italic' }}>{x.totalText || 'TBC'}</span>
-    const v = lineRateTotal(x)
+    const v = dMoney(lineRateTotal(x))
     return v ? fmt(v) : ''
   }
 
@@ -403,11 +412,11 @@ export default function ContractedRatesPage() {
       <tr style={{ background: bg, borderTop: `2px solid ${bd}55`, fontWeight: 700 }}>
         <td style={tdC}></td>
         <td style={{ ...td, color: bd }} colSpan={5}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
-        <td style={{ ...tdR, color: bd }}>{fmt(show.rate)}</td>
+        <td style={{ ...tdR, color: bd }}>{fmt(dMoney(show.rate))}</td>
         <td style={tdMat}></td>
-        <td style={{ ...tdMat, fontWeight: 700 }}>{fmt(show.materials)}</td>
+        <td style={{ ...tdMat, fontWeight: 700 }}>{fmt(dMoney(show.materials))}</td>
         <td style={tdLab}></td>
-        <td style={{ ...tdLab, fontWeight: 700 }}>{fmt(show.labour)}</td>
+        <td style={{ ...tdLab, fontWeight: 700 }}>{fmt(dMoney(show.labour))}</td>
         <td style={td}></td>
       </tr>
     )
@@ -479,17 +488,17 @@ export default function ContractedRatesPage() {
                 {isEditing ? <input value={x.unit || ''} onChange={e => update(x.id, { unit: e.target.value })} style={{ ...cellInput, width: 44 }} /> : (x.unit || '')}
               </td>
               <td style={tdR}>
-                {isEditing ? <input type="number" value={x.rate ?? ''} onChange={e => update(x.id, { rate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 74, textAlign: 'right' }} /> : (x.rate != null ? fmtRate(x.rate) : '')}
+                {isEditing ? <input type="number" value={x.rate ?? ''} onChange={e => update(x.id, { rate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 74, textAlign: 'right' }} /> : (x.rate != null ? fmtRate(dRate(x.rate)) : '')}
               </td>
               <td style={{ ...tdR, fontWeight: 600 }}>{totalCell(x, isEditing)}</td>
               <td style={tdMat} title="Materials rate within the rate (budget)">
-                {isEditing ? <input type="number" value={x.matRate ?? ''} onChange={e => update(x.id, { matRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.matRate != null ? fmtRate(x.matRate) : '')}
+                {isEditing ? <input type="number" value={x.matRate ?? ''} onChange={e => update(x.id, { matRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.matRate != null ? fmtRate(dRate(x.matRate)) : '')}
               </td>
-              <td style={{ ...tdMat, fontWeight: 600 }} title="Materials total (qty × mat rate)">{lineMatTotal(x) ? fmt(lineMatTotal(x)) : ''}</td>
+              <td style={{ ...tdMat, fontWeight: 600 }} title="Materials total (qty × mat rate)">{lineMatTotal(x) ? fmt(dMoney(lineMatTotal(x))) : ''}</td>
               <td style={tdLab} title="Labour rate within the rate (budget)">
-                {isEditing ? <input type="number" value={x.labRate ?? ''} onChange={e => update(x.id, { labRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.labRate != null ? fmtRate(x.labRate) : '')}
+                {isEditing ? <input type="number" value={x.labRate ?? ''} onChange={e => update(x.id, { labRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.labRate != null ? fmtRate(dRate(x.labRate)) : '')}
               </td>
-              <td style={{ ...tdLab, fontWeight: 600 }} title="Labour total (qty × lab rate)">{lineLabTotal(x) ? fmt(lineLabTotal(x)) : ''}</td>
+              <td style={{ ...tdLab, fontWeight: 600 }} title="Labour total (qty × lab rate)">{lineLabTotal(x) ? fmt(dMoney(lineLabTotal(x))) : ''}</td>
               <td style={tdR}>
                 {isEditing
                   ? <button onClick={() => setEditRow(null)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Done</button>
@@ -510,7 +519,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v13</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v14</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -558,12 +567,30 @@ export default function ContractedRatesPage() {
 
               {hasRates && (
                 <>
+                  {/* Discount applicable + view toggle */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#fff', borderRadius: 10, padding: '12px 16px', marginBottom: 14, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 12.5, color: '#555', fontWeight: 600 }}>Discount applicable (MCD)</label>
+                      <input type="number" min="0" max="100" step="0.1" value={discountPct} disabled={!editable}
+                        onChange={e => { setDiscountPct(e.target.value === '' ? 0 : parseFloat(e.target.value)); setDirty(true) }}
+                        style={{ width: 72, padding: '6px 8px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 13, textAlign: 'right', background: editable ? '#fff' : '#f5f5f5' }} />
+                      <span style={{ fontSize: 13, color: '#555' }}>%</span>
+                    </div>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#555', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={showNet} onChange={e => setShowNet(e.target.checked)} />
+                      Show rates net of discount {discountPct ? `(−${discountPct}%)` : ''}
+                    </label>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                      {showNet ? 'Showing rates AFTER discount (view only — stored rates stay gross).' : 'Showing gross rates. Applications stay gross; discount is applied separately on the Summary.'}
+                    </span>
+                  </div>
+
                   {/* Summary cards */}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
-                    <Card label="Above the line (contract works)" value={fmt(totals.aboveTotal)} sub={`${totals.aboveCount} items`} />
-                    <Card label="Below the line (available)" value={fmt(totals.belowTotal)} sub={`${totals.belowCount} items`} muted />
-                    <Card label="Materials budget (above)" value={fmt(totals.aboveMaterials)} tone="mat" />
-                    <Card label="Labour budget (above)" value={fmt(totals.aboveLabour)} tone="lab" />
+                    <Card label={`Above the line${showNet ? ' (net)' : ''}`} value={fmt(dMoney(totals.aboveTotal))} sub={`${totals.aboveCount} items`} />
+                    <Card label="Below the line (available)" value={fmt(dMoney(totals.belowTotal))} sub={`${totals.belowCount} items`} muted />
+                    <Card label="Materials budget (above)" value={fmt(dMoney(totals.aboveMaterials))} tone="mat" />
+                    <Card label="Labour budget (above)" value={fmt(dMoney(totals.aboveLabour))} tone="lab" />
                   </div>
                   {sourceTotal != null && Math.abs((sourceTotal || 0) - totals.aboveTotal) > 0.5 && (
                     <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>

@@ -62,7 +62,7 @@ export default async function handler(req, res) {
 
     // Save the (possibly edited) rate set + lock state.
     if (action === 'save') {
-      const { items, locked, fileName, sourceTotal } = req.body
+      const { items, locked, fileName, sourceTotal, discountPct } = req.body
       if (!Array.isArray(items)) return res.status(400).json({ error: 'items required' })
       const existing = project.contractedRates || {}
       project.contractedRates = {
@@ -70,6 +70,7 @@ export default async function handler(req, res) {
         locked: !!locked,
         fileName: fileName != null ? fileName : (existing.fileName || ''),
         sourceTotal: sourceTotal != null ? sourceTotal : (existing.sourceTotal ?? null),
+        discountPct: discountPct != null ? discountPct : (existing.discountPct ?? 0),
         uploadedAt: existing.uploadedAt || Date.now(),
         savedAt: Date.now(),
         savedBy: req.body.author || '',

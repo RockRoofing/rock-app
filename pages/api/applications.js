@@ -57,7 +57,7 @@ export default async function handler(req, res) {
         monthLabel: monthLabel || '',
         status: 'draft',
         appDate: appDate || '', valDate: valDate || '', paymentDate: paymentDate || '', finalDate: finalDate || '',
-        mcdPct: mcdPct != null ? mcdPct : 2.5,
+        mcdPct: mcdPct != null ? mcdPct : 0,
         retentionPct: retentionPct != null ? retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5),
         contractWorks,
         variations: [],
@@ -75,8 +75,8 @@ export default async function handler(req, res) {
       if (!application || !application.id) return res.status(400).json({ error: 'application required' })
       const idx = apps.findIndex(a => a.id === application.id)
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
-      if (apps[idx].status === 'submitted' && !req.body.allowSubmittedEdit) {
-        return res.status(400).json({ error: 'This application has been submitted and is locked.' })
+      if (apps[idx].status && apps[idx].status !== 'draft' && !req.body.allowSubmittedEdit) {
+        return res.status(400).json({ error: 'This application has been sent and is locked.' })
       }
       apps[idx] = { ...apps[idx], ...application, savedAt: Date.now() }
       project.applications = apps
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
       const { id } = req.body
       const idx = apps.findIndex(a => a.id === id)
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
-      apps[idx] = { ...apps[idx], status: 'submitted', submittedAt: Date.now(), submittedBy: req.body.author || '' }
+      apps[idx] = { ...apps[idx], status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
       project.applications = apps
       await saveProject(projectId, project)
       return res.json({ ok: true, application: apps[idx] })
@@ -96,6 +96,10 @@ export default async function handler(req, res) {
 
     if (action === 'delete') {
       const { id } = req.body
+      const target = apps.find(a => a.id === id)
+      if (target && target.status && target.status !== 'draft') {
+        return res.status(400).json({ error: 'Only draft applications can be deleted.' })
+      }
       project.applications = apps.filter(a => a.id !== id)
       await saveProject(projectId, project)
       return res.json({ ok: true, applications: project.applications })

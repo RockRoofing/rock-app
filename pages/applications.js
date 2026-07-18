@@ -67,7 +67,7 @@ export default function ApplicationsPage() {
         action: 'create', projectId,
         monthKey: newMonth, monthLabel: monthLabel(newMonth),
         ...newDates,
-        mcdPct: settings.mcdPct != null ? settings.mcdPct : 2.5,
+        mcdPct: settings.mcdPct != null ? settings.mcdPct : 0,
         retentionPct: settings.retentionPct != null ? settings.retentionPct * 100 : 5,
         author: me?.name || '',
       }
@@ -82,9 +82,18 @@ export default function ApplicationsPage() {
   const openApp = sortedApps.find(a => a.id === openId)
   const selProject = projects.find(p => p.xeroId === projectId)
 
+  async function deleteApp(a) {
+    if (a.status && a.status !== 'draft') { alert('Only draft applications can be deleted.'); return }
+    if (!confirm(`Delete draft application ${a.seq} (${a.monthLabel || monthLabel(a.monthKey)})? This cannot be undone.`)) return
+    try {
+      const d = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', projectId, id: a.id }) }).then(r => r.json())
+      if (d.ok) setApps(d.applications || [])
+    } catch { setMsg('Could not delete.') }
+  }
+
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v1</title></Head>
+      <Head><title>Rock Roofing — Applications · v2</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -165,12 +174,13 @@ export default function ApplicationsPage() {
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{a.monthLabel || monthLabel(a.monthKey)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{fmtDate(a.appDate)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 12 }}>
-                              <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: a.status === 'submitted' ? '#dcfce7' : '#fef9c3', color: a.status === 'submitted' ? '#16a34a' : '#a16207' }}>{a.status === 'submitted' ? 'Submitted' : 'Draft'}</span>
+                              <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: (a.status && a.status !== 'draft') ? '#dcfce7' : '#fef9c3', color: (a.status && a.status !== 'draft') ? '#16a34a' : '#a16207' }}>{(a.status && a.status !== 'draft') ? 'Sent' : 'Draft'}</span>
                             </td>
                             <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.grossCurrent)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', fontWeight: 700 }}>{fmt(sum.thisCert.total)}</td>
-                            <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                              <button onClick={() => setOpenId(a.id)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>{a.status === 'submitted' ? 'View' : 'Open'}</button>
+                            <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button onClick={() => setOpenId(a.id)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>{(a.status && a.status !== 'draft') ? 'View' : 'Open'}</button>
+                              {(!a.status || a.status === 'draft') && <button onClick={() => deleteApp(a)} style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: '#dc2626', fontWeight: 600, marginLeft: 6 }}>Delete</button>}
                             </td>
                           </tr>
                         )
@@ -199,7 +209,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, onBack, onSaved }) {
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
-  const locked = app.status === 'submitted'
+  const locked = !!app.status && app.status !== 'draft'
 
   const workApp = { ...app, contractWorks: rows }
   const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, prevGross, app.mcdPct, app.retentionPct])
@@ -236,10 +246,10 @@ function ApplicationEditor({ app, prevGross, projectId, me, onBack, onSaved }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 13, cursor: 'pointer' }}>‹ All applications</button>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Application {app.seq} — {app.monthLabel || monthLabel(app.monthKey)}</div>
-        <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: locked ? '#dcfce7' : '#fef9c3', color: locked ? '#16a34a' : '#a16207' }}>{locked ? 'Submitted' : 'Draft'}</span>
+        <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: locked ? '#dcfce7' : '#fef9c3', color: locked ? '#16a34a' : '#a16207' }}>{locked ? 'Sent' : 'Draft'}</span>
         <div style={{ flex: 1 }} />
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
-        {!locked && <button onClick={() => { if (confirm('Submit this application? It will be locked.')) save(true) }} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Submit</button>}
+        {!locked && <button onClick={() => { if (confirm('Mark this application as sent? It will be locked. (Full send is coming in Phase 4.)')) save(true) }} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
       </div>
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
@@ -281,7 +291,10 @@ function ApplicationEditor({ app, prevGross, projectId, me, onBack, onSaved }) {
                     <td style={tdR}>{fmt(r.total)}</td>
                     <td style={tdR}>
                       {locked ? `${r.pctComplete || 0}%` : (
-                        <input type="number" min="0" max="100" value={r.pctComplete ?? 0} onChange={e => setPct(r.id, e.target.value)} style={{ width: 64, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                          <input type="number" min="0" max="100" value={r.pctComplete ?? 0} onChange={e => setPct(r.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                          <button title="Mark 100% complete" onClick={() => setPct(r.id, 100)} style={{ background: (r.pctComplete === 100) ? '#16a34a' : '#f0f2f5', color: (r.pctComplete === 100) ? '#fff' : '#16a34a', border: '1px solid ' + ((r.pctComplete === 100) ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
+                        </div>
                       )}
                     </td>
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(worksValueToDate(r))}</td>

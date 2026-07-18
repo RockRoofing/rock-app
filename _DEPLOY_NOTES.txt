@@ -1,58 +1,36 @@
-Applications — PHASE 2: build an application from locked Contracted Rates
-========================================================================
+Applications tweaks + Contracted Rates discount/MCD
+===================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v1"
-Access: post-contract + management + admin.
-Replaces the Phase-2 placeholder pages/applications.js.
+Build: ✓ Compiled successfully
+Markers: Applications "· v2", Contracted Rates "· v14"
+Deploy on top of Phase 2.
 
-WHAT THIS ADDS
---------------
-The Applications page is now live (Commercial nav → Applications).
+APPLICATIONS
+------------
+1) DELETE DRAFTS: draft applications now have a Delete button in the list. Only
+   drafts can be deleted (sent ones are protected, server-side too).
+2) DRAFT UNTIL SENT: an application stays a DRAFT until it's sent / marked sent.
+   The old "Submit" button is now "Mark as sent" (status -> 'sent', locks it).
+   Statuses shown as Draft / Sent. (Real send is Phase 4; "Mark as sent" is the
+   manual equivalent for now.)
+3) TICK-TO-100: each % Complete box has a green ✓ button beside it; clicking sets
+   that line to 100%. The tick shows solid green when the line is at 100%.
+4) MCD DEFAULT 0%: new applications default MCD to 0% (was 2.5%). Retention still
+   defaults to the project's retention % (else 5%).
 
-1) PROJECT + APPLICATIONS LIST
-   Pick a project → see all its applications in a table (App No., month, app date,
-   Draft/Submitted status, Gross to date, This cert net) with Open/View.
-
-2) CREATE AN APPLICATION
-   • Requires contracted rates that are UPLOADED and LOCKED (guards otherwise,
-     with a link to the Contracted Rates page).
-   • Pick the application month; App date / Valuation date / Payment due / Final
-     date are pulled from Project Details (applicationDay / valuationDay /
-     paymentDay + any monthly date overrides). Payment due falls in the following
-     month; Final date = payment + finalPaymentDays (if set).
-   • Contract Works are built from the ABOVE-the-line locked items, AUTO-RENUMBERED
-     1..n (headings kept for structure), carrying qty/unit/rate/total.
-
-3) THE EDITOR
-   • Enter % Complete per line → Value to date computes automatically, with a
-     works total row.
-   • Summary (top block): Measured Work / Variations / Materials On Site across
-     Contract Sum · Application Total · Projected Final Account.
-   • Certificate block: Gross / MCD @ 2.5% / Sub-Total / Retention @ 5% / Total
-     across Current · Previously Cert · This Cert. "Previously Cert" is carried
-     forward automatically from the previous application's cumulative gross, so
-     "This Cert" = this month's movement. (Verified with worked examples.)
-   • Save (draft) and Submit (locks the application).
-
-DEFAULTS / NOTES
+CONTRACTED RATES
 ----------------
-• MCD defaults to 2.5% and retention to the project's retention % (else 5%),
-  stored per application. (A per-app editor for these + a Project Details field
-  can be added later if you want them changed per month.)
-• Variations and Materials On Site are Phase 3 — the Summary already includes them
-  the moment they're added, and the "This cert" carry-forward already accounts for
-  them.
-
-STORAGE
--------
-Applications are stored in the project settings under `applications: [...]`.
+5) DISCOUNT APPLICABLE (MCD): a "Discount applicable (MCD) %" box on the page
+   (editable while unlocked, saved with the rates).
+6) WITH / WITHOUT MCD TOGGLE: "Show rates net of discount" checkbox. When ON,
+   every displayed rate/total/materials/labour and the totals + cards are shown
+   reduced by rate × (1 − discount%). This is VIEW-ONLY — stored rates stay gross,
+   and Applications remain gross (the discount is applied separately as MCD on the
+   application Summary), exactly as agreed.
 
 FILES
 -----
-• lib/applications.js        (NEW — build works, summary calc w/ carry-forward, dates)
-• pages/api/applications.js  (NEW — list/create/save/submit/delete)
-• pages/applications.js      (REPLACES placeholder — list + create + editor; v1)
-
-NEXT (Phase 3, on your OK): pull variations (instructed/not, mirroring the CRs via
-descriptionFull/sourceItems) with document attachments, and Materials On Site
-selectable from not-yet-delivered POs.
+• pages/applications.js           (delete drafts, mark-as-sent, tick-to-100, MCD 0%; v2)
+• pages/api/applications.js       (MCD 0% default, sent status, draft-only delete/edit)
+• pages/contracted-rates.js       (discount box + net-view toggle; v14)
+• pages/api/contracted-rates.js   (persist discountPct)
