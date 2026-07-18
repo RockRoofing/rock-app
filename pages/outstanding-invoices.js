@@ -62,7 +62,7 @@ function resolveMergeFields(str, row, me, greetingName) {
     '[Invoice Reference]': row.reference || '',
     '[Project Name]': row.projectName || '',
     '[Project Address]': people.projectAddress || row.projectAddress || '',
-    '[Sub-Contract Ref]': row.subContractRef || '',
+    '[Sub-Contract Ref]': people.orderRef || row.orderRef || row.subContractRef || '',
     '[Due Date]': fmtDate(row.dueDate),
     "[Today's Date]": new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
     '[Invoice Value]': fmt(row.due),

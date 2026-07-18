@@ -1,38 +1,24 @@
-Edit Project Details — restructured + more fields from the IHM
-==============================================================
+Chase emails: [Sub-Contract Ref] = the project's Order Reference
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Project page tab now shows "· v2"
-Deploy on top of the ProjectPeople-from-IHM work.
+Build: ✓ Compiled successfully
+Deploy on top of the ProjectDetails-from-IHM work.
 
-CHANGES TO "EDIT PROJECT DETAILS"
----------------------------------
-• PROJECT DETAILS section now = Site address, High-risk customer toggle, Order
-  reference. REGION field REMOVED. (Existing stored region values are left as-is;
-  they're just no longer editable here.)  The old free-text "Customer name" field
-  is removed from this section — customer info now lives in Customer Details below.
-• NEW "CUSTOMER DETAILS" section = Company name + Company address.
-• RETENTION %: now defaults from the IHM.
+CHANGE
+------
+The [Sub-Contract Ref] merge field (used in the Suspension of Performance /
+withdrawal email, and any template that uses it) now pulls the ORDER REFERENCE
+from Project Details:
+      order-ref override (Project Details) → IHM customerOrderRef → blank
+This is the same value shown as "Order reference" in Edit Project Details, so
+the two always match.
 
-ALL FROM THE IHM (same one-way principle as before)
----------------------------------------------------
-Site address, order reference, customer company, customer address and retention %
-are pulled from the Internal Handover Minutes (matched by job number):
-      override (Project Details)  →  IHM value  →  blank
-Editing any of them sets an override that STICKS and WINS, and NEVER writes back
-to the IHM (one-way only). "from IHM" / "override" badges show the current source.
-Retention in the IHM is free text (e.g. "5%"); it's parsed to a percentage.
-
-IMPORTANT — RETENTION & FINANCIAL CALCS
----------------------------------------
-Retention % drives WIP/retention maths (which read settings.retentionPct). On
-SAVE, the effective retention (override → IHM → existing) is written into
-settings.retentionPct, so the calcs stay correct. NOTE: for an IHM-sourced value
-to flow into the financial calcs and the commercial pages, the project must be
-SAVED once (the edit form shows the IHM value immediately; saving commits it).
+NOTE ON REFRESH
+---------------
+The invoice row reads this from the dashboard cache (4h). If you've just changed
+the order reference in Project Details, it appears in the email after the next
+dashboard sync/refresh (Project Details itself updates immediately).
 
 FILES
 -----
-• lib/projectPeople.js        (resolver now also returns projectAddress, orderRef,
-                               customerCompany, customerAddress, retentionPct)
-• pages/project/[id].js       (restructured sections; IHM defaults + overrides;
-                               save persists effective retentionPct; "· v2" marker)
+• pages/outstanding-invoices.js   ([Sub-Contract Ref] -> people.orderRef)
