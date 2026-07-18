@@ -190,22 +190,37 @@ export default function ContractedRatesPage() {
 
   // Turn a below-the-line item into a variation on the project (variation tracker).
   const [varBusy, setVarBusy] = useState(null)
-  async function turnIntoVariation(x) {
-    if (!projectId) return
-    const matTotal = lineMatTotal(x)
-    const labTotal = lineLabTotal(x)
-    const rateTotal = lineRateTotal(x)
+  const [varModal, setVarModal] = useState(null)  // { items:[...], varNumber, description }
+
+  // Open the variation modal for a single item or a group of items.
+  function openVariation(itemsArr) {
+    const list = itemsArr.filter(x => x && x.kind === 'item')
+    if (!list.length) return
+    const single = list.length === 1
+    const varNumber = single ? (list[0].code || '') : list.map(x => x.code).filter(Boolean).join('+')
+    // Default combined description: each item's description on its own line.
+    const description = single
+      ? (list[0].description || '')
+      : list.map(x => `${x.code ? x.code + ' — ' : ''}${x.description || ''}`).join('\n')
+    setVarModal({ items: list, varNumber, description })
+  }
+
+  async function submitVariation() {
+    if (!projectId || !varModal) return
+    const { items: list, varNumber, description } = varModal
+    const matTotal = list.reduce((s, x) => s + lineMatTotal(x), 0)
+    const labTotal = list.reduce((s, x) => s + lineLabTotal(x), 0)
+    const rateTotal = list.reduce((s, x) => s + lineRateTotal(x), 0)
     const profit = Math.max(0, rateTotal - matTotal - labTotal)
-    if (!confirm(`Add "${x.description || x.code}" to this project's variations?\n\nMaterials ${fmt(matTotal)} · Labour ${fmt(labTotal)} · Profit ${fmt(profit)}\nIt will start as NOT instructed.`)) return
-    setVarBusy(x.id)
+    setVarBusy('modal')
     try {
       const d = await fetch('/api/contracted-rates', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'to-variation', projectId,
           variation: {
-            varNumber: x.code || '',
-            description: x.description || '',
+            varNumber: varNumber || '',
+            description: description || '',
             instructed: false,
             materials: String(Math.round(matTotal * 100) / 100),
             labour: String(Math.round(labTotal * 100) / 100),
@@ -214,7 +229,10 @@ export default function ContractedRatesPage() {
         }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Could not create the variation.'); setVarBusy(null); return }
-      setMsg(`Added "${x.description || x.code}" to variations (not instructed).`)
+      setMsg(`Added ${list.length === 1 ? `"${description.split('\n')[0]}"` : `${list.length} items`} to variations (not instructed).`)
+      setVarModal(null)
+      // Clear any selection used to build it.
+      setSelected(new Set())
     } catch (e) { setMsg('Could not create the variation.') }
     setVarBusy(null)
   }
@@ -403,7 +421,7 @@ export default function ContractedRatesPage() {
               <td style={tdR}>
                 {isEditing
                   ? <button onClick={() => setEditRow(null)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Done</button>
-                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={x.kind === 'heading' ? toggleHeadingStyle : null} onToVariation={section === 'below' ? () => turnIntoVariation(x) : null} varBusy={varBusy === x.id} />)}
+                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={x.kind === 'heading' ? toggleHeadingStyle : null} onToVariation={section === 'below' ? () => openVariation([x]) : null} />)}
               </td>
             </tr>
           )
@@ -420,7 +438,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v4</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v5</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -489,6 +507,11 @@ export default function ContractedRatesPage() {
                       <span style={{ fontSize: 13, color: '#1e40af' }}>Materials: <strong>{fmt(overallSel.materials)}</strong></span>
                       <span style={{ fontSize: 13, color: '#1e40af' }}>Labour: <strong>{fmt(overallSel.labour)}</strong></span>
                       <div style={{ flex: 1 }} />
+                      {editable && hasBelowSel && (
+                        <button onClick={() => openVariation(belowSelIds)} style={{ background: '#0f766e', border: 'none', color: '#fff', borderRadius: 6, padding: '5px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: 700 }}>
+                          ➜ Combine {belowSelIds.length} below-line item{belowSelIds.length === 1 ? '' : 's'} into one variation
+                        </button>
+                      )}
                       <button onClick={clearSel} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Clear selection</button>
                     </div>
                   )}
@@ -527,6 +550,50 @@ export default function ContractedRatesPage() {
           )}
         </div>
       </div>
+
+      {/* Turn item(s) into a variation */}
+      {varModal && (
+        <div onClick={() => setVarModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: 520, maxWidth: '100%', maxHeight: '88vh', overflow: 'auto' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>{varModal.items.length > 1 ? `Combine ${varModal.items.length} items into one variation` : 'Turn into a variation'}</div>
+            <div style={{ fontSize: 12.5, color: '#777', marginBottom: 16 }}>Adds a single variation to this project (Variation Tracker), starting as <strong>not instructed</strong>.</div>
+
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>VARIATION No.</label>
+            <input value={varModal.varNumber} onChange={e => setVarModal(m => ({ ...m, varNumber: e.target.value }))} placeholder="e.g. VO1" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', marginBottom: 12 }} />
+
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>DESCRIPTION</label>
+            <textarea value={varModal.description} onChange={e => setVarModal(m => ({ ...m, description: e.target.value }))} rows={varModal.items.length > 1 ? 5 : 3} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical', marginBottom: 14 }} />
+
+            {(() => {
+              const list = varModal.items
+              const mat = list.reduce((s, x) => s + lineMatTotal(x), 0)
+              const lab = list.reduce((s, x) => s + lineLabTotal(x), 0)
+              const rate = list.reduce((s, x) => s + lineRateTotal(x), 0)
+              const profit = Math.max(0, rate - mat - lab)
+              return (
+                <div style={{ background: '#f8f9fa', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+                  {list.length > 1 && (
+                    <div style={{ fontSize: 11.5, color: '#666', marginBottom: 8 }}>
+                      Combining: {list.map(x => x.code || (x.description || '').slice(0, 18)).join(', ')}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 18, fontSize: 13, flexWrap: 'wrap' }}>
+                    <span style={{ color: '#0369a1' }}>Materials <strong>{fmt(mat)}</strong></span>
+                    <span style={{ color: '#1e3a8a' }}>Labour <strong>{fmt(lab)}</strong></span>
+                    <span style={{ color: '#0f766e' }}>Profit <strong>{fmt(profit)}</strong></span>
+                    <span style={{ color: '#1a1a2e', marginLeft: 'auto', fontWeight: 700 }}>Value {fmt(mat + lab + profit)}</span>
+                  </div>
+                </div>
+              )
+            })()}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setVarModal(null)} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={submitVariation} disabled={varBusy === 'modal'} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: varBusy === 'modal' ? 'default' : 'pointer', opacity: varBusy === 'modal' ? 0.6 : 1 }}>{varBusy === 'modal' ? 'Adding…' : 'Add variation'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Double-click edit confirm */}
       {confirmEdit && (
