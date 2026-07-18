@@ -1,31 +1,14 @@
-Outstanding Invoices — selectable rows + tidied columns
-=======================================================
+Outstanding Invoices — default sort = Due date
+==============================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v8"
+Build: ✓ Compiled successfully  ·  tab shows "· v9"
 
-TICK BOXES + SELECTION-DRIVEN STAT CARDS
-----------------------------------------
-• A checkbox column has been added on the LEFT of every invoice row.
-• Tick any rows and the top cards recompute for JUST those invoices:
-    - "Selected invoices" (count) and "Selected total due" replace the normal
-      Outstanding/Total labels, and Overdue count/value reflect the selection too.
-    - A blue banner appears: "Showing totals for N selected invoices" with a
-      "Clear selection" button, and the cards get a subtle blue border.
-• With nothing ticked, the cards show all rows exactly as before.
-• The header checkbox is a SELECT-ALL: it ticks/unticks every invoice in the
-  current filtered set (all pages, not just the visible page), and shows an
-  indeterminate (–) state when only some are selected.
-• Selected rows are highlighted. Selection is by invoice number, so it survives
-  paging/sorting.
-
-COLUMN TIDY-UP
---------------
-• Headers restyled: uppercase, lighter weight, tighter tracking, consistent
-  padding and vertical alignment.
-• Shorter headers: "Inv No.", "Overdue", "Expected".
-• Overdue cell shows compact "22d" instead of "22 days".
-• Slightly larger row text and even padding for a cleaner read.
+CHANGE
+------
+The page now defaults to sorting by "Due date" (soonest first) instead of
+"Most overdue". The Sort dropdown still offers Most overdue / Largest due /
+Due date if you want to change it.
 
 FILES
 -----
-• pages/outstanding-invoices.js   (selection state + cards + checkbox column + restyle; v8)
+• pages/outstanding-invoices.js

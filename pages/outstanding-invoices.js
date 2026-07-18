@@ -347,7 +347,7 @@ export default function OutstandingInvoicesPage() {
   const [me, setMe] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [sortBy, setSortBy] = useState('overdue')   // overdue | due | dueDate
+  const [sortBy, setSortBy] = useState('dueDate')   // overdue | due | dueDate
   const [view, setView] = useState('outstanding')   // outstanding | all
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState(() => new Set())   // selected invoice numbers
@@ -486,7 +486,7 @@ export default function OutstandingInvoicesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Outstanding Invoices · v8</title></Head>
+      <Head><title>Rock Roofing — Outstanding Invoices · v9</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
