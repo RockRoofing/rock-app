@@ -445,7 +445,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v7</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v8</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -506,9 +506,9 @@ export default function ContractedRatesPage() {
                     </div>
                   )}
 
-                  {/* Selection summary bar */}
+                  {/* Selection summary bar — sticky so Combine stays reachable while scrolling */}
                   {anySel && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '10px 16px', marginBottom: 14 }}>
+                    <div style={{ position: 'sticky', top: 8, zIndex: 30, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '10px 16px', marginBottom: 14, boxShadow: '0 4px 14px rgba(79,70,229,0.18)' }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5' }}>{overallSel.count} selected</span>
                       <span style={{ fontSize: 13, color: '#4338ca' }}>Total rate: <strong>{fmt(overallSel.rate)}</strong></span>
                       <span style={{ fontSize: 13, color: '#1e40af' }}>Materials: <strong>{fmt(overallSel.materials)}</strong></span>

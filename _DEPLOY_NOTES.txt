@@ -1,20 +1,16 @@
-Contracted Rates — per-line formatting (bold / underline / red)
-===============================================================
+Contracted Rates — sticky selection / combine bar
+=================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v7"
+Build: ✓ Compiled successfully  ·  tab shows "· v8"
 
 CHANGE
 ------
-Each line's ⋯ menu now has a "Format line" section with three toggles:
-  • Bold
-  • Underline
-  • Red
-Any combination can be applied, and they can be toggled on/off (a ✓ shows when
-active). The menu stays open while you tick formats so you can apply several at
-once. Works on both item rows and heading rows, and is independent of the
-existing strike-through and the heading bold/underline styling.
-Formatting is saved with the rates (persists on save/reload).
+When any lines are ticked, the selection bar (with the "Combine … into one
+variation" button, the running totals and Clear selection) now STICKS to the top
+of the screen as you scroll. You can tick items anywhere down the list and the
+Combine button is always in view — no scrolling back up. It sits just below the
+Commercial nav.
 
 FILES
 -----
-• pages/contracted-rates.js   (toggleStyle + fmtStyle + menu; v7)
+• pages/contracted-rates.js
