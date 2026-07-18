@@ -129,6 +129,17 @@ export default function ContractedRatesPage() {
   const toggleStruck = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, struck: !x.struck } : x)))
   const toggleHeadingStyle = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, plainHeading: !x.plainHeading } : x)))
   const toggleStyle = (id, key) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, [key]: !x[key] } : x)))
+  // Bulk-format all currently selected lines (above and below). If every selected
+  // line already has the format, turn it off for all; otherwise turn it on for all.
+  const bulkStyle = (key) => {
+    if (!selected.size) return
+    setItems(list => {
+      const sel = list.filter(x => selected.has(x.id))
+      const allOn = sel.length > 0 && sel.every(x => !!x[key])
+      return list.map(x => selected.has(x.id) ? { ...x, [key]: !allOn } : x)
+    })
+    setDirty(true)
+  }
   const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
 
   // Reorder within a section by moving item `id` up/down among its section peers.
@@ -472,7 +483,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v9</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v10</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -541,6 +552,14 @@ export default function ContractedRatesPage() {
                       <span style={{ fontSize: 13, color: '#1e40af' }}>Materials: <strong>{fmt(overallSel.materials)}</strong></span>
                       <span style={{ fontSize: 13, color: '#1e40af' }}>Labour: <strong>{fmt(overallSel.labour)}</strong></span>
                       <div style={{ flex: 1 }} />
+                      {editable && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRight: '1px solid #c7d2fe', paddingRight: 12, marginRight: 4 }}>
+                          <span style={{ fontSize: 11, color: '#6b7280' }}>Format:</span>
+                          <button title="Bold selected lines" onClick={() => bulkStyle('bold')} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>B</button>
+                          <button title="Underline selected lines" onClick={() => bulkStyle('underline')} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}>U</button>
+                          <button title="Red selected lines" onClick={() => bulkStyle('red')} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>A</button>
+                        </span>
+                      )}
                       {editable && hasBelowSel && (
                         <button onClick={() => openVariation(belowSelIds)} style={{ background: '#0f766e', border: 'none', color: '#fff', borderRadius: 6, padding: '5px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: 700 }}>
                           ➜ Combine {belowSelIds.length} below-line item{belowSelIds.length === 1 ? '' : 's'} into one variation

@@ -1,33 +1,17 @@
-Contracted Rates → variations: auto-number + summarised description
-===================================================================
+Contracted Rates — bulk Bold / Underline / Red from the sticky bar
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v9"
-Deploy both files together.
+Build: ✓ Compiled successfully  ·  tab shows "· v10"
 
-1) AUTO VARIATION NUMBER
-------------------------
-When you turn item(s) into a variation, the Variation No. is pre-filled with the
-next number in sequence for that project — V01, V02, V03 … (reads the project's
-existing variations; handles mixed formats like "VO 5" or "3"). Still editable.
-
-2) SUMMARISED DESCRIPTION FOR LONG COMBINES
--------------------------------------------
-Combining several items no longer produces an enormous description in the tracker.
-If the combined text is long (>140 chars), the Variation Tracker gets a short
-summary that names the schedule item codes + a trimmed lead description, e.g.
-   "Items A, B, C: Supply and install additional single ply membrane… (+2 more)"
-The modal flags this ("summarised") and explains the full detail is preserved.
-
-3) FULL DETAIL KEPT FOR THE APPLICATION
----------------------------------------
-The variation now also stores:
-   • descriptionFull — the verbatim, line-per-item description, and
-   • sourceItems     — the exact schedule lines (code, description, qty, unit, rate)
-so the Application (Phase 2) can mirror the Contracted Rates exactly, regardless
-of the shortened tracker summary. The GET endpoint now also returns the project's
-existing variations (used to compute the next number).
+CHANGE
+------
+The sticky selection bar (the same one used for combining variations) now has
+bulk formatting buttons: B (bold), U (underline), A (red). Tick any lines —
+above AND/OR below the line — then click a format to apply it to all selected
+lines at once. Toggle behaviour: if any selected line doesn't have the format it
+turns ON for all; if they all already have it, it turns OFF for all.
+Per-line formatting via the row ⋯ menu still works too.
 
 FILES
 -----
-• pages/contracted-rates.js       (next number, summariser, full detail; v9)
-• pages/api/contracted-rates.js   (GET returns variations; store descriptionFull + sourceItems)
+• pages/contracted-rates.js   (bulkStyle + sticky-bar buttons; v10)
