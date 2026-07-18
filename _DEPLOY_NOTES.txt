@@ -1,17 +1,58 @@
-Contracted Rates — bulk move across the line from the sticky bar
-===============================================================
+Applications — PHASE 2: build an application from locked Contracted Rates
+========================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v13"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v1"
+Access: post-contract + management + admin.
+Replaces the Phase-2 placeholder pages/applications.js.
 
-CHANGE
-------
-With items selected, the sticky bar now shows bulk move buttons:
-  • When BELOW-the-line items are selected: "↑ Move N above the line".
-  • When ABOVE-the-line items are selected: "↓ Move N below the line".
-Moved items are appended (in their current order) after the last item of the
-target section, and can then be reordered/dragged as usual. Works alongside the
-existing bulk B/U/A formatting and Combine-into-variation buttons.
+WHAT THIS ADDS
+--------------
+The Applications page is now live (Commercial nav → Applications).
+
+1) PROJECT + APPLICATIONS LIST
+   Pick a project → see all its applications in a table (App No., month, app date,
+   Draft/Submitted status, Gross to date, This cert net) with Open/View.
+
+2) CREATE AN APPLICATION
+   • Requires contracted rates that are UPLOADED and LOCKED (guards otherwise,
+     with a link to the Contracted Rates page).
+   • Pick the application month; App date / Valuation date / Payment due / Final
+     date are pulled from Project Details (applicationDay / valuationDay /
+     paymentDay + any monthly date overrides). Payment due falls in the following
+     month; Final date = payment + finalPaymentDays (if set).
+   • Contract Works are built from the ABOVE-the-line locked items, AUTO-RENUMBERED
+     1..n (headings kept for structure), carrying qty/unit/rate/total.
+
+3) THE EDITOR
+   • Enter % Complete per line → Value to date computes automatically, with a
+     works total row.
+   • Summary (top block): Measured Work / Variations / Materials On Site across
+     Contract Sum · Application Total · Projected Final Account.
+   • Certificate block: Gross / MCD @ 2.5% / Sub-Total / Retention @ 5% / Total
+     across Current · Previously Cert · This Cert. "Previously Cert" is carried
+     forward automatically from the previous application's cumulative gross, so
+     "This Cert" = this month's movement. (Verified with worked examples.)
+   • Save (draft) and Submit (locks the application).
+
+DEFAULTS / NOTES
+----------------
+• MCD defaults to 2.5% and retention to the project's retention % (else 5%),
+  stored per application. (A per-app editor for these + a Project Details field
+  can be added later if you want them changed per month.)
+• Variations and Materials On Site are Phase 3 — the Summary already includes them
+  the moment they're added, and the "This cert" carry-forward already accounts for
+  them.
+
+STORAGE
+-------
+Applications are stored in the project settings under `applications: [...]`.
 
 FILES
 -----
-• pages/contracted-rates.js   (bulkMove + sticky-bar buttons; v13)
+• lib/applications.js        (NEW — build works, summary calc w/ carry-forward, dates)
+• pages/api/applications.js  (NEW — list/create/save/submit/delete)
+• pages/applications.js      (REPLACES placeholder — list + create + editor; v1)
+
+NEXT (Phase 3, on your OK): pull variations (instructed/not, mirroring the CRs via
+descriptionFull/sourceItems) with document attachments, and Materials On Site
+selectable from not-yet-delivered POs.
