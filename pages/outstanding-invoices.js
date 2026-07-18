@@ -31,6 +31,146 @@ function renderWithMentions(text, members = []) {
   return out
 }
 
+// The 5 chase stages in timeline order.
+const CHASE_STAGES = [
+  { key: 'upcoming', label: 'Upcoming', short: 'U' },
+  { key: 'overdue1', label: 'Overdue 1', short: '1' },
+  { key: 'overdue2', label: 'Overdue 2', short: '2' },
+  { key: 'overdue3', label: 'Overdue 3', short: '3' },
+  { key: 'withdrawal', label: 'Withdrawal', short: 'W' },
+]
+
+// Resolve [merge fields] for a given invoice row into a template string.
+function resolveMergeFields(str, row, me) {
+  if (!str) return ''
+  const firstName = (row.customer || '').trim().split(/\s+/)[0] || ''
+  const map = {
+    '[Customer First Name]': firstName,
+    '[Customer Company Name]': row.customer || '',
+    '[Customer Address]': row.customerAddress || '',
+    '[Customer QS Name]': row.customerQsName || '',
+    '[Customer QS Email]': row.customerQsEmail || '',
+    '[Invoice Number]': row.invoiceNumber || '',
+    '[Invoice Reference]': row.reference || '',
+    '[Project Name]': row.projectName || '',
+    '[Project Address]': row.projectAddress || '',
+    '[Sub-Contract Ref]': row.subContractRef || '',
+    '[Due Date]': fmtDate(row.dueDate),
+    "[Today's Date]": new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
+    '[Invoice Value]': fmt(row.due),
+    '[Invoice Value inc VAT]': fmt(row.due),
+    '[Rock Roofing QS Name]': row.qsName || (me && me.name) || '',
+  }
+  let out = str
+  for (const [k, v] of Object.entries(map)) out = out.split(k).join(v)
+  return out
+}
+
+// Timeline of 5 dots in the Auto Send cell. Sent stages are filled/green; a stage
+// sent doesn't change whether earlier ones show sent (no dropping back).
+function ChaseTimeline({ row, chases, onOpen }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+      {CHASE_STAGES.map((s, i) => {
+        const sent = !!chases[s.key]
+        const when = sent ? new Date(chases[s.key].at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : ''
+        return (
+          <div key={s.key} style={{ display: 'flex', alignItems: 'center' }}>
+            {i > 0 && <div style={{ width: 10, height: 2, background: '#e5e5e5' }} />}
+            <button
+              onClick={() => onOpen(s)}
+              title={sent ? `${s.label} — sent ${when} (click to resend)` : `${s.label} — click to compose`}
+              style={{
+                width: 22, height: 22, borderRadius: '50%', cursor: 'pointer', fontSize: 10, fontWeight: 700,
+                border: '1px solid ' + (sent ? '#16a34a' : '#d1d5db'),
+                background: sent ? '#16a34a' : '#fff',
+                color: sent ? '#fff' : '#9ca3af',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+              }}>
+              {s.short}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// Compose popup: pre-filled from the stage template with merge fields resolved,
+// editable, send via Resend (accounts from-address, QS reply-to). Discreet
+// "Amend template" link opens the Commercial editor.
+function ChaseComposeModal({ row, stage, templates, me, onClose, onSent }) {
+  const tpl = (templates || []).find(t => t.key === stage.key) || { subject: '', body: '' }
+  const [to, setTo] = useState(row.customerQsEmail || '')
+  const [subject, setSubject] = useState(resolveMergeFields(tpl.subject, row, me))
+  const [body, setBody] = useState(resolveMergeFields(tpl.body, row, me))
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState('')
+  const replyTo = row.qsEmail || (me && me.email) || ''
+
+  async function send() {
+    setErr(''); setSending(true)
+    try {
+      const recips = to.split(/[;,]/).map(s => s.trim()).filter(Boolean)
+      if (!recips.length) { setErr('Add at least one recipient.'); setSending(false); return }
+      const res = await fetch('/api/chase-email-send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: recips, replyTo, subject, text: body }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
+      // Record on the timeline (never drops back).
+      await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject }),
+      })
+      onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject })
+    } catch (e) { setErr(e.message); setSending(false) }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 24, overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640, boxShadow: '0 10px 40px rgba(0,0,0,0.2)', marginTop: 40 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{stage.label} — {row.invoiceNumber}</div>
+            <div style={{ fontSize: 11, color: '#888' }}>{row.customer} · {row.projectName}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>To (comma-separated)</label>
+          <input value={to} onChange={e => setTo(e.target.value)} placeholder="customer@example.com"
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 4 }} />
+          <div style={{ fontSize: 10, color: '#aaa', marginBottom: 12 }}>Sends from the accounts address · replies go to {replyTo || 'the project QS'}. CC controls arrive in the next update.</div>
+
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Subject</label>
+          <input value={subject} onChange={e => setSubject(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 12 }} />
+
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Message</label>
+          <textarea value={body} onChange={e => setBody(e.target.value)} rows={stage.key === 'withdrawal' ? 18 : 9}
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, resize: 'vertical' }} />
+
+          {err && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 10 }}>{err}</div>}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+            <Link href="/commercial-email-templates" style={{ fontSize: 11, color: '#9ca3af', textDecoration: 'none' }}>Amend template ↗</Link>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onClose} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer', color: '#555' }}>Cancel</button>
+              <button onClick={send} disabled={sending}
+                style={{ background: sending ? '#ccc' : '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: sending ? 'default' : 'pointer' }}>
+                {sending ? 'Sending…' : 'Send email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function OutstandingInvoicesPage() {
   const [invoices, setInvoices] = useState([])
   const [meta, setMeta] = useState({})
@@ -45,8 +185,13 @@ export default function OutstandingInvoicesPage() {
   const [commentInvoice, setCommentInvoice] = useState(null)  // invoice object for the pop-out
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [weeklyOpen, setWeeklyOpen] = useState(false)
+  const [chaseCompose, setChaseCompose] = useState(null)   // { row, stage }
+  const [chaseTemplates, setChaseTemplates] = useState([])
 
   useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    fetch('/api/chase-email-templates').then(r => r.json()).then(d => setChaseTemplates(d.templates || [])).catch(() => {})
+  }, [])
 
   async function loadAll() {
     setLoading(true)
@@ -286,7 +431,7 @@ export default function OutstandingInvoicesPage() {
                               </button>
                             </td>
                             <td style={td}>
-                              <span title="Chase-email buttons with timeline are coming in a later update — email content to be provided." style={{ fontSize: 11, color: '#bbb', cursor: 'help' }}>— soon —</span>
+                              <ChaseTimeline row={r} chases={(meta[r.invoiceNumber] || {}).chases || {}} onOpen={(stage) => setChaseCompose({ row: r, stage })} />
                             </td>
                           </tr>
                         )
@@ -320,6 +465,22 @@ export default function OutstandingInvoicesPage() {
       )}
       {downloadOpen && <DownloadModal onClose={() => setDownloadOpen(false)} />}
       {weeklyOpen && <WeeklyReportModal onClose={() => setWeeklyOpen(false)} />}
+      {chaseCompose && (
+        <ChaseComposeModal
+          row={chaseCompose.row}
+          stage={chaseCompose.stage}
+          templates={chaseTemplates}
+          me={me}
+          onClose={() => setChaseCompose(null)}
+          onSent={(invNo, stageKey, info) => {
+            setMeta(m => ({
+              ...m,
+              [invNo]: { ...(m[invNo] || {}), chases: { ...((m[invNo] || {}).chases || {}), [stageKey]: info } },
+            }))
+            setChaseCompose(null)
+          }}
+        />
+      )}
     </>
   )
 }

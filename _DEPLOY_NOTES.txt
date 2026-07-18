@@ -1,52 +1,52 @@
-Chase Emails — PHASE 1: templates + Commercial-portal editor
-============================================================
+Chase Emails — PHASE 2: timeline + compose/send popup
+=====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Deploy Phase 1 first (needs lib/chaseEmailTemplates.js + the templates API).
 
-WHAT THIS IS
-------------
-The first of three phases for the Outstanding Invoices chase-email feature. This
-phase only adds the 5 standard email templates and a place to edit them. Nothing
-sends yet, and the Auto Send column still shows "— soon —". Phases 2 (timeline +
-compose/send popup) and 3 (CC controls + fresh/custom email + manual timeline
-adjust) follow.
+WHAT'S NEW
+----------
+• Auto Send column now shows a TIMELINE of 5 dots per invoice:
+  U · 1 · 2 · 3 · W  (Upcoming, Overdue 1/2/3, Withdrawal).
+  Grey = not sent, green/filled = sent. Click ANY dot in any order to compose
+  that email. Sending a later one does NOT change earlier dots (no dropping
+  back); a sent dot can be clicked again to resend.
+• Clicking a dot opens a COMPOSE POPUP: subject + body pre-filled from that
+  stage's template with [merge fields] resolved for the invoice, fully editable
+  before sending. Includes a discreet "Amend template ↗" link (to the Commercial
+  editor) and a Cancel/Send.
+• Sends via Resend through NEW /api/chase-email-send:
+    FROM  = ACCOUNTS_FROM_EMAIL  (falls back to FORMS_FROM_EMAIL, then the Resend
+            test address)
+    REPLY-TO = the project QS email (row.qsEmail), so replies reach the QS.
+• On send, the stage is recorded on the invoice (new 'record-chase' action in
+  /api/outstanding-invoices, stored in the invoice meta as chases{stageKey:{at,
+  to,subject}}). The timeline reflects it immediately and after reload.
 
-NEW FILES
----------
-• lib/chaseEmailTemplates.js         — the 5 templates + merge-field list
-• pages/api/chase-email-templates.js — GET (all) / POST (save; post-contract,
-                                       management or admin). Stored in Redis key
-                                       config:chase-email-templates, merged over
-                                       the code defaults.
-• pages/commercial-email-templates.js — editor page at /commercial-email-templates
+MERGE FIELDS resolved now: First Name (from customer name), Company Name,
+Invoice Number/Reference, Project Name, Due Date, Today's Date, Invoice Value,
+Rock Roofing QS Name (project QS, or the logged-in user). Fields we don't yet
+hold on the invoice row (Customer Address, Customer QS Name/Email, Project
+Address, Sub-Contract Ref) resolve blank — the QS can type them in the editable
+popup. We can wire these to real data in a later pass if you store them.
 
-CHANGED FILE
-------------
-• pages/outstanding-invoices.js — added an "Email Templates" link in the nav.
+*** ENV / SETUP (required for real sending) ***
+1. Set ACCOUNTS_FROM_EMAIL in Vercel, e.g.:
+     Rock Roofing Accounts <accountsreceivable@rockroofing.co.uk>
+   (Left unset, it falls back to FORMS_FROM_EMAIL / the Resend test address.)
+2. Verify the ROOT domain rockroofing.co.uk in Resend (add its SPF/DKIM/return-
+   path DNS records). Your existing notifications use the verified SUBdomain
+   send.rockroofing.co.uk; sending from accountsreceivable@rockroofing.co.uk
+   (root) needs the root verified too. Until then, use an @send.rockroofing.co.uk
+   address in ACCOUNTS_FROM_EMAIL, or the Resend test address.
 
-THE 5 TEMPLATES
----------------
-upcoming, overdue1, overdue2, overdue3, withdrawal — worded as supplied. The
-withdrawal letter now uses [Customer Company Name] (the "Torsion Construction
-Limited" line was replaced). overdue1/2/3 + withdrawal default to auto-CC the
-customer site manager and the Rock Roofing CM (toggleable per template).
+STILL TO COME — PHASE 3: CC controls (auto-CC customer site manager + Rock CM per
+template, add/remove anyone), a separate "Draft fresh email" (custom, not tied to
+the timeline) with the ability to manually tick timeline stages, and pulling the
+remaining merge-field data from project records.
 
-MERGE FIELDS (typed literally, replaced at send in Phase 2)
-[Customer First Name] [Customer Company Name] [Customer Address] [Customer QS Name]
-[Customer QS Email] [Invoice Number] [Invoice Reference] [Project Name]
-[Project Address] [Sub-Contract Ref] [Due Date] [Today's Date] [Invoice Value]
-[Invoice Value inc VAT] [Rock Roofing QS Name]
-
-*** PREREQUISITE for Phase 2 sending (do this when you can) ***
-Emails will send via Resend FROM accountsreceivable@rockroofing.co.uk with the
-project QS as reply-to. For that to work, rockroofing.co.uk must be VERIFIED in
-Resend: add the SPF/DKIM/return-path DNS records Resend provides for the domain.
-Until verified, Resend only sends from its test address. You do NOT need to
-create an accountsreceivable@ mailbox to SEND (reply-to is the QS); create one
-only if you want a home for replies/bounces.
-
-HOW TO CHECK
-------------
-1. Outstanding Invoices → nav → "Email Templates".
-2. All 5 templates listed with editable Subject + Body and the two auto-CC
-   toggles. Save → reload → edits persist.
+FILES
+-----
+• pages/outstanding-invoices.js        (timeline + compose modal)
+• pages/api/outstanding-invoices.js    (added 'record-chase' action)
+• pages/api/chase-email-send.js        (NEW send endpoint)
