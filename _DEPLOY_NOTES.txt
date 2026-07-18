@@ -1,35 +1,42 @@
-Fresh email send fix + full email body logged into comments
-===========================================================
+Fresh-email logging — deploy verification build (adds "· v5" marker)
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy on top of the chase-email work (incl. the roles fix).
 
-FRESH ("Draft fresh email") FIX
--------------------------------
-The fresh send path uses the same /api/chase-email-send as templates, so it does
-send — but two things made it look broken:
-  1) No up-front validation: a blank subject/body only failed at the server
-     ("Subject is required"), which looked like nothing happened.
-  2) The fresh branch closed the modal WITHOUT logging anything, so a successful
-     send left no trace on the invoice.
-Now:
-  • Send validates recipient, SUBJECT and BODY before sending, with a clear
-    message in the compose box if any are missing.
-  • A fresh send is LOGGED as a comment (new 'log-email' API action), so you can
-    see it on the invoice just like template sends.
-  • Any real send/logging error is shown in the compose box (not swallowed).
+IMPORTANT: DEPLOY BOTH FILES
+----------------------------
+This fix needs BOTH files. If only the page deploys and the API doesn't, the
+fresh-email log call hits an old API that doesn't know the 'log-email' action,
+and you'll see "Email sent, but logging it failed: Unknown action" in the compose
+box. So please make sure BOTH of these land on GitHub:
+  • pages/outstanding-invoices.js
+  • pages/api/outstanding-invoices.js
 
-FULL EMAIL TEXT IN COMMENTS (both template + fresh)
----------------------------------------------------
-Sent emails logged to the invoice comments now include the FULL email:
-      📧 Overdue 1 email sent to bob@acme.co.uk
-      Subject: Overdue invoice INV-1234
-      <the entire body that was sent…>
-The comment view renders with pre-wrap, so the body reads exactly as sent. The
-raw fields are also stored on the comment (comment.email = { to, subject, body })
-for future use. These flow into the weekly report as before.
+HOW TO CONFIRM THE RIGHT BUILD IS LIVE
+--------------------------------------
+The browser tab now reads:  "Rock Roofing — Outstanding Invoices · v5"
+If your tab does NOT show "· v5", you're still on an older/cached build — hard
+refresh (Ctrl/Cmd+Shift+R) or wait for Vercel to finish, then retry.
+
+WHAT TO EXPECT AFTER DEPLOY
+---------------------------
+Draft fresh email → type Subject + Body → pick/enter a To → Send:
+  • The email sends.
+  • A comment is written to that invoice with the FULL text:
+        📧 Email sent to bob@acme.co.uk
+        Subject: <subject>
+        <full body…>
+  • Template sends behave the same (logged with full body).
+
+IF IT STILL DOESN'T LOG
+-----------------------
+The compose box now shows the exact reason. Tell me the message:
+  • "…logging it failed: Unknown action"  → the API file didn't deploy.
+  • "…logging it failed: 401/403"         → a session/role issue on that user.
+  • "Send failed: …"                       → the SEND failed (Resend/env), so it
+                                             correctly did not log.
 
 FILES
 -----
-• pages/outstanding-invoices.js      (validation; fresh logs via log-email; pass body)
-• pages/api/outstanding-invoices.js  (record-chase stores body; new log-email action)
+• pages/outstanding-invoices.js      (v5 marker; fresh logs via log-email; validation)
+• pages/api/outstanding-invoices.js  (log-email action; record-chase stores body)
