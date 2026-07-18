@@ -350,6 +350,7 @@ export default function OutstandingInvoicesPage() {
   const [sortBy, setSortBy] = useState('overdue')   // overdue | due | dueDate
   const [view, setView] = useState('outstanding')   // outstanding | all
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState(() => new Set())   // selected invoice numbers
   const PER_PAGE = 50
   const [commentInvoice, setCommentInvoice] = useState(null)  // invoice object for the pop-out
   const [downloadOpen, setDownloadOpen] = useState(false)
@@ -453,22 +454,39 @@ export default function OutstandingInvoicesPage() {
   const totalPages = Math.max(1, Math.ceil(rows.length / PER_PAGE))
   const pageRows = rows.slice((page - 1) * PER_PAGE, page * PER_PAGE)
 
+  // When rows are selected, the top cards reflect the selection; otherwise all rows.
+  const selectedRows = rows.filter(r => selected.has(r.invoiceNumber))
+  const hasSelection = selectedRows.length > 0
+  const statRows = hasSelection ? selectedRows : rows
   const totals = {
-    count: rows.length,
-    due: rows.reduce((s, r) => s + (r.due || 0), 0),
-    overdueCount: rows.filter(r => r.overdueBy).length,
-    overdueDue: rows.filter(r => r.overdueBy).reduce((s, r) => s + (r.due || 0), 0),
+    count: statRows.length,
+    due: statRows.reduce((s, r) => s + (r.due || 0), 0),
+    overdueCount: statRows.filter(r => r.overdueBy).length,
+    overdueDue: statRows.filter(r => r.overdueBy).reduce((s, r) => s + (r.due || 0), 0),
     unassignedCount: rows.filter(r => r.unassigned).length,
     unassignedDue: rows.filter(r => r.unassigned).reduce((s, r) => s + (r.due || 0), 0),
   }
 
-  const th = { padding: '9px 10px', textAlign: 'left', fontWeight: 600, color: '#555', whiteSpace: 'nowrap', fontSize: 12 }
+  const toggleRow = (invNo) => setSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(invNo)) next.delete(invNo); else next.add(invNo)
+    return next
+  })
+  // Header checkbox toggles all rows currently in view (across pages, the filtered set).
+  const allSelected = rows.length > 0 && rows.every(r => selected.has(r.invoiceNumber))
+  const someSelected = hasSelection && !allSelected
+  const toggleAll = () => setSelected(() => allSelected ? new Set() : new Set(rows.map(r => r.invoiceNumber)))
+  const clearSelection = () => setSelected(new Set())
+
+  const th = { padding: '10px 12px', textAlign: 'left', fontWeight: 700, color: '#6b7280', whiteSpace: 'nowrap', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.03em' }
   const thR = { ...th, textAlign: 'right' }
-  const td = { padding: '8px 10px', fontSize: 12, whiteSpace: 'nowrap' }
+  const thC = { ...th, textAlign: 'center', width: 36, padding: '10px 6px' }
+  const td = { padding: '10px 12px', fontSize: 12.5, whiteSpace: 'nowrap', verticalAlign: 'middle' }
+  const tdC = { ...td, textAlign: 'center', padding: '10px 6px' }
 
   return (
     <>
-      <Head><title>Rock Roofing — Outstanding Invoices · v7</title></Head>
+      <Head><title>Rock Roofing — Outstanding Invoices · v8</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
@@ -499,14 +517,20 @@ export default function OutstandingInvoicesPage() {
 
         <div style={{ padding: 24 }}>
           {/* Summary cards */}
+          {hasSelection && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 13, color: '#4f46e5', fontWeight: 600 }}>
+              <span>Showing totals for {selectedRows.length} selected invoice{selectedRows.length === 1 ? '' : 's'}.</span>
+              <button onClick={clearSelection} style={{ background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Clear selection</button>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
-              { label: view === 'all' ? 'Invoices (all)' : 'Outstanding invoices', value: totals.count, raw: true },
-              { label: view === 'all' ? 'Total due (unpaid)' : 'Total due', value: fmt(totals.due) },
+              { label: hasSelection ? 'Selected invoices' : (view === 'all' ? 'Invoices (all)' : 'Outstanding invoices'), value: totals.count, raw: true },
+              { label: hasSelection ? 'Selected total due' : (view === 'all' ? 'Total due (unpaid)' : 'Total due'), value: fmt(totals.due) },
               { label: 'Overdue invoices', value: totals.overdueCount, raw: true, color: totals.overdueCount ? '#dc2626' : '#16a34a' },
               { label: 'Overdue value', value: fmt(totals.overdueDue), color: totals.overdueDue > 0 ? '#dc2626' : '#16a34a' },
             ].map(card => (
-              <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: hasSelection ? '1px solid #c7d2fe' : '1px solid transparent' }}>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
                 <div style={{ fontSize: card.raw ? 28 : 20, fontWeight: 700, color: card.color || '#1a1a2e' }}>{card.value}</div>
               </div>
@@ -563,13 +587,16 @@ export default function OutstandingInvoicesPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                        <th style={th}>Inv Number</th>
+                        <th style={thC}>
+                          <input type="checkbox" checked={allSelected} ref={el => { if (el) el.indeterminate = someSelected }} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                        </th>
+                        <th style={th}>Inv No.</th>
                         <th style={th}>Ref</th>
                         <th style={th}>To</th>
                         <th style={th}>Date</th>
                         <th style={th}>Due Date</th>
-                        <th style={th}>Overdue by</th>
-                        <th style={th}>Expected date</th>
+                        <th style={th}>Overdue</th>
+                        <th style={th}>Expected</th>
                         <th style={thR}>Paid</th>
                         <th style={thR}>Due</th>
                         <th style={th}>Comments</th>
@@ -579,8 +606,12 @@ export default function OutstandingInvoicesPage() {
                     <tbody>
                       {pageRows.map((r, i) => {
                         const overdue = !!r.overdueBy
+                        const isSel = selected.has(r.invoiceNumber)
                         return (
-                          <tr key={`${r.invoiceNumber}-${i}`} style={{ borderBottom: '1px solid #f0f0f0', background: r.settled ? '#f0fdf4' : (i % 2 === 0 ? '#fff' : '#fafafa') }}>
+                          <tr key={`${r.invoiceNumber}-${i}`} style={{ borderBottom: '1px solid #f0f0f0', background: isSel ? '#eef2ff' : (r.settled ? '#f0fdf4' : (i % 2 === 0 ? '#fff' : '#fafafa')) }}>
+                            <td style={tdC}>
+                              <input type="checkbox" checked={isSel} onChange={() => toggleRow(r.invoiceNumber)} style={{ cursor: 'pointer' }} />
+                            </td>
                             <td style={{ ...td, fontWeight: 600, color: '#1a1a2e' }}>
                               {r.invoiceNumber || '—'}
                               {r.settled && <span title="Fully paid" style={{ marginLeft: 6, fontSize: 9, background: '#dcfce7', color: '#16a34a', border: '1px solid #86efac', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>PAID</span>}
@@ -590,7 +621,7 @@ export default function OutstandingInvoicesPage() {
                             <td style={{ ...td, whiteSpace: 'normal', maxWidth: 180 }}>{r.customer || '—'}</td>
                             <td style={td}>{fmtDate(r.date)}</td>
                             <td style={{ ...td, color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(r.dueDate)}</td>
-                            <td style={{ ...td, color: '#dc2626', fontWeight: 700 }}>{r.overdueBy ? `${r.overdueBy} day${r.overdueBy === 1 ? '' : 's'}` : ''}</td>
+                            <td style={{ ...td, color: '#dc2626', fontWeight: 700 }}>{r.overdueBy ? `${r.overdueBy}d` : ''}</td>
                             <td style={td}>
                               <input type="date" value={r.expectedDate || ''} onChange={e => setExpected(r.invoiceNumber, e.target.value)}
                                 style={{ fontSize: 11, padding: '3px 5px', border: '1px solid #e5e5e5', borderRadius: 5, fontFamily: 'inherit' }} />

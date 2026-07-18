@@ -1,35 +1,31 @@
-FIX: can't delete Project Details fields — value snaps back / "from IHM"
-=======================================================================
+Outstanding Invoices — selectable rows + tidied columns
+=======================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Project page tab shows "· v3"
-Deploy on top of the ProjectDetails-from-IHM work.
+Build: ✓ Compiled successfully  ·  tab shows "· v8"
 
-THE BUG
--------
-Clearing a field (site address, order ref, customer company/address, retention,
-or a team role) appeared to delete but immediately came back — and even claimed
-it was "from IHM" on projects that have no IHM.
+TICK BOXES + SELECTION-DRIVEN STAT CARDS
+----------------------------------------
+• A checkbox column has been added on the LEFT of every invoice row.
+• Tick any rows and the top cards recompute for JUST those invoices:
+    - "Selected invoices" (count) and "Selected total due" replace the normal
+      Outstanding/Total labels, and Overdue count/value reflect the selection too.
+    - A blue banner appears: "Showing totals for N selected invoices" with a
+      "Clear selection" button, and the cards get a subtle blue border.
+• With nothing ticked, the cards show all rows exactly as before.
+• The header checkbox is a SELECT-ALL: it ticks/unticks every invoice in the
+  current filtered set (all pages, not just the visible page), and shows an
+  indeterminate (–) state when only some are selected.
+• Selected rows are highlighted. Selection is by invoice number, so it survives
+  paging/sorting.
 
-CAUSE
------
-The override logic treated an EMPTY string / empty array as "no override set", so
-a deliberately-cleared field fell back to the IHM value (or blank re-resolved as
-not-overridden). This was in BOTH the UI and the shared resolver, so it also
-re-appeared after save + reload.
-
-FIX
----
-An override that EXISTS now wins — including an empty value, which means
-"deliberately cleared" and must NOT fall back to the IHM. Applied consistently to:
-  • Scalars: site address, order reference, customer company, customer address.
-  • Retention %.
-  • Team roles (CM/OM/QS/Estimator).
-  • Customer contacts (clearing them all now sticks).
-Both the form display AND lib/projectPeople.js (used by the dashboard + project
-API) were fixed, so cleared values persist through save/reload.
-Verified across scenarios: no-IHM+clear, IHM+clear, IHM+no-override, override-value.
+COLUMN TIDY-UP
+--------------
+• Headers restyled: uppercase, lighter weight, tighter tracking, consistent
+  padding and vertical alignment.
+• Shorter headers: "Inv No.", "Overdue", "Expected".
+• Overdue cell shows compact "22d" instead of "22 days".
+• Slightly larger row text and even padding for a cleaner read.
 
 FILES
 -----
-• lib/projectPeople.js       (empty override / empty array = deliberate clear)
-• pages/project/[id].js      (same rule in the form; "· v3" marker)
+• pages/outstanding-invoices.js   (selection state + cards + checkbox column + restyle; v8)
