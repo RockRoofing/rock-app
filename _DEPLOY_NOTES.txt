@@ -1,15 +1,17 @@
-Contracted Rates — select-all checkbox in the header
-====================================================
+Contracted Rates — bulk move across the line from the sticky bar
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v12"
+Build: ✓ Compiled successfully  ·  tab shows "· v13"
 
 CHANGE
 ------
-The tick-box column header now has a select-all checkbox. Ticking it selects
-every item ABOVE and BELOW the line at once; unticking clears them. It shows an
-indeterminate (–) state when only some rows are selected. (Section headings and
-struck rows aren't selectable, so they're ignored.)
+With items selected, the sticky bar now shows bulk move buttons:
+  • When BELOW-the-line items are selected: "↑ Move N above the line".
+  • When ABOVE-the-line items are selected: "↓ Move N below the line".
+Moved items are appended (in their current order) after the last item of the
+target section, and can then be reordered/dragged as usual. Works alongside the
+existing bulk B/U/A formatting and Combine-into-variation buttons.
 
 FILES
 -----
-• pages/contracted-rates.js   (v12)
+• pages/contracted-rates.js   (bulkMove + sticky-bar buttons; v13)

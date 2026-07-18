@@ -150,6 +150,25 @@ export default function ContractedRatesPage() {
   }
   const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
 
+  // Move all selected items currently in `fromSection` to the other side,
+  // appended (in their current order) after the last item of the target section.
+  const bulkMove = (fromSection) => {
+    const toSection = fromSection === 'above' ? 'below' : 'above'
+    setItems(list => {
+      const movingIds = list.filter(x => selected.has(x.id) && x.section === fromSection).map(x => x.id)
+      if (!movingIds.length) return list
+      const movingSet = new Set(movingIds)
+      const moved = list.filter(x => movingSet.has(x.id)).map(x => ({ ...x, section: toSection }))
+      const rest = list.filter(x => !movingSet.has(x.id))
+      let lastIdx = -1
+      rest.forEach((x, i) => { if (x.section === toSection) lastIdx = i })
+      const copy = [...rest]
+      copy.splice(lastIdx + 1, 0, ...moved)
+      return copy
+    })
+    setDirty(true)
+  }
+
   // Reorder within a section by moving item `id` up/down among its section peers.
   const moveUpDown = (id, dir) => {
     setItems(list => {
@@ -491,7 +510,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v12</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v13</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -567,6 +586,16 @@ export default function ContractedRatesPage() {
                           <button title="Underline selected lines" onClick={() => bulkStyle('underline')} style={{ background: allSelHave('underline') ? '#4f46e5' : '#fff', border: '1px solid ' + (allSelHave('underline') ? '#4f46e5' : '#c7d2fe'), color: allSelHave('underline') ? '#fff' : '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, textDecoration: 'underline', cursor: 'pointer', boxShadow: allSelHave('underline') ? 'inset 0 1px 2px rgba(0,0,0,0.25)' : 'none' }}>U</button>
                           <button title="Red selected lines" onClick={() => bulkStyle('red')} style={{ background: allSelHave('red') ? '#dc2626' : '#fff', border: '1px solid ' + (allSelHave('red') ? '#dc2626' : '#fecaca'), color: allSelHave('red') ? '#fff' : '#dc2626', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: allSelHave('red') ? 'inset 0 1px 2px rgba(0,0,0,0.25)' : 'none' }}>A</button>
                         </span>
+                      )}
+                      {editable && hasBelowSel && (
+                        <button onClick={() => bulkMove('below')} style={{ background: '#fff', border: '1px solid #99f6e4', color: '#0f766e', borderRadius: 6, padding: '4px 12px', fontSize: 12.5, cursor: 'pointer', fontWeight: 600 }}>
+                          ↑ Move {belowSelIds.length} above the line
+                        </button>
+                      )}
+                      {editable && hasAboveSel && (
+                        <button onClick={() => bulkMove('above')} style={{ background: '#fff', border: '1px solid #fde68a', color: '#b45309', borderRadius: 6, padding: '4px 12px', fontSize: 12.5, cursor: 'pointer', fontWeight: 600 }}>
+                          ↓ Move {aboveSelIds.length} below the line
+                        </button>
                       )}
                       {editable && hasBelowSel && (
                         <button onClick={() => openVariation(belowSelIds)} style={{ background: '#0f766e', border: 'none', color: '#fff', borderRadius: 6, padding: '5px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: 700 }}>
