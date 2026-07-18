@@ -1,16 +1,15 @@
-Contracted Rates — format button on/off state + "Deselect rows"
-===============================================================
+Contracted Rates — select-all checkbox in the header
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v11"
+Build: ✓ Compiled successfully  ·  tab shows "· v12"
 
-CHANGES
--------
-• The B / U / A bulk-format buttons in the sticky bar now show a clear ON state
-  (filled/highlighted with an inset press look) when EVERY selected line already
-  has that format, and an OFF state (outline) otherwise. Clicking toggles it, and
-  the button appearance flips to match.
-• "Clear selection" is renamed to "Deselect rows".
+CHANGE
+------
+The tick-box column header now has a select-all checkbox. Ticking it selects
+every item ABOVE and BELOW the line at once; unticking clears them. It shows an
+indeterminate (–) state when only some rows are selected. (Section headings and
+struck rows aren't selectable, so they're ignored.)
 
 FILES
 -----
-• pages/contracted-rates.js   (v11)
+• pages/contracted-rates.js   (v12)

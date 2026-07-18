@@ -69,6 +69,11 @@ export default function ContractedRatesPage() {
   const toggleSel = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const aboveItemsAll = items.filter(x => x.section === 'above' && x.kind === 'item' && !x.struck)
   const belowItemsAll = items.filter(x => x.section === 'below' && x.kind === 'item' && !x.struck)
+  // Select-all across BOTH sections (item rows only; headings/struck aren't tickable).
+  const allSelectable = [...aboveItemsAll, ...belowItemsAll]
+  const allSelected = allSelectable.length > 0 && allSelectable.every(x => selected.has(x.id))
+  const someSelected = selected.size > 0 && !allSelected
+  const toggleSelectAll = () => setSelected(() => allSelected ? new Set() : new Set(allSelectable.map(x => x.id)))
   const aboveSelIds = aboveItemsAll.filter(x => selected.has(x.id))
   const belowSelIds = belowItemsAll.filter(x => selected.has(x.id))
   const aboveSel = sumItems(aboveSelIds)
@@ -486,7 +491,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v11</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v12</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -578,7 +583,7 @@ export default function ContractedRatesPage() {
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                            <th style={thC}></th>
+                            <th style={thC}><input type="checkbox" checked={allSelected} ref={el => { if (el) el.indeterminate = someSelected }} onChange={toggleSelectAll} title="Select all (above & below the line)" style={{ cursor: 'pointer' }} /></th>
                             <th style={th}>Code</th>
                             <th style={th}>Description</th>
                             <th style={thR}>Qty</th>
