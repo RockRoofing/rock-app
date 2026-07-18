@@ -1,27 +1,62 @@
-Chase Emails — sent emails now logged into comments + weekly report
-===================================================================
+Project People from IHM — chase-email fields + Project Details team/contacts
+============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy after Chase Phases 1–3.
+Deploy AFTER the Chase Email phases (this builds on them).
 
-WHAT'S NEW
-----------
-• When a chase email is SENT, it's automatically logged as a comment on that
-  invoice, e.g.:  "📧 Overdue 1 email sent to bob@acme.co.uk — "Overdue invoice
-  INV-1234"".  Because comments are timestamped, the sent emails now appear
-  INTERLEAVED CHRONOLOGICALLY with manual comments in the invoice's comment
-  pop-out (a small "chase sent" badge marks them).
-• These comments are stored in the invoice meta, so they AUTOMATICALLY flow into
-  the WEEKLY REPORT (which already lists each invoice's comments/emails to date).
-  No separate change needed there.
-• Manual timeline ticks (Phase 3) do NOT create a comment — only actual sends do
-  (a manual tick means "chased another way", so no email log line).
+WHAT THIS DOES
+--------------
+Ties the chase emails AND Project Details to the Internal Handover Minutes (IHM)
+as the source of truth, matched by JOB NUMBER (Xero jobNo <-> IHM projectNo).
 
-Only SENT chase emails are logged. Customer replies are NOT captured (by your
-decision) — that would need an inbound email address + webhook, which we can add
-later if wanted.
+Resolution order for every person field:
+   commercial override (Project Details)  →  IHM value  →  blank (manual entry).
+Commercial overrides are remembered and NEVER written back to the IHM.
+
+NEW: lib/projectPeople.js
+  Resolves a project's team (CM/OM/QS/Estimator) + customer contacts + customer QS
+  from ops:projects (the IHM store) and portal users (name -> email/phone), with
+  the settings.peopleOverride layer on top.
+
+CHASE EMAILS (outstanding-invoices.js)
+  • "Hi [name]" now = the CUSTOMER'S QS (the IHM site contact whose role is
+    Quantity Surveyor). "To" defaults to that QS's email.
+  • Signature now = the LOGGED-IN SENDER:
+        <Name>
+        <Email>
+        <Phone>
+        Rock Roofing
+    (Templates still sign off with [Rock Roofing QS Name]; that final line is
+    expanded into the full signature block on compose.)
+  • Reply-to = the logged-in sender.
+  • CC quick-add chips now list the resolved Rock CM and each IHM customer contact.
+
+PROJECT DETAILS (project/[id].js + api/project/[id].js)
+  • "Team" section: the old free-text "manage team members" area is replaced by
+    four role dropdowns — CM, OM, QS, Estimator — each listing ALL PORTAL USERS.
+    Defaults come from the IHM (badge: "from IHM"); changing one sets an override
+    (badge: "override") that sticks and does not touch the IHM.
+  • "Customer Contacts": now a repeatable list (Role/Name/Email/Phone) pulled from
+    the IHM site contacts; editing overrides for this project only. The contact
+    with role "Quantity Surveyor" is the customer QS used by chase emails.
+
+SEQUENCE (your question): if a Xero project exists BEFORE the IHM is completed,
+the fields are blank and you enter them manually. Once the IHM is later completed
+with the matching job number, the values auto-populate on the next load (nothing
+is copied — resolved live), and any override you set is preserved and wins.
+
+portal-auth.js: the "me" endpoint now returns the sender's phone (enriched from
+the stored user record) so the email signature has it.
+
+NOTE ON REFRESH: the chase-email side reads the resolved people from the dashboard
+cache (4h). An override set in Project Details shows in chase emails after the
+next dashboard sync/refresh; Project Details itself updates immediately.
 
 FILES
 -----
-• pages/outstanding-invoices.js      (apply returned meta so chat updates instantly; badge)
-• pages/api/outstanding-invoices.js  (record-chase now appends a comment)
+• lib/projectPeople.js              (NEW)
+• pages/api/dashboard.js            (attach resolved people per project)
+• pages/api/portal-auth.js          (me returns phone)
+• pages/api/project/[id].js         (return people + allUsers)
+• pages/outstanding-invoices.js     (greeting=customer QS, signature=sender, CC chips)
+• pages/project/[id].js             (Team role dropdowns + Customer Contacts from IHM)

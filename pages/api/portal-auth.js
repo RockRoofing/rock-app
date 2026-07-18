@@ -90,6 +90,15 @@ export default async function handler(req, res) {
     const action = req.query.action
     if (action === 'me') {
       const u = currentUser(req)
+      if (u && u.id) {
+        // Enrich token claims (id/email/role/name) with the full stored record
+        // so callers get phone, firstName, etc. (needed for email signatures).
+        try {
+          const users = await getPortalUsers()
+          const full = users.find(x => x.id === u.id)
+          if (full) return res.json({ user: { ...u, ...strip(full) } })
+        } catch {}
+      }
       return res.json({ user: u || null })
     }
     if (action === 'list') {

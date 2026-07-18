@@ -43,26 +43,67 @@ const CHASE_STAGES = [
 // Resolve [merge fields] for a given invoice row into a template string.
 function resolveMergeFields(str, row, me) {
   if (!str) return ''
-  const firstName = (row.customer || '').trim().split(/\s+/)[0] || ''
+  const people = row.people || {}
+  const cqs = people.customerQS || null
+  // "Hi [name]" = the customer's QS (from the IHM site contacts).
+  const customerName = cqs?.name || row.customerContact || ''
+  const customerFirst = (customerName || '').trim().split(/\s+/)[0] || ''
+  // Signature = the logged-in user sending the email.
+  const senderName = (me && (me.name || [me.firstName, me.lastName].filter(Boolean).join(' '))) || ''
+  const senderEmail = (me && me.email) || ''
+  const senderPhone = (me && me.phone) || ''
   const map = {
-    '[Customer First Name]': firstName,
-    '[Customer Company Name]': row.customer || '',
-    '[Customer Address]': row.customerAddress || '',
-    '[Customer QS Name]': row.customerQsName || '',
-    '[Customer QS Email]': row.customerQsEmail || '',
+    '[Customer First Name]': customerFirst,
+    '[Customer Company Name]': people.customerCompany || row.customer || '',
+    '[Customer Address]': people.customerAddress || row.customerAddress || '',
+    '[Customer QS Name]': cqs?.name || '',
+    '[Customer QS Email]': cqs?.email || '',
     '[Invoice Number]': row.invoiceNumber || '',
     '[Invoice Reference]': row.reference || '',
     '[Project Name]': row.projectName || '',
-    '[Project Address]': row.projectAddress || '',
+    '[Project Address]': people.projectAddress || row.projectAddress || '',
     '[Sub-Contract Ref]': row.subContractRef || '',
     '[Due Date]': fmtDate(row.dueDate),
     "[Today's Date]": new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }),
     '[Invoice Value]': fmt(row.due),
     '[Invoice Value inc VAT]': fmt(row.due),
-    '[Rock Roofing QS Name]': row.qsName || (me && me.name) || '',
+    '[Rock Roofing QS Name]': senderName,
+    // Signature block for the logged-in sender.
+    '[Sender Name]': senderName,
+    '[Sender Email]': senderEmail,
+    '[Sender Phone]': senderPhone,
   }
   let out = str
   for (const [k, v] of Object.entries(map)) out = out.split(k).join(v)
+  return out
+}
+
+// A signature block built from the logged-in sender: name, email, phone, company.
+function senderSignature(me) {
+  const nm = (me && (me.name || [me.firstName, me.lastName].filter(Boolean).join(' '))) || ''
+  const lines = [
+    nm,
+    (me && me.email) || '',
+    (me && me.phone) || '',
+    'Rock Roofing',
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
+// Resolve a template body and expand the sign-off into the full sender signature
+// (name / email / phone / Rock Roofing). Templates sign off with
+// [Rock Roofing QS Name]; we replace that final token with the signature block.
+function buildBody(tplBody, row, me) {
+  let out = resolveMergeFields(tplBody, row, me)
+  const sig = senderSignature(me)
+  // Replace the resolved sender name on its own sign-off line with the full block.
+  const senderName = (me && (me.name || [me.firstName, me.lastName].filter(Boolean).join(' '))) || ''
+  if (senderName && out.trimEnd().endsWith(senderName)) {
+    out = out.replace(new RegExp(senderName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$'), sig)
+  } else {
+    // No recognisable sign-off — append the signature.
+    out = out.trimEnd() + '\n\n' + sig
+  }
   return out
 }
 
@@ -105,16 +146,20 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
   const tpl = (templates || []).find(t => t.key === stage.key) || { subject: '', body: '', ccSiteManager: false, ccRockCM: false }
 
   // Resolve the Rock CM's email by matching the project's CM name to team members.
+  // Rock CM email: prefer the resolved IHM person, fall back to name-matching.
+  const cmPerson = row.people?.team?.contractsManager || null
   const cmEmail = (() => {
-    const nm = (row.contractsManager || '').trim().toLowerCase()
+    if (cmPerson?.email) return cmPerson.email
+    const nm = (cmPerson?.name || row.contractsManager || '').trim().toLowerCase()
     if (!nm) return ''
     const hit = (members || []).find(m => (m.name || '').trim().toLowerCase() === nm)
     return hit?.email || ''
   })()
+  const cmName = cmPerson?.name || row.contractsManager || ''
 
-  const [to, setTo] = useState(row.customerQsEmail || row.customerEmail || '')
+  const [to, setTo] = useState((row.people && row.people.customerQS && row.people.customerQS.email) || row.customerEmail || '')
   const [subject, setSubject] = useState(fresh ? '' : resolveMergeFields(tpl.subject, row, me))
-  const [body, setBody] = useState(fresh ? '' : resolveMergeFields(tpl.body, row, me))
+  const [body, setBody] = useState(fresh ? '' : buildBody(tpl.body, row, me))
   // Seed CCs from the template's auto-CC flags.
   const [ccList, setCcList] = useState(() => {
     const seed = []
@@ -125,12 +170,13 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
   const [ccInput, setCcInput] = useState('')
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
-  const replyTo = row.qsEmail || (me && me.email) || ''
+  // Replies go to the logged-in sender.
+  const replyTo = (me && me.email) || row.qsEmail || ''
 
   function switchToFresh(v) {
     setFresh(v)
     if (v) { setSubject(''); setBody('') }
-    else { setSubject(resolveMergeFields(tpl.subject, row, me)); setBody(resolveMergeFields(tpl.body, row, me)) }
+    else { setSubject(resolveMergeFields(tpl.subject, row, me)); setBody(buildBody(tpl.body, row, me)) }
   }
   function addCc() {
     const parts = ccInput.split(/[;,]/).map(s => s.trim()).filter(Boolean)
@@ -208,8 +254,11 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
           </div>
           {/* quick auto-CC chips */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
-            {cmEmail && !ccList.includes(cmEmail) && <button onClick={() => setCcList(l => [...l, cmEmail])} style={quickCc}>+ Rock CM ({row.contractsManager})</button>}
-            {row.customerEmail && !ccList.includes(row.customerEmail) && <button onClick={() => setCcList(l => [...l, row.customerEmail])} style={quickCc}>+ Customer contact</button>}
+            {cmEmail && !ccList.includes(cmEmail) && <button onClick={() => setCcList(l => [...l, cmEmail])} style={quickCc}>+ Rock CM{cmName ? ` (${cmName})` : ''}</button>}
+            {(row.people?.customerContacts || []).filter(c => c.email && !ccList.includes(c.email)).map(c => (
+              <button key={c.email} onClick={() => setCcList(l => [...l, c.email])} style={quickCc}>+ {c.name || c.email}{c.title ? ` (${c.title})` : ''}</button>
+            ))}
+            {row.customerEmail && !ccList.includes(row.customerEmail) && !(row.people?.customerContacts || []).some(c => c.email === row.customerEmail) && <button onClick={() => setCcList(l => [...l, row.customerEmail])} style={quickCc}>+ Customer contact</button>}
           </div>
           <div style={{ fontSize: 10, color: '#aaa', marginBottom: 12 }}>Sends from the accounts address · replies go to {replyTo || 'the project QS'}.{(tpl.ccSiteManager && !fresh) ? ' This template normally CCs the customer site manager — add their email above.' : ''}</div>
 
@@ -316,6 +365,7 @@ export default function OutstandingInvoicesPage() {
             customerEmail: p.customerEmail || '',
             customerContact: p.customerContact || '',
             contractsManager: p.contractsManager || '',
+            people: p.people || null,
             highRisk: !!p.highRisk,
             unassigned: !!p.unassigned,
           })

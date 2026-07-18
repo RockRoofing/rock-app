@@ -86,6 +86,8 @@ export default function ProjectPage() {
   const [form, setForm] = useState({})
   const [generating, setGenerating] = useState(false)
   const [teamMembers, setTeamMembers] = useState([])
+  const [people, setPeople] = useState(null)
+  const [allUsers, setAllUsers] = useState([])
   const [showAddMember, setShowAddMember] = useState(false)
   const [newMember, setNewMember] = useState({ firstName: '', lastName: '', role: 'Contracts Manager' })
   const [addingMember, setAddingMember] = useState(false)
@@ -107,6 +109,8 @@ export default function ProjectPage() {
       setForm(data.settings || {})
       setCostLines(data.costLines || [])
       setInvoiceLines(data.invoiceLines || [])
+      setPeople(data.people || null)
+      setAllUsers(data.allUsers || [])
       const vDay = data.settings?.valuationDay
       const dates = getPastValuationDates(vDay, 12, data.settings?.dateOverrides || {})
       if (dates.length) {
@@ -286,7 +290,7 @@ export default function ProjectPage() {
                   <h3 style={{ margin: 0, fontSize: 16 }}>Project Details</h3>
                   <button onClick={() => setEditMode(false)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888', lineHeight: 1 }}>×</button>
                 </div>
-                <DetailsForm form={form} setForm={setForm} addVariation={addVariation} updateVariation={updateVariation} removeVariation={removeVariation} afa={afa} currentMargin={atDate.margin} teamMembers={teamMembers} onAddMember={() => setShowAddMember(true)} onRemoveMember={removeTeamMember} />
+                <DetailsForm form={form} setForm={setForm} addVariation={addVariation} updateVariation={updateVariation} removeVariation={removeVariation} afa={afa} currentMargin={atDate.margin} teamMembers={teamMembers} onAddMember={() => setShowAddMember(true)} onRemoveMember={removeTeamMember} people={people} allUsers={allUsers} />
                 <button onClick={save} disabled={saving} style={{ marginTop: 20, width: '100%', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 14 }}>
                   {saving ? 'Saving...' : 'Save Project Details'}
                 </button>
@@ -1364,7 +1368,7 @@ function RetentionTab({ p, settings, atDate }) {
   )
 }
 
-function DetailsForm({ form, setForm, addVariation, updateVariation, removeVariation, afa, currentMargin, teamMembers, onAddMember, onRemoveMember }) {
+function DetailsForm({ form, setForm, addVariation, updateVariation, removeVariation, afa, currentMargin, teamMembers, onAddMember, onRemoveMember, people, allUsers }) {
   const f = (field) => (e) => setForm({ ...form, [field]: e.target.value })
   // Open the monthly override table by default if the project already has any
   // manual dates set, so the user sees what's there.
@@ -1374,6 +1378,30 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const sectionStyle = { marginBottom: 20 }
   const headingStyle = { fontSize: 12, fontWeight: 700, color: '#1a1a2e', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #eee', textTransform: 'uppercase', letterSpacing: '0.05em' }
   const byRole = (role) => teamMembers.filter(m => m.role === role).map(m => m.name)
+
+  // Team role selectors: all portal users selectable for each role. The value
+  // shown = commercial override if set, else the IHM-resolved name, else blank.
+  // Editing writes to form.peopleOverride (which wins and is remembered — the IHM
+  // is never modified from here).
+  const users = allUsers || []
+  const ov = form.peopleOverride || {}
+  const setOverride = (key, value) => setForm({ ...form, peopleOverride: { ...(form.peopleOverride || {}), [key]: value } })
+  const TEAM_ROLES = [
+    { key: 'contractsManager', label: 'Contracts Manager (CM)' },
+    { key: 'operationsManager', label: 'Operations Manager (OM)' },
+    { key: 'quantitySurveyor', label: 'Quantity Surveyor (QS)' },
+    { key: 'estimator', label: 'Estimator' },
+  ]
+  const teamValue = (key) => (ov[key] != null && ov[key] !== '') ? ov[key] : (people?.team?.[key]?.name || '')
+  const fromIhm = (key) => !!(people?.team?.[key]?.name) && (ov[key] == null || ov[key] === '')
+
+  // Customer contacts: override list if set, else IHM-resolved list.
+  const contacts = Array.isArray(ov.customerContacts) ? ov.customerContacts : (people?.customerContacts || [])
+  const contactsFromIhm = !Array.isArray(ov.customerContacts) && (people?.customerContacts || []).length > 0
+  const setContacts = (list) => setForm({ ...form, peopleOverride: { ...(form.peopleOverride || {}), customerContacts: list } })
+  const addContact = () => setContacts([...(contacts || []), { title: '', name: '', email: '', phone: '' }])
+  const updateContact = (i, field, val) => setContacts(contacts.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
+  const removeContact = (i) => setContacts(contacts.filter((_, idx) => idx !== i))
 
   return (
     <div style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 8 }}>
@@ -1528,43 +1556,44 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <input value={form.orderRef || ''} onChange={f('orderRef')} style={inputStyle} />
       </div>
       <div style={sectionStyle}>
-        <div style={{ ...headingStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Team</span>
-          <button onClick={onAddMember} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>+ Add new team member</button>
+        <div style={headingStyle}>Team</div>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+          Populated from the Internal Handover Minutes (matched by job number). Change any role here to override for this project — your change is remembered and does not affect the IHM.
         </div>
-        {ROLES.map(role => {
-          const members = byRole(role)
-          const fieldKey = role === 'Contracts Manager' ? 'contractsManager' : role === 'Operations Manager' ? 'operationsManager' : role === 'Estimator' ? 'estimator' : 'qsName'
-          return (
-            <div key={role}>
-              <label style={labelStyle}>{role}</label>
-              <select value={form[fieldKey] || ''} onChange={f(fieldKey)} style={inputStyle}>
-                <option value="">— Select {role} —</option>
-                {members.map(name => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </div>
-          )
-        })}
-        {teamMembers.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Manage team members:</div>
-            {teamMembers.map(m => (
-              <div key={m.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', background: '#f8f9fa', borderRadius: 6, marginBottom: 4, fontSize: 12 }}>
-                <span>{m.name} <span style={{ color: '#888' }}>— {m.role}</span></span>
-                <button onClick={() => onRemoveMember(m.name)} style={{ background: 'none', border: 'none', color: '#bbb', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
-              </div>
-            ))}
+        {TEAM_ROLES.map(({ key, label }) => (
+          <div key={key}>
+            <label style={labelStyle}>{label}{fromIhm(key) && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{(ov[key] != null && ov[key] !== '') && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
+            <select value={teamValue(key)} onChange={e => setOverride(key, e.target.value)} style={inputStyle}>
+              <option value="">— Select {label.replace(/\s*\(.*\)/, '')} —</option>
+              {users.map(u => <option key={u.id || u.name} value={u.name}>{u.name}{u.role ? ` — ${u.role}` : ''}</option>)}
+              {teamValue(key) && !users.some(u => u.name === teamValue(key)) && <option value={teamValue(key)}>{teamValue(key)}</option>}
+            </select>
           </div>
-        )}
+        ))}
       </div>
       <div style={sectionStyle}>
-        <div style={headingStyle}>Customer Contact</div>
-        <label style={labelStyle}>Contact name</label>
-        <input value={form.customerContact || ''} onChange={f('customerContact')} style={inputStyle} />
-        <label style={labelStyle}>Email</label>
-        <input value={form.customerEmail || ''} onChange={f('customerEmail')} style={inputStyle} />
-        <label style={labelStyle}>Phone</label>
-        <input value={form.customerPhone || ''} onChange={f('customerPhone')} style={inputStyle} />
+        <div style={{ ...headingStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>Customer Contacts</span>
+          <button onClick={addContact} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>+ Add contact</button>
+        </div>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+          {contactsFromIhm
+            ? 'From the Internal Handover Minutes. Editing any contact overrides for this project (the IHM is unchanged).'
+            : (people?.hasIhm ? 'No customer contacts on the IHM yet — add them here.' : 'No IHM found for this job number yet — add customer contacts manually.')}
+        </div>
+        {(contacts || []).length === 0 && <div style={{ fontSize: 12, color: '#bbb', marginBottom: 8 }}>No customer contacts.</div>}
+        {(contacts || []).map((c, i) => (
+          <div key={i} style={{ background: '#f8f9fa', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <input value={c.title || ''} onChange={e => updateContact(i, 'title', e.target.value)} placeholder="Role (e.g. Quantity Surveyor)" style={{ ...inputStyle, marginBottom: 0, flex: 1 }} />
+              <button onClick={() => removeContact(i)} style={{ background: 'none', border: 'none', color: '#e63946', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}>×</button>
+            </div>
+            <input value={c.name || ''} onChange={e => updateContact(i, 'name', e.target.value)} placeholder="Name" style={inputStyle} />
+            <input value={c.email || ''} onChange={e => updateContact(i, 'email', e.target.value)} placeholder="Email" style={inputStyle} />
+            <input value={c.phone || ''} onChange={e => updateContact(i, 'phone', e.target.value)} placeholder="Phone" style={{ ...inputStyle, marginBottom: 0 }} />
+          </div>
+        ))}
+        <div style={{ fontSize: 10, color: '#aaa', marginTop: 4 }}>The contact whose role is “Quantity Surveyor” is used as the customer QS for chase emails.</div>
       </div>
     </div>
   )

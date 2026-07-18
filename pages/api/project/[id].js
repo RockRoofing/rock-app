@@ -136,9 +136,24 @@ export default async function handler(req, res) {
       ? costsAfterDate / (1 - effectiveMargin)
       : 0
 
+    // Resolve project people (team + customer contacts) from the IHM, with the
+    // commercial override layer (settings.peopleOverride). Also return all portal
+    // users so the Project Details role dropdowns can list everyone.
+    let people = null, allUsers = []
+    try {
+      const { resolveProjectPeople } = await import('../../../lib/projectPeople')
+      const { getPortalUsers } = await import('../../../lib/db')
+      let opsProjects = []
+      try { opsProjects = (redis ? (await redis.get('ops:projects')) : null) || [] } catch {}
+      allUsers = await getPortalUsers()
+      people = resolveProjectPeople({ jobNo: cp.jobNo, opsProjects, users: allUsers, override: settings.peopleOverride || {} })
+    } catch (e) { console.error('people resolve failed:', e.message) }
+
     res.json({
       costLines,
       invoiceLines: invoices,
+      people,
+      allUsers: allUsers.map(u => ({ id: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '', email: u.email || '', phone: u.phone || '', role: u.jobRole || '' })),
       project: {
         xeroId: id,
         trackingOptionId: id,

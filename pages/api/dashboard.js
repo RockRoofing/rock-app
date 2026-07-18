@@ -44,6 +44,12 @@ export default async function handler(req, res) {
     const categoryProjects = await getProjectsFromCategories(tokens.access_token, tokens.tenant_id)
     const allSettings = await getAllProjectSettings()
 
+    // For resolving project people (team roles + customer contacts) from the IHM.
+    let opsProjects = [], portalUsers = []
+    try { opsProjects = (await redis.get('ops:projects')) || [] } catch {}
+    try { const { getPortalUsers } = await import('../../lib/db'); portalUsers = await getPortalUsers() } catch {}
+    const { resolveProjectPeople } = await import('../../lib/projectPeople')
+
     const projects = await Promise.all(categoryProjects.map(async (cp) => {
       const id = cp.trackingOptionId
       const settings = allSettings[id] || allSettings[cp.jobNo] || {}
@@ -184,6 +190,12 @@ export default async function handler(req, res) {
         qsEmail: settings.qsEmail || '',
         customerEmail: settings.customerEmail || '',
         customerContact: settings.customerContact || '',
+        people: resolveProjectPeople({
+          jobNo: cp.jobNo,
+          opsProjects,
+          users: portalUsers,
+          override: settings.peopleOverride || {},
+        }),
         highRisk: settings.highRiskCustomer === true,
         pcDate: settings.pcDate || '',
         defectsDate: settings.defectsDate || '',
