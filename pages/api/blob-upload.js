@@ -18,6 +18,9 @@ export default async function handler(req, res) {
           'application/pdf',
           'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
           'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel.sheet.macroEnabled.12',
+          'application/vnd.ms-excel.sheet.macroenabled.12',
+          'application/octet-stream',
           'text/plain', 'text/csv',
         ],
         maximumSizeInBytes: 50 * 1024 * 1024, // 50MB

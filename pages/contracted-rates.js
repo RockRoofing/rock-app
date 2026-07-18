@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import { upload } from '@vercel/blob/client'
+import CommercialNav from '../components/CommercialNav'
 import { computeRateTotals } from '../lib/contractRatesParser'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -66,15 +68,16 @@ export default function ContractedRatesPage() {
     if (!file) return
     setUploading(true); setMsg('')
     try {
-      const b64 = await new Promise((res, rej) => {
-        const r = new FileReader()
-        r.onload = () => res(String(r.result).split(',')[1])
-        r.onerror = () => rej(new Error('read failed'))
-        r.readAsDataURL(file)
+      // Direct browser -> Blob upload (avoids the ~4.5MB serverless body limit),
+      // then the server fetches the blob and parses it.
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/blob-upload',
+        contentType: file.type || undefined,
       })
       const d = await fetch('/api/contracted-rates', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'parse-upload', fileData: b64, fileName: file.name }),
+        body: JSON.stringify({ action: 'parse-upload', fileUrl: blob.url, fileName: file.name }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Could not parse the file.'); setUploading(false); return }
       setItems(d.items.map(x => ({ ...x })))
@@ -83,7 +86,7 @@ export default function ContractedRatesPage() {
       setLocked(false)
       setDirty(true)
       setMsg(`Parsed ${d.items.filter(x => x.kind === 'item').length} rate lines from "${d.sheetName}". Review, then Save.`)
-    } catch (err) { setMsg('Upload failed: ' + err.message) }
+    } catch (err) { setMsg('Upload failed: ' + (err?.message || err)) }
     setUploading(false)
   }
 
@@ -228,20 +231,9 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v1</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v2</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
-        <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56 }}>
-            <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-            <a href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>← Commercial</a>
-            <span style={{ color: '#444' }}>|</span>
-            <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Contracted Rates</span>
-            <span style={{ color: '#444' }}>|</span>
-            <Link href="/applications" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>Applications</Link>
-            <span style={{ color: '#444' }}>|</span>
-            <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>Variations</Link>
-          </div>
-        </div>
+        <CommercialNav active="/contracted-rates" />
 
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
           {/* Project picker */}

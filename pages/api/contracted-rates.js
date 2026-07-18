@@ -21,15 +21,28 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { action, projectId } = req.body || {}
 
-    // Parse a base64 xlsm/xlsx into items WITHOUT saving (preview before commit).
+    // Parse an uploaded xlsm/xlsx into items WITHOUT saving (preview before commit).
+    // Accepts either a Blob URL (large files, preferred) or base64 (small files).
     if (action === 'parse-upload') {
-      const { fileData, fileName } = req.body
-      if (!fileData) return res.status(400).json({ error: 'fileData required' })
+      const { fileData, fileUrl, fileName } = req.body
+      let buffer
+      try {
+        if (fileUrl) {
+          const resp = await fetch(fileUrl)
+          if (!resp.ok) return res.status(400).json({ error: 'Could not fetch the uploaded file.' })
+          buffer = Buffer.from(await resp.arrayBuffer())
+        } else if (fileData) {
+          const b64 = String(fileData).includes(',') ? String(fileData).split(',')[1] : fileData
+          buffer = Buffer.from(b64, 'base64')
+        } else {
+          return res.status(400).json({ error: 'fileUrl or fileData required' })
+        }
+      } catch (e) {
+        return res.status(400).json({ error: 'Could not read the upload: ' + e.message })
+      }
       let rows, sheetName
       try {
         const xlsx = await import('xlsx')
-        const b64 = String(fileData).includes(',') ? String(fileData).split(',')[1] : fileData
-        const buffer = Buffer.from(b64, 'base64')
         const wb = xlsx.read(buffer, { type: 'buffer', cellDates: false })
         sheetName = wb.SheetNames.find(s => s.trim().toUpperCase() === 'TAKE OFF')
           || wb.SheetNames.find(s => /take\s*off/i.test(s))
