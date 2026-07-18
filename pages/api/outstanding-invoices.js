@@ -74,7 +74,7 @@ export default async function handler(req, res) {
     if (action === 'record-chase') {
       // Record that a chase-email stage was sent for this invoice. Timeline never
       // drops back: we keep a map of stageKey -> { at, to, subject }.
-      const { stageKey, to, subject, manual } = req.body
+      const { stageKey, to, subject, manual, body } = req.body
       if (!stageKey) return res.status(400).json({ error: 'stageKey required' })
       if (!meta[invoiceNumber].chases) meta[invoiceNumber].chases = {}
       const at = Date.now()
@@ -85,12 +85,15 @@ export default async function handler(req, res) {
         manual: !!manual,
       }
       // Also drop a comment onto the invoice so sent emails appear inline with
-      // manual comments (chronological) and flow into the weekly report.
+      // manual comments (chronological) and flow into the weekly report. We store
+      // the full subject + body so the exact email text can be read back later.
       if (!manual) {
         const stageLabels = { upcoming: 'Upcoming invoice', overdue1: 'Overdue 1', overdue2: 'Overdue 2', overdue3: 'Overdue 3', withdrawal: 'Withdrawal notice' }
         const recips = Array.isArray(to) ? to : (to ? [to] : [])
         const label = stageLabels[stageKey] || stageKey
-        const text = `📧 ${label} email sent${recips.length ? ` to ${recips.join(', ')}` : ''}${subject ? ` — "${subject}"` : ''}`
+        const header = `📧 ${label} email sent${recips.length ? ` to ${recips.join(', ')}` : ''}`
+        const text = [header, subject ? `Subject: ${subject}` : '', body ? `\n${body}` : '']
+          .filter(Boolean).join('\n')
         meta[invoiceNumber].comments = [...(meta[invoiceNumber].comments || []), {
           id: `c_${at}_${Math.random().toString(36).slice(2, 5)}`,
           text,
@@ -98,8 +101,31 @@ export default async function handler(req, res) {
           at,
           mentions: [],
           source: 'chase-email',
+          email: { to: recips, subject: subject || '', body: body || '' },
         }]
       }
+      await redis.set(META_KEY, meta)
+      return res.json({ ok: true, meta: meta[invoiceNumber] })
+    }
+
+    if (action === 'log-email') {
+      // Log a FRESH (non-template) email that was sent — not tied to a timeline
+      // stage. Stores the full subject + body as a comment.
+      const { to, subject, body } = req.body
+      const at = Date.now()
+      const recips = Array.isArray(to) ? to : (to ? [to] : [])
+      const header = `📧 Email sent${recips.length ? ` to ${recips.join(', ')}` : ''}`
+      const text = [header, subject ? `Subject: ${subject}` : '', body ? `\n${body}` : '']
+        .filter(Boolean).join('\n')
+      meta[invoiceNumber].comments = [...(meta[invoiceNumber].comments || []), {
+        id: `c_${at}_${Math.random().toString(36).slice(2, 5)}`,
+        text,
+        author: req.body.author || 'Accounts',
+        at,
+        mentions: [],
+        source: 'chase-email',
+        email: { to: recips, subject: subject || '', body: body || '' },
+      }]
       await redis.set(META_KEY, meta)
       return res.json({ ok: true, meta: meta[invoiceNumber] })
     }

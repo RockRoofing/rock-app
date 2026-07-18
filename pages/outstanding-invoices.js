@@ -198,37 +198,46 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
     setErr(''); setSending(true)
     try {
       const recips = to.split(/[;,]/).map(s => s.trim()).filter(Boolean)
-      if (!recips.length) { setErr('Add at least one recipient.'); setSending(false); return }
+      if (!recips.length) { setErr('Add a recipient.'); setSending(false); return }
+      if (!subject || !subject.trim()) { setErr('Add a subject.'); setSending(false); return }
+      if (!body || !body.trim()) { setErr('The email body is empty.'); setSending(false); return }
       const res = await fetch('/api/chase-email-send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: recips, cc: ccList, replyTo, subject, text: body }),
       })
-      const d = await res.json()
+      const d = await res.json().catch(() => ({}))
       if (!res.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
       if (!fresh) {
         // Record on the timeline (never drops back). The API also appends a
-        // comment, and returns the updated meta for this invoice.
+        // comment (with the full subject + body) and returns the updated meta.
         let updatedMeta = null
         try {
           const rr = await fetch('/api/outstanding-invoices', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject, author: (me && me.name) || 'Accounts' }),
+            body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject, body, author: (me && me.name) || 'Accounts' }),
           })
           const dd = await rr.json().catch(() => ({}))
-          if (!rr.ok) {
-            // Email sent but logging the timeline/comment failed — tell the user.
-            setErr('Email sent, but logging it failed: ' + (dd.error || rr.status))
-            setSending(false)
-            return
-          }
+          if (!rr.ok) { setErr('Email sent, but logging it failed: ' + (dd.error || rr.status)); setSending(false); return }
           updatedMeta = dd.meta || null
         } catch (e) {
           setErr('Email sent, but logging it failed: ' + e.message); setSending(false); return
         }
         onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject }, updatedMeta)
       } else {
-        // Fresh custom email — not tied to a stage.
-        onSent(row.invoiceNumber, null, null, null)
+        // Fresh custom email — not tied to a stage, but still logged (with body).
+        let updatedMeta = null
+        try {
+          const rr = await fetch('/api/outstanding-invoices', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'log-email', invoiceNumber: row.invoiceNumber, to: recips, subject, body, author: (me && me.name) || 'Accounts' }),
+          })
+          const dd = await rr.json().catch(() => ({}))
+          if (!rr.ok) { setErr('Email sent, but logging it failed: ' + (dd.error || rr.status)); setSending(false); return }
+          updatedMeta = dd.meta || null
+        } catch (e) {
+          setErr('Email sent, but logging it failed: ' + e.message); setSending(false); return
+        }
+        onSent(row.invoiceNumber, null, null, updatedMeta)
       }
     } catch (e) { setErr(e.message); setSending(false) }
   }

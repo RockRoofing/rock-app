@@ -1,41 +1,35 @@
-FIX: chase emails not sending / not logging to comments  +  To-box UI change
-============================================================================
+Fresh email send fix + full email body logged into comments
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy on top of the existing chase-email + ProjectPeople work.
+Deploy on top of the chase-email work (incl. the roles fix).
 
-ROOT CAUSE OF THE BUG
----------------------
-Three endpoints guarded access with roles ['post-contract','management','admin'].
-The role model now also has an 'accounts' role — and the person chasing invoices
-is on that role. So:
-  • /api/chase-email-send      → silent 403 → the email never sent.
-  • /api/outstanding-invoices  → silent 403 → record-chase (the comment) AND
-    even add-comment were blocked → nothing saved to the invoice comments.
-  • /api/chase-email-templates → 403 → couldn't load/save templates.
+FRESH ("Draft fresh email") FIX
+-------------------------------
+The fresh send path uses the same /api/chase-email-send as templates, so it does
+send — but two things made it look broken:
+  1) No up-front validation: a blank subject/body only failed at the server
+     ("Subject is required"), which looked like nothing happened.
+  2) The fresh branch closed the modal WITHOUT logging anything, so a successful
+     send left no trace on the invoice.
+Now:
+  • Send validates recipient, SUBJECT and BODY before sending, with a clear
+    message in the compose box if any are missing.
+  • A fresh send is LOGGED as a comment (new 'log-email' API action), so you can
+    see it on the invoice just like template sends.
+  • Any real send/logging error is shown in the compose box (not swallowed).
 
-FIX
----
-• Added 'accounts' to the allowed roles on all three endpoints.
-• The compose box now SHOWS a failure if logging the sent email to comments
-  fails (previously swallowed): "Email sent, but logging it failed: …".
-
-If sending still fails after this, the message shown in the compose box will say
-why — most likely a Resend/env issue (RESEND_API_KEY or ACCOUNTS_FROM_EMAIL).
-
-UI CHANGE (as requested)
-------------------------
-• The "To" box and the "Hi [name]" greeting now start BLANK when the compose
-  popup opens.
-• "To" is a DROPDOWN OF ALL CUSTOMER CONTACTS for that project (from the IHM),
-  single recipient — plus a free-type box to enter any email.
-• Selecting a To contact AUTO-FILLS "Hi <first name>," in the body.
-• If you free-type an unknown email, the greeting is left BLANK for you to fill.
-• CC remains multiple (unchanged).
+FULL EMAIL TEXT IN COMMENTS (both template + fresh)
+---------------------------------------------------
+Sent emails logged to the invoice comments now include the FULL email:
+      📧 Overdue 1 email sent to bob@acme.co.uk
+      Subject: Overdue invoice INV-1234
+      <the entire body that was sent…>
+The comment view renders with pre-wrap, so the body reads exactly as sent. The
+raw fields are also stored on the comment (comment.email = { to, subject, body })
+for future use. These flow into the weekly report as before.
 
 FILES
 -----
-• pages/api/chase-email-send.js        (add 'accounts' role)
-• pages/api/outstanding-invoices.js    (add 'accounts' role)
-• pages/api/chase-email-templates.js   (add 'accounts' role)
-• pages/outstanding-invoices.js        (blank To + greeting; To dropdown; visible log errors)
+• pages/outstanding-invoices.js      (validation; fresh logs via log-email; pass body)
+• pages/api/outstanding-invoices.js  (record-chase stores body; new log-email action)
