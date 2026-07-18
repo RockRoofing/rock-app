@@ -77,11 +77,28 @@ export default async function handler(req, res) {
       const { stageKey, to, subject, manual } = req.body
       if (!stageKey) return res.status(400).json({ error: 'stageKey required' })
       if (!meta[invoiceNumber].chases) meta[invoiceNumber].chases = {}
+      const at = Date.now()
       meta[invoiceNumber].chases[stageKey] = {
-        at: Date.now(),
+        at,
         to: Array.isArray(to) ? to : (to ? [to] : []),
         subject: subject || '',
         manual: !!manual,
+      }
+      // Also drop a comment onto the invoice so sent emails appear inline with
+      // manual comments (chronological) and flow into the weekly report.
+      if (!manual) {
+        const stageLabels = { upcoming: 'Upcoming invoice', overdue1: 'Overdue 1', overdue2: 'Overdue 2', overdue3: 'Overdue 3', withdrawal: 'Withdrawal notice' }
+        const recips = Array.isArray(to) ? to : (to ? [to] : [])
+        const label = stageLabels[stageKey] || stageKey
+        const text = `📧 ${label} email sent${recips.length ? ` to ${recips.join(', ')}` : ''}${subject ? ` — "${subject}"` : ''}`
+        meta[invoiceNumber].comments = [...(meta[invoiceNumber].comments || []), {
+          id: `c_${at}_${Math.random().toString(36).slice(2, 5)}`,
+          text,
+          author: req.body.author || 'Accounts',
+          at,
+          mentions: [],
+          source: 'chase-email',
+        }]
       }
       await redis.set(META_KEY, meta)
       return res.json({ ok: true, meta: meta[invoiceNumber] })

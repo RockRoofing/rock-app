@@ -150,15 +150,21 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
       const d = await res.json()
       if (!res.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
       if (!fresh) {
-        // Record on the timeline (never drops back).
-        await fetch('/api/outstanding-invoices', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject }),
-        })
-        onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject })
+        // Record on the timeline (never drops back). The API also appends a
+        // comment, and returns the updated meta for this invoice.
+        let updatedMeta = null
+        try {
+          const rr = await fetch('/api/outstanding-invoices', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject, author: (me && me.name) || 'Accounts' }),
+          })
+          const dd = await rr.json()
+          updatedMeta = dd.meta || null
+        } catch {}
+        onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject }, updatedMeta)
       } else {
         // Fresh custom email — not tied to a stage.
-        onSent(row.invoiceNumber, null, null)
+        onSent(row.invoiceNumber, null, null, null)
       }
     } catch (e) { setErr(e.message); setSending(false) }
   }
@@ -572,8 +578,10 @@ export default function OutstandingInvoicesPage() {
             } catch {}
           }}
           onClose={() => setChaseCompose(null)}
-          onSent={(invNo, stageKey, info) => {
-            if (stageKey) {
+          onSent={(invNo, stageKey, info, updatedMeta) => {
+            if (updatedMeta) {
+              setMeta(m => ({ ...m, [invNo]: { ...(m[invNo] || {}), ...updatedMeta } }))
+            } else if (stageKey) {
               setMeta(m => ({
                 ...m,
                 [invNo]: { ...(m[invNo] || {}), chases: { ...((m[invNo] || {}).chases || {}), [stageKey]: info } },
@@ -693,7 +701,7 @@ function CommentsModal({ invoice, comments, members, me, onClose, onChanged }) {
             : list.slice().sort((a, b) => a.at - b.at).map(c => (
               <div key={c.id} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid #f4f4f4' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>{c.author}{c.source === 'email-bcc' && <span style={{ marginLeft: 6, fontSize: 9, background: '#f0fdf4', color: '#16a34a', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>via email</span>}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>{c.author}{c.source === 'email-bcc' && <span style={{ marginLeft: 6, fontSize: 9, background: '#f0fdf4', color: '#16a34a', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>via email</span>}{c.source === 'chase-email' && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>chase sent</span>}</span>
                   <span style={{ fontSize: 11, color: '#aaa' }}>{new Date(c.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}{c.editedAt ? ' (edited)' : ''}</span>
                 </div>
                 {editingId === c.id ? (

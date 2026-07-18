@@ -1,47 +1,27 @@
-Chase Emails — PHASE 3: CC controls, fresh email, manual timeline
-=================================================================
+Chase Emails — sent emails now logged into comments + weekly report
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy Phases 1 & 2 first.
+Deploy after Chase Phases 1–3.
 
-WHAT'S NEW IN THE COMPOSE POPUP
--------------------------------
-1. CC CONTROLS
-   • A CC field with removable chips — add/remove anyone (incl. customer contacts).
-   • Auto-seeded from the template's flags: if the template is set to CC the Rock
-     Roofing CM, the CM's email is pre-added (resolved by matching the project's
-     Contracts Manager NAME to a team member's email).
-   • Quick-add chips: "+ Rock CM (name)" and "+ Customer contact" when those
-     emails are known.
-   • If a template normally CCs the CUSTOMER SITE MANAGER, a note prompts you to
-     add their email (there is no dedicated site-manager field on projects yet —
-     see LIMITATION below).
+WHAT'S NEW
+----------
+• When a chase email is SENT, it's automatically logged as a comment on that
+  invoice, e.g.:  "📧 Overdue 1 email sent to bob@acme.co.uk — "Overdue invoice
+  INV-1234"".  Because comments are timestamped, the sent emails now appear
+  INTERLEAVED CHRONOLOGICALLY with manual comments in the invoice's comment
+  pop-out (a small "chase sent" badge marks them).
+• These comments are stored in the invoice meta, so they AUTOMATICALLY flow into
+  the WEEKLY REPORT (which already lists each invoice's comments/emails to date).
+  No separate change needed there.
+• Manual timeline ticks (Phase 3) do NOT create a comment — only actual sends do
+  (a manual tick means "chased another way", so no email log line).
 
-2. DRAFT FRESH EMAIL
-   • Toggle at the top: "[Stage] template" vs "Draft fresh email".
-   • Fresh mode clears subject/body for a fully custom message and is NOT tied to
-     the timeline (sending it does not tick a stage).
-
-3. MANUAL TIMELINE ADJUSTMENT
-   • In the popup, a row of stage checkboxes lets you tick/untick any stage by
-     hand — e.g. if you chased by phone or sent a custom email, mark the stage
-     done without sending. Uses new 'record-chase' (manual:true) / 'clear-chase'
-     actions. The dot turns green just like a real send.
-
-CC DATA SOURCES (dashboard.js now exposes these per project)
-   customerEmail, customerContact  (from project settings → Customer Contact)
-   contractsManager (name) -> matched to team member email for the Rock CM CC.
-
-LIMITATION / FUTURE
-   There is no dedicated "customer site manager" field on projects, so that
-   particular auto-CC can't pre-fill — the user adds it manually (prompted). If
-   you want it automatic, add a customerSiteManagerEmail field to project
-   settings and we'll wire it in. Same for the remaining blank merge fields
-   (Customer Address, Customer QS Name/Email, Project Address, Sub-Contract Ref)
-   — tell me where to store them and they'll auto-resolve.
+Only SENT chase emails are logged. Customer replies are NOT captured (by your
+decision) — that would need an inbound email address + webhook, which we can add
+later if wanted.
 
 FILES
 -----
-• pages/outstanding-invoices.js      (CC controls, fresh email, manual ticks)
-• pages/api/outstanding-invoices.js  (added 'clear-chase'; manual flag on record-chase)
-• pages/api/dashboard.js             (exposes customerEmail/customerContact/contractsManager)
+• pages/outstanding-invoices.js      (apply returned meta so chat updates instantly; badge)
+• pages/api/outstanding-invoices.js  (record-chase now appends a comment)
