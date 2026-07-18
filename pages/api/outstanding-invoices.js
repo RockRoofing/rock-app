@@ -74,14 +74,24 @@ export default async function handler(req, res) {
     if (action === 'record-chase') {
       // Record that a chase-email stage was sent for this invoice. Timeline never
       // drops back: we keep a map of stageKey -> { at, to, subject }.
-      const { stageKey, to, subject } = req.body
+      const { stageKey, to, subject, manual } = req.body
       if (!stageKey) return res.status(400).json({ error: 'stageKey required' })
       if (!meta[invoiceNumber].chases) meta[invoiceNumber].chases = {}
       meta[invoiceNumber].chases[stageKey] = {
         at: Date.now(),
         to: Array.isArray(to) ? to : (to ? [to] : []),
         subject: subject || '',
+        manual: !!manual,
       }
+      await redis.set(META_KEY, meta)
+      return res.json({ ok: true, meta: meta[invoiceNumber] })
+    }
+
+    if (action === 'clear-chase') {
+      // Manually un-tick a timeline stage.
+      const { stageKey } = req.body
+      if (!stageKey) return res.status(400).json({ error: 'stageKey required' })
+      if (meta[invoiceNumber].chases) { delete meta[invoiceNumber].chases[stageKey] }
       await redis.set(META_KEY, meta)
       return res.json({ ok: true, meta: meta[invoiceNumber] })
     }

@@ -182,6 +182,8 @@ export default async function handler(req, res) {
         estimator: settings.estimator || '',
         qsName: settings.qsName || '',
         qsEmail: settings.qsEmail || '',
+        customerEmail: settings.customerEmail || '',
+        customerContact: settings.customerContact || '',
         highRisk: settings.highRiskCustomer === true,
         pcDate: settings.pcDate || '',
         defectsDate: settings.defectsDate || '',

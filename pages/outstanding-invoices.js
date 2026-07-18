@@ -97,16 +97,46 @@ function ChaseTimeline({ row, chases, onOpen }) {
 }
 
 // Compose popup: pre-filled from the stage template with merge fields resolved,
-// editable, send via Resend (accounts from-address, QS reply-to). Discreet
-// "Amend template" link opens the Commercial editor.
-function ChaseComposeModal({ row, stage, templates, me, onClose, onSent }) {
-  const tpl = (templates || []).find(t => t.key === stage.key) || { subject: '', body: '' }
-  const [to, setTo] = useState(row.customerQsEmail || '')
-  const [subject, setSubject] = useState(resolveMergeFields(tpl.subject, row, me))
-  const [body, setBody] = useState(resolveMergeFields(tpl.body, row, me))
+// editable, send via Resend (accounts from-address, QS reply-to). CC controls,
+// a "Draft fresh email" mode (not tied to the timeline), and manual timeline
+// ticking are all here.
+function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose, onSent, onToggleStage }) {
+  const [fresh, setFresh] = useState(false)   // fresh custom email, not tied to a stage
+  const tpl = (templates || []).find(t => t.key === stage.key) || { subject: '', body: '', ccSiteManager: false, ccRockCM: false }
+
+  // Resolve the Rock CM's email by matching the project's CM name to team members.
+  const cmEmail = (() => {
+    const nm = (row.contractsManager || '').trim().toLowerCase()
+    if (!nm) return ''
+    const hit = (members || []).find(m => (m.name || '').trim().toLowerCase() === nm)
+    return hit?.email || ''
+  })()
+
+  const [to, setTo] = useState(row.customerQsEmail || row.customerEmail || '')
+  const [subject, setSubject] = useState(fresh ? '' : resolveMergeFields(tpl.subject, row, me))
+  const [body, setBody] = useState(fresh ? '' : resolveMergeFields(tpl.body, row, me))
+  // Seed CCs from the template's auto-CC flags.
+  const [ccList, setCcList] = useState(() => {
+    const seed = []
+    if (tpl.ccRockCM && cmEmail) seed.push(cmEmail)
+    // customer site manager: no dedicated field yet — user adds manually.
+    return seed
+  })
+  const [ccInput, setCcInput] = useState('')
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
   const replyTo = row.qsEmail || (me && me.email) || ''
+
+  function switchToFresh(v) {
+    setFresh(v)
+    if (v) { setSubject(''); setBody('') }
+    else { setSubject(resolveMergeFields(tpl.subject, row, me)); setBody(resolveMergeFields(tpl.body, row, me)) }
+  }
+  function addCc() {
+    const parts = ccInput.split(/[;,]/).map(s => s.trim()).filter(Boolean)
+    if (parts.length) { setCcList(l => [...new Set([...l, ...parts])]); setCcInput('') }
+  }
+  const removeCc = (e) => setCcList(l => l.filter(x => x !== e))
 
   async function send() {
     setErr(''); setSending(true)
@@ -115,45 +145,93 @@ function ChaseComposeModal({ row, stage, templates, me, onClose, onSent }) {
       if (!recips.length) { setErr('Add at least one recipient.'); setSending(false); return }
       const res = await fetch('/api/chase-email-send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: recips, replyTo, subject, text: body }),
+        body: JSON.stringify({ to: recips, cc: ccList, replyTo, subject, text: body }),
       })
       const d = await res.json()
       if (!res.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
-      // Record on the timeline (never drops back).
-      await fetch('/api/outstanding-invoices', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject }),
-      })
-      onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject })
+      if (!fresh) {
+        // Record on the timeline (never drops back).
+        await fetch('/api/outstanding-invoices', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject }),
+        })
+        onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject })
+      } else {
+        // Fresh custom email — not tied to a stage.
+        onSent(row.invoiceNumber, null, null)
+      }
     } catch (e) { setErr(e.message); setSending(false) }
   }
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: 24, overflowY: 'auto' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640, boxShadow: '0 10px 40px rgba(0,0,0,0.2)', marginTop: 40 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 660, boxShadow: '0 10px 40px rgba(0,0,0,0.2)', marginTop: 40 }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{stage.label} — {row.invoiceNumber}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{fresh ? 'Fresh email' : stage.label} — {row.invoiceNumber}</div>
             <div style={{ fontSize: 11, color: '#888' }}>{row.customer} · {row.projectName}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
 
         <div style={{ padding: 20 }}>
+          {/* Fresh vs template toggle */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            <button onClick={() => switchToFresh(false)} style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid ' + (!fresh ? '#0f766e' : '#e5e5e5'), background: !fresh ? '#f0fdfa' : '#fff', color: !fresh ? '#0f766e' : '#666', fontWeight: 600 }}>{stage.label} template</button>
+            <button onClick={() => switchToFresh(true)} style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid ' + (fresh ? '#0f766e' : '#e5e5e5'), background: fresh ? '#f0fdfa' : '#fff', color: fresh ? '#0f766e' : '#666', fontWeight: 600 }}>Draft fresh email</button>
+          </div>
+
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>To (comma-separated)</label>
           <input value={to} onChange={e => setTo(e.target.value)} placeholder="customer@example.com"
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 4 }} />
-          <div style={{ fontSize: 10, color: '#aaa', marginBottom: 12 }}>Sends from the accounts address · replies go to {replyTo || 'the project QS'}. CC controls arrive in the next update.</div>
+            style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 10 }} />
+
+          {/* CC controls */}
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>CC</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+            {ccList.map(e => (
+              <span key={e} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#eef2ff', color: '#3730a3', borderRadius: 12, padding: '3px 8px 3px 10px', fontSize: 11 }}>
+                {e}<button onClick={() => removeCc(e)} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+              </span>
+            ))}
+            {ccList.length === 0 && <span style={{ fontSize: 11, color: '#bbb' }}>No CCs</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+            <input value={ccInput} onChange={e => setCcInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addCc())}
+              placeholder="Add CC email" style={{ flex: 1, padding: '6px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, boxSizing: 'border-box' }} />
+            <button onClick={addCc} style={{ padding: '6px 12px', background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#555' }}>Add</button>
+          </div>
+          {/* quick auto-CC chips */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+            {cmEmail && !ccList.includes(cmEmail) && <button onClick={() => setCcList(l => [...l, cmEmail])} style={quickCc}>+ Rock CM ({row.contractsManager})</button>}
+            {row.customerEmail && !ccList.includes(row.customerEmail) && <button onClick={() => setCcList(l => [...l, row.customerEmail])} style={quickCc}>+ Customer contact</button>}
+          </div>
+          <div style={{ fontSize: 10, color: '#aaa', marginBottom: 12 }}>Sends from the accounts address · replies go to {replyTo || 'the project QS'}.{(tpl.ccSiteManager && !fresh) ? ' This template normally CCs the customer site manager — add their email above.' : ''}</div>
 
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Subject</label>
           <input value={subject} onChange={e => setSubject(e.target.value)}
             style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 12 }} />
 
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Message</label>
-          <textarea value={body} onChange={e => setBody(e.target.value)} rows={stage.key === 'withdrawal' ? 18 : 9}
+          <textarea value={body} onChange={e => setBody(e.target.value)} rows={stage.key === 'withdrawal' && !fresh ? 18 : 9}
             style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5, resize: 'vertical' }} />
 
           {err && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 10 }}>{err}</div>}
+
+          {/* Manual timeline adjustment (useful after a fresh/custom send) */}
+          <div style={{ marginTop: 16, padding: '10px 12px', background: '#f8f9fa', borderRadius: 8 }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Timeline — tick a stage manually if you chased another way (no email sent):</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {CHASE_STAGES.map(s => {
+                const on = !!chases[s.key]
+                return (
+                  <label key={s.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={on} onChange={e => onToggleStage(row.invoiceNumber, s.key, e.target.checked)} />
+                    {s.label}
+                  </label>
+                )
+              })}
+            </div>
+          </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
             <Link href="/commercial-email-templates" style={{ fontSize: 11, color: '#9ca3af', textDecoration: 'none' }}>Amend template ↗</Link>
@@ -170,6 +248,8 @@ function ChaseComposeModal({ row, stage, templates, me, onClose, onSent }) {
     </div>
   )
 }
+
+const quickCc = { padding: '3px 9px', background: '#fff', border: '1px dashed #c7d2fe', borderRadius: 12, fontSize: 11, cursor: 'pointer', color: '#4f46e5' }
 
 export default function OutstandingInvoicesPage() {
   const [invoices, setInvoices] = useState([])
@@ -227,6 +307,9 @@ export default function OutstandingInvoicesPage() {
             projectName: p.name || '',
             qsName: p.qsName || '',
             qsEmail: p.qsEmail || '',
+            customerEmail: p.customerEmail || '',
+            customerContact: p.customerContact || '',
+            contractsManager: p.contractsManager || '',
             highRisk: !!p.highRisk,
             unassigned: !!p.unassigned,
           })
@@ -470,13 +553,32 @@ export default function OutstandingInvoicesPage() {
           row={chaseCompose.row}
           stage={chaseCompose.stage}
           templates={chaseTemplates}
+          members={members}
           me={me}
+          chases={(meta[chaseCompose.row.invoiceNumber] || {}).chases || {}}
+          onToggleStage={async (invNo, stageKey, sent) => {
+            // Manual timeline adjustment (tick/untick without sending).
+            setMeta(m => {
+              const cur = { ...((m[invNo] || {}).chases || {}) }
+              if (sent) cur[stageKey] = { at: Date.now(), to: [], subject: '', manual: true }
+              else delete cur[stageKey]
+              return { ...m, [invNo]: { ...(m[invNo] || {}), chases: cur } }
+            })
+            try {
+              await fetch('/api/outstanding-invoices', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: sent ? 'record-chase' : 'clear-chase', invoiceNumber: invNo, stageKey, manual: true }),
+              })
+            } catch {}
+          }}
           onClose={() => setChaseCompose(null)}
           onSent={(invNo, stageKey, info) => {
-            setMeta(m => ({
-              ...m,
-              [invNo]: { ...(m[invNo] || {}), chases: { ...((m[invNo] || {}).chases || {}), [stageKey]: info } },
-            }))
+            if (stageKey) {
+              setMeta(m => ({
+                ...m,
+                [invNo]: { ...(m[invNo] || {}), chases: { ...((m[invNo] || {}).chases || {}), [stageKey]: info } },
+              }))
+            }
             setChaseCompose(null)
           }}
         />
