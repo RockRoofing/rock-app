@@ -1,19 +1,35 @@
-Project Details — new variations default to Not Instructed
-==========================================================
+Commercial + Project Details — labels, tooltips, Remaining incl WIP, WIP-tab filters
+====================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE (pages/project/[id].js)
-------------------------------
-"+ Add variation" now creates the variation as NOT instructed by default (was
-instructed). Tick it instructed once it's confirmed. Only instructed variations
-count toward AFA/budgets, so this avoids new variations inflating the final
-account before they're agreed.
+REMAINING TO CLAIM now INCLUDES WIP
+ • Project Financials & EOM: Remaining (Ex.) = Anticipated Final Account −
+   (Invoiced + WIP); Remaining (Inc.) then adds retention. Floored at £0.
+   (dashboard.js + commercial.js). Tooltips updated to describe this.
 
-(This file also carries the earlier Project Details changes — Costs-tab filters,
-last-2+12 date table, picker-opens-on-month, auto-open overrides. Latest full
-version of the file.)
+TOOLTIPS
+ • AFA tooltip now reads "Anticipated Final Account" (Budget Tracker AND EOM).
+ • EOM table column headers now have hover descriptions (were missing).
 
-FILE CHANGED
-------------
+PROJECT DETAILS
+ • Overview: "Gross Invoiced Inc. Retention" -> "Invoiced Inc. Retention"
+   (also the Income tab card).
+ • Income chart: bar labels show the EXACT invoiced amount; added a KEY
+   (green = Invoiced, dark = Latest month). The dark bar is just the latest
+   month highlight — NOT a payment-status indicator.
+ • "Margin Override" card -> "WIP Margin Override".
+ • WIP tab: month filter DEFAULTS to the last full month; suppliers are now a
+   searchable picker; account filter is a multi-select-by-code dropdown; and the
+   Labour/Materials filter matches the Costs tab (dropdown). All consistent with
+   the Costs tab.
+
+STILL TO COME (separate) — WIP manual adjustments (editable, default month,
+add-with-month button, and the cost-vs-invoice logic) will follow once we've
+agreed how invoice adjustments should behave.
+
+FILES CHANGED
+-------------
+• pages/commercial.js
+• pages/api/dashboard.js
 • pages/project/[id].js

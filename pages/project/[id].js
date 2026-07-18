@@ -232,7 +232,7 @@ export default function ProjectPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'AFA', value: fmt(atDate.afa), sub: `CV: ${fmt(parseFloat(settings?.contractValue || 0))}` },
-              { label: 'Gross Invoiced Inc. Retention', value: fmt(atDate.grossInvoiced), sub: `as at ${vDateLabel}` },
+              { label: 'Invoiced Inc. Retention', value: fmt(atDate.grossInvoiced), sub: `as at ${vDateLabel}` },
               { label: 'Total Spent', value: fmt(atDate.costsToDate), sub: `as at ${vDateLabel}` },
               { label: 'Total Budget', value: fmt(atDate.totalBudget), sub: atDate.totalBudget > 0 ? `${((atDate.costsToDate / atDate.totalBudget) * 100).toFixed(0)}% used` : '⚠ Set budget' },
               { label: 'Current Margin', value: atDate.margin != null ? (atDate.margin * 100).toFixed(1) + '%' : '—', sub: `as at ${vDateLabel}`, color: marginColor(atDate.margin), bg: marginBg(atDate.margin), showKey: true },
@@ -836,7 +836,13 @@ function IncomeTab({ invoiceLines, atDate }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 16, marginBottom: 16 }}>
         <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, color: '#1a1a2e' }}>Monthly Invoicing</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#1a1a2e' }}>Monthly Invoicing</div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#16a34a', display: 'inline-block' }} />Invoiced</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#1a1a2e', display: 'inline-block' }} />Latest month</span>
+            </div>
+          </div>
           {monthlyData.length > 0 ? (
             <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
               {yTicks.map((t, i) => (
@@ -851,13 +857,13 @@ function IncomeTab({ invoiceLines, atDate }) {
                 const barH2 = Math.max((d.value / maxVal) * chartH, 2)
                 const y = padT + chartH - barH2
                 const isLatest = i === monthlyData.length - 1
+                const exact = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(d.value)
                 return (
                   <g key={i}>
-                    <rect x={x} y={y} width={barW} height={barH2} rx={3} fill={isLatest ? '#1a1a2e' : '#16a34a'} opacity={0.9} />
-                    {barH2 > 20
-                      ? <text x={x + barW / 2} y={y + barH2 / 2 + 4} textAnchor="middle" fontSize={8} fill="#fff" fontWeight="600">{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact', maximumFractionDigits: 0 }).format(d.value)}</text>
-                      : <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={8} fill="#555" fontWeight="600">{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', notation: 'compact', maximumFractionDigits: 0 }).format(d.value)}</text>
-                    }
+                    <rect x={x} y={y} width={barW} height={barH2} rx={3} fill={isLatest ? '#1a1a2e' : '#16a34a'} opacity={0.9}>
+                      <title>{d.label}: {exact}</title>
+                    </rect>
+                    <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={7.5} fill="#555" fontWeight="600">{exact}</text>
                     <text x={x + barW / 2} y={padT + chartH + 14} textAnchor="middle" fontSize={8} fill="#888">{d.label}</text>
                   </g>
                 )
@@ -870,7 +876,7 @@ function IncomeTab({ invoiceLines, atDate }) {
           {[
             { label: 'Total Invoiced', value: atDate.invoicedToDate, color: '#16a34a' },
             { label: 'Retention Held', value: atDate.retention, color: '#ca8a04' },
-            { label: 'Gross Invoiced', value: atDate.grossInvoiced, color: '#1a1a2e' },
+            { label: 'Invoiced Inc. Retention', value: atDate.grossInvoiced, color: '#1a1a2e' },
           ].map(card => (
             <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flex: 1 }}>
               <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
@@ -912,10 +918,23 @@ function IncomeTab({ invoiceLines, atDate }) {
 }
 
 function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, id, onSettingsSaved }) {
-  const [wipVDate, setWipVDate] = useState(selectedVDate)
+  // Default the valuation-date filter to the last FULL month (previous month end),
+  // matched to an available past valuation date if one exists.
+  const lastFullMonthDate = React.useMemo(() => {
+    const list = pastVDates || []
+    if (list.length) {
+      const now = new Date()
+      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      // Most recent valuation date that is before the start of the current month.
+      const prior = list.filter(d => d < startOfThisMonth)
+      return (prior[0] || list[0])
+    }
+    return null
+  }, [pastVDates])
+  const [wipVDate, setWipVDate] = useState(selectedVDate || lastFullMonthDate)
   const [typeFilter, setTypeFilter] = useState('all')
   const [supplierFilter, setSupplierFilter] = useState('')
-  const [accountFilter, setAccountFilter] = useState('')
+  const [accountCodes, setAccountCodes] = useState([])
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState('asc')
   const [expandedInvoice, setExpandedInvoice] = useState(null)
@@ -929,7 +948,7 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
   })
   const [savingAdj, setSavingAdj] = useState(false)
 
-  React.useEffect(() => { if (selectedVDate && !wipVDate) setWipVDate(selectedVDate) }, [selectedVDate])
+  React.useEffect(() => { if (!wipVDate && (selectedVDate || lastFullMonthDate)) setWipVDate(selectedVDate || lastFullMonthDate) }, [selectedVDate, lastFullMonthDate])
 
   React.useEffect(() => { loadAdjustments() }, [id])
 
@@ -986,12 +1005,14 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
   })
 
   const suppliers = [...new Set(dateFiltered.map(l => l.supplier).filter(Boolean))].sort()
-  const accounts = [...new Set(dateFiltered.map(l => l.accountName).filter(Boolean))].sort()
+  const codeName = {}
+  for (const l of dateFiltered) { if (l.accountCode && l.accountName && !codeName[l.accountCode]) codeName[l.accountCode] = l.accountName }
+  const accountCodeList = [...new Set(dateFiltered.map(l => String(l.accountCode || '')).filter(Boolean))].sort()
 
   const filtered = dateFiltered.filter(l => {
     if (typeFilter !== 'all' && l.type !== typeFilter) return false
     if (supplierFilter && l.supplier !== supplierFilter) return false
-    if (accountFilter && l.accountName !== accountFilter) return false
+    if (accountCodes.length && !accountCodes.includes(String(l.accountCode || ''))) return false
     return true
   })
 
@@ -1077,7 +1098,7 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
           <div style={{ fontSize: 10, color: '#888', marginTop: 3 }}>costs / (1 - {effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'})</div>
         </div>
         <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>Margin Override</div>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>WIP Margin Override</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: marginColor(effectiveMargin) }}>{effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'}</div>
             <div style={{ fontSize: 10, color: '#888' }}>{marginOverride ? 'override' : 'auto'}</div>
@@ -1092,18 +1113,15 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={supplierFilter} onChange={e => setSupplierFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
-          <option value="">All suppliers</option>
-          {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
+          <option value="all">Labour &amp; Materials</option>
+          <option value="Labour">Labour only</option>
+          <option value="Materials">Materials only</option>
         </select>
-        <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)} style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, background: '#fff' }}>
-          <option value="">All accounts</option>
-          {accounts.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <button onClick={() => setTypeFilter(typeFilter === 'Labour' ? 'all' : 'Labour')} style={{ padding: '5px 10px', background: typeFilter === 'Labour' ? '#f0fdf4' : '#f0f2f5', border: `1px solid ${typeFilter === 'Labour' ? '#16a34a' : '#ddd'}`, borderRadius: 6, fontSize: 12, cursor: 'pointer', color: typeFilter === 'Labour' ? '#16a34a' : '#555' }}>Labour</button>
-        <button onClick={() => setTypeFilter(typeFilter === 'Materials' ? 'all' : 'Materials')} style={{ padding: '5px 10px', background: typeFilter === 'Materials' ? '#fff7ed' : '#f0f2f5', border: `1px solid ${typeFilter === 'Materials' ? '#ea7c28' : '#ddd'}`, borderRadius: 6, fontSize: 12, cursor: 'pointer', color: typeFilter === 'Materials' ? '#ea7c28' : '#555' }}>Materials</button>
-        {(typeFilter !== 'all' || supplierFilter || accountFilter) && (
-          <button onClick={() => { setTypeFilter('all'); setSupplierFilter(''); setAccountFilter('') }} style={{ padding: '5px 10px', background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#555' }}>Clear</button>
+        <CostSupplierPicker value={supplierFilter} options={suppliers} onChange={setSupplierFilter} />
+        <CostAccountPicker codes={accountCodeList} codeName={codeName} selected={accountCodes} onChange={setAccountCodes} />
+        {(typeFilter !== 'all' || supplierFilter || accountCodes.length > 0) && (
+          <button onClick={() => { setTypeFilter('all'); setSupplierFilter(''); setAccountCodes([]) }} style={{ padding: '5px 10px', background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#555' }}>Clear filters</button>
         )}
       </div>
 

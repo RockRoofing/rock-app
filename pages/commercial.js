@@ -59,13 +59,15 @@ function calcAtValDate(project, monthKey) {
   const retention = retPct > 0 ? invoicedToDate * retPct / (1 - retPct) : 0
   const grossInvoiced = invoicedToDate + retention
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
-  const remainingToClaim = project.afa - invoicedToDate
 
   // No cutoff (completed project) => nothing is "after" the date, so WIP is 0.
   const costsAfterDate = vDateStr ? costLines.filter(l => l.date && l.date > vDateStr).reduce((s, l) => s + (l.amount || 0), 0) : 0
   const effectiveMargin = project.wipMarginOverride ? parseFloat(project.wipMarginOverride) / 100 : margin
   const wip = effectiveMargin != null && effectiveMargin < 1 && costsAfterDate > 0
     ? costsAfterDate / (1 - effectiveMargin) : 0
+
+  // Remaining to claim = AFA − (invoiced + WIP). Never below 0.
+  const remainingToClaim = Math.max(0, (project.afa || 0) - grossInvoiced - wip)
 
   const profit = grossInvoiced - costsToDate
   const wipProfit = wip - costsAfterDate   // profit portion of WIP (revenue − its cost)
@@ -337,27 +339,27 @@ export default function Dashboard() {
   const eomCols = [
     { key: 'cm', label: 'CM', group: 'none', fixed: true },
     { key: 'estimator', label: 'Estimator', group: 'none', fixed: true },
-    { key: 'afa', label: 'AFA', group: 'contract' },
-    { key: 'grossInvoiced', label: 'Invoiced', group: 'contract' },
-    { key: 'retention', label: 'Retention', group: 'contract' },
-    { key: 'remaining', label: 'Remaining (Ex.)', group: 'contract' },
-    { key: 'remainingInc', label: 'Remaining (Inc.)', group: 'contract' },
-    { key: 'labourSpend', label: 'Lab Spend', group: 'labour' },
-    { key: 'labourBudget', label: 'Lab Budget', group: 'labour' },
-    { key: 'labourLeft', label: 'Lab Left £', group: 'labour' },
-    { key: 'labourLeftPct', label: 'Lab Left %', group: 'labour' },
-    { key: 'matsSpend', label: 'Mat Spend', group: 'materials' },
-    { key: 'matsBudget', label: 'Mat Budget', group: 'materials' },
-    { key: 'matsLeft', label: 'Mat Left £', group: 'materials' },
-    { key: 'matsLeftPct', label: 'Mat Left %', group: 'materials' },
-    { key: 'totalSpend', label: 'Total Spend', group: 'budget' },
-    { key: 'totalBudget', label: 'Total Budget', group: 'budget' },
-    { key: 'totalLeft', label: 'Total Left £', group: 'budget' },
-    { key: 'totalLeftPct', label: 'Total Left %', group: 'budget' },
-    { key: 'profit', label: 'Profit £', group: 'profit' },
-    { key: 'profitPct', label: 'Profit %', group: 'profit' },
-    { key: 'wip', label: 'WIP £', group: 'wip' },
-    { key: 'wipMargin', label: 'WIP Margin %', group: 'wip' },
+    { key: 'afa', label: 'AFA', group: 'contract', tip: 'Anticipated Final Account = contract value + instructed variations (net of VAT).' },
+    { key: 'grossInvoiced', label: 'Invoiced', group: 'contract', tip: 'Invoiced to the valuation date: Sales (code 200) lines, net of VAT, incl. retention.' },
+    { key: 'retention', label: 'Retention', group: 'contract', tip: 'Retention held on the invoiced value to the valuation date.' },
+    { key: 'remaining', label: 'Remaining (Ex.)', group: 'contract', tip: 'Anticipated Final Account − (Invoiced + WIP). Still to invoice after allowing for work done but not yet invoiced. Excludes retention.' },
+    { key: 'remainingInc', label: 'Remaining (Inc.)', group: 'contract', tip: 'Remaining to claim including retention outstanding (and net of WIP).' },
+    { key: 'labourSpend', label: 'Lab Spend', group: 'labour', tip: 'Labour cost to the valuation date (wages + labour-coded bills).' },
+    { key: 'labourBudget', label: 'Lab Budget', group: 'labour', tip: 'Labour budget incl. instructed variations.' },
+    { key: 'labourLeft', label: 'Lab Left £', group: 'labour', tip: 'Labour budget − labour spend to the valuation date.' },
+    { key: 'labourLeftPct', label: 'Lab Left %', group: 'labour', tip: 'Labour budget remaining as a %.' },
+    { key: 'matsSpend', label: 'Mat Spend', group: 'materials', tip: 'Materials cost to the valuation date.' },
+    { key: 'matsBudget', label: 'Mat Budget', group: 'materials', tip: 'Materials budget incl. instructed variations.' },
+    { key: 'matsLeft', label: 'Mat Left £', group: 'materials', tip: 'Materials budget − materials spend to the valuation date.' },
+    { key: 'matsLeftPct', label: 'Mat Left %', group: 'materials', tip: 'Materials budget remaining as a %.' },
+    { key: 'totalSpend', label: 'Total Spend', group: 'budget', tip: 'Total cost (labour + materials) to the valuation date.' },
+    { key: 'totalBudget', label: 'Total Budget', group: 'budget', tip: 'Total budget incl. instructed variations.' },
+    { key: 'totalLeft', label: 'Total Left £', group: 'budget', tip: 'Total budget − total spend to the valuation date.' },
+    { key: 'totalLeftPct', label: 'Total Left %', group: 'budget', tip: 'Total budget remaining as a %.' },
+    { key: 'profit', label: 'Profit £', group: 'profit', tip: 'Invoiced (incl. retention) − total cost, to the valuation date.' },
+    { key: 'profitPct', label: 'Profit %', group: 'profit', tip: 'Profit ÷ invoiced (incl. retention), to the valuation date.' },
+    { key: 'wip', label: 'WIP £', group: 'wip', tip: 'Value of work done after the valuation date but not yet invoiced (cost grossed up by margin).' },
+    { key: 'wipMargin', label: 'WIP Margin %', group: 'wip', tip: 'Margin used to gross up WIP — the WIP margin override if set, otherwise the current margin.' },
   ]
 
   const visibleEomCols = eomCols.filter(c => isColVisible(c.key))
@@ -710,11 +712,11 @@ export default function Dashboard() {
                     <tr>
                       {['Job No', 'Project', 'CM'].map(h => <th key={h} style={thStyle(GROUP.none, true)}>{h}</th>)}
                       {[
-                        ['AFA', 'Agreed Final Account = contract value + instructed variations (net of VAT).'],
+                        ['AFA', 'Anticipated Final Account = contract value + instructed variations (net of VAT).'],
                         ['Invoiced', 'Total invoiced: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it).'],
                         ['Retention', 'Retention outstanding (not yet released) on the invoiced value.'],
-                        ['Remaining (Ex.)', 'Final Account − Invoiced. Still to invoice, excluding retention already applied.'],
-                        ['Remaining (Inc.)', 'Remaining to claim including retention outstanding.'],
+                        ['Remaining (Ex.)', 'Anticipated Final Account − (Invoiced + WIP). What is still to invoice, after allowing for work already done but not yet invoiced (WIP). Excludes retention.'],
+                        ['Remaining (Inc.)', 'Remaining to claim including retention outstanding (and net of WIP).'],
                       ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.contract)} title={tip}>{h}</th>)}
                       {['Lab Spend', 'Lab Budget', 'Lab Left £', 'Lab Left %'].map(h => <th key={h} style={thStyle(GROUP.labour)}>{h}</th>)}
                       {['Mat Spend', 'Mat Budget', 'Mat Left £', 'Mat Left %'].map(h => <th key={h} style={thStyle(GROUP.materials)}>{h}</th>)}
@@ -838,7 +840,7 @@ export default function Dashboard() {
                       {isColVisible('estimator') && <th style={thStyle(GROUP.none, true)}>Estimator</th>}
                       <th style={thStyle(GROUP.none)}>Val. Date</th>
                       {visibleEomCols.filter(c => c.group !== 'none').map(col => (
-                        <th key={col.key} style={thStyle(groupColors[col.group])}>{col.label}</th>
+                        <th key={col.key} style={thStyle(groupColors[col.group])} title={col.tip || ''}>{col.label}</th>
                       ))}
                       <th style={thStyle(GROUP.none, true)}>Comments</th>
                       <th style={thStyle(GROUP.none)} />

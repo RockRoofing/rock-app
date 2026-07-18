@@ -136,14 +136,6 @@ export default async function handler(req, res) {
       // have the 200 total that's exactly it; otherwise reconstruct.
       const grossInvoiced = invoicedSales200 > 0 ? invoicedSales200 : (invoicedExVat + retentionOutstanding)
       const currentMargin = grossInvoiced > 0 ? (grossInvoiced - totalCosts) / grossInvoiced : null
-      const remainingToClaim = afa - grossInvoiced
-
-      // ── Budgets (inc. instructed variations) ─────────────────────────────
-      const labourBudget = parseFloat(settings.labourBudget || 0) +
-        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
-      const materialsBudget = parseFloat(settings.materialsBudget || 0) +
-        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
-      const totalBudget = labourBudget + materialsBudget
 
       // ── WIP ───────────────────────────────────────────────────────────────
       let wip = 0, wipMarginOverride = settings.wipMarginOverride || null
@@ -151,6 +143,17 @@ export default async function handler(req, res) {
         const wipCache = await redis.get(`wip:latest:${id}`)
         if (wipCache) wip = wipCache.wip || 0
       } catch {}
+
+      // Remaining to claim = AFA − what's already accounted for (invoiced + WIP,
+      // where WIP is work done but not yet invoiced). Never below 0.
+      const remainingToClaim = Math.max(0, afa - grossInvoiced - wip)
+
+      // ── Budgets (inc. instructed variations) ─────────────────────────────
+      const labourBudget = parseFloat(settings.labourBudget || 0) +
+        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.labour || 0), 0)
+      const materialsBudget = parseFloat(settings.materialsBudget || 0) +
+        (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + parseFloat(v.materials || 0), 0)
+      const totalBudget = labourBudget + materialsBudget
 
       // ── Comment ───────────────────────────────────────────────────────────
       let comment = ''
