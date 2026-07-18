@@ -298,8 +298,8 @@ export default function Dashboard() {
 
   const monthLbl = monthOptions.find(m => m.key === selectedMonth)?.label || ''
   const underTargetCard = { key: 'under_target', label: `Projects Under Target Margin`, value: underTarget, raw: true, clickable: true, warn: underTarget > 0, targetControl: true }
-  const remainingExCard = { key: 'remaining', label: 'Remaining to Claim (Ex. Retention)', value: fmt(totals.remainingToClaim), highlight: true, clickable: false }
-  const remainingIncCard = { key: 'remaining_gross', label: 'Remaining to Claim (Inc. Retention)', value: fmt(totals.remainingGross), highlight: true, clickable: false }
+  const remainingExCard = { key: 'remaining', label: 'Remaining to Claim (Inc. WIP, Ex. Retention)', value: fmt(totals.remainingToClaim), highlight: true, clickable: false }
+  const remainingIncCard = { key: 'remaining_gross', label: 'Remaining to Claim (Inc. WIP, Inc. Retention)', value: fmt(totals.remainingGross), highlight: true, clickable: false }
   const wipCard = { key: 'wip', label: 'WIP', value: fmt(totals.eomWip), highlight: true, clickable: false, sub: `to end of ${monthLbl}` }
   const retentionCard = { key: 'retention', label: 'Retention Outstanding', value: fmt(totals.retention), warn: totals.retention > 0, clickable: false }
 
@@ -718,9 +718,24 @@ export default function Dashboard() {
                         ['Remaining (Ex.)', 'Anticipated Final Account − (Invoiced + WIP). What is still to invoice, after allowing for work already done but not yet invoiced (WIP). Excludes retention.'],
                         ['Remaining (Inc.)', 'Remaining to claim including retention outstanding (and net of WIP).'],
                       ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.contract)} title={tip}>{h}</th>)}
-                      {['Lab Spend', 'Lab Budget', 'Lab Left £', 'Lab Left %'].map(h => <th key={h} style={thStyle(GROUP.labour)}>{h}</th>)}
-                      {['Mat Spend', 'Mat Budget', 'Mat Left £', 'Mat Left %'].map(h => <th key={h} style={thStyle(GROUP.materials)}>{h}</th>)}
-                      {['Total Spend', 'Total Budget', 'Total Left £', 'Total Left %'].map(h => <th key={h} style={thStyle(GROUP.budget)}>{h}</th>)}
+                      {[
+                        ['Lab Spend', 'Labour cost to date (wages + labour-coded bills).'],
+                        ['Lab Budget', 'Labour budget incl. instructed variations.'],
+                        ['Lab Left £', 'Labour budget − labour spend.'],
+                        ['Lab Left %', 'Labour budget remaining as a %.'],
+                      ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.labour)} title={tip}>{h}</th>)}
+                      {[
+                        ['Mat Spend', 'Materials cost to date.'],
+                        ['Mat Budget', 'Materials budget incl. instructed variations.'],
+                        ['Mat Left £', 'Materials budget − materials spend.'],
+                        ['Mat Left %', 'Materials budget remaining as a %.'],
+                      ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.materials)} title={tip}>{h}</th>)}
+                      {[
+                        ['Total Spend', 'Total cost to date (labour + materials).'],
+                        ['Total Budget', 'Total budget incl. instructed variations.'],
+                        ['Total Left £', 'Total budget − total spend.'],
+                        ['Total Left %', 'Total budget remaining as a %.'],
+                      ].map(([h, tip]) => <th key={h} style={thStyle(GROUP.budget)} title={tip}>{h}</th>)}
                       <th style={thStyle(GROUP.none, true)}>Comments</th>
                       <th style={thStyle(GROUP.none)} />
                     </tr>

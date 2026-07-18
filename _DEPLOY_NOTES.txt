@@ -1,27 +1,21 @@
-WIP tab — fix "no valuation costs / WIP" when dates are manual; fix double-minus
-===============================================================================
+Commercial cards/headers + Income chart tweaks
+==============================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-BUG 1 — WIP tab empty despite EOM showing WIP
----------------------------------------------
-The WIP tab's valuation-date dropdown (pastVDates) was built ONLY from the fixed
-"valuation day of month" and returned nothing if no fixed day was set — so
-projects with only MANUAL monthly valuation dates had no date to work from, hence
-no post-valuation costs and no WIP. EOM worked because it already honoured the
-manual overrides.
-Fix: getPastValuationDates now MERGES the fixed-day dates AND the manual
-dateOverrides valuation dates (overrides win for their month), and runs even when
-there's no fixed day. The WIP tab now shows costs/WIP for override-only projects,
-matching EOM.
+1. Remaining to Claim CARDS relabelled (Budget Tracker + EOM):
+   • "Remaining to Claim (Inc. WIP, Ex. Retention)"
+   • "Remaining to Claim (Inc. WIP, Inc. Retention)"
+   (Values already include WIP; labels now say so.)
 
-BUG 2 — double minus on the WIP Value card
-------------------------------------------
-"costs / (1 - -12.5%)" appeared when margin was negative. Reworded to
-"costs ÷ (1 − margin), margin −12.5%".
+2. Budget Tracker TABLE HEADERS: added hover descriptions to the Labour,
+   Materials and Total Budget columns (previously only Contract group had them).
+   All data columns now have tooltips.
 
-(Latest full version of pages/project/[id].js — supersedes prior copies.)
+3. Project Details → Income tab: monthly bar chart is now ALL GREEN (removed the
+   dark "latest month" bar) and the key no longer shows a "Latest month" entry.
 
-FILE CHANGED
-------------
-• pages/project/[id].js
+FILES CHANGED
+-------------
+• pages/commercial.js
+• pages/project/[id].js  (latest full version)

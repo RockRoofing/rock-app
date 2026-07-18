@@ -852,7 +852,6 @@ function IncomeTab({ invoiceLines, atDate }) {
             <div style={{ fontWeight: 700, fontSize: 13, color: '#1a1a2e' }}>Monthly Invoicing</div>
             <div style={{ display: 'flex', gap: 12 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#16a34a', display: 'inline-block' }} />Invoiced</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#555' }}><span style={{ width: 10, height: 10, borderRadius: 2, background: '#1a1a2e', display: 'inline-block' }} />Latest month</span>
             </div>
           </div>
           {monthlyData.length > 0 ? (
@@ -872,7 +871,7 @@ function IncomeTab({ invoiceLines, atDate }) {
                 const exact = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(d.value)
                 return (
                   <g key={i}>
-                    <rect x={x} y={y} width={barW} height={barH2} rx={3} fill={isLatest ? '#1a1a2e' : '#16a34a'} opacity={0.9}>
+                    <rect x={x} y={y} width={barW} height={barH2} rx={3} fill="#16a34a" opacity={0.9}>
                       <title>{d.label}: {exact}</title>
                     </rect>
                     <text x={x + barW / 2} y={y - 4} textAnchor="middle" fontSize={7.5} fill="#555" fontWeight="600">{exact}</text>
