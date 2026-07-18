@@ -31,6 +31,7 @@ export async function middleware(req) {
       pathname.startsWith('/favicon') ||
       pathname === '/rock-logo.jpg' ||
       pathname.startsWith('/api/forms') ||
+      pathname.startsWith('/api/cron') ||
       pathname.startsWith('/api/submissions') ||
       pathname.startsWith('/api/ops-users') ||
       pathname.startsWith('/api/ops-docs') ||
@@ -98,4 +99,3 @@ export async function middleware(req) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image).*)'],
 }
-

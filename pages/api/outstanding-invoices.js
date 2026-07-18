@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
-import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport } from '../../lib/outstandingInvoicesReport'
+import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport, getWeeklySchedule, setWeeklySchedule } from '../../lib/outstandingInvoicesReport'
 import { buildOutstandingInvoicesPDF } from '../../lib/outstandingInvoicesPdf'
+import { getPortalUsers } from '../../lib/db'
 
 async function getRedis() {
   try {
@@ -24,6 +25,18 @@ export default async function handler(req, res) {
     const { action } = req.query
     if (action === 'recipients') {
       try { return res.json({ recipients: await getWeeklyRecipients() }) } catch { return res.json({ recipients: [] }) }
+    }
+    if (action === 'report-settings') {
+      // Recipients + schedule + the list of portal users to pick from.
+      try {
+        const [recipients, schedule, users] = await Promise.all([
+          getWeeklyRecipients(), getWeeklySchedule(), getPortalUsers(),
+        ])
+        const portalUsers = (users || [])
+          .filter(u => u.active !== false && u.email)
+          .map(u => ({ name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.email, email: u.email, role: u.jobRole || '' }))
+        return res.json({ recipients, schedule, portalUsers })
+      } catch (e) { return res.json({ recipients: [], schedule: { dayOfWeek: 4, hour: 8 }, portalUsers: [] }) }
     }
     if (action === 'download') {
       // Stream the full outstanding list as a PDF. ?comments=1 appends per-invoice pages.
@@ -57,6 +70,10 @@ export default async function handler(req, res) {
       const list = Array.isArray(req.body.recipients) ? req.body.recipients.map(s => String(s).trim()).filter(Boolean) : []
       await setWeeklyRecipients([...new Set(list)])
       return res.json({ ok: true, recipients: list })
+    }
+    if (action === 'set-schedule') {
+      const schedule = await setWeeklySchedule({ dayOfWeek: req.body.dayOfWeek, hour: req.body.hour })
+      return res.json({ ok: true, schedule })
     }
     if (action === 'send-report-now') {
       const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]

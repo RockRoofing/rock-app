@@ -35,16 +35,10 @@ export default async function handler(req, res) {
       try { formsResult = await runFormsWeeklyNotify({ force }) } catch (e) { formsResult = { ok: false, error: e.message } }
     }
 
-    // ── Thursday: weekly Outstanding Invoices report (PDF to post-contract/mgmt/admin + extras) ──
-    let invoiceReport = { skipped: 'not Thursday' }
-    if (force || now.getDay() === 4) {
-      try {
-        const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
-        const host = req.headers['x-forwarded-host'] || req.headers.host
-        const baseUrl = host ? `${proto}://${host}` : null
-        invoiceReport = await sendWeeklyOverdueReport({ baseUrl })
-      } catch (e) { invoiceReport = { ok: false, error: e.message } }
-    }
+    // ── Weekly Outstanding Invoices report ──
+    // Now handled by its own hourly cron (/api/cron/weekly-report), which honours
+    // the day + hour configured in the app. Left here as a no-op for clarity.
+    let invoiceReport = { skipped: 'handled by weekly-report cron' }
 
     // ── DAILY: deliveries expected today -> notify site supervisors ──
     let deliveriesResult = {}

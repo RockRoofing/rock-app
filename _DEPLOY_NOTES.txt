@@ -1,29 +1,46 @@
-FIX: Weekly report (with comments) PDF download failed on emoji
-===============================================================
+Weekly Report — editable recipients (portal users + manual) + editable day/time
+===============================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
+Build: ✓ Compiled successfully  ·  Outstanding Invoices tab shows "· v6"
+Requires Vercel PRO (adds a 3rd, hourly cron).
 
-THE ERROR
----------
-Download returned: {"error":"WinAnsi cannot encode \"\" (0x1f4e7)"}
-0x1f4e7 is the 📧 emoji we put at the start of logged chase-email comments.
-The PDF uses standard fonts (Helvetica / WinAnsi encoding), which can't encode
-emoji or various unicode symbols — so the whole PDF build threw and the download
-failed.
+WHAT'S NEW (all in the "Weekly Report" pop-out on Outstanding Invoices)
+----------------------------------------------------------------------
+• WHEN IT'S SENT: pick the day of week + hour (e.g. Thursday at 15:00). UK time,
+  sends on the hour. Saved as you change it.
+• PORTAL USERS: a checklist of all active portal users — tick anyone who should
+  receive the report.
+• OTHER EMAIL ADDRESSES: add/remove any manual email (e.g. someone outside the
+  business), as before.
+• Send now: unchanged.
 
-THE FIX
--------
-Added a text sanitiser applied to every string drawn into the PDF:
-  • 📧  → "[email]"
-  • smart quotes “ ” ‘ ’ → " '
-  • en/em dash – —      → -
-  • ellipsis …          → ...
-  • bullet •            → *
-  • anything else outside WinAnsi (incl. other emoji like 🙏) is dropped.
-Verified: after sanitising, zero characters remain that WinAnsi can't encode, so
-the report (including the full email bodies now stored in comments) generates
-cleanly. Content still reads fine; only unsupported glyphs are swapped/removed.
+RECIPIENT MODEL CHANGE (please note)
+------------------------------------
+The report now goes to EXACTLY the people in this pop-out (ticked portal users +
+manual emails). Previously it auto-sent to everyone with post-contract/mgmt/admin
+access. Safety net: if the list is ever empty, it falls back to the old auto
+post-contract/mgmt/admin recipients so it never sends to nobody. => After
+deploying, open the pop-out once and tick who should receive it.
+
+HOW THE TIMING WORKS (honest detail)
+------------------------------------
+A once-a-day cron can't fire at an arbitrary hour, so this adds a dedicated cron
+that runs HOURLY (/api/cron/weekly-report) and sends only when the configured
+day + hour match the current UK time, guarded so it never sends twice in a day.
+The old Thursday piggyback inside hs-expiry-email has been REMOVED (no double
+sends). vercel.json now has 3 crons (Pro allows this):
+   deliveries-sync  0 6 * * *
+   hs-expiry-email  0 8 * * *
+   weekly-report    0 * * * *   (NEW, hourly)
+Test immediately with:  /api/cron/weekly-report?force=1
 
 FILES
 -----
-• lib/outstandingInvoicesPdf.js   (san() sanitiser applied to all drawn text)
+• pages/outstanding-invoices.js         (new pop-out UI: schedule + portal picker; v6)
+• pages/api/outstanding-invoices.js     (report-settings GET; set-schedule POST)
+• lib/outstandingInvoicesReport.js      (schedule storage + maybeSendScheduledReport;
+                                         recipients = managed list w/ fallback)
+• pages/api/cron/weekly-report.js       (NEW hourly cron)
+• pages/api/cron/hs-expiry-email.js     (removed Thursday report piggyback)
+• middleware.js                         (/api/cron passthrough)
+• vercel.json                           (added hourly weekly-report cron)
