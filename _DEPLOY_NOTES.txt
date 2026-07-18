@@ -1,22 +1,52 @@
-Project Details Overview — % sub-lines for invoiced-vs-AFA and spent-vs-budget
-==============================================================================
+Chase Emails — PHASE 1: templates + Commercial-portal editor
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CHANGE (pages/project/[id].js — Overview summary cards)
--------------------------------------------------------
-• "Invoiced Inc. Retention" card now shows, in light grey underneath, the
-  percentage of the Anticipated Final Account invoiced: "X% of AFA"
-  (grossInvoiced ÷ AFA).
-• "Total Spent" card now shows, in light grey underneath, spend as a % of the
-  total budget: "X% of budget" (costsToDate ÷ totalBudget).
-
-Comparing the two at a glance: if "% of AFA invoiced" and "% of budget spent" are
-close, invoicing is tracking cost. A gap suggests under/over-invoicing, or a
-project running at a loss / better-than-expected profit.
-
-(Latest full version of the file.)
-
-FILE CHANGED
+WHAT THIS IS
 ------------
-• pages/project/[id].js
+The first of three phases for the Outstanding Invoices chase-email feature. This
+phase only adds the 5 standard email templates and a place to edit them. Nothing
+sends yet, and the Auto Send column still shows "— soon —". Phases 2 (timeline +
+compose/send popup) and 3 (CC controls + fresh/custom email + manual timeline
+adjust) follow.
+
+NEW FILES
+---------
+• lib/chaseEmailTemplates.js         — the 5 templates + merge-field list
+• pages/api/chase-email-templates.js — GET (all) / POST (save; post-contract,
+                                       management or admin). Stored in Redis key
+                                       config:chase-email-templates, merged over
+                                       the code defaults.
+• pages/commercial-email-templates.js — editor page at /commercial-email-templates
+
+CHANGED FILE
+------------
+• pages/outstanding-invoices.js — added an "Email Templates" link in the nav.
+
+THE 5 TEMPLATES
+---------------
+upcoming, overdue1, overdue2, overdue3, withdrawal — worded as supplied. The
+withdrawal letter now uses [Customer Company Name] (the "Torsion Construction
+Limited" line was replaced). overdue1/2/3 + withdrawal default to auto-CC the
+customer site manager and the Rock Roofing CM (toggleable per template).
+
+MERGE FIELDS (typed literally, replaced at send in Phase 2)
+[Customer First Name] [Customer Company Name] [Customer Address] [Customer QS Name]
+[Customer QS Email] [Invoice Number] [Invoice Reference] [Project Name]
+[Project Address] [Sub-Contract Ref] [Due Date] [Today's Date] [Invoice Value]
+[Invoice Value inc VAT] [Rock Roofing QS Name]
+
+*** PREREQUISITE for Phase 2 sending (do this when you can) ***
+Emails will send via Resend FROM accountsreceivable@rockroofing.co.uk with the
+project QS as reply-to. For that to work, rockroofing.co.uk must be VERIFIED in
+Resend: add the SPF/DKIM/return-path DNS records Resend provides for the domain.
+Until verified, Resend only sends from its test address. You do NOT need to
+create an accountsreceivable@ mailbox to SEND (reply-to is the QS); create one
+only if you want a home for replies/bounces.
+
+HOW TO CHECK
+------------
+1. Outstanding Invoices → nav → "Email Templates".
+2. All 5 templates listed with editable Subject + Body and the two auto-CC
+   toggles. Save → reload → edits persist.
