@@ -15,7 +15,7 @@ async function getRedis() {
 const META_KEY = 'invoice:meta'   // { [invoiceNumber]: { expectedDate, comments:[{id,text,author,at,mentions:[]}] } }
 
 export default async function handler(req, res) {
-  if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
+  if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 

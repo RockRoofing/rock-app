@@ -8,7 +8,7 @@ import { requireRole } from '../../lib/portalAuth'
 // Body: { to:[..], cc:[..], replyTo, subject, html|text }
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
+  if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
 
   const { to, cc, replyTo, subject, text } = req.body || {}
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean)

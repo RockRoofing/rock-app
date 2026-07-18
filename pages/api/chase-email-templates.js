@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
-    if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
+    if (!requireRole(req, res, ['post-contract', 'accounts', 'management', 'admin'])) return
     const { templates } = req.body || {}
     if (!Array.isArray(templates)) return res.status(400).json({ error: 'templates must be an array' })
     // Only persist the editable fields, keyed by the known template keys.

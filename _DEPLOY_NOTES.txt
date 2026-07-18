@@ -1,62 +1,41 @@
-Project People from IHM — chase-email fields + Project Details team/contacts
+FIX: chase emails not sending / not logging to comments  +  To-box UI change
 ============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy AFTER the Chase Email phases (this builds on them).
+Deploy on top of the existing chase-email + ProjectPeople work.
 
-WHAT THIS DOES
---------------
-Ties the chase emails AND Project Details to the Internal Handover Minutes (IHM)
-as the source of truth, matched by JOB NUMBER (Xero jobNo <-> IHM projectNo).
+ROOT CAUSE OF THE BUG
+---------------------
+Three endpoints guarded access with roles ['post-contract','management','admin'].
+The role model now also has an 'accounts' role — and the person chasing invoices
+is on that role. So:
+  • /api/chase-email-send      → silent 403 → the email never sent.
+  • /api/outstanding-invoices  → silent 403 → record-chase (the comment) AND
+    even add-comment were blocked → nothing saved to the invoice comments.
+  • /api/chase-email-templates → 403 → couldn't load/save templates.
 
-Resolution order for every person field:
-   commercial override (Project Details)  →  IHM value  →  blank (manual entry).
-Commercial overrides are remembered and NEVER written back to the IHM.
+FIX
+---
+• Added 'accounts' to the allowed roles on all three endpoints.
+• The compose box now SHOWS a failure if logging the sent email to comments
+  fails (previously swallowed): "Email sent, but logging it failed: …".
 
-NEW: lib/projectPeople.js
-  Resolves a project's team (CM/OM/QS/Estimator) + customer contacts + customer QS
-  from ops:projects (the IHM store) and portal users (name -> email/phone), with
-  the settings.peopleOverride layer on top.
+If sending still fails after this, the message shown in the compose box will say
+why — most likely a Resend/env issue (RESEND_API_KEY or ACCOUNTS_FROM_EMAIL).
 
-CHASE EMAILS (outstanding-invoices.js)
-  • "Hi [name]" now = the CUSTOMER'S QS (the IHM site contact whose role is
-    Quantity Surveyor). "To" defaults to that QS's email.
-  • Signature now = the LOGGED-IN SENDER:
-        <Name>
-        <Email>
-        <Phone>
-        Rock Roofing
-    (Templates still sign off with [Rock Roofing QS Name]; that final line is
-    expanded into the full signature block on compose.)
-  • Reply-to = the logged-in sender.
-  • CC quick-add chips now list the resolved Rock CM and each IHM customer contact.
-
-PROJECT DETAILS (project/[id].js + api/project/[id].js)
-  • "Team" section: the old free-text "manage team members" area is replaced by
-    four role dropdowns — CM, OM, QS, Estimator — each listing ALL PORTAL USERS.
-    Defaults come from the IHM (badge: "from IHM"); changing one sets an override
-    (badge: "override") that sticks and does not touch the IHM.
-  • "Customer Contacts": now a repeatable list (Role/Name/Email/Phone) pulled from
-    the IHM site contacts; editing overrides for this project only. The contact
-    with role "Quantity Surveyor" is the customer QS used by chase emails.
-
-SEQUENCE (your question): if a Xero project exists BEFORE the IHM is completed,
-the fields are blank and you enter them manually. Once the IHM is later completed
-with the matching job number, the values auto-populate on the next load (nothing
-is copied — resolved live), and any override you set is preserved and wins.
-
-portal-auth.js: the "me" endpoint now returns the sender's phone (enriched from
-the stored user record) so the email signature has it.
-
-NOTE ON REFRESH: the chase-email side reads the resolved people from the dashboard
-cache (4h). An override set in Project Details shows in chase emails after the
-next dashboard sync/refresh; Project Details itself updates immediately.
+UI CHANGE (as requested)
+------------------------
+• The "To" box and the "Hi [name]" greeting now start BLANK when the compose
+  popup opens.
+• "To" is a DROPDOWN OF ALL CUSTOMER CONTACTS for that project (from the IHM),
+  single recipient — plus a free-type box to enter any email.
+• Selecting a To contact AUTO-FILLS "Hi <first name>," in the body.
+• If you free-type an unknown email, the greeting is left BLANK for you to fill.
+• CC remains multiple (unchanged).
 
 FILES
 -----
-• lib/projectPeople.js              (NEW)
-• pages/api/dashboard.js            (attach resolved people per project)
-• pages/api/portal-auth.js          (me returns phone)
-• pages/api/project/[id].js         (return people + allUsers)
-• pages/outstanding-invoices.js     (greeting=customer QS, signature=sender, CC chips)
-• pages/project/[id].js             (Team role dropdowns + Customer Contacts from IHM)
+• pages/api/chase-email-send.js        (add 'accounts' role)
+• pages/api/outstanding-invoices.js    (add 'accounts' role)
+• pages/api/chase-email-templates.js   (add 'accounts' role)
+• pages/outstanding-invoices.js        (blank To + greeting; To dropdown; visible log errors)

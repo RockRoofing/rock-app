@@ -41,13 +41,13 @@ const CHASE_STAGES = [
 ]
 
 // Resolve [merge fields] for a given invoice row into a template string.
-function resolveMergeFields(str, row, me) {
+// greetingName (optional) is the name for "Hi [Customer First Name]" — it comes
+// from the selected To recipient, so it's blank until one is chosen.
+function resolveMergeFields(str, row, me, greetingName) {
   if (!str) return ''
   const people = row.people || {}
   const cqs = people.customerQS || null
-  // "Hi [name]" = the customer's QS (from the IHM site contacts).
-  const customerName = cqs?.name || row.customerContact || ''
-  const customerFirst = (customerName || '').trim().split(/\s+/)[0] || ''
+  const customerFirst = (greetingName || '').trim().split(/\s+/)[0] || ''
   // Signature = the logged-in user sending the email.
   const senderName = (me && (me.name || [me.firstName, me.lastName].filter(Boolean).join(' '))) || ''
   const senderEmail = (me && me.email) || ''
@@ -68,7 +68,6 @@ function resolveMergeFields(str, row, me) {
     '[Invoice Value]': fmt(row.due),
     '[Invoice Value inc VAT]': fmt(row.due),
     '[Rock Roofing QS Name]': senderName,
-    // Signature block for the logged-in sender.
     '[Sender Name]': senderName,
     '[Sender Email]': senderEmail,
     '[Sender Phone]': senderPhone,
@@ -93,8 +92,8 @@ function senderSignature(me) {
 // Resolve a template body and expand the sign-off into the full sender signature
 // (name / email / phone / Rock Roofing). Templates sign off with
 // [Rock Roofing QS Name]; we replace that final token with the signature block.
-function buildBody(tplBody, row, me) {
-  let out = resolveMergeFields(tplBody, row, me)
+function buildBody(tplBody, row, me, greetingName) {
+  let out = resolveMergeFields(tplBody, row, me, greetingName)
   const sig = senderSignature(me)
   // Replace the resolved sender name on its own sign-off line with the full block.
   const senderName = (me && (me.name || [me.firstName, me.lastName].filter(Boolean).join(' '))) || ''
@@ -157,7 +156,7 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
   })()
   const cmName = cmPerson?.name || row.contractsManager || ''
 
-  const [to, setTo] = useState((row.people && row.people.customerQS && row.people.customerQS.email) || row.customerEmail || '')
+  const [to, setTo] = useState('')
   const [subject, setSubject] = useState(fresh ? '' : resolveMergeFields(tpl.subject, row, me))
   const [body, setBody] = useState(fresh ? '' : buildBody(tpl.body, row, me))
   // Seed CCs from the template's auto-CC flags.
@@ -184,6 +183,17 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
   }
   const removeCc = (e) => setCcList(l => l.filter(x => x !== e))
 
+  // The list of selectable customer contacts (from the IHM), for the To dropdown.
+  const contactOptions = (row.people?.customerContacts || []).filter(c => c.email)
+  // Pick a single To recipient. Auto-fills the "Hi [name]" greeting from that
+  // contact's first name (leaves it blank for an unknown/free-typed email).
+  function pickTo(email) {
+    setTo(email)
+    const hit = contactOptions.find(c => c.email === email)
+    const name = hit?.name || ''
+    if (!fresh) setBody(buildBody(tpl.body, row, me, name))
+  }
+
   async function send() {
     setErr(''); setSending(true)
     try {
@@ -204,9 +214,17 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'record-chase', invoiceNumber: row.invoiceNumber, stageKey: stage.key, to: recips, subject, author: (me && me.name) || 'Accounts' }),
           })
-          const dd = await rr.json()
+          const dd = await rr.json().catch(() => ({}))
+          if (!rr.ok) {
+            // Email sent but logging the timeline/comment failed — tell the user.
+            setErr('Email sent, but logging it failed: ' + (dd.error || rr.status))
+            setSending(false)
+            return
+          }
           updatedMeta = dd.meta || null
-        } catch {}
+        } catch (e) {
+          setErr('Email sent, but logging it failed: ' + e.message); setSending(false); return
+        }
         onSent(row.invoiceNumber, stage.key, { at: Date.now(), to: recips, subject }, updatedMeta)
       } else {
         // Fresh custom email — not tied to a stage.
@@ -233,8 +251,15 @@ function ChaseComposeModal({ row, stage, templates, members, me, chases, onClose
             <button onClick={() => switchToFresh(true)} style={{ flex: 1, padding: '7px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer', border: '1px solid ' + (fresh ? '#0f766e' : '#e5e5e5'), background: fresh ? '#f0fdfa' : '#fff', color: fresh ? '#0f766e' : '#666', fontWeight: 600 }}>Draft fresh email</button>
           </div>
 
-          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>To (comma-separated)</label>
-          <input value={to} onChange={e => setTo(e.target.value)} placeholder="customer@example.com"
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>To (one recipient)</label>
+          {contactOptions.length > 0 && (
+            <select value={contactOptions.some(c => c.email === to) ? to : ''} onChange={e => pickTo(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 6, background: '#fff' }}>
+              <option value="">— Select a customer contact —</option>
+              {contactOptions.map(c => <option key={c.email} value={c.email}>{c.name || c.email}{c.title ? ` (${c.title})` : ''} — {c.email}</option>)}
+            </select>
+          )}
+          <input value={to} onChange={e => pickTo(e.target.value)} placeholder={contactOptions.length ? 'or type an email…' : 'customer@example.com'}
             style={{ width: '100%', padding: '8px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', marginBottom: 10 }} />
 
           {/* CC controls */}
