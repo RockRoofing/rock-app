@@ -1,21 +1,26 @@
-Commercial cards/headers + Income chart tweaks
-==============================================
+EOM invoiced now on the SAME basis as Budget Tracker (fixes the mismatch)
+=========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-1. Remaining to Claim CARDS relabelled (Budget Tracker + EOM):
-   • "Remaining to Claim (Inc. WIP, Ex. Retention)"
-   • "Remaining to Claim (Inc. WIP, Inc. Retention)"
-   (Values already include WIP; labels now say so.)
+WHY THEY DIFFERED
+-----------------
+Budget Tracker "Invoiced" = sum of account-code-200 (Sales) lines: NET of VAT,
+INCLUDING retention. EOM was still computing invoiced the OLD way: summing each
+invoice's gross Total (VAT-INCLUSIVE) and then ADDING reconstructed retention on
+top. So EOM read higher (VAT included + retention double-counted), on a different
+basis entirely.
 
-2. Budget Tracker TABLE HEADERS: added hover descriptions to the Labour,
-   Materials and Total Budget columns (previously only Contract group had them).
-   All data columns now have tooltips.
+FIX (pages/commercial.js — calcAtValDate)
+-----------------------------------------
+EOM now sums the 200-coded Sales lines up to the valuation date (net of VAT, incl
+retention), and does NOT re-add retention. This matches the Budget Tracker basis.
+Retention is derived for display only.
 
-3. Project Details → Income tab: monthly bar chart is now ALL GREEN (removed the
-   dark "latest month" bar) and the key no longer shows a "Latest month" entry.
+After this, the ONLY expected difference between the two is the intended DATE
+CUTOFF: Budget Tracker = all invoices to date; EOM = invoices up to the selected
+month's valuation date. For the latest month they should agree.
 
-FILES CHANGED
--------------
+FILE CHANGED
+------------
 • pages/commercial.js
-• pages/project/[id].js  (latest full version)

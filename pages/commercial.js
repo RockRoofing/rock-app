@@ -53,11 +53,17 @@ function calcAtValDate(project, monthKey) {
   const costsToDate = costLines.filter(l => withinDate(l.date) && l.date).reduce((s, l) => s + (l.amount || 0), 0)
   const labourToDate = costLines.filter(l => l.date && withinDate(l.date) && ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
   const materialsToDate = costsToDate - labourToDate
-  const invoicedToDate = invoiceLines.filter(i => i.date && withinDate(i.date)).reduce((s, i) => s + (i.total || 0), 0)
+  // Invoiced = sum of account-code-200 (Sales) lines up to the valuation date —
+  // NET of VAT and INCLUDING retention (same basis as the Budget Tracker's
+  // "Invoiced"). Falls back to ex-VAT subtotal for older lines without sales200.
+  const invoicedToDate = invoiceLines.filter(i => i.date && withinDate(i.date))
+    .reduce((s, i) => s + (i.sales200 != null ? i.sales200 : (i.subTotal || 0)), 0)
 
   const retPct = parseFloat(project.retentionPct || 0)
-  const retention = retPct > 0 ? invoicedToDate * retPct / (1 - retPct) : 0
-  const grossInvoiced = invoicedToDate + retention
+  // 200 already includes retention, so grossInvoiced IS invoicedToDate. Retention
+  // is derived for display only, not added on top.
+  const retention = retPct > 0 ? invoicedToDate * retPct : 0
+  const grossInvoiced = invoicedToDate
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
 
   // No cutoff (completed project) => nothing is "after" the date, so WIP is 0.
