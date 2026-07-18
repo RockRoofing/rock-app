@@ -126,6 +126,7 @@ export default function ContractedRatesPage() {
   }
   const toggleStruck = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, struck: !x.struck } : x)))
   const toggleHeadingStyle = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, plainHeading: !x.plainHeading } : x)))
+  const toggleStyle = (id, key) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, [key]: !x[key] } : x)))
   const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
 
   // Reorder within a section by moving item `id` up/down among its section peers.
@@ -362,6 +363,12 @@ export default function ContractedRatesPage() {
         {sectionItems.map((x) => {
           const isEditing = editable && editRow === x.id
           const strike = x.struck ? { textDecoration: 'line-through', color: '#b91c1c', opacity: 0.7 } : {}
+          // Per-line manual formatting (independent of strike/heading).
+          const fmtStyle = {
+            ...(x.bold ? { fontWeight: 700 } : {}),
+            ...(x.underline ? { textDecoration: 'underline' } : {}),
+            ...(x.red ? { color: '#dc2626' } : {}),
+          }
           const isSel = selected.has(x.id)
           if (x.kind === 'heading' && !isEditing) {
             const headStyle = x.plainHeading
@@ -375,9 +382,9 @@ export default function ContractedRatesPage() {
                 onDrop={() => editable && onDrop(x.id)}
                 style={{ background: dragId === x.id ? '#eef2ff' : '#fafafa' }}>
                 <td style={tdC}>{editable && <span title="Drag to reorder" style={{ cursor: 'grab', color: '#cbd5e1' }}>⋮⋮</span>}</td>
-                <td style={{ ...td, ...headStyle, ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6, fontWeight: 400, textDecoration: 'none' }}>{x.code}</span> : null}{x.description || '—'}</td>
+                <td style={{ ...td, ...headStyle, ...fmtStyle, ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6, fontWeight: 400, textDecoration: 'none' }}>{x.code}</span> : null}{x.description || '—'}</td>
                 <td style={tdMat}></td>
-                <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={toggleHeadingStyle} />}</td>
+                <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={toggleHeadingStyle} onToggleStyle={toggleStyle} />}</td>
               </tr>
             )
           }
@@ -397,7 +404,7 @@ export default function ContractedRatesPage() {
               <td style={{ ...td, color: '#6b7280', fontWeight: 600 }}>
                 {isEditing ? <input value={x.code || ''} onChange={e => update(x.id, { code: e.target.value })} style={{ ...cellInput, width: 46 }} /> : (x.code || '')}
               </td>
-              <td style={{ ...td, minWidth: 200, maxWidth: 320, whiteSpace: 'normal', ...strike }}>
+              <td style={{ ...td, minWidth: 200, maxWidth: 320, whiteSpace: 'normal', ...fmtStyle, ...strike }}>
                 {isEditing ? <input value={x.description || ''} onChange={e => update(x.id, { description: e.target.value })} style={cellInput} /> : (x.description || '—')}
               </td>
               <td style={tdR}>
@@ -421,7 +428,7 @@ export default function ContractedRatesPage() {
               <td style={tdR}>
                 {isEditing
                   ? <button onClick={() => setEditRow(null)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Done</button>
-                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={x.kind === 'heading' ? toggleHeadingStyle : null} onToVariation={section === 'below' ? () => openVariation([x]) : null} />)}
+                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={x.kind === 'heading' ? toggleHeadingStyle : null} onToggleStyle={toggleStyle} onToVariation={section === 'below' ? () => openVariation([x]) : null} />)}
               </td>
             </tr>
           )
@@ -438,7 +445,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v6</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v7</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -629,9 +636,10 @@ function Card({ label, value, sub, tone, muted }) {
 
 // Per-row action menu: move across line, up/down, strike, edit, delete,
 // heading-style toggle, and (below the line) turn into a variation.
-function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown, onToggleHeading, onToVariation, varBusy }) {
+function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown, onToggleHeading, onToggleStyle, onToVariation, varBusy }) {
   const [open, setOpen] = useState(false)
   const btn = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '4px 8px', textAlign: 'left', width: '100%', color: '#374151' }
+  const on = { background: '#eef2ff', color: '#4f46e5', fontWeight: 700 }
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button onClick={() => setOpen(o => !o)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '3px 8px', fontSize: 13, cursor: 'pointer', color: '#475569' }}>⋯</button>
@@ -639,8 +647,17 @@ function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown,
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
           <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 11, minWidth: 210, overflow: 'hidden' }}>
-            <button style={btn} onClick={() => { onEdit(); setOpen(false) }}>✎ Edit</button>
+            <button style={btn} onClick={() => { onEdit(); setOpen(false) }}>✎ Edit text / values</button>
             {onToVariation && <button style={{ ...btn, color: '#0f766e', fontWeight: 600 }} disabled={varBusy} onClick={() => { onToVariation(); setOpen(false) }}>{varBusy ? '… adding' : '➜ Turn into variation'}</button>}
+            {onToggleStyle && (
+              <div style={{ borderTop: '1px solid #f0f0f0', padding: '4px 0' }}>
+                <div style={{ fontSize: 10, color: '#9ca3af', padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '0.03em' }}>Format line</div>
+                <button style={{ ...btn, ...(x.bold ? on : {}) }} onClick={() => onToggleStyle(x.id, 'bold')}><strong>B</strong>&nbsp;&nbsp;Bold {x.bold ? '✓' : ''}</button>
+                <button style={{ ...btn, ...(x.underline ? on : {}) }} onClick={() => onToggleStyle(x.id, 'underline')}><span style={{ textDecoration: 'underline' }}>U</span>&nbsp;&nbsp;Underline {x.underline ? '✓' : ''}</button>
+                <button style={{ ...btn, ...(x.red ? on : {}) }} onClick={() => onToggleStyle(x.id, 'red')}><span style={{ color: '#dc2626', fontWeight: 700 }}>A</span>&nbsp;&nbsp;Red {x.red ? '✓' : ''}</button>
+              </div>
+            )}
+            <div style={{ borderTop: '1px solid #f0f0f0' }} />
             <button style={btn} onClick={() => { onMove(x.id, section === 'above' ? 'below' : 'above'); setOpen(false) }}>{section === 'above' ? '↓ Move below the line' : '↑ Move above the line'}</button>
             <button style={btn} onClick={() => { onUp(); setOpen(false) }}>↑ Move up</button>
             <button style={btn} onClick={() => { onDown(); setOpen(false) }}>↓ Move down</button>

@@ -1,13 +1,20 @@
-Contracted Rates — section totals aligned under the Total column
+Contracted Rates — per-line formatting (bold / underline / red)
 ===============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v6"
+Build: ✓ Compiled successfully  ·  tab shows "· v7"
 
 CHANGE
 ------
-The Above/Below the line total figure now sits under the TOTAL column (not the
-Rate column). Materials and Labour totals stay under their own columns.
+Each line's ⋯ menu now has a "Format line" section with three toggles:
+  • Bold
+  • Underline
+  • Red
+Any combination can be applied, and they can be toggled on/off (a ✓ shows when
+active). The menu stays open while you tick formats so you can apply several at
+once. Works on both item rows and heading rows, and is independent of the
+existing strike-through and the heading bold/underline styling.
+Formatting is saved with the rates (persists on save/reload).
 
 FILES
 -----
-• pages/contracted-rates.js
+• pages/contracted-rates.js   (toggleStyle + fmtStyle + menu; v7)
