@@ -131,8 +131,15 @@ export default function ProjectPage() {
 
   async function save() {
     setSaving(true)
-    await fetch(`/api/project/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-    setSettings(form)
+    // Resolve the EFFECTIVE retention (override → IHM → existing) into
+    // settings.retentionPct so all financial calcs (WIP, retention) stay correct.
+    const ovRet = form.peopleOverride?.retentionPct
+    let effRet = form.retentionPct
+    if (ovRet != null && ovRet !== '') effRet = parseFloat(ovRet)
+    else if (people?.retentionPct != null) effRet = people.retentionPct
+    const payload = { ...form, retentionPct: (effRet != null && !isNaN(effRet)) ? effRet : (form.retentionPct || 0) }
+    await fetch(`/api/project/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    setSettings(payload)
     setEditMode(false)
     setSaving(false)
     load()
@@ -209,7 +216,7 @@ export default function ProjectPage() {
 
   return (
     <>
-      <Head><title>{p.jobNo} — {p.name}</title></Head>
+      <Head><title>{p.jobNo} — {p.name} · v2</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a2e', padding: '0 24px' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
@@ -1403,6 +1410,32 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const updateContact = (i, field, val) => setContacts(contacts.map((c, idx) => idx === i ? { ...c, [field]: val } : c))
   const removeContact = (i) => setContacts(contacts.filter((_, idx) => idx !== i))
 
+  // Scalar fields that follow the same override → IHM → blank pattern.
+  const ihmBadge = { marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }
+  const ovBadge = { marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }
+  const isOv = (k) => ov[k] != null && ov[k] !== ''
+  // Site address
+  const addressDisplay = isOv('projectAddress') ? ov.projectAddress : (people?.projectAddress || '')
+  const addrOverridden = isOv('projectAddress')
+  const addrFromIhm = !addrOverridden && !!(people?.projectAddress)
+  // Order reference
+  const orderRefDisplay = isOv('orderRef') ? ov.orderRef : (people?.orderRef || '')
+  const orderOverridden = isOv('orderRef')
+  const orderFromIhm = !orderOverridden && !!(people?.orderRef)
+  // Customer company
+  const custCompanyDisplay = isOv('customerCompany') ? ov.customerCompany : (people?.customerCompany || '')
+  const compOverridden = isOv('customerCompany')
+  const compFromIhm = !compOverridden && !!(people?.customerCompany)
+  // Customer address
+  const custAddressDisplay = isOv('customerAddress') ? ov.customerAddress : (people?.customerAddress || '')
+  const custAddrOverridden = isOv('customerAddress')
+  const custAddrFromIhm = !custAddrOverridden && !!(people?.customerAddress)
+  // Retention % (stored as a fraction; shown as a whole percentage)
+  const retFraction = isOv('retentionPct') ? ov.retentionPct : (people?.retentionPct != null ? people.retentionPct : (form.retentionPct != null ? form.retentionPct : null))
+  const retentionDisplay = (retFraction == null || retFraction === '') ? '' : (parseFloat(retFraction) * 100)
+  const retOverridden = isOv('retentionPct')
+  const retFromIhm = !retOverridden && people?.retentionPct != null
+
   return (
     <div style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 8 }}>
       <div style={sectionStyle}>
@@ -1528,8 +1561,9 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Retention</div>
-        <label style={labelStyle}>Retention %</label>
-        <input type="number" value={(form.retentionPct || 0) * 100} onChange={e => setForm({ ...form, retentionPct: parseFloat(e.target.value) / 100 })} style={inputStyle} placeholder="e.g. 3" />
+        <label style={labelStyle}>Retention %{retFromIhm && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{retOverridden && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
+        <input type="number" value={retentionDisplay} onChange={e => setOverride('retentionPct', e.target.value === '' ? '' : parseFloat(e.target.value) / 100)} style={inputStyle} placeholder="e.g. 3" />
+        {retFromIhm && <div style={{ fontSize: 10, color: '#aaa', marginTop: -4, marginBottom: 8 }}>From the IHM{people?.ihmRetentionRaw ? ` ("${people.ihmRetentionRaw}")` : ''}. Change to override for this project.</div>}
         <label style={labelStyle}>PC date (1st half release)</label>
         <input type="date" value={form.pcDate || ''} onChange={f('pcDate')} style={inputStyle} />
         <label style={labelStyle}>Defects liability end date (2nd half release)</label>
@@ -1541,19 +1575,29 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Project Details</div>
-        <label style={labelStyle}>Customer name</label>
-        <input value={form.customerName || ''} onChange={f('customerName')} style={inputStyle} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0 4px', fontSize: 13, cursor: 'pointer', color: form.highRiskCustomer ? '#dc2626' : '#333', fontWeight: form.highRiskCustomer ? 600 : 400 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+          Site address and order reference come from the Internal Handover Minutes (matched by job number). Change either to override for this project — the IHM is not affected.
+        </div>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px', fontSize: 13, cursor: 'pointer', color: form.highRiskCustomer ? '#dc2626' : '#333', fontWeight: form.highRiskCustomer ? 600 : 400 }}>
           <input type="checkbox" checked={!!form.highRiskCustomer} onChange={e => setForm({ ...form, highRiskCustomer: e.target.checked })} />
           Is this a high risk customer?
         </label>
         {form.highRiskCustomer && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 6 }}>⚠ Invoices for this customer will show a High Risk warning on the Outstanding Invoices page.</div>}
-        <label style={labelStyle}>Address</label>
-        <input value={form.address || ''} onChange={f('address')} style={inputStyle} />
-        <label style={labelStyle}>Region</label>
-        <input value={form.region || ''} onChange={f('region')} style={inputStyle} />
-        <label style={labelStyle}>Order reference</label>
-        <input value={form.orderRef || ''} onChange={f('orderRef')} style={inputStyle} />
+        <label style={labelStyle}>Site address{addrFromIhm && <span style={ihmBadge}>from IHM</span>}{addrOverridden && <span style={ovBadge}>override</span>}</label>
+        <input value={addressDisplay} onChange={e => setOverride('projectAddress', e.target.value)} style={inputStyle} />
+        <label style={labelStyle}>Order reference{orderFromIhm && <span style={ihmBadge}>from IHM</span>}{orderOverridden && <span style={ovBadge}>override</span>}</label>
+        <input value={orderRefDisplay} onChange={e => setOverride('orderRef', e.target.value)} style={inputStyle} />
+      </div>
+      <div style={sectionStyle}>
+        <div style={headingStyle}>Customer Details</div>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+          {people?.hasIhm ? 'From the Internal Handover Minutes. Editing overrides for this project (the IHM is unchanged).' : 'No IHM found for this job number yet — enter manually.'}
+        </div>
+        <label style={labelStyle}>Company name{compFromIhm && <span style={ihmBadge}>from IHM</span>}{compOverridden && <span style={ovBadge}>override</span>}</label>
+        <input value={custCompanyDisplay} onChange={e => setOverride('customerCompany', e.target.value)} style={inputStyle} />
+        <label style={labelStyle}>Company address{custAddrFromIhm && <span style={ihmBadge}>from IHM</span>}{custAddrOverridden && <span style={ovBadge}>override</span>}</label>
+        <textarea value={custAddressDisplay} onChange={e => setOverride('customerAddress', e.target.value)} rows={3}
+          style={{ ...inputStyle, minHeight: 60, resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Team</div>

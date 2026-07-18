@@ -1,42 +1,38 @@
-Fresh-email logging — deploy verification build (adds "· v5" marker)
-====================================================================
+Edit Project Details — restructured + more fields from the IHM
+==============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
+Build: ✓ Compiled successfully  ·  Project page tab now shows "· v2"
+Deploy on top of the ProjectPeople-from-IHM work.
 
-IMPORTANT: DEPLOY BOTH FILES
-----------------------------
-This fix needs BOTH files. If only the page deploys and the API doesn't, the
-fresh-email log call hits an old API that doesn't know the 'log-email' action,
-and you'll see "Email sent, but logging it failed: Unknown action" in the compose
-box. So please make sure BOTH of these land on GitHub:
-  • pages/outstanding-invoices.js
-  • pages/api/outstanding-invoices.js
+CHANGES TO "EDIT PROJECT DETAILS"
+---------------------------------
+• PROJECT DETAILS section now = Site address, High-risk customer toggle, Order
+  reference. REGION field REMOVED. (Existing stored region values are left as-is;
+  they're just no longer editable here.)  The old free-text "Customer name" field
+  is removed from this section — customer info now lives in Customer Details below.
+• NEW "CUSTOMER DETAILS" section = Company name + Company address.
+• RETENTION %: now defaults from the IHM.
 
-HOW TO CONFIRM THE RIGHT BUILD IS LIVE
---------------------------------------
-The browser tab now reads:  "Rock Roofing — Outstanding Invoices · v5"
-If your tab does NOT show "· v5", you're still on an older/cached build — hard
-refresh (Ctrl/Cmd+Shift+R) or wait for Vercel to finish, then retry.
+ALL FROM THE IHM (same one-way principle as before)
+---------------------------------------------------
+Site address, order reference, customer company, customer address and retention %
+are pulled from the Internal Handover Minutes (matched by job number):
+      override (Project Details)  →  IHM value  →  blank
+Editing any of them sets an override that STICKS and WINS, and NEVER writes back
+to the IHM (one-way only). "from IHM" / "override" badges show the current source.
+Retention in the IHM is free text (e.g. "5%"); it's parsed to a percentage.
 
-WHAT TO EXPECT AFTER DEPLOY
----------------------------
-Draft fresh email → type Subject + Body → pick/enter a To → Send:
-  • The email sends.
-  • A comment is written to that invoice with the FULL text:
-        📧 Email sent to bob@acme.co.uk
-        Subject: <subject>
-        <full body…>
-  • Template sends behave the same (logged with full body).
-
-IF IT STILL DOESN'T LOG
------------------------
-The compose box now shows the exact reason. Tell me the message:
-  • "…logging it failed: Unknown action"  → the API file didn't deploy.
-  • "…logging it failed: 401/403"         → a session/role issue on that user.
-  • "Send failed: …"                       → the SEND failed (Resend/env), so it
-                                             correctly did not log.
+IMPORTANT — RETENTION & FINANCIAL CALCS
+---------------------------------------
+Retention % drives WIP/retention maths (which read settings.retentionPct). On
+SAVE, the effective retention (override → IHM → existing) is written into
+settings.retentionPct, so the calcs stay correct. NOTE: for an IHM-sourced value
+to flow into the financial calcs and the commercial pages, the project must be
+SAVED once (the edit form shows the IHM value immediately; saving commits it).
 
 FILES
 -----
-• pages/outstanding-invoices.js      (v5 marker; fresh logs via log-email; validation)
-• pages/api/outstanding-invoices.js  (log-email action; record-chase stores body)
+• lib/projectPeople.js        (resolver now also returns projectAddress, orderRef,
+                               customerCompany, customerAddress, retentionPct)
+• pages/project/[id].js       (restructured sections; IHM defaults + overrides;
+                               save persists effective retentionPct; "· v2" marker)
