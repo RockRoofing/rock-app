@@ -244,8 +244,8 @@ export default function ProjectPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'AFA', value: fmt(atDate.afa), sub: `CV: ${fmt(parseFloat(settings?.contractValue || 0))}` },
-              { label: 'Invoiced Inc. Retention', value: fmt(atDate.grossInvoiced), sub: `as at ${vDateLabel}` },
-              { label: 'Total Spent', value: fmt(atDate.costsToDate), sub: `as at ${vDateLabel}` },
+              { label: 'Invoiced Inc. Retention', value: fmt(atDate.grossInvoiced), sub: atDate.afa > 0 ? `${((atDate.grossInvoiced / atDate.afa) * 100).toFixed(0)}% of AFA` : `as at ${vDateLabel}` },
+              { label: 'Total Spent', value: fmt(atDate.costsToDate), sub: atDate.totalBudget > 0 ? `${((atDate.costsToDate / atDate.totalBudget) * 100).toFixed(0)}% of budget` : `as at ${vDateLabel}` },
               { label: 'Total Budget', value: fmt(atDate.totalBudget), sub: atDate.totalBudget > 0 ? `${((atDate.costsToDate / atDate.totalBudget) * 100).toFixed(0)}% used` : '⚠ Set budget' },
               { label: 'Current Margin', value: atDate.margin != null ? (atDate.margin * 100).toFixed(1) + '%' : '—', sub: `as at ${vDateLabel}`, color: marginColor(atDate.margin), bg: marginBg(atDate.margin), showKey: true },
               { label: 'Remaining to Invoice', value: fmt(atDate.remainingToInvoice), color: atDate.remainingToInvoice > 0 ? '#2563eb' : '#e63946' },

@@ -1,26 +1,22 @@
-EOM invoiced now on the SAME basis as Budget Tracker (fixes the mismatch)
-=========================================================================
+Project Details Overview — % sub-lines for invoiced-vs-AFA and spent-vs-budget
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-WHY THEY DIFFERED
------------------
-Budget Tracker "Invoiced" = sum of account-code-200 (Sales) lines: NET of VAT,
-INCLUDING retention. EOM was still computing invoiced the OLD way: summing each
-invoice's gross Total (VAT-INCLUSIVE) and then ADDING reconstructed retention on
-top. So EOM read higher (VAT included + retention double-counted), on a different
-basis entirely.
+CHANGE (pages/project/[id].js — Overview summary cards)
+-------------------------------------------------------
+• "Invoiced Inc. Retention" card now shows, in light grey underneath, the
+  percentage of the Anticipated Final Account invoiced: "X% of AFA"
+  (grossInvoiced ÷ AFA).
+• "Total Spent" card now shows, in light grey underneath, spend as a % of the
+  total budget: "X% of budget" (costsToDate ÷ totalBudget).
 
-FIX (pages/commercial.js — calcAtValDate)
------------------------------------------
-EOM now sums the 200-coded Sales lines up to the valuation date (net of VAT, incl
-retention), and does NOT re-add retention. This matches the Budget Tracker basis.
-Retention is derived for display only.
+Comparing the two at a glance: if "% of AFA invoiced" and "% of budget spent" are
+close, invoicing is tracking cost. A gap suggests under/over-invoicing, or a
+project running at a loss / better-than-expected profit.
 
-After this, the ONLY expected difference between the two is the intended DATE
-CUTOFF: Budget Tracker = all invoices to date; EOM = invoices up to the selected
-month's valuation date. For the latest month they should agree.
+(Latest full version of the file.)
 
 FILE CHANGED
 ------------
-• pages/commercial.js
+• pages/project/[id].js
