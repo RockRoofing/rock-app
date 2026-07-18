@@ -94,6 +94,24 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
+    // Append a below-the-line item to the project's variations (variation tracker).
+    if (action === 'to-variation') {
+      const v = req.body.variation || {}
+      if (!v.description && !v.varNumber) return res.status(400).json({ error: 'Nothing to add.' })
+      const vars = Array.isArray(project.variations) ? [...project.variations] : []
+      vars.push({
+        varNumber: v.varNumber || '',
+        description: v.description || '',
+        instructed: !!v.instructed,
+        materials: v.materials || '0',
+        labour: v.labour || '0',
+        profit: v.profit || '0',
+      })
+      project.variations = vars
+      await saveProject(projectId, project)
+      return res.json({ ok: true, variations: vars })
+    }
+
     return res.status(400).json({ error: 'Unknown action' })
   }
 

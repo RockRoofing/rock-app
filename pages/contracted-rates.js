@@ -108,22 +108,115 @@ export default function ContractedRatesPage() {
 
   // ── Row ops (only when editable) ──
   const update = (id, patch) => { setItems(list => list.map(x => x.id === id ? { ...x, ...patch } : x)); setDirty(true) }
-  const move = (id, toSection) => update(id, { section: toSection })
-  const toggleStruck = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, struck: !x.struck } : x)))
-  const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
-  const moveUpDown = (id, dir) => {
+  const move = (id, toSection) => {
+    // Move across the line and place at the END of the target section so it
+    // lands somewhere sensible and is then freely re-orderable.
     setItems(list => {
-      const i = list.findIndex(x => x.id === id); if (i === -1) return list
-      const j = i + dir; if (j < 0 || j >= list.length) return list
-      // only swap within the same section
-      if (list[i].section !== list[j].section) return list
-      const copy = [...list];[copy[i], copy[j]] = [copy[j], copy[i]]; return copy
+      const it = list.find(x => x.id === id); if (!it) return list
+      const rest = list.filter(x => x.id !== id)
+      const moved = { ...it, section: toSection }
+      // insert after the last item of the target section
+      let lastIdx = -1
+      rest.forEach((x, i) => { if (x.section === toSection) lastIdx = i })
+      const copy = [...rest]
+      copy.splice(lastIdx + 1, 0, moved)
+      return copy
     })
     setDirty(true)
   }
-  function addLine(section) {
-    setItems(list => [...list, { id: `cr_new_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, code: '', qty: null, unit: '', description: '', rate: null, total: null, totalMode: 'calc', totalText: '', matRate: null, labRate: null, rateOnly: section === 'below', section, kind: 'item', struck: false }])
+  const toggleStruck = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, struck: !x.struck } : x)))
+  const toggleHeadingStyle = (id) => setItems(list => (setDirty(true), list.map(x => x.id === id ? { ...x, plainHeading: !x.plainHeading } : x)))
+  const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
+
+  // Reorder within a section by moving item `id` up/down among its section peers.
+  const moveUpDown = (id, dir) => {
+    setItems(list => {
+      const it = list.find(x => x.id === id); if (!it) return list
+      const section = it.section
+      const order = list.filter(x => x.section === section)
+      const pos = order.findIndex(x => x.id === id)
+      const np = pos + dir
+      if (np < 0 || np >= order.length) return list
+      const reordered = [...order];[reordered[pos], reordered[np]] = [reordered[np], reordered[pos]]
+      return rebuildWithSectionOrder(list, section, reordered)
+    })
     setDirty(true)
+  }
+
+  // Drag-and-drop reorder within a section.
+  const [dragId, setDragId] = useState(null)
+  const onDrop = (targetId) => {
+    if (!dragId || dragId === targetId) { setDragId(null); return }
+    setItems(list => {
+      const src = list.find(x => x.id === dragId)
+      const tgt = list.find(x => x.id === targetId)
+      if (!src || !tgt || src.section !== tgt.section) return list
+      const section = src.section
+      const order = list.filter(x => x.section === section).filter(x => x.id !== dragId)
+      const tpos = order.findIndex(x => x.id === targetId)
+      order.splice(tpos, 0, src)
+      return rebuildWithSectionOrder(list, section, order)
+    })
+    setDragId(null); setDirty(true)
+  }
+  // Rebuild the full list, replacing the given section's items with `orderedSubset`
+  // (in order) while keeping the other section's items in their original slots.
+  function rebuildWithSectionOrder(list, section, orderedSubset) {
+    const out = []
+    let k = 0
+    for (const x of list) {
+      if (x.section === section) { out.push(orderedSubset[k++]) }
+      else out.push(x)
+    }
+    // if the section grew/shrank (shouldn't here), append any leftovers
+    while (k < orderedSubset.length) out.push(orderedSubset[k++])
+    return out
+  }
+
+  function addLine(section) {
+    // Insert at the END of its own section (not the very end of the array), so a
+    // new above-the-line line sits under the last above-the-line item and can be
+    // dragged/moved up straight away.
+    setItems(list => {
+      const newItem = { id: `cr_new_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, code: '', qty: null, unit: '', description: '', rate: null, total: null, totalMode: 'calc', totalText: '', matRate: null, labRate: null, rateOnly: section === 'below', section, kind: 'item', struck: false }
+      let lastIdx = -1
+      list.forEach((x, i) => { if (x.section === section) lastIdx = i })
+      const copy = [...list]
+      copy.splice(lastIdx + 1, 0, newItem)
+      return copy
+    })
+    setDirty(true)
+  }
+
+  // Turn a below-the-line item into a variation on the project (variation tracker).
+  const [varBusy, setVarBusy] = useState(null)
+  async function turnIntoVariation(x) {
+    if (!projectId) return
+    const matTotal = lineMatTotal(x)
+    const labTotal = lineLabTotal(x)
+    const rateTotal = lineRateTotal(x)
+    const profit = Math.max(0, rateTotal - matTotal - labTotal)
+    if (!confirm(`Add "${x.description || x.code}" to this project's variations?\n\nMaterials ${fmt(matTotal)} · Labour ${fmt(labTotal)} · Profit ${fmt(profit)}\nIt will start as NOT instructed.`)) return
+    setVarBusy(x.id)
+    try {
+      const d = await fetch('/api/contracted-rates', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'to-variation', projectId,
+          variation: {
+            varNumber: x.code || '',
+            description: x.description || '',
+            instructed: false,
+            materials: String(Math.round(matTotal * 100) / 100),
+            labour: String(Math.round(labTotal * 100) / 100),
+            profit: String(Math.round(profit * 100) / 100),
+          },
+        }),
+      }).then(r => r.json())
+      if (!d.ok) { setMsg(d.error || 'Could not create the variation.'); setVarBusy(null); return }
+      setMsg(`Added "${x.description || x.code}" to variations (not instructed).`)
+    } catch (e) { setMsg('Could not create the variation.') }
+    setVarBusy(null)
   }
 
   async function save() {
@@ -169,17 +262,25 @@ export default function ContractedRatesPage() {
   const hasRates = items.length > 0
   const selProject = projects.find(p => p.xeroId === projectId)
 
-  // Styles
-  const th = { padding: '9px 8px', textAlign: 'left', fontWeight: 700, color: '#6b7280', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
+  // Styles. Vertical separators via right borders. Materials = light blue,
+  // Labour = darker blue.
+  const SEP = '1px solid #e8eaed'
+  const MAT_HEAD = '#e0f2fe', MAT_HEAD_INK = '#0369a1', MAT_CELL = '#f0f9ff', MAT_INK = '#0369a1'
+  const LAB_HEAD = '#bfdbfe', LAB_HEAD_INK = '#1e3a8a', LAB_CELL = '#dbeafe', LAB_INK = '#1e3a8a'
+  const th = { padding: '9px 8px', textAlign: 'left', fontWeight: 700, color: '#6b7280', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap', borderRight: SEP }
   const thR = { ...th, textAlign: 'right' }
   const thC = { ...th, textAlign: 'center', width: 34, padding: '9px 4px' }
-  const thBudget = { ...thR, background: '#eef6ff', color: '#1e40af' }
-  const td = { padding: '7px 8px', fontSize: 12.5, verticalAlign: 'middle' }
+  const thMat = { ...thR, background: MAT_HEAD, color: MAT_HEAD_INK }
+  const thLab = { ...thR, background: LAB_HEAD, color: LAB_HEAD_INK }
+  const td = { padding: '7px 8px', fontSize: 12.5, verticalAlign: 'middle', borderRight: SEP }
   const tdR = { ...td, textAlign: 'right' }
   const tdC = { ...td, textAlign: 'center', padding: '7px 4px' }
-  const tdBudget = { ...tdR, background: '#f5faff', color: '#1e40af' }
+  const tdMat = { ...tdR, background: MAT_CELL, color: MAT_INK }
+  const tdLab = { ...tdR, background: LAB_CELL, color: LAB_INK }
   const cellInput = { width: '100%', padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, boxSizing: 'border-box', fontFamily: 'inherit' }
   const COLSPAN = 12
+  // keep old names used elsewhere pointing at materials styling
+  const thBudget = thMat, tdBudget = tdMat
 
   function totalCell(x, isEditing) {
     // Text-mode lines (TBC / Rate only / custom) show the text; calc lines show qty*rate.
@@ -219,10 +320,10 @@ export default function ContractedRatesPage() {
         <td style={tdC}></td>
         <td style={{ ...td, color: bd }} colSpan={4}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
         <td style={{ ...tdR, color: bd }}>{fmt(show.rate)}</td>
-        <td style={tdBudget}></td>
-        <td style={{ ...tdBudget, fontWeight: 700 }}>{fmt(show.materials)}</td>
-        <td style={tdBudget}></td>
-        <td style={{ ...tdBudget, fontWeight: 700 }}>{fmt(show.labour)}</td>
+        <td style={tdMat}></td>
+        <td style={{ ...tdMat, fontWeight: 700 }}>{fmt(show.materials)}</td>
+        <td style={tdLab}></td>
+        <td style={{ ...tdLab, fontWeight: 700 }}>{fmt(show.labour)}</td>
         <td style={td}></td>
       </tr>
     )
@@ -245,18 +346,36 @@ export default function ContractedRatesPage() {
           const strike = x.struck ? { textDecoration: 'line-through', color: '#b91c1c', opacity: 0.7 } : {}
           const isSel = selected.has(x.id)
           if (x.kind === 'heading' && !isEditing) {
+            const headStyle = x.plainHeading
+              ? { fontWeight: 400, color: '#374151' }
+              : { fontWeight: 700, color: '#111827', textDecoration: 'underline' }
             return (
-              <tr key={x.id} style={{ background: '#fafafa' }}>
-                <td style={tdC}></td>
-                <td style={{ ...td, fontWeight: 700, color: '#374151', ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6 }}>{x.code}</span> : null}{x.description || '—'}</td>
-                <td style={tdBudget}></td>
-                <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} />}</td>
+              <tr key={x.id}
+                draggable={editable}
+                onDragStart={() => editable && setDragId(x.id)}
+                onDragOver={e => editable && e.preventDefault()}
+                onDrop={() => editable && onDrop(x.id)}
+                style={{ background: dragId === x.id ? '#eef2ff' : '#fafafa' }}>
+                <td style={tdC}>{editable && <span title="Drag to reorder" style={{ cursor: 'grab', color: '#cbd5e1' }}>⋮⋮</span>}</td>
+                <td style={{ ...td, ...headStyle, ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6, fontWeight: 400, textDecoration: 'none' }}>{x.code}</span> : null}{x.description || '—'}</td>
+                <td style={tdMat}></td>
+                <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={toggleHeadingStyle} />}</td>
               </tr>
             )
           }
           return (
-            <tr key={x.id} style={{ borderBottom: '1px solid #f0f0f0', background: isSel ? '#eef2ff' : (x.struck ? '#fef2f2' : '#fff') }}>
-              <td style={tdC}><input type="checkbox" checked={isSel} onChange={() => toggleSel(x.id)} style={{ cursor: 'pointer' }} /></td>
+            <tr key={x.id}
+              draggable={editable && !isEditing}
+              onDragStart={() => editable && !isEditing && setDragId(x.id)}
+              onDragOver={e => editable && e.preventDefault()}
+              onDrop={() => editable && onDrop(x.id)}
+              style={{ borderBottom: '1px solid #f0f0f0', background: dragId === x.id ? '#e0e7ff' : (isSel ? '#eef2ff' : (x.struck ? '#fef2f2' : '#fff')) }}>
+              <td style={tdC}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+                  {editable && !isEditing && <span title="Drag to reorder" style={{ cursor: 'grab', color: '#cbd5e1', fontSize: 12 }}>⋮⋮</span>}
+                  <input type="checkbox" checked={isSel} onChange={() => toggleSel(x.id)} style={{ cursor: 'pointer' }} />
+                </div>
+              </td>
               <td style={{ ...td, color: '#6b7280', fontWeight: 600 }}>
                 {isEditing ? <input value={x.code || ''} onChange={e => update(x.id, { code: e.target.value })} style={{ ...cellInput, width: 46 }} /> : (x.code || '')}
               </td>
@@ -273,18 +392,18 @@ export default function ContractedRatesPage() {
                 {isEditing ? <input type="number" value={x.rate ?? ''} onChange={e => update(x.id, { rate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 74, textAlign: 'right' }} /> : (x.rate != null ? fmtRate(x.rate) : '')}
               </td>
               <td style={{ ...tdR, fontWeight: 600 }}>{totalCell(x, isEditing)}</td>
-              <td style={tdBudget} title="Materials rate within the rate (budget)">
+              <td style={tdMat} title="Materials rate within the rate (budget)">
                 {isEditing ? <input type="number" value={x.matRate ?? ''} onChange={e => update(x.id, { matRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.matRate != null ? fmtRate(x.matRate) : '')}
               </td>
-              <td style={{ ...tdBudget, fontWeight: 600 }} title="Materials total (qty × mat rate)">{lineMatTotal(x) ? fmt(lineMatTotal(x)) : ''}</td>
-              <td style={tdBudget} title="Labour rate within the rate (budget)">
+              <td style={{ ...tdMat, fontWeight: 600 }} title="Materials total (qty × mat rate)">{lineMatTotal(x) ? fmt(lineMatTotal(x)) : ''}</td>
+              <td style={tdLab} title="Labour rate within the rate (budget)">
                 {isEditing ? <input type="number" value={x.labRate ?? ''} onChange={e => update(x.id, { labRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.labRate != null ? fmtRate(x.labRate) : '')}
               </td>
-              <td style={{ ...tdBudget, fontWeight: 600 }} title="Labour total (qty × lab rate)">{lineLabTotal(x) ? fmt(lineLabTotal(x)) : ''}</td>
+              <td style={{ ...tdLab, fontWeight: 600 }} title="Labour total (qty × lab rate)">{lineLabTotal(x) ? fmt(lineLabTotal(x)) : ''}</td>
               <td style={tdR}>
                 {isEditing
                   ? <button onClick={() => setEditRow(null)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Done</button>
-                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} />)}
+                  : (editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={x.kind === 'heading' ? toggleHeadingStyle : null} onToVariation={section === 'below' ? () => turnIntoVariation(x) : null} varBusy={varBusy === x.id} />)}
               </td>
             </tr>
           )
@@ -301,7 +420,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v3</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v4</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -353,8 +472,8 @@ export default function ContractedRatesPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
                     <Card label="Above the line (contract works)" value={fmt(totals.aboveTotal)} sub={`${totals.aboveCount} items`} />
                     <Card label="Below the line (available)" value={fmt(totals.belowTotal)} sub={`${totals.belowCount} items`} muted />
-                    <Card label="Materials budget (above)" value={fmt(totals.aboveMaterials)} budget />
-                    <Card label="Labour budget (above)" value={fmt(totals.aboveLabour)} budget />
+                    <Card label="Materials budget (above)" value={fmt(totals.aboveMaterials)} tone="mat" />
+                    <Card label="Labour budget (above)" value={fmt(totals.aboveLabour)} tone="lab" />
                   </div>
                   {sourceTotal != null && Math.abs((sourceTotal || 0) - totals.aboveTotal) > 0.5 && (
                     <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>
@@ -387,10 +506,10 @@ export default function ContractedRatesPage() {
                             <th style={th}>Unit</th>
                             <th style={thR}>Rate</th>
                             <th style={thR}>Total</th>
-                            <th style={thBudget}>Mat rate</th>
-                            <th style={thBudget}>Mat total</th>
-                            <th style={thBudget}>Lab rate</th>
-                            <th style={thBudget}>Lab total</th>
+                            <th style={thMat}>Mat rate</th>
+                            <th style={thMat}>Mat total</th>
+                            <th style={thLab}>Lab rate</th>
+                            <th style={thLab}>Lab total</th>
                             <th style={thR}></th>
                           </tr>
                         </thead>
@@ -426,18 +545,24 @@ export default function ContractedRatesPage() {
   )
 }
 
-function Card({ label, value, sub, budget, muted }) {
+function Card({ label, value, sub, tone, muted }) {
+  const tones = {
+    mat: { bg: '#f0f9ff', border: '#bae6fd', ink: '#0369a1' },
+    lab: { bg: '#dbeafe', border: '#93c5fd', ink: '#1e3a8a' },
+  }
+  const t = tone ? tones[tone] : null
   return (
-    <div style={{ background: budget ? '#f5faff' : '#fff', borderRadius: 10, padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: budget ? '1px solid #dbeafe' : '1px solid transparent' }}>
-      <div style={{ fontSize: 11, color: budget ? '#1e40af' : '#888', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: budget ? '#1e40af' : (muted ? '#b45309' : '#1a1a2e') }}>{value}</div>
+    <div style={{ background: t ? t.bg : '#fff', borderRadius: 10, padding: '14px 18px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', border: t ? `1px solid ${t.border}` : '1px solid transparent' }}>
+      <div style={{ fontSize: 11, color: t ? t.ink : '#888', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, color: t ? t.ink : (muted ? '#b45309' : '#1a1a2e') }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
 
-// Per-row action menu: move across line, up/down, strike, edit, delete.
-function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown }) {
+// Per-row action menu: move across line, up/down, strike, edit, delete,
+// heading-style toggle, and (below the line) turn into a variation.
+function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown, onToggleHeading, onToVariation, varBusy }) {
   const [open, setOpen] = useState(false)
   const btn = { background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, padding: '4px 8px', textAlign: 'left', width: '100%', color: '#374151' }
   return (
@@ -446,11 +571,13 @@ function RowMenu({ x, section, onEdit, onMove, onStrike, onDelete, onUp, onDown 
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 10 }} />
-          <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 11, minWidth: 190, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.15)', zIndex: 11, minWidth: 210, overflow: 'hidden' }}>
             <button style={btn} onClick={() => { onEdit(); setOpen(false) }}>✎ Edit</button>
+            {onToVariation && <button style={{ ...btn, color: '#0f766e', fontWeight: 600 }} disabled={varBusy} onClick={() => { onToVariation(); setOpen(false) }}>{varBusy ? '… adding' : '➜ Turn into variation'}</button>}
             <button style={btn} onClick={() => { onMove(x.id, section === 'above' ? 'below' : 'above'); setOpen(false) }}>{section === 'above' ? '↓ Move below the line' : '↑ Move above the line'}</button>
             <button style={btn} onClick={() => { onUp(); setOpen(false) }}>↑ Move up</button>
             <button style={btn} onClick={() => { onDown(); setOpen(false) }}>↓ Move down</button>
+            {onToggleHeading && <button style={btn} onClick={() => { onToggleHeading(x.id); setOpen(false) }}>{x.plainHeading ? 'B̲ Make heading bold + underlined' : '⇥ Plain heading (no bold/underline)'}</button>}
             <button style={btn} onClick={() => { onStrike(x.id); setOpen(false) }}>{x.struck ? '⟲ Remove strike-through' : '⌐ Strike through'}</button>
             <button style={{ ...btn, color: '#dc2626', borderTop: '1px solid #f0f0f0' }} onClick={() => { onDelete(x.id); setOpen(false) }}>🗑 Delete</button>
           </div>

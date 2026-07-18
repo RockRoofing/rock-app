@@ -1,48 +1,43 @@
-Contracted Rates — enhancements (totals, columns, selection)
-============================================================
+Contracted Rates — drag reorder, headings, variations, colours
+==============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Contracted Rates tab shows "· v3"
-Deploy on top of the Contracted Rates work (incl. the blank-row + upload/nav fixes).
+Build: ✓ Compiled successfully  ·  tab shows "· v4"
+Deploy on top of the Contracted Rates work.
 
-1) "RATE ONLY" / "TBC" TEXT vs CALCULATED TOTAL
------------------------------------------------
-• On upload, any non-numeric text in the Total column (Rate only, TBC, P.O.A,
-  etc.) is preserved verbatim.
-• Each line's Total is now switchable. Edit a line → the Total cell shows a
-  "Calculate / Text (TBC…)" selector:
-    - Calculate  → Total = Qty × Rate (updates as you type a quantity).
-    - Text       → type free text (e.g. "TBC", "Rate only").
-  So a "Rate only" line becomes a real calculated total the moment you add a
-  quantity and switch it to Calculate — or you can keep/enter text.
+1) DRAG TO REORDER
+------------------
+Rows can now be dragged up/down (grab the ⋮⋮ handle at the left of each row) to
+reorder within their section. The ⋯ menu's "Move up / Move down" still work too.
 
-2) MATERIALS TOTAL + LABOUR TOTAL COLUMNS
------------------------------------------
-Two new BLUE budget columns: "Mat total" (Qty × Mat rate) sits right after Mat
-rate, and "Lab total" (Qty × Lab rate) right after Lab rate.
+2) MOVE-UP BUG FIXED
+--------------------
+Adding a line to the bottom of the above-the-line section and not being able to
+move it up is fixed. New lines now insert at the end of THEIR OWN section, and
+reordering operates within the section (previously it compared array neighbours,
+which could be a below-the-line row, so it refused). Verified with a test.
 
-3) LINE SELECTION + GROUP VALUE
--------------------------------
-• Every line now has a tick-box on the left.
-• Ticking lines shows a summary bar: selected count + Total rate + Materials +
-  Labour for the selection.
+3) HEADINGS BOLD + UNDERLINED (toggleable)
+------------------------------------------
+Heading rows (a description with no rates/totals) now render BOLD + UNDERLINED.
+Each heading's ⋯ menu has "Plain heading (no bold/underline)" to turn the styling
+off for that heading (and back on again).
 
-4) SECTION TOTAL ROWS
----------------------
-• A total row now sits at the BOTTOM of the above-the-line section (and one for
-  below the line, above nothing — it's the last row of that block).
-• ABOVE the line: always shows the full contract-works total (rate + materials +
-  labour). When above-the-line lines are ticked, it switches to the ticked
-  subtotal.
-• BELOW the line: shows the full below-the-line total by default; when below-line
-  lines are ticked, it shows the ticked subtotal.
-• Text lines (TBC / Rate only) contribute 0 to the rate total (verified).
+4) TURN A BELOW-THE-LINE ITEM INTO A VARIATION
+----------------------------------------------
+Below-the-line rows have a new ⋯ menu item "Turn into variation". It adds the item
+to THIS project's variations (the Variation Tracker / project settings), mapping:
+   materials total -> materials, labour total -> labour,
+   remainder of the rate -> profit, description/code carried over,
+   starting as NOT instructed. (New API action: to-variation.)
 
-Site App read-only view updated to match (shows TBC/Rate-only text correctly).
+5) COLOURS + SEPARATORS
+-----------------------
+• Vertical separator lines between all columns.
+• Materials rate + Materials total columns = LIGHT blue.
+• Labour rate + Labour total columns = DARKER blue.
+• Top summary cards recoloured to match (Materials light blue, Labour darker).
 
 FILES
 -----
-• lib/contractRatesParser.js        (totalMode/totalText; per-line + sum helpers)
-• pages/contracted-rates.js         (checkbox col, mat/lab totals, total toggle,
-                                     selection bar, section total rows; v3)
-• pages/forms/cm/contracted-rates.js (Site App view respects totalMode) — only
-                                     needed if/when you deploy the Site App part
+• pages/contracted-rates.js       (drag, headings, variations, colours; v4)
+• pages/api/contracted-rates.js   (to-variation action)
