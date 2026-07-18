@@ -336,7 +336,7 @@ export default function ContractedRatesPage() {
     return (
       <tr style={{ background: bg, borderTop: `2px solid ${bd}55`, fontWeight: 700 }}>
         <td style={tdC}></td>
-        <td style={{ ...td, color: bd }} colSpan={4}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
+        <td style={{ ...td, color: bd }} colSpan={5}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
         <td style={{ ...tdR, color: bd }}>{fmt(show.rate)}</td>
         <td style={tdMat}></td>
         <td style={{ ...tdMat, fontWeight: 700 }}>{fmt(show.materials)}</td>
@@ -438,7 +438,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v5</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v6</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 

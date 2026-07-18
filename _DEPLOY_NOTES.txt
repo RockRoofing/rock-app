@@ -1,27 +1,13 @@
-Contracted Rates — combine multiple items into one variation
-============================================================
+Contracted Rates — section totals aligned under the Total column
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v5"
-Deploy on top of the Contracted Rates work (no API change needed — uses the
-existing to-variation action).
+Build: ✓ Compiled successfully  ·  tab shows "· v6"
 
 CHANGE
 ------
-Turning below-the-line items into variations is no longer one-line-per-variation.
-
-• Single item: the row ⋯ menu "Turn into variation" now opens a small dialog
-  where you can set the Variation No. and Description before adding.
-• GROUP: tick several below-the-line items, then in the selection bar click
-  "Combine N below-line items into one variation". The dialog opens pre-filled
-  with a combined description (one line per item) and a combined Variation No.
-  (the codes joined with +). You can edit both.
-• The dialog shows the combined Materials / Labour / Profit / Value that will be
-  written, then adds ONE variation to the project (not instructed). Selection is
-  cleared afterwards.
-
-Mapping (summed across the selected items): materials totals -> materials,
-labour totals -> labour, remainder of the rate -> profit.
+The Above/Below the line total figure now sits under the TOTAL column (not the
+Rate column). Materials and Labour totals stay under their own columns.
 
 FILES
 -----
-• pages/contracted-rates.js   (variation modal; combine-selected button; v5)
+• pages/contracted-rates.js
