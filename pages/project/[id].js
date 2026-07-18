@@ -36,16 +36,28 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
   return { costsToDate, labourToDate, materialsToDate, invoicedToDate, grossInvoiced, retention, afa, margin, remainingToInvoice, totalBudget, totalLabourBudget, totalMaterialsBudget }
 }
 
-function getPastValuationDates(valuationDay, months = 12) {
-  if (!valuationDay) return []
-  const day = parseInt(valuationDay)
-  const dates = []
+function getPastValuationDates(valuationDay, months = 12, dateOverrides = {}) {
   const now = new Date()
-  for (let i = 0; i <= months; i++) {
-    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, day))
-    if (d <= now) dates.push(d)
+  const map = new Map()   // key YYYY-MM-DD -> Date, de-duped
+  // 1) Fixed recurring day-of-month (if set).
+  if (valuationDay) {
+    const day = parseInt(valuationDay)
+    for (let i = 0; i <= months; i++) {
+      const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() - i, day))
+      if (d <= now) map.set(d.toISOString().split('T')[0], d)
+    }
   }
-  return dates
+  // 2) Manual per-month override valuation dates (win over the fixed day for
+  //    their month, and cover projects that have NO fixed day at all).
+  for (const [monthKey, ov] of Object.entries(dateOverrides || {})) {
+    if (ov?.valuationDate) {
+      // Drop any fixed-day entry in the same month, then add the override.
+      for (const k of [...map.keys()]) { if (k.slice(0, 7) === monthKey) map.delete(k) }
+      const d = new Date(ov.valuationDate + 'T00:00:00Z')
+      if (!isNaN(d)) map.set(ov.valuationDate, d)
+    }
+  }
+  return [...map.values()].sort((a, b) => b - a)   // most recent first
 }
 
 function marginColor(m) {
@@ -96,8 +108,8 @@ export default function ProjectPage() {
       setCostLines(data.costLines || [])
       setInvoiceLines(data.invoiceLines || [])
       const vDay = data.settings?.valuationDay
-      if (vDay) {
-        const dates = getPastValuationDates(vDay, 12)
+      const dates = getPastValuationDates(vDay, 12, data.settings?.dateOverrides || {})
+      if (dates.length) {
         setPastVDates(dates)
         setSelectedVDate(dates[0] || null)
       }
@@ -1117,7 +1129,7 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
         <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>WIP Value</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#16a34a' }}>{fmtC(wipValue)}</div>
-          <div style={{ fontSize: 10, color: '#888', marginTop: 3 }}>costs / (1 - {effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'})</div>
+          <div style={{ fontSize: 10, color: '#888', marginTop: 3 }}>costs ÷ (1 − margin), margin {effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'}</div>
         </div>
         <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>WIP Margin Override</div>
