@@ -77,6 +77,9 @@ export default function ContractedRatesPage() {
   const hasBelowSel = belowSelIds.length > 0
   const anySel = selected.size > 0
   const overallSel = sumItems([...aboveSelIds, ...belowSelIds])
+  // True when EVERY selected line has the given format (drives the on/off button look).
+  const selArr = items.filter(x => selected.has(x.id))
+  const allSelHave = (key) => selArr.length > 0 && selArr.every(x => !!x[key])
   const clearSel = () => setSelected(new Set())
 
   // ── Upload + parse ──
@@ -483,7 +486,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v10</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v11</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -555,9 +558,9 @@ export default function ContractedRatesPage() {
                       {editable && (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRight: '1px solid #c7d2fe', paddingRight: 12, marginRight: 4 }}>
                           <span style={{ fontSize: 11, color: '#6b7280' }}>Format:</span>
-                          <button title="Bold selected lines" onClick={() => bulkStyle('bold')} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>B</button>
-                          <button title="Underline selected lines" onClick={() => bulkStyle('underline')} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, textDecoration: 'underline', cursor: 'pointer' }}>U</button>
-                          <button title="Red selected lines" onClick={() => bulkStyle('red')} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>A</button>
+                          <button title="Bold selected lines" onClick={() => bulkStyle('bold')} style={{ background: allSelHave('bold') ? '#4f46e5' : '#fff', border: '1px solid ' + (allSelHave('bold') ? '#4f46e5' : '#c7d2fe'), color: allSelHave('bold') ? '#fff' : '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: allSelHave('bold') ? 'inset 0 1px 2px rgba(0,0,0,0.25)' : 'none' }}>B</button>
+                          <button title="Underline selected lines" onClick={() => bulkStyle('underline')} style={{ background: allSelHave('underline') ? '#4f46e5' : '#fff', border: '1px solid ' + (allSelHave('underline') ? '#4f46e5' : '#c7d2fe'), color: allSelHave('underline') ? '#fff' : '#1a1a2e', borderRadius: 6, padding: '4px 10px', fontSize: 13, textDecoration: 'underline', cursor: 'pointer', boxShadow: allSelHave('underline') ? 'inset 0 1px 2px rgba(0,0,0,0.25)' : 'none' }}>U</button>
+                          <button title="Red selected lines" onClick={() => bulkStyle('red')} style={{ background: allSelHave('red') ? '#dc2626' : '#fff', border: '1px solid ' + (allSelHave('red') ? '#dc2626' : '#fecaca'), color: allSelHave('red') ? '#fff' : '#dc2626', borderRadius: 6, padding: '4px 10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: allSelHave('red') ? 'inset 0 1px 2px rgba(0,0,0,0.25)' : 'none' }}>A</button>
                         </span>
                       )}
                       {editable && hasBelowSel && (
@@ -565,7 +568,7 @@ export default function ContractedRatesPage() {
                           ➜ Combine {belowSelIds.length} below-line item{belowSelIds.length === 1 ? '' : 's'} into one variation
                         </button>
                       )}
-                      <button onClick={clearSel} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Clear selection</button>
+                      <button onClick={clearSel} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Deselect rows</button>
                     </div>
                   )}
 

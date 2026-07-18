@@ -1,17 +1,16 @@
-Contracted Rates — bulk Bold / Underline / Red from the sticky bar
-==================================================================
+Contracted Rates — format button on/off state + "Deselect rows"
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v10"
+Build: ✓ Compiled successfully  ·  tab shows "· v11"
 
-CHANGE
-------
-The sticky selection bar (the same one used for combining variations) now has
-bulk formatting buttons: B (bold), U (underline), A (red). Tick any lines —
-above AND/OR below the line — then click a format to apply it to all selected
-lines at once. Toggle behaviour: if any selected line doesn't have the format it
-turns ON for all; if they all already have it, it turns OFF for all.
-Per-line formatting via the row ⋯ menu still works too.
+CHANGES
+-------
+• The B / U / A bulk-format buttons in the sticky bar now show a clear ON state
+  (filled/highlighted with an inset press look) when EVERY selected line already
+  has that format, and an OFF state (outline) otherwise. Clicking toggles it, and
+  the button appearance flips to match.
+• "Clear selection" is renamed to "Deselect rows".
 
 FILES
 -----
-• pages/contracted-rates.js   (bulkStyle + sticky-bar buttons; v10)
+• pages/contracted-rates.js   (v11)
