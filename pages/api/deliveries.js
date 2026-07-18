@@ -51,10 +51,29 @@ async function syncPOs() {
     return { ok: true, firstRun, baseline: pos.length }
   }
 
-  let added = 0
+  let added = 0, updated = 0
+  const byPoId = new Map(deliveries.filter(d => d.purchaseOrderId).map(d => [d.purchaseOrderId, d]))
   for (const po of pos) {
-    if (seenSet.has(po.purchaseOrderId)) continue      // already known -> backlog/imported
-    if (existingPoIds.has(po.purchaseOrderId)) { seenSet.add(po.purchaseOrderId); continue }
+    const trackNo = po.tracking?.jobNo || ''
+    const trackName = po.tracking?.name || ''
+    const existing = byPoId.get(po.purchaseOrderId)
+    if (existing) {
+      // Already known. Keep it as backlog, BUT refresh its project allocation from
+      // Xero's current tracking category if it changed there (e.g. the category
+      // was added/changed on the PO after it was first synced).
+      if (trackNo && matchProject(existing.projectNo) !== matchProject(trackNo)) {
+        existing.projectNo = trackNo
+        existing.projectName = trackName || existing.projectName || ''
+        updated++
+      } else if (!existing.projectNo && trackNo) {
+        existing.projectNo = trackNo
+        existing.projectName = trackName || existing.projectName || ''
+        updated++
+      }
+      seenSet.add(po.purchaseOrderId)
+      continue
+    }
+    if (seenSet.has(po.purchaseOrderId)) continue      // seen but not in list (removed) -> skip
     // NEW PO -> add it (regardless of any date)
     deliveries.push({
       id: `po_${po.purchaseOrderId}`,
@@ -66,8 +85,8 @@ async function syncPOs() {
       deliveryAddress: po.deliveryAddress || '',
       requiredDeliveryDate: po.deliveryDate || '',
       lineItems: po.lineItems || [],
-      projectName: po.tracking?.name || '',
-      projectNo: po.tracking?.jobNo || '',
+      projectName: trackName,
+      projectNo: trackNo,
       poSent: false,
       supplierConfirmedDate: false,
       secondCheck: false,
@@ -81,8 +100,9 @@ async function syncPOs() {
   }
   await saveDeliveries(deliveries)
   await setSeenIds([...seenSet])
-  return { ok: true, firstRun: false, added }
+  return { ok: true, firstRun: false, added, updated }
 }
+function matchProject(s) { return String(s || '').trim().replace(/^[#jJ]/, '').toLowerCase() }
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {

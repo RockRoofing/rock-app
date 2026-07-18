@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
-import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations } from '../lib/applications'
+import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal } from '../lib/applications'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s + (s.length === 10 ? 'T00:00:00' : '')); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
@@ -17,7 +17,7 @@ export default function ApplicationsPage() {
   const [cr, setCr] = useState(null)
   const [settings, setSettings] = useState({})
   const [trackerVariations, setTrackerVariations] = useState([])
-  const [undeliveredPOs, setUndeliveredPOs] = useState([])
+  const [projectPOs, setProjectPOs] = useState([])
   const [openId, setOpenId] = useState(null)     // application being edited
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -45,7 +45,7 @@ export default function ApplicationsPage() {
       setCr(d.contractedRates || null)
       setSettings(d.settings || {})
       setTrackerVariations(d.variations || [])
-      setUndeliveredPOs(d.undeliveredPOs || [])
+      setProjectPOs(d.projectPOs || [])
     } catch { setMsg('Could not load applications.') }
     setLoading(false)
   }
@@ -97,7 +97,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v4</title></Head>
+      <Head><title>Rock Roofing — Applications · v5</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -121,7 +121,7 @@ export default function ApplicationsPage() {
               projectId={projectId}
               me={me}
               trackerVariations={trackerVariations}
-              undeliveredPOs={undeliveredPOs}
+              projectPOs={projectPOs}
               onBack={() => { setOpenId(null); load(projectId) }}
               onSaved={(updated) => setApps(a => a.map(x => x.id === updated.id ? updated : x))}
               onVariationChange={(vs) => setTrackerVariations(vs || [])}
@@ -211,7 +211,7 @@ function prevGrossForApp(sortedApps, app) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], undeliveredPOs = [], onBack, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], projectPOs = [], onBack, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -384,10 +384,10 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
                     <td style={{ ...td, minWidth: 240, whiteSpace: 'pre-wrap', ...greyLine }}>{v.description || '—'}</td>
                     <td style={td}>
                       {locked ? (
-                        <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: instructed ? '#dcfce7' : '#f3f4f6', color: instructed ? '#16a34a' : '#9ca3af' }}>{instructed ? 'Instructed' : 'Not instructed'}</span>
+                        <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: instructed ? '#dcfce7' : '#ffedd5', color: instructed ? '#16a34a' : '#c2410c' }}>{instructed ? 'Instructed' : 'Not instructed'}</span>
                       ) : (
                         <button onClick={() => setInstructed(v, !instructed)} title="Click to toggle — updates the tracker & budgets"
-                          style={{ padding: '3px 9px', borderRadius: 5, fontWeight: 700, fontSize: 11, cursor: 'pointer', border: '1px solid ' + (instructed ? '#86efac' : '#e5e7eb'), background: instructed ? '#dcfce7' : '#f3f4f6', color: instructed ? '#16a34a' : '#9ca3af' }}>
+                          style={{ padding: '3px 9px', borderRadius: 5, fontWeight: 700, fontSize: 11, cursor: 'pointer', border: '1px solid ' + (instructed ? '#86efac' : '#fdba74'), background: instructed ? '#dcfce7' : '#ffedd5', color: instructed ? '#16a34a' : '#c2410c' }}>
                           {instructed ? 'Instructed' : 'Not instructed'}
                         </button>
                       )}
@@ -434,37 +434,43 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-              <th style={th}>Description</th><th style={th}>PO</th><th style={thR}>Qty</th><th style={th}>Unit</th><th style={thR}>Rate</th><th style={thR}>Total</th><th style={thR}></th>
+              <th style={th}>Description</th><th style={th}>PO</th><th style={thR}>Qty</th><th style={th}>Unit</th><th style={thR}>Rate</th><th style={thR}>Net</th><th style={thR} title="Internal only — hidden on the customer copy">Mark-up %</th><th style={thR}>Total</th><th style={thR}></th>
             </tr></thead>
             <tbody>
-              {mats.length === 0 && <tr><td colSpan={7} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
+              {mats.length === 0 && <tr><td colSpan={9} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
               {mats.map(m => {
-                const total = m.total != null ? m.total : (num(m.qty) * num(m.rate))
+                const netTotal = m.total != null ? num(m.total) : (num(m.qty) * num(m.rate))
+                const total = materialLineTotal(m)
                 return (
                   <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ ...td, minWidth: 220, whiteSpace: 'normal' }}>{m.description}</td>
+                    <td style={{ ...td, minWidth: 200, whiteSpace: 'normal' }}>{m.description}</td>
                     <td style={{ ...td, color: '#6b7280' }}>{m.poNumber || '—'}</td>
-                    <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 60, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 56, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
                     <td style={td}>{m.unit || ''}</td>
-                    <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 80, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 76, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={tdR}>{fmt(netTotal)}</td>
+                    <td style={{ ...tdR, background: '#fff7ed' }} title="Internal only — hidden on the customer copy">{locked ? `${m.markupPct || 0}%` : (
+                      <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 56, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
+                    )}</td>
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
                     <td style={tdR}>{!locked && <button onClick={() => removeMat(m.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Remove</button>}</td>
                   </tr>
                 )
               })}
               <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
-                <td style={td} colSpan={5}>TOTAL</td>
+                <td style={td} colSpan={7}>TOTAL</td>
                 <td style={tdR}>{fmt(sum.materialsOnSite)}</td><td></td>
               </tr>
             </tbody>
           </table>
         </div>
+        <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 16px' }}>The mark-up column (shaded) is internal only — it won't appear on the copy sent to the customer, but the marked-up Total will.</div>
       </div>
 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
 
-      {showAddMat && <AddMaterialsModal pos={undeliveredPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} />}
+      {showAddMat && <AddMaterialsModal pos={projectPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} />}
     </>
   )
 }
@@ -520,32 +526,62 @@ function SummaryBlock({ sum, app }) {
 // Pick variations from the project's tracker to add to the application.
 function AddMaterialsModal({ pos, onClose, onAdd }) {
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const flat = []
-  ;(pos || []).forEach((p, pi) => (p.lineItems || []).forEach((li, li2) => flat.push({ key: `${pi}_${li2}`, poNumber: p.poNumber, supplier: p.supplier, description: li.description, qty: li.quantity, unit: li.unit, rate: li.rate })))
-  const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '' })
+  // Per-PO mark-up entered here; applied to every line added from that PO.
+  const [markups, setMarkups] = useState({})
+  const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '', markupPct: '' })
+  const mk = (poNumber) => (markups[poNumber] === '' || markups[poNumber] == null) ? 0 : parseFloat(markups[poNumber]) || 0
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 640, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 720, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Add materials on site</div>
-        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>From purchase orders not yet delivered. Click one to add it, or enter a manual line.</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
-          {flat.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No undelivered PO lines found for this project.</div>}
-          {flat.map(f => (
-            <button key={f.key} onClick={() => onAdd({ description: f.description, poNumber: f.poNumber, qty: f.qty, unit: f.unit, rate: f.rate })} style={{ textAlign: 'left', background: '#f8f9fa', border: '1px solid #eee', borderRadius: 8, padding: 10, cursor: 'pointer' }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{f.description || '(no description)'}</div>
-              <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{f.poNumber} · {f.supplier}{f.qty ? ` · qty ${f.qty}${f.unit ? ' ' + f.unit : ''}` : ''}{f.rate ? ` · ${money(f.rate)}` : ''}</div>
-            </button>
-          ))}
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>All purchase orders for this project. Set a mark-up per PO (applied to every line added from it, hidden on the customer copy), then add whole POs or individual lines.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
+          {(pos || []).length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No purchase orders found for this project.</div>}
+          {(pos || []).map((p, pi) => {
+            const m = mk(p.poNumber)
+            const factor = 1 + m / 100
+            return (
+              <div key={pi} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8f9fa', padding: '10px 12px', flexWrap: 'wrap' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{p.poNumber || '(no PO no.)'}</div>
+                  <div style={{ fontSize: 12, color: '#666' }}>{p.supplier}</div>
+                  <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 5, background: p.delivered ? '#dcfce7' : '#fef9c3', color: p.delivered ? '#16a34a' : '#a16207' }}>{p.delivered ? 'Delivered' : 'Not delivered'}</span>
+                  <div style={{ flex: 1 }} />
+                  <label style={{ fontSize: 11, color: '#c2410c', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    Mark-up
+                    <input type="number" value={markups[p.poNumber] ?? ''} placeholder="0" onChange={e => setMarkups(s => ({ ...s, [p.poNumber]: e.target.value }))} style={{ width: 54, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />%
+                  </label>
+                  <button onClick={() => (p.lineItems || []).forEach(li => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m }))} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>Add all lines</button>
+                </div>
+                <div style={{ padding: '6px 0' }}>
+                  {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
+                  {(p.lineItems || []).map((li, li2) => {
+                    const net = (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)
+                    return (
+                      <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12.5 }}>{li.description || '(no description)'}</div>
+                          <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
+                        </div>
+                        <button onClick={() => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Add</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
         <div style={{ borderTop: '1px solid #eee', paddingTop: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 8 }}>OR ADD MANUALLY</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.7fr 0.7fr 0.9fr', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 0.6fr 0.8fr 0.7fr', gap: 8, marginBottom: 10 }}>
             <input value={manual.description} onChange={e => setManual(m => ({ ...m, description: e.target.value }))} placeholder="Description" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
             <input value={manual.qty} onChange={e => setManual(m => ({ ...m, qty: e.target.value }))} placeholder="Qty" type="number" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
             <input value={manual.unit} onChange={e => setManual(m => ({ ...m, unit: e.target.value }))} placeholder="Unit" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
             <input value={manual.rate} onChange={e => setManual(m => ({ ...m, rate: e.target.value }))} placeholder="Rate" type="number" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
+            <input value={manual.markupPct} onChange={e => setManual(m => ({ ...m, markupPct: e.target.value }))} placeholder="MU %" type="number" style={{ padding: '7px 9px', border: '1px solid #fdba74', borderRadius: 6, fontSize: 12.5 }} />
           </div>
-          <button onClick={() => { if (manual.description) onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate) }) }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
+          <button onClick={() => { if (manual.description) onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate), markupPct: manual.markupPct === '' ? 0 : parseFloat(manual.markupPct) }) }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
           <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Done</button>

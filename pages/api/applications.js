@@ -27,15 +27,16 @@ export default async function handler(req, res) {
       jobNo = row?.jobNo || ''
     } catch {}
     const matchKey = (s) => String(s || '').trim().replace(/^[#jJ]/, '').toLowerCase()
-    let undeliveredPOs = []
+    let projectPOs = []
     try {
       const deliveries = (await get('ops:deliveries')) || []
-      undeliveredPOs = deliveries
-        .filter(d => !d.actualDeliveryDate)   // not yet delivered
-        .filter(d => jobNo ? (matchKey(d.projectNo) === matchKey(jobNo) || matchKey(d.project) === matchKey(jobNo)) : true)
+      projectPOs = deliveries
+        .filter(d => jobNo ? (matchKey(d.projectNo) === matchKey(jobNo) || matchKey(d.project) === matchKey(jobNo)) : false)
         .map(d => ({
           poNumber: d.poNumber || '', supplier: d.supplier || '',
           project: d.project || d.projectNo || '',
+          delivered: !!d.actualDeliveryDate,
+          deliveryDate: d.actualDeliveryDate || '',
           lineItems: (d.lineItems || []).map(li => ({ description: li.description || li.item || '', quantity: li.quantity ?? null, unit: li.unit || '', rate: li.unitAmount ?? li.rate ?? null })),
         }))
     } catch {}
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
       applications: project.applications || [],
       contractedRates: project.contractedRates || null,
       variations: project.variations || [],
-      undeliveredPOs,
+      projectPOs,
       jobNo,
       settings: {
         applicationDay: project.applicationDay || null,

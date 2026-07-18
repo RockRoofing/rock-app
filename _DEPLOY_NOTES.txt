@@ -1,46 +1,41 @@
-Applications — variations behaviour rework
-==========================================
+Applications: orange variations + PO mark-up  ·  Delivery auto-assign fix
+========================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v4"
-Deploy all three files (on top of Phase 3).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v5"
 
-WHAT CHANGED
-------------
-1) ALL PROJECT VARIATIONS APPEAR AUTOMATICALLY on the application (no more "add
-   from tracker" step). Drafts read them LIVE from the Variation Tracker.
+1) NOT-INSTRUCTED VARIATIONS = ORANGE
+   The Not-instructed status pill is now orange (same shape/weight as the green
+   Instructed pill). Still greyed line text + N/A value-to-date + excluded from
+   totals; the pill itself is orange for visibility. Toggling still writes to the
+   tracker/budgets.
 
-2) STATUS DRIVES TOTALLING:
-   • Instructed  → normal black text, included in totals, has % Complete (with the
-     ✓=100% button) and a Value to date.
-   • Not instructed → the whole line is greyed, there is NO % Complete input, and
-     Value to date shows "N/A". It does NOT contribute to the totals or the
-     Summary/Certificate.
+2) MATERIALS ON SITE — ALL POs + PER-PO MARK-UP
+   • "+ Add from POs" now lists ALL purchase orders for the project (delivered or
+     not; each PO is tagged Delivered / Not delivered), grouped by PO, showing
+     each PO's line items.
+   • Each PO has a Mark-up % — applied to every line added from that PO. You can
+     "Add all lines" for a PO or add individual lines. A manual line can also take
+     a mark-up.
+   • On the application, Materials on Site now shows Net, a Mark-up % column
+     (shaded, editable), and Total = net x (1 + mark-up). The value used
+     everywhere (Summary/Certificate) is the MARKED-UP total.
+   • CUSTOMER COPY: the mark-up % column is internal only and will be HIDDEN on the
+     customer PDF (Phase 4); the marked-up Total is what the customer sees. (Per
+     your choice: both show the marked-up value; the PDF just hides the % column.)
 
-3) MARK INSTRUCTED FROM THE APPLICATION: click the status pill on a variation to
-   toggle Instructed / Not instructed. This writes back to the Variation Tracker
-   (settings.variations), so Project Details, budgets and WIP all update from the
-   same source. (Instructed variations feed those figures already.)
-
-4) SENT = FROZEN, DOUBLE-CLICK TO EDIT: when an application is marked as sent, its
-   variations are FROZEN as they are at that moment. A sent application is locked;
-   "Double-click here to edit this sent application" unlocks it for changes (same
-   pattern as the Contracted Rates lock), then Save re-persists.
-
-DATA MODEL
-----------
-• Drafts store only per-variation data (variationData keyed by varNumber+desc):
-  the % complete and any attachments. The variation identity/value/instructed
-  come live from the tracker.
-• On "Mark as sent" the full computed variation list is frozen into the
-  application (application.variations) so the sent document never changes if the
-  tracker later does.
-• New API action: set-variation-instructed (matched write-through to the tracker).
+3) DELIVERY SCHEDULE — AUTO-ASSIGN PROJECT ON RE-SYNC  (bug fix)
+   Previously, re-syncing skipped POs already known, so if you added the Xero
+   project (tracking) category to a PO AFTER it was first synced, the delivery
+   never picked it up. Now a re-sync UPDATES an existing delivery's project from
+   the PO's current Xero tracking category when it's been added or changed. New
+   POs still auto-assign from the category as before. (sync result now also
+   reports "updated".)
 
 FILES
 -----
-• lib/applications.js        (varKey, buildAppVariations, not-instructed excluded from totals)
-• pages/applications.js      (auto variations, grey/N-A not-instructed, instructed toggle, unlock; v4)
-• pages/api/applications.js  (submit freezes variations; set-variation-instructed)
+• lib/applications.js        (materialLineTotal w/ mark-up; not-instructed excluded)
+• pages/applications.js      (orange pill, materials mark-up column, PO picker; v5)
+• pages/api/applications.js  (GET returns all projectPOs w/ delivered flag)
+• pages/api/deliveries.js    (re-sync updates existing delivery project from tracking)
 
-NEXT (Phase 4): application PDF (Summary/Contract Works/Variations/Materials) with
-variation attachments appended, sent via the chase-email popout.
+NEXT (Phase 4): application PDF (customer copy hides the mark-up column) + send.
