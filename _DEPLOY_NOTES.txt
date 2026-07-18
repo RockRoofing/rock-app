@@ -1,15 +1,51 @@
-Contracted Rates — Save button on the Discount applicable box
-=============================================================
+Applications — PHASE 3: Variations + Materials on Site
+======================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v15"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v3"
+Deploy on top of Phase 2 (both files).
 
-CHANGE
-------
-A Save button now sits right next to the "Discount applicable (MCD) %" box. It
-saves the discount (and any other pending edits) without scrolling to the main
-toolbar. Enabled only when unlocked and there are unsaved changes; greys out once
-saved.
+VARIATIONS
+----------
+• "+ Add from tracker" opens a picker of the project's variations (from the
+  Variation Tracker). Tick any to add them to the application.
+• Each shows Instructed / Not instructed (carried from the tracker) and the value
+  (materials + labour + profit). The description MIRRORS THE CONTRACTED RATES —
+  it uses the variation's descriptionFull (the verbatim item-by-item text we now
+  store), not the shortened tracker summary.
+• Per variation: % Complete (with a ✓ = 100% button) → Value to date; Remove.
+• ATTACH DOCUMENTS: each variation has "+ Attach" (instructions or other docs,
+  uploaded to Vercel Blob). Attached files are listed with links and can be
+  removed. (These will be appended to the application PDF in Phase 4.)
+• A totals row shows variations Final value + Value to date.
+
+MATERIALS ON SITE
+-----------------
+• "+ Add from POs" lists line items from PURCHASE ORDERS NOT YET DELIVERED for
+  this project (matched by job number; a PO counts as undelivered until it has an
+  actual delivery date). Click a line to add it (description, PO no., qty, unit,
+  rate carried over). A manual line can also be entered.
+• Qty/rate are editable on the application; Total = qty x rate; a totals row sums
+  Materials on Site.
+
+SUMMARY
+-------
+The Summary + Certificate now include Variations (value to date) and Materials on
+Site automatically, and the This-Cert carry-forward accounts for them (as built
+in Phase 2).
+
+STORAGE / NOTES
+---------------
+• variations[] and materials[] are saved inside each application (via the existing
+  save action). Nothing is written back to the Variation Tracker or the POs.
+• The GET endpoint now also returns the project's tracker variations and its
+  undelivered PO lines (read from ops:deliveries, filtered by the project's jobNo
+  resolved from the dashboard cache).
 
 FILES
 -----
-• pages/contracted-rates.js
+• pages/applications.js       (variations + materials sections, two pickers; v3)
+• pages/api/applications.js   (GET returns variations + undeliveredPOs)
+
+NEXT (Phase 4): generate the application PDF (Summary / Contract Works / Variations
+/ Materials tabs) with the variation attachments appended, and send via the
+chase-email-style popout to selected customer contacts.

@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, saveProject } from '../../lib/db'
+import { getProject, saveProject, get } from '../../lib/db'
 import { computeApplicationSummary, buildContractWorksFromRates } from '../../lib/applications'
 
 // Applications live inside the project settings under `applications: [ ... ]`.
@@ -18,9 +18,34 @@ export default async function handler(req, res) {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
+
+    // Resolve this project's jobNo (from the dashboard cache) to match deliveries.
+    let jobNo = ''
+    try {
+      const cache = await get('dashboard:cache')
+      const row = Array.isArray(cache) ? cache.find(p => String(p.xeroId) === String(projectId)) : null
+      jobNo = row?.jobNo || ''
+    } catch {}
+    const matchKey = (s) => String(s || '').trim().replace(/^[#jJ]/, '').toLowerCase()
+    let undeliveredPOs = []
+    try {
+      const deliveries = (await get('ops:deliveries')) || []
+      undeliveredPOs = deliveries
+        .filter(d => !d.actualDeliveryDate)   // not yet delivered
+        .filter(d => jobNo ? (matchKey(d.projectNo) === matchKey(jobNo) || matchKey(d.project) === matchKey(jobNo)) : true)
+        .map(d => ({
+          poNumber: d.poNumber || '', supplier: d.supplier || '',
+          project: d.project || d.projectNo || '',
+          lineItems: (d.lineItems || []).map(li => ({ description: li.description || li.item || '', quantity: li.quantity ?? null, unit: li.unit || '', rate: li.unitAmount ?? li.rate ?? null })),
+        }))
+    } catch {}
+
     return res.json({
       applications: project.applications || [],
       contractedRates: project.contractedRates || null,
+      variations: project.variations || [],
+      undeliveredPOs,
+      jobNo,
       settings: {
         applicationDay: project.applicationDay || null,
         valuationDay: project.valuationDay || null,

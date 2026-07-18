@@ -16,6 +16,8 @@ export default function ApplicationsPage() {
   const [apps, setApps] = useState([])
   const [cr, setCr] = useState(null)
   const [settings, setSettings] = useState({})
+  const [trackerVariations, setTrackerVariations] = useState([])
+  const [undeliveredPOs, setUndeliveredPOs] = useState([])
   const [openId, setOpenId] = useState(null)     // application being edited
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -42,6 +44,8 @@ export default function ApplicationsPage() {
       setApps(d.applications || [])
       setCr(d.contractedRates || null)
       setSettings(d.settings || {})
+      setTrackerVariations(d.variations || [])
+      setUndeliveredPOs(d.undeliveredPOs || [])
     } catch { setMsg('Could not load applications.') }
     setLoading(false)
   }
@@ -93,7 +97,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v2</title></Head>
+      <Head><title>Rock Roofing — Applications · v3</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -116,6 +120,8 @@ export default function ApplicationsPage() {
               prevGross={prevGrossFor(openApp)}
               projectId={projectId}
               me={me}
+              trackerVariations={trackerVariations}
+              undeliveredPOs={undeliveredPOs}
               onBack={() => { setOpenId(null); load(projectId) }}
               onSaved={(updated) => setApps(a => a.map(x => x.id === updated.id ? updated : x))}
             />
@@ -204,33 +210,72 @@ function prevGrossForApp(sortedApps, app) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, prevGross, projectId, me, onBack, onSaved }) {
+function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], undeliveredPOs = [], onBack, onSaved }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
+  const [vars, setVars] = useState(() => (app.variations || []).map(v => ({ ...v })))
+  const [mats, setMats] = useState(() => (app.materials || []).map(m => ({ ...m })))
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [showAddVar, setShowAddVar] = useState(false)
+  const [showAddMat, setShowAddMat] = useState(false)
   const locked = !!app.status && app.status !== 'draft'
 
-  const workApp = { ...app, contractWorks: rows }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, prevGross, app.mcdPct, app.retentionPct])
+  const workApp = { ...app, contractWorks: rows, variations: vars, materials: mats }
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, vars, mats, prevGross, app.mcdPct, app.retentionPct])
 
   const setPct = (id, v) => {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
     setRows(list => list.map(r => r.id === id ? { ...r, pctComplete: n } : r)); setDirty(true)
   }
+  // Variations
+  const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
+  const varValue = (v) => num(v.materials) + num(v.labour) + num(v.profit)
+  const setVarPct = (id, v) => { const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0)); setVars(l => l.map(x => x.id === id ? { ...x, pctComplete: n } : x)); setDirty(true) }
+  const removeVar = (id) => { setVars(l => l.filter(x => x.id !== id)); setDirty(true) }
+  const addVariationsFromTracker = (chosen) => {
+    // Snapshot selected tracker variations into the application (mirrors the CRs
+    // via descriptionFull; keeps instructed flag + values).
+    const existingKeys = new Set(vars.map(v => v.trackerKey))
+    const toAdd = chosen.filter(v => !existingKeys.has(v.trackerKey)).map(v => ({
+      id: `av_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      trackerKey: v.trackerKey,
+      varNumber: v.varNumber || '',
+      description: v.descriptionFull || v.description || '',
+      instructed: !!v.instructed,
+      materials: v.materials || '0', labour: v.labour || '0', profit: v.profit || '0',
+      pctComplete: v.instructed ? 0 : 0,
+      attachments: [],
+    }))
+    if (toAdd.length) { setVars(l => [...l, ...toAdd]); setDirty(true) }
+    setShowAddVar(false)
+  }
+  async function attachToVar(id, file) {
+    try {
+      const { upload } = await import('@vercel/blob/client')
+      const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || undefined })
+      setVars(l => l.map(x => x.id === id ? { ...x, attachments: [...(x.attachments || []), { name: file.name, url: blob.url, at: Date.now() }] } : x))
+      setDirty(true)
+    } catch (e) { setMsg('Attachment upload failed: ' + (e?.message || e)) }
+  }
+  const removeAttachment = (vid, url) => { setVars(l => l.map(x => x.id === vid ? { ...x, attachments: (x.attachments || []).filter(a => a.url !== url) } : x)); setDirty(true) }
+  // Materials on site
+  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, ...m }]); setDirty(true); setShowAddMat(false) }
+  const removeMat = (id) => { setMats(l => l.filter(x => x.id !== id)); setDirty(true) }
+  const setMatField = (id, field, v) => { setMats(l => l.map(x => x.id === id ? { ...x, [field]: v } : x)); setDirty(true) }
 
   async function save(submit) {
     setSaving(true); setMsg('')
     try {
       const d = await fetch('/api/applications', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projectId, application: { ...app, contractWorks: rows } }),
+        body: JSON.stringify({ action: 'save', projectId, application: { ...app, contractWorks: rows, variations: vars, materials: mats } }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Save failed.'); setSaving(false); return }
       onSaved(d.application); setDirty(false)
       if (submit) {
         const s = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit', projectId, id: app.id, author: me?.name || '' }) }).then(r => r.json())
-        if (s.ok) { onSaved(s.application); setMsg('Submitted.') }
+        if (s.ok) { onSaved(s.application); setMsg('Marked as sent.') }
       } else setMsg('Saved.')
     } catch { setMsg('Save failed.') }
     setSaving(false)
@@ -312,10 +357,101 @@ function ApplicationEditor({ app, prevGross, projectId, me, onBack, onSaved }) {
         </div>
       </div>
 
-      <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 16 }}>Variations and Materials on Site come next (Phase 3). The Summary below already includes them once added.</div>
+      {/* Variations */}
+      <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Variations</div>
+          <div style={{ flex: 1 }} />
+          {!locked && <button onClick={() => setShowAddVar(true)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>+ Add from tracker</button>}
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+              <th style={th}>VO</th><th style={th}>Description</th><th style={th}>Status</th><th style={thR}>Final value</th><th style={thR}>% Complete</th><th style={thR}>Value to date</th><th style={th}>Docs</th><th style={thR}></th>
+            </tr></thead>
+            <tbody>
+              {vars.length === 0 && <tr><td colSpan={8} style={{ ...td, color: '#aaa' }}>No variations added. {locked ? '' : 'Use "Add from tracker".'}</td></tr>}
+              {vars.map(v => {
+                const val = varValue(v)
+                const vtd = val * num(v.pctComplete) / 100
+                return (
+                  <tr key={v.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ ...td, fontWeight: 600, color: '#6b7280' }}>{v.varNumber || '—'}</td>
+                    <td style={{ ...td, minWidth: 240, whiteSpace: 'pre-wrap' }}>{v.description || '—'}</td>
+                    <td style={td}><span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: v.instructed ? '#dcfce7' : '#fef9c3', color: v.instructed ? '#16a34a' : '#a16207' }}>{v.instructed ? 'Instructed' : 'Not instructed'}</span></td>
+                    <td style={tdR}>{fmt(val)}</td>
+                    <td style={tdR}>{locked ? `${v.pctComplete || 0}%` : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                        <input type="number" min="0" max="100" value={v.pctComplete ?? 0} onChange={e => setVarPct(v.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                        <button title="100%" onClick={() => setVarPct(v.id, 100)} style={{ background: v.pctComplete === 100 ? '#16a34a' : '#f0f2f5', color: v.pctComplete === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (v.pctComplete === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
+                      </div>
+                    )}</td>
+                    <td style={{ ...tdR, fontWeight: 600 }}>{fmt(vtd)}</td>
+                    <td style={td}>
+                      {(v.attachments || []).map(a => (
+                        <div key={a.url} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                          <a href={a.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</a>
+                          {!locked && <button onClick={() => removeAttachment(v.id, a.url)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>×</button>}
+                        </div>
+                      ))}
+                      {!locked && <label style={{ fontSize: 11, color: '#0f766e', cursor: 'pointer' }}>+ Attach<input type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attachToVar(v.id, f) }} /></label>}
+                    </td>
+                    <td style={tdR}>{!locked && <button onClick={() => removeVar(v.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Remove</button>}</td>
+                  </tr>
+                )
+              })}
+              <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
+                <td style={td}></td><td style={td} colSpan={2}>TOTAL</td>
+                <td style={tdR}>{fmt(sum.variationsFinal)}</td><td style={td}></td>
+                <td style={tdR}>{fmt(sum.variationsToDate)}</td><td colSpan={2}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Materials on Site */}
+      <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Materials on Site</div>
+          <div style={{ flex: 1 }} />
+          {!locked && <button onClick={() => setShowAddMat(true)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>+ Add from POs</button>}
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+              <th style={th}>Description</th><th style={th}>PO</th><th style={thR}>Qty</th><th style={th}>Unit</th><th style={thR}>Rate</th><th style={thR}>Total</th><th style={thR}></th>
+            </tr></thead>
+            <tbody>
+              {mats.length === 0 && <tr><td colSpan={7} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
+              {mats.map(m => {
+                const total = m.total != null ? m.total : (num(m.qty) * num(m.rate))
+                return (
+                  <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                    <td style={{ ...td, minWidth: 220, whiteSpace: 'normal' }}>{m.description}</td>
+                    <td style={{ ...td, color: '#6b7280' }}>{m.poNumber || '—'}</td>
+                    <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 60, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={td}>{m.unit || ''}</td>
+                    <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 80, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
+                    <td style={tdR}>{!locked && <button onClick={() => removeMat(m.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Remove</button>}</td>
+                  </tr>
+                )
+              })}
+              <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
+                <td style={td} colSpan={5}>TOTAL</td>
+                <td style={tdR}>{fmt(sum.materialsOnSite)}</td><td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
+
+      {showAddVar && <AddVariationsModal trackerVariations={trackerVariations} existing={vars} onClose={() => setShowAddVar(false)} onAdd={addVariationsFromTracker} />}
+      {showAddMat && <AddMaterialsModal pos={undeliveredPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} />}
     </>
   )
 }
@@ -363,6 +499,82 @@ function SummaryBlock({ sum, app }) {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+// Pick variations from the project's tracker to add to the application.
+function AddVariationsModal({ trackerVariations, existing, onClose, onAdd }) {
+  const withKeys = (trackerVariations || []).map((v, i) => ({ ...v, trackerKey: `${v.varNumber || ''}|${(v.description || '').slice(0, 40)}|${i}` }))
+  const existingKeys = new Set((existing || []).map(v => v.trackerKey))
+  const [sel, setSel] = useState(() => new Set())
+  const toggle = (k) => setSel(p => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const valOf = (v) => (parseFloat(v.materials) || 0) + (parseFloat(v.labour) || 0) + (parseFloat(v.profit) || 0)
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 640, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Add variations from the tracker</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>Tick the variations to include. Descriptions mirror the Contracted Rates. Instructed status carries over.</div>
+        {withKeys.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No variations on this project's tracker yet.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {withKeys.map(v => {
+            const already = existingKeys.has(v.trackerKey)
+            return (
+              <label key={v.trackerKey} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: 10, border: '1px solid #eee', borderRadius: 8, opacity: already ? 0.5 : 1, cursor: already ? 'default' : 'pointer' }}>
+                <input type="checkbox" disabled={already} checked={sel.has(v.trackerKey)} onChange={() => toggle(v.trackerKey)} style={{ marginTop: 3 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{v.varNumber || '—'} {already && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 400 }}>(already added)</span>}</div>
+                  <div style={{ fontSize: 12, color: '#555', whiteSpace: 'pre-wrap' }}>{v.descriptionFull || v.description || ''}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{v.instructed ? 'Instructed' : 'Not instructed'} · {money(valOf(v))}</div>
+                </div>
+              </label>
+            )
+          })}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => onAdd(withKeys.filter(v => sel.has(v.trackerKey)))} disabled={sel.size === 0} style={{ background: sel.size ? '#0f766e' : '#e5e7eb', color: sel.size ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: sel.size ? 'pointer' : 'default' }}>Add {sel.size || ''}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Pick materials-on-site lines from not-yet-delivered POs.
+function AddMaterialsModal({ pos, onClose, onAdd }) {
+  const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const flat = []
+  ;(pos || []).forEach((p, pi) => (p.lineItems || []).forEach((li, li2) => flat.push({ key: `${pi}_${li2}`, poNumber: p.poNumber, supplier: p.supplier, description: li.description, qty: li.quantity, unit: li.unit, rate: li.rate })))
+  const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '' })
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 640, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Add materials on site</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>From purchase orders not yet delivered. Click one to add it, or enter a manual line.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {flat.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No undelivered PO lines found for this project.</div>}
+          {flat.map(f => (
+            <button key={f.key} onClick={() => onAdd({ description: f.description, poNumber: f.poNumber, qty: f.qty, unit: f.unit, rate: f.rate })} style={{ textAlign: 'left', background: '#f8f9fa', border: '1px solid #eee', borderRadius: 8, padding: 10, cursor: 'pointer' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{f.description || '(no description)'}</div>
+              <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>{f.poNumber} · {f.supplier}{f.qty ? ` · qty ${f.qty}${f.unit ? ' ' + f.unit : ''}` : ''}{f.rate ? ` · ${money(f.rate)}` : ''}</div>
+            </button>
+          ))}
+        </div>
+        <div style={{ borderTop: '1px solid #eee', paddingTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 8 }}>OR ADD MANUALLY</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.7fr 0.7fr 0.9fr', gap: 8, marginBottom: 10 }}>
+            <input value={manual.description} onChange={e => setManual(m => ({ ...m, description: e.target.value }))} placeholder="Description" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
+            <input value={manual.qty} onChange={e => setManual(m => ({ ...m, qty: e.target.value }))} placeholder="Qty" type="number" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
+            <input value={manual.unit} onChange={e => setManual(m => ({ ...m, unit: e.target.value }))} placeholder="Unit" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
+            <input value={manual.rate} onChange={e => setManual(m => ({ ...m, rate: e.target.value }))} placeholder="Rate" type="number" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
+          </div>
+          <button onClick={() => { if (manual.description) onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate) }) }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Done</button>
+        </div>
       </div>
     </div>
   )
