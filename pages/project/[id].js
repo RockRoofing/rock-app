@@ -216,7 +216,7 @@ export default function ProjectPage() {
 
   return (
     <>
-      <Head><title>{p.jobNo} — {p.name} · v2</title></Head>
+      <Head><title>{p.jobNo} — {p.name} · v3</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a2e', padding: '0 24px' }}>
           <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
@@ -1399,8 +1399,8 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
     { key: 'quantitySurveyor', label: 'Quantity Surveyor (QS)' },
     { key: 'estimator', label: 'Estimator' },
   ]
-  const teamValue = (key) => (ov[key] != null && ov[key] !== '') ? ov[key] : (people?.team?.[key]?.name || '')
-  const fromIhm = (key) => !!(people?.team?.[key]?.name) && (ov[key] == null || ov[key] === '')
+  const teamValue = (key) => (ov[key] !== undefined) ? (ov[key] || '') : (people?.team?.[key]?.name || '')
+  const fromIhm = (key) => (ov[key] === undefined) && !!(people?.team?.[key]?.name)
 
   // Customer contacts: override list if set, else IHM-resolved list.
   const contacts = Array.isArray(ov.customerContacts) ? ov.customerContacts : (people?.customerContacts || [])
@@ -1411,29 +1411,37 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const removeContact = (i) => setContacts(contacts.filter((_, idx) => idx !== i))
 
   // Scalar fields that follow the same override → IHM → blank pattern.
+  // IMPORTANT: an override key that EXISTS wins even when it's an empty string —
+  // that represents "deliberately cleared", so it must not fall back to the IHM.
   const ihmBadge = { marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }
   const ovBadge = { marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }
-  const isOv = (k) => ov[k] != null && ov[k] !== ''
+  const hasOv = (k) => ov[k] !== undefined            // key present (incl. empty)
+  // display value = override (if key present) else IHM value else blank
+  const dispVal = (k, ihmVal) => hasOv(k) ? (ov[k] || '') : (ihmVal || '')
+  // "from IHM" only when there's no override AND the IHM actually has a value
+  const isFromIhm = (k, ihmVal) => !hasOv(k) && !!ihmVal
   // Site address
-  const addressDisplay = isOv('projectAddress') ? ov.projectAddress : (people?.projectAddress || '')
-  const addrOverridden = isOv('projectAddress')
-  const addrFromIhm = !addrOverridden && !!(people?.projectAddress)
+  const addressDisplay = dispVal('projectAddress', people?.projectAddress)
+  const addrOverridden = hasOv('projectAddress')
+  const addrFromIhm = isFromIhm('projectAddress', people?.projectAddress)
   // Order reference
-  const orderRefDisplay = isOv('orderRef') ? ov.orderRef : (people?.orderRef || '')
-  const orderOverridden = isOv('orderRef')
-  const orderFromIhm = !orderOverridden && !!(people?.orderRef)
+  const orderRefDisplay = dispVal('orderRef', people?.orderRef)
+  const orderOverridden = hasOv('orderRef')
+  const orderFromIhm = isFromIhm('orderRef', people?.orderRef)
   // Customer company
-  const custCompanyDisplay = isOv('customerCompany') ? ov.customerCompany : (people?.customerCompany || '')
-  const compOverridden = isOv('customerCompany')
-  const compFromIhm = !compOverridden && !!(people?.customerCompany)
+  const custCompanyDisplay = dispVal('customerCompany', people?.customerCompany)
+  const compOverridden = hasOv('customerCompany')
+  const compFromIhm = isFromIhm('customerCompany', people?.customerCompany)
   // Customer address
-  const custAddressDisplay = isOv('customerAddress') ? ov.customerAddress : (people?.customerAddress || '')
-  const custAddrOverridden = isOv('customerAddress')
-  const custAddrFromIhm = !custAddrOverridden && !!(people?.customerAddress)
+  const custAddressDisplay = dispVal('customerAddress', people?.customerAddress)
+  const custAddrOverridden = hasOv('customerAddress')
+  const custAddrFromIhm = isFromIhm('customerAddress', people?.customerAddress)
   // Retention % (stored as a fraction; shown as a whole percentage)
-  const retFraction = isOv('retentionPct') ? ov.retentionPct : (people?.retentionPct != null ? people.retentionPct : (form.retentionPct != null ? form.retentionPct : null))
+  const retFraction = hasOv('retentionPct')
+    ? (ov.retentionPct === '' ? '' : ov.retentionPct)
+    : (people?.retentionPct != null ? people.retentionPct : (form.retentionPct != null ? form.retentionPct : null))
   const retentionDisplay = (retFraction == null || retFraction === '') ? '' : (parseFloat(retFraction) * 100)
-  const retOverridden = isOv('retentionPct')
+  const retOverridden = hasOv('retentionPct')
   const retFromIhm = !retOverridden && people?.retentionPct != null
 
   return (
@@ -1606,7 +1614,7 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         </div>
         {TEAM_ROLES.map(({ key, label }) => (
           <div key={key}>
-            <label style={labelStyle}>{label}{fromIhm(key) && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{(ov[key] != null && ov[key] !== '') && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
+            <label style={labelStyle}>{label}{fromIhm(key) && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{ov[key] !== undefined && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
             <select value={teamValue(key)} onChange={e => setOverride(key, e.target.value)} style={inputStyle}>
               <option value="">— Select {label.replace(/\s*\(.*\)/, '')} —</option>
               {users.map(u => <option key={u.id || u.name} value={u.name}>{u.name}{u.role ? ` — ${u.role}` : ''}</option>)}

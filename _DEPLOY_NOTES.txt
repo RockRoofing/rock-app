@@ -1,20 +1,35 @@
-Weekly Report pop-out — explicit Save button
-=============================================
+FIX: can't delete Project Details fields — value snaps back / "from IHM"
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Outstanding Invoices tab shows "· v7"
-Deploy on top of WeeklyReport_recipients_and_schedule.
+Build: ✓ Compiled successfully  ·  Project page tab shows "· v3"
+Deploy on top of the ProjectDetails-from-IHM work.
 
-CHANGE
-------
-The pop-out previously saved silently on every tick/change, so it wasn't clear
-anything had happened. Now:
-  • Edits (day, hour, portal-user ticks, manual emails) update the form only.
-  • A clear "Save" button persists everything at once and CLOSES the pop-out —
-    so it's obvious it worked.
-  • "Cancel" closes without saving those edits.
-  • "Send now" still works, and now saves the on-screen recipients first so it
-    sends to exactly who's shown (not a stale list).
+THE BUG
+-------
+Clearing a field (site address, order ref, customer company/address, retention,
+or a team role) appeared to delete but immediately came back — and even claimed
+it was "from IHM" on projects that have no IHM.
+
+CAUSE
+-----
+The override logic treated an EMPTY string / empty array as "no override set", so
+a deliberately-cleared field fell back to the IHM value (or blank re-resolved as
+not-overridden). This was in BOTH the UI and the shared resolver, so it also
+re-appeared after save + reload.
+
+FIX
+---
+An override that EXISTS now wins — including an empty value, which means
+"deliberately cleared" and must NOT fall back to the IHM. Applied consistently to:
+  • Scalars: site address, order reference, customer company, customer address.
+  • Retention %.
+  • Team roles (CM/OM/QS/Estimator).
+  • Customer contacts (clearing them all now sticks).
+Both the form display AND lib/projectPeople.js (used by the dashboard + project
+API) were fixed, so cleared values persist through save/reload.
+Verified across scenarios: no-IHM+clear, IHM+clear, IHM+no-override, override-value.
 
 FILES
 -----
-• pages/outstanding-invoices.js   (Save/Cancel buttons; save-on-click; v7)
+• lib/projectPeople.js       (empty override / empty array = deliberate clear)
+• pages/project/[id].js      (same rule in the form; "· v3" marker)
