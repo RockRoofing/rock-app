@@ -468,7 +468,7 @@ export default function OutstandingInvoicesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Outstanding Invoices · v6</title></Head>
+      <Head><title>Rock Roofing — Outstanding Invoices · v7</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
@@ -864,37 +864,40 @@ function WeeklyReportModal({ onClose }) {
     setLoading(false)
   })() }, [])
 
-  async function saveRecipients(list) {
-    setSaving(true)
-    try {
-      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-recipients', recipients: list }) })
-      setRecipients(list)
-    } catch {}
-    setSaving(false)
-  }
+  // Edits update local state only; nothing is persisted until Save is clicked.
   function toggleUser(email) {
-    if (recipients.includes(email)) saveRecipients(recipients.filter(x => x !== email))
-    else saveRecipients([...recipients, email])
+    setRecipients(r => r.includes(email) ? r.filter(x => x !== email) : [...r, email])
   }
   function addEmail() {
     const e = input.trim()
     if (!e || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { setMsg('Enter a valid email address.'); return }
     if (recipients.includes(e)) { setMsg('Already added.'); return }
     setMsg(''); setInput('')
-    saveRecipients([...recipients, e])
+    setRecipients(r => [...r, e])
   }
-  function remove(e) { saveRecipients(recipients.filter(x => x !== e)) }
+  function remove(e) { setRecipients(r => r.filter(x => x !== e)) }
+  function setDay(dayOfWeek) { setSchedule(s => ({ ...s, dayOfWeek })) }
+  function setHour(hour) { setSchedule(s => ({ ...s, hour })) }
 
-  async function saveSchedule(next) {
-    setSchedule(next)
+  // Persist recipients + schedule together, confirm, then close.
+  async function saveAll() {
+    setSaving(true); setMsg('')
     try {
-      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-schedule', dayOfWeek: next.dayOfWeek, hour: next.hour }) })
-    } catch {}
+      const list = [...new Set(recipients.filter(Boolean))]
+      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-recipients', recipients: list }) })
+      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-schedule', dayOfWeek: schedule.dayOfWeek, hour: schedule.hour }) })
+      onClose()
+    } catch (e) {
+      setMsg('Could not save — please try again.'); setSaving(false)
+    }
   }
 
   async function sendNow() {
     setSending(true); setMsg('')
     try {
+      // Persist current on-screen recipients first so "Send now" uses them.
+      const list = [...new Set(recipients.filter(Boolean))]
+      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-recipients', recipients: list }) })
       const r = await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-report-now' }) })
       const d = await r.json()
       setMsg(d.ok ? `Sent to ${(d.sentTo || []).length} recipient(s).` : (d.note || d.error || 'Could not send.'))
@@ -922,11 +925,11 @@ function WeeklyReportModal({ onClose }) {
               <div style={{ fontSize: 11, fontWeight: 700, color: '#888', margin: '0 0 8px' }}>WHEN IT'S SENT</div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6 }}>
                 <span style={{ fontSize: 13, color: '#555' }}>Every</span>
-                <select value={schedule.dayOfWeek} onChange={e => saveSchedule({ ...schedule, dayOfWeek: parseInt(e.target.value) })} style={box}>
+                <select value={schedule.dayOfWeek} onChange={e => setDay(parseInt(e.target.value))} style={box}>
                   {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
                 </select>
                 <span style={{ fontSize: 13, color: '#555' }}>at</span>
-                <select value={schedule.hour} onChange={e => saveSchedule({ ...schedule, hour: parseInt(e.target.value) })} style={box}>
+                <select value={schedule.hour} onChange={e => setHour(parseInt(e.target.value))} style={box}>
                   {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
                 </select>
               </div>
@@ -962,11 +965,16 @@ function WeeklyReportModal({ onClose }) {
 
               {msg && <div style={{ fontSize: 12, color: msg.startsWith('Sent') ? '#16a34a' : '#dc2626', marginTop: 12 }}>{msg}</div>}
 
-              <div style={{ borderTop: '1px solid #eee', marginTop: 18, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: '#888' }}>Send this week's report now:</span>
-                <button onClick={sendNow} disabled={sending} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}>
+              <div style={{ borderTop: '1px solid #eee', marginTop: 18, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <button onClick={sendNow} disabled={sending || saving} style={{ background: '#fff', color: '#1a1a2e', border: '1px solid #d5d5d5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: (sending || saving) ? 'default' : 'pointer', opacity: (sending || saving) ? 0.6 : 1, fontWeight: 600 }}>
                   {sending ? 'Sending…' : 'Send now'}
                 </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={onClose} disabled={saving} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={saveAll} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
               </div>
             </>
           )}

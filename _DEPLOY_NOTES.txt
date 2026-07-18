@@ -1,46 +1,20 @@
-Weekly Report — editable recipients (portal users + manual) + editable day/time
-===============================================================================
+Weekly Report pop-out — explicit Save button
+=============================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Outstanding Invoices tab shows "· v6"
-Requires Vercel PRO (adds a 3rd, hourly cron).
+Build: ✓ Compiled successfully  ·  Outstanding Invoices tab shows "· v7"
+Deploy on top of WeeklyReport_recipients_and_schedule.
 
-WHAT'S NEW (all in the "Weekly Report" pop-out on Outstanding Invoices)
-----------------------------------------------------------------------
-• WHEN IT'S SENT: pick the day of week + hour (e.g. Thursday at 15:00). UK time,
-  sends on the hour. Saved as you change it.
-• PORTAL USERS: a checklist of all active portal users — tick anyone who should
-  receive the report.
-• OTHER EMAIL ADDRESSES: add/remove any manual email (e.g. someone outside the
-  business), as before.
-• Send now: unchanged.
-
-RECIPIENT MODEL CHANGE (please note)
-------------------------------------
-The report now goes to EXACTLY the people in this pop-out (ticked portal users +
-manual emails). Previously it auto-sent to everyone with post-contract/mgmt/admin
-access. Safety net: if the list is ever empty, it falls back to the old auto
-post-contract/mgmt/admin recipients so it never sends to nobody. => After
-deploying, open the pop-out once and tick who should receive it.
-
-HOW THE TIMING WORKS (honest detail)
-------------------------------------
-A once-a-day cron can't fire at an arbitrary hour, so this adds a dedicated cron
-that runs HOURLY (/api/cron/weekly-report) and sends only when the configured
-day + hour match the current UK time, guarded so it never sends twice in a day.
-The old Thursday piggyback inside hs-expiry-email has been REMOVED (no double
-sends). vercel.json now has 3 crons (Pro allows this):
-   deliveries-sync  0 6 * * *
-   hs-expiry-email  0 8 * * *
-   weekly-report    0 * * * *   (NEW, hourly)
-Test immediately with:  /api/cron/weekly-report?force=1
+CHANGE
+------
+The pop-out previously saved silently on every tick/change, so it wasn't clear
+anything had happened. Now:
+  • Edits (day, hour, portal-user ticks, manual emails) update the form only.
+  • A clear "Save" button persists everything at once and CLOSES the pop-out —
+    so it's obvious it worked.
+  • "Cancel" closes without saving those edits.
+  • "Send now" still works, and now saves the on-screen recipients first so it
+    sends to exactly who's shown (not a stale list).
 
 FILES
 -----
-• pages/outstanding-invoices.js         (new pop-out UI: schedule + portal picker; v6)
-• pages/api/outstanding-invoices.js     (report-settings GET; set-schedule POST)
-• lib/outstandingInvoicesReport.js      (schedule storage + maybeSendScheduledReport;
-                                         recipients = managed list w/ fallback)
-• pages/api/cron/weekly-report.js       (NEW hourly cron)
-• pages/api/cron/hs-expiry-email.js     (removed Thursday report piggyback)
-• middleware.js                         (/api/cron passthrough)
-• vercel.json                           (added hourly weekly-report cron)
+• pages/outstanding-invoices.js   (Save/Cancel buttons; save-on-click; v7)
