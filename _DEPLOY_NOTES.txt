@@ -1,14 +1,65 @@
-Outstanding Invoices — default sort = Due date
-==============================================
+Applications feature — PHASE 1: Contracted Rates page
+=====================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v9"
+Build: ✓ Compiled successfully  ·  Contracted Rates tab shows "· v1"
+Access: post-contract + management + admin.
 
-CHANGE
-------
-The page now defaults to sorting by "Due date" (soonest first) instead of
-"Most overdue". The Sort dropdown still offers Most overdue / Largest due /
-Due date if you want to change it.
+WHAT THIS ADDS
+--------------
+A new "Contracted Rates" page in the Commercial Portal (linked from Commercial
+nav, alongside a placeholder "Applications" page which comes in Phase 2).
+
+WORKFLOW
+--------
+1. Pick a project.
+2. Upload your costings / contract-rates workbook (.xlsm or .xlsx). The server
+   parses the "TAKE OFF" tab:
+     A=code, E=qty, F=unit, G=description, H=complete rate, I=total,
+     J=materials rate (budget), L=labour rate (budget).
+   It splits ABOVE THE LINE (contract works) from BELOW THE LINE ITEMS at the
+   divider row, keeps section headings, and flags "Rate only" below-line items.
+   (Validated against Bradford Works: above-the-line total = £92,200.84, exactly
+   matching the sheet's own total row.)
+3. Review the grid. While UNLOCKED you can:
+     • Move any item across the line (above <-> below) via the row ⋯ menu.
+     • Move items up/down within a section.
+     • Edit any cell (code, qty, unit, description, rate, mat rate, lab rate).
+     • Strike through a line (stays on the document, shown struck) or delete it.
+     • Add new above/below-the-line lines.
+4. Save. Then Lock contracted rates. Once LOCKED the grid is read-only; to change
+   it you DOUBLE-CLICK "Double-click here to edit contracted rates", which asks
+   "Edit contracted rates? Are you sure…" before unlocking.
+5. Delete & re-upload removes the set so you can upload a fresh file.
+
+BUDGET COLUMNS
+--------------
+Materials rate (J) and Labour rate (L) show in BLUE budget columns, plus summary
+cards for the above-the-line materials/labour budget (qty x rate). These are for
+margin tracking — they will NOT appear on the customer application.
+
+STORAGE
+-------
+Saved inside the project settings under `contractedRates`
+({ items, locked, fileName, uploadedAt, savedAt }), so it travels with the
+project and will feed the Application in Phase 2.
+
+NOTE / LIMITS
+-------------
+• Upload is base64 through the API (6MB body limit). The sample file is ~2.7MB
+  which is fine. If a much larger workbook ever fails to upload, tell me and I'll
+  switch this to the direct Blob upload path.
+• Auto-renumbering of above-the-line items happens when the APPLICATION is built
+  (Phase 2), not on this page — here the original sheet codes are preserved.
 
 FILES
 -----
-• pages/outstanding-invoices.js
+• lib/contractRatesParser.js       (NEW — parser + totals; validated)
+• pages/api/contracted-rates.js    (NEW — parse-upload / save / set-lock / delete)
+• pages/contracted-rates.js        (NEW — the page)
+• pages/applications.js            (NEW — Phase 2 placeholder so the nav link works)
+• pages/commercial.js              (added Contracted Rates + Applications nav links)
+
+NEXT (Phase 2, on your OK after testing): build an application from the locked
+rates — contract works % complete, variations (instructed/not), materials on
+site from undelivered POs, dates from Project Details, PDF + send, CM approval,
+and a table of previously submitted applications.
