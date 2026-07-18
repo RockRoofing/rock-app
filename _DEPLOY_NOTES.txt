@@ -1,35 +1,28 @@
-Commercial + Project Details — labels, tooltips, Remaining incl WIP, WIP-tab filters
-====================================================================================
+WIP tab — manual adjustments reworked (single Cost type, editable, month-on-add)
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+*** Deploy Group A first (or together, taking this newer project/[id].js). ***
 
-REMAINING TO CLAIM now INCLUDES WIP
- • Project Financials & EOM: Remaining (Ex.) = Anticipated Final Account −
-   (Invoiced + WIP); Remaining (Inc.) then adds retention. Floored at £0.
-   (dashboard.js + commercial.js). Tooltips updated to describe this.
+CHANGES (pages/project/[id].js — WIP tab manual adjustments)
+------------------------------------------------------------
+• ONE adjustment type only: "Cost adjustment", accepting POSITIVE or NEGATIVE
+  amounts. Positive = cost incurred but not yet in Xero (increases WIP). Negative
+  = cost you won't recover / WIP write-down (decreases WIP). The old "Invoice"
+  type is removed — it never actually affected WIP and was redundant with the
+  invoice sync. WIP = (post-val costs + net cost adjustment) / (1 − margin).
+• Adjustments are now EDITABLE inline (Edit → change month/description/amount →
+  Save), in addition to delete.
+• The month selector DEFAULTS to the last full month (previous calendar month),
+  still fully changeable.
+• The Add button shows the month it will apply to by NAME, e.g. "+ Add to June
+  2026" — so you set and confirm the month at the same time.
+• Footer now shows a single "Net cost adjustment" for the month.
 
-TOOLTIPS
- • AFA tooltip now reads "Anticipated Final Account" (Budget Tracker AND EOM).
- • EOM table column headers now have hover descriptions (were missing).
+This file also carries the Group A Project Details changes (Income key/exact
+values, WIP-tab filters, WIP Margin Override label, Invoiced Inc. Retention
+rename, variations default). It is the latest full version of the file — use it.
 
-PROJECT DETAILS
- • Overview: "Gross Invoiced Inc. Retention" -> "Invoiced Inc. Retention"
-   (also the Income tab card).
- • Income chart: bar labels show the EXACT invoiced amount; added a KEY
-   (green = Invoiced, dark = Latest month). The dark bar is just the latest
-   month highlight — NOT a payment-status indicator.
- • "Margin Override" card -> "WIP Margin Override".
- • WIP tab: month filter DEFAULTS to the last full month; suppliers are now a
-   searchable picker; account filter is a multi-select-by-code dropdown; and the
-   Labour/Materials filter matches the Costs tab (dropdown). All consistent with
-   the Costs tab.
-
-STILL TO COME (separate) — WIP manual adjustments (editable, default month,
-add-with-month button, and the cost-vs-invoice logic) will follow once we've
-agreed how invoice adjustments should behave.
-
-FILES CHANGED
--------------
-• pages/commercial.js
-• pages/api/dashboard.js
+FILE CHANGED
+------------
 • pages/project/[id].js

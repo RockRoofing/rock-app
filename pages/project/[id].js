@@ -941,9 +941,12 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
   const [marginOverride, setMarginOverride] = useState(settings.wipMarginOverride || '')
   const [savingMargin, setSavingMargin] = useState(false)
   const [adjustments, setAdjustments] = useState([])
-  const [adjForm, setAdjForm] = useState({ type: 'Cost', description: '', amount: '' })
+  const [adjForm, setAdjForm] = useState({ description: '', amount: '' })
+  const [editingAdj, setEditingAdj] = useState(null)   // { id, description, amount, month }
   const [adjMonth, setAdjMonth] = useState(() => {
+    // Default to the last FULL month (previous calendar month).
     const d = new Date()
+    d.setMonth(d.getMonth() - 1)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
   })
   const [savingAdj, setSavingAdj] = useState(false)
@@ -967,11 +970,31 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
       const res = await fetch(`/api/project/${id}/wip-adjustments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...adjForm, month: adjMonth })
+        body: JSON.stringify({ type: 'Cost', description: adjForm.description, amount: adjForm.amount, month: adjMonth })
       })
       const data = await res.json()
       setAdjustments(data.adjustments || [])
-      setAdjForm({ type: 'Cost', description: '', amount: '' })
+      setAdjForm({ description: '', amount: '' })
+    } catch {}
+    setSavingAdj(false)
+  }
+
+  async function updateAdjustment() {
+    if (!editingAdj || editingAdj.amount === '' || !editingAdj.description) return
+    setSavingAdj(true)
+    try {
+      // Update = delete old + re-add with new values (keeps the API simple).
+      await fetch(`/api/project/${id}/wip-adjustments`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adjId: editingAdj.id })
+      })
+      const res = await fetch(`/api/project/${id}/wip-adjustments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'Cost', description: editingAdj.description, amount: editingAdj.amount, month: editingAdj.month })
+      })
+      const data = await res.json()
+      setAdjustments(data.adjustments || [])
+      setEditingAdj(null)
     } catch {}
     setSavingAdj(false)
   }
@@ -1052,8 +1075,7 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
   const monthAdjustments = wipMonthKey
     ? adjustments.filter(a => a.month === wipMonthKey)
     : []
-  const adjCostTotal = monthAdjustments.filter(a => a.type === 'Cost').reduce((s, a) => s + a.amount, 0)
-  const adjInvoiceTotal = monthAdjustments.filter(a => a.type === 'Invoice').reduce((s, a) => s + a.amount, 0)
+  const adjCostTotal = monthAdjustments.reduce((s, a) => s + a.amount, 0)
   const adjustedPostValCosts = postValTotal + adjCostTotal
   const wipValue = effectiveMargin != null && effectiveMargin < 1 && adjustedPostValCosts > 0 ? adjustedPostValCosts / (1 - effectiveMargin) : 0
 
@@ -1188,21 +1210,8 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
       <div style={{ marginTop: 24, background: '#fff', borderRadius: 10, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Manual Adjustments</h3>
-            <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>One-off cost or invoice adjustments for a specific month only — never carried forward</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: '#666' }}>Month:</span>
-            <select value={adjMonth} onChange={e => setAdjMonth(e.target.value)}
-              style={{ padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }}>
-              {Array.from({ length: 24 }, (_, i) => {
-                const d = new Date()
-                d.setMonth(d.getMonth() - i)
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-                return <option key={key} value={key}>{label}</option>
-              })}
-            </select>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Manual WIP Cost Adjustments</h3>
+            <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>One-off cost adjustments for a specific month only — never carried forward. Use a POSITIVE amount for cost incurred but not yet in Xero (increases WIP), or a NEGATIVE amount for cost you won't recover / a WIP write-down (decreases WIP).</p>
           </div>
         </div>
 
@@ -1210,54 +1219,87 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 16 }}>
             <thead>
               <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                {['Month', 'Type', 'Description', 'Amount', ''].map(h => (
+                {['Month', 'Description', 'Amount', ''].map(h => (
                   <th key={h} style={{ padding: '7px 10px', textAlign: h === 'Amount' ? 'right' : 'left', fontWeight: 600, color: '#555', fontSize: 11 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {[...adjustments].sort((a, b) => b.month.localeCompare(a.month)).map(adj => (
-                <tr key={adj.id} style={{ borderBottom: '1px solid #f0f0f0', background: adj.month === wipMonthKey ? '#fffbeb' : 'inherit' }}>
-                  <td style={{ padding: '7px 10px', color: '#555' }}>
-                    {adj.month === wipMonthKey && <span style={{ marginRight: 4, fontSize: 9, background: '#fde68a', color: '#92400e', borderRadius: 4, padding: '1px 4px', fontWeight: 600 }}>CURRENT</span>}
-                    {new Date(adj.month + '-01').toLocaleString('en-GB', { month: 'short', year: 'numeric' })}
-                  </td>
-                  <td style={{ padding: '7px 10px' }}>
-                    <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, fontWeight: 600, background: adj.type === 'Cost' ? '#fff7ed' : '#f0fdf4', color: adj.type === 'Cost' ? '#c2410c' : '#15803d' }}>{adj.type}</span>
-                  </td>
-                  <td style={{ padding: '7px 10px', color: '#333' }}>{adj.description}</td>
-                  <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: adj.amount >= 0 ? '#333' : '#e63946' }}>{fmtC(adj.amount)}</td>
-                  <td style={{ padding: '7px 10px', textAlign: 'center' }}>
-                    <button onClick={() => deleteAdjustment(adj.id)} style={{ background: 'none', border: 'none', color: '#e63946', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
-                  </td>
-                </tr>
-              ))}
+              {[...adjustments].sort((a, b) => b.month.localeCompare(a.month)).map(adj => {
+                const isEditing = editingAdj?.id === adj.id
+                if (isEditing) {
+                  return (
+                    <tr key={adj.id} style={{ borderBottom: '1px solid #f0f0f0', background: '#eef2ff' }}>
+                      <td style={{ padding: '5px 10px' }}>
+                        <select value={editingAdj.month} onChange={e => setEditingAdj({ ...editingAdj, month: e.target.value })}
+                          style={{ padding: '4px 6px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 11 }}>
+                          {Array.from({ length: 24 }, (_, i) => {
+                            const d = new Date(); d.setMonth(d.getMonth() - i + 1)
+                            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                            return <option key={key} value={key}>{new Date(key + '-01').toLocaleString('en-GB', { month: 'short', year: 'numeric' })}</option>
+                          })}
+                        </select>
+                      </td>
+                      <td style={{ padding: '5px 10px' }}>
+                        <input value={editingAdj.description} onChange={e => setEditingAdj({ ...editingAdj, description: e.target.value })}
+                          style={{ width: '100%', padding: '4px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }} />
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right' }}>
+                        <input type="number" value={editingAdj.amount} onChange={e => setEditingAdj({ ...editingAdj, amount: e.target.value })}
+                          style={{ width: 110, padding: '4px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
+                      </td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        <button onClick={updateAdjustment} disabled={savingAdj} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, padding: '4px 8px', cursor: 'pointer', marginRight: 4 }}>Save</button>
+                        <button onClick={() => setEditingAdj(null)} style={{ background: '#f0f2f5', color: '#555', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}>Cancel</button>
+                      </td>
+                    </tr>
+                  )
+                }
+                return (
+                  <tr key={adj.id} style={{ borderBottom: '1px solid #f0f0f0', background: adj.month === wipMonthKey ? '#fffbeb' : 'inherit' }}>
+                    <td style={{ padding: '7px 10px', color: '#555' }}>
+                      {adj.month === wipMonthKey && <span style={{ marginRight: 4, fontSize: 9, background: '#fde68a', color: '#92400e', borderRadius: 4, padding: '1px 4px', fontWeight: 600 }}>CURRENT</span>}
+                      {new Date(adj.month + '-01').toLocaleString('en-GB', { month: 'short', year: 'numeric' })}
+                    </td>
+                    <td style={{ padding: '7px 10px', color: '#333' }}>{adj.description}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 600, color: adj.amount >= 0 ? '#333' : '#e63946' }}>{fmtC(adj.amount)}</td>
+                    <td style={{ padding: '7px 10px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => setEditingAdj({ id: adj.id, description: adj.description, amount: adj.amount, month: adj.month })} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}>Edit</button>
+                      <button onClick={() => deleteAdjustment(adj.id)} style={{ background: 'none', border: 'none', color: '#e63946', cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: '0 4px' }}>×</button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
 
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f8f9fa', borderRadius: 8, padding: '10px 12px' }}>
-          <select value={adjForm.type} onChange={e => setAdjForm({ ...adjForm, type: e.target.value })}
-            style={{ padding: '6px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, width: 90 }}>
-            <option value="Cost">Cost</option>
-            <option value="Invoice">Invoice</option>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f8f9fa', borderRadius: 8, padding: '10px 12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#666' }}>Month:</span>
+          <select value={adjMonth} onChange={e => setAdjMonth(e.target.value)}
+            style={{ padding: '6px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }}>
+            {Array.from({ length: 24 }, (_, i) => {
+              const d = new Date(); d.setMonth(d.getMonth() - i + 1)   // last full month first
+              const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+              const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+              return <option key={key} value={key}>{label}</option>
+            })}
           </select>
           <input placeholder="Description" value={adjForm.description} onChange={e => setAdjForm({ ...adjForm, description: e.target.value })}
-            style={{ flex: 1, padding: '6px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }} />
-          <input placeholder="Amount (£)" type="number" value={adjForm.amount} onChange={e => setAdjForm({ ...adjForm, amount: e.target.value })}
-            style={{ width: 120, padding: '6px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }}
+            style={{ flex: 1, minWidth: 140, padding: '6px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }} />
+          <input placeholder="Amount (£, − to reduce)" type="number" value={adjForm.amount} onChange={e => setAdjForm({ ...adjForm, amount: e.target.value })}
+            style={{ width: 150, padding: '6px 10px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }}
             onKeyDown={e => e.key === 'Enter' && addAdjustment()} />
-          <button onClick={addAdjustment} disabled={savingAdj || !adjForm.description || !adjForm.amount}
-            style={{ padding: '6px 14px', background: (!adjForm.description || !adjForm.amount) ? '#ddd' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: (!adjForm.description || !adjForm.amount) ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-            {savingAdj ? 'Saving...' : `+ Add to ${adjMonth}`}
+          <button onClick={addAdjustment} disabled={savingAdj || !adjForm.description || adjForm.amount === ''}
+            style={{ padding: '6px 14px', background: (!adjForm.description || adjForm.amount === '') ? '#ddd' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: (!adjForm.description || adjForm.amount === '') ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+            {savingAdj ? 'Saving...' : `+ Add to ${new Date(adjMonth + '-01').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}`}
           </button>
         </div>
 
         {monthAdjustments.length > 0 && (
           <div style={{ marginTop: 12, display: 'flex', gap: 16, fontSize: 12 }}>
             <span style={{ color: '#888' }}>Adjustments for {new Date(adjMonth + '-01').toLocaleString('en-GB', { month: 'long', year: 'numeric' })}:</span>
-            {adjCostTotal !== 0 && <span style={{ color: '#c2410c', fontWeight: 600 }}>Costs: {fmtC(adjCostTotal)}</span>}
-            {adjInvoiceTotal !== 0 && <span style={{ color: '#15803d', fontWeight: 600 }}>Invoices: {fmtC(adjInvoiceTotal)}</span>}
+            <span style={{ color: adjCostTotal >= 0 ? '#c2410c' : '#e63946', fontWeight: 600 }}>Net cost adjustment: {fmtC(adjCostTotal)}</span>
           </div>
         )}
       </div>
