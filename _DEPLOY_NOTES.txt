@@ -1,41 +1,17 @@
-Contracted Rates — upload fix (large files) + nav fix
-=====================================================
+Contracted Rates — only import rows with a code in column A
+==========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Contracted Rates tab shows "· v2"
-Deploy on top of Applications_Phase1_ContractedRates.zip.
+Build: ✓ Compiled successfully
+Deploy on top of the Contracted Rates work.
 
-1) UPLOAD FIX  ("Upload failed: Unexpected token 'R', Request En…")
-------------------------------------------------------------------
-Cause: base64-in-the-request-body exceeded Vercel's ~4.5MB serverless request
-limit, so the platform rejected it with a plain-text "Request Entity Too Large"
-BEFORE our handler ran — hence the non-JSON error.
-Fix: the page now uploads the file DIRECTLY to Vercel Blob (no 4.5MB limit, up to
-50MB) and sends the blob URL to the API, which fetches + parses it. Small files
-still work; large .xlsm files now upload fine.
-  • blob-upload.js: added macro-enabled Excel (.xlsm) + octet-stream MIME types.
-  • contracted-rates.js API: parse-upload now accepts { fileUrl } (preferred) or
-    { fileData } (base64 fallback).
-  • contracted-rates.js page: uses @vercel/blob/client upload() then parse-by-URL.
-Requires BLOB_READ_WRITE_TOKEN in the environment (already set — Blob is used for
-deliveries + admin documents).
-
-2) NAV FIX
-----------
-Contracted Rates and Applications are now just normal items in the FULL Commercial
-nav — clicking them no longer hides the other items. Introduced a shared
-components/CommercialNav.js used by both new pages: it always renders the complete
-set (Project Financials, Outstanding Invoices, Retention, Variations, Contracted
-Rates, Applications, Application Calendar, Commercial Scorecard) and highlights the
-current page. Project Financials (commercial.js) already shows everything, so it's
-unchanged.
-Note: the other older commercial pages (Outstanding Invoices, Retention, Variations)
-still have their own inline navs; if you want them all standardised on
-CommercialNav too, say the word and I'll migrate them.
+CHANGE
+------
+On upload, the parser now keeps ONLY rows that have a value (a number or a
+letter) in column A. Every blank spacer row, and any total/sub-total line that
+has a figure but no item code, is dropped.
+Verified against Bradford Works: keeps all 32 coded lines (items 1–21, 11.1,
+H/I/J above the line; A–G below), removes the blanks.
 
 FILES
 -----
-• components/CommercialNav.js      (NEW — shared full nav)
-• pages/contracted-rates.js        (blob upload + shared nav; v2)
-• pages/applications.js            (shared nav)
-• pages/api/contracted-rates.js    (parse-upload accepts fileUrl)
-• pages/api/blob-upload.js         (allow .xlsm MIME types)
+• lib/contractRatesParser.js
