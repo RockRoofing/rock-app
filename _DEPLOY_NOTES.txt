@@ -1,16 +1,33 @@
-Contracted Rates — sticky selection / combine bar
-=================================================
+Contracted Rates → variations: auto-number + summarised description
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  tab shows "· v8"
+Build: ✓ Compiled successfully  ·  tab shows "· v9"
+Deploy both files together.
 
-CHANGE
-------
-When any lines are ticked, the selection bar (with the "Combine … into one
-variation" button, the running totals and Clear selection) now STICKS to the top
-of the screen as you scroll. You can tick items anywhere down the list and the
-Combine button is always in view — no scrolling back up. It sits just below the
-Commercial nav.
+1) AUTO VARIATION NUMBER
+------------------------
+When you turn item(s) into a variation, the Variation No. is pre-filled with the
+next number in sequence for that project — V01, V02, V03 … (reads the project's
+existing variations; handles mixed formats like "VO 5" or "3"). Still editable.
+
+2) SUMMARISED DESCRIPTION FOR LONG COMBINES
+-------------------------------------------
+Combining several items no longer produces an enormous description in the tracker.
+If the combined text is long (>140 chars), the Variation Tracker gets a short
+summary that names the schedule item codes + a trimmed lead description, e.g.
+   "Items A, B, C: Supply and install additional single ply membrane… (+2 more)"
+The modal flags this ("summarised") and explains the full detail is preserved.
+
+3) FULL DETAIL KEPT FOR THE APPLICATION
+---------------------------------------
+The variation now also stores:
+   • descriptionFull — the verbatim, line-per-item description, and
+   • sourceItems     — the exact schedule lines (code, description, qty, unit, rate)
+so the Application (Phase 2) can mirror the Contracted Rates exactly, regardless
+of the shortened tracker summary. The GET endpoint now also returns the project's
+existing variations (used to compute the next number).
 
 FILES
 -----
-• pages/contracted-rates.js
+• pages/contracted-rates.js       (next number, summariser, full detail; v9)
+• pages/api/contracted-rates.js   (GET returns variations; store descriptionFull + sourceItems)

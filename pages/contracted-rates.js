@@ -25,6 +25,7 @@ export default function ContractedRatesPage() {
   const [editRow, setEditRow] = useState(null)  // item id being edited
   const [confirmEdit, setConfirmEdit] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
+  const [variations, setVariations] = useState([])
 
   useEffect(() => { (async () => {
     try {
@@ -45,6 +46,7 @@ export default function ContractedRatesPage() {
     try {
       const d = await fetch(`/api/contracted-rates?projectId=${encodeURIComponent(pid)}`).then(r => r.json())
       applyCr(d.contractedRates)
+      setVariations(d.variations || [])
     } catch { setMsg('Could not load contracted rates.') }
     setLoading(false)
   }
@@ -194,21 +196,41 @@ export default function ContractedRatesPage() {
   const [varModal, setVarModal] = useState(null)  // { items:[...], varNumber, description }
 
   // Open the variation modal for a single item or a group of items.
+  // Next variation number for this project: V01, V02, … based on existing ones.
+  function nextVarNumber() {
+    let max = 0
+    for (const v of (variations || [])) {
+      const m = String(v.varNumber || '').match(/(\d+)/)
+      if (m) max = Math.max(max, parseInt(m[1], 10))
+    }
+    return `V${String(max + 1).padStart(2, '0')}`
+  }
+
+  // Build a description. Full = each line verbatim (used by the Application so it
+  // mirrors the CRs). If that's very long, the tracker gets a shorter summary
+  // that names the schedule item codes + a trimmed lead description.
+  function buildDescriptions(list) {
+    const full = list.map(x => `${x.code ? x.code + ' — ' : ''}${x.description || ''}`.trim()).join('\n')
+    if (list.length === 1) return { description: list[0].description || '', full: list[0].description || '' }
+    const SUMMARY_LIMIT = 140
+    if (full.length <= SUMMARY_LIMIT) return { description: full, full }
+    const codes = list.map(x => x.code).filter(Boolean)
+    const lead = (list[0].description || '').slice(0, 60).trim()
+    const codePart = codes.length ? `Items ${codes.join(', ')}` : `${list.length} rate items`
+    const summary = `${codePart}: ${lead}${lead ? '…' : ''} (+${list.length - 1} more)`
+    return { description: summary, full }
+  }
+
   function openVariation(itemsArr) {
     const list = itemsArr.filter(x => x && x.kind === 'item')
     if (!list.length) return
-    const single = list.length === 1
-    const varNumber = single ? (list[0].code || '') : list.map(x => x.code).filter(Boolean).join('+')
-    // Default combined description: each item's description on its own line.
-    const description = single
-      ? (list[0].description || '')
-      : list.map(x => `${x.code ? x.code + ' — ' : ''}${x.description || ''}`).join('\n')
-    setVarModal({ items: list, varNumber, description })
+    const { description, full } = buildDescriptions(list)
+    setVarModal({ items: list, varNumber: nextVarNumber(), description, descriptionFull: full, autoSummarised: description !== full })
   }
 
   async function submitVariation() {
     if (!projectId || !varModal) return
-    const { items: list, varNumber, description } = varModal
+    const { items: list, varNumber, description, descriptionFull } = varModal
     const matTotal = list.reduce((s, x) => s + lineMatTotal(x), 0)
     const labTotal = list.reduce((s, x) => s + lineLabTotal(x), 0)
     const rateTotal = list.reduce((s, x) => s + lineRateTotal(x), 0)
@@ -222,6 +244,11 @@ export default function ContractedRatesPage() {
           variation: {
             varNumber: varNumber || '',
             description: description || '',
+            // Verbatim, line-per-item description for the Application (mirrors the CRs).
+            descriptionFull: descriptionFull || description || '',
+            // The schedule lines this variation was built from, so the Application
+            // can reproduce them exactly.
+            sourceItems: list.map(x => ({ code: x.code || '', description: x.description || '', qty: x.qty ?? null, unit: x.unit || '', rate: x.rate ?? null })),
             instructed: false,
             materials: String(Math.round(matTotal * 100) / 100),
             labour: String(Math.round(labTotal * 100) / 100),
@@ -230,9 +257,9 @@ export default function ContractedRatesPage() {
         }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Could not create the variation.'); setVarBusy(null); return }
-      setMsg(`Added ${list.length === 1 ? `"${description.split('\n')[0]}"` : `${list.length} items`} to variations (not instructed).`)
+      if (d.variations) setVariations(d.variations)
+      setMsg(`Added ${varNumber} to variations (not instructed).`)
       setVarModal(null)
-      // Clear any selection used to build it.
       setSelected(new Set())
     } catch (e) { setMsg('Could not create the variation.') }
     setVarBusy(null)
@@ -445,7 +472,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v8</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v9</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -565,11 +592,16 @@ export default function ContractedRatesPage() {
             <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>{varModal.items.length > 1 ? `Combine ${varModal.items.length} items into one variation` : 'Turn into a variation'}</div>
             <div style={{ fontSize: 12.5, color: '#777', marginBottom: 16 }}>Adds a single variation to this project (Variation Tracker), starting as <strong>not instructed</strong>.</div>
 
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>VARIATION No.</label>
-            <input value={varModal.varNumber} onChange={e => setVarModal(m => ({ ...m, varNumber: e.target.value }))} placeholder="e.g. VO1" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', marginBottom: 12 }} />
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>VARIATION No.<span style={{ fontWeight: 400, color: '#aaa', marginLeft: 6 }}>(auto — next in sequence)</span></label>
+            <input value={varModal.varNumber} onChange={e => setVarModal(m => ({ ...m, varNumber: e.target.value }))} placeholder="e.g. V01" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', marginBottom: 12 }} />
 
-            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>DESCRIPTION</label>
-            <textarea value={varModal.description} onChange={e => setVarModal(m => ({ ...m, description: e.target.value }))} rows={varModal.items.length > 1 ? 5 : 3} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical', marginBottom: 14 }} />
+            <label style={{ fontSize: 11, fontWeight: 700, color: '#888', display: 'block', marginBottom: 4 }}>DESCRIPTION{varModal.autoSummarised && <span style={{ fontWeight: 400, color: '#b45309', marginLeft: 6 }}>(summarised)</span>}</label>
+            <textarea value={varModal.description} onChange={e => setVarModal(m => ({ ...m, description: e.target.value }))} rows={varModal.items.length > 1 ? 4 : 3} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical', marginBottom: varModal.autoSummarised ? 6 : 14 }} />
+            {varModal.autoSummarised && (
+              <div style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', marginBottom: 14 }}>
+                The combined description was long, so this is a short summary for the Variation Tracker. The full item-by-item detail is kept and will appear in the Application exactly as in the Contracted Rates.
+              </div>
+            )}
 
             {(() => {
               const list = varModal.items

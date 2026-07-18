@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
-    return res.json({ contractedRates: project.contractedRates || null })
+    return res.json({ contractedRates: project.contractedRates || null, variations: project.variations || [] })
   }
 
   if (req.method === 'POST') {
@@ -102,6 +102,8 @@ export default async function handler(req, res) {
       vars.push({
         varNumber: v.varNumber || '',
         description: v.description || '',
+        descriptionFull: v.descriptionFull || v.description || '',
+        sourceItems: Array.isArray(v.sourceItems) ? v.sourceItems : [],
         instructed: !!v.instructed,
         materials: v.materials || '0',
         labour: v.labour || '0',
