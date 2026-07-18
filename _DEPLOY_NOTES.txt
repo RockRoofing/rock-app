@@ -1,17 +1,48 @@
-Contracted Rates — only import rows with a code in column A
-==========================================================
+Contracted Rates — enhancements (totals, columns, selection)
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Deploy on top of the Contracted Rates work.
+Build: ✓ Compiled successfully  ·  Contracted Rates tab shows "· v3"
+Deploy on top of the Contracted Rates work (incl. the blank-row + upload/nav fixes).
 
-CHANGE
-------
-On upload, the parser now keeps ONLY rows that have a value (a number or a
-letter) in column A. Every blank spacer row, and any total/sub-total line that
-has a figure but no item code, is dropped.
-Verified against Bradford Works: keeps all 32 coded lines (items 1–21, 11.1,
-H/I/J above the line; A–G below), removes the blanks.
+1) "RATE ONLY" / "TBC" TEXT vs CALCULATED TOTAL
+-----------------------------------------------
+• On upload, any non-numeric text in the Total column (Rate only, TBC, P.O.A,
+  etc.) is preserved verbatim.
+• Each line's Total is now switchable. Edit a line → the Total cell shows a
+  "Calculate / Text (TBC…)" selector:
+    - Calculate  → Total = Qty × Rate (updates as you type a quantity).
+    - Text       → type free text (e.g. "TBC", "Rate only").
+  So a "Rate only" line becomes a real calculated total the moment you add a
+  quantity and switch it to Calculate — or you can keep/enter text.
+
+2) MATERIALS TOTAL + LABOUR TOTAL COLUMNS
+-----------------------------------------
+Two new BLUE budget columns: "Mat total" (Qty × Mat rate) sits right after Mat
+rate, and "Lab total" (Qty × Lab rate) right after Lab rate.
+
+3) LINE SELECTION + GROUP VALUE
+-------------------------------
+• Every line now has a tick-box on the left.
+• Ticking lines shows a summary bar: selected count + Total rate + Materials +
+  Labour for the selection.
+
+4) SECTION TOTAL ROWS
+---------------------
+• A total row now sits at the BOTTOM of the above-the-line section (and one for
+  below the line, above nothing — it's the last row of that block).
+• ABOVE the line: always shows the full contract-works total (rate + materials +
+  labour). When above-the-line lines are ticked, it switches to the ticked
+  subtotal.
+• BELOW the line: shows the full below-the-line total by default; when below-line
+  lines are ticked, it shows the ticked subtotal.
+• Text lines (TBC / Rate only) contribute 0 to the rate total (verified).
+
+Site App read-only view updated to match (shows TBC/Rate-only text correctly).
 
 FILES
 -----
-• lib/contractRatesParser.js
+• lib/contractRatesParser.js        (totalMode/totalText; per-line + sum helpers)
+• pages/contracted-rates.js         (checkbox col, mat/lab totals, total toggle,
+                                     selection bar, section total rows; v3)
+• pages/forms/cm/contracted-rates.js (Site App view respects totalMode) — only
+                                     needed if/when you deploy the Site App part

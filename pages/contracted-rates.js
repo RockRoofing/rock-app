@@ -3,7 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { upload } from '@vercel/blob/client'
 import CommercialNav from '../components/CommercialNav'
-import { computeRateTotals } from '../lib/contractRatesParser'
+import { computeRateTotals, sumItems, lineRateTotal, lineMatTotal, lineLabTotal } from '../lib/contractRatesParser'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtRate = (n) => n == null || n === '' ? '' : (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -24,6 +24,7 @@ export default function ContractedRatesPage() {
   const [uploading, setUploading] = useState(false)
   const [editRow, setEditRow] = useState(null)  // item id being edited
   const [confirmEdit, setConfirmEdit] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
 
   useEffect(() => { (async () => {
     try {
@@ -55,11 +56,26 @@ export default function ContractedRatesPage() {
     setSourceTotal(rates?.sourceTotal ?? null)
     setDirty(false)
     setEditRow(null)
+    setSelected(new Set())
   }
   function pickProject(pid) { setProjectId(pid); loadRates(pid) }
 
   const totals = useMemo(() => computeRateTotals(items), [items])
   const editable = !locked
+
+  // Selection: totals for ticked items, split by section.
+  const toggleSel = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const aboveItemsAll = items.filter(x => x.section === 'above' && x.kind === 'item' && !x.struck)
+  const belowItemsAll = items.filter(x => x.section === 'below' && x.kind === 'item' && !x.struck)
+  const aboveSelIds = aboveItemsAll.filter(x => selected.has(x.id))
+  const belowSelIds = belowItemsAll.filter(x => selected.has(x.id))
+  const aboveSel = sumItems(aboveSelIds)
+  const belowSel = sumItems(belowSelIds)
+  const hasAboveSel = aboveSelIds.length > 0
+  const hasBelowSel = belowSelIds.length > 0
+  const anySel = selected.size > 0
+  const overallSel = sumItems([...aboveSelIds, ...belowSelIds])
+  const clearSel = () => setSelected(new Set())
 
   // ── Upload + parse ──
   async function onFile(e) {
@@ -106,7 +122,7 @@ export default function ContractedRatesPage() {
     setDirty(true)
   }
   function addLine(section) {
-    setItems(list => [...list, { id: `cr_new_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, code: '', qty: null, unit: '', description: '', rate: null, total: null, matRate: null, labRate: null, rateOnly: section === 'below', section, kind: 'item', struck: false }])
+    setItems(list => [...list, { id: `cr_new_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, code: '', qty: null, unit: '', description: '', rate: null, total: null, totalMode: 'calc', totalText: '', matRate: null, labRate: null, rateOnly: section === 'below', section, kind: 'item', struck: false }])
     setDirty(true)
   }
 
@@ -156,62 +172,115 @@ export default function ContractedRatesPage() {
   // Styles
   const th = { padding: '9px 8px', textAlign: 'left', fontWeight: 700, color: '#6b7280', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
   const thR = { ...th, textAlign: 'right' }
+  const thC = { ...th, textAlign: 'center', width: 34, padding: '9px 4px' }
   const thBudget = { ...thR, background: '#eef6ff', color: '#1e40af' }
   const td = { padding: '7px 8px', fontSize: 12.5, verticalAlign: 'middle' }
   const tdR = { ...td, textAlign: 'right' }
+  const tdC = { ...td, textAlign: 'center', padding: '7px 4px' }
   const tdBudget = { ...tdR, background: '#f5faff', color: '#1e40af' }
   const cellInput = { width: '100%', padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, boxSizing: 'border-box', fontFamily: 'inherit' }
+  const COLSPAN = 12
+
+  function totalCell(x, isEditing) {
+    // Text-mode lines (TBC / Rate only / custom) show the text; calc lines show qty*rate.
+    if (isEditing) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end' }}>
+          <select value={x.totalMode || 'calc'} onChange={e => update(x.id, { totalMode: e.target.value })} style={{ ...cellInput, width: 92, fontSize: 11 }}>
+            <option value="calc">Calculate</option>
+            <option value="text">Text (TBC…)</option>
+          </select>
+          {x.totalMode === 'text'
+            ? <input value={x.totalText || ''} onChange={e => update(x.id, { totalText: e.target.value })} placeholder="TBC / Rate only" style={{ ...cellInput, width: 92, textAlign: 'right' }} />
+            : <span style={{ fontWeight: 600 }}>{fmt(lineRateTotal(x))}</span>}
+        </div>
+      )
+    }
+    if (x.totalMode === 'text') return <span style={{ color: '#a16207', fontStyle: 'italic' }}>{x.totalText || 'TBC'}</span>
+    const v = lineRateTotal(x)
+    return v ? fmt(v) : ''
+  }
+
+  function sectionTotalRow(section) {
+    const all = section === 'above' ? aboveItemsAll : belowItemsAll
+    const allSum = sumItems(all)
+    const sel = section === 'above' ? aboveSel : belowSel
+    const hasSel = section === 'above' ? hasAboveSel : hasBelowSel
+    // Above: always show the full total; when items are ticked, show the selected subtotal.
+    // Below: show the selected subtotal when items are ticked (else full total, greyed).
+    const show = hasSel ? sel : allSum
+    const label = hasSel
+      ? `${section === 'above' ? 'Above' : 'Below'} the line — ${show.count} selected`
+      : `${section === 'above' ? 'Above the line total' : 'Below the line total'}`
+    const bg = section === 'above' ? '#ecfdf5' : '#fffbeb'
+    const bd = section === 'above' ? '#0f766e' : '#b45309'
+    return (
+      <tr style={{ background: bg, borderTop: `2px solid ${bd}55`, fontWeight: 700 }}>
+        <td style={tdC}></td>
+        <td style={{ ...td, color: bd }} colSpan={4}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
+        <td style={{ ...tdR, color: bd }}>{fmt(show.rate)}</td>
+        <td style={tdBudget}></td>
+        <td style={{ ...tdBudget, fontWeight: 700 }}>{fmt(show.materials)}</td>
+        <td style={tdBudget}></td>
+        <td style={{ ...tdBudget, fontWeight: 700 }}>{fmt(show.labour)}</td>
+        <td style={td}></td>
+      </tr>
+    )
+  }
 
   function renderSection(section, label) {
     const sectionItems = items.filter(x => x.section === section)
     return (
       <>
         <tr>
-          <td colSpan={10} style={{ padding: '10px 8px 6px', fontSize: 12, fontWeight: 700, color: section === 'above' ? '#0f766e' : '#b45309', background: section === 'above' ? '#f0fdfa' : '#fffbeb', borderTop: '2px solid ' + (section === 'above' ? '#99f6e4' : '#fde68a') }}>
-            {label} {section === 'below' && <span style={{ fontWeight: 400, color: '#a16207' }}>— optional / variation items (rate only)</span>}
+          <td colSpan={COLSPAN} style={{ padding: '10px 8px 6px', fontSize: 12, fontWeight: 700, color: section === 'above' ? '#0f766e' : '#b45309', background: section === 'above' ? '#f0fdfa' : '#fffbeb', borderTop: '2px solid ' + (section === 'above' ? '#99f6e4' : '#fde68a') }}>
+            {label} {section === 'below' && <span style={{ fontWeight: 400, color: '#a16207' }}>— optional / variation items</span>}
           </td>
         </tr>
         {sectionItems.length === 0 && (
-          <tr><td colSpan={10} style={{ padding: '10px 8px', fontSize: 12, color: '#aaa' }}>No {section === 'above' ? 'above' : 'below'}-the-line items.</td></tr>
+          <tr><td colSpan={COLSPAN} style={{ padding: '10px 8px', fontSize: 12, color: '#aaa' }}>No {section === 'above' ? 'above' : 'below'}-the-line items.</td></tr>
         )}
         {sectionItems.map((x) => {
           const isEditing = editable && editRow === x.id
-          const lineTotal = x.total != null ? x.total : ((x.qty || 0) * (x.rate || 0))
           const strike = x.struck ? { textDecoration: 'line-through', color: '#b91c1c', opacity: 0.7 } : {}
+          const isSel = selected.has(x.id)
           if (x.kind === 'heading' && !isEditing) {
             return (
               <tr key={x.id} style={{ background: '#fafafa' }}>
-                <td style={td}></td>
-                <td style={{ ...td, fontWeight: 700, color: '#374151', ...strike }} colSpan={6}>{x.description || '—'}</td>
-                <td colSpan={2}></td>
+                <td style={tdC}></td>
+                <td style={{ ...td, fontWeight: 700, color: '#374151', ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6 }}>{x.code}</span> : null}{x.description || '—'}</td>
+                <td style={tdBudget}></td>
                 <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} />}</td>
               </tr>
             )
           }
           return (
-            <tr key={x.id} style={{ borderBottom: '1px solid #f0f0f0', background: x.struck ? '#fef2f2' : '#fff' }}>
+            <tr key={x.id} style={{ borderBottom: '1px solid #f0f0f0', background: isSel ? '#eef2ff' : (x.struck ? '#fef2f2' : '#fff') }}>
+              <td style={tdC}><input type="checkbox" checked={isSel} onChange={() => toggleSel(x.id)} style={{ cursor: 'pointer' }} /></td>
               <td style={{ ...td, color: '#6b7280', fontWeight: 600 }}>
                 {isEditing ? <input value={x.code || ''} onChange={e => update(x.id, { code: e.target.value })} style={{ ...cellInput, width: 46 }} /> : (x.code || '')}
               </td>
-              <td style={{ ...td, minWidth: 220, maxWidth: 340, whiteSpace: 'normal', ...strike }}>
+              <td style={{ ...td, minWidth: 200, maxWidth: 320, whiteSpace: 'normal', ...strike }}>
                 {isEditing ? <input value={x.description || ''} onChange={e => update(x.id, { description: e.target.value })} style={cellInput} /> : (x.description || '—')}
               </td>
               <td style={tdR}>
-                {isEditing ? <input type="number" value={x.qty ?? ''} onChange={e => update(x.id, { qty: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 64, textAlign: 'right' }} /> : (x.qty ?? '')}
+                {isEditing ? <input type="number" value={x.qty ?? ''} onChange={e => update(x.id, { qty: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 60, textAlign: 'right' }} /> : (x.qty ?? '')}
               </td>
-              <td style={{ ...td }}>
-                {isEditing ? <input value={x.unit || ''} onChange={e => update(x.id, { unit: e.target.value })} style={{ ...cellInput, width: 48 }} /> : (x.unit || '')}
+              <td style={td}>
+                {isEditing ? <input value={x.unit || ''} onChange={e => update(x.id, { unit: e.target.value })} style={{ ...cellInput, width: 44 }} /> : (x.unit || '')}
               </td>
               <td style={tdR}>
-                {isEditing ? <input type="number" value={x.rate ?? ''} onChange={e => update(x.id, { rate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 78, textAlign: 'right' }} /> : (x.rate != null ? fmtRate(x.rate) : '')}
+                {isEditing ? <input type="number" value={x.rate ?? ''} onChange={e => update(x.id, { rate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 74, textAlign: 'right' }} /> : (x.rate != null ? fmtRate(x.rate) : '')}
               </td>
-              <td style={{ ...tdR, fontWeight: 600 }}>{x.rateOnly ? <span style={{ color: '#a16207', fontStyle: 'italic', fontWeight: 400 }}>Rate only</span> : (lineTotal ? fmt(lineTotal) : '')}</td>
+              <td style={{ ...tdR, fontWeight: 600 }}>{totalCell(x, isEditing)}</td>
               <td style={tdBudget} title="Materials rate within the rate (budget)">
-                {isEditing ? <input type="number" value={x.matRate ?? ''} onChange={e => update(x.id, { matRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 70, textAlign: 'right' }} /> : (x.matRate != null ? fmtRate(x.matRate) : '')}
+                {isEditing ? <input type="number" value={x.matRate ?? ''} onChange={e => update(x.id, { matRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.matRate != null ? fmtRate(x.matRate) : '')}
               </td>
+              <td style={{ ...tdBudget, fontWeight: 600 }} title="Materials total (qty × mat rate)">{lineMatTotal(x) ? fmt(lineMatTotal(x)) : ''}</td>
               <td style={tdBudget} title="Labour rate within the rate (budget)">
-                {isEditing ? <input type="number" value={x.labRate ?? ''} onChange={e => update(x.id, { labRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 70, textAlign: 'right' }} /> : (x.labRate != null ? fmtRate(x.labRate) : '')}
+                {isEditing ? <input type="number" value={x.labRate ?? ''} onChange={e => update(x.id, { labRate: e.target.value === '' ? null : parseFloat(e.target.value) })} style={{ ...cellInput, width: 66, textAlign: 'right' }} /> : (x.labRate != null ? fmtRate(x.labRate) : '')}
               </td>
+              <td style={{ ...tdBudget, fontWeight: 600 }} title="Labour total (qty × lab rate)">{lineLabTotal(x) ? fmt(lineLabTotal(x)) : ''}</td>
               <td style={tdR}>
                 {isEditing
                   ? <button onClick={() => setEditRow(null)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Done</button>
@@ -220,8 +289,9 @@ export default function ContractedRatesPage() {
             </tr>
           )
         })}
+        {sectionTotalRow(section)}
         {editable && (
-          <tr><td colSpan={10} style={{ padding: '6px 8px' }}>
+          <tr><td colSpan={COLSPAN} style={{ padding: '6px 8px' }}>
             <button onClick={() => addLine(section)} style={{ background: '#f0f2f5', border: '1px dashed #cbd5e1', borderRadius: 6, padding: '5px 12px', fontSize: 11.5, cursor: 'pointer', color: '#475569' }}>+ Add {section === 'above' ? 'above-the-line' : 'below-the-line'} item</button>
           </td></tr>
         )}
@@ -231,7 +301,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v2</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v3</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 
@@ -292,12 +362,25 @@ export default function ContractedRatesPage() {
                     </div>
                   )}
 
+                  {/* Selection summary bar */}
+                  {anySel && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 10, padding: '10px 16px', marginBottom: 14 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#4f46e5' }}>{overallSel.count} selected</span>
+                      <span style={{ fontSize: 13, color: '#4338ca' }}>Total rate: <strong>{fmt(overallSel.rate)}</strong></span>
+                      <span style={{ fontSize: 13, color: '#1e40af' }}>Materials: <strong>{fmt(overallSel.materials)}</strong></span>
+                      <span style={{ fontSize: 13, color: '#1e40af' }}>Labour: <strong>{fmt(overallSel.labour)}</strong></span>
+                      <div style={{ flex: 1 }} />
+                      <button onClick={clearSel} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Clear selection</button>
+                    </div>
+                  )}
+
                   {/* Grid */}
                   <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                           <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+                            <th style={thC}></th>
                             <th style={th}>Code</th>
                             <th style={th}>Description</th>
                             <th style={thR}>Qty</th>
@@ -305,7 +388,9 @@ export default function ContractedRatesPage() {
                             <th style={thR}>Rate</th>
                             <th style={thR}>Total</th>
                             <th style={thBudget}>Mat rate</th>
+                            <th style={thBudget}>Mat total</th>
                             <th style={thBudget}>Lab rate</th>
+                            <th style={thBudget}>Lab total</th>
                             <th style={thR}></th>
                           </tr>
                         </thead>
@@ -316,7 +401,7 @@ export default function ContractedRatesPage() {
                       </table>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Blue columns are budget figures (materials &amp; labour within the rate) — for margin tracking, not the customer application.</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Blue columns are budget figures (materials &amp; labour within the rate) — for margin tracking, not the customer application. Tick lines to total a group; the above-the-line total always shows the full contract-works value.</div>
                 </>
               )}
             </>
