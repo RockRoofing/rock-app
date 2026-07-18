@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject, get } from '../../lib/db'
-import { computeApplicationSummary, buildContractWorksFromRates } from '../../lib/applications'
+import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations } from '../../lib/applications'
 
 // Applications live inside the project settings under `applications: [ ... ]`.
 // Each application:
@@ -86,6 +86,7 @@ export default async function handler(req, res) {
         retentionPct: retentionPct != null ? retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5),
         contractWorks,
         variations: [],
+        variationData: {},
         materials: [],
         createdAt: Date.now(),
         createdBy: req.body.author || '',
@@ -113,10 +114,29 @@ export default async function handler(req, res) {
       const { id } = req.body
       const idx = apps.findIndex(a => a.id === id)
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
-      apps[idx] = { ...apps[idx], status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
+      // Freeze the live variation list (from the tracker + per-app data) into the app.
+      const frozen = buildAppVariations(apps[idx], project.variations || [])
+      apps[idx] = { ...apps[idx], variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
       project.applications = apps
       await saveProject(projectId, project)
       return res.json({ ok: true, application: apps[idx] })
+    }
+
+    // Mark a variation instructed/not-instructed from the application. Writes
+    // through to the project's variation tracker (settings.variations) so Project
+    // Details, budgets and WIP all update.
+    if (action === 'set-variation-instructed') {
+      const { varNumber, description, instructed } = req.body
+      const vars = Array.isArray(project.variations) ? [...project.variations] : []
+      const norm = (s) => String(s || '').trim()
+      let matchIdx = vars.findIndex(v => norm(v.varNumber) === norm(varNumber) && norm(v.description) === norm(description))
+      if (matchIdx < 0) matchIdx = vars.findIndex(v => norm(v.varNumber) === norm(varNumber))
+      if (matchIdx < 0 && description) matchIdx = vars.findIndex(v => norm(v.descriptionFull) === norm(description) || norm(v.description) === norm(description))
+      if (matchIdx < 0) return res.status(404).json({ error: 'Variation not found in tracker.' })
+      vars[matchIdx] = { ...vars[matchIdx], instructed: !!instructed }
+      project.variations = vars
+      await saveProject(projectId, project)
+      return res.json({ ok: true, variations: vars })
     }
 
     if (action === 'delete') {

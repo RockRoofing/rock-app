@@ -1,51 +1,46 @@
-Applications — PHASE 3: Variations + Materials on Site
-======================================================
+Applications — variations behaviour rework
+==========================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v3"
-Deploy on top of Phase 2 (both files).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v4"
+Deploy all three files (on top of Phase 3).
 
-VARIATIONS
+WHAT CHANGED
+------------
+1) ALL PROJECT VARIATIONS APPEAR AUTOMATICALLY on the application (no more "add
+   from tracker" step). Drafts read them LIVE from the Variation Tracker.
+
+2) STATUS DRIVES TOTALLING:
+   • Instructed  → normal black text, included in totals, has % Complete (with the
+     ✓=100% button) and a Value to date.
+   • Not instructed → the whole line is greyed, there is NO % Complete input, and
+     Value to date shows "N/A". It does NOT contribute to the totals or the
+     Summary/Certificate.
+
+3) MARK INSTRUCTED FROM THE APPLICATION: click the status pill on a variation to
+   toggle Instructed / Not instructed. This writes back to the Variation Tracker
+   (settings.variations), so Project Details, budgets and WIP all update from the
+   same source. (Instructed variations feed those figures already.)
+
+4) SENT = FROZEN, DOUBLE-CLICK TO EDIT: when an application is marked as sent, its
+   variations are FROZEN as they are at that moment. A sent application is locked;
+   "Double-click here to edit this sent application" unlocks it for changes (same
+   pattern as the Contracted Rates lock), then Save re-persists.
+
+DATA MODEL
 ----------
-• "+ Add from tracker" opens a picker of the project's variations (from the
-  Variation Tracker). Tick any to add them to the application.
-• Each shows Instructed / Not instructed (carried from the tracker) and the value
-  (materials + labour + profit). The description MIRRORS THE CONTRACTED RATES —
-  it uses the variation's descriptionFull (the verbatim item-by-item text we now
-  store), not the shortened tracker summary.
-• Per variation: % Complete (with a ✓ = 100% button) → Value to date; Remove.
-• ATTACH DOCUMENTS: each variation has "+ Attach" (instructions or other docs,
-  uploaded to Vercel Blob). Attached files are listed with links and can be
-  removed. (These will be appended to the application PDF in Phase 4.)
-• A totals row shows variations Final value + Value to date.
-
-MATERIALS ON SITE
------------------
-• "+ Add from POs" lists line items from PURCHASE ORDERS NOT YET DELIVERED for
-  this project (matched by job number; a PO counts as undelivered until it has an
-  actual delivery date). Click a line to add it (description, PO no., qty, unit,
-  rate carried over). A manual line can also be entered.
-• Qty/rate are editable on the application; Total = qty x rate; a totals row sums
-  Materials on Site.
-
-SUMMARY
--------
-The Summary + Certificate now include Variations (value to date) and Materials on
-Site automatically, and the This-Cert carry-forward accounts for them (as built
-in Phase 2).
-
-STORAGE / NOTES
----------------
-• variations[] and materials[] are saved inside each application (via the existing
-  save action). Nothing is written back to the Variation Tracker or the POs.
-• The GET endpoint now also returns the project's tracker variations and its
-  undelivered PO lines (read from ops:deliveries, filtered by the project's jobNo
-  resolved from the dashboard cache).
+• Drafts store only per-variation data (variationData keyed by varNumber+desc):
+  the % complete and any attachments. The variation identity/value/instructed
+  come live from the tracker.
+• On "Mark as sent" the full computed variation list is frozen into the
+  application (application.variations) so the sent document never changes if the
+  tracker later does.
+• New API action: set-variation-instructed (matched write-through to the tracker).
 
 FILES
 -----
-• pages/applications.js       (variations + materials sections, two pickers; v3)
-• pages/api/applications.js   (GET returns variations + undeliveredPOs)
+• lib/applications.js        (varKey, buildAppVariations, not-instructed excluded from totals)
+• pages/applications.js      (auto variations, grey/N-A not-instructed, instructed toggle, unlock; v4)
+• pages/api/applications.js  (submit freezes variations; set-variation-instructed)
 
-NEXT (Phase 4): generate the application PDF (Summary / Contract Works / Variations
-/ Materials tabs) with the variation attachments appended, and send via the
-chase-email-style popout to selected customer contacts.
+NEXT (Phase 4): application PDF (Summary/Contract Works/Variations/Materials) with
+variation attachments appended, sent via the chase-email popout.
