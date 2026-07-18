@@ -1,24 +1,29 @@
-Chase emails: [Sub-Contract Ref] = the project's Order Reference
-================================================================
+FIX: Weekly report (with comments) PDF download failed on emoji
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy on top of the ProjectDetails-from-IHM work.
 
-CHANGE
-------
-The [Sub-Contract Ref] merge field (used in the Suspension of Performance /
-withdrawal email, and any template that uses it) now pulls the ORDER REFERENCE
-from Project Details:
-      order-ref override (Project Details) → IHM customerOrderRef → blank
-This is the same value shown as "Order reference" in Edit Project Details, so
-the two always match.
+THE ERROR
+---------
+Download returned: {"error":"WinAnsi cannot encode \"\" (0x1f4e7)"}
+0x1f4e7 is the 📧 emoji we put at the start of logged chase-email comments.
+The PDF uses standard fonts (Helvetica / WinAnsi encoding), which can't encode
+emoji or various unicode symbols — so the whole PDF build threw and the download
+failed.
 
-NOTE ON REFRESH
----------------
-The invoice row reads this from the dashboard cache (4h). If you've just changed
-the order reference in Project Details, it appears in the email after the next
-dashboard sync/refresh (Project Details itself updates immediately).
+THE FIX
+-------
+Added a text sanitiser applied to every string drawn into the PDF:
+  • 📧  → "[email]"
+  • smart quotes “ ” ‘ ’ → " '
+  • en/em dash – —      → -
+  • ellipsis …          → ...
+  • bullet •            → *
+  • anything else outside WinAnsi (incl. other emoji like 🙏) is dropped.
+Verified: after sanitising, zero characters remain that WinAnsi can't encode, so
+the report (including the full email bodies now stored in comments) generates
+cleanly. Content still reads fine; only unsupported glyphs are swapped/removed.
 
 FILES
 -----
-• pages/outstanding-invoices.js   ([Sub-Contract Ref] -> people.orderRef)
+• lib/outstandingInvoicesPdf.js   (san() sanitiser applied to all drawn text)
