@@ -1,32 +1,13 @@
-Applications — fix numbering for apps sent before appNumber existed
-==================================================================
+Application PDF — Contract Works % Complete column
+==================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v24"
+Build: ✓ Compiled successfully
+Single-file change (lib/applicationPdf.js).
 
-THE BUG
--------
-Your App 1 was sent BEFORE the sent-based numbering was added, so it had no stored
-appNumber. The "next number" was computed as (highest STORED appNumber) + 1 = 0 + 1
-= 1, so a newly created draft also showed as 1.
-
-THE FIX
--------
-New helper backfillAppNumbers(): assigns permanent numbers to any SENT application
-that lacks one, by sent order (the Nth sent app = N), respecting any numbers already
-stored. Now:
-  • App 1 (sent, legacy) is treated as number 1.
-  • The next new draft shows 2, and becomes 2 when sent.
-It's applied:
-  • On the client (list / editor / everywhere the number shows) — derived by sent order.
-  • On the server GET — legacy sent apps get their appNumber written permanently
-    (one-time, persisted), so the fix sticks.
-  • In the summary "Next app" column, the submit/mark-as-sent path, and the PDF
-    endpoints — all now count legacy sent apps.
+Contract Works now includes a "% Complete" column (shown with the % symbol),
+sitting between Total and To date. Columns re-spaced to fit without overlap:
+Code | Description | Qty | Unit | Rate | Total | % Complete | To date.
 
 FILES
 -----
-• lib/applications.js          (new backfillAppNumbers helper)
-• pages/applications.js        (numbering derived by sent order; v24)
-• pages/api/applications.js    (backfill+persist on load; summary + submit use it)
-• pages/api/application-pdf.js  (uses backfill for the PDF number)
-• pages/api/application-send.js (uses backfill for mark-as-sent + PDF)
+• lib/applicationPdf.js
