@@ -213,7 +213,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v24</title></Head>
+      <Head><title>Rock Roofing — Applications · v25</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -626,6 +626,9 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
         ))}
       </div>
 
+      {/* Summary + Certificate (shown at the top) */}
+      <SummaryBlock sum={sum} app={app} />
+
       {/* Contract Works */}
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 16 }}>
         <div style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#1a1a2e', borderBottom: '1px solid #eee' }}>Contract Works</div>
@@ -828,9 +831,6 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
         </div>
         <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 16px' }}>The mark-up column (shaded) is internal only — it won't appear on the copy sent to the customer, but the marked-up Total will. "Value to date" (% claimed × total) is what's certified this application.</div>
       </div>
-
-      {/* Summary */}
-      <SummaryBlock sum={sum} app={app} />
 
       {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} addedLineKeys={addedLineKeys} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} onRemove={removeMaterialByKey} />}
     </>

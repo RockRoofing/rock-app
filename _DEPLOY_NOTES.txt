@@ -1,13 +1,13 @@
-Application PDF — Contract Works % Complete column
-==================================================
+Applications page — Summary + Certificate moved to the top
+=========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Single-file change (lib/applicationPdf.js).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v25"
 
-Contract Works now includes a "% Complete" column (shown with the % symbol),
-sitting between Total and To date. Columns re-spaced to fit without overlap:
-Code | Description | Qty | Unit | Rate | Total | % Complete | To date.
+In the application editor, the Summary + Certificate section now sits at the TOP,
+above Contract Works (previously it was at the bottom). Order is now:
+Summary/Certificate → Contract Works → Variations → Materials on Site.
+(The PDF layout is unchanged.)
 
 FILES
 -----
-• lib/applicationPdf.js
+• pages/applications.js   (v25)
