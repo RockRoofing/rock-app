@@ -1,34 +1,37 @@
-Materials supplier groups + new application clones the previous one
-===================================================================
+Applications — upcoming table + materials picker (added/hide/stay-open)
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v7"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v8"
 
-1) MATERIALS GROUPED BY SUPPLIER (with attachable docs)
-   • "Add all lines" from a PO now inserts a SUPPLIER HEADING row above that PO's
-     line items in Materials on Site. Two POs from the same supplier = the supplier
-     name appears twice (one heading per PO added), as requested.
-   • Each supplier/group heading has "+ Attach doc" — documents attach to that
-     group and will be appended to the application (Phase 4). Listed with links,
-     removable. "Remove group" removes the heading and its lines.
-   • Group headings don't total (only the item lines do). Adding a single line
-     (the per-line "Add") still adds an ungrouped line as before.
+A) UPCOMING APPLICATIONS TABLE (landing page, before a project is picked)
+   • Shows the NEXT application PER PROJECT — max one row per project.
+   • Ordered by application date (soonest first).
+   • Colour-coded date pill with a KEY at the top:
+       grey = not yet due · orange = within 3 days · green = due today · red = overdue
+     (also shows "in Xd" / "Xd overdue" / "today").
+   • "Next" = the project's current DRAFT if it has one ("Draft ready"), otherwise
+     the next month that's due to be raised ("Due to raise"), dated from Project
+     Details. Click Open to jump into that project.
 
-2) NEW APPLICATION STARTS FROM THE PREVIOUS ONE
-   Creating a new application now CLONES the latest application exactly:
-   • Contract Works % complete carried across (matched by line).
-   • Materials on Site copied in full — supplier groups, lines, mark-ups, % claimed
-     AND their attachments (group ids are re-linked correctly).
-   • Per-variation data (% complete + attachments) copied.
-   • MCD % / retention % carried from the previous app.
-   Only the identity changes automatically: application number (seq +1), month
-   (auto-advances to the month after the last app), and App/Val/Payment/Final
-   dates (recomputed from Project Details for the new month).
+B) MATERIALS PICKER
+   • Window STAYS OPEN when adding lines/POs (only closes on "Done" or clicking
+     off) so you can add several at once.
+   • A PO already on the application shows GREEN with a ✓ and "Added"; its "Add all
+     lines" is disabled — a PO can't be added twice at the same time. Remove it
+     from the application and it becomes addable again (infinitely).
+   • ALL POs show regardless of delivery date, newest POs first.
+   • HIDE a PO from the list (per project, persisted). Hidden POs move to a
+     collapsible "Show N hidden POs" section and stay hidden next time — so
+     used-up materials don't clog the window. Unhide any time.
+   • Manual line entry now clears after adding (so you can add several).
+
+STORAGE
+-------
+• Hidden POs stored on the project as `hiddenPOs` (PO numbers). New API actions:
+  set-hidden-pos; GET returns hiddenPOs and all project POs (sorted latest-first),
+  plus an `?upcoming=1` mode powering the landing table.
 
 FILES
 -----
-• lib/applications.js        (summary ignores group heading rows)
-• pages/applications.js      (supplier group rows + attachments, month auto-advance; v7)
-• pages/api/applications.js  (create clones previous app incl. attachments; relinks groups)
-
-NEXT (Phase 4): PDF (customer copy hides mark-up; appends variation + supplier
-group attachments) and send.
+• pages/applications.js      (upcoming table, materials picker rework; v8)
+• pages/api/applications.js  (upcoming summary, hiddenPOs, PO sort)

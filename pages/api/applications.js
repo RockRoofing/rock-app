@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, saveProject, get } from '../../lib/db'
-import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations } from '../../lib/applications'
+import { getProject, saveProject, get, getAllProjectSettings } from '../../lib/db'
+import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates } from '../../lib/applications'
 
 // Applications live inside the project settings under `applications: [ ... ]`.
 // Each application:
@@ -15,6 +15,52 @@ export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
   if (req.method === 'GET') {
+    // Cross-project "upcoming applications" summary for the landing table.
+    if (req.query.upcoming) {
+      const all = await getAllProjectSettings()
+      let cache = null
+      try { cache = await get('dashboard:cache') } catch {}
+      const nameOf = (xeroId) => {
+        const row = Array.isArray(cache) ? cache.find(p => String(p.xeroId) === String(xeroId)) : null
+        return { jobNo: row?.jobNo || '', name: row?.name || '' }
+      }
+      const rows = []
+      for (const [xeroId, proj] of Object.entries(all || {})) {
+        const p = proj || {}
+        const apps = Array.isArray(p.applications) ? p.applications : []
+        if (!apps.length) continue
+        const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
+        // "Next" = the latest DRAFT if any; else the next month after the last sent.
+        const draft = [...sorted].reverse().find(a => !a.status || a.status === 'draft')
+        const last = sorted[sorted.length - 1]
+        let nextSeq, nextDate, nextMonthLabel, status
+        if (draft) {
+          nextSeq = draft.seq; nextDate = draft.appDate || ''; nextMonthLabel = draft.monthLabel || ''; status = 'draft'
+        } else {
+          // project up to date; next would follow the last sent app
+          nextSeq = (last.seq || 0) + 1
+          const [y, m] = String(last.monthKey || '').split('-').map(Number)
+          if (y && m) {
+            const nd = new Date(y, m, 1)
+            const settings = { applicationDay: p.applicationDay, valuationDay: p.valuationDay, paymentDay: p.paymentDay, dateOverrides: p.dateOverrides || {}, finalPaymentDays: p.finalPaymentDays }
+            const key = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`
+            nextDate = resolveAppDates(key, settings).appDate || ''
+            nextMonthLabel = nd.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+          }
+          status = 'upcoming'
+        }
+        const info = nameOf(xeroId)
+        rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq, nextDate, nextMonthLabel, status })
+      }
+      // Order by the next application date (soonest first; undated last).
+      rows.sort((a, b) => {
+        if (!a.nextDate) return 1
+        if (!b.nextDate) return -1
+        return a.nextDate.localeCompare(b.nextDate)
+      })
+      return res.json({ upcoming: rows })
+    }
+
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
@@ -37,8 +83,12 @@ export default async function handler(req, res) {
           project: d.project || d.projectNo || '',
           delivered: !!d.actualDeliveryDate,
           deliveryDate: d.actualDeliveryDate || '',
+          orderDate: d.orderDate || '',
+          createdAt: d.createdAt || 0,
           lineItems: (d.lineItems || []).map(li => ({ description: li.description || li.item || '', quantity: li.quantity ?? null, unit: li.unit || '', rate: li.unitAmount ?? li.rate ?? null })),
         }))
+        // Latest POs first (by order date, then by when we first saw it).
+        .sort((a, b) => (b.orderDate || '').localeCompare(a.orderDate || '') || (b.createdAt || 0) - (a.createdAt || 0))
     } catch {}
 
     return res.json({
@@ -46,6 +96,7 @@ export default async function handler(req, res) {
       contractedRates: project.contractedRates || null,
       variations: project.variations || [],
       projectPOs,
+      hiddenPOs: project.hiddenPOs || [],
       jobNo,
       settings: {
         applicationDay: project.applicationDay || null,
@@ -178,6 +229,13 @@ export default async function handler(req, res) {
       project.applications = apps.filter(a => a.id !== id)
       await saveProject(projectId, project)
       return res.json({ ok: true, applications: project.applications })
+    }
+
+    // Persist the project's hidden-PO list (PO numbers hidden from the materials picker).
+    if (action === 'set-hidden-pos') {
+      project.hiddenPOs = Array.isArray(req.body.hiddenPOs) ? req.body.hiddenPOs : []
+      await saveProject(projectId, project)
+      return res.json({ ok: true, hiddenPOs: project.hiddenPOs })
     }
 
     return res.status(400).json({ error: 'Unknown action' })

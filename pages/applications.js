@@ -18,6 +18,7 @@ export default function ApplicationsPage() {
   const [settings, setSettings] = useState({})
   const [trackerVariations, setTrackerVariations] = useState([])
   const [projectPOs, setProjectPOs] = useState([])
+  const [hiddenPOs, setHiddenPOs] = useState([])
   const [openId, setOpenId] = useState(null)     // application being edited
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -46,6 +47,7 @@ export default function ApplicationsPage() {
       setSettings(d.settings || {})
       setTrackerVariations(d.variations || [])
       setProjectPOs(d.projectPOs || [])
+      setHiddenPOs(d.hiddenPOs || [])
     } catch { setMsg('Could not load applications.') }
     setLoading(false)
   }
@@ -108,7 +110,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v7</title></Head>
+      <Head><title>Rock Roofing — Applications · v8</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -122,7 +124,7 @@ export default function ApplicationsPage() {
           </div>
 
           {!projectId ? (
-            <div style={{ background: '#fff', borderRadius: 12, padding: 48, textAlign: 'center', color: '#888', fontSize: 14 }}>Select a project to view or create applications for payment.</div>
+            <UpcomingTable onOpen={pickProject} />
           ) : loading ? (
             <div style={{ background: '#fff', borderRadius: 12, padding: 48, textAlign: 'center', color: '#888' }}>Loading…</div>
           ) : openApp ? (
@@ -133,6 +135,8 @@ export default function ApplicationsPage() {
               me={me}
               trackerVariations={trackerVariations}
               projectPOs={projectPOs}
+              hiddenPOs={hiddenPOs}
+              onHiddenPOsChange={setHiddenPOs}
               onBack={() => { setOpenId(null); load(projectId) }}
               onSaved={(updated) => setApps(a => a.map(x => x.id === updated.id ? updated : x))}
               onVariationChange={(vs) => setTrackerVariations(vs || [])}
@@ -221,8 +225,80 @@ function prevGrossForApp(sortedApps, app) {
   return prev ? computeApplicationSummary(prev, 0).grossCurrent : 0
 }
 
+// Landing table: the NEXT application per project, colour-coded by due date.
+function UpcomingTable({ onOpen }) {
+  const [rows, setRows] = useState(null)
+  useEffect(() => { (async () => {
+    try { const d = await fetch('/api/applications?upcoming=1').then(r => r.json()); setRows(d.upcoming || []) }
+    catch { setRows([]) }
+  })() }, [])
+
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const dueInfo = (iso) => {
+    if (!iso) return { label: '—', color: '#9ca3af', bg: '#f3f4f6', days: null }
+    const d = new Date(iso + 'T00:00:00'); d.setHours(0, 0, 0, 0)
+    const days = Math.round((d - today) / 86400000)
+    if (days < 0) return { color: '#dc2626', bg: '#fee2e2', days }        // overdue - red
+    if (days === 0) return { color: '#16a34a', bg: '#dcfce7', days }      // due today - green
+    if (days <= 3) return { color: '#c2410c', bg: '#ffedd5', days }       // within 3 days - orange
+    return { color: '#6b7280', bg: '#f3f4f6', days }                      // not yet due - grey
+  }
+  const fmtD = (s) => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
+
+  const KeyDot = ({ c, label }) => <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#555' }}><span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }} />{label}</span>
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 16px', borderBottom: '1px solid #eee', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Upcoming applications</div>
+        <div style={{ flex: 1 }} />
+        <KeyDot c="#f3f4f6" label="Not yet due" />
+        <KeyDot c="#ffedd5" label="Within 3 days" />
+        <KeyDot c="#dcfce7" label="Due today" />
+        <KeyDot c="#fee2e2" label="Overdue" />
+      </div>
+      {rows === null ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 14 }}>No applications yet. Select a project above to create one.</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
+            {['Project', 'Next app', 'Month', 'Application date', 'Status', ''].map((h, i) => (
+              <th key={i} style={{ padding: '9px 14px', textAlign: i === 5 ? 'right' : 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {rows.map(r => {
+              const di = dueInfo(r.nextDate)
+              return (
+                <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ') || r.xeroId}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextSeq}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextMonthLabel || '—'}</td>
+                  <td style={{ padding: '9px 14px' }}>
+                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: di.bg, color: di.color }}>
+                      {fmtD(r.nextDate)}{di.days != null && di.days !== 0 ? ` (${di.days < 0 ? `${-di.days}d overdue` : `in ${di.days}d`})` : di.days === 0 ? ' (today)' : ''}
+                    </span>
+                  </td>
+                  <td style={{ padding: '9px 14px', fontSize: 12 }}>
+                    <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: r.status === 'draft' ? '#fef9c3' : '#eef2ff', color: r.status === 'draft' ? '#a16207' : '#4f46e5' }}>{r.status === 'draft' ? 'Draft ready' : 'Due to raise'}</span>
+                  </td>
+                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
+                    <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Open</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], projectPOs = [], onBack, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -273,13 +349,13 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
 
   // Materials on site
-  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', pctComplete: 100, ...m }]); setDirty(true); setShowAddMat(false) }
+  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', pctComplete: 100, ...m }]); setDirty(true) }
   // Add a whole PO group: a supplier heading row + its item lines beneath it.
   const addMaterialGroup = ({ supplier, poNumber, markupPct, lines }) => {
     const gid = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
     const group = { id: gid, kind: 'group', supplier: supplier || '', poNumber: poNumber || '', attachments: [] }
     const items = (lines || []).map((li, i) => ({ id: `mat_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 4)}`, kind: 'item', groupId: gid, pctComplete: 100, description: li.description, poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: markupPct || 0 }))
-    setMats(l => [...l, group, ...items]); setDirty(true); setShowAddMat(false)
+    setMats(l => [...l, group, ...items]); setDirty(true)
   }
   async function attachToGroup(gid, file) {
     try {
@@ -290,6 +366,15 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
   const removeGroupAttachment = (gid, url) => { setMats(l => l.map(x => x.id === gid ? { ...x, attachments: (x.attachments || []).filter(a => a.url !== url) } : x)); setDirty(true) }
   const removeGroup = (gid) => { setMats(l => l.filter(x => x.id !== gid && x.groupId !== gid)); setDirty(true) }
+  // PO numbers currently on the application (via a supplier group) — used to block
+  // adding the same PO twice at once, and to show it ticked/green in the picker.
+  const addedPONumbers = mats.filter(m => m.kind === 'group' && m.poNumber).map(m => m.poNumber)
+  // Hide/unhide a PO from the picker (persisted per project).
+  async function toggleHidePO(poNumber) {
+    const next = hiddenPOs.includes(poNumber) ? hiddenPOs.filter(x => x !== poNumber) : [...hiddenPOs, poNumber]
+    if (onHiddenPOsChange) onHiddenPOsChange(next)
+    try { await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-hidden-pos', projectId, hiddenPOs: next }) }) } catch {}
+  }
   const removeMat = (id) => { setMats(l => l.filter(x => x.id !== id)); setDirty(true) }
   const setMatField = (id, field, v) => { setMats(l => l.map(x => x.id === id ? { ...x, [field]: v } : x)); setDirty(true) }
   const setMatPct = (id, v) => { const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0)); setMatField(id, 'pctComplete', n) }
@@ -538,7 +623,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
 
-      {showAddMat && <AddMaterialsModal pos={projectPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
+      {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
     </>
   )
 }
@@ -592,54 +677,79 @@ function SummaryBlock({ sum, app }) {
 }
 
 // Pick variations from the project's tracker to add to the application.
-function AddMaterialsModal({ pos, onClose, onAdd, onAddGroup }) {
+function AddMaterialsModal({ pos, addedPONumbers = [], hiddenPOs = [], onToggleHide, onClose, onAdd, onAddGroup }) {
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  // Per-PO mark-up entered here; applied to every line added from that PO.
   const [markups, setMarkups] = useState({})
   const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '', markupPct: '' })
+  const [showHidden, setShowHidden] = useState(false)
   const mk = (poNumber) => (markups[poNumber] === '' || markups[poNumber] == null) ? 0 : parseFloat(markups[poNumber]) || 0
+  const isAdded = (po) => addedPONumbers.includes(po)
+  const isHidden = (po) => hiddenPOs.includes(po)
+  const visiblePos = (pos || []).filter(p => !isHidden(p.poNumber))
+  const hiddenList = (pos || []).filter(p => isHidden(p.poNumber))
+
+  const renderPO = (p, pi) => {
+    const m = mk(p.poNumber)
+    const factor = 1 + m / 100
+    const added = isAdded(p.poNumber)
+    return (
+      <div key={p.poNumber || pi} style={{ border: '1px solid ' + (added ? '#86efac' : '#e5e7eb'), borderRadius: 10, overflow: 'hidden', background: added ? '#f0fdf4' : '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: added ? '#dcfce7' : '#f8f9fa', padding: '10px 12px', flexWrap: 'wrap' }}>
+          {added && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{p.poNumber || '(no PO no.)'}</div>
+          <div style={{ fontSize: 12, color: '#666' }}>{p.supplier}</div>
+          <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 5, background: p.delivered ? '#dcfce7' : '#fef9c3', color: p.delivered ? '#16a34a' : '#a16207' }}>{p.delivered ? 'Delivered' : 'Not delivered'}</span>
+          {added && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Added</span>}
+          <div style={{ flex: 1 }} />
+          <label style={{ fontSize: 11, color: '#c2410c', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            Mark-up
+            <input type="number" value={markups[p.poNumber] ?? ''} placeholder="0" onChange={e => setMarkups(s => ({ ...s, [p.poNumber]: e.target.value }))} style={{ width: 54, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />%
+          </label>
+          <button disabled={added} onClick={() => onAddGroup({ supplier: p.supplier, poNumber: p.poNumber, markupPct: m, lines: (p.lineItems || []) })} style={{ background: added ? '#e5e7eb' : '#0f766e', color: added ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: added ? 'default' : 'pointer' }}>{added ? 'Added' : 'Add all lines'}</button>
+          <button onClick={() => onToggleHide(p.poNumber)} title={isHidden(p.poNumber) ? 'Unhide' : 'Hide this PO from the list'} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: '#6b7280' }}>{isHidden(p.poNumber) ? 'Unhide' : 'Hide'}</button>
+        </div>
+        {!added && (
+          <div style={{ padding: '6px 0' }}>
+            {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
+            {(p.lineItems || []).map((li, li2) => {
+              const net = (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)
+              return (
+                <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12.5 }}>{li.description || '(no description)'}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
+                  </div>
+                  <button onClick={() => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Add</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 720, maxWidth: '100%', maxHeight: '86vh', overflow: 'auto' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Add materials on site</div>
-        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>All purchase orders for this project. Set a mark-up per PO (applied to every line added from it, hidden on the customer copy), then add whole POs or individual lines.</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 16 }}>
-          {(pos || []).length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No purchase orders found for this project.</div>}
-          {(pos || []).map((p, pi) => {
-            const m = mk(p.poNumber)
-            const factor = 1 + m / 100
-            return (
-              <div key={pi} style={{ border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8f9fa', padding: '10px 12px', flexWrap: 'wrap' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{p.poNumber || '(no PO no.)'}</div>
-                  <div style={{ fontSize: 12, color: '#666' }}>{p.supplier}</div>
-                  <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 5, background: p.delivered ? '#dcfce7' : '#fef9c3', color: p.delivered ? '#16a34a' : '#a16207' }}>{p.delivered ? 'Delivered' : 'Not delivered'}</span>
-                  <div style={{ flex: 1 }} />
-                  <label style={{ fontSize: 11, color: '#c2410c', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    Mark-up
-                    <input type="number" value={markups[p.poNumber] ?? ''} placeholder="0" onChange={e => setMarkups(s => ({ ...s, [p.poNumber]: e.target.value }))} style={{ width: 54, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />%
-                  </label>
-                  <button onClick={() => onAddGroup({ supplier: p.supplier, poNumber: p.poNumber, markupPct: m, lines: (p.lineItems || []) })} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>Add all lines</button>
-                </div>
-                <div style={{ padding: '6px 0' }}>
-                  {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
-                  {(p.lineItems || []).map((li, li2) => {
-                    const net = (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)
-                    return (
-                      <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 12.5 }}>{li.description || '(no description)'}</div>
-                          <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
-                        </div>
-                        <button onClick={() => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Add</button>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 760, maxWidth: '100%', maxHeight: '88vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Add materials on site</div>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
+        <div style={{ fontSize: 12.5, color: '#777', margin: '4px 0 14px' }}>All POs for this project (latest first). Add whole POs or individual lines — the window stays open so you can add several. Added POs show green with a tick. Hide POs you've finished with; they stay hidden next time.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+          {visiblePos.length === 0 && <div style={{ fontSize: 13, color: '#aaa' }}>No purchase orders to show{hiddenList.length ? ' (all hidden).' : ' for this project.'}</div>}
+          {visiblePos.map((p, pi) => renderPO(p, pi))}
+        </div>
+
+        {hiddenList.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <button onClick={() => setShowHidden(s => !s)} style={{ background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '6px 12px', fontSize: 12, cursor: 'pointer', color: '#6b7280' }}>{showHidden ? '▲ Hide' : `▼ Show ${hiddenList.length} hidden PO${hiddenList.length === 1 ? '' : 's'}`}</button>
+            {showHidden && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>{hiddenList.map((p, pi) => renderPO(p, `h${pi}`))}</div>}
+          </div>
+        )}
+
         <div style={{ borderTop: '1px solid #eee', paddingTop: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 8 }}>OR ADD MANUALLY</div>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 0.6fr 0.6fr 0.8fr 0.7fr', gap: 8, marginBottom: 10 }}>
@@ -649,10 +759,7 @@ function AddMaterialsModal({ pos, onClose, onAdd, onAddGroup }) {
             <input value={manual.rate} onChange={e => setManual(m => ({ ...m, rate: e.target.value }))} placeholder="Rate" type="number" style={{ padding: '7px 9px', border: '1px solid #d5d9e0', borderRadius: 6, fontSize: 12.5 }} />
             <input value={manual.markupPct} onChange={e => setManual(m => ({ ...m, markupPct: e.target.value }))} placeholder="MU %" type="number" style={{ padding: '7px 9px', border: '1px solid #fdba74', borderRadius: 6, fontSize: 12.5 }} />
           </div>
-          <button onClick={() => { if (manual.description) onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate), markupPct: manual.markupPct === '' ? 0 : parseFloat(manual.markupPct) }) }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Done</button>
+          <button onClick={() => { if (manual.description) { onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate), markupPct: manual.markupPct === '' ? 0 : parseFloat(manual.markupPct) }); setManual({ description: '', qty: '', unit: '', rate: '', markupPct: '' }) } }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
         </div>
       </div>
     </div>
