@@ -1,34 +1,21 @@
-Applications — latest-first sort, delete from editor, attachment viewer
-=======================================================================
+Applications — spacing + PDF variation tweaks
+=============================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v26"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v27"
 
-1) SORT — LATEST APPLICATION AT THE TOP
-   Within a project, the applications list is ordered newest first by default.
+1) PAGE: gap between Summary and Contract Works
+   Added a small margin below the Summary/Certificate block so it no longer butts
+   up against the Contract Works card.
 
-2) DELETE FROM INSIDE THE EDITOR
-   A "Delete" button is now in the application editor header (not just the list).
-   • Drafts: simple confirm.
-   • Already-issued (sent): stronger confirm ("This application has been ISSUED to
-     the customer…") — allowed, but deliberate. Deletes and returns to the list.
+2) PDF: more space before "Variations not yet instructed"
+   Increased the gap between TOTAL VARIATIONS and the "Variations not yet instructed"
+   section so they're clearly separated.
 
-3) VARIATION / SUPPLIER ATTACHMENTS — PAPERCLIP + COUNT + VIEWER
-   Instead of listing each file, attachments now show as a "📎 N" button (N = number
-   of attachments). Click it to open a viewer:
-     • Left: list of the files.
-     • Right: inline preview for PDFs and images.
-     • Other types (Word, Excel, etc.) show an Open/Download button.
-   Same treatment on supplier-group attachments in Materials on Site. You can still
-   remove attachments from within the viewer.
-
-EMAILS
-------
-Emails CAN be attached (.eml / .msg upload fine via the direct-to-Blob uploader).
-Browsers cannot render emails inline, so in the viewer they appear with an
-Open/Download button ("Emails open in your mail app") rather than a preview — the
-person opens them in Outlook/Mail. PDFs and images preview inline.
+3) PDF: VO number column now wraps
+   Long VO references (e.g. "PP+QQ+RR+SS") wrap within the VO column instead of
+   overrunning into the description. Description column adjusted to sit clear of it.
 
 FILES
 -----
-• pages/applications.js       (sort, editor Delete, 📎 viewer, AttachmentViewer; v26)
-• pages/api/applications.js   (delete action accepts allowSent to remove issued apps)
+• pages/applications.js   (Summary bottom margin; v27)
+• lib/applicationPdf.js   (VO wrap + not-instructed spacing)
