@@ -20,25 +20,19 @@ export default function ApplicationsPage() {
   const [projectPOs, setProjectPOs] = useState([])
   const [hiddenPOs, setHiddenPOs] = useState([])
   const [upcoming, setUpcoming] = useState({ dated: [], missing: [], loading: true })
+  const [datesModal, setDatesModal] = useState(null) // { xeroId, jobNo, name }
   const [openId, setOpenId] = useState(null)     // application being edited
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
   const [newMonth, setNewMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
 
-  useEffect(() => { (async () => {
+  const loadUpcoming = async () => {
     try {
-      const [d, m, hiddenRes, sumRes] = await Promise.all([
+      const [d, hiddenRes, sumRes] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
-        fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
         fetch('/api/hidden-projects').then(r => r.json()).catch(() => ({})),
         fetch('/api/applications?upcoming=1').then(r => r.json()).catch(() => ({})),
       ])
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' }))
-        .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
-      setProjects(ps)
-      if (m && m.user) setMe(m.user)
-
-      // Build the upcoming split (dated table rows + missing-dates banner).
       const hidden = new Set((hiddenRes.hidden || []).map(String))
       const summary = sumRes.summary || {}
       const inProgress = (d.projects || []).filter(p => p.status === 'INPROGRESS' && !hidden.has(String(p.xeroId)))
@@ -79,6 +73,20 @@ export default function ApplicationsPage() {
       dated.sort((a, b) => a.nextDate.localeCompare(b.nextDate))
       setUpcoming({ dated, missing, loading: false })
     } catch { setUpcoming({ dated: [], missing: [], loading: false }) }
+  }
+
+  useEffect(() => { (async () => {
+    try {
+      const [d, m] = await Promise.all([
+        fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
+        fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
+      ])
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' }))
+        .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
+      setProjects(ps)
+      if (m && m.user) setMe(m.user)
+    } catch {}
+    loadUpcoming()
   })() }, [])
 
   async function load(pid) {
@@ -154,7 +162,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v14</title></Head>
+      <Head><title>Rock Roofing — Applications · v15</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -172,7 +180,7 @@ export default function ApplicationsPage() {
               <span style={{ fontWeight: 700, marginRight: 8 }}>⚠ Missing dates:</span>
               {upcoming.missing.map((r, i) => (
                 <span key={r.xeroId}>
-                  <button onClick={() => pickProject(r.xeroId)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
+                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
                   {i < upcoming.missing.length - 1 ? <span style={{ margin: '0 6px', color: '#b45309' }}>·</span> : null}
                 </span>
               ))}
@@ -271,6 +279,7 @@ export default function ApplicationsPage() {
           )}
         </div>
       </div>
+      {datesModal && <SetDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); setUpcoming(u => ({ ...u, loading: true })); loadUpcoming() }} />}
     </>
   )
 }
@@ -286,6 +295,61 @@ function prevGrossForApp(sortedApps, app) {
 // date. Mirrors the Application Calendar: uses the dashboard's in-progress
 // projects and each project's day-of-month settings to compute the next date.
 // Projects with NO dates set show at the TOP.
+// Set the recurring application/valuation/payment day-of-month for a project —
+// the same date-entry the Application Calendar's banner opens.
+function SetDatesModal({ project, onClose, onSaved }) {
+  const [days, setDays] = useState({ applicationDay: '', valuationDay: '', paymentDay: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { (async () => {
+    try {
+      const data = await fetch(`/api/project/${project.xeroId}`).then(r => r.json())
+      const s = data.settings || {}
+      setDays({ applicationDay: s.applicationDay || '', valuationDay: s.valuationDay || '', paymentDay: s.paymentDay || '' })
+    } catch {} setLoading(false)
+  })() }, [project.xeroId])
+  async function save() {
+    setSaving(true); setErr('')
+    try {
+      const data = await fetch(`/api/project/${project.xeroId}`).then(r => r.json())
+      const settings = data.settings || {}
+      const updated = { ...settings, applicationDay: days.applicationDay || undefined, valuationDay: days.valuationDay || undefined, paymentDay: days.paymentDay || undefined }
+      const res = await fetch(`/api/project/${project.xeroId}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
+      if (!res.ok) throw new Error()
+      onSaved()
+    } catch { setErr('Could not save dates.'); setSaving(false) }
+  }
+  const fields = [
+    { label: 'Application day', key: 'applicationDay', color: '#1e40af', bg: '#dbeafe' },
+    { label: 'Valuation day', key: 'valuationDay', color: '#065f46', bg: '#d1fae5' },
+    { label: 'Payment day', key: 'paymentDay', color: '#92400e', bg: '#fef3c7' },
+  ]
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 460, maxWidth: '100%' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div>
+        <div style={{ fontSize: 12.5, color: '#777', margin: '4px 0 16px' }}>Set the day of the month each date falls on. These recur monthly and drive the upcoming applications and calendar.</div>
+        {loading ? <div style={{ padding: 20, textAlign: 'center', color: '#aaa' }}>Loading…</div> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {fields.map(f => (
+              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: f.color, background: f.bg, padding: '6px 10px', borderRadius: 7 }}>{f.label}</span>
+                <input type="number" min="1" max="31" placeholder="e.g. 25" value={days[f.key] || ''} onChange={e => setDays(d => ({ ...d, [f.key]: e.target.value }))} style={{ width: 90, padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 13, textAlign: 'right' }} />
+              </div>
+            ))}
+          </div>
+        )}
+        {err && <div style={{ fontSize: 12.5, color: '#dc2626', marginTop: 10 }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+          <button onClick={save} disabled={saving || loading} style={{ flex: 1, background: (saving || loading) ? '#ccc' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: (saving || loading) ? 'default' : 'pointer' }}>{saving ? 'Saving…' : 'Save dates'}</button>
+          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Upcoming Applications table — dated projects (within 31 days) only. Missing-dates
 // projects are shown in a banner above the dropdown by the parent.
 function UpcomingTable({ rows, loading, onOpen, onDismissed }) {

@@ -1,21 +1,19 @@
-Applications — picker Remove button + Summary tidy
-==================================================
+Upcoming Applications — missing-dates banner opens the date-entry popup
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v14"
-(Page-only change.)
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v15"
+(Page-only change. Uses the existing /api/project/[id] + /api/project/[id]/settings
+endpoints — the same ones the Application Calendar uses.)
 
-1) REMOVE BUTTON IN THE MATERIALS POPOUT
-   Added lines now show "✓ Added" with a red "Remove" button right there in the
-   "Add materials on site" popout — so an accidental add can be undone without
-   leaving the window. Removing the last line of a PO also removes its (now empty)
-   supplier group header. The line becomes addable again immediately.
-
-2) SUMMARY — CONTRACT SUM COLUMN TIDIED
-   In the Summary block, the Contract Sum figures next to "Variations" and
-   "Materials On Site" have been removed (left blank). Only "Measured Work" carries
-   a Contract Sum. (The Materials On Site "Projected Final Account" cell is also
-   left blank, as before.)
+CHANGE
+------
+Clicking a project in the amber "⚠ Missing dates" banner now opens a date-entry
+popup (the same recurring Application day / Valuation day / Payment day fields the
+Application Calendar's banner opens) so you can set the dates right there. On Save
+the dates are written to the project settings and the Upcoming Applications table +
+banner refresh immediately — the project moves out of the banner and into the
+table once its next application date is known.
 
 FILES
 -----
-• pages/applications.js   (v14)
+• pages/applications.js   (v15)
