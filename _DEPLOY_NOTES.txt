@@ -1,19 +1,43 @@
-Materials picker — add PO lines one at a time (fix)
-===================================================
+Upcoming applications table — rebuilt to match the Application Calendar
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v11"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v12"
 
-FIX
+WHY NOTHING WAS SHOWING
+-----------------------
+The old table only looked at projects that already had a saved application or
+contracted rates, and derived the date from an existing application. Most projects
+have neither yet, so the table was empty.
+
+NEW DEFINITION (mirrors the Application Calendar)
+-------------------------------------------------
+• Source = ALL in-progress projects from /api/dashboard, minus hidden projects
+  (same as the calendar).
+• For each project we compute its NEXT application date from its day-of-month
+  settings (applicationDay + any month overrides) — no existing application needed.
+• A project shows if that next application date is within the next 31 DAYS
+  (overdue-this-month still counts). Max ONE row per project (the next one).
+• Projects with NO dates assigned show at the TOP with an amber "⚠ Missing dates"
+  pill (exactly like the calendar) so they can be set up.
+
+HEADING
+-------
+The table title now reads "Select Project — Upcoming Applications".
+
+STILL INCLUDED
+--------------
+• Colour-coded date pill + key: grey not-yet-due / orange within 3 days / green
+  due today / red overdue.
+• "Contracted Rates required" when a project's CRs aren't set up/locked.
+• "Draft ready" vs "Due to raise" status, and "Dismiss month" with its warning.
+
+API
 ---
-Adding a single line from a PO no longer collapses/hides the whole PO. A PO now
-only collapses when ALL of its lines have been added.
-• Add lines one at a time — each added line turns green with "✓ Added" while the
-  rest stay visible and addable.
-• The PO header shows "N/total added" while partially added; the top button
-  becomes "Add remaining" (adds only the not-yet-added lines), and "Added / All
-  added" once every line is in.
-• Individual line still pulls supplier + PO number (group header) and the rate.
+/api/applications?upcoming=1 now returns a lightweight per-project summary
+(hasDraft, seq, dismissed months, CR status) keyed by xeroId; the table computes
+which projects/dates to show client-side from the dashboard.
 
 FILES
 -----
-• pages/applications.js   (v11)
+• pages/applications.js      (UpcomingTable rebuilt; v12)
+• pages/api/applications.js  (upcoming returns summary map)

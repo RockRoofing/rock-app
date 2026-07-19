@@ -17,59 +17,30 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     // Cross-project "upcoming applications" summary for the landing table.
     if (req.query.upcoming) {
+      // Lightweight per-project applications summary, keyed by xeroId. The client
+      // (UpcomingTable) computes which projects/dates to show from the dashboard;
+      // this just tells it each project's draft/seq/dismissed + CR status.
       const all = await getAllProjectSettings()
-      let cache = null
-      try { cache = await get('dashboard:cache') } catch {}
-      const nameOf = (xeroId) => {
-        const row = Array.isArray(cache) ? cache.find(p => String(p.xeroId) === String(xeroId)) : null
-        return { jobNo: row?.jobNo || '', name: row?.name || '' }
-      }
-      const rows = []
+      const summary = {}
       for (const [xeroId, proj] of Object.entries(all || {})) {
         const p = proj || {}
         const apps = Array.isArray(p.applications) ? p.applications : []
         const cr = p.contractedRates
         const hasCR = !!(cr && Array.isArray(cr.items) && cr.items.length)
         const crLocked = hasCR && !!cr.locked
-        // Include a project if it has applications OR contracted rates started.
-        if (!apps.length && !hasCR) continue
-        const info = nameOf(xeroId)
-        const crStatus = !hasCR ? 'none' : (!crLocked ? 'unlocked' : 'ok')
-
-        if (!apps.length) {
-          // No applications yet — surface it so the CR status is visible.
-          rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq: 1, nextDate: '', nextMonthLabel: '', status: crStatus === 'ok' ? 'upcoming' : 'needs-cr', crStatus })
-          continue
-        }
         const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
         const draft = [...sorted].reverse().find(a => !a.status || a.status === 'draft')
         const last = sorted[sorted.length - 1]
-        let nextSeq, nextDate = '', nextMonthLabel = '', status
-        if (draft) {
-          nextSeq = draft.seq; nextDate = draft.appDate || ''; nextMonthLabel = draft.monthLabel || ''; status = 'draft'
-        } else {
-          nextSeq = (last.seq || 0) + 1
-          const [y, m] = String(last.monthKey || '').split('-').map(Number)
-          if (y && m) {
-            const nd = new Date(y, m, 1)
-            const settings = { applicationDay: p.applicationDay, valuationDay: p.valuationDay, paymentDay: p.paymentDay, dateOverrides: p.dateOverrides || {}, finalPaymentDays: p.finalPaymentDays }
-            const key = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`
-            nextDate = resolveAppDates(key, settings).appDate || ''
-            nextMonthLabel = nd.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-            // Respect a "dismissed this month" flag.
-            if ((p.applicationDismissals || []).includes(key)) status = 'dismissed'
-            else status = 'upcoming'
-          } else status = 'upcoming'
+        summary[String(xeroId)] = {
+          nextSeq: (last ? (last.seq || 0) : 0) + (draft ? 0 : 1) || 1,
+          draftSeq: draft ? draft.seq : null,
+          hasDraft: !!draft,
+          lastMonthKey: last ? (last.monthKey || '') : '',
+          dismissed: Array.isArray(p.applicationDismissals) ? p.applicationDismissals : [],
+          crStatus: !hasCR ? 'none' : (!crLocked ? 'unlocked' : 'ok'),
         }
-        rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq, nextDate, nextMonthLabel, status, crStatus })
       }
-      // Order by the next application date (soonest first; undated last).
-      rows.sort((a, b) => {
-        if (!a.nextDate) return 1
-        if (!b.nextDate) return -1
-        return a.nextDate.localeCompare(b.nextDate)
-      })
-      return res.json({ upcoming: rows })
+      return res.json({ summary })
     }
 
     const { projectId } = req.query
