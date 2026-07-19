@@ -1,39 +1,39 @@
-Wages sync — always dated + no duplicates (supersedes Wages_sync_dedupe_fix)
-===========================================================================
+GROUP A — Contracted Rates → budgets + searchable CR project picker
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/api/sync-wages.js  (deploy BEFORE re-syncing wages)
+NEW FILE to create in GitHub: components/ProjectSearchSelect.js
 
-DECISION
---------
-Wages stay in the COSTS tab (they're a cost — a separate tab would break the
-"all project spend in one place" reconciliation). For an accurate EOM report every
-wage line MUST carry a date, so the fix makes undated wages impossible rather than
-trying to display them.
+This is the first of several bundles working through your 11-item list. It's
+self-contained and safe to deploy/test on its own.
 
-WHAT THIS DOES
---------------
-1) EVERY wage line is dated. The date now resolves from the Xero journal's Date,
-   then DateString, then UpdatedDateUTC. If none resolve, the line is SKIPPED (and
-   counted as skippedNoDate in the sync response) — never stored undated. So wages
-   will always fall into the correct month in the Costs tab and the EOM report.
+1) CRs AUTO-POPULATE THE EDIT-PROJECT-DETAILS BUDGETS (on LOCK)
+   When a project's Contracted Rates are LOCKED (either via the Lock button or by
+   saving while locked), the CR totals become the source of truth and OVERWRITE the
+   edit-project-details fields:
+     • Original Contract Value  <- CR "Above the line" total
+     • Labour budget            <- CR "Labour budget (above)"
+     • Materials budget         <- CR "Materials budget (above)"
+   This also satisfies "uploading/relocking CRs overwrites manual entries" — each
+   lock re-pushes the current CR totals. (Budgets only change on LOCK, so unlocked
+   editing won't disturb the project details until you re-lock.)
 
-2) NO MORE DUPLICATES. The old sync kept every existing line that was before the
-   window OR had no date, so undated lines were re-kept on every sync while fresh
-   dated wages were added alongside — the doubling you saw on Russell Hill. The
-   bucket is now rebuilt each sync: older DATED history + fresh in-window lines,
-   de-duplicated by Xero JournalLineID (content-key fallback), legacy undated/no-id
-   orphans dropped. Applied to per-project and untagged buckets.
+2) SEARCHABLE PROJECT DROPDOWN ON THE CRs TAB
+   The project selector is now a type-to-search box (filter by job no or name),
+   replacing the long plain dropdown. (Applications tab gets the same in the next
+   bundle, Group B.)
 
-AFTER DEPLOY
-------------
-1. Deploy this file.
-2. Re-run the Wages sync (Bookkeeping page or commercial SyncBar) to repopulate the
-   wages you cleared. They come in clean and fully dated.
-3. Check the sync result — if "skippedNoDate" is > 0, those journals in Xero have no
-   usable date and need a date set in Xero, then re-sync. (Expected to be 0.)
-4. Wages now appear in each project's Costs tab under their real month, and the
-   Budget Tracker / EOM / Costs figures reconcile (allowing for the valuation-date
-   basis, which is by design).
+FILES
+-----
+• components/ProjectSearchSelect.js   (NEW — reusable searchable project picker)
+• pages/contracted-rates.js           (uses the searchable picker)
+• pages/api/contracted-rates.js       (populates budgets when locked)
 
-The diagnostic endpoint pages/api/cost-reconcile.js can be deleted whenever you like.
+STILL TO COME (next bundles):
+• Group B: searchable picker on Applications + Anticipated Final Account flows from
+  a sent application into Project Financials / Budget Tracker / Retentions.
+• Group C: retention auto-green + Outstanding/Complete/All toggle + TBC warnings.
+• Group D: manual status toggle (In Progress→Defects→Complete), WIP override moved
+  to EOM inline, project-details completeness warnings.
+• Group E: editable application month (defaults current, warns on past) + valuation
+  date dropdown showing the real per-month dates.

@@ -3,6 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { upload } from '@vercel/blob/client'
 import CommercialNav from '../components/CommercialNav'
+import ProjectSearchSelect from '../components/ProjectSearchSelect'
 import { computeRateTotals, sumItems, lineRateTotal, lineMatTotal, lineLabTotal } from '../lib/contractRatesParser'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -533,10 +534,13 @@ export default function ContractedRatesPage() {
           {/* Project picker */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Project</label>
+            <ProjectSearchSelect projects={projects} value={projectId} onPick={(pid) => pickProject(pid)} minWidth={340} />
+            {false && (
             <select value={projectId} onChange={e => pickProject(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, minWidth: 340, background: '#fff' }}>
               <option value="">— Select a project —</option>
               {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
             </select>
+            )}
             {selProject && <Link href={`/project/${projectId}`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open project →</Link>}
           </div>
 

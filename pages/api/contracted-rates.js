@@ -1,5 +1,21 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject } from '../../lib/db'
+
+// When contracted rates are LOCKED, push the CR totals into the project's edit
+// details as the source of truth (overwriting any manual entries):
+//   Original Contract Value  <- above-the-line total
+//   Labour budget            <- above-the-line labour
+//   Materials budget         <- above-the-line materials
+// NOTE: getProject(id) returns the settings object itself, so these live at the
+// top level of `project` (e.g. project.contractValue), not project.settings.*.
+function populateBudgetsFromCR(project) {
+  const items = project?.contractedRates?.items || []
+  const t = computeRateTotals(items)
+  project.contractValue = Number(t.aboveTotal || 0)
+  project.labourBudget = Number(t.aboveLabour || 0)
+  project.materialsBudget = Number(t.aboveMaterials || 0)
+  project.budgetsFromCRAt = Date.now()
+}
 import { parseTakeOffRows, computeRateTotals } from '../../lib/contractRatesParser'
 
 export const config = { api: { bodyParser: { sizeLimit: '6mb' } } }
@@ -75,6 +91,9 @@ export default async function handler(req, res) {
         savedAt: Date.now(),
         savedBy: req.body.author || '',
       }
+      // When the rates are locked, the CR totals become the source of truth for the
+      // project's contract value + labour/materials budgets (overwrites manual).
+      if (project.contractedRates.locked) populateBudgetsFromCR(project)
       await saveProject(projectId, project)
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
@@ -84,6 +103,7 @@ export default async function handler(req, res) {
       if (!project.contractedRates) return res.status(400).json({ error: 'No contracted rates to lock.' })
       project.contractedRates.locked = !!req.body.locked
       project.contractedRates.savedAt = Date.now()
+      if (project.contractedRates.locked) populateBudgetsFromCR(project)
       await saveProject(projectId, project)
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
