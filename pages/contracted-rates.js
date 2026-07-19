@@ -39,6 +39,12 @@ export default function ContractedRatesPage() {
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       setProjects(ps)
       if (m && m.user) setMe(m.user)
+      // Deep-link: ?projectId=… pre-selects a project (e.g. "Set up" from the
+      // Applications upcoming table) so the costing doc can be uploaded straight away.
+      try {
+        const qp = new URLSearchParams(window.location.search).get('projectId')
+        if (qp && ps.some(p => p.xeroId === String(qp))) { setProjectId(String(qp)); loadRates(String(qp)) }
+      } catch {}
     } catch {}
   })() }, [])
 
@@ -519,7 +525,7 @@ export default function ContractedRatesPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Contracted Rates · v15</title></Head>
+      <Head><title>Rock Roofing — Contracted Rates · v16</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/contracted-rates" />
 

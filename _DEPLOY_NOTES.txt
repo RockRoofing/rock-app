@@ -1,19 +1,19 @@
-Upcoming Applications — missing-dates banner opens the date-entry popup
-======================================================================
+"Set up" deep-links to Contracted Rates with the project pre-selected
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v15"
-(Page-only change. Uses the existing /api/project/[id] + /api/project/[id]/settings
-endpoints — the same ones the Application Calendar uses.)
+Build: ✓ Compiled successfully
+Markers: Applications "· v16"  ·  Contracted Rates "· v16"
 
 CHANGE
 ------
-Clicking a project in the amber "⚠ Missing dates" banner now opens a date-entry
-popup (the same recurring Application day / Valuation day / Payment day fields the
-Application Calendar's banner opens) so you can set the dates right there. On Save
-the dates are written to the project settings and the Upcoming Applications table +
-banner refresh immediately — the project moves out of the banner and into the
-table once its next application date is known.
+In the Upcoming Applications table, the "Set up" button (shown for projects that
+need contracted rates) now links straight to:
+    /contracted-rates?projectId=<xeroId>
+The Contracted Rates page reads that query parameter on load and auto-selects the
+project, so you land ready to upload the costing document immediately — no need to
+re-pick the project.
 
 FILES
 -----
-• pages/applications.js   (v15)
+• pages/applications.js       (Set up = deep link; v16)
+• pages/contracted-rates.js   (reads ?projectId= and auto-selects; v16)
