@@ -1,25 +1,24 @@
-Applications — re-send warning, auto-CC sender, PDF spacing (no lines)
-=====================================================================
+Application PDF — variation columns, not-instructed section, materials columns, formatting, % symbol
+===================================================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v23"
+Build: ✓ Compiled successfully
+Single-file change (lib/applicationPdf.js).
 
-1) RE-SEND WARNING
-   If an application has already been sent, pressing "Send email" in the send
-   popout asks: "Are you sure you want to send this application to the customer
-   again?" before sending.
-
-2) AUTO-CC THE SENDING PORTAL USER
-   The person sending is automatically copied in (their email is pre-ticked in CC,
-   and always included on send even if unticked).
-
-3) PDF — LINES REMOVED, MORE ROW SPACING
-   All table gridlines (vertical + horizontal) have been removed. Instead there's
-   more vertical space between each line item so every item reads clearly against
-   its qty / rate / total. Applies to Summary, Payment Certificate, Contract Works,
-   Variations and Materials on Site. The section-divider rules under headings and
-   above the section totals are kept (those are structure, not table lines).
+1) VARIATIONS COLUMNS
+   VO | Description | Status | Final value | % Complete | Value to date
+   • Instructed rows: Status "Instructed", % Complete with the % symbol, value to date.
+2) VARIATIONS NOT YET INSTRUCTED (new section below TOTAL VARIATIONS)
+   Same columns; Status "Not instructed"; Final value shown; % Complete and Value to
+   date shown as N/A. Has its own TOTAL NOT YET INSTRUCTED (value to date = N/A).
+3) MATERIALS ON SITE COLUMNS
+   Description | PO | Qty | Unit | Rate | Total | Claimed | Value to date
+   • Rate = customer (marked-up) unit rate so Qty × Rate reconciles to Total, without
+     ever showing the mark-up %. Claimed shown as a % (with symbol).
+4) FORMATTING CARRIED THROUGH
+   Bold / Underline / Red set on Contracted-Rates / Application lines now render in
+   the Contract Works section of the PDF (bold font, underline rule, red text).
+5) % COMPLETE shown as a percentage (with the % symbol) throughout.
 
 FILES
 -----
-• lib/applicationPdf.js     (line removal + spacing)
-• pages/applications.js     (re-send confirm + auto-CC sender; v23)
+• lib/applicationPdf.js
