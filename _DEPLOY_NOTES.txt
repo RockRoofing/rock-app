@@ -1,27 +1,59 @@
-Upcoming Applications — app + valuation dates, overdue drafts
-=============================================================
+Applications Phase 4 — PDF generation + send
+============================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v18"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v20"
 
-1) COLUMNS: APPLICATION DUE + VALUATION DATE (replaces Month)
-   The table now shows "Application due" (colour-coded: grey not-yet-due / orange
-   within 3 days / green due today / red overdue, with in-Xd / Xd-overdue) and a
-   "Valuation date" column. The Month column is removed.
+WHAT'S NEW
+----------
+1) APPLICATION PDF (customer copy)
+   One combined A4 PDF, Rock-branded, containing:
+     • Header + application/valuation/payment/final dates
+     • Summary (Measured Work / Variations / Materials On Site, Contract Sum /
+       Application Total / Anticipated Final Account)
+     • Payment Certificate (Gross / MCD / Sub-total / Retention / Total, across
+       Current / Previously Cert / This Certificate)
+     • Contract Works (measurable lines only; sub-headings/notes have no totals)
+     • Variations (instructed only, with value-to-date)
+     • Materials on Site — CUSTOMER COPY: shows the marked-up Total but NO mark-up
+       % column (mark-up stays internal, exactly as agreed)
+   Then the VARIATION and SUPPLIER-GROUP attachments are appended (PDFs copied in
+   page-for-page; images placed on their own page).
 
-2) OVERDUE DRAFTS ALWAYS SHOW
-   A draft application that hasn't been marked as sent and whose application date
-   has already passed now always appears in the table (previously it dropped off
-   because it was outside the 31-day forward window). Overdue drafts use their own
-   saved application/valuation dates, so the date shown is correct and flagged red
-   as overdue. Other projects still show if their next application falls within 31
-   days.
+2) DOWNLOAD
+   "Download PDF" button in the application header (and inside the send popout).
+   Opens /api/application-pdf?projectId=..&appId=..&download=1
 
-API
----
-/api/applications?upcoming=1 now also returns each draft's appDate, valDate and
-monthKey so the table can render dates and detect overdue drafts.
+3) SEND TO CUSTOMER
+   "Send to customer" opens a popout (like the chase emails):
+     • Tickable customer recipients (from the project's customer contacts / email),
+       plus a free-text box for extra addresses
+     • Editable subject + message (sensible default filled in)
+     • Replies go to the project QS (reply-to) when set
+     • Optional "Mark this application as sent" (freezes variations + locks it)
+   Sends via Resend with the PDF attached, and records the send on the application.
+   (Save any edits first — the Send button asks you to save if there are unsaved
+   changes, so the PDF matches what's on screen.)
 
-FILES
------
-• pages/applications.js       (columns + overdue-draft logic; v18)
-• pages/api/applications.js   (summary carries draft dates)
+NEW FILES (make sure these are created in GitHub, not just the edited ones)
+--------------------------------------------------------------------------
+• lib/applicationPdf.js          (NEW — the PDF generator)
+• pages/api/application-pdf.js    (NEW — download/preview endpoint)
+• pages/api/application-send.js   (NEW — build + email via Resend w/ attachment)
+
+EDITED
+------
+• pages/applications.js          (Download + Send buttons, SendApplicationModal; v20)
+• pages/api/applications.js      (GET now returns customer contacts + QS email for
+                                  the send popout)
+
+ENV / NOTES
+-----------
+• Uses RESEND_API_KEY (already set). FROM = ACCOUNTS_FROM_EMAIL if set, else
+  FORMS_FROM_EMAIL, else Resend's onboarding address.
+• Logo pulled from /rock-logo.jpg (same as the other PDFs).
+• Verified the PDF's figures against the calc engine (measured / variations
+  instructed-only / materials marked-up / gross / certificate after MCD+retention).
+  Rendering itself uses pdf-lib (already a project dependency).
+
+NEXT (Phase 5): CM approval workflow (tokenised email link → approve / request
+edits / adjust %). Phase 6: surface finished applications under Projects.

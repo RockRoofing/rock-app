@@ -59,12 +59,22 @@ export default function ApplicationsPage() {
         const s = summary[String(p.xeroId)] || {}
         const hasDays = !!(parseInt(p.applicationDay) || Object.keys(p.dateOverrides || {}).length)
 
-        // An overdue draft (not yet sent, application date in the past) must always
-        // show, even though it's outside the 31-day forward window.
-        const draftAppIso = s.hasDraft ? (s.draftAppDate || '') : ''
-        const draftOverdue = draftAppIso && new Date(draftAppIso + 'T00:00:00') < today
+        // An overdue draft (an application not yet marked as sent, whose application
+        // date has passed) should still show even though it's outside the 31-day
+        // forward window. Use the draft's stored date, else recompute it from the
+        // draft's month + the project's day settings.
+        let draftAppIso = s.hasDraft ? (s.draftAppDate || '') : ''
+        let draftValIso = s.hasDraft ? (s.draftValDate || '') : ''
+        if (s.hasDraft && !draftAppIso && s.draftMonthKey) {
+          const [dy, dm] = String(s.draftMonthKey).split('-').map(Number)
+          if (dy && dm) {
+            draftAppIso = getDateForMonth(p, 'applicationDay', dy, dm, 'applicationDate') || ''
+            draftValIso = draftValIso || getDateForMonth(p, 'valuationDay', dy, dm, 'valuationDate') || ''
+          }
+        }
+        const draftOverdue = !!(draftAppIso && new Date(draftAppIso + 'T00:00:00') < today)
 
-        if (!hasDays && !draftOverdue) { if (!hasDays) missing.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name }); continue }
+        if (!hasDays && !draftOverdue) { missing.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name }); continue }
 
         // Find the next application date within the horizon (this month / next).
         let found = null
@@ -78,10 +88,10 @@ export default function ApplicationsPage() {
           if (!found || iso < found.iso) found = cand
         }
 
-        // Prefer an overdue draft's own dates so it surfaces with the right date.
+        // An overdue draft surfaces with its own dates.
         if (draftOverdue) {
-          const mk = s.draftMonthKey || draftAppIso.slice(0, 7)
-          dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, appDate: draftAppIso, valDate: s.draftValDate || '', monthKey: mk, ...statusOf(s, mk) })
+          const mk = s.draftMonthKey || (draftAppIso ? draftAppIso.slice(0, 7) : '')
+          dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, appDate: draftAppIso, valDate: draftValIso, monthKey: mk, ...statusOf(s, mk) })
           continue
         }
         if (!found) continue
@@ -179,7 +189,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v18</title></Head>
+      <Head><title>Rock Roofing — Applications · v20</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -214,6 +224,7 @@ export default function ApplicationsPage() {
               prevGross={prevGrossFor(openApp)}
               projectId={projectId}
               me={me}
+              settings={settings}
               trackerVariations={trackerVariations}
               projectPOs={projectPOs}
               hiddenPOs={hiddenPOs}
@@ -396,7 +407,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -406,6 +417,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   const [msg, setMsg] = useState('')
   const [showAddMat, setShowAddMat] = useState(false)
   const [unlocked, setUnlocked] = useState(false)
+  const [showSend, setShowSend] = useState(false)
   const isSent = !!app.status && app.status !== 'draft'
   const locked = isSent && !unlocked
 
@@ -568,9 +580,13 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
         <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: isSent ? '#dcfce7' : '#fef9c3', color: isSent ? '#16a34a' : '#a16207' }}>{isSent ? (unlocked ? 'Sent — editing' : 'Sent') : 'Draft'}</span>
         <div style={{ flex: 1 }} />
         {isSent && !unlocked && <span onDoubleClick={() => setUnlocked(true)} title="Double-click to edit" style={{ fontSize: 12, color: '#6b7280', cursor: 'pointer', userSelect: 'none' }}>Double-click here to edit this sent application</span>}
+        <a href={`/api/application-pdf?projectId=${encodeURIComponent(projectId)}&appId=${encodeURIComponent(app.id)}&download=1`} target="_blank" rel="noreferrer" style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', color: '#374151', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
+        <button onClick={() => { if (dirty) { setMsg('Save your changes before sending.'); return } setShowSend(true) }} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Send to customer</button>
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
         {!locked && !isSent && <button onClick={trySubmit} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
       </div>
+
+      {showSend && <SendApplicationModal app={app} projectId={projectId} settings={settings} me={me} isSent={isSent} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
 
@@ -940,6 +956,76 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
             <input value={manual.markupPct} onChange={e => setManual(m => ({ ...m, markupPct: e.target.value }))} placeholder="MU %" type="number" style={{ padding: '7px 9px', border: '1px solid #fdba74', borderRadius: 6, fontSize: 12.5 }} />
           </div>
           <button onClick={() => { if (manual.description) { onAdd({ description: manual.description, qty: manual.qty === '' ? null : parseFloat(manual.qty), unit: manual.unit, rate: manual.rate === '' ? null : parseFloat(manual.rate), markupPct: manual.markupPct === '' ? 0 : parseFloat(manual.markupPct) }); setManual({ description: '', qty: '', unit: '', rate: '', markupPct: '' }) } }} disabled={!manual.description} style={{ background: manual.description ? '#0f766e' : '#e5e7eb', color: manual.description ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: manual.description ? 'pointer' : 'default' }}>Add manual line</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Send the Application PDF to the customer — tickable recipients + editable message.
+function SendApplicationModal({ app, projectId, settings = {}, me, isSent, onClose, onSent }) {
+  const contacts = []
+  const seen = new Set()
+  const push = (name, email) => { const e = (email || '').trim(); if (!e || seen.has(e.toLowerCase())) return; seen.add(e.toLowerCase()); contacts.push({ name: name || e, email: e }) }
+  ;(settings.customerContacts || []).forEach(c => push(c.name || c.title, c.email))
+  push(settings.customerName, settings.customerEmail)
+  const [checked, setChecked] = useState(() => { const s = {}; contacts.forEach((c, i) => { s[c.email] = i === 0 }); return s })
+  const [extra, setExtra] = useState('')
+  const [markSent, setMarkSent] = useState(!isSent)
+  const [subject, setSubject] = useState(`Application for Payment ${app.seq || ''} — ${app.monthLabel || ''}`.trim())
+  const [body, setBody] = useState(
+    `Dear Sir/Madam,\n\nPlease find attached our Application for Payment ${app.seq || ''}${app.monthLabel ? ` for ${app.monthLabel}` : ''}.\n\nWe would be grateful if you could review and confirm at your earliest convenience.\n\nKind regards,\n${me?.name || 'Rock Roofing'}\nRock Roofing Ltd`
+  )
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function send() {
+    const to = contacts.filter(c => checked[c.email]).map(c => c.email)
+    const extras = extra.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean)
+    const all = [...new Set([...to, ...extras])]
+    if (!all.length) { setErr('Select at least one recipient.'); return }
+    setSending(true); setErr('')
+    try {
+      const d = await fetch('/api/application-send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, appId: app.id, to: all, replyTo: settings.qsEmail || undefined, subject, text: body, markSent, author: me?.name || '' }),
+      }).then(r => r.json())
+      if (!d.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
+      onSent(d.application || null)
+    } catch { setErr('Send failed.'); setSending(false) }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 620, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Send application to customer</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>The customer-copy PDF (mark-up hidden) will be attached. Variation and supplier documents are appended to the PDF.</div>
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>RECIPIENTS</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+          {contacts.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa' }}>No customer contacts on file — add an email below.</div>}
+          {contacts.map(c => (
+            <label key={c.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!checked[c.email]} onChange={e => setChecked(s => ({ ...s, [c.email]: e.target.checked }))} />
+              <span style={{ fontWeight: 600 }}>{c.name}</span><span style={{ color: '#888' }}>{c.email}</span>
+            </label>
+          ))}
+        </div>
+        <input value={extra} onChange={e => setExtra(e.target.value)} placeholder="Add more emails (comma separated)" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 14, boxSizing: 'border-box' }} />
+
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>SUBJECT</div>
+        <input value={subject} onChange={e => setSubject(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>MESSAGE</div>
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={9} style={{ width: '100%', padding: '10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }} />
+
+        {settings.qsEmail && <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 8 }}>Replies go to {settings.qsName || 'the QS'} ({settings.qsEmail}).</div>}
+        {!isSent && <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 12 }}><input type="checkbox" checked={markSent} onChange={e => setMarkSent(e.target.checked)} />Mark this application as sent (freezes variations, locks it)</label>}
+        {err && <div style={{ fontSize: 12.5, color: '#dc2626', marginBottom: 10 }}>{err}</div>}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={send} disabled={sending} style={{ flex: 1, background: sending ? '#ccc' : '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: sending ? 'default' : 'pointer' }}>{sending ? 'Sending…' : 'Send email'}</button>
+          <a href={`/api/application-pdf?projectId=${encodeURIComponent(projectId)}&appId=${encodeURIComponent(app.id)}&download=1`} target="_blank" rel="noreferrer" style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', color: '#374151', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
+          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
     </div>

@@ -91,6 +91,11 @@ export default async function handler(req, res) {
         retentionPct: project.retentionPct != null ? project.retentionPct : null,
         mcdPct: project.mcdPct != null ? project.mcdPct : null,
         finalPaymentDays: project.finalPaymentDays != null ? project.finalPaymentDays : null,
+        customerName: project.customerName || '',
+        customerEmail: project.customerEmail || '',
+        customerContacts: Array.isArray(project.customerContacts) ? project.customerContacts : (project.peopleOverride?.customerContacts || []),
+        qsName: project.qsName || '',
+        qsEmail: project.qsEmail || '',
       },
     })
   }
