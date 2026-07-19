@@ -1,41 +1,34 @@
-Applications: orange variations + PO mark-up  ·  Delivery auto-assign fix
-========================================================================
+Materials on Site — line rates, global mark-up, % claimed
+=========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v5"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v6"
+(The "Attempted import error" lines during build are pre-existing warnings from
+other files, unrelated to this change — the build still compiles successfully.)
 
-1) NOT-INSTRUCTED VARIATIONS = ORANGE
-   The Not-instructed status pill is now orange (same shape/weight as the green
-   Instructed pill). Still greyed line text + N/A value-to-date + excluded from
-   totals; the pill itself is orange for visibility. Toggling still writes to the
-   tracker/budgets.
+1) LINE ITEM RATES NOW PULL IN
+   Root cause: PO line items were fetched from Xero with description + quantity
+   ONLY (no cost), so no rate reached the application. lib/xero.js now also pulls
+   UnitAmount (rate) and Unit for each PO line.
+   IMPORTANT: existing ops:deliveries rows were synced before this change and have
+   no rate stored yet — run a SYNC on the delivery schedule to refresh them (new
+   and re-synced POs will then carry rates). Until then, older rows show a blank
+   rate you can type in manually.
 
-2) MATERIALS ON SITE — ALL POs + PER-PO MARK-UP
-   • "+ Add from POs" now lists ALL purchase orders for the project (delivered or
-     not; each PO is tagged Delivered / Not delivered), grouped by PO, showing
-     each PO's line items.
-   • Each PO has a Mark-up % — applied to every line added from that PO. You can
-     "Add all lines" for a PO or add individual lines. A manual line can also take
-     a mark-up.
-   • On the application, Materials on Site now shows Net, a Mark-up % column
-     (shaded, editable), and Total = net x (1 + mark-up). The value used
-     everywhere (Summary/Certificate) is the MARKED-UP total.
-   • CUSTOMER COPY: the mark-up % column is internal only and will be HIDDEN on the
-     customer PDF (Phase 4); the marked-up Total is what the customer sees. (Per
-     your choice: both show the marked-up value; the PDF just hides the % column.)
+2) MARK-UP ALL MATERIALS
+   The Materials on Site header has a "Mark-up all __%" box — type once and it sets
+   the mark-up on EVERY material line. Per-line mark-up still editable, and the
+   per-PO mark-up in the picker still works.
 
-3) DELIVERY SCHEDULE — AUTO-ASSIGN PROJECT ON RE-SYNC  (bug fix)
-   Previously, re-syncing skipped POs already known, so if you added the Xero
-   project (tracking) category to a PO AFTER it was first synced, the delivery
-   never picked it up. Now a re-sync UPDATES an existing delivery's project from
-   the PO's current Xero tracking category when it's been added or changed. New
-   POs still auto-assign from the category as before. (sync result now also
-   reports "updated".)
+3) % CLAIMED FOR MATERIALS ON SITE
+   New "% Claimed" column (with a ✓=100% button), exactly like Contract Works.
+   Value to date = marked-up Total x % claimed. New lines default to 100%.
+   • The TOTAL row now shows both the marked-up final total and the value-to-date.
+   • Summary/Certificate "Materials On Site" now uses the VALUE TO DATE (what's
+     being certified this application), and the carry-forward accounts for it.
 
 FILES
 -----
-• lib/applications.js        (materialLineTotal w/ mark-up; not-instructed excluded)
-• pages/applications.js      (orange pill, materials mark-up column, PO picker; v5)
-• pages/api/applications.js  (GET returns all projectPOs w/ delivered flag)
-• pages/api/deliveries.js    (re-sync updates existing delivery project from tracking)
-
-NEXT (Phase 4): application PDF (customer copy hides the mark-up column) + send.
+• lib/xero.js               (PO line items now include unitAmount + unit)
+• lib/applications.js       (materialValueToDate; summary uses value-to-date; materialsFinal)
+• pages/applications.js     (rate shows, mark-up-all, % claimed column; v6)
+• pages/api/applications.js (unchanged logic; included for the projectPOs rate passthrough)

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
-import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal } from '../lib/applications'
+import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate } from '../lib/applications'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s + (s.length === 10 ? 'T00:00:00' : '')); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
@@ -97,7 +97,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v5</title></Head>
+      <Head><title>Rock Roofing — Applications · v6</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -262,9 +262,12 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
 
   // Materials on site
-  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, ...m }]); setDirty(true); setShowAddMat(false) }
+  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, pctComplete: 100, ...m }]); setDirty(true); setShowAddMat(false) }
   const removeMat = (id) => { setMats(l => l.filter(x => x.id !== id)); setDirty(true) }
   const setMatField = (id, field, v) => { setMats(l => l.map(x => x.id === id ? { ...x, [field]: v } : x)); setDirty(true) }
+  const setMatPct = (id, v) => { const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0)); setMatField(id, 'pctComplete', n) }
+  // Apply one mark-up % to ALL material lines at once.
+  const bulkMarkupAll = (v) => { const n = v === '' ? 0 : parseFloat(v) || 0; setMats(l => l.map(x => ({ ...x, markupPct: n }))); setDirty(true) }
 
   async function save(submit) {
     setSaving(true); setMsg('')
@@ -426,45 +429,62 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
 
       {/* Materials on Site */}
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #eee', flexWrap: 'wrap' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>Materials on Site</div>
           <div style={{ flex: 1 }} />
+          {!locked && mats.length > 0 && (
+            <label style={{ fontSize: 12, color: '#c2410c', display: 'inline-flex', alignItems: 'center', gap: 6, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 7, padding: '5px 10px' }}>
+              Mark-up all
+              <input type="number" placeholder="%" onChange={e => bulkMarkupAll(e.target.value)} style={{ width: 60, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />%
+            </label>
+          )}
           {!locked && <button onClick={() => setShowAddMat(true)} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>+ Add from POs</button>}
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-              <th style={th}>Description</th><th style={th}>PO</th><th style={thR}>Qty</th><th style={th}>Unit</th><th style={thR}>Rate</th><th style={thR}>Net</th><th style={thR} title="Internal only — hidden on the customer copy">Mark-up %</th><th style={thR}>Total</th><th style={thR}></th>
+              <th style={th}>Description</th><th style={th}>PO</th><th style={thR}>Qty</th><th style={th}>Unit</th><th style={thR}>Rate</th><th style={thR}>Net</th><th style={thR} title="Internal only — hidden on the customer copy">Mark-up %</th><th style={thR}>Total</th><th style={thR}>% Claimed</th><th style={thR}>Value to date</th><th style={thR}></th>
             </tr></thead>
             <tbody>
-              {mats.length === 0 && <tr><td colSpan={9} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
+              {mats.length === 0 && <tr><td colSpan={11} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
               {mats.map(m => {
                 const netTotal = m.total != null ? num(m.total) : (num(m.qty) * num(m.rate))
                 const total = materialLineTotal(m)
+                const pct = m.pctComplete == null ? 100 : m.pctComplete
+                const vtd = materialValueToDate(m)
                 return (
                   <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ ...td, minWidth: 200, whiteSpace: 'normal' }}>{m.description}</td>
+                    <td style={{ ...td, minWidth: 180, whiteSpace: 'normal' }}>{m.description}</td>
                     <td style={{ ...td, color: '#6b7280' }}>{m.poNumber || '—'}</td>
-                    <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 56, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
                     <td style={td}>{m.unit || ''}</td>
-                    <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 76, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
+                    <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 72, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
                     <td style={tdR}>{fmt(netTotal)}</td>
                     <td style={{ ...tdR, background: '#fff7ed' }} title="Internal only — hidden on the customer copy">{locked ? `${m.markupPct || 0}%` : (
-                      <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 56, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
+                      <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
                     )}</td>
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
+                    <td style={tdR}>{locked ? `${pct}%` : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
+                        <input type="number" min="0" max="100" value={pct} onChange={e => setMatPct(m.id, e.target.value)} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                        <button title="100%" onClick={() => setMatPct(m.id, 100)} style={{ background: pct === 100 ? '#16a34a' : '#f0f2f5', color: pct === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (pct === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
+                      </div>
+                    )}</td>
+                    <td style={{ ...tdR, fontWeight: 600 }}>{fmt(vtd)}</td>
                     <td style={tdR}>{!locked && <button onClick={() => removeMat(m.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Remove</button>}</td>
                   </tr>
                 )
               })}
               <tr style={{ background: '#f8f9fa', fontWeight: 700 }}>
                 <td style={td} colSpan={7}>TOTAL</td>
+                <td style={tdR}>{fmt(sum.materialsFinal)}</td>
+                <td style={td}></td>
                 <td style={tdR}>{fmt(sum.materialsOnSite)}</td><td></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 16px' }}>The mark-up column (shaded) is internal only — it won't appear on the copy sent to the customer, but the marked-up Total will.</div>
+        <div style={{ fontSize: 11, color: '#94a3b8', padding: '8px 16px' }}>The mark-up column (shaded) is internal only — it won't appear on the copy sent to the customer, but the marked-up Total will. "Value to date" (% claimed × total) is what's certified this application.</div>
       </div>
 
       {/* Summary */}
