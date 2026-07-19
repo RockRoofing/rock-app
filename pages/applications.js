@@ -110,7 +110,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v10</title></Head>
+      <Head><title>Rock Roofing — Applications · v11</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -768,36 +768,41 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
   const renderPO = (p, pi) => {
     const m = mk(p.poNumber)
     const factor = 1 + m / 100
-    const added = isAdded(p.poNumber)
+    const lineKey = (li) => `${p.poNumber}|${(li.description || '').trim()}`
+    const lines = p.lineItems || []
+    const addedCount = lines.filter(li => addedLineKeys.includes(lineKey(li))).length
+    const fullyAdded = lines.length > 0 && addedCount === lines.length
+    const someAdded = addedCount > 0
     return (
-      <div key={p.poNumber || pi} style={{ border: '1px solid ' + (added ? '#86efac' : '#e5e7eb'), borderRadius: 10, overflow: 'hidden', background: added ? '#f0fdf4' : '#fff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: added ? '#dcfce7' : '#f8f9fa', padding: '10px 12px', flexWrap: 'wrap' }}>
-          {added && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
+      <div key={p.poNumber || pi} style={{ border: '1px solid ' + (fullyAdded ? '#86efac' : someAdded ? '#bbf7d0' : '#e5e7eb'), borderRadius: 10, overflow: 'hidden', background: fullyAdded ? '#f0fdf4' : '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: fullyAdded ? '#dcfce7' : '#f8f9fa', padding: '10px 12px', flexWrap: 'wrap' }}>
+          {fullyAdded && <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>}
           <div style={{ fontWeight: 700, fontSize: 13 }}>{p.poNumber || '(no PO no.)'}</div>
           <div style={{ fontSize: 12, color: '#666' }}>{p.supplier}</div>
           <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 5, background: p.delivered ? '#dcfce7' : '#fef9c3', color: p.delivered ? '#16a34a' : '#a16207' }}>{p.delivered ? 'Delivered' : 'Not delivered'}</span>
-          {added && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Added</span>}
+          {fullyAdded ? <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>All added</span>
+            : someAdded ? <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>{addedCount}/{lines.length} added</span> : null}
           <div style={{ flex: 1 }} />
           <label style={{ fontSize: 11, color: '#c2410c', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             Mark-up
             <input type="number" value={markups[p.poNumber] ?? ''} placeholder="0" onChange={e => setMarkups(s => ({ ...s, [p.poNumber]: e.target.value }))} style={{ width: 54, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />%
           </label>
-          <button disabled={added} onClick={() => onAddGroup({ supplier: p.supplier, poNumber: p.poNumber, markupPct: m, lines: (p.lineItems || []) })} style={{ background: added ? '#e5e7eb' : '#0f766e', color: added ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: added ? 'default' : 'pointer' }}>{added ? 'Added' : 'Add all lines'}</button>
+          <button disabled={fullyAdded} onClick={() => onAddGroup({ supplier: p.supplier, poNumber: p.poNumber, markupPct: m, lines: lines.filter(li => !addedLineKeys.includes(lineKey(li))) })} title="Add the remaining lines from this PO" style={{ background: fullyAdded ? '#e5e7eb' : '#0f766e', color: fullyAdded ? '#9ca3af' : '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: fullyAdded ? 'default' : 'pointer' }}>{fullyAdded ? 'Added' : someAdded ? 'Add remaining' : 'Add all lines'}</button>
           <button onClick={() => onToggleHide(p.poNumber)} title={isHidden(p.poNumber) ? 'Unhide' : 'Hide this PO from the list'} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 9px', fontSize: 11, cursor: 'pointer', color: '#6b7280' }}>{isHidden(p.poNumber) ? 'Unhide' : 'Hide'}</button>
         </div>
-        {!added && (
+        {!fullyAdded && (
           <div style={{ padding: '6px 0' }}>
-            {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
-            {(p.lineItems || []).map((li, li2) => {
+            {lines.length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
+            {lines.map((li, li2) => {
               const net = (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)
-              const lineAdded = addedLineKeys.includes(`${p.poNumber}|${(li.description || '').trim()}`)
+              const lineAdded = addedLineKeys.includes(lineKey(li))
               return (
                 <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none', background: lineAdded ? '#f0fdf4' : 'transparent' }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 12.5 }}>{lineAdded && <span style={{ color: '#16a34a', fontWeight: 700, marginRight: 5 }}>✓</span>}{li.description || '(no description)'}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
                   </div>
-                  <button disabled={lineAdded} onClick={() => onAdd({ supplier: p.supplier, description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: lineAdded ? '#e5e7eb' : '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: lineAdded ? 'default' : 'pointer', color: lineAdded ? '#9ca3af' : '#374151', fontWeight: 600 }}>{lineAdded ? 'Added' : 'Add'}</button>
+                  <button disabled={lineAdded} onClick={() => onAdd({ supplier: p.supplier, description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: lineAdded ? '#dcfce7' : '#f0f2f5', border: '1px solid ' + (lineAdded ? '#86efac' : '#e5e7eb'), borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: lineAdded ? 'default' : 'pointer', color: lineAdded ? '#16a34a' : '#374151', fontWeight: 600 }}>{lineAdded ? '✓ Added' : 'Add'}</button>
                 </div>
               )
             })}
