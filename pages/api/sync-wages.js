@@ -16,14 +16,19 @@ async function getRedis() {
 }
 
 // Parse Xero's Microsoft-JSON date "/Date(1551312000000+0000)/" -> "YYYY-MM-DD".
-// (The ManualJournals list gives ONLY this format in `Date`; there is no DateString.)
+// Handles the /Date(ms)/ form and plain ISO. Wage lines MUST have a date for the
+// EOM report to be accurate, so callers should skip any line this can't resolve.
 function parseXeroDate(v) {
   if (!v) return null
   const s = String(v)
   const m = s.match(/\/Date\((-?\d+)/)          // /Date(1551312000000+0000)/
-  if (m) return new Date(parseInt(m[1], 10)).toISOString().slice(0, 10)
+  if (m) { const d = new Date(parseInt(m[1], 10)); return isNaN(d) ? null : d.toISOString().slice(0, 10) }
   const iso = s.match(/\d{4}-\d{2}-\d{2}/)       // already ISO (fallback)
   return iso ? iso[0] : null
+}
+// Best available date for a journal: Date, then DateString, then UpdatedDateUTC.
+function journalDate(j) {
+  return parseXeroDate(j.Date) || parseXeroDate(j.DateString) || parseXeroDate(j.UpdatedDateUTC) || null
 }
 
 // ONE pass over ManualJournals. The list ALREADY includes JournalLines and the
@@ -33,6 +38,7 @@ function parseXeroDate(v) {
 // name, not GUID). Rate-limit-safe (429 backoff).
 async function fetchAllWageLines(at, tid, fromDate) {
   const out = []
+  let skippedNoDate = 0
   let page = 1
   let guard = 0
   while (guard++ < 100) {
@@ -45,13 +51,17 @@ async function fetchAllWageLines(at, tid, fromDate) {
     if (journals.length === 0) break
     let allOlderThanWindow = journals.length > 0
     for (const j of journals) {
-      const dateStr = parseXeroDate(j.Date)
+      const dateStr = journalDate(j)
       if (dateStr && dateStr >= fromDate) allOlderThanWindow = false
       if (dateStr && dateStr < fromDate) continue        // outside window
       for (const jl of (j.JournalLines || [])) {
         if (String(jl.AccountCode) !== '320') continue
         const amount = (jl.LineAmount || 0)
         if (amount <= 0) continue                          // keep positive (debit) project lines
+        // A wage line without a resolvable date can't be attributed to a month, so
+        // it would corrupt the EOM report. Skip it (and count it) rather than store
+        // an undated line.
+        if (!dateStr) { skippedNoDate++; continue }
         const trackingNames = []
         for (const t of (jl.Tracking || [])) { if (t.Option) trackingNames.push(String(t.Option).trim().toLowerCase()) }
         out.push({
@@ -67,6 +77,7 @@ async function fetchAllWageLines(at, tid, fromDate) {
     if (journals.length < 100) break
     page++; await sleep(400)
   }
+  out._skippedNoDate = skippedNoDate
   return out
 }
 
@@ -202,7 +213,7 @@ export default async function handler(req, res) {
 
     await redis.del('dashboard:cache')
     await redis.set('sync-wages:at', new Date().toISOString())
-    res.json({ ok: true, months, wageLinesFetched: all.length, taggedToProjects: taggedCount, untagged: untagged.length, projectsTouched: byProject.size })
+    res.json({ ok: true, months, wageLinesFetched: all.length, skippedNoDate: all._skippedNoDate || 0, taggedToProjects: taggedCount, untagged: untagged.length, projectsTouched: byProject.size })
   } catch (e) {
     console.error('sync-wages error:', e)
     res.status(500).json({ error: e.message })

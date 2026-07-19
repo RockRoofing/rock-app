@@ -1,40 +1,39 @@
-Wages sync — stop duplicates accumulating
-==========================================
+Wages sync — always dated + no duplicates (supersedes Wages_sync_dedupe_fix)
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/api/sync-wages.js
+Single file: pages/api/sync-wages.js  (deploy BEFORE re-syncing wages)
 
-DEPLOY THIS BEFORE RE-SYNCING WAGES.
+DECISION
+--------
+Wages stay in the COSTS tab (they're a cost — a separate tab would break the
+"all project spend in one place" reconciliation). For an accurate EOM report every
+wage line MUST carry a date, so the fix makes undated wages impossible rather than
+trying to display them.
 
-THE BUG
--------
-On each wage sync, the old code kept every existing line that was before the window
-OR had no date:
-    const older = existing.filter(l => !l.date || l.date < winStr)
-Undated lines can never be "in the window", so they were re-kept on EVERY sync while
-fresh dated wages were added alongside them — duplicating labour (e.g. the repeated
-£20,172.73 "Labour cost upto 30/04/2026 to book under tracking categories" and
-£920.52 "June 26 Wages" rows on Russell Hill).
+WHAT THIS DOES
+--------------
+1) EVERY wage line is dated. The date now resolves from the Xero journal's Date,
+   then DateString, then UpdatedDateUTC. If none resolve, the line is SKIPPED (and
+   counted as skippedNoDate in the sync response) — never stored undated. So wages
+   will always fall into the correct month in the Costs tab and the EOM report.
 
-THE FIX
--------
-The wage bucket is now rebuilt cleanly on every sync:
- • Keep genuine OLDER dated history (before the window) — nothing is lost.
- • Add the freshly-fetched in-window lines.
- • DE-DUPLICATE by Xero JournalLineID (fresh wins); fall back to a content key
-   (date+amount+description+reference) when no id is present.
- • DROP legacy lines that have no date AND no Xero line id — these were the orphaned
-   adjustments that caused the pile-up. Real Xero lines always carry a JournalLineID,
-   so nothing legitimate is removed.
-Applied to both the per-project buckets and the untagged (unassigned) bucket.
+2) NO MORE DUPLICATES. The old sync kept every existing line that was before the
+   window OR had no date, so undated lines were re-kept on every sync while fresh
+   dated wages were added alongside — the doubling you saw on Russell Hill. The
+   bucket is now rebuilt each sync: older DATED history + fresh in-window lines,
+   de-duplicated by Xero JournalLineID (content-key fallback), legacy undated/no-id
+   orphans dropped. Applied to per-project and untagged buckets.
 
 AFTER DEPLOY
 ------------
 1. Deploy this file.
-2. Re-run the Wages sync (Bookkeeping page or the commercial SyncBar) to repopulate
-   the wages you cleared — it will now come in without duplicates.
-3. Re-check Russell Hill: the Budget Tracker all-time labour should equal the sum of
-   the actual dated wage lines (no doubling).
+2. Re-run the Wages sync (Bookkeeping page or commercial SyncBar) to repopulate the
+   wages you cleared. They come in clean and fully dated.
+3. Check the sync result — if "skippedNoDate" is > 0, those journals in Xero have no
+   usable date and need a date set in Xero, then re-sync. (Expected to be 0.)
+4. Wages now appear in each project's Costs tab under their real month, and the
+   Budget Tracker / EOM / Costs figures reconcile (allowing for the valuation-date
+   basis, which is by design).
 
-The diagnostic endpoint (pages/api/cost-reconcile.js) can be deleted once you're happy
-— it's read-only and unused by the app.
+The diagnostic endpoint pages/api/cost-reconcile.js can be deleted whenever you like.
