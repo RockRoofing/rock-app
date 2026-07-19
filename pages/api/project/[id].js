@@ -115,7 +115,7 @@ export default async function handler(req, res) {
     const instructedVars = (settings.variations || [])
       .filter(v => v.instructed)
       .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
-    const afa = contractValue + instructedVars
+    const afa = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : (contractValue + instructedVars)
 
     const retPct = parseFloat(settings.retentionPct || 0)
     const totalRetention = retPct > 0 ? totalInvoiced * retPct / (1 - retPct) : 0

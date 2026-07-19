@@ -2,6 +2,38 @@ import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject, get, getAllProjectSettings } from '../../lib/db'
 import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates, backfillAppNumbers } from '../../lib/applications'
 
+// Drop the dashboard snapshot so Project Financials / Budget Tracker / Retentions
+// rebuild from fresh project data.
+async function clearDashboardCache() {
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !token) return
+    const redis = new Redis({ url, token })
+    await redis.del('dashboard:cache')
+  } catch {}
+}
+
+// When an application is sent, its Anticipated Final Account becomes the source of
+// truth for the project. Store it so Project Financials, Budget Tracker and the
+// Retention register all use it (see afaOverride handling on those surfaces).
+function applyAfaOverrideFromApp(project, app) {
+  try {
+    let prev = null
+    const sorted = (project.applications || []).slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
+    for (const a of sorted) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
+    const isFirst = !prev
+    const prevGross = isFirst ? 0 : (app.prevCertGross != null ? app.prevCertGross : (prev ? computeApplicationSummary(prev, 0).grossCurrent : 0))
+    const sum = computeApplicationSummary(app, prevGross)
+    if (sum && isFinite(sum.anticipatedFinalAccount)) {
+      project.afaOverride = Number(sum.anticipatedFinalAccount)
+      project.afaOverrideAt = Date.now()
+      project.afaOverrideAppSeq = app.seq || null
+    }
+  } catch {}
+}
+
 // Applications live inside the project settings under `applications: [ ... ]`.
 // Each application:
 //   { id, seq, monthLabel, status ('draft'|'submitted'),
@@ -218,7 +250,9 @@ export default async function handler(req, res) {
       }
       apps[idx] = { ...apps[idx], appNumber, variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
       project.applications = apps
+      applyAfaOverrideFromApp(project, apps[idx])
       await saveProject(projectId, project)
+      await clearDashboardCache()
       return res.json({ ok: true, application: apps[idx] })
     }
 

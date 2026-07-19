@@ -90,9 +90,26 @@ export default async function handler(req, res) {
         apps[idx].appNumber = maxSent + 1
       }
       apps[idx].status = 'sent'; apps[idx].sentAt = Date.now(); apps[idx].sentBy = req.body.author || ''
+      // Sent application's Anticipated Final Account becomes the project's source of truth.
+      try {
+        const { computeApplicationSummary } = await import('../../lib/applications')
+        let prev = null
+        const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
+        for (const a of sorted) { if ((a.seq || 0) < (apps[idx].seq || 0)) prev = a }
+        const pg = !prev ? 0 : (apps[idx].prevCertGross != null ? apps[idx].prevCertGross : computeApplicationSummary(prev, 0).grossCurrent)
+        const sum = computeApplicationSummary(apps[idx], pg)
+        if (sum && isFinite(sum.anticipatedFinalAccount)) { project.afaOverride = Number(sum.anticipatedFinalAccount); project.afaOverrideAt = Date.now(); project.afaOverrideAppSeq = apps[idx].seq || null }
+      } catch {}
     }
     project.applications = apps
     await saveProject(projectId, project)
+    // Refresh Project Financials / Retentions so the new AFA shows.
+    try {
+      const { Redis } = await import('@upstash/redis')
+      const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+      const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+      if (url && token) { const redis = new Redis({ url, token }); await redis.del('dashboard:cache') }
+    } catch {}
 
     return res.json({ ok: true, id: data?.id || null, application: apps[idx] })
   } catch (e) {

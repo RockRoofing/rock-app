@@ -120,7 +120,10 @@ export default async function handler(req, res) {
       const instructedVars = (settings.variations || [])
         .filter(v => v.instructed)
         .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
-      const afa = contractValue + instructedVars
+      // A sent application's Anticipated Final Account is the source of truth when set;
+      // otherwise fall back to contract value + instructed variations.
+      const computedAfa = contractValue + instructedVars
+      const afa = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : computedAfa
 
       // ── Invoiced value & retention ────────────────────────────────────────
       // invoicedSales200 = sum of account-code-200 (Sales) lines: NET of VAT and
