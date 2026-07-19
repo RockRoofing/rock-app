@@ -193,7 +193,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v22</title></Head>
+      <Head><title>Rock Roofing — Applications · v23</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -989,7 +989,8 @@ function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, is
   const byEmail = (e) => everyone.find(x => x.email.toLowerCase() === (e || '').toLowerCase())
 
   const [to, setTo] = useState(() => custContacts[0]?.email || '')
-  const [ccSel, setCcSel] = useState({})            // email -> bool
+  // Auto-CC the sending portal user (yourself) by default.
+  const [ccSel, setCcSel] = useState(() => (me?.email ? { [me.email]: true } : {}))
   const [ccExtra, setCcExtra] = useState('')
   const [markSent, setMarkSent] = useState(!isSent)
   const [sending, setSending] = useState(false)
@@ -1020,9 +1021,12 @@ function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, is
 
   async function send() {
     if (!to) { setErr('Choose one "To" recipient.'); return }
+    if (isSent && !confirm('Are you sure you want to send this application to the customer again?')) return
     const ccChosen = Object.keys(ccSel).filter(e => ccSel[e])
     const ccExtras = ccExtra.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean)
-    const cc = [...new Set([...ccChosen, ...ccExtras])].filter(e => e.toLowerCase() !== to.toLowerCase())
+    // Always copy in the sending portal user.
+    const forced = signer.email ? [signer.email] : []
+    const cc = [...new Set([...ccChosen, ...ccExtras, ...forced])].filter(e => e.toLowerCase() !== to.toLowerCase())
     setSending(true); setErr('')
     try {
       const d = await fetch('/api/application-send', {

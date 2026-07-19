@@ -1,22 +1,25 @@
-Application PDF — fix summary overflow + add table gridlines
-============================================================
+Applications — re-send warning, auto-CC sender, PDF spacing (no lines)
+=====================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Single-file change (lib/applicationPdf.js).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v23"
 
-1) SUMMARY / CERTIFICATE NO LONGER RUN OFF THE PAGE
-   The value columns were positioned at fixed offsets that pushed the third column
-   ~63pt past the right margin (why "£319,32…" / "£377,67…" were cut off). Rebuilt
-   the geometry as three right-aligned money columns that all sit inside the page
-   width. Verified the widest figure (£319,329.66) fits with room to spare and no
-   column right-edge exceeds the page margin.
+1) RE-SEND WARNING
+   If an application has already been sent, pressing "Send email" in the send
+   popout asks: "Are you sure you want to send this application to the customer
+   again?" before sending.
 
-2) GRIDLINES ON ALL TABLES
-   • Vertical column separators in BLACK.
-   • Horizontal row rules in LIGHT GREY.
-   Applied to Summary, Payment Certificate, Contract Works, Variations and Materials
-   on Site. Verticals are drawn per row so they stay correct across page breaks.
+2) AUTO-CC THE SENDING PORTAL USER
+   The person sending is automatically copied in (their email is pre-ticked in CC,
+   and always included on send even if unticked).
+
+3) PDF — LINES REMOVED, MORE ROW SPACING
+   All table gridlines (vertical + horizontal) have been removed. Instead there's
+   more vertical space between each line item so every item reads clearly against
+   its qty / rate / total. Applies to Summary, Payment Certificate, Contract Works,
+   Variations and Materials on Site. The section-divider rules under headings and
+   above the section totals are kept (those are structure, not table lines).
 
 FILES
 -----
-• lib/applicationPdf.js
+• lib/applicationPdf.js     (line removal + spacing)
+• pages/applications.js     (re-send confirm + auto-CC sender; v23)
