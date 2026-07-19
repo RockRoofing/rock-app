@@ -1,36 +1,22 @@
-Applications — sent-based numbering + edit-issued-application (revert to draft)
-==============================================================================
+Application PDF — fix summary overflow + add table gridlines
+============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v22"
+Build: ✓ Compiled successfully
+Single-file change (lib/applicationPdf.js).
 
-1) APPLICATION NUMBERS ARE BASED ON SENT APPLICATIONS
-   • An application gets a permanent, customer-facing number the FIRST time it is
-     sent / marked as sent = (highest existing sent number) + 1.
-   • Re-sending keeps that number (App 3 stays App 3).
-   • A never-sent draft displays the NEXT number = (highest sent) + 1.
-   This number is shown everywhere: the list, the editor header, the PDF
-   ("Application no." + footer), the send email/subject, and the upcoming table's
-   "Next app" column. (The internal creation order "seq" is unchanged and still
-   drives sorting / carry-forward.)
-   Verified lifecycle: send 3 apps -> 1,2,3; edit App 3 -> draft (still 3);
-   re-send -> 3; next new draft -> 4.
+1) SUMMARY / CERTIFICATE NO LONGER RUN OFF THE PAGE
+   The value columns were positioned at fixed offsets that pushed the third column
+   ~63pt past the right margin (why "£319,32…" / "£377,67…" were cut off). Rebuilt
+   the geometry as three right-aligned money columns that all sit inside the page
+   width. Verified the widest figure (£319,329.66) fits with room to spare and no
+   column right-edge exceeds the page margin.
 
-2) EDIT AN ALREADY-ISSUED APPLICATION
-   • Sent applications now have an "Edit application" button (was a hidden
-     double-click).
-   • Clicking it shows a confirm warning:
-       "Are you sure you want to edit an application that has already been issued
-        to the customer? Editing will move it back to draft — you will need to send
-        it (or mark it as sent) again. Its application number stays the same."
-   • On confirm the application unlocks for editing; SAVING it moves it back to
-     DRAFT (revertedFromSentAt recorded) while KEEPING its application number.
-   • You then Send / Mark as sent again to re-issue it (number unchanged).
+2) GRIDLINES ON ALL TABLES
+   • Vertical column separators in BLACK.
+   • Horizontal row rules in LIGHT GREY.
+   Applied to Summary, Payment Certificate, Contract Works, Variations and Materials
+   on Site. Verticals are drawn per row so they stay correct across page breaks.
 
 FILES
 -----
-• pages/applications.js         (appNumber display, Edit-application warning; v22)
-• pages/api/applications.js     (submit assigns/keeps appNumber; save reverts sent
-                                 -> draft; summary returns sent-based next number)
-• pages/api/application-send.js (mark-as-sent assigns/keeps appNumber; PDF uses it)
-• pages/api/application-pdf.js  (PDF uses the sent-based number)
-• lib/applicationPdf.js         (renders appNumber instead of seq)
+• lib/applicationPdf.js
