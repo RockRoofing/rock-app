@@ -1,26 +1,30 @@
-Commercial nav tidy + scorecard background
-===========================================
+Commercial nav — Contracted Rates + Applications on ALL commercial pages
+========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-1) CONTRACTED RATES + APPLICATIONS — only under Project Financials
-   These two links now appear in the Commercial nav only on Project Financials
-   (and on the Contracted Rates / Applications pages themselves, so you can move
-   between those two). They no longer clutter the other commercial pages' navs.
-   (The other commercial pages already didn't list them; this fixes the shared nav
-   used by the Contracted Rates and Applications pages.)
+WHAT HAPPENED
+-------------
+The other commercial pages don't use the shared CommercialNav component — they each
+have their own hand-written nav bar, which didn't list Contracted Rates or
+Applications. That's why those two only appeared on Project Financials.
 
-2) EMAIL TEMPLATES — removed from the navigation
-   The "Email Templates" nav link on the Outstanding Invoices page has been removed.
-   Templates are still reachable via the "Amend template ↗" link shown on the emails
-   themselves (that link is unchanged).
+FIX
+---
+Added "Contracted Rates" and "Applications" (after Variations) to the nav on every
+commercial page, so the full set is consistent everywhere:
+Project Financials | Outstanding Invoices | Retention | Variations |
+Contracted Rates | Applications | Application Calendar | Commercial Scorecard.
 
-3) COMMERCIAL SCORECARD — background matches the other commercial pages
-   The main scorecard page background is now #f0f2f5 (was #fafaf9), matching Project
-   Financials, Retention, etc.
+The shared CommercialNav (used by the Contracted Rates + Applications pages) is also
+reverted to show the full set again.
 
 FILES
 -----
-• components/CommercialNav.js     (Contracted Rates + Applications gated to financials)
-• pages/outstanding-invoices.js   (removed Email Templates nav link)
-• pages/commercial-scorecard.js   (background #f0f2f5)
+• components/CommercialNav.js       (shows all links again)
+• pages/retention.js                (added CR + Applications)
+• pages/outstanding-invoices.js     (added CR + Applications)
+• pages/variations.js               (added CR + Applications)
+• pages/application-calendar.js     (added CR + Applications)
+• pages/commercial-scorecard.js     (added CR + Applications)
+(Project Financials already had both.)
