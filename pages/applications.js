@@ -154,7 +154,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v13</title></Head>
+      <Head><title>Rock Roofing — Applications · v14</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -455,6 +455,19 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
   const removeGroupAttachment = (gid, url) => { setMats(l => l.map(x => x.id === gid ? { ...x, attachments: (x.attachments || []).filter(a => a.url !== url) } : x)); setDirty(true) }
   const removeGroup = (gid) => { setMats(l => l.filter(x => x.id !== gid && x.groupId !== gid)); setDirty(true) }
+  // Remove a PO line from the application by its (poNumber|description) key — used
+  // by the picker's Remove button. Also drops the group header if it's left empty.
+  const removeMaterialByKey = (key) => {
+    setMats(l => {
+      const [po, desc] = key.split('|')
+      const target = l.find(m => m.kind === 'item' && m.poNumber === po && (m.description || '').trim() === (desc || '').trim())
+      if (!target) return l
+      let out = l.filter(m => m.id !== target.id)
+      if (target.groupId && !out.some(m => m.groupId === target.groupId)) out = out.filter(m => m.id !== target.groupId)
+      return out
+    })
+    setDirty(true)
+  }
   // PO numbers currently on the application (via a supplier group) — used to block
   // adding the same PO twice at once, and to show it ticked/green in the picker.
   const addedPONumbers = mats.filter(m => m.kind === 'group' && m.poNumber).map(m => m.poNumber)
@@ -749,7 +762,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
 
-      {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} addedLineKeys={addedLineKeys} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
+      {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} addedLineKeys={addedLineKeys} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} onRemove={removeMaterialByKey} />}
     </>
   )
 }
@@ -775,8 +788,8 @@ function SummaryBlock({ sum, app }) {
           <thead><tr style={{ background: '#f8f9fa' }}><th style={{ ...th, textAlign: 'left' }}></th><th style={th}>Contract Sum</th><th style={th}>Application Total</th><th style={th}>Proj. Final Account</th></tr></thead>
           <tbody>
             <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Measured Work</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredContractSum)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredToDate)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredContractSum)}</td></tr>
-            <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Variations</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>—</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsToDate)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsFinal)}</td></tr>
-            <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Materials On Site</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>—</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.materialsOnSite)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>—</td></tr>
+            <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Variations</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsToDate)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsFinal)}</td></tr>
+            <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Materials On Site</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.materialsOnSite)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td></tr>
             <tr style={{ background: '#f8f9fa', fontWeight: 700 }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Application Total</td><td style={{ padding: '8px 12px' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.applicationTotal)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.anticipatedFinalAccount)}</td></tr>
           </tbody>
         </table>
@@ -803,7 +816,7 @@ function SummaryBlock({ sum, app }) {
 }
 
 // Pick variations from the project's tracker to add to the application.
-function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hiddenPOs = [], onToggleHide, onClose, onAdd, onAddGroup }) {
+function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hiddenPOs = [], onToggleHide, onClose, onAdd, onAddGroup, onRemove }) {
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const [markups, setMarkups] = useState({})
   const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '', markupPct: '' })
@@ -851,7 +864,14 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
                     <div style={{ fontSize: 12.5 }}>{lineAdded && <span style={{ color: '#16a34a', fontWeight: 700, marginRight: 5 }}>✓</span>}{li.description || '(no description)'}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
                   </div>
-                  <button disabled={lineAdded} onClick={() => onAdd({ supplier: p.supplier, description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: lineAdded ? '#dcfce7' : '#f0f2f5', border: '1px solid ' + (lineAdded ? '#86efac' : '#e5e7eb'), borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: lineAdded ? 'default' : 'pointer', color: lineAdded ? '#16a34a' : '#374151', fontWeight: 600 }}>{lineAdded ? '✓ Added' : 'Add'}</button>
+                  {lineAdded ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>✓ Added</span>
+                      <button onClick={() => onRemove(`${p.poNumber}|${(li.description || '').trim()}`)} title="Remove this line from the application" style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#dc2626', fontWeight: 600 }}>Remove</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => onAdd({ supplier: p.supplier, description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Add</button>
+                  )}
                 </div>
               )
             })}

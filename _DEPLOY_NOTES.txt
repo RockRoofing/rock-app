@@ -1,32 +1,21 @@
-Upcoming Applications — missing-dates banner + labels
-=====================================================
+Applications — picker Remove button + Summary tidy
+==================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v13"
-(Page-only change. The ?upcoming=1 API from the previous deploy is unchanged.)
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v14"
+(Page-only change.)
 
-CHANGES
--------
-1) MISSING-DATES BANNER (like the Application Calendar)
-   Projects with no application dates set now appear in an amber "⚠ Missing dates:"
-   banner ABOVE the project dropdown — outside the table — listing each project as
-   a clickable link (opens the project so dates can be set). They no longer appear
-   as rows in the table.
+1) REMOVE BUTTON IN THE MATERIALS POPOUT
+   Added lines now show "✓ Added" with a red "Remove" button right there in the
+   "Add materials on site" popout — so an accidental add can be undone without
+   leaving the window. Removing the last line of a PO also removes its (now empty)
+   supplier group header. The line becomes addable again immediately.
 
-2) TABLE TITLE
-   The table is now titled "Upcoming Applications".
-
-3) DROPDOWN LABEL
-   The project selector label now reads "Select Project — Upcoming Applications".
-
-4) DATE NEEDED
-   The table's date column is now headed "Application date needed" and shows the
-   date each application is required (computed from the project's application day /
-   overrides), colour-coded: grey not-yet-due / orange within 3 days / green due
-   today / red overdue.
-
-Table still shows only projects whose next application falls within 31 days, max
-one row per project, soonest first.
+2) SUMMARY — CONTRACT SUM COLUMN TIDIED
+   In the Summary block, the Contract Sum figures next to "Variations" and
+   "Materials On Site" have been removed (left blank). Only "Measured Work" carries
+   a Contract Sum. (The Materials On Site "Projected Final Account" cell is also
+   left blank, as before.)
 
 FILES
 -----
-• pages/applications.js   (v13)
+• pages/applications.js   (v14)
