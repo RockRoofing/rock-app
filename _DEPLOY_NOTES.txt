@@ -1,21 +1,40 @@
-Applications — spacing + PDF variation tweaks
-=============================================
+Applications — Previously Certified entered manually + required to send
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v27"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v28"
 
-1) PAGE: gap between Summary and Contract Works
-   Added a small margin below the Summary/Certificate block so it no longer butts
-   up against the Contract Works card.
+WHAT CHANGED
+------------
+"Previously Certified" is no longer auto-carried from the previous application — it
+is now entered MANUALLY on each application and drives the certificate maths
+(This Certificate = Current − Previously).
 
-2) PDF: more space before "Variations not yet instructed"
-   Increased the gap between TOTAL VARIATIONS and the "Variations not yet instructed"
-   section so they're clearly separated.
+• A "Previously certified (gross)" input sits just above the Summary/Certificate.
+  It always starts BLANK and must be typed each time.
+• While blank it shows an amber warning: "⚠ Insert the previously certified amount —
+  you can't submit or send until this is entered."
+• The certificate's "Previously Cert." column and "This Certificate" now use this
+  manual figure. The list view and the PDF use it too.
 
-3) PDF: VO number column now wraps
-   Long VO references (e.g. "PP+QQ+RR+SS") wrap within the VO column instead of
-   overrunning into the description. Description column adjusted to sit clear of it.
+FIRST APPLICATION
+-----------------
+The first application (lowest seq) has no prior, so it's fixed at £0 automatically —
+no entry needed, no warning.
+
+CAN'T SUBMIT / SEND UNTIL ENTERED
+---------------------------------
+For every application after the first:
+• "Mark as sent" is blocked with a prompt to insert the amount.
+• "Send to customer" is blocked with the same prompt.
+• Server-side guards on both the submit and mark-as-sent paths also refuse if the
+  previously-certified amount is missing (belt and braces).
 
 FILES
 -----
-• pages/applications.js   (Summary bottom margin; v27)
-• lib/applicationPdf.js   (VO wrap + not-instructed spacing)
+• pages/applications.js         (manual field, warning, submit/send guards; v28)
+• pages/api/applications.js     (submit refuses without prevCertGross for non-first)
+• pages/api/application-pdf.js   (PDF uses stored prevCertGross)
+• pages/api/application-send.js  (mark-as-sent guard + PDF uses prevCertGross)
+
+NOTE: existing draft applications will show the field blank and must have it filled
+before they can be sent (except the first). Already-sent apps keep their figures.

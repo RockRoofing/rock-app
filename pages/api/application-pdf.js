@@ -19,7 +19,9 @@ export default async function handler(req, res) {
     for (const a of sorted) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
     const { computeApplicationSummary, backfillAppNumbers } = await import('../../lib/applications')
     backfillAppNumbers(apps)
-    const prevGross = prev ? computeApplicationSummary(prev, 0).grossCurrent : 0
+    // 'Previously certified' is entered manually on the app (0 for the first app).
+    const isFirst = !prev
+    const prevGross = isFirst ? 0 : (app.prevCertGross != null ? app.prevCertGross : (prev ? computeApplicationSummary(prev, 0).grossCurrent : 0))
 
     // Project meta (jobNo / name) from the dashboard cache.
     let jobNo = '', name = ''

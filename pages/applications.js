@@ -219,7 +219,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v27</title></Head>
+      <Head><title>Rock Roofing — Applications · v28</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -252,6 +252,7 @@ export default function ApplicationsPage() {
             <ApplicationEditor
               app={openApp}
               appNumber={appNumberFor(openApp)}
+              isFirstApp={sortedApps.length > 0 && sortedApps[0].id === openApp.id}
               prevGross={prevGrossFor(openApp)}
               projectId={projectId}
               me={me}
@@ -313,7 +314,9 @@ export default function ApplicationsPage() {
                     </thead>
                     <tbody>
                       {displayApps.map(a => {
-                        const sum = computeApplicationSummary(a, prevGrossForApp(sortedApps, a))
+                        const isFirst = sortedApps.length > 0 && sortedApps[0].id === a.id
+                        const prevCert = isFirst ? 0 : (a.prevCertGross != null ? a.prevCertGross : prevGrossForApp(sortedApps, a))
+                        const sum = computeApplicationSummary(a, prevCert)
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{appNumberFor(a)}</td>
@@ -439,7 +442,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -451,6 +454,11 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
   const [unlocked, setUnlocked] = useState(false)
   const [showSend, setShowSend] = useState(false)
   const [viewer, setViewer] = useState(null)   // { title, items, key?, canRemove }
+  // "Previously certified" gross is entered MANUALLY (blank until typed). The first
+  // application has no prior, so it's fixed at £0.
+  const [prevCertGross, setPrevCertGross] = useState(() => (isFirstApp ? '0' : (app.prevCertGross != null ? String(app.prevCertGross) : '')))
+  const prevCertEntered = isFirstApp || (prevCertGross !== '' && prevCertGross != null && !isNaN(parseFloat(prevCertGross)))
+  const prevCertValue = isFirstApp ? 0 : (prevCertEntered ? parseFloat(prevCertGross) : 0)
   const isSent = !!app.status && app.status !== 'draft'
   const locked = isSent && !unlocked
 
@@ -458,7 +466,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
   const vars = useMemo(() => buildAppVariations({ ...app, variationData }, trackerVariations), [app, variationData, trackerVariations])
 
   const workApp = { ...app, contractWorks: rows, variations: vars, materials: mats }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, vars, mats, prevGross, app.mcdPct, app.retentionPct])
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevCertValue), [rows, vars, mats, prevCertValue, app.mcdPct, app.retentionPct])
 
   const setPct = (id, v) => {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
@@ -573,6 +581,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
     return w
   }
   function trySubmit() {
+    if (!prevCertEntered) { setMsg('Enter the "Previously certified" amount before marking as sent.'); alert('Please insert the Previously Certified amount before submitting this application.'); return }
     const w = collectWarnings()
     const base = 'Mark this application as sent? Variations will be frozen as they are now, and it will be locked (double-click to edit later).'
     if (w.length) {
@@ -588,7 +597,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
     try {
       const d = await fetch('/api/applications', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projectId, allowSubmittedEdit: unlocked, application: { ...app, contractWorks: rows, variationData, materials: mats } }),
+        body: JSON.stringify({ action: 'save', projectId, allowSubmittedEdit: unlocked, application: { ...app, contractWorks: rows, variationData, materials: mats, prevCertGross: isFirstApp ? 0 : (prevCertEntered ? prevCertValue : null) } }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Save failed.'); setSaving(false); return }
       onSaved(d.application); setDirty(false)
@@ -615,7 +624,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
         {isSent && !unlocked && <button onClick={() => { if (confirm('Are you sure you want to edit an application that has already been issued to the customer?\n\nEditing will move it back to draft — you will need to send it (or mark it as sent) again. Its application number stays the same.')) setUnlocked(true) }} style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Edit application</button>}
         {isSent && unlocked && <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>Editing an issued application — re-send when done</span>}
         <a href={`/api/application-pdf?projectId=${encodeURIComponent(projectId)}&appId=${encodeURIComponent(app.id)}&download=1`} target="_blank" rel="noreferrer" style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', color: '#374151', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
-        <button onClick={() => { if (dirty) { setMsg('Save your changes before sending.'); return } setShowSend(true) }} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Send to customer</button>
+        <button onClick={() => { if (!prevCertEntered) { alert('Please insert the Previously Certified amount before sending this application.'); return } if (dirty) { setMsg('Save your changes before sending.'); return } setShowSend(true) }} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Send to customer</button>
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
         {!locked && !isSent && <button onClick={trySubmit} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
         {onDelete && <button onClick={onDelete} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Delete</button>}
@@ -634,6 +643,26 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
           </div>
         ))}
       </div>
+
+      {/* Previously certified — entered manually (required from App 2 onwards) */}
+      {!isFirstApp && (
+        <div style={{ background: prevCertEntered ? '#fff' : '#fffbeb', border: '1px solid ' + (prevCertEntered ? '#e5e7eb' : '#fde68a'), borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Previously certified (gross)</div>
+            <div style={{ fontSize: 11.5, color: prevCertEntered ? '#94a3b8' : '#b45309' }}>
+              {prevCertEntered ? 'Used as the "Previously Cert." column. This certificate = current − previously.' : '⚠ Insert the previously certified amount — you can’t submit or send until this is entered.'}
+            </div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15, color: '#374151' }}>£</span>
+            <input type="number" step="0.01" min="0" disabled={locked} value={prevCertGross}
+              onChange={e => { setPrevCertGross(e.target.value); setDirty(true) }}
+              placeholder="0.00"
+              style={{ width: 160, padding: '8px 10px', border: '1px solid ' + (prevCertEntered ? '#d5d9e0' : '#f59e0b'), borderRadius: 8, fontSize: 14, textAlign: 'right', background: locked ? '#f8f9fa' : '#fff' }} />
+          </div>
+        </div>
+      )}
 
       {/* Summary + Certificate (shown at the top) */}
       <SummaryBlock sum={sum} app={app} />

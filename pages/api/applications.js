@@ -200,6 +200,13 @@ export default async function handler(req, res) {
       const { id } = req.body
       const idx = apps.findIndex(a => a.id === id)
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
+      // The first application (lowest seq) needs no previously-certified figure; every
+      // later one must have it entered before it can be sent.
+      const minSeq = apps.reduce((m, a) => Math.min(m, a.seq || 0), Infinity)
+      const isFirst = (apps[idx].seq || 0) === minSeq
+      if (!isFirst && apps[idx].prevCertGross == null) {
+        return res.status(400).json({ error: 'Enter the "Previously certified" amount before sending this application.' })
+      }
       // Freeze the live variation list (from the tracker + per-app data) into the app.
       const frozen = buildAppVariations(apps[idx], project.variations || [])
       // Assign a permanent, customer-facing application number the FIRST time it's

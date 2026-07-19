@@ -29,7 +29,9 @@ export default async function handler(req, res) {
     const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
     let prev = null
     for (const a of sorted) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
-    const prevGross = prev ? computeApplicationSummary(prev, 0).grossCurrent : 0
+    // 'Previously certified' is entered manually on the app (0 for the first app).
+    const isFirst = !prev
+    const prevGross = isFirst ? 0 : (app.prevCertGross != null ? app.prevCertGross : (prev ? computeApplicationSummary(prev, 0).grossCurrent : 0))
 
     let jobNo = '', name = ''
     try {
@@ -76,6 +78,11 @@ export default async function handler(req, res) {
     const nowSend = { at: Date.now(), to: recipients, cc: ccList, by: req.body.author || '' }
     apps[idx].sends = [...(apps[idx].sends || []), nowSend]
     if (markSent && (!apps[idx].status || apps[idx].status === 'draft')) {
+      const minSeq = apps.reduce((m, a) => Math.min(m, a.seq || 0), Infinity)
+      const isFirst = (apps[idx].seq || 0) === minSeq
+      if (!isFirst && apps[idx].prevCertGross == null) {
+        return res.status(400).json({ error: 'Enter the "Previously certified" amount before sending this application.' })
+      }
       const { buildAppVariations } = await import('../../lib/applications')
       apps[idx].variations = buildAppVariations(apps[idx], project.variations || [])
       if (!apps[idx].appNumber) {
