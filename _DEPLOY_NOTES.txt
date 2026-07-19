@@ -1,28 +1,17 @@
-Retention register — Defects Liability lifecycle + multi-select filters
-=======================================================================
+Retention register — legend updated for manual lifecycle
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 Single file: pages/retention.js (latest — includes all prior retention changes)
 
-1) THREE-STAGE LIFECYCLE: Live Project -> Defects Liability -> Complete
-   Manual, gated transitions per row:
-     • "→ Defects Liability" (from Live): BLOCKED unless Final Account = Invoiced.
-       (Defects Liability = the defects period waiting for the final retention.)
-     • "✓ Complete" (from Defects only): a project CANNOT skip Defects Liability.
-     • "↩ Live" / "↩ Re-open" to step back a stage.
-   A small status pill (Live / Defects / Complete) shows in the Ref cell.
-
-2) MULTI-SELECT FILTERS (default: Live Project)
-   Filters are now Live Project | Defects Liability | Complete, and you can tick ANY
-   COMBINATION at once. The "All" option has been removed (tick all three for the
-   same effect). Page defaults to Live Project only.
-
-3) OWED vs 612 MATCH INDICATOR MOVED
-   The green-tick / red-flag check now sits to the RIGHT of "612 Allocated".
-
-4) RED-FLAG TOOLTIP
-   Hovering the Owed-vs-612 red flag now reads:
-   "Mismatch, retention owed and Xero allocated retention differs".
+Colour key updated to match the new manual lifecycle (no auto-moving between stages):
+ • Release orange  = due, not yet paid
+ • Release green   = paid (amount paid covers it AND Final Account reconciles)
+ • Row green       = marked Complete (manual)
+ • Live (blue) / Defects Liability (amber) status chips explained
+ • ⚠ check FA and ⚠ TBC notes retained
+Removed the old "settled (auto)" and "retention closed (paid in full)" wording that
+described the removed auto-close behaviour.
 
 FILES
 -----

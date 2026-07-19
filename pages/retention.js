@@ -437,8 +437,10 @@ export default function RetentionPage() {
             {/* Colour key */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 11, color: '#666', width: '100%', marginTop: 4 }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3e0', border: '1px solid #ffb74d' }} /> Release due — not yet paid</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release settled (auto, from amount paid)</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = retention closed (paid in full)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release paid (amount paid covers it & FA reconciles)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = marked Complete (manual)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e0f2fe', border: '1px solid #0369a1' }} /> Live</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fef9c3', border: '1px solid #a16207' }} /> Defects Liability (awaiting final retention)</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#a16207' }}>⚠ check FA = paid but Final Account ≠ invoiced (won’t go green until reconciled)</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#c77700' }}>⚠ TBC = release date not confirmed</span>
             </div>
