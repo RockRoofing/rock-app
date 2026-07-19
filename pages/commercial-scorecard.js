@@ -307,7 +307,7 @@ export default function CommercialScorecard() {
   return (
     <>
       <Head><title>Rock Roofing — Commercial Scorecard</title></Head>
-      <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
+      <div style={{ ...s, minHeight: '100vh', background: '#f0f2f5' }}>
         {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} onClose={() => setModal(null)} />}
 
         {/* Nav */}

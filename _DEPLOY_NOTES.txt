@@ -1,40 +1,26 @@
-Applications — Previously Certified entered manually + required to send
-======================================================================
+Commercial nav tidy + scorecard background
+===========================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v28"
+Build: ✓ Compiled successfully
 
-WHAT CHANGED
-------------
-"Previously Certified" is no longer auto-carried from the previous application — it
-is now entered MANUALLY on each application and drives the certificate maths
-(This Certificate = Current − Previously).
+1) CONTRACTED RATES + APPLICATIONS — only under Project Financials
+   These two links now appear in the Commercial nav only on Project Financials
+   (and on the Contracted Rates / Applications pages themselves, so you can move
+   between those two). They no longer clutter the other commercial pages' navs.
+   (The other commercial pages already didn't list them; this fixes the shared nav
+   used by the Contracted Rates and Applications pages.)
 
-• A "Previously certified (gross)" input sits just above the Summary/Certificate.
-  It always starts BLANK and must be typed each time.
-• While blank it shows an amber warning: "⚠ Insert the previously certified amount —
-  you can't submit or send until this is entered."
-• The certificate's "Previously Cert." column and "This Certificate" now use this
-  manual figure. The list view and the PDF use it too.
+2) EMAIL TEMPLATES — removed from the navigation
+   The "Email Templates" nav link on the Outstanding Invoices page has been removed.
+   Templates are still reachable via the "Amend template ↗" link shown on the emails
+   themselves (that link is unchanged).
 
-FIRST APPLICATION
------------------
-The first application (lowest seq) has no prior, so it's fixed at £0 automatically —
-no entry needed, no warning.
-
-CAN'T SUBMIT / SEND UNTIL ENTERED
----------------------------------
-For every application after the first:
-• "Mark as sent" is blocked with a prompt to insert the amount.
-• "Send to customer" is blocked with the same prompt.
-• Server-side guards on both the submit and mark-as-sent paths also refuse if the
-  previously-certified amount is missing (belt and braces).
+3) COMMERCIAL SCORECARD — background matches the other commercial pages
+   The main scorecard page background is now #f0f2f5 (was #fafaf9), matching Project
+   Financials, Retention, etc.
 
 FILES
 -----
-• pages/applications.js         (manual field, warning, submit/send guards; v28)
-• pages/api/applications.js     (submit refuses without prevCertGross for non-first)
-• pages/api/application-pdf.js   (PDF uses stored prevCertGross)
-• pages/api/application-send.js  (mark-as-sent guard + PDF uses prevCertGross)
-
-NOTE: existing draft applications will show the field blank and must have it filled
-before they can be sent (except the first). Already-sent apps keep their figures.
+• components/CommercialNav.js     (Contracted Rates + Applications gated to financials)
+• pages/outstanding-invoices.js   (removed Email Templates nav link)
+• pages/commercial-scorecard.js   (background #f0f2f5)
