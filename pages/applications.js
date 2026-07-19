@@ -134,6 +134,8 @@ export default function ApplicationsPage() {
 
   // Sorted, and previous-gross lookup (by seq) for carry-forward.
   const sortedApps = useMemo(() => [...apps].sort((a, b) => (a.seq || 0) - (b.seq || 0)), [apps])
+  // Display order: latest application first.
+  const displayApps = useMemo(() => [...apps].sort((a, b) => (b.seq || 0) - (a.seq || 0)), [apps])
 
   // Default the new-application month to the month AFTER the latest application.
   useEffect(() => {
@@ -202,18 +204,22 @@ export default function ApplicationsPage() {
   const openApp = sortedApps.find(a => a.id === openId)
   const selProject = projects.find(p => p.xeroId === projectId)
 
-  async function deleteApp(a) {
-    if (a.status && a.status !== 'draft') { alert('Only draft applications can be deleted.'); return }
-    if (!confirm(`Delete draft application ${appNumberFor(a)} (${a.monthLabel || monthLabel(a.monthKey)})? This cannot be undone.`)) return
+  async function deleteApp(a, { fromEditor } = {}) {
+    const isSent = a.status && a.status !== 'draft'
+    const label = `application ${appNumberFor(a)} (${a.monthLabel || monthLabel(a.monthKey)})`
+    const msg = isSent
+      ? `This application has been ISSUED to the customer. Are you sure you want to permanently delete ${label}? This cannot be undone.`
+      : `Delete draft ${label}? This cannot be undone.`
+    if (!confirm(msg)) return
     try {
-      const d = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', projectId, id: a.id }) }).then(r => r.json())
-      if (d.ok) setApps(d.applications || [])
+      const d = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', projectId, id: a.id, allowSent: isSent }) }).then(r => r.json())
+      if (d.ok) { setApps(d.applications || []); if (fromEditor) setOpenId(null) }
     } catch { setMsg('Could not delete.') }
   }
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v25</title></Head>
+      <Head><title>Rock Roofing — Applications · v26</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -255,6 +261,7 @@ export default function ApplicationsPage() {
               hiddenPOs={hiddenPOs}
               onHiddenPOsChange={setHiddenPOs}
               onBack={() => { setOpenId(null); load(projectId) }}
+              onDelete={() => deleteApp(openApp, { fromEditor: true })}
               onSaved={(updated) => setApps(a => a.map(x => x.id === updated.id ? updated : x))}
               onVariationChange={(vs) => setTrackerVariations(vs || [])}
             />
@@ -305,7 +312,7 @@ export default function ApplicationsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedApps.map(a => {
+                      {displayApps.map(a => {
                         const sum = computeApplicationSummary(a, prevGrossForApp(sortedApps, a))
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
@@ -432,7 +439,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -443,6 +450,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
   const [showAddMat, setShowAddMat] = useState(false)
   const [unlocked, setUnlocked] = useState(false)
   const [showSend, setShowSend] = useState(false)
+  const [viewer, setViewer] = useState(null)   // { title, items, key?, canRemove }
   const isSent = !!app.status && app.status !== 'draft'
   const locked = isSent && !unlocked
 
@@ -610,6 +618,7 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
         <button onClick={() => { if (dirty) { setMsg('Save your changes before sending.'); return } setShowSend(true) }} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Send to customer</button>
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
         {!locked && !isSent && <button onClick={trySubmit} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
+        {onDelete && <button onClick={onDelete} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Delete</button>}
       </div>
 
       {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
@@ -725,13 +734,16 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
                     </td>
                     <td style={{ ...tdR, fontWeight: 600, ...(instructed ? {} : { color: '#cbd5e1', fontWeight: 400 }) }}>{instructed ? fmt(vtd) : 'N/A'}</td>
                     <td style={td}>
-                      {(v.attachments || []).map(a => (
-                        <div key={a.url} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                          <a href={a.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</a>
-                          {!locked && <button onClick={() => removeAttachment(v.key, a.url)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>×</button>}
-                        </div>
-                      ))}
-                      {!locked && <label style={{ fontSize: 11, color: '#0f766e', cursor: 'pointer' }}>+ Attach<input type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attachToVar(v.key, f) }} /></label>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {(v.attachments || []).length > 0 && (
+                          <button onClick={() => setViewer({ title: `Variation ${v.varNumber || ''} — attachments`, items: v.attachments, key: v.key, canRemove: !locked })}
+                            title={`${v.attachments.length} attachment${v.attachments.length > 1 ? 's' : ''}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, padding: '3px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            📎 {v.attachments.length}
+                          </button>
+                        )}
+                        {!locked && <label style={{ fontSize: 11, color: '#0f766e', cursor: 'pointer' }}>+ Attach<input type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attachToVar(v.key, f) }} /></label>}
+                      </div>
                     </td>
                   </tr>
                 )
@@ -774,12 +786,13 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                           <span style={{ fontWeight: 700, fontSize: 13, color: '#0369a1' }}>{m.supplier || 'Supplier'}</span>
                           {m.poNumber && <span style={{ fontSize: 11, color: '#6b7280' }}>{m.poNumber}</span>}
-                          {(m.attachments || []).map(a => (
-                            <span key={a.url} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                              <a href={a.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>📎 {a.name}</a>
-                              {!locked && <button onClick={() => removeGroupAttachment(m.id, a.url)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>×</button>}
-                            </span>
-                          ))}
+                          {(m.attachments || []).length > 0 && (
+                            <button onClick={() => setViewer({ title: `${m.supplier || 'Supplier'}${m.poNumber ? ' ' + m.poNumber : ''} — attachments`, items: m.attachments, groupId: m.id, canRemove: !locked })}
+                              title={`${m.attachments.length} attachment${m.attachments.length > 1 ? 's' : ''}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca', borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                              📎 {m.attachments.length}
+                            </button>
+                          )}
                           {!locked && <label style={{ fontSize: 11, color: '#0f766e', cursor: 'pointer' }}>+ Attach doc<input type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attachToGroup(m.id, f) }} /></label>}
                           <div style={{ flex: 1 }} />
                           {!locked && <button onClick={() => removeGroup(m.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}>Remove group</button>}
@@ -833,6 +846,13 @@ function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings 
       </div>
 
       {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} addedLineKeys={addedLineKeys} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} onRemove={removeMaterialByKey} />}
+      {viewer && <AttachmentViewer
+        title={viewer.title}
+        items={(viewer.key ? ((variationData[viewer.key] || {}).attachments || []) : viewer.groupId ? ((mats.find(x => x.id === viewer.groupId) || {}).attachments || []) : viewer.items) || []}
+        canRemove={viewer.canRemove}
+        onRemove={(url) => { if (viewer.key) removeAttachment(viewer.key, url); else if (viewer.groupId) removeGroupAttachment(viewer.groupId, url) }}
+        onClose={() => setViewer(null)}
+      />}
     </>
   )
 }
@@ -1115,6 +1135,61 @@ function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, is
           <button onClick={send} disabled={sending} style={{ flex: 1, background: sending ? '#ccc' : '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: sending ? 'default' : 'pointer' }}>{sending ? 'Sending…' : 'Send email'}</button>
           <a href={`/api/application-pdf?projectId=${encodeURIComponent(projectId)}&appId=${encodeURIComponent(app.id)}&download=1`} target="_blank" rel="noreferrer" style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', color: '#374151', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
           <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// View a set of attachments. PDFs and images preview inline; everything else
+// (emails such as .eml/.msg, Word, Excel, etc.) shows as an Open/Download link —
+// browsers can't render those inline, so the person opens them in the relevant app.
+function AttachmentViewer({ title, items = [], canRemove, onRemove, onClose }) {
+  const list = Array.isArray(items) ? items : []
+  const [sel, setSel] = useState(0)
+  const cur = list[sel] || null
+  const kind = (name = '', url = '') => {
+    const s = (name || url || '').toLowerCase()
+    if (/\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/.test(s)) return 'image'
+    if (/\.pdf(\?|$)/.test(s)) return 'pdf'
+    if (/\.(eml|msg)(\?|$)/.test(s)) return 'email'
+    return 'other'
+  }
+  const k = cur ? kind(cur.name, cur.url) : 'other'
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 900, maxWidth: '100%', height: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{title}</div>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#888', cursor: 'pointer' }}>×</button>
+        </div>
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          {/* file list */}
+          <div style={{ width: 230, borderRight: '1px solid #eee', overflowY: 'auto', padding: 8 }}>
+            {list.map((a, i) => (
+              <div key={a.url} onClick={() => setSel(i)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: i === sel ? '#eef2ff' : 'transparent', marginBottom: 4 }}>
+                <span style={{ fontSize: 13 }}>{kind(a.name, a.url) === 'image' ? '🖼️' : kind(a.name, a.url) === 'pdf' ? '📄' : kind(a.name, a.url) === 'email' ? '✉️' : '📎'}</span>
+                <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={a.name}>{a.name}</span>
+                {canRemove && <button onClick={(e) => { e.stopPropagation(); onRemove(a.url); if (sel >= list.length - 1) setSel(0) }} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>×</button>}
+              </div>
+            ))}
+            {list.length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: 10 }}>No attachments.</div>}
+          </div>
+          {/* preview */}
+          <div style={{ flex: 1, minWidth: 0, background: '#f8f9fa', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
+            {!cur ? <div style={{ color: '#aaa', fontSize: 13 }}>Select an attachment</div>
+              : k === 'image' ? <img src={cur.url} alt={cur.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              : k === 'pdf' ? <iframe src={cur.url} title={cur.name} style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
+              : (
+                <div style={{ textAlign: 'center', color: '#555' }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>{k === 'email' ? '✉️' : '📎'}</div>
+                  <div style={{ fontSize: 13, marginBottom: 4, fontWeight: 600 }}>{cur.name}</div>
+                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14 }}>{k === 'email' ? 'Emails open in your mail app.' : 'This file type can\u2019t preview here.'}</div>
+                  <a href={cur.url} target="_blank" rel="noreferrer" download style={{ background: '#0369a1', color: '#fff', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>Open / Download</a>
+                </div>
+              )}
+          </div>
         </div>
       </div>
     </div>

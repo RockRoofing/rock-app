@@ -1,13 +1,34 @@
-Applications page — Summary + Certificate moved to the top
-=========================================================
+Applications — latest-first sort, delete from editor, attachment viewer
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v25"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v26"
 
-In the application editor, the Summary + Certificate section now sits at the TOP,
-above Contract Works (previously it was at the bottom). Order is now:
-Summary/Certificate → Contract Works → Variations → Materials on Site.
-(The PDF layout is unchanged.)
+1) SORT — LATEST APPLICATION AT THE TOP
+   Within a project, the applications list is ordered newest first by default.
+
+2) DELETE FROM INSIDE THE EDITOR
+   A "Delete" button is now in the application editor header (not just the list).
+   • Drafts: simple confirm.
+   • Already-issued (sent): stronger confirm ("This application has been ISSUED to
+     the customer…") — allowed, but deliberate. Deletes and returns to the list.
+
+3) VARIATION / SUPPLIER ATTACHMENTS — PAPERCLIP + COUNT + VIEWER
+   Instead of listing each file, attachments now show as a "📎 N" button (N = number
+   of attachments). Click it to open a viewer:
+     • Left: list of the files.
+     • Right: inline preview for PDFs and images.
+     • Other types (Word, Excel, etc.) show an Open/Download button.
+   Same treatment on supplier-group attachments in Materials on Site. You can still
+   remove attachments from within the viewer.
+
+EMAILS
+------
+Emails CAN be attached (.eml / .msg upload fine via the direct-to-Blob uploader).
+Browsers cannot render emails inline, so in the viewer they appear with an
+Open/Download button ("Emails open in your mail app") rather than a preview — the
+person opens them in Outlook/Mail. PDFs and images preview inline.
 
 FILES
 -----
-• pages/applications.js   (v25)
+• pages/applications.js       (sort, editor Delete, 📎 viewer, AttachmentViewer; v26)
+• pages/api/applications.js   (delete action accepts allowSent to remove issued apps)

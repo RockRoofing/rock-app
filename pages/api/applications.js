@@ -233,10 +233,10 @@ export default async function handler(req, res) {
     }
 
     if (action === 'delete') {
-      const { id } = req.body
+      const { id, allowSent } = req.body
       const target = apps.find(a => a.id === id)
-      if (target && target.status && target.status !== 'draft') {
-        return res.status(400).json({ error: 'Only draft applications can be deleted.' })
+      if (target && target.status && target.status !== 'draft' && !allowSent) {
+        return res.status(400).json({ error: 'Only draft applications can be deleted (pass allowSent to override).' })
       }
       project.applications = apps.filter(a => a.id !== id)
       await saveProject(projectId, project)
