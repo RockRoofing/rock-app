@@ -264,8 +264,10 @@ export default function RetentionPage() {
     ...mergedEntries
   ].filter(e => !(e.xeroId && hiddenEntrySet.has(String(e.xeroId)))).filter(e => {
     // Outstanding = retention not yet fully settled (Total Remaining ≠ £0).
-    // All = every project that has/had retention.
+    // Complete    = fully settled / paid in full.
+    // All         = every project that has/had retention.
     if (filter === 'outstanding') return !isClosed(e)
+    if (filter === 'complete') return isClosed(e)
     return true
   }).filter(e => {
     if (!search) return true
@@ -357,7 +359,7 @@ export default function RetentionPage() {
           {/* Filters */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', background: '#f0f2f5', borderRadius: 8, overflow: 'hidden' }}>
-              {[['outstanding', 'Outstanding'], ['all', 'All']].map(([key, label]) => (
+              {[['outstanding', 'Outstanding'], ['complete', 'Complete'], ['all', 'All']].map(([key, label]) => (
                 <button key={key} onClick={() => setFilter(key)}
                   style={{ padding: '6px 16px', border: 'none', background: filter === key ? '#1a1a2e' : 'transparent', color: filter === key ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                   {label}
@@ -369,9 +371,10 @@ export default function RetentionPage() {
             <span style={{ fontSize: 12, color: '#888' }}>{allEntries.length} entries</span>
             {/* Colour key */}
             <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 11, color: '#666', width: '100%', marginTop: 4 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3e0', border: '1px solid #ffb74d' }} /> Release due — not received</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release received</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = retention closed (Total Remaining £0)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3e0', border: '1px solid #ffb74d' }} /> Release due — not yet paid</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release settled (auto, from amount paid)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = retention closed (paid in full)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#c77700' }}>⚠ TBC = release date not confirmed</span>
             </div>
           </div>
 
@@ -428,6 +431,16 @@ export default function RetentionPage() {
                       const totalDue = calcTotalDue(entry)
                       const totalRemaining = calcTotalRemaining(entry)
                       const hasPaid = entry.paid != null && entry.paid !== ''
+                      // Release "received" is now DERIVED from what's actually been paid
+                      // (no manual tick box):
+                      //  • 1st release is settled once only the 2nd half remains to pay
+                      //    (remaining <= 2nd release value).
+                      //  • 2nd release is settled once the account is paid in full.
+                      const r1v = parseFloat(entry.release1Value || 0) || 0
+                      const r2v = parseFloat(entry.release2Value || 0) || 0
+                      const paidKnown = hasPaid && fa
+                      const secondReceived = paidKnown ? (totalRemaining < 1) : false
+                      const firstReceived = paidKnown ? (secondReceived || totalRemaining <= r2v + 1) : false
                       // Release cell: orange fill when due & not received; green + "received" when received.
                       const releaseCell = (val, received) => {
                         const has = val != null && val !== '' && !isNaN(parseFloat(val))
@@ -468,13 +481,13 @@ export default function RetentionPage() {
                             {/* QS */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.qsName || '—'}</td>
                             {/* 1st Value (coloured) */}
-                            {releaseCell(entry.release1Value, entry.release1Received)}
+                            {releaseCell(entry.release1Value, firstReceived)}
                             {/* 1st Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release1Date || '—'}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
                             {/* 2nd Value (coloured) */}
-                            {releaseCell(entry.release2Value, entry.release2Received)}
+                            {releaseCell(entry.release2Value, secondReceived)}
                             {/* 2nd Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: '#555' }}>{entry.release2Date || '—'}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
                             {/* VAT */}
                             {vatNeedsManual(entry)
                               ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -668,10 +681,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release1Date || ''} onChange={f('release1Date')} style={inputStyle} />
             </div>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!form.release1Received} onChange={fb('release1Received')} />
-            Received
-          </label>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Auto: turns green once only the 2nd half remains to be paid.</div>
         </div>
         <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>2nd Retention Release</div>
@@ -685,10 +695,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release2Date || ''} onChange={f('release2Date')} style={inputStyle} />
             </div>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!form.release2Received} onChange={fb('release2Received')} />
-            Received
-          </label>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Auto: turns green once the account is paid in full.</div>
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>

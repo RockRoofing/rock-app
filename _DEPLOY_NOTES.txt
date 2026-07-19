@@ -1,16 +1,30 @@
-Contracted Rates — Select-all now includes headings
-===================================================
+GROUP C — Retention tab: auto-green, Complete filter, TBC warnings
+=================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/contracted-rates.js
+Single file: pages/retention.js
 
-The header "select all" checkbox now selects HEADINGS as well as item rows (both
-sections), so you can select everything — headers included — and move it above/below
-the line in one go. Struck lines stay excluded. The Above/Below selection subtotals
-are unchanged (headings carry no value, so they don't affect the money totals).
+1) 1st / 2nd VALUE AUTO-GREEN — TICK BOX REMOVED
+   The "Received" checkboxes are gone. Release status is now DERIVED from the amount
+   actually paid:
+     • 1st Value turns green once only the 2nd half remains to be paid
+       (Total Remaining <= 2nd release value).
+     • 2nd Value turns green once the account is paid in full.
+   The row already turns fully green (Complete) when paid in full — unchanged.
 
-NOTE: this file also contains the earlier Group A changes (searchable picker, sticky
-section totals, heading checkboxes, save->lock prompt, budgets-on-lock). If you have
-NOT yet deployed GroupA_v2, this single file replaces its pages/contracted-rates.js
-(you still need the other GroupA_v2 files: pages/api/contracted-rates.js and the new
-components/ProjectSearchSelect.js).
+2) OUTSTANDING / COMPLETE / ALL TOGGLE
+   New "Complete" filter so you can view fully-settled retentions on their own.
+   Outstanding = not settled, Complete = paid in full, All = everything.
+
+3) RETENTION DATE "TBC" WARNING
+   Outstanding entries with no release date show an amber "⚠ TBC" in the date column
+   (with a tooltip), flagging that the retention release date isn't confirmed.
+   (Closed rows just show "—".)
+
+NOTE: this fully wires to the amount paid + release dates already on each entry. Once
+Group D adds an explicit "TBC" toggle on PC dates in edit project details, the
+warning will also key off that flag.
+
+FILES
+-----
+• pages/retention.js
