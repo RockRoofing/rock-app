@@ -103,6 +103,8 @@ export default function RetentionPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ENTRY)
   const [saving, setSaving] = useState(false)
+  const [sortKey, setSortKey] = useState('ref')   // default sort by Ref
+  const [sortDir, setSortDir] = useState('asc')
   const [filter, setFilter] = useState('outstanding') // outstanding | all
   const [qsOptions, setQsOptions] = useState([])
   const [allProjects, setAllProjects] = useState([])   // for the "add existing project" picker
@@ -286,6 +288,40 @@ export default function RetentionPage() {
     return e.ourRef?.toLowerCase().includes(q) || e.customerName?.toLowerCase().includes(q) || e.projectName?.toLowerCase().includes(q)
   })
 
+  // Sortable columns. Each key maps to a value getter; strings sort case-insensitively
+  // (numeric-aware for refs), numbers/dates naturally.
+  const sortVal = (e, key) => {
+    switch (key) {
+      case 'ref': return e.ourRef || ''
+      case 'customer': return e.customerName || ''
+      case 'project': return e.projectName || ''
+      case 'finalAccount': return parseFloat(e.finalAccount || 0) || 0
+      case 'appliedFor': return parseFloat(e.appliedFor || 0) || 0
+      case 'invoiced': return parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0
+      case 'retentionOwed': return parseFloat(e.retentionOwed || 0) || 0
+      case 'r612': return parseFloat(e.retention612Allocated || 0) || 0
+      case 'retPct': return parseFloat(e.retentionPct || 0) || 0
+      case 'pcType': return e.pcType || ''
+      case 'qs': return e.qsName || ''
+      case 'paid': return parseFloat(e.paid || 0) || 0
+      case 'r1date': return e.release1Date || ''
+      case 'r2date': return e.release2Date || ''
+      default: return e.ourRef || ''
+    }
+  }
+  const sortedEntries = [...allEntries].sort((a, b) => {
+    const va = sortVal(a, sortKey), vb = sortVal(b, sortKey)
+    let cmp
+    if (typeof va === 'number' && typeof vb === 'number') cmp = va - vb
+    else cmp = String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' })
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+  const toggleSort = (key) => {
+    if (!key) return
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const totals = {
     total: allEntries.reduce((s, e) => s + (parseFloat(e.release1Value || 0) + parseFloat(e.release2Value || 0)), 0),
     remaining: allEntries.reduce((s, e) => s + (calcTotalDue(e) ? calcTotalRemaining(e) : 0), 0),
@@ -401,39 +437,42 @@ export default function RetentionPage() {
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
                       {[
-                        ['Ref', 'left', 'Project reference (job number) from project details.'],
-                        ['Customer', 'left', 'Customer name from project details.'],
-                        ['Project', 'left', 'Project name from project details.'],
-                        ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.'],
-                        ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.'],
-                        ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.'],
-                        ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.'],
-                        ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.'],
-                        ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.'],
-                        ['Ret %', 'center', 'Retention percentage from project details.'],
-                        ['PC Type', 'left', 'Practical completion type (manual).'],
-                        ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).'],
-                        ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not received, green = received.'],
-                        ['1st Date', 'left', 'Due date of the first retention release (manual).'],
-                        ['2nd Value', 'right', 'Second retention release (half of total retention). Orange = due/not received, green = received.'],
-                        ['2nd Date', 'left', 'Due date of the second retention release (manual).'],
-                        ['VAT', 'right', 'VAT on the Final Account = Final Account × VAT-type rate. Reverse charge / 0% = £0.'],
-                        ['VAT Type', 'left', 'VAT treatment from Xero: reverse charge, 5%, 20%, zero-rated, etc.'],
-                        ['Total Due', 'right', 'Final Account + VAT. The full amount due including VAT.'],
-                        ['Total Paid', 'right', 'Total received from the customer (including VAT). From Xero / the imported CSV.'],
-                        ['Total Remaining (Check)', 'right', 'Total Due − Total Paid. When this reaches £0 everything owed (incl. VAT) has been paid and the retention is closed — the whole row turns green.'],
-                        ['Comments', 'left', 'Synced with the Retention comments box in Project Details.'],
-                        ['', 'left', ''],
-                      ].map(([h, align, tip]) => (
-                        <th key={h || 'actions'} title={tip || undefined}
-                          style={{ padding: '9px 10px', textAlign: align, fontWeight: 600, color: '#555', whiteSpace: 'nowrap', cursor: tip ? 'help' : 'default' }}>
-                          {h}{tip ? <span style={{ color: '#bbb', marginLeft: 3, fontSize: 10 }}>ⓘ</span> : null}
+                        ['Ref', 'left', 'Project reference (job number) from project details.', 'ref'],
+                        ['Customer', 'left', 'Customer name from project details.', 'customer'],
+                        ['Project', 'left', 'Project name from project details.', 'project'],
+                        ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.', 'finalAccount'],
+                        ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.', 'appliedFor'],
+                        ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
+                        ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
+                        ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
+                        ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.', 'retentionOwed'],
+                        ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
+                        ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.', 'r612'],
+                        ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
+                        ['PC Type', 'left', 'Practical completion type (manual).', 'pcType'],
+                        ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).', 'qs'],
+                        ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not paid, green = settled.', null],
+                        ['1st Date', 'left', 'Due date of the first retention release (manual).', 'r1date'],
+                        ['2nd Value', 'right', 'Second retention release (half of total retention). Orange = due/not paid, green = settled.', null],
+                        ['2nd Date', 'left', 'Due date of the second retention release (manual).', 'r2date'],
+                        ['VAT', 'right', 'VAT on the Final Account = Final Account × VAT-type rate. Reverse charge / 0% = £0.', null],
+                        ['VAT Type', 'left', 'VAT treatment from Xero: reverse charge, 5%, 20%, zero-rated, etc.', null],
+                        ['Total Due', 'right', 'Final Account + VAT. The full amount due including VAT.', null],
+                        ['Total Paid', 'right', 'Total received from the customer (including VAT). From Xero / the imported CSV.', 'paid'],
+                        ['Total Remaining (Check)', 'right', 'Total Due − Total Paid.', null],
+                        ['Comments', 'left', 'Synced with the Retention comments box in Project Details.', null],
+                        ['', 'left', '', null],
+                      ].map(([h, align, tip, key]) => (
+                        <th key={(h || 'actions') + (key || '')} title={tip || undefined}
+                          onClick={() => key && toggleSort(key)}
+                          style={{ padding: '9px 10px', textAlign: align, fontWeight: 600, color: sortKey === key ? '#1a1a2e' : '#555', whiteSpace: 'nowrap', cursor: key ? 'pointer' : (tip ? 'help' : 'default'), userSelect: 'none' }}>
+                          {h}{key && sortKey === key ? <span style={{ marginLeft: 3, fontSize: 10 }}>{sortDir === 'asc' ? '▲' : '▼'}</span> : (tip ? <span style={{ color: '#bbb', marginLeft: 3, fontSize: 10 }}>ⓘ</span> : null)}
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {allEntries.map((entry, i) => {
+                    {sortedEntries.map((entry, i) => {
                       const isEditing = editingId === entry.id
                       const closed = isClosed(entry)
                       const rowBg = closed ? '#dcfce7' : (i % 2 === 0 ? '#fff' : '#fafafa')
@@ -465,6 +504,15 @@ export default function RetentionPage() {
                           </td>
                         )
                       }
+                      // Match indicator: green tick when the two values agree (within
+                      // £1), red flag when they differ. Grey dash if either is missing.
+                      const matchCell = (a, b, hasBoth) => {
+                        if (!hasBoth) return <td style={{ padding: '8px 6px', textAlign: 'center', color: '#cbd5e1' }}>—</td>
+                        const ok = Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 1
+                        return <td style={{ padding: '8px 6px', textAlign: 'center' }} title={ok ? 'Match' : 'Mismatch — figures differ'}>
+                          <span style={{ fontSize: 14, color: ok ? '#16a34a' : '#dc2626' }}>{ok ? '✓' : '🚩'}</span>
+                        </td>
+                      }
                       return (
                         <>
                           <tr key={entry.id} style={{ borderBottom: '1px solid #f0f0f0', background: rowBg }}>
@@ -483,12 +531,16 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(fa || null)}</td>
                             {/* Applied for (manual override) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}</td>
+                            {/* Applied-for vs Invoiced match */}
+                            {matchCell(entry.appliedFor, invNet, entry.appliedFor != null && entry.appliedFor !== '' && invNet != null)}
                             {/* Invoiced Net */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
                             {/* Account Remaining */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{entry.retentionOwed ? fmt(parseFloat(entry.retentionOwed)) : fmt(0)}</td>
+                            {/* Retention Owed vs 612 Allocated match */}
+                            {matchCell(entry.retentionOwed, entry.retention612Allocated, (parseFloat(entry.retentionOwed) || 0) > 0 || (parseFloat(entry.retention612Allocated) || 0) > 0)}
                             {/* 612 Allocated */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.retention612Allocated ? fmt(parseFloat(entry.retention612Allocated)) : fmt(0)}</td>
                             {/* Ret % */}
@@ -538,7 +590,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={23} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={25} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
                                   onCancel={() => setEditingId(null)} />

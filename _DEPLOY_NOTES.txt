@@ -1,36 +1,31 @@
-Retention register — all projects, Retention Owed + 612 columns, manual complete
-================================================================================
+Retention register — match indicators + sortable columns
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-(Builds on GroupC — deploy after/with it. retention.js here is the latest version.)
+Single file: pages/retention.js (latest — includes all prior retention changes)
 
-1) ALL IN-PROGRESS PROJECTS SHOWN
-   The register no longer hides projects with nothing invoiced. Every project now
-   appears; if nothing's invoiced, its retention values simply show £0. It's a full
-   register.
+1) RETENTION OWED vs 612 MATCH COLUMN (left of "612 Allocated")
+   • Green tick ✓ when Retention Owed == 612 Allocated (within £1).
+   • Red flag 🚩 when they differ.
+   • Grey — when neither has a value yet.
 
-2) NEW "RETENTION OWED" COLUMN
-   Retention owed based on invoiced value = invoiced (Sales, account code 200) ×
-   retention %. (Invoiced value already derives from the 200-Sales total, so this
-   reconciles with the rest of the financials.)
+2) APPLIED-FOR vs INVOICED MATCH COLUMN (right of "Applied for")
+   • Green tick ✓ when Applied for == Invoiced (within £1).
+   • Red flag 🚩 when they differ.
+   • Grey — when either is missing.
 
-3) NEW "612 ALLOCATED" COLUMN
-   The retention actually deducted on invoices under account code 612, per project.
-   • sync-invoices now captures 612 line amounts alongside 200.
-   • dashboard surfaces it as retention612Allocated.
-   ⚠ REQUIRES AN INVOICE RE-SYNC to populate (existing cached invoices don't have the
-     612 figure yet). Until re-synced it shows £0.
+3) DEFAULT SORT BY REF
+   The register loads sorted by Ref (job number), ascending.
 
-4) MANUAL "MARK COMPLETE" — AUTO-COMPLETE REMOVED
-   Each row has a "Mark complete" button (toggles to "✓ Complete"). Completion is now
-   purely manual — the old auto-close (row auto-greened when Total Remaining hit £0)
-   has been removed. The Outstanding / Complete / All filter keys off this manual
-   flag, so Complete shows only projects you've marked complete.
+4) CLICK-TO-SORT HEADERS
+   Click a column header to sort by it; click again to reverse. An arrow (▲/▼) shows
+   the active sort column and direction. Sortable: Ref, Customer, Project, Final
+   Account, Applied for, Invoiced, Retention Owed, 612 Allocated, Ret %, PC Type, QS,
+   1st Date, 2nd Date, Total Paid. (Match/among-derived columns aren't sortable.)
 
 FILES
 -----
-• pages/retention.js            (all projects, 2 new columns, manual complete)
-• pages/api/sync-invoices.js    (capture code 612 per invoice/project)
-• pages/api/dashboard.js        (surface retention612Allocated)
+• pages/retention.js
 
-AFTER DEPLOY: run an Invoices sync so the 612 Allocated column populates.
+REMINDER: the 612 Allocated figures (and therefore the Owed-vs-612 match) only
+populate after an Invoices re-sync.
