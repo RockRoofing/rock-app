@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
-import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate } from '../lib/applications'
+import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate, isMeasurableWorks } from '../lib/applications'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s + (s.length === 10 ? 'T00:00:00' : '')); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
@@ -110,7 +110,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v8</title></Head>
+      <Head><title>Rock Roofing — Applications · v9</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -444,6 +444,10 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
                   return <tr key={r.id} style={{ background: '#fafafa' }}><td style={td}></td><td style={{ ...td, ...hs, ...(r.red ? { color: '#dc2626' } : {}) }} colSpan={7}>{r.description}</td></tr>
                 }
                 const fs = { ...(r.bold ? { fontWeight: 700 } : {}), ...(r.underline ? { textDecoration: 'underline' } : {}), ...(r.red ? { color: '#dc2626' } : {}) }
+                // A line only carries a Total / % Complete / Value to date when it is a
+                // complete measurable item (has qty, unit, rate and total). Otherwise
+                // it behaves like a text/sub-line and those cells stay blank.
+                const measurable = isMeasurableWorks(r)
                 return (
                   <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                     <td style={{ ...td, color: '#6b7280', fontWeight: 600 }}>{r.code}</td>
@@ -451,16 +455,16 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
                     <td style={tdR}>{r.qty ?? ''}</td>
                     <td style={td}>{r.unit || ''}</td>
                     <td style={tdR}>{r.rate != null ? Number(r.rate).toLocaleString('en-GB', { minimumFractionDigits: 2 }) : ''}</td>
-                    <td style={tdR}>{fmt(r.total)}</td>
+                    <td style={tdR}>{measurable ? fmt(r.total) : ''}</td>
                     <td style={tdR}>
-                      {locked ? `${r.pctComplete || 0}%` : (
+                      {!measurable ? '' : locked ? `${r.pctComplete || 0}%` : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
                           <input type="number" min="0" max="100" value={r.pctComplete ?? 0} onChange={e => setPct(r.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
                           <button title="Mark 100% complete" onClick={() => setPct(r.id, 100)} style={{ background: (r.pctComplete === 100) ? '#16a34a' : '#f0f2f5', color: (r.pctComplete === 100) ? '#fff' : '#16a34a', border: '1px solid ' + ((r.pctComplete === 100) ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                         </div>
                       )}
                     </td>
-                    <td style={{ ...tdR, fontWeight: 600 }}>{fmt(worksValueToDate(r))}</td>
+                    <td style={{ ...tdR, fontWeight: 600 }}>{measurable ? fmt(worksValueToDate(r)) : ''}</td>
                   </tr>
                 )
               })}

@@ -1,37 +1,17 @@
-Applications — upcoming table + materials picker (added/hide/stay-open)
-======================================================================
+Applications — blank Total/%/Value for non-measurable lines
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v8"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v9"
 
-A) UPCOMING APPLICATIONS TABLE (landing page, before a project is picked)
-   • Shows the NEXT application PER PROJECT — max one row per project.
-   • Ordered by application date (soonest first).
-   • Colour-coded date pill with a KEY at the top:
-       grey = not yet due · orange = within 3 days · green = due today · red = overdue
-     (also shows "in Xd" / "Xd overdue" / "today").
-   • "Next" = the project's current DRAFT if it has one ("Draft ready"), otherwise
-     the next month that's due to be raised ("Due to raise"), dated from Project
-     Details. Click Open to jump into that project.
-
-B) MATERIALS PICKER
-   • Window STAYS OPEN when adding lines/POs (only closes on "Done" or clicking
-     off) so you can add several at once.
-   • A PO already on the application shows GREEN with a ✓ and "Added"; its "Add all
-     lines" is disabled — a PO can't be added twice at the same time. Remove it
-     from the application and it becomes addable again (infinitely).
-   • ALL POs show regardless of delivery date, newest POs first.
-   • HIDE a PO from the list (per project, persisted). Hidden POs move to a
-     collapsible "Show N hidden POs" section and stay hidden next time — so
-     used-up materials don't clog the window. Unhide any time.
-   • Manual line entry now clears after adding (so you can add several).
-
-STORAGE
--------
-• Hidden POs stored on the project as `hiddenPOs` (PO numbers). New API actions:
-  set-hidden-pos; GET returns hiddenPOs and all project POs (sorted latest-first),
-  plus an `?upcoming=1` mode powering the landing table.
+CHANGE
+------
+In Contract Works, a line only shows a Total, % Complete box, ✓ tick and Value to
+date when it is a COMPLETE MEASURABLE ITEM — i.e. it has a quantity, a unit, a rate
+and a (non-zero) total. Lines missing any of those (sub-lines, notes, placeholders)
+now leave those cells BLANK, and they don't contribute to the Contract Works total
+or the Summary.
 
 FILES
 -----
-• pages/applications.js      (upcoming table, materials picker rework; v8)
-• pages/api/applications.js  (upcoming summary, hiddenPOs, PO sort)
+• lib/applications.js     (isMeasurableWorks; totals + value-to-date gated on it)
+• pages/applications.js   (blank cells for non-measurable rows; v9)
