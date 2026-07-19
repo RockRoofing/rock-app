@@ -29,7 +29,9 @@ export default async function handler(req, res) {
     } catch {}
 
     const origin = `https://${req.headers.host}`
+    const appNumber = app.appNumber || (apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0) + 1)
     const bytes = await buildApplicationPDF({
+      appNumber,
       app, prevGross,
       trackerVariations: project.variations || [],
       project: { jobNo, name, customerName: project.customerName || '' },

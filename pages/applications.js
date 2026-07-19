@@ -152,6 +152,10 @@ export default function ApplicationsPage() {
     if (!prev) return 0
     return computeApplicationSummary(prev, 0).grossCurrent
   }
+  // Customer-facing application number: the permanent appNumber once sent, else the
+  // NEXT number for a never-sent draft = (highest sent number) + 1.
+  const maxSentNumber = useMemo(() => apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0), [apps])
+  const appNumberFor = (a) => a && a.appNumber ? a.appNumber : (maxSentNumber + 1)
 
   const newDates = useMemo(() => resolveAppDates(newMonth, settings), [newMonth, settings])
 
@@ -180,7 +184,7 @@ export default function ApplicationsPage() {
 
   async function deleteApp(a) {
     if (a.status && a.status !== 'draft') { alert('Only draft applications can be deleted.'); return }
-    if (!confirm(`Delete draft application ${a.seq} (${a.monthLabel || monthLabel(a.monthKey)})? This cannot be undone.`)) return
+    if (!confirm(`Delete draft application ${appNumberFor(a)} (${a.monthLabel || monthLabel(a.monthKey)})? This cannot be undone.`)) return
     try {
       const d = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', projectId, id: a.id }) }).then(r => r.json())
       if (d.ok) setApps(d.applications || [])
@@ -189,7 +193,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v21</title></Head>
+      <Head><title>Rock Roofing — Applications · v22</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -221,6 +225,7 @@ export default function ApplicationsPage() {
           ) : openApp ? (
             <ApplicationEditor
               app={openApp}
+              appNumber={appNumberFor(openApp)}
               prevGross={prevGrossFor(openApp)}
               projectId={projectId}
               me={me}
@@ -284,7 +289,7 @@ export default function ApplicationsPage() {
                         const sum = computeApplicationSummary(a, prevGrossForApp(sortedApps, a))
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                            <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{a.seq}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{appNumberFor(a)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{a.monthLabel || monthLabel(a.monthKey)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{fmtDate(a.appDate)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 12 }}>
@@ -407,7 +412,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
-function ApplicationEditor({ app, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
+function ApplicationEditor({ app, appNumber, prevGross, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -576,17 +581,18 @@ function ApplicationEditor({ app, prevGross, projectId, me, settings = {}, track
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 13, cursor: 'pointer' }}>‹ All applications</button>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Application {app.seq} — {app.monthLabel || monthLabel(app.monthKey)}</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Application {appNumber} — {app.monthLabel || monthLabel(app.monthKey)}</div>
         <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: isSent ? '#dcfce7' : '#fef9c3', color: isSent ? '#16a34a' : '#a16207' }}>{isSent ? (unlocked ? 'Sent — editing' : 'Sent') : 'Draft'}</span>
         <div style={{ flex: 1 }} />
-        {isSent && !unlocked && <span onDoubleClick={() => setUnlocked(true)} title="Double-click to edit" style={{ fontSize: 12, color: '#6b7280', cursor: 'pointer', userSelect: 'none' }}>Double-click here to edit this sent application</span>}
+        {isSent && !unlocked && <button onClick={() => { if (confirm('Are you sure you want to edit an application that has already been issued to the customer?\n\nEditing will move it back to draft — you will need to send it (or mark it as sent) again. Its application number stays the same.')) setUnlocked(true) }} style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Edit application</button>}
+        {isSent && unlocked && <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>Editing an issued application — re-send when done</span>}
         <a href={`/api/application-pdf?projectId=${encodeURIComponent(projectId)}&appId=${encodeURIComponent(app.id)}&download=1`} target="_blank" rel="noreferrer" style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', color: '#374151', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
         <button onClick={() => { if (dirty) { setMsg('Save your changes before sending.'); return } setShowSend(true) }} style={{ background: '#0369a1', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Send to customer</button>
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
         {!locked && !isSent && <button onClick={trySubmit} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
       </div>
 
-      {showSend && <SendApplicationModal app={app} projectId={projectId} settings={settings} me={me} isSent={isSent} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
+      {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
 
@@ -966,7 +972,7 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
 // - To: exactly ONE recipient (customer contact or Rock Roofing portal user).
 // - CC: any number (customer contacts and/or portal users), plus free-text.
 // - Message from an editable template with placeholders filled in.
-function SendApplicationModal({ app, projectId, settings = {}, me, isSent, onClose, onSent }) {
+function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, isSent, onClose, onSent }) {
   const [portalUsers, setPortalUsers] = useState([])
   useEffect(() => { (async () => {
     try { const d = await fetch('/api/portal-auth?action=directory').then(r => r.json()); setPortalUsers(d.users || []) } catch {}
@@ -993,7 +999,7 @@ function SendApplicationModal({ app, projectId, settings = {}, me, isSent, onClo
   const now = new Date()
   const monthName = now.toLocaleString('en-GB', { month: 'long' })
   const year = now.getFullYear()
-  const appNo = app.seq || ''
+  const appNo = appNumber || app.appNumber || app.seq || ''
   const custName = (custContacts[0]?.name || settings.customerName || 'there').split(' ')[0] || 'there'
   const signer = { name: me?.name || '', email: me?.email || '', phone: me?.phone || '' }
 

@@ -39,7 +39,9 @@ export default async function handler(req, res) {
     } catch {}
 
     const origin = `https://${req.headers.host}`
+    const appNumber = app.appNumber || (apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0) + 1)
     const bytes = await buildApplicationPDF({
+      appNumber,
       app, prevGross,
       trackerVariations: project.variations || [],
       project: { jobNo, name, customerName: project.customerName || '' },
@@ -75,6 +77,10 @@ export default async function handler(req, res) {
     if (markSent && (!apps[idx].status || apps[idx].status === 'draft')) {
       const { buildAppVariations } = await import('../../lib/applications')
       apps[idx].variations = buildAppVariations(apps[idx], project.variations || [])
+      if (!apps[idx].appNumber) {
+        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
+        apps[idx].appNumber = maxSent + 1
+      }
       apps[idx].status = 'sent'; apps[idx].sentAt = Date.now(); apps[idx].sentBy = req.body.author || ''
     }
     project.applications = apps

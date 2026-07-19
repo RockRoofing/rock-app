@@ -31,8 +31,12 @@ export default async function handler(req, res) {
         const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
         const draft = [...sorted].reverse().find(a => !a.status || a.status === 'draft')
         const last = sorted[sorted.length - 1]
+        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
+        // The number the next application will carry: a draft keeps its own appNumber
+        // if it was reverted from sent, otherwise it's (highest sent) + 1.
+        const nextNumber = draft ? (draft.appNumber || (maxSent + 1)) : (maxSent + 1)
         summary[String(xeroId)] = {
-          nextSeq: (last ? (last.seq || 0) : 0) + (draft ? 0 : 1) || 1,
+          nextSeq: nextNumber,
           draftSeq: draft ? draft.seq : null,
           hasDraft: !!draft,
           draftAppDate: draft ? (draft.appDate || '') : '',
@@ -172,10 +176,14 @@ export default async function handler(req, res) {
       if (!application || !application.id) return res.status(400).json({ error: 'application required' })
       const idx = apps.findIndex(a => a.id === application.id)
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
-      if (apps[idx].status && apps[idx].status !== 'draft' && !req.body.allowSubmittedEdit) {
+      const wasSent = apps[idx].status && apps[idx].status !== 'draft'
+      if (wasSent && !req.body.allowSubmittedEdit) {
         return res.status(400).json({ error: 'This application has been sent and is locked.' })
       }
       apps[idx] = { ...apps[idx], ...application, savedAt: Date.now() }
+      // Editing a previously-sent application sends it back to DRAFT — it must be
+      // re-sent (or marked as sent) again. Its permanent appNumber is kept.
+      if (wasSent) { apps[idx].status = 'draft'; apps[idx].revertedFromSentAt = Date.now() }
       project.applications = apps
       await saveProject(projectId, project)
       return res.json({ ok: true, application: apps[idx] })
@@ -187,7 +195,14 @@ export default async function handler(req, res) {
       if (idx === -1) return res.status(404).json({ error: 'Application not found' })
       // Freeze the live variation list (from the tracker + per-app data) into the app.
       const frozen = buildAppVariations(apps[idx], project.variations || [])
-      apps[idx] = { ...apps[idx], variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
+      // Assign a permanent, customer-facing application number the FIRST time it's
+      // sent = (number of already-sent apps) + 1. Re-sending keeps the same number.
+      let appNumber = apps[idx].appNumber
+      if (!appNumber) {
+        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
+        appNumber = maxSent + 1
+      }
+      apps[idx] = { ...apps[idx], appNumber, variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }
       project.applications = apps
       await saveProject(projectId, project)
       return res.json({ ok: true, application: apps[idx] })

@@ -1,18 +1,36 @@
-Application PDF — Summary on its own page, certificate heading removed
-=====================================================================
+Applications — sent-based numbering + edit-issued-application (revert to draft)
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Single-file change (lib/applicationPdf.js).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v22"
 
-CHANGES
--------
-1) SUMMARY ON ITS OWN PAGE
-   Contract Works now starts on a fresh page, so page 1 is just the Summary +
-   certificate figures.
-2) "PAYMENT CERTIFICATE" HEADING REMOVED
-   The gross/MCD/sub-total/retention/total block now sits directly under the
-   Summary with no separate title.
+1) APPLICATION NUMBERS ARE BASED ON SENT APPLICATIONS
+   • An application gets a permanent, customer-facing number the FIRST time it is
+     sent / marked as sent = (highest existing sent number) + 1.
+   • Re-sending keeps that number (App 3 stays App 3).
+   • A never-sent draft displays the NEXT number = (highest sent) + 1.
+   This number is shown everywhere: the list, the editor header, the PDF
+   ("Application no." + footer), the send email/subject, and the upcoming table's
+   "Next app" column. (The internal creation order "seq" is unchanged and still
+   drives sorting / carry-forward.)
+   Verified lifecycle: send 3 apps -> 1,2,3; edit App 3 -> draft (still 3);
+   re-send -> 3; next new draft -> 4.
+
+2) EDIT AN ALREADY-ISSUED APPLICATION
+   • Sent applications now have an "Edit application" button (was a hidden
+     double-click).
+   • Clicking it shows a confirm warning:
+       "Are you sure you want to edit an application that has already been issued
+        to the customer? Editing will move it back to draft — you will need to send
+        it (or mark it as sent) again. Its application number stays the same."
+   • On confirm the application unlocks for editing; SAVING it moves it back to
+     DRAFT (revertedFromSentAt recorded) while KEEPING its application number.
+   • You then Send / Mark as sent again to re-issue it (number unchanged).
 
 FILES
 -----
-• lib/applicationPdf.js
+• pages/applications.js         (appNumber display, Edit-application warning; v22)
+• pages/api/applications.js     (submit assigns/keeps appNumber; save reverts sent
+                                 -> draft; summary returns sent-based next number)
+• pages/api/application-send.js (mark-as-sent assigns/keeps appNumber; PDF uses it)
+• pages/api/application-pdf.js  (PDF uses the sent-based number)
+• lib/applicationPdf.js         (renders appNumber instead of seq)
