@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject, get, getAllProjectSettings } from '../../lib/db'
-import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates } from '../../lib/applications'
+import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates, backfillAppNumbers } from '../../lib/applications'
 
 // Applications live inside the project settings under `applications: [ ... ]`.
 // Each application:
@@ -31,9 +31,9 @@ export default async function handler(req, res) {
         const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
         const draft = [...sorted].reverse().find(a => !a.status || a.status === 'draft')
         const last = sorted[sorted.length - 1]
-        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
-        // The number the next application will carry: a draft keeps its own appNumber
-        // if it was reverted from sent, otherwise it's (highest sent) + 1.
+        // Derive numbers by sent order so legacy sent apps (no stored appNumber) still
+        // count towards the next number.
+        const { maxSent } = backfillAppNumbers(apps.map(a => ({ ...a })))
         const nextNumber = draft ? (draft.appNumber || (maxSent + 1)) : (maxSent + 1)
         summary[String(xeroId)] = {
           nextSeq: nextNumber,
@@ -53,6 +53,13 @@ export default async function handler(req, res) {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
+
+    // One-time backfill: assign permanent appNumbers to any sent applications that
+    // predate this field, so numbering is correct and persists.
+    if (Array.isArray(project.applications)) {
+      const { changed } = backfillAppNumbers(project.applications)
+      if (changed) { try { await saveProject(projectId, project) } catch {} }
+    }
 
     // Resolve this project's jobNo (from the dashboard cache) to match deliveries.
     let jobNo = ''
@@ -199,7 +206,7 @@ export default async function handler(req, res) {
       // sent = (number of already-sent apps) + 1. Re-sending keeps the same number.
       let appNumber = apps[idx].appNumber
       if (!appNumber) {
-        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
+        const { maxSent } = backfillAppNumbers(apps)   // also fills any legacy sent apps
         appNumber = maxSent + 1
       }
       apps[idx] = { ...apps[idx], appNumber, variations: frozen, status: 'sent', sentAt: Date.now(), sentBy: req.body.author || '' }

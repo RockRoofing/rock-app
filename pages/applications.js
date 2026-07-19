@@ -152,10 +152,30 @@ export default function ApplicationsPage() {
     if (!prev) return 0
     return computeApplicationSummary(prev, 0).grossCurrent
   }
-  // Customer-facing application number: the permanent appNumber once sent, else the
-  // NEXT number for a never-sent draft = (highest sent number) + 1.
-  const maxSentNumber = useMemo(() => apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0), [apps])
-  const appNumberFor = (a) => a && a.appNumber ? a.appNumber : (maxSentNumber + 1)
+  // Customer-facing application numbers. An app that has been sent gets a permanent
+  // number; a never-sent draft shows the NEXT number = (highest sent) + 1.
+  // Older apps sent before appNumber existed have no stored number — so we derive
+  // numbers from SENT ORDER (by seq) as a fallback: the Nth sent app is N.
+  const appNumberMap = useMemo(() => {
+    const map = {}
+    let maxSent = 0
+    const sentInOrder = apps
+      .filter(a => a.status && a.status !== 'draft')
+      .sort((a, b) => (a.seq || 0) - (b.seq || 0))
+    let n = 0
+    for (const a of sentInOrder) {
+      n = a.appNumber ? a.appNumber : n + 1   // prefer stored number, else next in order
+      map[a.id] = n
+      if (n > maxSent) maxSent = n
+    }
+    // Drafts: a draft reverted from sent keeps its stored number, else it's next.
+    for (const a of apps) {
+      if (map[a.id]) continue
+      map[a.id] = a.appNumber || (maxSent + 1)
+    }
+    return map
+  }, [apps])
+  const appNumberFor = (a) => (a && appNumberMap[a.id]) || 1
 
   const newDates = useMemo(() => resolveAppDates(newMonth, settings), [newMonth, settings])
 
@@ -193,7 +213,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v23</title></Head>
+      <Head><title>Rock Roofing — Applications · v24</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>

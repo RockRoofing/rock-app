@@ -1,7 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get, saveProject } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
-import { computeApplicationSummary } from '../../lib/applications'
+import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 
 // POST /api/application-send
 // Body: { projectId, appId, to:[..], cc:[..], replyTo, subject, text, markSent }
@@ -39,7 +39,8 @@ export default async function handler(req, res) {
     } catch {}
 
     const origin = `https://${req.headers.host}`
-    const appNumber = app.appNumber || (apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0) + 1)
+    backfillAppNumbers(apps)
+    const appNumber = app.appNumber || (backfillAppNumbers(apps).maxSent + 1)
     const bytes = await buildApplicationPDF({
       appNumber,
       app, prevGross,
@@ -78,7 +79,7 @@ export default async function handler(req, res) {
       const { buildAppVariations } = await import('../../lib/applications')
       apps[idx].variations = buildAppVariations(apps[idx], project.variations || [])
       if (!apps[idx].appNumber) {
-        const maxSent = apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0)
+        const { maxSent } = backfillAppNumbers(apps)
         apps[idx].appNumber = maxSent + 1
       }
       apps[idx].status = 'sent'; apps[idx].sentAt = Date.now(); apps[idx].sentBy = req.body.author || ''

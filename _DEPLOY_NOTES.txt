@@ -1,24 +1,32 @@
-Application PDF — variation columns, not-instructed section, materials columns, formatting, % symbol
-===================================================================================================
+Applications — fix numbering for apps sent before appNumber existed
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Single-file change (lib/applicationPdf.js).
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v24"
 
-1) VARIATIONS COLUMNS
-   VO | Description | Status | Final value | % Complete | Value to date
-   • Instructed rows: Status "Instructed", % Complete with the % symbol, value to date.
-2) VARIATIONS NOT YET INSTRUCTED (new section below TOTAL VARIATIONS)
-   Same columns; Status "Not instructed"; Final value shown; % Complete and Value to
-   date shown as N/A. Has its own TOTAL NOT YET INSTRUCTED (value to date = N/A).
-3) MATERIALS ON SITE COLUMNS
-   Description | PO | Qty | Unit | Rate | Total | Claimed | Value to date
-   • Rate = customer (marked-up) unit rate so Qty × Rate reconciles to Total, without
-     ever showing the mark-up %. Claimed shown as a % (with symbol).
-4) FORMATTING CARRIED THROUGH
-   Bold / Underline / Red set on Contracted-Rates / Application lines now render in
-   the Contract Works section of the PDF (bold font, underline rule, red text).
-5) % COMPLETE shown as a percentage (with the % symbol) throughout.
+THE BUG
+-------
+Your App 1 was sent BEFORE the sent-based numbering was added, so it had no stored
+appNumber. The "next number" was computed as (highest STORED appNumber) + 1 = 0 + 1
+= 1, so a newly created draft also showed as 1.
+
+THE FIX
+-------
+New helper backfillAppNumbers(): assigns permanent numbers to any SENT application
+that lacks one, by sent order (the Nth sent app = N), respecting any numbers already
+stored. Now:
+  • App 1 (sent, legacy) is treated as number 1.
+  • The next new draft shows 2, and becomes 2 when sent.
+It's applied:
+  • On the client (list / editor / everywhere the number shows) — derived by sent order.
+  • On the server GET — legacy sent apps get their appNumber written permanently
+    (one-time, persisted), so the fix sticks.
+  • In the summary "Next app" column, the submit/mark-as-sent path, and the PDF
+    endpoints — all now count legacy sent apps.
 
 FILES
 -----
-• lib/applicationPdf.js
+• lib/applications.js          (new backfillAppNumbers helper)
+• pages/applications.js        (numbering derived by sent order; v24)
+• pages/api/applications.js    (backfill+persist on load; summary + submit use it)
+• pages/api/application-pdf.js  (uses backfill for the PDF number)
+• pages/api/application-send.js (uses backfill for mark-as-sent + PDF)

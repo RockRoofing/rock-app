@@ -17,7 +17,8 @@ export default async function handler(req, res) {
     const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
     let prev = null
     for (const a of sorted) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
-    const { computeApplicationSummary } = await import('../../lib/applications')
+    const { computeApplicationSummary, backfillAppNumbers } = await import('../../lib/applications')
+    backfillAppNumbers(apps)
     const prevGross = prev ? computeApplicationSummary(prev, 0).grossCurrent : 0
 
     // Project meta (jobNo / name) from the dashboard cache.
@@ -29,7 +30,7 @@ export default async function handler(req, res) {
     } catch {}
 
     const origin = `https://${req.headers.host}`
-    const appNumber = app.appNumber || (apps.reduce((m, a) => (a.appNumber ? Math.max(m, a.appNumber) : m), 0) + 1)
+    const appNumber = app.appNumber || (backfillAppNumbers(apps).maxSent + 1)
     const bytes = await buildApplicationPDF({
       appNumber,
       app, prevGross,
