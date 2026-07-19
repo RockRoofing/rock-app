@@ -19,6 +19,7 @@ export default function ApplicationsPage() {
   const [trackerVariations, setTrackerVariations] = useState([])
   const [projectPOs, setProjectPOs] = useState([])
   const [hiddenPOs, setHiddenPOs] = useState([])
+  const [upcoming, setUpcoming] = useState({ dated: [], missing: [], loading: true })
   const [openId, setOpenId] = useState(null)     // application being edited
   const [msg, setMsg] = useState('')
   const [creating, setCreating] = useState(false)
@@ -26,15 +27,58 @@ export default function ApplicationsPage() {
 
   useEffect(() => { (async () => {
     try {
-      const [d, m] = await Promise.all([
+      const [d, m, hiddenRes, sumRes] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
+        fetch('/api/hidden-projects').then(r => r.json()).catch(() => ({})),
+        fetch('/api/applications?upcoming=1').then(r => r.json()).catch(() => ({})),
       ])
       const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       setProjects(ps)
       if (m && m.user) setMe(m.user)
-    } catch {}
+
+      // Build the upcoming split (dated table rows + missing-dates banner).
+      const hidden = new Set((hiddenRes.hidden || []).map(String))
+      const summary = sumRes.summary || {}
+      const inProgress = (d.projects || []).filter(p => p.status === 'INPROGRESS' && !hidden.has(String(p.xeroId)))
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      const horizon = new Date(today); horizon.setDate(horizon.getDate() + 31)
+      const getDateForMonth = (project, dayField, year, month, overrideField) => {
+        const monthKey = `${year}-${String(month).padStart(2, '0')}`
+        const ov = (project.dateOverrides || {})[monthKey]?.[overrideField]
+        if (ov) return ov
+        const day = parseInt(project[dayField]); if (!day || isNaN(day)) return null
+        const dim = new Date(year, month, 0).getDate()
+        return `${year}-${String(month).padStart(2, '0')}-${String(Math.min(day, dim)).padStart(2, '0')}`
+      }
+      const statusOf = (s, monthKey) => {
+        const crStatus = s.crStatus || 'ok'
+        const nextSeq = s.hasDraft ? s.draftSeq : (s.nextSeq || 1)
+        let status = s.hasDraft ? 'draft' : 'upcoming'
+        if (monthKey && (s.dismissed || []).includes(monthKey)) status = 'dismissed'
+        return { crStatus, nextSeq, status }
+      }
+      const dated = [], missing = []
+      for (const p of inProgress) {
+        const s = summary[String(p.xeroId)] || {}
+        const hasDays = !!(parseInt(p.applicationDay) || Object.keys(p.dateOverrides || {}).length)
+        if (!hasDays) { missing.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name }); continue }
+        let found = null
+        for (let i = 0; i <= 1; i++) {
+          const dt = new Date(today.getFullYear(), today.getMonth() + i, 1)
+          const iso = getDateForMonth(p, 'applicationDay', dt.getFullYear(), dt.getMonth() + 1, 'applicationDate')
+          if (!iso) continue
+          if (new Date(iso + 'T00:00:00') > horizon) continue
+          const cand = { iso, monthLabel: dt.toLocaleString('en-GB', { month: 'long', year: 'numeric' }), monthKey: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` }
+          if (!found || iso < found.iso) found = cand
+        }
+        if (!found) continue
+        dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, nextDate: found.iso, nextMonthLabel: found.monthLabel, monthKey: found.monthKey, ...statusOf(s, found.monthKey) })
+      }
+      dated.sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+      setUpcoming({ dated, missing, loading: false })
+    } catch { setUpcoming({ dated: [], missing: [], loading: false }) }
   })() }, [])
 
   async function load(pid) {
@@ -110,12 +154,12 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v12</title></Head>
+      <Head><title>Rock Roofing — Applications · v13</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Project</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Select Project — Upcoming Applications</label>
             <select value={projectId} onChange={e => pickProject(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, minWidth: 340, background: '#fff' }}>
               <option value="">— Select a project —</option>
               {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
@@ -123,8 +167,20 @@ export default function ApplicationsPage() {
             {selProject && <Link href={`/contracted-rates`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Contracted Rates →</Link>}
           </div>
 
+          {!projectId && upcoming.missing.length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+              <span style={{ fontWeight: 700, marginRight: 8 }}>⚠ Missing dates:</span>
+              {upcoming.missing.map((r, i) => (
+                <span key={r.xeroId}>
+                  <button onClick={() => pickProject(r.xeroId)} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
+                  {i < upcoming.missing.length - 1 ? <span style={{ margin: '0 6px', color: '#b45309' }}>·</span> : null}
+                </span>
+              ))}
+            </div>
+          )}
+
           {!projectId ? (
-            <UpcomingTable onOpen={pickProject} />
+            <UpcomingTable rows={upcoming.dated} loading={upcoming.loading} onOpen={pickProject} onDismissed={(id) => setUpcoming(u => ({ ...u, dated: u.dated.map(x => x.xeroId === id ? { ...x, status: 'dismissed' } : x) }))} />
           ) : loading ? (
             <div style={{ background: '#fff', borderRadius: 12, padding: 48, textAlign: 'center', color: '#888' }}>Loading…</div>
           ) : openApp ? (
@@ -230,78 +286,9 @@ function prevGrossForApp(sortedApps, app) {
 // date. Mirrors the Application Calendar: uses the dashboard's in-progress
 // projects and each project's day-of-month settings to compute the next date.
 // Projects with NO dates set show at the TOP.
-function UpcomingTable({ onOpen }) {
-  const [rows, setRows] = useState(null)
-
-  const getDateForMonth = (project, dayField, year, month, overrideField) => {
-    const monthKey = `${year}-${String(month).padStart(2, '0')}`
-    const ov = (project.dateOverrides || {})[monthKey]?.[overrideField]
-    if (ov) return ov
-    const day = parseInt(project[dayField])
-    if (!day || isNaN(day)) return null
-    const dim = new Date(year, month, 0).getDate()
-    const d = Math.min(day, dim)
-    return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-  }
-
-  useEffect(() => { (async () => {
-    try {
-      const [dash, hiddenRes, sumRes] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
-        fetch('/api/hidden-projects').then(r => r.json()).catch(() => ({})),
-        fetch('/api/applications?upcoming=1').then(r => r.json()).catch(() => ({})),
-      ])
-      const hidden = new Set((hiddenRes.hidden || []).map(String))
-      const summary = sumRes.summary || {}
-      const projects = (dash.projects || []).filter(p => p.status === 'INPROGRESS' && !hidden.has(String(p.xeroId)))
-
-      const today = new Date(); today.setHours(0, 0, 0, 0)
-      const horizon = new Date(today); horizon.setDate(horizon.getDate() + 31)
-
-      const out = []
-      for (const p of projects) {
-        const s = summary[String(p.xeroId)] || {}
-        const hasDays = !!(parseInt(p.applicationDay) || Object.keys(p.dateOverrides || {}).length)
-        if (!hasDays) {
-          // No dates assigned — surface at the top (like the calendar's "missing dates").
-          out.push({ xeroId: p.xeroId, jobNo: p.jobNo, name: p.name, nextDate: '', nextMonthLabel: '', noDates: true, ...statusOf(s, '') })
-          continue
-        }
-        // Candidate application dates: this month and next. Pick the soonest that
-        // falls on/before the 31-day horizon (overdue-this-month still counts).
-        let found = null
-        for (let i = 0; i <= 1; i++) {
-          const dt = new Date(today.getFullYear(), today.getMonth() + i, 1)
-          const iso = getDateForMonth(p, 'applicationDay', dt.getFullYear(), dt.getMonth() + 1, 'applicationDate')
-          if (!iso) continue
-          const d = new Date(iso + 'T00:00:00')
-          if (d > horizon) continue
-          const cand = { iso, monthLabel: dt.toLocaleString('en-GB', { month: 'long', year: 'numeric' }), monthKey: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` }
-          if (!found || iso < found.iso) found = cand
-        }
-        if (!found) continue // no application due within 31 days
-        out.push({ xeroId: p.xeroId, jobNo: p.jobNo, name: p.name, nextDate: found.iso, nextMonthLabel: found.monthLabel, monthKey: found.monthKey, noDates: false, ...statusOf(s, found.monthKey) })
-      }
-
-      // No-dates first, then by soonest application date.
-      out.sort((a, b) => {
-        if (a.noDates && !b.noDates) return -1
-        if (!a.noDates && b.noDates) return 1
-        if (a.noDates && b.noDates) return 0
-        return a.nextDate.localeCompare(b.nextDate)
-      })
-      setRows(out)
-    } catch { setRows([]) }
-  })() }, [])
-
-  function statusOf(s, monthKey) {
-    const crStatus = s.crStatus || 'ok'
-    const nextSeq = s.hasDraft ? s.draftSeq : (s.nextSeq || 1)
-    let status = s.hasDraft ? 'draft' : 'upcoming'
-    if (monthKey && (s.dismissed || []).includes(monthKey)) status = 'dismissed'
-    return { crStatus, nextSeq, status }
-  }
-
+// Upcoming Applications table — dated projects (within 31 days) only. Missing-dates
+// projects are shown in a banner above the dropdown by the parent.
+function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const dueInfo = (iso) => {
     if (!iso) return { color: '#9ca3af', bg: '#f3f4f6', days: null }
@@ -318,44 +305,42 @@ function UpcomingTable({ onOpen }) {
   return (
     <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, padding: '14px 16px', borderBottom: '1px solid #eee', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Select Project — Upcoming Applications</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>Upcoming Applications</div>
         <div style={{ flex: 1 }} />
         <KeyDot c="#f3f4f6" label="Not yet due" />
         <KeyDot c="#ffedd5" label="Within 3 days" />
         <KeyDot c="#dcfce7" label="Due today" />
         <KeyDot c="#fee2e2" label="Overdue" />
       </div>
-      {rows === null ? (
+      {loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#aaa' }}>Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : (rows || []).length === 0 ? (
         <div style={{ padding: 40, textAlign: 'center', color: '#888', fontSize: 14 }}>No applications due in the next 31 days.</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-            {['Project', 'Next app', 'Month', 'Application date', 'Status', ''].map((h, i) => (
+            {['Project', 'Next app', 'Month', 'Application date needed', 'Status', ''].map((h, i) => (
               <th key={i} style={{ padding: '9px 14px', textAlign: i === 5 ? 'right' : 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {rows.map(r => {
+            {(rows || []).map(r => {
               const needsCR = r.crStatus && r.crStatus !== 'ok'
               const di = dueInfo(r.nextDate)
               async function dismiss() {
                 if (!confirm(`Are you sure you don't have an application for works completed on site for this project this month?\n\n${[r.jobNo, r.name].filter(Boolean).join(' — ')}`)) return
                 try {
                   await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss-month', projectId: r.xeroId, monthKey: r.monthKey || (r.nextDate ? r.nextDate.slice(0, 7) : '') }) })
-                  setRows(rs => rs.map(x => x.xeroId === r.xeroId ? { ...x, status: 'dismissed' } : x))
+                  if (onDismissed) onDismissed(r.xeroId)
                 } catch {}
               }
               return (
-                <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0', opacity: r.status === 'dismissed' ? 0.55 : 1, background: r.noDates ? '#fffbeb' : 'transparent' }}>
+                <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0', opacity: r.status === 'dismissed' ? 0.55 : 1 }}>
                   <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ') || r.xeroId}</td>
                   <td style={{ padding: '9px 14px', fontSize: 13 }}>{needsCR ? '—' : r.nextSeq}</td>
-                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.noDates ? '—' : (r.nextMonthLabel || '—')}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextMonthLabel || '—'}</td>
                   <td style={{ padding: '9px 14px' }}>
-                    {r.noDates ? (
-                      <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>⚠ Missing dates</span>
-                    ) : needsCR ? (
+                    {needsCR ? (
                       <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>Contracted Rates required</span>
                     ) : (
                       <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: di.bg, color: di.color }}>
@@ -364,14 +349,13 @@ function UpcomingTable({ onOpen }) {
                     )}
                   </td>
                   <td style={{ padding: '9px 14px', fontSize: 12 }}>
-                    {r.noDates ? <span style={{ color: '#92400e', fontWeight: 700, fontSize: 11 }}>Set dates</span>
-                      : needsCR ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'CR not set up' : 'CR not locked'}</span>
+                    {needsCR ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'CR not set up' : 'CR not locked'}</span>
                       : r.status === 'dismissed' ? <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: '#6b7280' }}>Dismissed</span>
                       : <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: r.status === 'draft' ? '#fef9c3' : '#eef2ff', color: r.status === 'draft' ? '#a16207' : '#4f46e5' }}>{r.status === 'draft' ? 'Draft ready' : 'Due to raise'}</span>}
                   </td>
                   <td style={{ padding: '9px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>{needsCR ? 'Set up' : r.noDates ? 'Open' : 'Open'}</button>
-                    {!r.noDates && !needsCR && r.status !== 'dismissed' && r.status !== 'draft' && <button onClick={dismiss} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: '#6b7280', marginLeft: 6 }}>Dismiss month</button>}
+                    <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>{needsCR ? 'Set up' : 'Open'}</button>
+                    {!needsCR && r.status !== 'dismissed' && r.status !== 'draft' && <button onClick={dismiss} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: '#6b7280', marginLeft: 6 }}>Dismiss month</button>}
                   </td>
                 </tr>
               )

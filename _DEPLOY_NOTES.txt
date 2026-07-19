@@ -1,43 +1,32 @@
-Upcoming applications table — rebuilt to match the Application Calendar
-======================================================================
+Upcoming Applications — missing-dates banner + labels
+=====================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v12"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v13"
+(Page-only change. The ?upcoming=1 API from the previous deploy is unchanged.)
 
-WHY NOTHING WAS SHOWING
------------------------
-The old table only looked at projects that already had a saved application or
-contracted rates, and derived the date from an existing application. Most projects
-have neither yet, so the table was empty.
-
-NEW DEFINITION (mirrors the Application Calendar)
--------------------------------------------------
-• Source = ALL in-progress projects from /api/dashboard, minus hidden projects
-  (same as the calendar).
-• For each project we compute its NEXT application date from its day-of-month
-  settings (applicationDay + any month overrides) — no existing application needed.
-• A project shows if that next application date is within the next 31 DAYS
-  (overdue-this-month still counts). Max ONE row per project (the next one).
-• Projects with NO dates assigned show at the TOP with an amber "⚠ Missing dates"
-  pill (exactly like the calendar) so they can be set up.
-
-HEADING
+CHANGES
 -------
-The table title now reads "Select Project — Upcoming Applications".
+1) MISSING-DATES BANNER (like the Application Calendar)
+   Projects with no application dates set now appear in an amber "⚠ Missing dates:"
+   banner ABOVE the project dropdown — outside the table — listing each project as
+   a clickable link (opens the project so dates can be set). They no longer appear
+   as rows in the table.
 
-STILL INCLUDED
---------------
-• Colour-coded date pill + key: grey not-yet-due / orange within 3 days / green
-  due today / red overdue.
-• "Contracted Rates required" when a project's CRs aren't set up/locked.
-• "Draft ready" vs "Due to raise" status, and "Dismiss month" with its warning.
+2) TABLE TITLE
+   The table is now titled "Upcoming Applications".
 
-API
----
-/api/applications?upcoming=1 now returns a lightweight per-project summary
-(hasDraft, seq, dismissed months, CR status) keyed by xeroId; the table computes
-which projects/dates to show client-side from the dashboard.
+3) DROPDOWN LABEL
+   The project selector label now reads "Select Project — Upcoming Applications".
+
+4) DATE NEEDED
+   The table's date column is now headed "Application date needed" and shows the
+   date each application is required (computed from the project's application day /
+   overrides), colour-coded: grey not-yet-due / orange within 3 days / green due
+   today / red overdue.
+
+Table still shows only projects whose next application falls within 31 days, max
+one row per project, soonest first.
 
 FILES
 -----
-• pages/applications.js      (UpcomingTable rebuilt; v12)
-• pages/api/applications.js  (upcoming returns summary map)
+• pages/applications.js   (v13)
