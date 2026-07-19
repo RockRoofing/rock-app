@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import ProjectDatesModal from '../components/ProjectDatesModal'
 
 function getDateForProject(project, field, year, month) {
   const dayField = field === 'applicationDate' ? 'applicationDay' : field === 'valuationDate' ? 'valuationDay' : 'paymentDay'
@@ -280,122 +281,41 @@ export default function ApplicationCalendar() {
         </div>
 
         {/* Modal */}
-        {modal && (
+        {modal && modal.overflow && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
             onClick={() => setModal(null)}>
             <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '100%', maxWidth: 620, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
               onClick={e => e.stopPropagation()}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>
-                  {modal.overflow ? `${modal.day}/${modal.month}/${modal.year} — All projects` : `${modal.project?.jobNo} — ${modal.project?.name}`}
-                </h3>
+                <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>{`${modal.day}/${modal.month}/${modal.year} — All projects`}</h3>
                 <button onClick={() => setModal(null)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button>
               </div>
-
-              {modal.overflow ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  {modal.overflow.map((e, i) => (
-                    <div key={i} style={{ background: '#f8f9fa', borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }}
-                      onClick={() => openModal(e)}>
-                      <div style={{ fontWeight: 600, color: '#1a1a2e', marginBottom: 6 }}>
-                        {e.project.jobNo} — {e.project.name}
-                      </div>
-                      <div style={{ fontSize: 12, color: '#888', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
-                        <div>App: {fmtDate(e.appDate)}</div>
-                        <div>Val: {fmtDate(e.valDate)}</div>
-                        <div>Pay: {fmtDate(e.payDate)}</div>
-                      </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {modal.overflow.map((e, i) => (
+                  <div key={i} style={{ background: '#f8f9fa', borderRadius: 8, padding: '12px 14px', cursor: 'pointer' }} onClick={() => openModal(e)}>
+                    <div style={{ fontWeight: 600, color: '#1a1a2e', marginBottom: 6 }}>{e.project.jobNo} — {e.project.name}</div>
+                    <div style={{ fontSize: 12, color: '#888', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4 }}>
+                      <div>App: {fmtDate(e.appDate)}</div>
+                      <div>Val: {fmtDate(e.valDate)}</div>
+                      <div>Pay: {fmtDate(e.payDate)}</div>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div>
-                  {modal.missingAny && (
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-                      ⚠ Missing one or more dates — set the fixed monthly days below, or add specific monthly dates manually.
-                    </div>
-                  )}
-
-                  {/* 1) Fixed recurring day-of-month */}
-                  <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>Fixed monthly dates</div>
-                  <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>The day of each month these dates normally fall on. Used for every month unless overridden manually below.</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12, marginBottom: 20 }}>
-                    {[
-                      { label: 'Application day', key: 'applicationDay', color: '#1e40af', bg: '#dbeafe' },
-                      { label: 'Valuation day', key: 'valuationDay', color: '#065f46', bg: '#d1fae5' },
-                      { label: 'Payment day', key: 'paymentDay', color: '#92400e', bg: '#fef3c7' },
-                    ].map(item => (
-                      <div key={item.key} style={{ background: item.bg, borderRadius: 8, padding: '10px 12px' }}>
-                        <div style={{ fontSize: 10, color: item.color, fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>{item.label}</div>
-                        <input type="number" min="1" max="31" placeholder="e.g. 25"
-                          value={dayFields[item.key] || ''}
-                          onChange={e => setDayFields(d => ({ ...d, [item.key]: e.target.value }))}
-                          style={{ width: '100%', minWidth: 0, fontSize: 12, padding: '5px 6px', border: `1px solid ${item.color}44`, borderRadius: 6, background: '#fff', boxSizing: 'border-box', fontFamily: 'inherit' }} />
-                      </div>
-                    ))}
                   </div>
-
-                  {/* 2) Manual per-month override table (same as Project Details) */}
-                  <button onClick={() => setShowManualMonths(s => !s)}
-                    style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#6366f1', marginBottom: showManualMonths ? 12 : 0 }}>
-                    {showManualMonths ? '▲ Hide manual monthly dates' : '＋ Add monthly dates manually'}
-                  </button>
-                  {showManualMonths && (
-                    <div style={{ marginBottom: 16, border: '1px solid #e5e5e5', borderRadius: 8, overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ background: '#f8f9fa', position: 'sticky', top: 0 }}>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Month</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Application</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Valuation</th>
-                            <th style={{ padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e5e5e5', fontWeight: 600, color: '#555' }}>Payment</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Array.from({ length: 14 }, (_, i) => {
-                            const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 2 + i)
-                            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-                            const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-                            const row = monthOverrides[key] || {}
-                            const [ky, km] = key.split('-').map(n => parseInt(n, 10))
-                            const monthMin = `${key}-01`
-                            const monthMax = `${key}-${String(new Date(ky, km, 0).getDate()).padStart(2, '0')}`
-                            return (
-                              <tr key={key} style={{ borderBottom: '0.5px solid #f0f0f0' }}>
-                                <td style={{ padding: '6px 10px', fontWeight: 500, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{label}</td>
-                                {['applicationDate', 'valuationDate', 'paymentDate'].map(field => (
-                                  <td key={field} style={{ padding: '4px 8px' }}>
-                                    <input type="date" value={row[field] || ''} min={monthMin} max={monthMax}
-                                      onChange={e => {
-                                        const next = { ...monthOverrides, [key]: { ...row, [field]: e.target.value || undefined } }
-                                        if (!next[key].applicationDate && !next[key].valuationDate && !next[key].paymentDate) delete next[key]
-                                        setMonthOverrides(next)
-                                      }}
-                                      style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #e5e5e5', borderRadius: 4, fontFamily: 'inherit', width: '100%' }} />
-                                  </td>
-                                ))}
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <button onClick={saveDates} disabled={saving || modalLoading}
-                      style={{ flex: 1, background: (saving || modalLoading) ? '#ccc' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 500, cursor: (saving || modalLoading) ? 'not-allowed' : 'pointer' }}>
-                      {modalLoading ? 'Loading…' : saving ? 'Saving...' : 'Save dates'}
-                    </button>
-                    <Link href={`/project/${modal.project?.xeroId}`}
-                      style={{ padding: '9px 16px', background: '#f0f2f5', color: '#1a1a2e', borderRadius: 8, fontSize: 13, textDecoration: 'none', fontWeight: 500 }}>
-                      View project ↗
-                    </Link>
-                  </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           </div>
+        )}
+        {modal && !modal.overflow && modal.project && (
+          <ProjectDatesModal
+            project={modal.project}
+            onClose={() => setModal(null)}
+            onSaved={(updatedSettings) => {
+              setProjects(prev => prev.map(proj => proj.xeroId === modal.project.xeroId
+                ? { ...proj, applicationDay: updatedSettings.applicationDay, valuationDay: updatedSettings.valuationDay, paymentDay: updatedSettings.paymentDay, dateOverrides: updatedSettings.dateOverrides }
+                : proj))
+              setModal(null)
+            }}
+          />
         )}
       </div>
     </>

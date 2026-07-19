@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
+import ProjectDatesModal from '../components/ProjectDatesModal'
 import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate, isMeasurableWorks } from '../lib/applications'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -162,7 +163,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v16</title></Head>
+      <Head><title>Rock Roofing — Applications · v17</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -279,7 +280,7 @@ export default function ApplicationsPage() {
           )}
         </div>
       </div>
-      {datesModal && <SetDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); setUpcoming(u => ({ ...u, loading: true })); loadUpcoming() }} />}
+      {datesModal && <ProjectDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); setUpcoming(u => ({ ...u, loading: true })); loadUpcoming() }} />}
     </>
   )
 }
@@ -297,61 +298,6 @@ function prevGrossForApp(sortedApps, app) {
 // Projects with NO dates set show at the TOP.
 // Set the recurring application/valuation/payment day-of-month for a project —
 // the same date-entry the Application Calendar's banner opens.
-function SetDatesModal({ project, onClose, onSaved }) {
-  const [days, setDays] = useState({ applicationDay: '', valuationDay: '', paymentDay: '' })
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-  useEffect(() => { (async () => {
-    try {
-      const data = await fetch(`/api/project/${project.xeroId}`).then(r => r.json())
-      const s = data.settings || {}
-      setDays({ applicationDay: s.applicationDay || '', valuationDay: s.valuationDay || '', paymentDay: s.paymentDay || '' })
-    } catch {} setLoading(false)
-  })() }, [project.xeroId])
-  async function save() {
-    setSaving(true); setErr('')
-    try {
-      const data = await fetch(`/api/project/${project.xeroId}`).then(r => r.json())
-      const settings = data.settings || {}
-      const updated = { ...settings, applicationDay: days.applicationDay || undefined, valuationDay: days.valuationDay || undefined, paymentDay: days.paymentDay || undefined }
-      const res = await fetch(`/api/project/${project.xeroId}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) })
-      if (!res.ok) throw new Error()
-      onSaved()
-    } catch { setErr('Could not save dates.'); setSaving(false) }
-  }
-  const fields = [
-    { label: 'Application day', key: 'applicationDay', color: '#1e40af', bg: '#dbeafe' },
-    { label: 'Valuation day', key: 'valuationDay', color: '#065f46', bg: '#d1fae5' },
-    { label: 'Payment day', key: 'paymentDay', color: '#92400e', bg: '#fef3c7' },
-  ]
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 460, maxWidth: '100%' }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div>
-        <div style={{ fontSize: 12.5, color: '#777', margin: '4px 0 16px' }}>Set the day of the month each date falls on. These recur monthly and drive the upcoming applications and calendar.</div>
-        {loading ? <div style={{ padding: 20, textAlign: 'center', color: '#aaa' }}>Loading…</div> : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {fields.map(f => (
-              <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: f.color, background: f.bg, padding: '6px 10px', borderRadius: 7 }}>{f.label}</span>
-                <input type="number" min="1" max="31" placeholder="e.g. 25" value={days[f.key] || ''} onChange={e => setDays(d => ({ ...d, [f.key]: e.target.value }))} style={{ width: 90, padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 13, textAlign: 'right' }} />
-              </div>
-            ))}
-          </div>
-        )}
-        {err && <div style={{ fontSize: 12.5, color: '#dc2626', marginTop: 10 }}>{err}</div>}
-        <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-          <button onClick={save} disabled={saving || loading} style={{ flex: 1, background: (saving || loading) ? '#ccc' : '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: (saving || loading) ? 'default' : 'pointer' }}>{saving ? 'Saving…' : 'Save dates'}</button>
-          <button onClick={onClose} style={{ background: '#fff', color: '#666', border: '1px solid #e5e5e5', borderRadius: 8, padding: '10px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// Upcoming Applications table — dated projects (within 31 days) only. Missing-dates
-// projects are shown in a banner above the dropdown by the parent.
 function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const dueInfo = (iso) => {

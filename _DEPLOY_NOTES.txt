@@ -1,19 +1,32 @@
-"Set up" deep-links to Contracted Rates with the project pre-selected
-====================================================================
+Shared date-entry box (Application Calendar's modal) reused on Applications
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Markers: Applications "· v16"  ·  Contracted Rates "· v16"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v17"
 
-CHANGE
-------
-In the Upcoming Applications table, the "Set up" button (shown for projects that
-need contracted rates) now links straight to:
-    /contracted-rates?projectId=<xeroId>
-The Contracted Rates page reads that query parameter on load and auto-selects the
-project, so you land ready to upload the costing document immediately — no need to
-re-pick the project.
+WHAT CHANGED
+------------
+The missing-dates banner on the Applications page now opens the EXACT SAME box the
+Application Calendar uses — extracted into a shared component so they can never
+drift apart:
+  • Amber "⚠ Missing one or more dates…" notice
+  • "Fixed monthly dates" — Application / Valuation / Payment day tiles
+  • "＋ Add monthly dates manually" — the per-month override table (Month /
+    Application / Valuation / Payment date pickers, 14-month window)
+  • "Save dates" + "View project ↗"
+Saving writes through to the project settings (applicationDay / valuationDay /
+paymentDay / dateOverrides) exactly as the calendar does, so Project Details, the
+calendar and the upcoming table all pick it up. On the Applications page the
+upcoming table + banner refresh immediately after saving.
+
+The Application Calendar now renders the same shared component for its per-project
+modal (its "all projects on this day" overflow popup is unchanged).
 
 FILES
 -----
-• pages/applications.js       (Set up = deep link; v16)
-• pages/contracted-rates.js   (reads ?projectId= and auto-selects; v16)
+• components/ProjectDatesModal.js   (NEW — shared box)
+• pages/applications.js             (uses ProjectDatesModal; removed the interim
+                                     simplified modal; v17)
+• pages/application-calendar.js     (per-project modal now uses ProjectDatesModal)
+
+NOTE: this adds a NEW file (components/ProjectDatesModal.js) — make sure it's
+created in GitHub, not just the two edited pages.
