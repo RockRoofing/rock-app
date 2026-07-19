@@ -1,6 +1,20 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject } from '../../lib/db'
 
+// Drop the dashboard snapshot so Project Financials (Budget Tracker + EOM) rebuild
+// from fresh project data. Called after CR-lock updates the project's budgets — the
+// dashboard caches for 4h, so without this the tables show stale numbers.
+async function clearDashboardCache() {
+  try {
+    const { Redis } = await import('@upstash/redis')
+    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+    const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !token) return
+    const redis = new Redis({ url, token })
+    await redis.del('dashboard:cache')
+  } catch {}
+}
+
 // When contracted rates are LOCKED, push the CR totals into the project's edit
 // details as the source of truth (overwriting any manual entries):
 //   Original Contract Value  <- above-the-line total
@@ -95,6 +109,7 @@ export default async function handler(req, res) {
       // project's contract value + labour/materials budgets (overwrites manual).
       if (project.contractedRates.locked) populateBudgetsFromCR(project)
       await saveProject(projectId, project)
+      if (project.contractedRates.locked) await clearDashboardCache()
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
 
@@ -105,6 +120,7 @@ export default async function handler(req, res) {
       project.contractedRates.savedAt = Date.now()
       if (project.contractedRates.locked) populateBudgetsFromCR(project)
       await saveProject(projectId, project)
+      if (project.contractedRates.locked) await clearDashboardCache()
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
 

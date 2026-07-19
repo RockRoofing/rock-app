@@ -330,6 +330,15 @@ export default function ContractedRatesPage() {
       if (!d.ok) { setMsg(d.error || 'Save failed.'); setSaving(false); return }
       applyCr(d.contractedRates)
       setMsg('Saved.')
+      setSaving(false)
+      // Offer to lock, since locking is what populates the project details and makes
+      // applications available. Only prompt when not already locked.
+      if (!d.contractedRates?.locked) {
+        if (confirm('Saved.\n\nAre you ready to Lock Contract Rates?\n\nThis must be done to populate the project details and make applications available.')) {
+          await doLock(true)
+        }
+      }
+      return
     } catch { setMsg('Save failed.') }
     setSaving(false)
   }
@@ -415,16 +424,19 @@ export default function ContractedRatesPage() {
       : `${section === 'above' ? 'Above the line total' : 'Below the line total'}`
     const bg = section === 'above' ? '#ecfdf5' : '#fffbeb'
     const bd = section === 'above' ? '#0f766e' : '#b45309'
+    // Sticky to the bottom of the viewport so the running section total stays visible
+    // while scrolling and moving lines across the line.
+    const stick = { position: 'sticky', bottom: 0, zIndex: 10, background: bg, boxShadow: `0 -2px 6px ${bd}22` }
     return (
       <tr style={{ background: bg, borderTop: `2px solid ${bd}55`, fontWeight: 700 }}>
-        <td style={tdC}></td>
-        <td style={{ ...td, color: bd }} colSpan={5}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
-        <td style={{ ...tdR, color: bd }}>{fmt(dMoney(show.rate))}</td>
-        <td style={tdMat}></td>
-        <td style={{ ...tdMat, fontWeight: 700 }}>{fmt(dMoney(show.materials))}</td>
-        <td style={tdLab}></td>
-        <td style={{ ...tdLab, fontWeight: 700 }}>{fmt(dMoney(show.labour))}</td>
-        <td style={td}></td>
+        <td style={{ ...tdC, ...stick }}></td>
+        <td style={{ ...td, color: bd, ...stick }} colSpan={5}>{label}{hasSel && <span style={{ fontWeight: 400, color: '#6b7280', marginLeft: 6, fontSize: 11 }}>(ticked)</span>}</td>
+        <td style={{ ...tdR, color: bd, ...stick }}>{fmt(dMoney(show.rate))}</td>
+        <td style={{ ...tdMat, ...stick }}></td>
+        <td style={{ ...tdMat, fontWeight: 700, ...stick }}>{fmt(dMoney(show.materials))}</td>
+        <td style={{ ...tdLab, ...stick }}></td>
+        <td style={{ ...tdLab, fontWeight: 700, ...stick }}>{fmt(dMoney(show.labour))}</td>
+        <td style={{ ...td, ...stick }}></td>
       </tr>
     )
   }
@@ -462,7 +474,12 @@ export default function ContractedRatesPage() {
                 onDragOver={e => editable && e.preventDefault()}
                 onDrop={() => editable && onDrop(x.id)}
                 style={{ background: dragId === x.id ? '#eef2ff' : '#fafafa' }}>
-                <td style={tdC}>{editable && <span title="Drag to reorder" style={{ cursor: 'grab', color: '#cbd5e1' }}>⋮⋮</span>}</td>
+                <td style={tdC}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+                    {editable && <span title="Drag to reorder" style={{ cursor: 'grab', color: '#cbd5e1' }}>⋮⋮</span>}
+                    {editable && <input type="checkbox" checked={isSel} onChange={() => toggleSel(x.id)} title="Select heading (to move above/below the line)" style={{ cursor: 'pointer' }} />}
+                  </div>
+                </td>
                 <td style={{ ...td, ...headStyle, ...fmtStyle, ...strike }} colSpan={9}>{x.code ? <span style={{ color: '#9ca3af', marginRight: 6, fontWeight: 400, textDecoration: 'none' }}>{x.code}</span> : null}{x.description || '—'}</td>
                 <td style={tdMat}></td>
                 <td style={tdR}>{editable && <RowMenu x={x} section={section} onEdit={() => setEditRow(x.id)} onMove={move} onStrike={toggleStruck} onDelete={remove} onUp={() => moveUpDown(x.id, -1)} onDown={() => moveUpDown(x.id, 1)} onToggleHeading={toggleHeadingStyle} onToggleStyle={toggleStyle} />}</td>
