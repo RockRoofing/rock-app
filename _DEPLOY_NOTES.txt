@@ -1,31 +1,21 @@
-Retention register — match indicators + sortable columns
-========================================================
+Retention register — releases gated on FA=Invoiced, FA-below-invoiced warning
+=============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 Single file: pages/retention.js (latest — includes all prior retention changes)
 
-1) RETENTION OWED vs 612 MATCH COLUMN (left of "612 Allocated")
-   • Green tick ✓ when Retention Owed == 612 Allocated (within £1).
-   • Red flag 🚩 when they differ.
-   • Grey — when neither has a value yet.
+1) 1st / 2nd VALUE ONLY GO GREEN WHEN FA MATCHES INVOICED
+   A release cell now turns green ("released") only when BOTH:
+     • the amount paid means that release is settled, AND
+     • the Final Account reconciles with the invoiced value (within £1).
+   If it's paid/settled but FA ≠ Invoiced, the cell shows an amber "⚠ check FA"
+   warning instead of green (tooltip explains why). Still-due releases stay orange.
 
-2) APPLIED-FOR vs INVOICED MATCH COLUMN (right of "Applied for")
-   • Green tick ✓ when Applied for == Invoiced (within £1).
-   • Red flag 🚩 when they differ.
-   • Grey — when either is missing.
-
-3) DEFAULT SORT BY REF
-   The register loads sorted by Ref (job number), ascending.
-
-4) CLICK-TO-SORT HEADERS
-   Click a column header to sort by it; click again to reverse. An arrow (▲/▼) shows
-   the active sort column and direction. Sortable: Ref, Customer, Project, Final
-   Account, Applied for, Invoiced, Retention Owed, 612 Allocated, Ret %, PC Type, QS,
-   1st Date, 2nd Date, Total Paid. (Match/among-derived columns aren't sortable.)
+2) FINAL ACCOUNT WARNING WHEN INVOICED IS HIGHER
+   When the invoiced value exceeds the Final Account, the FA figure turns RED and
+   shows "⚠ FA lower than invoiced" beneath it, flagging the FA is understated and
+   needs updating.
 
 FILES
 -----
 • pages/retention.js
-
-REMINDER: the 612 Allocated figures (and therefore the Owed-vs-612 match) only
-populate after an Invoices re-sync.

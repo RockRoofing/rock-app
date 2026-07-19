@@ -421,6 +421,7 @@ export default function RetentionPage() {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3e0', border: '1px solid #ffb74d' }} /> Release due — not yet paid</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#e8f5e9', border: '1px solid #66bb6a' }} /> Release settled (auto, from amount paid)</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: '#dcfce7', border: '1px solid #16a34a' }} /> Row green = retention closed (paid in full)</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#a16207' }}>⚠ check FA = paid but Final Account ≠ invoiced (won’t go green until reconciled)</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#c77700' }}>⚠ TBC = release date not confirmed</span>
             </div>
           </div>
@@ -491,16 +492,37 @@ export default function RetentionPage() {
                       const r1v = parseFloat(entry.release1Value || 0) || 0
                       const r2v = parseFloat(entry.release2Value || 0) || 0
                       const paidKnown = hasPaid && fa
-                      const secondReceived = paidKnown ? (totalRemaining < 1) : false
-                      const firstReceived = paidKnown ? (secondReceived || totalRemaining <= r2v + 1) : false
-                      // Release cell: orange fill when due & not received; green + "received" when received.
-                      const releaseCell = (val, received) => {
+                      // Final Account vs Invoiced. Releases should only go green once the
+                      // FA and the invoiced value reconcile; if invoiced exceeds FA the
+                      // FA is understated (warning shown on the FA cell).
+                      const faKnown = fa > 0 && invNet != null
+                      const faMatchesInvoiced = faKnown && Math.abs(fa - (invNet || 0)) < 1
+                      const faBelowInvoiced = faKnown && (invNet || 0) - fa > 1
+                      const settledSecond = paidKnown ? (totalRemaining < 1) : false
+                      const settledFirst = paidKnown ? (settledSecond || totalRemaining <= r2v + 1) : false
+                      // Only allow the green "settled" state when FA reconciles to invoiced.
+                      const secondReceived = settledSecond && faMatchesInvoiced
+                      const firstReceived = settledFirst && faMatchesInvoiced
+                      // A release that WOULD be settled but is blocked by an FA/invoiced
+                      // mismatch shows an amber warning instead of green.
+                      const releaseWarn = (settledFirst || settledSecond) && !faMatchesInvoiced
+                      // Release cell: green when settled AND FA reconciles; amber warning
+                      // when settled but FA≠Invoiced; orange "due" otherwise.
+                      const releaseCell = (val, received, warn) => {
                         const has = val != null && val !== '' && !isNaN(parseFloat(val))
                         if (!has) return <td style={{ padding: '8px 10px', textAlign: 'right', color: '#bbb' }}>—</td>
+                        if (warn && !received) {
+                          return (
+                            <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: '#fef9c3' }} title="Paid, but Final Account doesn't match the invoiced value — reconcile before treating as released.">
+                              <div style={{ fontWeight: 600, color: '#a16207' }}>{fmt(parseFloat(val))}</div>
+                              <div style={{ fontSize: 9.5, color: '#a16207', fontWeight: 600 }}>⚠ check FA</div>
+                            </td>
+                          )
+                        }
                         return (
                           <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: received ? '#e8f5e9' : '#fff3e0' }}>
                             <div style={{ fontWeight: 600, color: received ? '#166534' : '#b26a00' }}>{fmt(parseFloat(val))}</div>
-                            <div style={{ fontSize: 9.5, color: received ? '#16a34a' : '#c77700', fontWeight: 600 }}>{received ? 'received' : 'due'}</div>
+                            <div style={{ fontSize: 9.5, color: received ? '#16a34a' : '#c77700', fontWeight: 600 }}>{received ? 'released' : 'due'}</div>
                           </td>
                         )
                       }
@@ -528,7 +550,10 @@ export default function RetentionPage() {
                             {/* Project */}
                             <td style={{ padding: '8px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.projectName || '—'}</td>
                             {/* Final Account */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(fa || null)}</td>
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: faBelowInvoiced ? '#dc2626' : undefined, fontWeight: faBelowInvoiced ? 700 : undefined }}>
+                              {fmt(fa || null)}
+                              {faBelowInvoiced && <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 600 }}>⚠ FA lower than invoiced</div>}
+                            </td>
                             {/* Applied for (manual override) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}</td>
                             {/* Applied-for vs Invoiced match */}
@@ -550,11 +575,11 @@ export default function RetentionPage() {
                             {/* QS */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.qsName || '—'}</td>
                             {/* 1st Value (coloured) */}
-                            {releaseCell(entry.release1Value, firstReceived)}
+                            {releaseCell(entry.release1Value, firstReceived, releaseWarn)}
                             {/* 1st Date */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
                             {/* 2nd Value (coloured) */}
-                            {releaseCell(entry.release2Value, secondReceived)}
+                            {releaseCell(entry.release2Value, secondReceived, releaseWarn)}
                             {/* 2nd Date */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
                             {/* VAT */}
