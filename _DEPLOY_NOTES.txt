@@ -1,62 +1,28 @@
-Applications Phase 4 (full) — PDF + send, To/CC pickers, editable template
-==========================================================================
+Application PDF — column fix + standalone sections + section totals
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v21"
-This bundle SUPERSEDES the earlier Phase 4 zip — deploy this one.
+Build: ✓ Compiled successfully
+Single-file change on top of Phase 4 (pages/API unchanged).
 
-PDF (customer copy)
--------------------
-Combined A4: Summary + Payment Certificate + Contract Works (measurable only) +
-Variations (instructed only) + Materials on Site (marked-up Total, NO mark-up %
-column), then variation + supplier-group attachments appended. Download via the
-"Download PDF" button.
+FIXES
+-----
+1) COLUMN OVERRUN FIXED
+   Contract Works columns were overlapping (Rate printing over Total, headers like
+   "TToottaal"). Re-spaced with fixed, non-overlapping right-aligned money columns:
+   Code | Description (wraps) | Qty | Unit | Rate | Total | To date. Descriptions
+   now wrap on word boundaries (no mid-word breaks).
 
-SEND TO CUSTOMER (popout)
--------------------------
-• TO — exactly ONE recipient, chosen from a dropdown of Customer contacts OR Rock
-  Roofing portal users.
-• CC — any number, tickable from Customer contacts and Rock Roofing portal users,
-  plus a free-text box for extra emails. (The chosen To can't also be CC'd.)
-• MESSAGE — editable, pre-filled from this template (with a "Reset to template"
-  link):
-      Subject: Application for Payment [App No] - [Current Month] [Year]
+2) VARIATIONS & MATERIALS ON THEIR OWN PAGES
+   Each of these sections now starts on a fresh page.
 
-      Hi [Customer first name],
+3) SECTION TOTALS
+   A bold total row at the bottom of each section:
+     • TOTAL CONTRACT WORKS      (Total + To date)
+     • TOTAL VARIATIONS          (Final value + To date)
+     • TOTAL MATERIALS ON SITE   (Total + To date)
+   (Verified: the J178 Contract Works "To date" total comes to £55,335.38, matching
+   the Summary's Measured Work figure.)
 
-      Please find attached our application for payment [App No] for [current month].
-
-      Feel free to call if there is anything you would like to discuss.
-
-      Kind Regards,
-
-      [Your name]
-      [Your email]
-      [Your phone]
-      Rock Roofing Ltd
-  ([Your ...] = the signed-in portal user's name / email / phone.)
-• Reply-to = the sender (signed-in portal user), falling back to the project QS.
-• Optional "Mark as sent" (freezes variations + locks).
-
-SENDER (from)
--------------
-COMMERCIAL_FROM_EMAIL if set, else ACCOUNTS_FROM_EMAIL, else FORMS_FROM_EMAIL, else
-Resend test address. Set COMMERCIAL_FROM_EMAIL in Vercel to
-"Rock Roofing Commercial <commercial@rockroofing.co.uk>" (domain already verified
-in Resend).
-
-NEW FILES (create in GitHub)
-----------------------------
-• lib/applicationPdf.js
-• pages/api/application-pdf.js
-• pages/api/application-send.js
-
-EDITED
-------
-• pages/applications.js       (Download + Send, To/CC pickers, template; v21)
-• pages/api/applications.js   (GET returns customer contacts + QS)
-• pages/api/portal-auth.js    (new ?action=directory — name/email/phone of active
-                               portal users, for the recipient pickers; any
-                               signed-in user, not admin-only)
-
-NOTE: the portal user's PHONE comes through only if it's set on their portal
-profile; otherwise that line in the signature will be blank.
+FILES
+-----
+• lib/applicationPdf.js   (only file changed)
