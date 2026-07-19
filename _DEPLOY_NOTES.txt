@@ -1,17 +1,48 @@
-Applications — blank Total/%/Value for non-measurable lines
-===========================================================
+Applications — CR-required, dismiss month, add-line fix, warnings, submit guard
+===============================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v9"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v10"
 
-CHANGE
-------
-In Contract Works, a line only shows a Total, % Complete box, ✓ tick and Value to
-date when it is a COMPLETE MEASURABLE ITEM — i.e. it has a quantity, a unit, a rate
-and a (non-zero) total. Lines missing any of those (sub-lines, notes, placeholders)
-now leave those cells BLANK, and they don't contribute to the Contract Works total
-or the Summary.
+1) CONTRACTED RATES REQUIRED (upcoming table)
+   Projects whose contracted rates aren't set up (or aren't locked) now appear in
+   the upcoming table with a red "Contracted Rates required" pill and a "Set up"
+   button (opens the project so you can go add them). Projects with CRs started but
+   unlocked show "Not locked".
+
+2) DISMISS APPLICATION THIS MONTH
+   Each due row has a "Dismiss month" button. It warns: "Are you sure you don't
+   have an application for works completed on site for this project this month?"
+   Confirming marks the project's month as dismissed (greyed "Dismissed").
+
+3) INDIVIDUAL ADD FIX (materials)
+   • Adding a single line now pulls the SUPPLIER NAME + PO NUMBER in as a group
+     header (creating the group if the PO isn't on the app yet, else appending to
+     it) — even for one line.
+   • Rates now pull through on single-line adds.
+   • The same line can't be added twice: added lines show green + "Added" and the
+     button disables. Remove from the application to re-enable. (Whole-PO add still
+     blocks the whole PO.)
+
+4) MISSING MARK-UP WARNING
+   Any material line with no mark-up shows a red ⚠ and a red-bordered / red-tinted
+   mark-up cell.
+
+5) ZERO-VALUE WARNING
+   Any material or contract-works line that pulls in at £0 is flagged with a red ⚠
+   and a red-tinted row.
+
+6) SUBMIT GUARD
+   "Mark as sent" now checks for warnings first. If any remain (no mark-up, £0
+   material lines, £0 works lines) it prompts: "Are you sure you want to submit?
+   The following need attention: …" listing the reasons before proceeding.
+
+STORAGE
+-------
+• hiddenPOs (from before) + applicationDismissals (array of YYYY-MM) on the
+  project. New API actions: dismiss-month. Upcoming GET now also lists projects
+  that need contracted rates.
 
 FILES
 -----
-• lib/applications.js     (isMeasurableWorks; totals + value-to-date gated on it)
-• pages/applications.js   (blank cells for non-measurable rows; v9)
+• pages/applications.js      (all of the above; v10)
+• pages/api/applications.js  (CR status in upcoming, dismiss-month)

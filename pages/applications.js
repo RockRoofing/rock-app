@@ -110,7 +110,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v9</title></Head>
+      <Head><title>Rock Roofing — Applications · v10</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -270,22 +270,43 @@ function UpcomingTable({ onOpen }) {
           </tr></thead>
           <tbody>
             {rows.map(r => {
+              const needsCR = r.crStatus && r.crStatus !== 'ok'
               const di = dueInfo(r.nextDate)
+              async function dismiss() {
+                if (!confirm(`Are you sure you don't have an application for works completed on site for this project this month?\n\n${[r.jobNo, r.name].filter(Boolean).join(' — ')}`)) return
+                try {
+                  let monthKey = ''
+                  if (r.nextDate) monthKey = r.nextDate.slice(0, 7)
+                  await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss-month', projectId: r.xeroId, monthKey }) })
+                  setRows(rs => rs.map(x => x.xeroId === r.xeroId ? { ...x, status: 'dismissed' } : x))
+                } catch {}
+              }
               return (
-                <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0', opacity: r.status === 'dismissed' ? 0.55 : 1 }}>
                   <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ') || r.xeroId}</td>
-                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextSeq}</td>
-                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextMonthLabel || '—'}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{needsCR ? '—' : r.nextSeq}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{needsCR ? '—' : (r.nextMonthLabel || '—')}</td>
                   <td style={{ padding: '9px 14px' }}>
-                    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: di.bg, color: di.color }}>
-                      {fmtD(r.nextDate)}{di.days != null && di.days !== 0 ? ` (${di.days < 0 ? `${-di.days}d overdue` : `in ${di.days}d`})` : di.days === 0 ? ' (today)' : ''}
-                    </span>
+                    {needsCR ? (
+                      <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>Contracted Rates required</span>
+                    ) : (
+                      <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: di.bg, color: di.color }}>
+                        {fmtD(r.nextDate)}{di.days != null && di.days !== 0 ? ` (${di.days < 0 ? `${-di.days}d overdue` : `in ${di.days}d`})` : di.days === 0 ? ' (today)' : ''}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '9px 14px', fontSize: 12 }}>
-                    <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: r.status === 'draft' ? '#fef9c3' : '#eef2ff', color: r.status === 'draft' ? '#a16207' : '#4f46e5' }}>{r.status === 'draft' ? 'Draft ready' : 'Due to raise'}</span>
+                    {needsCR ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'Not set up' : 'Not locked'}</span>
+                      : r.status === 'dismissed' ? <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: '#6b7280' }}>Dismissed</span>
+                      : <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: r.status === 'draft' ? '#fef9c3' : '#eef2ff', color: r.status === 'draft' ? '#a16207' : '#4f46e5' }}>{r.status === 'draft' ? 'Draft ready' : 'Due to raise'}</span>}
                   </td>
-                  <td style={{ padding: '9px 14px', textAlign: 'right' }}>
-                    <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Open</button>
+                  <td style={{ padding: '9px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {needsCR
+                      ? <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Set up</button>
+                      : <>
+                          <button onClick={() => onOpen(r.xeroId)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Open</button>
+                          {r.status !== 'dismissed' && r.status !== 'draft' && <button onClick={dismiss} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: '#6b7280', marginLeft: 6 }}>Dismiss month</button>}
+                        </>}
                   </td>
                 </tr>
               )
@@ -349,7 +370,26 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
 
   // Materials on site
-  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', pctComplete: 100, ...m }]); setDirty(true) }
+  // Add a single line. Manual lines (no PO) stay ungrouped; PO lines go under a
+  // supplier/PO group header — created if this PO isn't already on the application,
+  // otherwise appended to its existing group.
+  const addMaterial = (m) => {
+    if (!m.poNumber) {
+      setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', pctComplete: 100, ...m }]); setDirty(true); return
+    }
+    setMats(l => {
+      let group = l.find(x => x.kind === 'group' && x.poNumber === m.poNumber)
+      const out = [...l]
+      let gid
+      if (!group) {
+        gid = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
+        out.push({ id: gid, kind: 'group', supplier: m.supplier || '', poNumber: m.poNumber, attachments: [] })
+      } else { gid = group.id }
+      out.push({ id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', groupId: gid, pctComplete: 100, description: m.description, poNumber: m.poNumber, qty: m.qty, unit: m.unit, rate: m.rate, markupPct: m.markupPct || 0 })
+      return out
+    })
+    setDirty(true)
+  }
   // Add a whole PO group: a supplier heading row + its item lines beneath it.
   const addMaterialGroup = ({ supplier, poNumber, markupPct, lines }) => {
     const gid = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
@@ -369,6 +409,9 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   // PO numbers currently on the application (via a supplier group) — used to block
   // adding the same PO twice at once, and to show it ticked/green in the picker.
   const addedPONumbers = mats.filter(m => m.kind === 'group' && m.poNumber).map(m => m.poNumber)
+  // Which individual PO lines are already on the app (poNumber|description), so the
+  // picker can mark them added and prevent adding the same line twice.
+  const addedLineKeys = mats.filter(m => m.kind === 'item' && m.poNumber).map(m => `${m.poNumber}|${(m.description || '').trim()}`)
   // Hide/unhide a PO from the picker (persisted per project).
   async function toggleHidePO(poNumber) {
     const next = hiddenPOs.includes(poNumber) ? hiddenPOs.filter(x => x !== poNumber) : [...hiddenPOs, poNumber]
@@ -380,6 +423,30 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   const setMatPct = (id, v) => { const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0)); setMatField(id, 'pctComplete', n) }
   // Apply one mark-up % to ALL material lines at once.
   const bulkMarkupAll = (v) => { const n = v === '' ? 0 : parseFloat(v) || 0; setMats(l => l.map(x => ({ ...x, markupPct: n }))); setDirty(true) }
+
+  // Collect warnings to surface before sending.
+  function collectWarnings() {
+    const w = []
+    const num2 = (x) => { const n = parseFloat(x); return isNaN(n) ? 0 : n }
+    const matItems = mats.filter(m => m.kind !== 'group')
+    const noMk = matItems.filter(m => !num2(m.markupPct))
+    if (noMk.length) w.push(`${noMk.length} material line${noMk.length === 1 ? ' has' : 's have'} no mark-up applied`)
+    const zeroMats = matItems.filter(m => num2(m.total != null ? m.total : num2(m.qty) * num2(m.rate)) === 0)
+    if (zeroMats.length) w.push(`${zeroMats.length} material line${zeroMats.length === 1 ? ' has' : 's have'} a £0 value`)
+    const zeroWorks = rows.filter(r => r.kind === 'item' && (r.qty != null || String(r.unit || '').trim() !== '') && (r.total == null || num2(r.total) === 0))
+    if (zeroWorks.length) w.push(`${zeroWorks.length} contract-works line${zeroWorks.length === 1 ? ' has' : 's have'} a £0 value`)
+    return w
+  }
+  function trySubmit() {
+    const w = collectWarnings()
+    const base = 'Mark this application as sent? Variations will be frozen as they are now, and it will be locked (double-click to edit later).'
+    if (w.length) {
+      if (!confirm(`Are you sure you want to submit? The following need attention:\n\n• ${w.join('\n• ')}\n\n${base}`)) return
+    } else {
+      if (!confirm(base)) return
+    }
+    save(true)
+  }
 
   async function save(submit) {
     setSaving(true); setMsg('')
@@ -412,7 +479,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
         <div style={{ flex: 1 }} />
         {isSent && !unlocked && <span onDoubleClick={() => setUnlocked(true)} title="Double-click to edit" style={{ fontSize: 12, color: '#6b7280', cursor: 'pointer', userSelect: 'none' }}>Double-click here to edit this sent application</span>}
         {!locked && <button onClick={() => save(false)} disabled={saving || !dirty} style={{ background: dirty ? '#0f766e' : '#e5e7eb', color: dirty ? '#fff' : '#9ca3af', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: dirty ? 'pointer' : 'default' }}>{saving ? 'Saving…' : 'Save'}</button>}
-        {!locked && !isSent && <button onClick={() => { if (confirm('Mark this application as sent? Variations will be frozen as they are now, and it will be locked (double-click to edit later).')) save(true) }} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
+        {!locked && !isSent && <button onClick={trySubmit} disabled={saving} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Mark as sent</button>}
       </div>
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
@@ -448,10 +515,11 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
                 // complete measurable item (has qty, unit, rate and total). Otherwise
                 // it behaves like a text/sub-line and those cells stay blank.
                 const measurable = isMeasurableWorks(r)
+                const zeroWorks = r.kind === 'item' && (r.qty != null || String(r.unit || '').trim() !== '') && (r.total == null || Number(r.total) === 0)
                 return (
-                  <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <tr key={r.id} style={{ borderBottom: '1px solid #f0f0f0', background: zeroWorks ? '#fef2f2' : 'transparent' }}>
                     <td style={{ ...td, color: '#6b7280', fontWeight: 600 }}>{r.code}</td>
-                    <td style={{ ...td, minWidth: 240, whiteSpace: 'normal', ...fs }}>{r.description}</td>
+                    <td style={{ ...td, minWidth: 240, whiteSpace: 'normal', ...fs }}>{zeroWorks && <span title="This line has a £0 value" style={{ color: '#dc2626', fontWeight: 700, marginRight: 5 }}>⚠</span>}{r.description}</td>
                     <td style={tdR}>{r.qty ?? ''}</td>
                     <td style={td}>{r.unit || ''}</td>
                     <td style={tdR}>{r.rate != null ? Number(r.rate).toLocaleString('en-GB', { minimumFractionDigits: 2 }) : ''}</td>
@@ -589,16 +657,21 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
                 const total = materialLineTotal(m)
                 const pct = m.pctComplete == null ? 100 : m.pctComplete
                 const vtd = materialValueToDate(m)
+                const noMarkup = !num(m.markupPct)
+                const zeroLine = num(netTotal) === 0
                 return (
-                  <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                    <td style={{ ...td, minWidth: 180, whiteSpace: 'normal' }}>{m.description}</td>
+                  <tr key={m.id} style={{ borderBottom: '1px solid #f0f0f0', background: zeroLine ? '#fef2f2' : 'transparent' }}>
+                    <td style={{ ...td, minWidth: 180, whiteSpace: 'normal' }}>{zeroLine && <span title="This line has a £0 value" style={{ color: '#dc2626', fontWeight: 700, marginRight: 5 }}>⚠</span>}{m.description}</td>
                     <td style={{ ...td, color: '#6b7280' }}>{m.poNumber || '—'}</td>
                     <td style={tdR}>{locked ? (m.qty ?? '') : <input type="number" value={m.qty ?? ''} onChange={e => setMatField(m.id, 'qty', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
                     <td style={td}>{m.unit || ''}</td>
                     <td style={tdR}>{locked ? fmt(m.rate || 0) : <input type="number" value={m.rate ?? ''} onChange={e => setMatField(m.id, 'rate', e.target.value === '' ? null : parseFloat(e.target.value))} style={{ width: 72, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />}</td>
-                    <td style={tdR}>{fmt(netTotal)}</td>
-                    <td style={{ ...tdR, background: '#fff7ed' }} title="Internal only — hidden on the customer copy">{locked ? `${m.markupPct || 0}%` : (
-                      <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
+                    <td style={{ ...tdR, ...(zeroLine ? { color: '#dc2626', fontWeight: 700 } : {}) }}>{fmt(netTotal)}</td>
+                    <td style={{ ...tdR, background: noMarkup ? '#fee2e2' : '#fff7ed' }} title={noMarkup ? 'No mark-up applied to this line' : 'Internal only — hidden on the customer copy'}>{locked ? `${m.markupPct || 0}%` : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                        {noMarkup && <span title="No mark-up applied" style={{ color: '#dc2626', fontWeight: 700 }}>⚠</span>}
+                        <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid ' + (noMarkup ? '#dc2626' : '#fdba74'), borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
+                      </div>
                     )}</td>
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
                     <td style={tdR}>{locked ? `${pct}%` : (
@@ -627,7 +700,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
 
-      {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
+      {showAddMat && <AddMaterialsModal pos={projectPOs} addedPONumbers={addedPONumbers} addedLineKeys={addedLineKeys} hiddenPOs={hiddenPOs} onToggleHide={toggleHidePO} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
     </>
   )
 }
@@ -681,7 +754,7 @@ function SummaryBlock({ sum, app }) {
 }
 
 // Pick variations from the project's tracker to add to the application.
-function AddMaterialsModal({ pos, addedPONumbers = [], hiddenPOs = [], onToggleHide, onClose, onAdd, onAddGroup }) {
+function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hiddenPOs = [], onToggleHide, onClose, onAdd, onAddGroup }) {
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const [markups, setMarkups] = useState({})
   const [manual, setManual] = useState({ description: '', qty: '', unit: '', rate: '', markupPct: '' })
@@ -717,13 +790,14 @@ function AddMaterialsModal({ pos, addedPONumbers = [], hiddenPOs = [], onToggleH
             {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}
             {(p.lineItems || []).map((li, li2) => {
               const net = (parseFloat(li.quantity) || 0) * (parseFloat(li.rate) || 0)
+              const lineAdded = addedLineKeys.includes(`${p.poNumber}|${(li.description || '').trim()}`)
               return (
-                <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none' }}>
+                <div key={li2} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderTop: li2 ? '1px solid #f3f4f6' : 'none', background: lineAdded ? '#f0fdf4' : 'transparent' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12.5 }}>{li.description || '(no description)'}</div>
+                    <div style={{ fontSize: 12.5 }}>{lineAdded && <span style={{ color: '#16a34a', fontWeight: 700, marginRight: 5 }}>✓</span>}{li.description || '(no description)'}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{li.quantity != null ? `qty ${li.quantity}${li.unit ? ' ' + li.unit : ''}` : ''}{li.rate != null ? ` · ${money(li.rate)}` : ''}{net ? ` · net ${money(net)}` : ''}{m ? ` · +${m}% → ${money(net * factor)}` : ''}</div>
                   </div>
-                  <button onClick={() => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>Add</button>
+                  <button disabled={lineAdded} onClick={() => onAdd({ supplier: p.supplier, description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m })} style={{ background: lineAdded ? '#e5e7eb' : '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '4px 10px', fontSize: 11.5, cursor: lineAdded ? 'default' : 'pointer', color: lineAdded ? '#9ca3af' : '#374151', fontWeight: 600 }}>{lineAdded ? 'Added' : 'Add'}</button>
                 </div>
               )
             })}

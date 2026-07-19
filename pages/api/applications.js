@@ -28,16 +28,26 @@ export default async function handler(req, res) {
       for (const [xeroId, proj] of Object.entries(all || {})) {
         const p = proj || {}
         const apps = Array.isArray(p.applications) ? p.applications : []
-        if (!apps.length) continue
+        const cr = p.contractedRates
+        const hasCR = !!(cr && Array.isArray(cr.items) && cr.items.length)
+        const crLocked = hasCR && !!cr.locked
+        // Include a project if it has applications OR contracted rates started.
+        if (!apps.length && !hasCR) continue
+        const info = nameOf(xeroId)
+        const crStatus = !hasCR ? 'none' : (!crLocked ? 'unlocked' : 'ok')
+
+        if (!apps.length) {
+          // No applications yet — surface it so the CR status is visible.
+          rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq: 1, nextDate: '', nextMonthLabel: '', status: crStatus === 'ok' ? 'upcoming' : 'needs-cr', crStatus })
+          continue
+        }
         const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
-        // "Next" = the latest DRAFT if any; else the next month after the last sent.
         const draft = [...sorted].reverse().find(a => !a.status || a.status === 'draft')
         const last = sorted[sorted.length - 1]
-        let nextSeq, nextDate, nextMonthLabel, status
+        let nextSeq, nextDate = '', nextMonthLabel = '', status
         if (draft) {
           nextSeq = draft.seq; nextDate = draft.appDate || ''; nextMonthLabel = draft.monthLabel || ''; status = 'draft'
         } else {
-          // project up to date; next would follow the last sent app
           nextSeq = (last.seq || 0) + 1
           const [y, m] = String(last.monthKey || '').split('-').map(Number)
           if (y && m) {
@@ -46,11 +56,12 @@ export default async function handler(req, res) {
             const key = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`
             nextDate = resolveAppDates(key, settings).appDate || ''
             nextMonthLabel = nd.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
-          }
-          status = 'upcoming'
+            // Respect a "dismissed this month" flag.
+            if ((p.applicationDismissals || []).includes(key)) status = 'dismissed'
+            else status = 'upcoming'
+          } else status = 'upcoming'
         }
-        const info = nameOf(xeroId)
-        rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq, nextDate, nextMonthLabel, status })
+        rows.push({ xeroId, jobNo: info.jobNo, name: info.name, nextSeq, nextDate, nextMonthLabel, status, crStatus })
       }
       // Order by the next application date (soonest first; undated last).
       rows.sort((a, b) => {
@@ -236,6 +247,17 @@ export default async function handler(req, res) {
       project.hiddenPOs = Array.isArray(req.body.hiddenPOs) ? req.body.hiddenPOs : []
       await saveProject(projectId, project)
       return res.json({ ok: true, hiddenPOs: project.hiddenPOs })
+    }
+
+    // Dismiss an application month for a project (nothing to apply for).
+    if (action === 'dismiss-month') {
+      const { monthKey } = req.body
+      if (!monthKey) return res.status(400).json({ error: 'monthKey required' })
+      const list = Array.isArray(project.applicationDismissals) ? project.applicationDismissals : []
+      if (!list.includes(monthKey)) list.push(monthKey)
+      project.applicationDismissals = list
+      await saveProject(projectId, project)
+      return res.json({ ok: true, applicationDismissals: list })
     }
 
     return res.status(400).json({ error: 'Unknown action' })
