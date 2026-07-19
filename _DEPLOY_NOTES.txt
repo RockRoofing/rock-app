@@ -1,32 +1,27 @@
-Shared date-entry box (Application Calendar's modal) reused on Applications
-==========================================================================
+Upcoming Applications — app + valuation dates, overdue drafts
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v17"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v18"
 
-WHAT CHANGED
-------------
-The missing-dates banner on the Applications page now opens the EXACT SAME box the
-Application Calendar uses — extracted into a shared component so they can never
-drift apart:
-  • Amber "⚠ Missing one or more dates…" notice
-  • "Fixed monthly dates" — Application / Valuation / Payment day tiles
-  • "＋ Add monthly dates manually" — the per-month override table (Month /
-    Application / Valuation / Payment date pickers, 14-month window)
-  • "Save dates" + "View project ↗"
-Saving writes through to the project settings (applicationDay / valuationDay /
-paymentDay / dateOverrides) exactly as the calendar does, so Project Details, the
-calendar and the upcoming table all pick it up. On the Applications page the
-upcoming table + banner refresh immediately after saving.
+1) COLUMNS: APPLICATION DUE + VALUATION DATE (replaces Month)
+   The table now shows "Application due" (colour-coded: grey not-yet-due / orange
+   within 3 days / green due today / red overdue, with in-Xd / Xd-overdue) and a
+   "Valuation date" column. The Month column is removed.
 
-The Application Calendar now renders the same shared component for its per-project
-modal (its "all projects on this day" overflow popup is unchanged).
+2) OVERDUE DRAFTS ALWAYS SHOW
+   A draft application that hasn't been marked as sent and whose application date
+   has already passed now always appears in the table (previously it dropped off
+   because it was outside the 31-day forward window). Overdue drafts use their own
+   saved application/valuation dates, so the date shown is correct and flagged red
+   as overdue. Other projects still show if their next application falls within 31
+   days.
+
+API
+---
+/api/applications?upcoming=1 now also returns each draft's appDate, valDate and
+monthKey so the table can render dates and detect overdue drafts.
 
 FILES
 -----
-• components/ProjectDatesModal.js   (NEW — shared box)
-• pages/applications.js             (uses ProjectDatesModal; removed the interim
-                                     simplified modal; v17)
-• pages/application-calendar.js     (per-project modal now uses ProjectDatesModal)
-
-NOTE: this adds a NEW file (components/ProjectDatesModal.js) — make sure it's
-created in GitHub, not just the two edited pages.
+• pages/applications.js       (columns + overdue-draft logic; v18)
+• pages/api/applications.js   (summary carries draft dates)

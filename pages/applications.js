@@ -58,20 +58,36 @@ export default function ApplicationsPage() {
       for (const p of inProgress) {
         const s = summary[String(p.xeroId)] || {}
         const hasDays = !!(parseInt(p.applicationDay) || Object.keys(p.dateOverrides || {}).length)
-        if (!hasDays) { missing.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name }); continue }
+
+        // An overdue draft (not yet sent, application date in the past) must always
+        // show, even though it's outside the 31-day forward window.
+        const draftAppIso = s.hasDraft ? (s.draftAppDate || '') : ''
+        const draftOverdue = draftAppIso && new Date(draftAppIso + 'T00:00:00') < today
+
+        if (!hasDays && !draftOverdue) { if (!hasDays) missing.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name }); continue }
+
+        // Find the next application date within the horizon (this month / next).
         let found = null
         for (let i = 0; i <= 1; i++) {
           const dt = new Date(today.getFullYear(), today.getMonth() + i, 1)
           const iso = getDateForMonth(p, 'applicationDay', dt.getFullYear(), dt.getMonth() + 1, 'applicationDate')
           if (!iso) continue
           if (new Date(iso + 'T00:00:00') > horizon) continue
-          const cand = { iso, monthLabel: dt.toLocaleString('en-GB', { month: 'long', year: 'numeric' }), monthKey: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` }
+          const valIso = getDateForMonth(p, 'valuationDay', dt.getFullYear(), dt.getMonth() + 1, 'valuationDate')
+          const cand = { iso, valIso, monthKey: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}` }
           if (!found || iso < found.iso) found = cand
         }
+
+        // Prefer an overdue draft's own dates so it surfaces with the right date.
+        if (draftOverdue) {
+          const mk = s.draftMonthKey || draftAppIso.slice(0, 7)
+          dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, appDate: draftAppIso, valDate: s.draftValDate || '', monthKey: mk, ...statusOf(s, mk) })
+          continue
+        }
         if (!found) continue
-        dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, nextDate: found.iso, nextMonthLabel: found.monthLabel, monthKey: found.monthKey, ...statusOf(s, found.monthKey) })
+        dated.push({ xeroId: String(p.xeroId), jobNo: p.jobNo, name: p.name, appDate: found.iso, valDate: found.valIso || '', monthKey: found.monthKey, ...statusOf(s, found.monthKey) })
       }
-      dated.sort((a, b) => a.nextDate.localeCompare(b.nextDate))
+      dated.sort((a, b) => (a.appDate || '').localeCompare(b.appDate || ''))
       setUpcoming({ dated, missing, loading: false })
     } catch { setUpcoming({ dated: [], missing: [], loading: false }) }
   }
@@ -163,7 +179,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v17</title></Head>
+      <Head><title>Rock Roofing — Applications · v18</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -329,18 +345,18 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-            {['Project', 'Next app', 'Month', 'Application date needed', 'Status', ''].map((h, i) => (
+            {['Project', 'Next app', 'Application due', 'Valuation date', 'Status', ''].map((h, i) => (
               <th key={i} style={{ padding: '9px 14px', textAlign: i === 5 ? 'right' : 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
             {(rows || []).map(r => {
               const needsCR = r.crStatus && r.crStatus !== 'ok'
-              const di = dueInfo(r.nextDate)
+              const di = dueInfo(r.appDate)
               async function dismiss() {
                 if (!confirm(`Are you sure you don't have an application for works completed on site for this project this month?\n\n${[r.jobNo, r.name].filter(Boolean).join(' — ')}`)) return
                 try {
-                  await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss-month', projectId: r.xeroId, monthKey: r.monthKey || (r.nextDate ? r.nextDate.slice(0, 7) : '') }) })
+                  await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss-month', projectId: r.xeroId, monthKey: r.monthKey || (r.appDate ? r.appDate.slice(0, 7) : '') }) })
                   if (onDismissed) onDismissed(r.xeroId)
                 } catch {}
               }
@@ -348,16 +364,16 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
                 <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0', opacity: r.status === 'dismissed' ? 0.55 : 1 }}>
                   <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ') || r.xeroId}</td>
                   <td style={{ padding: '9px 14px', fontSize: 13 }}>{needsCR ? '—' : r.nextSeq}</td>
-                  <td style={{ padding: '9px 14px', fontSize: 13 }}>{r.nextMonthLabel || '—'}</td>
                   <td style={{ padding: '9px 14px' }}>
                     {needsCR ? (
                       <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: '#fee2e2', color: '#dc2626' }}>Contracted Rates required</span>
                     ) : (
                       <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 6, fontSize: 12.5, fontWeight: 700, background: di.bg, color: di.color }}>
-                        {fmtD(r.nextDate)}{di.days != null && di.days !== 0 ? ` (${di.days < 0 ? `${-di.days}d overdue` : `in ${di.days}d`})` : di.days === 0 ? ' (today)' : ''}
+                        {fmtD(r.appDate)}{di.days != null && di.days !== 0 ? ` (${di.days < 0 ? `${-di.days}d overdue` : `in ${di.days}d`})` : di.days === 0 ? ' (today)' : ''}
                       </span>
                     )}
                   </td>
+                  <td style={{ padding: '9px 14px', fontSize: 13, color: '#374151' }}>{needsCR ? '—' : fmtD(r.valDate)}</td>
                   <td style={{ padding: '9px 14px', fontSize: 12 }}>
                     {needsCR ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'CR not set up' : 'CR not locked'}</span>
                       : r.status === 'dismissed' ? <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: '#6b7280' }}>Dismissed</span>
