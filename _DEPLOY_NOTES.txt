@@ -1,32 +1,16 @@
-GROUP B — Applications: searchable picker + AFA source-of-truth
-==============================================================
+Contracted Rates — Select-all now includes headings
+===================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v29"
-Requires components/ProjectSearchSelect.js (already created for Group A).
+Build: ✓ Compiled successfully
+Single file: pages/contracted-rates.js
 
-1) SEARCHABLE PROJECT DROPDOWN ON APPLICATIONS
-   Same type-to-search picker as the CRs tab (filter by job no / name).
+The header "select all" checkbox now selects HEADINGS as well as item rows (both
+sections), so you can select everything — headers included — and move it above/below
+the line in one go. Struck lines stay excluded. The Above/Below selection subtotals
+are unchanged (headings carry no value, so they don't affect the money totals).
 
-2) ANTICIPATED FINAL ACCOUNT — SENT APPLICATION IS THE SOURCE OF TRUTH
-   When an application is marked sent (via "Mark as sent") OR sent from the platform
-   (the send-to-customer flow with "mark as sent"), that application's Anticipated
-   Final Account (measured contract sum + final variations) is stored on the project
-   as afaOverride and OVERWRITES the AFA shown in:
-     • Project Financials (project detail page)
-     • Budget Tracker (commercial dashboard)
-     • Retention register
-   Until an application has been sent, AFA falls back to the computed
-   contract value + instructed variations (unchanged behaviour).
-   The dashboard cache is cleared on send, so the three surfaces update immediately.
-
-   NOTE: the latest sent application wins (it re-writes afaOverride each send), which
-   is the intended "application data is the source of truth" behaviour.
-
-FILES
------
-• pages/applications.js            (searchable picker; v29)
-• pages/api/applications.js        (submit -> write afaOverride + clear cache)
-• pages/api/application-send.js    (markSent -> write afaOverride + clear cache)
-• pages/api/dashboard.js           (AFA uses afaOverride when present)
-• pages/api/project/[id].js        (AFA uses afaOverride when present)
-(Retention reads AFA from the dashboard, so it picks up the override automatically.)
+NOTE: this file also contains the earlier Group A changes (searchable picker, sticky
+section totals, heading checkboxes, save->lock prompt, budgets-on-lock). If you have
+NOT yet deployed GroupA_v2, this single file replaces its pages/contracted-rates.js
+(you still need the other GroupA_v2 files: pages/api/contracted-rates.js and the new
+components/ProjectSearchSelect.js).

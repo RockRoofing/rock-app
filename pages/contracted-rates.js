@@ -85,8 +85,9 @@ export default function ContractedRatesPage() {
   const toggleSel = (id) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   const aboveItemsAll = items.filter(x => x.section === 'above' && x.kind === 'item' && !x.struck)
   const belowItemsAll = items.filter(x => x.section === 'below' && x.kind === 'item' && !x.struck)
-  // Select-all across BOTH sections (item rows only; headings/struck aren't tickable).
-  const allSelectable = [...aboveItemsAll, ...belowItemsAll]
+  // Select-all across BOTH sections. Includes headings (they're movable) as well as
+  // item rows; struck lines are excluded. Subtotals below still use item-only sets.
+  const allSelectable = items.filter(x => (x.kind === 'item' || x.kind === 'heading') && !x.struck)
   const allSelected = allSelectable.length > 0 && allSelectable.every(x => selected.has(x.id))
   const someSelected = selected.size > 0 && !allSelected
   const toggleSelectAll = () => setSelected(() => allSelected ? new Set() : new Set(allSelectable.map(x => x.id)))
