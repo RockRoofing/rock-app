@@ -60,11 +60,9 @@ function calcAccountRemaining(entry) {
 function calcTotalRemaining(entry) {
   return calcTotalDue(entry) - (parseFloat(entry.paid || 0) || 0)
 }
-const isClosed = (entry) => {
-  if (vatNeedsManual(entry)) return false   // can't confirm closed until VAT entered
-  const due = calcTotalDue(entry)
-  return due > 0 && Math.abs(calcTotalRemaining(entry)) < 1
-}
+// Completion is now a MANUAL flag set per project (no auto-close from the paid
+// figure). A project is complete only when someone marks it complete.
+const isClosed = (entry) => !!entry.markedComplete
 
 function calcBalance(entry) {
   const r1 = parseFloat(entry.release1Value || 0)
@@ -153,8 +151,10 @@ export default function RetentionPage() {
       // (a retention % set), plus any that already have retention outstanding or
       // invoicing under way. This mirrors the project details / EOM data rather
       // than waiting for a project to be invoiced.
+      // Show EVERY in-progress project on the register — even before anything is
+      // invoiced (values show £0), so it's a complete list. Closed/defects still
+      // included so nothing disappears.
       const withRetention = visibleProjects
-        .filter(p => (parseFloat(p.retentionPct || 0) > 0) || p.retentionOutstanding > 0 || p.grossInvoiced > 0)
         .map(p => ({
           id: p.xeroId,
           xeroId: p.xeroId,
@@ -175,6 +175,8 @@ export default function RetentionPage() {
           vatRateLabel: p.vatRateLabel || '—',
           paid: p.paid || 0,
           appliedFor: '',
+          retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
+          retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
           release1Value: (p.totalRetention || 0) / 2 || 0,
           release1Date: '',
           release1Received: false,
@@ -223,6 +225,13 @@ export default function RetentionPage() {
     setSaving(false)
   }
 
+  async function toggleComplete(entry) {
+    const next = !entry.markedComplete
+    if (next && !confirm(`Mark ${entry.ourRef || 'this project'} as complete? It will move to the Complete list.`)) return
+    if (!next && !confirm(`Re-open ${entry.ourRef || 'this project'}? It will move back to Outstanding.`)) return
+    await saveEntry({ ...entry, markedComplete: next, completedAt: next ? Date.now() : null })
+  }
+
   async function deleteEntry(id) {
     if (!confirm('Delete this entry?')) return
     try {
@@ -247,12 +256,14 @@ export default function RetentionPage() {
       return {
         ...e,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
+        retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
         completionDate: e.completionDate || x.completionDate,
         qsName: e.qsName || x.qsName,
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
+        // markedComplete is a manual saved flag on `e` — keep it.
       }
     }
     return e
@@ -397,6 +408,8 @@ export default function RetentionPage() {
                         ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.'],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.'],
+                        ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.'],
+                        ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.'],
                         ['Ret %', 'center', 'Retention percentage from project details.'],
                         ['PC Type', 'left', 'Practical completion type (manual).'],
                         ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).'],
@@ -474,6 +487,10 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
                             {/* Account Remaining */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
+                            {/* Retention Owed (invoiced × ret %) */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{entry.retentionOwed ? fmt(parseFloat(entry.retentionOwed)) : fmt(0)}</td>
+                            {/* 612 Allocated */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.retention612Allocated ? fmt(parseFloat(entry.retention612Allocated)) : fmt(0)}</td>
                             {/* Ret % */}
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{entry.retentionPct ? `${parseFloat(entry.retentionPct).toFixed(0)}%` : '—'}</td>
                             {/* PC Type */}
@@ -508,6 +525,11 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                               <button onClick={() => { setEditingId(entry.id); setEditForm({ ...entry }) }}
                                 style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333', marginRight: 4 }}>Edit</button>
+                              <button onClick={() => toggleComplete(entry)}
+                                title={entry.markedComplete ? 'Re-open this project' : 'Mark this project complete'}
+                                style={{ background: entry.markedComplete ? '#dcfce7' : '#fff', border: '1px solid ' + (entry.markedComplete ? '#16a34a' : '#cbd5e1'), borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: entry.markedComplete ? '#166534' : '#333', marginRight: 4, fontWeight: 600 }}>
+                                {entry.markedComplete ? '✓ Complete' : 'Mark complete'}
+                              </button>
                               {entry.manual !== false && (
                                 <button onClick={() => deleteEntry(entry.id)}
                                   style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#e63946' }}>Del</button>
@@ -516,7 +538,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={21} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={23} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
                                   onCancel={() => setEditingId(null)} />

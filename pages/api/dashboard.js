@@ -70,13 +70,14 @@ export default async function handler(req, res) {
 
       // ── Read invoice lines from Redis ─────────────────────────────────────
       let totalInvoiced = 0, invoiceLines = []
-      let invoicedExVat = 0, invoicedSales200 = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—'
+      let invoicedExVat = 0, invoicedSales200 = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—', retention612 = 0
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
         if (invCache) {
           totalInvoiced = invCache.totalInvoiced || 0
           invoicedExVat = invCache.invoicedExVat || 0
           invoicedSales200 = invCache.invoicedSales200 || 0
+          retention612 = invCache.retention612 || 0
           vatTotal = invCache.vatTotal || 0
           paidTotal = invCache.paidTotal || 0
           vatRateLabel = invCache.vatRateLabel || '—'
@@ -93,6 +94,7 @@ export default async function handler(req, res) {
         if (!vatTotal) vatTotal = invoiceLines.reduce((s, l) => s + (l.totalTax || 0), 0)
         if (!invoicedExVat) invoicedExVat = invoiceLines.reduce((s, l) => s + (l.subTotal || 0), 0)
         if (!invoicedSales200) invoicedSales200 = invoiceLines.reduce((s, l) => s + (l.sales200 || 0), 0)
+        if (!retention612) retention612 = invoiceLines.reduce((s, l) => s + (l.retention612 || 0), 0)
         if (!totalInvoiced) totalInvoiced = invoiceLines.reduce((s, l) => s + (l.total || 0), 0)
         if (vatRateLabel === '—') {
           const labels = [...new Set(invoiceLines.map(l => l.vatLabel).filter(x => x && x !== '—'))]
@@ -227,6 +229,7 @@ export default async function handler(req, res) {
         materialsBudget,
         retentionOutstanding,
         totalRetention,
+        retention612Allocated: Math.abs(retention612),
         grossInvoiced,
         currentMargin,
         wip,

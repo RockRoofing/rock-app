@@ -1,30 +1,36 @@
-GROUP C — Retention tab: auto-green, Complete filter, TBC warnings
-=================================================================
+Retention register — all projects, Retention Owed + 612 columns, manual complete
+================================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/retention.js
+(Builds on GroupC — deploy after/with it. retention.js here is the latest version.)
 
-1) 1st / 2nd VALUE AUTO-GREEN — TICK BOX REMOVED
-   The "Received" checkboxes are gone. Release status is now DERIVED from the amount
-   actually paid:
-     • 1st Value turns green once only the 2nd half remains to be paid
-       (Total Remaining <= 2nd release value).
-     • 2nd Value turns green once the account is paid in full.
-   The row already turns fully green (Complete) when paid in full — unchanged.
+1) ALL IN-PROGRESS PROJECTS SHOWN
+   The register no longer hides projects with nothing invoiced. Every project now
+   appears; if nothing's invoiced, its retention values simply show £0. It's a full
+   register.
 
-2) OUTSTANDING / COMPLETE / ALL TOGGLE
-   New "Complete" filter so you can view fully-settled retentions on their own.
-   Outstanding = not settled, Complete = paid in full, All = everything.
+2) NEW "RETENTION OWED" COLUMN
+   Retention owed based on invoiced value = invoiced (Sales, account code 200) ×
+   retention %. (Invoiced value already derives from the 200-Sales total, so this
+   reconciles with the rest of the financials.)
 
-3) RETENTION DATE "TBC" WARNING
-   Outstanding entries with no release date show an amber "⚠ TBC" in the date column
-   (with a tooltip), flagging that the retention release date isn't confirmed.
-   (Closed rows just show "—".)
+3) NEW "612 ALLOCATED" COLUMN
+   The retention actually deducted on invoices under account code 612, per project.
+   • sync-invoices now captures 612 line amounts alongside 200.
+   • dashboard surfaces it as retention612Allocated.
+   ⚠ REQUIRES AN INVOICE RE-SYNC to populate (existing cached invoices don't have the
+     612 figure yet). Until re-synced it shows £0.
 
-NOTE: this fully wires to the amount paid + release dates already on each entry. Once
-Group D adds an explicit "TBC" toggle on PC dates in edit project details, the
-warning will also key off that flag.
+4) MANUAL "MARK COMPLETE" — AUTO-COMPLETE REMOVED
+   Each row has a "Mark complete" button (toggles to "✓ Complete"). Completion is now
+   purely manual — the old auto-close (row auto-greened when Total Remaining hit £0)
+   has been removed. The Outstanding / Complete / All filter keys off this manual
+   flag, so Complete shows only projects you've marked complete.
 
 FILES
 -----
-• pages/retention.js
+• pages/retention.js            (all projects, 2 new columns, manual complete)
+• pages/api/sync-invoices.js    (capture code 612 per invoice/project)
+• pages/api/dashboard.js        (surface retention612Allocated)
+
+AFTER DEPLOY: run an Invoices sync so the 612 Allocated column populates.
