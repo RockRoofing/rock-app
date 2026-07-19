@@ -1,59 +1,62 @@
-Applications Phase 4 — PDF generation + send
-============================================
+Applications Phase 4 (full) — PDF + send, To/CC pickers, editable template
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v20"
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v21"
+This bundle SUPERSEDES the earlier Phase 4 zip — deploy this one.
 
-WHAT'S NEW
-----------
-1) APPLICATION PDF (customer copy)
-   One combined A4 PDF, Rock-branded, containing:
-     • Header + application/valuation/payment/final dates
-     • Summary (Measured Work / Variations / Materials On Site, Contract Sum /
-       Application Total / Anticipated Final Account)
-     • Payment Certificate (Gross / MCD / Sub-total / Retention / Total, across
-       Current / Previously Cert / This Certificate)
-     • Contract Works (measurable lines only; sub-headings/notes have no totals)
-     • Variations (instructed only, with value-to-date)
-     • Materials on Site — CUSTOMER COPY: shows the marked-up Total but NO mark-up
-       % column (mark-up stays internal, exactly as agreed)
-   Then the VARIATION and SUPPLIER-GROUP attachments are appended (PDFs copied in
-   page-for-page; images placed on their own page).
+PDF (customer copy)
+-------------------
+Combined A4: Summary + Payment Certificate + Contract Works (measurable only) +
+Variations (instructed only) + Materials on Site (marked-up Total, NO mark-up %
+column), then variation + supplier-group attachments appended. Download via the
+"Download PDF" button.
 
-2) DOWNLOAD
-   "Download PDF" button in the application header (and inside the send popout).
-   Opens /api/application-pdf?projectId=..&appId=..&download=1
+SEND TO CUSTOMER (popout)
+-------------------------
+• TO — exactly ONE recipient, chosen from a dropdown of Customer contacts OR Rock
+  Roofing portal users.
+• CC — any number, tickable from Customer contacts and Rock Roofing portal users,
+  plus a free-text box for extra emails. (The chosen To can't also be CC'd.)
+• MESSAGE — editable, pre-filled from this template (with a "Reset to template"
+  link):
+      Subject: Application for Payment [App No] - [Current Month] [Year]
 
-3) SEND TO CUSTOMER
-   "Send to customer" opens a popout (like the chase emails):
-     • Tickable customer recipients (from the project's customer contacts / email),
-       plus a free-text box for extra addresses
-     • Editable subject + message (sensible default filled in)
-     • Replies go to the project QS (reply-to) when set
-     • Optional "Mark this application as sent" (freezes variations + locks it)
-   Sends via Resend with the PDF attached, and records the send on the application.
-   (Save any edits first — the Send button asks you to save if there are unsaved
-   changes, so the PDF matches what's on screen.)
+      Hi [Customer first name],
 
-NEW FILES (make sure these are created in GitHub, not just the edited ones)
---------------------------------------------------------------------------
-• lib/applicationPdf.js          (NEW — the PDF generator)
-• pages/api/application-pdf.js    (NEW — download/preview endpoint)
-• pages/api/application-send.js   (NEW — build + email via Resend w/ attachment)
+      Please find attached our application for payment [App No] for [current month].
+
+      Feel free to call if there is anything you would like to discuss.
+
+      Kind Regards,
+
+      [Your name]
+      [Your email]
+      [Your phone]
+      Rock Roofing Ltd
+  ([Your ...] = the signed-in portal user's name / email / phone.)
+• Reply-to = the sender (signed-in portal user), falling back to the project QS.
+• Optional "Mark as sent" (freezes variations + locks).
+
+SENDER (from)
+-------------
+COMMERCIAL_FROM_EMAIL if set, else ACCOUNTS_FROM_EMAIL, else FORMS_FROM_EMAIL, else
+Resend test address. Set COMMERCIAL_FROM_EMAIL in Vercel to
+"Rock Roofing Commercial <commercial@rockroofing.co.uk>" (domain already verified
+in Resend).
+
+NEW FILES (create in GitHub)
+----------------------------
+• lib/applicationPdf.js
+• pages/api/application-pdf.js
+• pages/api/application-send.js
 
 EDITED
 ------
-• pages/applications.js          (Download + Send buttons, SendApplicationModal; v20)
-• pages/api/applications.js      (GET now returns customer contacts + QS email for
-                                  the send popout)
+• pages/applications.js       (Download + Send, To/CC pickers, template; v21)
+• pages/api/applications.js   (GET returns customer contacts + QS)
+• pages/api/portal-auth.js    (new ?action=directory — name/email/phone of active
+                               portal users, for the recipient pickers; any
+                               signed-in user, not admin-only)
 
-ENV / NOTES
------------
-• Uses RESEND_API_KEY (already set). FROM = ACCOUNTS_FROM_EMAIL if set, else
-  FORMS_FROM_EMAIL, else Resend's onboarding address.
-• Logo pulled from /rock-logo.jpg (same as the other PDFs).
-• Verified the PDF's figures against the calc engine (measured / variations
-  instructed-only / materials marked-up / gross / certificate after MCD+retention).
-  Rendering itself uses pdf-lib (already a project dependency).
-
-NEXT (Phase 5): CM approval workflow (tokenised email link → approve / request
-edits / adjust %). Phase 6: surface finished applications under Projects.
+NOTE: the portal user's PHONE comes through only if it's set on their portal
+profile; otherwise that line in the signature will be blank.

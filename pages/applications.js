@@ -189,7 +189,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v20</title></Head>
+      <Head><title>Rock Roofing — Applications · v21</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -962,63 +962,122 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
   )
 }
 
-// Send the Application PDF to the customer — tickable recipients + editable message.
+// Send the Application PDF to the customer.
+// - To: exactly ONE recipient (customer contact or Rock Roofing portal user).
+// - CC: any number (customer contacts and/or portal users), plus free-text.
+// - Message from an editable template with placeholders filled in.
 function SendApplicationModal({ app, projectId, settings = {}, me, isSent, onClose, onSent }) {
-  const contacts = []
-  const seen = new Set()
-  const push = (name, email) => { const e = (email || '').trim(); if (!e || seen.has(e.toLowerCase())) return; seen.add(e.toLowerCase()); contacts.push({ name: name || e, email: e }) }
-  ;(settings.customerContacts || []).forEach(c => push(c.name || c.title, c.email))
-  push(settings.customerName, settings.customerEmail)
-  const [checked, setChecked] = useState(() => { const s = {}; contacts.forEach((c, i) => { s[c.email] = i === 0 }); return s })
-  const [extra, setExtra] = useState('')
+  const [portalUsers, setPortalUsers] = useState([])
+  useEffect(() => { (async () => {
+    try { const d = await fetch('/api/portal-auth?action=directory').then(r => r.json()); setPortalUsers(d.users || []) } catch {}
+  })() }, [])
+
+  // Build the pick lists (deduped by email).
+  const custContacts = []
+  const seenC = new Set()
+  const pushC = (name, email) => { const e = (email || '').trim(); if (!e || seenC.has(e.toLowerCase())) return; seenC.add(e.toLowerCase()); custContacts.push({ name: name || e, email: e, group: 'Customer' }) }
+  ;(settings.customerContacts || []).forEach(c => pushC(c.name || c.title, c.email))
+  pushC(settings.customerName, settings.customerEmail)
+  const users = (portalUsers || []).map(u => ({ name: u.name || u.email, email: u.email, phone: u.phone || '', group: 'Rock Roofing' }))
+  const everyone = [...custContacts, ...users]
+  const byEmail = (e) => everyone.find(x => x.email.toLowerCase() === (e || '').toLowerCase())
+
+  const [to, setTo] = useState(() => custContacts[0]?.email || '')
+  const [ccSel, setCcSel] = useState({})            // email -> bool
+  const [ccExtra, setCcExtra] = useState('')
   const [markSent, setMarkSent] = useState(!isSent)
-  const [subject, setSubject] = useState(`Application for Payment ${app.seq || ''} — ${app.monthLabel || ''}`.trim())
-  const [body, setBody] = useState(
-    `Dear Sir/Madam,\n\nPlease find attached our Application for Payment ${app.seq || ''}${app.monthLabel ? ` for ${app.monthLabel}` : ''}.\n\nWe would be grateful if you could review and confirm at your earliest convenience.\n\nKind regards,\n${me?.name || 'Rock Roofing'}\nRock Roofing Ltd`
-  )
   const [sending, setSending] = useState(false)
   const [err, setErr] = useState('')
 
+  // Template placeholders.
+  const now = new Date()
+  const monthName = now.toLocaleString('en-GB', { month: 'long' })
+  const year = now.getFullYear()
+  const appNo = app.seq || ''
+  const custName = (custContacts[0]?.name || settings.customerName || 'there').split(' ')[0] || 'there'
+  const signer = { name: me?.name || '', email: me?.email || '', phone: me?.phone || '' }
+
+  const defaultSubject = `Application for Payment ${appNo} - ${monthName} ${year}`
+  const defaultBody =
+    `Hi ${custName},\n\n` +
+    `Please find attached our application for payment ${appNo} for ${monthName}.\n\n` +
+    `Feel free to call if there is anything you would like to discuss.\n\n` +
+    `Kind Regards,\n\n` +
+    `${signer.name}\n` +
+    `${signer.email}\n` +
+    `${signer.phone}\n` +
+    `Rock Roofing Ltd`
+
+  const [subject, setSubject] = useState(defaultSubject)
+  const [body, setBody] = useState(defaultBody)
+  const resetTemplate = () => { setSubject(defaultSubject); setBody(defaultBody) }
+
   async function send() {
-    const to = contacts.filter(c => checked[c.email]).map(c => c.email)
-    const extras = extra.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean)
-    const all = [...new Set([...to, ...extras])]
-    if (!all.length) { setErr('Select at least one recipient.'); return }
+    if (!to) { setErr('Choose one "To" recipient.'); return }
+    const ccChosen = Object.keys(ccSel).filter(e => ccSel[e])
+    const ccExtras = ccExtra.split(/[;,\s]+/).map(s => s.trim()).filter(Boolean)
+    const cc = [...new Set([...ccChosen, ...ccExtras])].filter(e => e.toLowerCase() !== to.toLowerCase())
     setSending(true); setErr('')
     try {
       const d = await fetch('/api/application-send', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, appId: app.id, to: all, replyTo: settings.qsEmail || undefined, subject, text: body, markSent, author: me?.name || '' }),
+        body: JSON.stringify({ projectId, appId: app.id, to: [to], cc, replyTo: signer.email || settings.qsEmail || undefined, subject, text: body, markSent, author: me?.name || '' }),
       }).then(r => r.json())
       if (!d.ok) { setErr(d.error || 'Send failed.'); setSending(false); return }
       onSent(d.application || null)
     } catch { setErr('Send failed.'); setSending(false) }
   }
 
+  const optGroups = [
+    { label: 'Customer contacts', items: custContacts },
+    { label: 'Rock Roofing portal users', items: users },
+  ]
+
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 70, padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 620, maxWidth: '100%', maxHeight: '90vh', overflow: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 640, maxWidth: '100%', maxHeight: '92vh', overflow: 'auto' }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Send application to customer</div>
-        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>The customer-copy PDF (mark-up hidden) will be attached. Variation and supplier documents are appended to the PDF.</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 14 }}>The customer-copy PDF (mark-up hidden) is attached. Variation and supplier documents are appended to the PDF.</div>
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>RECIPIENTS</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
-          {contacts.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa' }}>No customer contacts on file — add an email below.</div>}
-          {contacts.map(c => (
-            <label key={c.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!checked[c.email]} onChange={e => setChecked(s => ({ ...s, [c.email]: e.target.checked }))} />
-              <span style={{ fontWeight: 600 }}>{c.name}</span><span style={{ color: '#888' }}>{c.email}</span>
-            </label>
-          ))}
+        {/* To (one only) */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>TO (one recipient)</div>
+        <select value={to} onChange={e => setTo(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 13, marginBottom: 14, background: '#fff', boxSizing: 'border-box' }}>
+          <option value="">— Select a recipient —</option>
+          {optGroups.map(g => g.items.length ? (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map(x => <option key={x.email} value={x.email}>{x.name} — {x.email}</option>)}
+            </optgroup>
+          ) : null)}
+        </select>
+
+        {/* CC (many) */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>CC (optional)</div>
+        <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 10, marginBottom: 8, maxHeight: 180, overflowY: 'auto' }}>
+          {optGroups.map(g => g.items.length ? (
+            <div key={g.label} style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', marginBottom: 4 }}>{g.label}</div>
+              {g.items.map(x => (
+                <label key={x.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: x.email === to ? 'not-allowed' : 'pointer', opacity: x.email === to ? 0.45 : 1, padding: '2px 0' }}>
+                  <input type="checkbox" disabled={x.email === to} checked={!!ccSel[x.email]} onChange={e => setCcSel(s => ({ ...s, [x.email]: e.target.checked }))} />
+                  <span style={{ fontWeight: 600 }}>{x.name}</span><span style={{ color: '#888' }}>{x.email}</span>
+                </label>
+              ))}
+            </div>
+          ) : null)}
+          {everyone.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa' }}>No contacts on file — add emails below.</div>}
         </div>
-        <input value={extra} onChange={e => setExtra(e.target.value)} placeholder="Add more emails (comma separated)" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 14, boxSizing: 'border-box' }} />
+        <input value={ccExtra} onChange={e => setCcExtra(e.target.value)} placeholder="Add more CC emails (comma separated)" style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 14, boxSizing: 'border-box' }} />
 
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>SUBJECT</div>
+        {/* Message */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>SUBJECT</div>
+          <div style={{ flex: 1 }} />
+          <button onClick={resetTemplate} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 11.5, cursor: 'pointer' }}>Reset to template</button>
+        </div>
         <input value={subject} onChange={e => setSubject(e.target.value)} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 13, marginBottom: 12, boxSizing: 'border-box' }} />
         <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6 }}>MESSAGE</div>
-        <textarea value={body} onChange={e => setBody(e.target.value)} rows={9} style={{ width: '100%', padding: '10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }} />
+        <textarea value={body} onChange={e => setBody(e.target.value)} rows={11} style={{ width: '100%', padding: '10px', border: '1px solid #d5d9e0', borderRadius: 7, fontSize: 12.5, marginBottom: 12, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical' }} />
 
-        {settings.qsEmail && <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 8 }}>Replies go to {settings.qsName || 'the QS'} ({settings.qsEmail}).</div>}
         {!isSent && <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, marginBottom: 12 }}><input type="checkbox" checked={markSent} onChange={e => setMarkSent(e.target.checked)} />Mark this application as sent (freezes variations, locks it)</label>}
         {err && <div style={{ fontSize: 12.5, color: '#dc2626', marginBottom: 10 }}>{err}</div>}
 

@@ -107,6 +107,14 @@ export default async function handler(req, res) {
       const users = await getPortalUsers()
       return res.json({ users: users.map(strip) })
     }
+    // Lightweight directory for recipient pickers (any signed-in portal user).
+    // Only exposes name/email/phone of active users — no roles or other detail.
+    if (action === 'directory') {
+      const me = currentUser(req)
+      if (!me) return res.status(401).json({ error: 'Not signed in' })
+      const users = await getPortalUsers()
+      return res.json({ users: users.filter(u => u.active !== false && u.email).map(u => ({ name: u.name || '', email: u.email || '', phone: u.phone || '' })) })
+    }
     return res.status(400).json({ error: 'Unknown action' })
   }
 
