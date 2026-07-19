@@ -1,47 +1,40 @@
-Diagnostic: cost reconciliation for one project (read-only)
-===========================================================
+Wages sync — stop duplicates accumulating
+==========================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Single file: pages/api/sync-wages.js
 
-NEW FILE (create it in GitHub):
-• pages/api/cost-reconcile.js
+DEPLOY THIS BEFORE RE-SYNCING WAGES.
 
-WHAT IT DOES
+THE BUG
+-------
+On each wage sync, the old code kept every existing line that was before the window
+OR had no date:
+    const older = existing.filter(l => !l.date || l.date < winStr)
+Undated lines can never be "in the window", so they were re-kept on EVERY sync while
+fresh dated wages were added alongside them — duplicating labour (e.g. the repeated
+£20,172.73 "Labour cost upto 30/04/2026 to book under tracking categories" and
+£920.52 "June 26 Wages" rows on Russell Hill).
+
+THE FIX
+-------
+The wage bucket is now rebuilt cleanly on every sync:
+ • Keep genuine OLDER dated history (before the window) — nothing is lost.
+ • Add the freshly-fetched in-window lines.
+ • DE-DUPLICATE by Xero JournalLineID (fresh wins); fall back to a content key
+   (date+amount+description+reference) when no id is present.
+ • DROP legacy lines that have no date AND no Xero line id — these were the orphaned
+   adjustments that caused the pile-up. Real Xero lines always carry a JournalLineID,
+   so nothing legitimate is removed.
+Applied to both the per-project buckets and the untagged (unassigned) bucket.
+
+AFTER DEPLOY
 ------------
-Read-only endpoint to explain WHY the Budget Tracker, EOM Report and Project page
-can show different labour/materials/total for the same project.
+1. Deploy this file.
+2. Re-run the Wages sync (Bookkeeping page or the commercial SyncBar) to repopulate
+   the wages you cleared — it will now come in without duplicates.
+3. Re-check Russell Hill: the Budget Tracker all-time labour should equal the sum of
+   the actual dated wage lines (no doubling).
 
-USE IT
-------
-Deploy, then open in your browser while logged in (find Russell Hill's Xero id — it's
-in the project page URL /project/<id>):
-
-  https://app.rockroofing.co.uk/api/cost-reconcile?id=<xeroId>&date=2027-06-30
-
-IT RETURNS
-----------
-• cached_costs_latest        — what the BUDGET TRACKER shows (all-time, import-time
-                               labour/materials split)
-• recomputed_all_time_320_321 — same lines, all-time, labour = codes 320/321 only
-• recomputed_to_date          — same lines up to the ?date you pass (what the PROJECT
-                               page / EOM compute)
-• classification_check        — labour by the import 'type' field vs labour by code
-                               320/321. If 'difference' is NON-ZERO, some spend is
-                               called Labour by the categorisation config but isn't
-                               coded 320/321 — that's a real classification mismatch,
-                               separate from the date cutoff.
-• account_code_breakdown      — every account code present with its total, so you can
-                               see exactly which codes make up labour vs materials.
-
-READING RUSSELL HILL
---------------------
-Budget Tracker showed Lab £153,733 / Mat £166,204 / Total £319,937 (all-time).
-Project page at 30 Jun 2027 showed Lab £90,454 / Mat £166,204 / Total £256,658.
-Materials matched exactly; the £63,279 gap is entirely in labour AND equals the
-total gap — consistent with post-30-Jun spend that is all labour. This endpoint
-confirms it: compare recomputed_all_time_320_321.labour (should ≈ £153,733) with
-recomputed_to_date.labour (should ≈ £90,454). If they line up, it's purely the date.
-If cached labour ≠ recomputed_all_time labour, we also have a classification drift
-to fix (I can then make the Budget Tracker recompute labour by 320/321).
-
-NOTE: delete this endpoint once we've diagnosed the issue.
+The diagnostic endpoint (pages/api/cost-reconcile.js) can be deleted once you're happy
+— it's read-only and unused by the app.

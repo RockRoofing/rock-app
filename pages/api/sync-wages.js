@@ -156,28 +156,48 @@ export default async function handler(req, res) {
       return res.json({ ok: true, months, wageLinesFetched: 0, taggedToProjects: 0, untagged: 0, projectsTouched: 0, note: 'No wage journal lines returned from Xero — nothing changed (existing data left intact).' })
     }
 
-    // Store per project — exact-mirror within window, but ONLY replace a project's
-    // in-window wages when the fetch actually returned lines FOR THAT PROJECT.
-    // If a project has no fresh lines, leave its existing data untouched (never
-    // wipe on an empty result).
+    // Store per project. Rebuild the line set so duplicates can't accumulate:
+    //  • Keep genuine OLDER dated lines (before the window) — the sync only fetched
+    //    the window, so we mustn't lose history.
+    //  • Add the freshly-fetched in-window lines.
+    //  • Deduplicate by Xero JournalLineID (fresh wins). Legacy lines without an
+    //    xeroLineId that also have NO date are dropped — these were the orphaned
+    //    "book under tracking categories" adjustments that could never leave the
+    //    window and were being re-kept on every sync (the duplication bug).
     for (const cp of cats) {
       const pid = cp.trackingOptionId
       const fresh = byProject.get(pid) || []
       if (fresh.length === 0) continue          // nothing fetched for this project -> leave as-is
       const existing = (await redis.get(`costs:wages:${pid}`).catch(() => null))?.lines || []
-      const older = existing.filter(l => !l.date || l.date < winStr)
-      const combined = [...older, ...fresh]
+      // Older dated history only (undated legacy orphans are intentionally excluded).
+      const olderDated = existing.filter(l => l.date && l.date < winStr)
+      const combinedRaw = [...olderDated, ...fresh]
+      // De-dupe: prefer a stable Xero line id; otherwise fall back to a content key.
+      const seen = new Set()
+      const combined = []
+      for (const l of combinedRaw) {
+        const key = l.xeroLineId ? `id:${l.xeroLineId}` : `c:${l.date || 'ND'}|${(l.amount || 0).toFixed(2)}|${(l.description || '').trim()}|${l.reference || ''}`
+        if (seen.has(key)) continue
+        seen.add(key); combined.push(l)
+      }
       const wTot = combined.reduce((s, l) => s + (l.amount || 0), 0)
       await redis.set(`costs:wages:${pid}`, { labourSpend: wTot, materialsSpend: 0, totalCosts: wTot, lines: combined, calculatedAt: new Date().toISOString(), source: 'sync_button' })
       await mergeCosts(redis, pid)
     }
 
-    // Untagged wages -> unassigned bucket. Only replace in-window if we actually
-    // fetched untagged lines; otherwise leave the existing bucket intact.
+    // Untagged wages -> unassigned bucket. Same rebuild rule: older dated history +
+    // fresh, de-duplicated, undated legacy orphans dropped.
     if (untagged.length > 0) {
       const existingUn = (await redis.get('costs:untagged:wages').catch(() => null)) || []
-      const olderUn = existingUn.filter(l => !l.date || l.date < winStr)
-      await redis.set('costs:untagged:wages', [...olderUn, ...untagged])
+      const olderUn = existingUn.filter(l => l.date && l.date < winStr)
+      const seenUn = new Set()
+      const combinedUn = []
+      for (const l of [...olderUn, ...untagged]) {
+        const key = l.xeroLineId ? `id:${l.xeroLineId}` : `c:${l.date || 'ND'}|${(l.amount || 0).toFixed(2)}|${(l.description || '').trim()}|${l.reference || ''}`
+        if (seenUn.has(key)) continue
+        seenUn.add(key); combinedUn.push(l)
+      }
+      await redis.set('costs:untagged:wages', combinedUn)
     }
 
     await redis.del('dashboard:cache')
