@@ -53,6 +53,17 @@ export default function ApplicationsPage() {
 
   // Sorted, and previous-gross lookup (by seq) for carry-forward.
   const sortedApps = useMemo(() => [...apps].sort((a, b) => (a.seq || 0) - (b.seq || 0)), [apps])
+
+  // Default the new-application month to the month AFTER the latest application.
+  useEffect(() => {
+    if (!sortedApps.length) return
+    const last = sortedApps[sortedApps.length - 1]
+    if (!last.monthKey) return
+    const [y, m] = last.monthKey.split('-').map(Number)
+    if (!y || !m) return
+    const d = new Date(y, m, 1) // next month
+    setNewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }, [sortedApps])
   function prevGrossFor(app) {
     // previous = the application with the highest seq below this one's seq
     let prev = null
@@ -97,7 +108,7 @@ export default function ApplicationsPage() {
 
   return (
     <>
-      <Head><title>Rock Roofing — Applications · v6</title></Head>
+      <Head><title>Rock Roofing — Applications · v7</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
@@ -262,7 +273,23 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
   }
 
   // Materials on site
-  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, pctComplete: 100, ...m }]); setDirty(true); setShowAddMat(false) }
+  const addMaterial = (m) => { setMats(l => [...l, { id: `mat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, kind: 'item', pctComplete: 100, ...m }]); setDirty(true); setShowAddMat(false) }
+  // Add a whole PO group: a supplier heading row + its item lines beneath it.
+  const addMaterialGroup = ({ supplier, poNumber, markupPct, lines }) => {
+    const gid = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
+    const group = { id: gid, kind: 'group', supplier: supplier || '', poNumber: poNumber || '', attachments: [] }
+    const items = (lines || []).map((li, i) => ({ id: `mat_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 4)}`, kind: 'item', groupId: gid, pctComplete: 100, description: li.description, poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: markupPct || 0 }))
+    setMats(l => [...l, group, ...items]); setDirty(true); setShowAddMat(false)
+  }
+  async function attachToGroup(gid, file) {
+    try {
+      const { upload } = await import('@vercel/blob/client')
+      const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || undefined })
+      setMats(l => l.map(x => x.id === gid ? { ...x, attachments: [...(x.attachments || []), { name: file.name, url: blob.url, at: Date.now() }] } : x)); setDirty(true)
+    } catch (e) { setMsg('Attachment upload failed: ' + (e?.message || e)) }
+  }
+  const removeGroupAttachment = (gid, url) => { setMats(l => l.map(x => x.id === gid ? { ...x, attachments: (x.attachments || []).filter(a => a.url !== url) } : x)); setDirty(true) }
+  const removeGroup = (gid) => { setMats(l => l.filter(x => x.id !== gid && x.groupId !== gid)); setDirty(true) }
   const removeMat = (id) => { setMats(l => l.filter(x => x.id !== id)); setDirty(true) }
   const setMatField = (id, field, v) => { setMats(l => l.map(x => x.id === id ? { ...x, [field]: v } : x)); setDirty(true) }
   const setMatPct = (id, v) => { const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0)); setMatField(id, 'pctComplete', n) }
@@ -448,6 +475,27 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
             <tbody>
               {mats.length === 0 && <tr><td colSpan={11} style={{ ...td, color: '#aaa' }}>No materials on site added.</td></tr>}
               {mats.map(m => {
+                if (m.kind === 'group') {
+                  return (
+                    <tr key={m.id} style={{ background: '#f0f9ff', borderTop: '2px solid #bae6fd' }}>
+                      <td colSpan={11} style={{ padding: '8px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#0369a1' }}>{m.supplier || 'Supplier'}</span>
+                          {m.poNumber && <span style={{ fontSize: 11, color: '#6b7280' }}>{m.poNumber}</span>}
+                          {(m.attachments || []).map(a => (
+                            <span key={a.url} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                              <a href={a.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>📎 {a.name}</a>
+                              {!locked && <button onClick={() => removeGroupAttachment(m.id, a.url)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>×</button>}
+                            </span>
+                          ))}
+                          {!locked && <label style={{ fontSize: 11, color: '#0f766e', cursor: 'pointer' }}>+ Attach doc<input type="file" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) attachToGroup(m.id, f) }} /></label>}
+                          <div style={{ flex: 1 }} />
+                          {!locked && <button onClick={() => removeGroup(m.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 11 }}>Remove group</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                }
                 const netTotal = m.total != null ? num(m.total) : (num(m.qty) * num(m.rate))
                 const total = materialLineTotal(m)
                 const pct = m.pctComplete == null ? 100 : m.pctComplete
@@ -490,7 +538,7 @@ function ApplicationEditor({ app, prevGross, projectId, me, trackerVariations = 
       {/* Summary */}
       <SummaryBlock sum={sum} app={app} />
 
-      {showAddMat && <AddMaterialsModal pos={projectPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} />}
+      {showAddMat && <AddMaterialsModal pos={projectPOs} onClose={() => setShowAddMat(false)} onAdd={addMaterial} onAddGroup={addMaterialGroup} />}
     </>
   )
 }
@@ -544,7 +592,7 @@ function SummaryBlock({ sum, app }) {
 }
 
 // Pick variations from the project's tracker to add to the application.
-function AddMaterialsModal({ pos, onClose, onAdd }) {
+function AddMaterialsModal({ pos, onClose, onAdd, onAddGroup }) {
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   // Per-PO mark-up entered here; applied to every line added from that PO.
   const [markups, setMarkups] = useState({})
@@ -571,7 +619,7 @@ function AddMaterialsModal({ pos, onClose, onAdd }) {
                     Mark-up
                     <input type="number" value={markups[p.poNumber] ?? ''} placeholder="0" onChange={e => setMarkups(s => ({ ...s, [p.poNumber]: e.target.value }))} style={{ width: 54, padding: '4px 6px', border: '1px solid #fdba74', borderRadius: 5, fontSize: 12, textAlign: 'right' }} />%
                   </label>
-                  <button onClick={() => (p.lineItems || []).forEach(li => onAdd({ description: li.description, poNumber: p.poNumber, qty: li.quantity, unit: li.unit, rate: li.rate, markupPct: m }))} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>Add all lines</button>
+                  <button onClick={() => onAddGroup({ supplier: p.supplier, poNumber: p.poNumber, markupPct: m, lines: (p.lineItems || []) })} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}>Add all lines</button>
                 </div>
                 <div style={{ padding: '6px 0' }}>
                   {(p.lineItems || []).length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: '4px 12px' }}>No line items on this PO.</div>}

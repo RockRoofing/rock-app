@@ -75,7 +75,35 @@ export default async function handler(req, res) {
       }
       const { monthKey, monthLabel, appDate, valDate, paymentDate, finalDate, mcdPct, retentionPct } = req.body
       const seq = (apps.reduce((m, a) => Math.max(m, a.seq || 0), 0)) + 1
-      const contractWorks = buildContractWorksFromRates(cr.items)
+
+      // Base the new application on the PREVIOUS one (highest seq) so it starts
+      // exactly where the last left off — % complete, materials (incl. their
+      // attachments) and per-variation data (incl. attachments) all carry over.
+      // Only the identity fields (seq, month, dates) change.
+      const prev = apps.slice().sort((a, b) => (b.seq || 0) - (a.seq || 0))[0] || null
+
+      let contractWorks = buildContractWorksFromRates(cr.items)
+      if (prev && Array.isArray(prev.contractWorks)) {
+        // carry % complete across by matching row id (falls back to code)
+        const byId = new Map(prev.contractWorks.filter(r => r.kind === 'item').map(r => [r.id, r]))
+        const byCode = new Map(prev.contractWorks.filter(r => r.kind === 'item').map(r => [String(r.code), r]))
+        contractWorks = contractWorks.map(r => {
+          if (r.kind !== 'item') return r
+          const p = byId.get(r.id) || byCode.get(String(r.code))
+          return p ? { ...r, pctComplete: p.pctComplete || 0 } : r
+        })
+      }
+      // Deep-copy previous per-variation data and materials (including attachments).
+      const variationData = prev && prev.variationData ? JSON.parse(JSON.stringify(prev.variationData)) : {}
+      const materials = prev && Array.isArray(prev.materials)
+        ? JSON.parse(JSON.stringify(prev.materials)).map(m => ({ ...m, id: `${m.kind === 'group' ? 'grp' : 'mat'}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, _oldId: m.id }))
+        : []
+      // Re-link item groupId to the newly-generated group ids.
+      if (materials.length) {
+        const idMap = new Map(materials.filter(m => m._oldId).map(m => [m._oldId, m.id]))
+        materials.forEach(m => { if (m.groupId && idMap.get(m.groupId)) m.groupId = idMap.get(m.groupId); delete m._oldId })
+      }
+
       const app = {
         id: `app_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         seq,
@@ -83,12 +111,13 @@ export default async function handler(req, res) {
         monthLabel: monthLabel || '',
         status: 'draft',
         appDate: appDate || '', valDate: valDate || '', paymentDate: paymentDate || '', finalDate: finalDate || '',
-        mcdPct: mcdPct != null ? mcdPct : 0,
-        retentionPct: retentionPct != null ? retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5),
+        mcdPct: mcdPct != null ? mcdPct : (prev ? prev.mcdPct : 0),
+        retentionPct: retentionPct != null ? retentionPct : (prev ? prev.retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5)),
         contractWorks,
         variations: [],
-        variationData: {},
-        materials: [],
+        variationData,
+        materials,
+        clonedFromSeq: prev ? prev.seq : null,
         createdAt: Date.now(),
         createdBy: req.body.author || '',
       }

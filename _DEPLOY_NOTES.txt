@@ -1,34 +1,34 @@
-Materials on Site — line rates, global mark-up, % claimed
-=========================================================
+Materials supplier groups + new application clones the previous one
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully  ·  Applications tab shows "· v6"
-(The "Attempted import error" lines during build are pre-existing warnings from
-other files, unrelated to this change — the build still compiles successfully.)
+Build: ✓ Compiled successfully  ·  Applications tab shows "· v7"
 
-1) LINE ITEM RATES NOW PULL IN
-   Root cause: PO line items were fetched from Xero with description + quantity
-   ONLY (no cost), so no rate reached the application. lib/xero.js now also pulls
-   UnitAmount (rate) and Unit for each PO line.
-   IMPORTANT: existing ops:deliveries rows were synced before this change and have
-   no rate stored yet — run a SYNC on the delivery schedule to refresh them (new
-   and re-synced POs will then carry rates). Until then, older rows show a blank
-   rate you can type in manually.
+1) MATERIALS GROUPED BY SUPPLIER (with attachable docs)
+   • "Add all lines" from a PO now inserts a SUPPLIER HEADING row above that PO's
+     line items in Materials on Site. Two POs from the same supplier = the supplier
+     name appears twice (one heading per PO added), as requested.
+   • Each supplier/group heading has "+ Attach doc" — documents attach to that
+     group and will be appended to the application (Phase 4). Listed with links,
+     removable. "Remove group" removes the heading and its lines.
+   • Group headings don't total (only the item lines do). Adding a single line
+     (the per-line "Add") still adds an ungrouped line as before.
 
-2) MARK-UP ALL MATERIALS
-   The Materials on Site header has a "Mark-up all __%" box — type once and it sets
-   the mark-up on EVERY material line. Per-line mark-up still editable, and the
-   per-PO mark-up in the picker still works.
-
-3) % CLAIMED FOR MATERIALS ON SITE
-   New "% Claimed" column (with a ✓=100% button), exactly like Contract Works.
-   Value to date = marked-up Total x % claimed. New lines default to 100%.
-   • The TOTAL row now shows both the marked-up final total and the value-to-date.
-   • Summary/Certificate "Materials On Site" now uses the VALUE TO DATE (what's
-     being certified this application), and the carry-forward accounts for it.
+2) NEW APPLICATION STARTS FROM THE PREVIOUS ONE
+   Creating a new application now CLONES the latest application exactly:
+   • Contract Works % complete carried across (matched by line).
+   • Materials on Site copied in full — supplier groups, lines, mark-ups, % claimed
+     AND their attachments (group ids are re-linked correctly).
+   • Per-variation data (% complete + attachments) copied.
+   • MCD % / retention % carried from the previous app.
+   Only the identity changes automatically: application number (seq +1), month
+   (auto-advances to the month after the last app), and App/Val/Payment/Final
+   dates (recomputed from Project Details for the new month).
 
 FILES
 -----
-• lib/xero.js               (PO line items now include unitAmount + unit)
-• lib/applications.js       (materialValueToDate; summary uses value-to-date; materialsFinal)
-• pages/applications.js     (rate shows, mark-up-all, % claimed column; v6)
-• pages/api/applications.js (unchanged logic; included for the projectPOs rate passthrough)
+• lib/applications.js        (summary ignores group heading rows)
+• pages/applications.js      (supplier group rows + attachments, month auto-advance; v7)
+• pages/api/applications.js  (create clones previous app incl. attachments; relinks groups)
+
+NEXT (Phase 4): PDF (customer copy hides mark-up; appends variation + supplier
+group attachments) and send.
