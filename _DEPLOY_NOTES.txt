@@ -1,28 +1,18 @@
-Application PDF — column fix + standalone sections + section totals
-==================================================================
+Application PDF — Summary on its own page, certificate heading removed
+=====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single-file change on top of Phase 4 (pages/API unchanged).
+Single-file change (lib/applicationPdf.js).
 
-FIXES
------
-1) COLUMN OVERRUN FIXED
-   Contract Works columns were overlapping (Rate printing over Total, headers like
-   "TToottaal"). Re-spaced with fixed, non-overlapping right-aligned money columns:
-   Code | Description (wraps) | Qty | Unit | Rate | Total | To date. Descriptions
-   now wrap on word boundaries (no mid-word breaks).
-
-2) VARIATIONS & MATERIALS ON THEIR OWN PAGES
-   Each of these sections now starts on a fresh page.
-
-3) SECTION TOTALS
-   A bold total row at the bottom of each section:
-     • TOTAL CONTRACT WORKS      (Total + To date)
-     • TOTAL VARIATIONS          (Final value + To date)
-     • TOTAL MATERIALS ON SITE   (Total + To date)
-   (Verified: the J178 Contract Works "To date" total comes to £55,335.38, matching
-   the Summary's Measured Work figure.)
+CHANGES
+-------
+1) SUMMARY ON ITS OWN PAGE
+   Contract Works now starts on a fresh page, so page 1 is just the Summary +
+   certificate figures.
+2) "PAYMENT CERTIFICATE" HEADING REMOVED
+   The gross/MCD/sub-total/retention/total block now sits directly under the
+   Summary with no separate title.
 
 FILES
 -----
-• lib/applicationPdf.js   (only file changed)
+• lib/applicationPdf.js
