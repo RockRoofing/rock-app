@@ -1,26 +1,14 @@
-GROUP D (part 1) — WIP Margin Override moved to the EOM report (inline)
-======================================================================
+Retention register — Applied-for vs Invoiced check moved right of Invoiced
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Single file: pages/retention.js (latest — includes all prior retention changes)
 
-1) REMOVED from Edit Project Details
-   • The "WIP margin override %" field is gone from the edit-details form.
-   • The WIP Margin Override editor card on the project's WIP/costs view is now a
-     READ-ONLY "WIP Margin" display (shows the effective margin + auto/override),
-     with a note: "Set the WIP margin override inline on the EOM report."
-
-2) ADDED to the EOM report (inline)
-   • In the EOM view, the "WIP Margin" column cell is now click-to-edit.
-   • Click it → type a % → Enter or ✓ to save; ✕ clears the override (reverts to the
-     auto margin). An overridden value shows with a small "*".
-   • Saves via the existing /api/project/[id]/wip-margin endpoint and refreshes.
-   (Replaces the old pop-up prompt with proper inline editing.)
+The Applied-for vs Invoiced match indicator (green tick / red flag) now sits to the
+RIGHT of the Invoiced column (was between Applied for and Invoiced). Column order:
+… Applied for | Invoiced | ✓ | Account Remaining | …
+Its red-flag tooltip reads "Mismatch, applied for and invoiced differ".
 
 FILES
 -----
-• pages/commercial.js          (inline WIP margin editing in EOM)
-• pages/project/[id].js        (removed override field + editor; read-only display)
-
-STILL TO COME in Group D:
-• PC Date 1st/2nd half "TBC" option that suppresses the warning.
-• "Project details not complete" warnings on Project Financials + Retentions.
+• pages/retention.js

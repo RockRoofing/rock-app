@@ -463,8 +463,8 @@ export default function RetentionPage() {
                         ['Project', 'left', 'Project name from project details.', 'project'],
                         ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.', 'finalAccount'],
                         ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.', 'appliedFor'],
-                        ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
+                        ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
                         ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.', 'retentionOwed'],
                         ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.', 'r612'],
@@ -583,10 +583,10 @@ export default function RetentionPage() {
                             </td>
                             {/* Applied for (manual override) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.appliedFor != null && entry.appliedFor !== '' ? fmt(parseFloat(entry.appliedFor)) : '—'}</td>
-                            {/* Applied-for vs Invoiced match */}
-                            {matchCell(entry.appliedFor, invNet, entry.appliedFor != null && entry.appliedFor !== '' && invNet != null)}
                             {/* Invoiced Net */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{invNet != null ? fmt(invNet) : '—'}</td>
+                            {/* Applied-for vs Invoiced match (right of Invoiced) */}
+                            {matchCell(entry.appliedFor, invNet, entry.appliedFor != null && entry.appliedFor !== '' && invNet != null, 'Mismatch, applied for and invoiced differ')}
                             {/* Account Remaining */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
