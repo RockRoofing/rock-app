@@ -1142,17 +1142,12 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
           <div style={{ fontSize: 10, color: '#888', marginTop: 3 }}>costs ÷ (1 − margin), margin {effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'}</div>
         </div>
         <div style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>WIP Margin Override</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: '#888', marginBottom: 8 }}>WIP Margin</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ fontSize: 22, fontWeight: 700, color: marginColor(effectiveMargin) }}>{effectiveMargin != null ? (effectiveMargin * 100).toFixed(1) + '%' : '—'}</div>
             <div style={{ fontSize: 10, color: '#888' }}>{marginOverride ? 'override' : 'auto'}</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="number" min="0" max="100" step="0.1" value={marginOverride} onChange={e => setMarginOverride(e.target.value)} placeholder={atVDate.margin != null ? `Auto: ${(atVDate.margin * 100).toFixed(1)}%` : 'Auto'} style={{ width: 80, padding: '4px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12 }} />
-            <span style={{ fontSize: 11, color: '#888' }}>%</span>
-            <button onClick={() => saveMarginOverride()} disabled={savingMargin} style={{ padding: '4px 10px', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>{savingMargin ? '...' : 'Save'}</button>
-            {marginOverride && <button onClick={() => { setMarginOverride(''); saveMarginOverride('') }} style={{ padding: '4px 8px', background: '#f0f2f5', color: '#555', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>Clear</button>}
-          </div>
+          <div style={{ fontSize: 10, color: '#94a3b8' }}>Set the WIP margin override inline on the EOM report.</div>
         </div>
       </div>
 
@@ -1522,8 +1517,6 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <input type="number" value={form.labourBudget || ''} onChange={f('labourBudget')} style={inputStyle} placeholder="0.00" />
         <label style={labelStyle}>Materials budget (£)</label>
         <input type="number" value={form.materialsBudget || ''} onChange={f('materialsBudget')} style={inputStyle} placeholder="0.00" />
-        <label style={labelStyle}>WIP margin override % (optional)</label>
-        <input type="number" min="0" max="100" step="0.1" value={form.wipMarginOverride || ''} onChange={f('wipMarginOverride')} style={inputStyle} placeholder={currentMargin ? `Leave blank to use current (${(currentMargin * 100).toFixed(1)}%)` : 'Leave blank to use current margin'} />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Variations</div>

@@ -101,6 +101,8 @@ export default function Dashboard() {
   const [eomMode, setEomMode] = useState(false)
   const [editingComment, setEditingComment] = useState(null)
   const [commentText, setCommentText] = useState('')
+  const [editingWip, setEditingWip] = useState(null)   // xeroId being edited inline
+  const [wipText, setWipText] = useState('')
   const [hiddenCols, setHiddenCols] = useState([])
   const [showColPanel, setShowColPanel] = useState(false)
   const [selectedProjects, setSelectedProjects] = useState(new Set())
@@ -186,16 +188,13 @@ export default function Dashboard() {
     setEditingComment(null)
   }
 
-  async function saveWipMargin(projectId, jobNo, currentMargin, currentOverride) {
-    const val = prompt(
-      `WIP margin override for ${jobNo} (leave blank to use current margin ${currentMargin ? (currentMargin * 100).toFixed(1) + '%' : 'unknown'}):`,
-      currentOverride || ''
-    )
-    if (val === null) return
+  async function saveWipMarginInline(projectId, rawVal) {
+    const v = (rawVal ?? '').toString().trim()
+    setEditingWip(null)
     await fetch(`/api/project/${projectId}/wip-margin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wipMarginOverride: val || null })
+      body: JSON.stringify({ wipMarginOverride: v === '' ? null : v })
     })
     loadDashboard(true)
   }
@@ -958,6 +957,25 @@ export default function Dashboard() {
                               const m = e.effectiveMargin
                               val = m != null ? pct(m) : '—'
                               color = m != null ? (m >= 0.25 ? '#16a34a' : m >= 0.21 ? '#ca8a04' : '#e63946') : '#888'
+                              const overridden = p.wipMarginOverride != null && p.wipMarginOverride !== ''
+                              if (editingWip === p.xeroId) {
+                                return <td key={col.key} style={cell({ bg: bgC }, color, false)}>
+                                  <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                                    <input autoFocus type="number" step="0.1" value={wipText}
+                                      onChange={ev => setWipText(ev.target.value)}
+                                      onKeyDown={ev => { if (ev.key === 'Enter') saveWipMarginInline(p.xeroId, wipText); if (ev.key === 'Escape') setEditingWip(null) }}
+                                      placeholder="%"
+                                      style={{ width: 52, padding: '2px 4px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }} />
+                                    <button onClick={() => saveWipMarginInline(p.xeroId, wipText)} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }}>✓</button>
+                                    <button onClick={() => saveWipMarginInline(p.xeroId, '')} title="Clear override (use current margin)" style={{ background: '#eee', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }}>✕</button>
+                                  </div>
+                                </td>
+                              }
+                              return <td key={col.key} style={cell({ bg: bgC }, color, false)}
+                                onClick={() => { setEditingWip(p.xeroId); setWipText(overridden ? String(p.wipMarginOverride) : '') }}
+                                title={overridden ? 'Overridden — click to edit' : 'Click to set a WIP margin override'}>
+                                <span style={{ cursor: 'pointer', borderBottom: '1px dashed #cbd5e1' }}>{val}{overridden ? ' *' : ''}</span>
+                              </td>
                             }
                             return <td key={col.key} style={cell({ bg: bgC }, color, ['labourLeft', 'matsLeft', 'totalLeft', 'remaining', 'profit'].includes(col.key))}>{val}</td>
                           })}
