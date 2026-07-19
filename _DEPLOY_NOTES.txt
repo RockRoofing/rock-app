@@ -1,20 +1,28 @@
-Retention register — releases gated on FA=Invoiced, FA-below-invoiced warning
-=============================================================================
+Retention register — Defects Liability lifecycle + multi-select filters
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 Single file: pages/retention.js (latest — includes all prior retention changes)
 
-1) 1st / 2nd VALUE ONLY GO GREEN WHEN FA MATCHES INVOICED
-   A release cell now turns green ("released") only when BOTH:
-     • the amount paid means that release is settled, AND
-     • the Final Account reconciles with the invoiced value (within £1).
-   If it's paid/settled but FA ≠ Invoiced, the cell shows an amber "⚠ check FA"
-   warning instead of green (tooltip explains why). Still-due releases stay orange.
+1) THREE-STAGE LIFECYCLE: Live Project -> Defects Liability -> Complete
+   Manual, gated transitions per row:
+     • "→ Defects Liability" (from Live): BLOCKED unless Final Account = Invoiced.
+       (Defects Liability = the defects period waiting for the final retention.)
+     • "✓ Complete" (from Defects only): a project CANNOT skip Defects Liability.
+     • "↩ Live" / "↩ Re-open" to step back a stage.
+   A small status pill (Live / Defects / Complete) shows in the Ref cell.
 
-2) FINAL ACCOUNT WARNING WHEN INVOICED IS HIGHER
-   When the invoiced value exceeds the Final Account, the FA figure turns RED and
-   shows "⚠ FA lower than invoiced" beneath it, flagging the FA is understated and
-   needs updating.
+2) MULTI-SELECT FILTERS (default: Live Project)
+   Filters are now Live Project | Defects Liability | Complete, and you can tick ANY
+   COMBINATION at once. The "All" option has been removed (tick all three for the
+   same effect). Page defaults to Live Project only.
+
+3) OWED vs 612 MATCH INDICATOR MOVED
+   The green-tick / red-flag check now sits to the RIGHT of "612 Allocated".
+
+4) RED-FLAG TOOLTIP
+   Hovering the Owed-vs-612 red flag now reads:
+   "Mismatch, retention owed and Xero allocated retention differs".
 
 FILES
 -----

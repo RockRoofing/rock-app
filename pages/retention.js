@@ -60,9 +60,10 @@ function calcAccountRemaining(entry) {
 function calcTotalRemaining(entry) {
   return calcTotalDue(entry) - (parseFloat(entry.paid || 0) || 0)
 }
-// Completion is now a MANUAL flag set per project (no auto-close from the paid
-// figure). A project is complete only when someone marks it complete.
-const isClosed = (entry) => !!entry.markedComplete
+// Retention lifecycle status: 'live' -> 'defects' -> 'complete' (all manual, gated).
+// Older records used a markedComplete boolean; treat that as 'complete'.
+const retStatusOf = (entry) => entry.retStatus || (entry.markedComplete ? 'complete' : 'live')
+const isClosed = (entry) => retStatusOf(entry) === 'complete'
 
 function calcBalance(entry) {
   const r1 = parseFloat(entry.release1Value || 0)
@@ -105,7 +106,7 @@ export default function RetentionPage() {
   const [saving, setSaving] = useState(false)
   const [sortKey, setSortKey] = useState('ref')   // default sort by Ref
   const [sortDir, setSortDir] = useState('asc')
-  const [filter, setFilter] = useState('outstanding') // outstanding | all
+  const [filter, setFilter] = useState(() => new Set(['live'])) // multi-select: live | defects | complete
   const [qsOptions, setQsOptions] = useState([])
   const [allProjects, setAllProjects] = useState([])   // for the "add existing project" picker
 
@@ -227,11 +228,26 @@ export default function RetentionPage() {
     setSaving(false)
   }
 
-  async function toggleComplete(entry) {
-    const next = !entry.markedComplete
-    if (next && !confirm(`Mark ${entry.ourRef || 'this project'} as complete? It will move to the Complete list.`)) return
-    if (!next && !confirm(`Re-open ${entry.ourRef || 'this project'}? It will move back to Outstanding.`)) return
-    await saveEntry({ ...entry, markedComplete: next, completedAt: next ? Date.now() : null })
+  // Retention lifecycle transitions (all manual, gated):
+  //  • live -> defects: only when Final Account reconciles with invoiced value.
+  //  • defects -> complete: only from defects (can't skip the defects period).
+  //  • re-open steps back one stage.
+  async function setRetStatus(entry, next) {
+    const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
+    const invNet = entry.invoicedNet != null ? parseFloat(entry.invoicedNet) : (entry.invoiced != null ? parseFloat(entry.invoiced) : null)
+    const faMatches = fa > 0 && invNet != null && Math.abs(fa - (invNet || 0)) < 1
+    if (next === 'defects') {
+      if (!faMatches) { alert('Cannot move to Defects Liability: the Final Account and the invoiced value must match first. Reconcile them, then try again.'); return }
+      if (!confirm(`Move ${entry.ourRef || 'this project'} to Defects Liability? (Waiting for the final retention release.)`)) return
+    }
+    if (next === 'complete') {
+      if (retStatusOf(entry) !== 'defects') { alert('A project must go through Defects Liability before it can be marked Complete.'); return }
+      if (!confirm(`Mark ${entry.ourRef || 'this project'} as Complete?`)) return
+    }
+    if (next === 'live') {
+      if (!confirm(`Move ${entry.ourRef || 'this project'} back to ${retStatusOf(entry) === 'complete' ? 'Defects Liability' : 'Live Project'}?`)) return
+    }
+    await saveEntry({ ...entry, retStatus: next, markedComplete: next === 'complete', completedAt: next === 'complete' ? Date.now() : null })
   }
 
   async function deleteEntry(id) {
@@ -276,12 +292,10 @@ export default function RetentionPage() {
     ...xeroEntries.filter(x => !manualIds.has(x.xeroId) && !entries.find(e => e.id === x.xeroId)),
     ...mergedEntries
   ].filter(e => !(e.xeroId && hiddenEntrySet.has(String(e.xeroId)))).filter(e => {
-    // Outstanding = retention not yet fully settled (Total Remaining ≠ £0).
-    // Complete    = fully settled / paid in full.
-    // All         = every project that has/had retention.
-    if (filter === 'outstanding') return !isClosed(e)
-    if (filter === 'complete') return isClosed(e)
-    return true
+    // Multi-select status filter: show a row if its status is among the ticked
+    // filters. No filters ticked -> show nothing (prompt shown separately).
+    if (!filter || filter.size === 0) return true
+    return filter.has(retStatusOf(e))
   }).filter(e => {
     if (!search) return true
     const q = search.toLowerCase()
@@ -406,12 +420,16 @@ export default function RetentionPage() {
           {/* Filters */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', background: '#f0f2f5', borderRadius: 8, overflow: 'hidden' }}>
-              {[['outstanding', 'Outstanding'], ['complete', 'Complete'], ['all', 'All']].map(([key, label]) => (
-                <button key={key} onClick={() => setFilter(key)}
-                  style={{ padding: '6px 16px', border: 'none', background: filter === key ? '#1a1a2e' : 'transparent', color: filter === key ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                  {label}
-                </button>
-              ))}
+              {[['live', 'Live Project'], ['defects', 'Defects Liability'], ['complete', 'Complete']].map(([key, label]) => {
+                const on = filter.has(key)
+                return (
+                  <button key={key} onClick={() => setFilter(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n })}
+                    title="Tick any combination"
+                    style={{ padding: '6px 16px', border: 'none', background: on ? '#1a1a2e' : 'transparent', color: on ? '#fff' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                    {on ? '✓ ' : ''}{label}
+                  </button>
+                )
+              })}
             </div>
             <input placeholder="Search ref, customer, project..." value={search} onChange={e => setSearch(e.target.value)}
               style={{ flex: 1, minWidth: 200, padding: '7px 12px', border: '1px solid #e5e5e5', borderRadius: 8, fontSize: 12 }} />
@@ -431,7 +449,7 @@ export default function RetentionPage() {
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading...</div>
             ) : allEntries.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>No retention entries found.</div>
+              <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>{filter.size === 0 ? 'No status filters selected — tick Live Project, Defects Liability or Complete above.' : 'No retention entries match the current filters.'}</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -447,8 +465,8 @@ export default function RetentionPage() {
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
                         ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.', 'retentionOwed'],
-                        ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
                         ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.', 'r612'],
+                        ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Practical completion type (manual).', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).', 'qs'],
@@ -528,10 +546,10 @@ export default function RetentionPage() {
                       }
                       // Match indicator: green tick when the two values agree (within
                       // £1), red flag when they differ. Grey dash if either is missing.
-                      const matchCell = (a, b, hasBoth) => {
+                      const matchCell = (a, b, hasBoth, mismatchTip) => {
                         if (!hasBoth) return <td style={{ padding: '8px 6px', textAlign: 'center', color: '#cbd5e1' }}>—</td>
                         const ok = Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 1
-                        return <td style={{ padding: '8px 6px', textAlign: 'center' }} title={ok ? 'Match' : 'Mismatch — figures differ'}>
+                        return <td style={{ padding: '8px 6px', textAlign: 'center' }} title={ok ? 'Match' : (mismatchTip || 'Mismatch — figures differ')}>
                           <span style={{ fontSize: 14, color: ok ? '#16a34a' : '#dc2626' }}>{ok ? '✓' : '🚩'}</span>
                         </td>
                       }
@@ -544,6 +562,13 @@ export default function RetentionPage() {
                                 ? <Link href={`/project/${entry.xeroId}`} style={{ color: '#2563eb' }}>{entry.ourRef}</Link>
                                 : entry.ourRef || '—'}
                               {!entry.manual && <span style={{ marginLeft: 4, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 4px' }}>Xero</span>}
+                              {(() => {
+                                const st = retStatusOf(entry)
+                                const meta = st === 'complete' ? { t: 'Complete', bg: '#dcfce7', c: '#166534' }
+                                  : st === 'defects' ? { t: 'Defects', bg: '#fef9c3', c: '#a16207' }
+                                  : { t: 'Live', bg: '#e0f2fe', c: '#0369a1' }
+                                return <span style={{ marginLeft: 4, fontSize: 9, background: meta.bg, color: meta.c, borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>{meta.t}</span>
+                              })()}
                             </td>
                             {/* Customer */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.customerName || '—'}</td>
@@ -564,10 +589,10 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{entry.retentionOwed ? fmt(parseFloat(entry.retentionOwed)) : fmt(0)}</td>
-                            {/* Retention Owed vs 612 Allocated match */}
-                            {matchCell(entry.retentionOwed, entry.retention612Allocated, (parseFloat(entry.retentionOwed) || 0) > 0 || (parseFloat(entry.retention612Allocated) || 0) > 0)}
                             {/* 612 Allocated */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.retention612Allocated ? fmt(parseFloat(entry.retention612Allocated)) : fmt(0)}</td>
+                            {/* Retention Owed vs 612 Allocated match (right of 612) */}
+                            {matchCell(entry.retentionOwed, entry.retention612Allocated, (parseFloat(entry.retentionOwed) || 0) > 0 || (parseFloat(entry.retention612Allocated) || 0) > 0, 'Mismatch, retention owed and Xero allocated retention differs')}
                             {/* Ret % */}
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{entry.retentionPct ? `${parseFloat(entry.retentionPct).toFixed(0)}%` : '—'}</td>
                             {/* PC Type */}
@@ -602,11 +627,29 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
                               <button onClick={() => { setEditingId(entry.id); setEditForm({ ...entry }) }}
                                 style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333', marginRight: 4 }}>Edit</button>
-                              <button onClick={() => toggleComplete(entry)}
-                                title={entry.markedComplete ? 'Re-open this project' : 'Mark this project complete'}
-                                style={{ background: entry.markedComplete ? '#dcfce7' : '#fff', border: '1px solid ' + (entry.markedComplete ? '#16a34a' : '#cbd5e1'), borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: entry.markedComplete ? '#166534' : '#333', marginRight: 4, fontWeight: 600 }}>
-                                {entry.markedComplete ? '✓ Complete' : 'Mark complete'}
-                              </button>
+                              {(() => {
+                                const st = retStatusOf(entry)
+                                if (st === 'live') return (
+                                  <button onClick={() => setRetStatus(entry, 'defects')}
+                                    title="Move to Defects Liability (requires Final Account = Invoiced)"
+                                    style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333', marginRight: 4, fontWeight: 600 }}>→ Defects Liability</button>
+                                )
+                                if (st === 'defects') return (
+                                  <>
+                                    <button onClick={() => setRetStatus(entry, 'complete')}
+                                      title="Mark project Complete"
+                                      style={{ background: '#dcfce7', border: '1px solid #16a34a', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#166534', marginRight: 4, fontWeight: 600 }}>✓ Complete</button>
+                                    <button onClick={() => setRetStatus(entry, 'live')}
+                                      title="Move back to Live Project"
+                                      style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#666', marginRight: 4 }}>↩ Live</button>
+                                  </>
+                                )
+                                return (
+                                  <button onClick={() => setRetStatus(entry, 'defects')}
+                                    title="Re-open — back to Defects Liability"
+                                    style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#666', marginRight: 4 }}>↩ Re-open</button>
+                                )
+                              })()}
                               {entry.manual !== false && (
                                 <button onClick={() => deleteEntry(entry.id)}
                                   style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#e63946' }}>Del</button>
