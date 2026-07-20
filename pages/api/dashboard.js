@@ -242,6 +242,7 @@ export default async function handler(req, res) {
         amountOutstanding,
         lastInvoiceDate,
         retentionPct: parseFloat(settings.retentionPct || 0),
+        hasContractedRates: !!(settings.contractedRates && Array.isArray(settings.contractedRates.items) && settings.contractedRates.items.length > 0),
         // Edit-details completeness (for the "project details not complete" banner).
         detailsMissing: missingProjectFields({ ...settings, retentionPct: (parseFloat(settings.retentionPct || 0) || retPct) || '' }),
         pcDateTBC: !!settings.pcDateTBC,

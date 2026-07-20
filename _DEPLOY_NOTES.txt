@@ -1,26 +1,41 @@
-Fix: Schedule of Works showed no projects for operatives
-========================================================
+Schedule of Works — source from Commercial + robust job-number linking
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/forms/schedule.js
 
-CAUSE
------
-The Schedule of Works page used useMyProjects().myProjects, which is filtered to
-projects where the user is the CONTRACTS MANAGER. Operatives aren't CMs, so that list
-was empty — hence "no projects".
+BACKGROUND
+----------
+Commercial projects come from Xero (keyed by xeroId, carry a job number from the
+tracking-category name). Ops projects come from IHMs (keyed by projectNo). The link
+between them is the JOB NUMBER. The Schedule picker was sourced from Ops, so any
+project set up only in Commercial (no IHM) never appeared.
 
-FIX
----
-It now uses useMyProjects().projects — the list filtered by the operative's own
-project PERMISSIONS (projectAccess). So an operative sees exactly the projects they're
-allowed to view (all of them if projectAccess is 'all'/unset, otherwise just their
-assigned ones), matching the spec.
+CHANGES
+-------
+1) SCHEDULE PICKER NOW SOURCED FROM COMMERCIAL
+   The Schedule of Works lists projects from the dashboard (commercial/Xero) that
+   HAVE contracted rates — so any project with a schedule shows, even if it has no
+   Ops/IHM record yet. The operative's projectAccess permissions still apply.
+   • dashboard.js now outputs hasContractedRates per project.
+
+2) ROBUST JOB-NUMBER MATCHING (shared key)
+   New normJobNo() in lib/cmSiteApp.js normalises job numbers for matching: trims,
+   uppercases, removes inner spaces, and treats "190" == "J190". allowedProjects()
+   and canAccessProject() now use it, so permissions match reliably regardless of
+   formatting differences between Commercial and Ops.
+
+RESULT
+------
+An operative with permission to J190 will see J190 in the Schedule picker as long as
+it has contracted rates in Commercial — no Ops record required, and the job-number
+formatting no longer has to match exactly.
 
 FILES
 -----
-• pages/forms/schedule.js
+• pages/forms/schedule.js     (picker sourced from commercial projects w/ CRs)
+• lib/cmSiteApp.js            (normJobNo + robust permission matching)
+• pages/api/dashboard.js      (hasContractedRates flag)
 
-NOTE: if a specific operative still sees nothing, check their projectAccess in the
-Site App user setup — an empty/explicit list with no projects would correctly show
-none. 'all' or unset shows every project.
+NOTE: reads live /api/dashboard; if a project's CRs were just added, the flag appears
+after the dashboard cache next rebuilds (open Project Financials once, or it refreshes
+on its 4h cycle).

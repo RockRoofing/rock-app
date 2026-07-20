@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { Shell } from './index'
-import { INK, BRAND, useMyProjects, ProjectPicker, ProjectHeader } from '../../lib/cmSiteApp'
+import { INK, BRAND, allowedProjects, ProjectPicker, ProjectHeader } from '../../lib/cmSiteApp'
 
 // Operative › Schedule of Works — project-first, READ-ONLY, NO FINANCIALS.
-// Operatives only see projects they have permission to view (useMyProjects).
-// Shows item number, description, quantity and unit only — no rates or totals.
-// Variations are listed at the bottom (VO number, description, item, qty, instructed
-// status) with no financial information.
+// Projects are sourced from the COMMERCIAL side (Xero/dashboard) so any project that
+// has contracted rates appears, even without an Ops/IHM record. The operative's own
+// projectAccess permissions still apply. Shows item number, description, quantity and
+// unit only — no rates or totals. Variations listed at the bottom (no financials).
 export default function ScheduleOfWorks() {
   const router = useRouter()
   const [user, setUser] = useState(null); const [ready, setReady] = useState(false)
+  const [projects, setProjects] = useState(null)   // commercial projects w/ CRs, permission-filtered
   const [proj, setProj] = useState(null)
   const [cr, setCr] = useState(null)
   const [variations, setVariations] = useState([])
@@ -19,26 +20,33 @@ export default function ScheduleOfWorks() {
   useEffect(() => {
     const s = sessionStorage.getItem('ops_operative')
     if (!s) { router.replace('/forms'); return }
-    try { setUser(JSON.parse(s)) } catch {}
+    let u = null
+    try { u = JSON.parse(s); setUser(u) } catch {}
     setReady(true)
+    ;(async () => {
+      try {
+        // Commercial projects come from the dashboard (keyed by Xero id, carry jobNo).
+        let d = await fetch('/api/dashboard').then(r => r.json())
+        let list = d.projects || []
+        // Keep only projects that actually have contracted rates to show.
+        const withCr = list
+          .filter(p => p.hasContractedRates)
+          .map(p => ({ projectNo: p.jobNo || '', projectName: p.name || '', jobNo: p.jobNo || '', xeroId: p.xeroId }))
+          .filter(p => p.projectNo)
+        // Apply the operative's project permissions.
+        const permitted = allowedProjects(u, withCr)
+        // De-dupe by projectNo.
+        const seen = new Set()
+        setProjects(permitted.filter(p => { const k = p.projectNo; if (seen.has(k)) return false; seen.add(k); return true }))
+      } catch { setProjects([]) }
+    })()
   }, [])
-
-  // Operatives see every project they have PERMISSION to view (projectAccess),
-  // not just projects they're the CM on. `projects` = permission-filtered list.
-  const { projects: myProjects, loading: projLoading } = useMyProjects(user)
 
   async function pick(p) {
     setProj(p); setCr(null); setVariations([]); setLoading(true)
     try {
-      const matchKey = (x) => String(x.jobNo || x.projectNo || '').trim()
-      let d = await fetch('/api/dashboard').then(r => r.json())
-      let row = (d.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
-      if (!row) {
-        d = await fetch('/api/dashboard?sync=true').then(r => r.json())
-        row = (d.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
-      }
-      if (row?.xeroId) {
-        const cd = await fetch(`/api/contracted-rates-view?projectId=${encodeURIComponent(row.xeroId)}`).then(r => r.json())
+      if (p.xeroId) {
+        const cd = await fetch(`/api/contracted-rates-view?projectId=${encodeURIComponent(p.xeroId)}`).then(r => r.json())
         setCr(cd.contractedRates || { items: [] })
         setVariations(cd.variations || [])
       } else {
@@ -54,6 +62,7 @@ export default function ScheduleOfWorks() {
   // Above-the-line = the contracted works; below-the-line = optional/variation items.
   const above = items.filter(x => x.section === 'above')
   const below = items.filter(x => x.section === 'below')
+  const projLoading = projects == null
 
   return (
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
@@ -62,7 +71,7 @@ export default function ScheduleOfWorks() {
         <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 10px' }}>Schedule of Works</h2>
 
         {!proj ? (
-          projLoading ? <Loading /> : <ProjectPicker projects={myProjects} onPick={pick} subtitle="Select one of your projects." />
+          projLoading ? <Loading /> : <ProjectPicker projects={projects} onPick={pick} subtitle="Select one of your projects." />
         ) : (
           <>
             <ProjectHeader project={proj} onBack={() => { setProj(null); setCr(null); setVariations([]) }} />
