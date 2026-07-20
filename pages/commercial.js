@@ -453,7 +453,7 @@ export default function Dashboard() {
 
           {/* Project details incomplete banner — click a job to fix its details */}
           {(() => {
-            const incomplete = filtered.filter(p => (p.detailsMissing || []).length > 0)
+            const incomplete = projects.filter(p => !hiddenProjects.includes(String(p.xeroId)) && (p.detailsMissing || []).length > 0)
             if (incomplete.length === 0) return null
             return (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -19,12 +19,19 @@ function calcAtDate(costLines, invoiceLines, valDate, settings) {
     ? costLines.filter(l => l.date && l.date <= vDateStr && ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
     : costLines.filter(l => ['321', '320'].includes(l.accountCode)).reduce((s, l) => s + (l.amount || 0), 0)
   const materialsToDate = costsToDate - labourToDate
+  // Invoiced = account-code-200 (Sales) lines: NET of VAT and INCLUDING retention
+  // (retention posts to a separate 612 line, so 200 already includes it). This is
+  // the SAME basis as the EOM report and Budget Tracker, so the figures reconcile.
+  // Fall back to the ex-VAT subtotal for older lines without sales200.
+  const invLineVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
   const invoicedToDate = vDateStr
-    ? invoiceLines.filter(i => i.date && i.date <= vDateStr).reduce((s, i) => s + (i.total || 0), 0)
-    : invoiceLines.reduce((s, i) => s + (i.total || 0), 0)
+    ? invoiceLines.filter(i => i.date && i.date <= vDateStr).reduce((s, i) => s + invLineVal(i), 0)
+    : invoiceLines.reduce((s, i) => s + invLineVal(i), 0)
   const retPct = parseFloat(settings.retentionPct || 0)
-  const retention = retPct > 0 ? invoicedToDate * retPct / (1 - retPct) : 0
-  const grossInvoiced = invoicedToDate + retention
+  // 200 already includes retention, so grossInvoiced IS invoicedToDate; retention is
+  // derived for display only (not added on top).
+  const retention = retPct > 0 ? invoicedToDate * retPct : 0
+  const grossInvoiced = invoicedToDate
   const contractValue = parseFloat(settings.contractValue || 0)
   const instructedVars = (settings.variations || []).filter(v => v.instructed).reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
   const afa = contractValue + instructedVars
@@ -251,7 +258,7 @@ export default function ProjectPage() {
                   <option key={d.toISOString()} value={d.toISOString()}>{d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</option>
                 ))}
               </select>
-              <span style={{ fontSize: 12, color: '#888' }}>Valuation day: {settings?.valuationDay ? `${settings.valuationDay}th of each month` : '⚠ Not set'}</span>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{settings?.valuationDay ? `Valuation day: ${settings.valuationDay}th of each month` : 'Valuation day: using monthly dates'}</span>
             </div>
           )}
 

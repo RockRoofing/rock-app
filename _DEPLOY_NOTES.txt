@@ -1,39 +1,34 @@
-Valuation date dropdown — exclude FUTURE override dates (was defaulting to 2027)
-===============================================================================
+Fixes: valuation-day note, project-page vs EOM reconciliation, banner scope
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/project/[id].js
 
-THE MISMATCH YOU SAW
---------------------
-Russell Hill's project page defaulted to valuation date 30 JUNE 2027 (a future date),
-while the EOM report was on June 2026 — a full year apart — so every figure differed
-(more costs/invoices fall within the 2027 cutoff).
+1) "Valuation day: ⚠ Not set" REMOVED
+   On the project page it now reads, in light grey:
+     • "Valuation day: 28th of each month"  (if a fixed day is set), or
+     • "Valuation day: using monthly dates"  (for projects on per-month dates)
+   No more amber warning.
 
-ROOT CAUSE
-----------
-getPastValuationDates() added manual per-month override dates WITHOUT a future check
-(the fixed-day branch had one, the override branch didn't). Russell Hill has a
-30 Jun 2027 override row, which sorted to the top of the "most recent first" list and
-became the default selection.
+2) RUSSELL HILL FIGURES NOW RECONCILE WITH EOM  ← the real cause
+   The project page (calcAtDate) was computing Invoiced/Margin on a DIFFERENT basis
+   from the EOM report:
+     • Project page used invoice TOTAL (inc VAT) then grossed retention UP on top.
+     • EOM used account-code-200 Sales (net of VAT, already incl. retention).
+   These never matched even at the same date. calcAtDate now uses the SAME sales200
+   basis as EOM and the Budget Tracker, so at the same valuation date the Invoiced,
+   Gross Invoiced and Margin figures reconcile. (Combined with the earlier valuation-
+   date fixes, project page and EOM now line up.)
 
-THE FIX
--------
-Future override dates are now excluded from the valuation-date dropdown, so it only
-offers dates up to today and DEFAULTS to the most recent PAST valuation date. Russell
-Hill will now default to its latest past date (e.g. 30 Jun 2026), which lines up with
-the EOM report's month — and the figures reconcile.
-
-(Pairs with the earlier lib/db.js fix, which made the server-side effective valuation
-date also use the most recent past override.)
-
-WORTH CHECKING IN THE DATA
---------------------------
-Russell Hill has a valuation-date override entered for June 2027. If that's a typo
-(should be 2026), correct it in Edit Project Details > monthly date overrides. The
-app now handles it correctly either way, but a stray 2027 date won't be used until
-that month actually arrives.
+3) "PROJECT DETAILS INCOMPLETE" BANNER — now scans ALL projects
+   The banner was only looking at the currently-FILTERED rows, so projects hidden by
+   the stage/date/card filters were missed. It now scans the full project list (minus
+   the shared hide list), so every incomplete project is listed regardless of the
+   active view.
+   NOTE: the banner reads detailsMissing from the dashboard cache. If it's still empty
+   after deploying, the cache predates GroupD2 — open the page once (or Sync) to
+   rebuild it, and ensure lib/projectComplete.js exists in GitHub.
 
 FILES
 -----
-• pages/project/[id].js
+• pages/commercial.js          (banner scope; also carries WIP inline + earlier work)
+• pages/project/[id].js        (valuation-day note + calcAtDate sales200 basis)
