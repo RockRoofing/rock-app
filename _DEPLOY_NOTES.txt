@@ -1,29 +1,45 @@
-Fix: Schedule of Works showing no projects (stale-cache flag)
-=============================================================
+Chart of Accounts sync + Overheads/Uncategorised categorisation
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+NEW FILE to create in GitHub: pages/api/sync-chart-of-accounts.js
 
-CAUSE
------
-The Schedule filtered the project list on p.hasContractedRates. That flag is new, so
-a dashboard cache built before it existed returned it as undefined on every project —
-filtering them ALL out -> empty picker. (The cache guard only forced a rebuild when
-detailsMissing was missing, not this new flag.)
+1) SYNC CHART OF ACCOUNTS  (Account Categorisation admin area)
+   • New "↻ Sync chart of accounts" button pulls EVERY account from Xero (code +
+     name, via the Accounts endpoint) into the list. Shows last-synced time.
+   • New API: /api/sync-chart-of-accounts (POST, admin/accounts/management only).
+   • Stored at config:chart-of-accounts; the categorisation list merges it in, so
+     all account codes + names appear.
 
-FIXES
------
-1) dashboard.js: the cache guard now also requires hasContractedRates, so a cache
-   lacking it is ignored and rebuilt automatically.
-2) schedule.js: made resilient — if NO project in the returned list carries the
-   hasContractedRates flag (stale cache), it no longer filters on it; it shows all
-   accessible projects and the CR check happens when one is opened ("No schedule
-   uploaded" if none). Once the cache rebuilds, it filters to CR projects as intended.
+2) "IGNORE" RENAMED TO "OVERHEADS"
+   The third category is now "Overheads" (was "Ignore"). Overheads are excluded from
+   project costs, same as before. Legacy 'ignore' values are auto-migrated to
+   'overheads' everywhere (display, classification, save).
 
-RESULT
-------
-Projects appear in the Schedule picker again. Permissions (projectAccess) still apply.
+3) NEW ACCOUNTS DEFAULT TO UNCATEGORISED (flagged)
+   • Any account code with no category assigned is "Uncategorised" — EXCLUDED from
+     project costs (like Overheads) and flagged. Shown with a red row + "needs
+     categorising" in the admin list, and counted in the summary.
+   • Unknown codes seen in cost data also default to Uncategorised (previously they
+     silently defaulted to Ignore).
+
+4) BOOKKEEPING APP BANNER
+   The Bookkeeping app shows a red banner listing every uncategorised account code
+   (code + name) with a link to the Account Categorisation page. It appears whenever
+   any code in the data hasn't been categorised.
 
 FILES
 -----
-• pages/forms/schedule.js
-• pages/api/dashboard.js
+• lib/xero.js                          (fetchChartOfAccounts)
+• pages/api/sync-chart-of-accounts.js  (NEW — sync endpoint)
+• pages/api/account-categorisation.js  (overheads/uncategorised model + chart merge)
+• pages/admin/account-categorisation.js(Sync button, Overheads pill, uncategorised)
+• pages/api/bookkeeping.js             (route overheads/uncat to excluded; banner data)
+• pages/api/import-bills-bulk.js       (exclude overheads + uncategorised from costs)
+• pages/bookkeeping.js                 (uncategorised banner)
+
+AFTER DEPLOY
+------------
+1. Open Admin → Account Categorisation and click "Sync chart of accounts".
+2. Assign any Uncategorised codes to Labour / Materials / Overheads and Save.
+3. Re-sync/re-upload bills so costs recalculate with the new categories.

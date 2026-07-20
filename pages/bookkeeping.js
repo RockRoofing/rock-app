@@ -311,6 +311,13 @@ export default function BookkeepingPage() {
 
         {loading ? <div style={{ color: '#aaa', padding: 40 }}>Loading…</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
+            {(data.uncategorisedCodes || []).length > 0 && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#b91c1c' }}>
+                <strong>⚠ {data.uncategorisedCodes.length} uncategorised account {data.uncategorisedCodes.length === 1 ? 'code' : 'codes'}</strong> — these are excluded from project costs until assigned in{' '}
+                <Link href="/admin/account-categorisation" style={{ color: '#b91c1c', fontWeight: 600 }}>Account Categorisation</Link>:
+                <span style={{ color: '#7f1d1d' }}> {data.uncategorisedCodes.map(c => `${c.code}${c.name ? ` (${c.name})` : ''}`).join(', ')}</span>
+              </div>
+            )}
             <ReconPanel data={data} month={month} tab={tab} onPickMonth={setMonth} />
 
             {/* Tabs */}

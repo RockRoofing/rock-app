@@ -37,11 +37,15 @@ const DEFAULT_LABOUR_CODES = ['320', '321']
 const KNOWN_COS_CODES = ['310', '311', '320', '321', '322', '325', '328', '329', '330', '331', '333', '334', '335', '336']
 function categoryFor(code, name, config) {
   const cfg = config[String(code)] || config[String(name)]
-  if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
+  if (cfg) {
+    let c = cfg.category
+    if (c === 'ignore') c = 'overheads'   // legacy migration
+    if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+  }
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
   if (KNOWN_COS_CODES.includes(c)) return 'materials'
-  return 'ignore'   // unknown / overhead codes excluded until categorised
+  return 'uncategorised'   // unknown codes excluded & flagged until categorised
 }
 
 export default async function handler(req, res) {
@@ -106,7 +110,7 @@ export default async function handler(req, res) {
         untagged.push({ ...lineRec, category })
         continue
       }
-      if (category === 'ignore') continue
+      if (category === 'ignore' || category === 'overheads' || category === 'uncategorised') continue
 
       if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, materials: 0, total: 0, lines: [] })
       const g = byProject.get(tracking)

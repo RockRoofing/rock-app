@@ -18,11 +18,15 @@ const DEFAULT_LABOUR_CODES = ['320', '321']
 const KNOWN_COS_CODES = ['310', '311', '320', '321', '322', '325', '328', '329', '330', '331', '333', '334', '335', '336']
 function categoryOf(code, config) {
   const cfg = config[String(code)]
-  if (cfg && ['labour', 'materials', 'ignore'].includes(cfg.category)) return cfg.category
+  if (cfg) {
+    let c = cfg.category
+    if (c === 'ignore') c = 'overheads'   // legacy migration
+    if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+  }
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
   if (KNOWN_COS_CODES.includes(c)) return 'materials'
-  return 'ignore'
+  return 'uncategorised'
 }
 
 export default async function handler(req, res) {
@@ -94,7 +98,7 @@ export default async function handler(req, res) {
           hasCode: knownCodes.has(String(l.accountCode)),
           source: l.accountCode === '320' ? 'wages' : 'bills',
         }
-        if (cat === 'ignore') ignored.push(rec)
+        if (cat === 'ignore' || cat === 'overheads' || cat === 'uncategorised') ignored.push(rec)
         else if (rec.source === 'wages') wages.push(rec)
         else bills.push(rec)
       }
@@ -119,7 +123,7 @@ export default async function handler(req, res) {
         hasCode: knownCodes.has(String(l.accountCode)),
         source: 'bills',
       }
-      if (cat === 'ignore') ignored.push(rec)
+      if (cat === 'ignore' || cat === 'overheads' || cat === 'uncategorised') ignored.push(rec)
       else bills.push(rec)
     }
     for (const l of (untWages || [])) {
@@ -158,11 +162,27 @@ export default async function handler(req, res) {
       [...bills, ...ignored].map(l => String(l.accountCode)).filter(c => c && !knownCodes.has(c))
     )]
 
+    // Account codes present in the data that are UNCATEGORISED (no category assigned
+    // in the Account Categorisation admin area) — surfaced as a banner in the app.
+    const chart = await redis.get('config:chart-of-accounts').then(v => v || []).catch(() => [])
+    const chartNames = {}
+    for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
+    const uncatMap = {}
+    for (const l of [...bills, ...ignored, ...wages]) {
+      if (categoryOf(l.accountCode, catConfig) === 'uncategorised') {
+        const code = String(l.accountCode || '')
+        if (code) uncatMap[code] = chartNames[code] || l.description || ''
+      }
+    }
+    const uncategorisedCodes = Object.keys(uncatMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(code => ({ code, name: uncatMap[code] }))
+
     res.json({
       bills, wages, invoices, ignored,
       appCategorised, benchmark,
       categorisation: catConfig,
       knownCodes: [...knownCodes], missingCodes,
+      uncategorisedCodes,
       benchmarkUpdatedAt: benchmark?.updatedAt || null,
       _diag: {
         projectsRead: perProject.length,

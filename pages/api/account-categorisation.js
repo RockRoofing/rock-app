@@ -10,11 +10,12 @@ async function getRedis() {
   } catch { return null }
 }
 
-const CONFIG_KEY = 'config:account-categorisation'   // { [code]: { name, category: 'labour'|'materials'|'ignore' } }
+const CONFIG_KEY = 'config:account-categorisation'   // { [code]: { name, category: 'labour'|'materials'|'overheads'|'uncategorised' } }
 const SEEN_KEY = 'costs:seen-accounts'                // { [code]: name }  (populated by cost uploads)
+const CHART_KEY = 'config:chart-of-accounts'          // [{ code, name, type, class, status }]  (from Xero sync)
 
 // Sensible defaults so the split works before anything is configured. Anything
-// not listed defaults to 'materials' (matches the old importer behaviour).
+// not listed defaults to 'uncategorised' (flagged until an admin assigns it).
 export const DEFAULT_LABOUR_CODES = ['320', '321']
 
 // The standard cost-of-sale accounts, so the page is useful before any re-upload.
@@ -35,15 +36,22 @@ const BASE_ACCOUNTS = {
   '336': 'Design Services',
 }
 // Codes we KNOW are cost-of-sale (safe to default to labour/materials). Anything
-// else is treated as an overhead and defaults to "ignore" so it can never count
-// toward project costs until an admin explicitly categorises it.
+// else defaults to 'uncategorised' so it is flagged and excluded from project costs
+// until an admin explicitly categorises it.
 export const KNOWN_COS_CODES = Object.keys(BASE_ACCOUNTS)
+
+// Normalise a stored category, migrating the legacy 'ignore' value to 'overheads'.
+export function normCategory(c) {
+  if (c === 'ignore') return 'overheads'
+  if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+  return null
+}
 
 export function defaultCategoryFor(code) {
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
   if (KNOWN_COS_CODES.includes(c)) return 'materials'
-  return 'ignore'   // unknown / overhead codes are excluded by default
+  return 'uncategorised'   // unknown codes are flagged & excluded until assigned
 }
 
 export default async function handler(req, res) {
@@ -52,18 +60,30 @@ export default async function handler(req, res) {
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
   if (req.method === 'GET') {
-    const [config, seen] = await Promise.all([
+    const [config, seen, chart] = await Promise.all([
       redis.get(CONFIG_KEY).then(v => v || {}).catch(() => ({})),
       redis.get(SEEN_KEY).then(v => v || {}).catch(() => ({})),
+      redis.get(CHART_KEY).then(v => v || []).catch(() => ([])),
     ])
-    // Merge: base cost-of-sale accounts + every seen account + any configured one.
-    const codes = new Set([...Object.keys(BASE_ACCOUNTS), ...Object.keys(seen), ...Object.keys(config)])
+    const chartNames = {}
+    for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
+    // Merge: synced chart of accounts + base cost-of-sale accounts + every seen
+    // account + any configured one.
+    const codes = new Set([
+      ...Object.keys(chartNames),
+      ...Object.keys(BASE_ACCOUNTS),
+      ...Object.keys(seen),
+      ...Object.keys(config),
+    ])
     const accounts = [...codes].map(code => {
       const cfg = config[code] || {}
-      const category = cfg.category || defaultCategoryFor(code)
-      return { code, name: cfg.name || seen[code] || BASE_ACCOUNTS[code] || '', category }
+      // A saved category wins (migrating legacy 'ignore' -> 'overheads'); otherwise
+      // fall back to the default for that code.
+      const category = normCategory(cfg.category) || defaultCategoryFor(code)
+      return { code, name: cfg.name || chartNames[code] || seen[code] || BASE_ACCOUNTS[code] || '', category }
     }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-    return res.json({ accounts })
+    const lastSync = await redis.get('config:chart-of-accounts-synced').catch(() => null)
+    return res.json({ accounts, lastSync: lastSync || null })
   }
 
   if (req.method === 'POST') {
@@ -72,7 +92,7 @@ export default async function handler(req, res) {
     const config = {}
     for (const a of accounts) {
       if (!a || !a.code) continue
-      const category = ['labour', 'materials', 'ignore'].includes(a.category) ? a.category : 'materials'
+      const category = normCategory(a.category) || 'uncategorised'
       config[String(a.code)] = { name: a.name || '', category }
     }
     await redis.set(CONFIG_KEY, config)
