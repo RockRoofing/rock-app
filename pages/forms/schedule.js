@@ -23,7 +23,9 @@ export default function ScheduleOfWorks() {
     setReady(true)
   }, [])
 
-  const { myProjects, loading: projLoading } = useMyProjects(user)
+  // Operatives see every project they have PERMISSION to view (projectAccess),
+  // not just projects they're the CM on. `projects` = permission-filtered list.
+  const { projects: myProjects, loading: projLoading } = useMyProjects(user)
 
   async function pick(p) {
     setProj(p); setCr(null); setVariations([]); setLoading(true)

@@ -1,45 +1,26 @@
-Site App — Applications view for Contracts Managers
-===================================================
+Fix: Schedule of Works showed no projects for operatives
+========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILES to create in GitHub:
-  • pages/forms/cm/applications.js
-  • pages/api/applications-view.js
+Single file: pages/forms/schedule.js
 
-WHERE
+CAUSE
 -----
-• In the Site App's Contracts Manager area there's a new card: "📄 Applications".
+The Schedule of Works page used useMyProjects().myProjects, which is filtered to
+projects where the user is the CONTRACTS MANAGER. Operatives aren't CMs, so that list
+was empty — hence "no projects".
 
-HOW IT BEHAVES
---------------
-• PROJECT FIRST: pick a project. Only projects where the logged-in user IS the
-  Contracts Manager are shown (useMyProjects — matches the CM field on the project).
-• APPLICATIONS TABLE: lists ALL applications (any status) for the project, showing:
-    - Application no.
-    - Required application date
-    - Status (Draft / Sent / Paid)
-    - This cert value
-  Sorted newest application first.
-• TAP AN APPLICATION: opens the full summary with ALL sections and columns:
-    - Summary block (required/valuation/payment dates, measured contract sum,
-      variations final, anticipated final account, application total)
-    - Certificate block (Previously / To date / This application × Gross, MCD,
-      Sub-total, Retention, Total)
-    - Contract Works (item, description, qty, unit, rate, total, % complete)
-    - Variations (VO, description, status, final value, % complete)
-    - Materials on Site (description, qty, unit, rate, total, claimed %)
-
-DATA / SAFETY
--------------
-• New read-only GET endpoint /api/applications-view (no writes). Added to the Site
-  App middleware passthrough. It computes the same figures as the portal via
-  computeApplicationSummary / resolveAppDates.
-• This is the CM area, so financial columns ARE shown (unlike the operative Schedule
-  of Works). Access is still gated to the user's own CM projects.
+FIX
+---
+It now uses useMyProjects().projects — the list filtered by the operative's own
+project PERMISSIONS (projectAccess). So an operative sees exactly the projects they're
+allowed to view (all of them if projectAccess is 'all'/unset, otherwise just their
+assigned ones), matching the spec.
 
 FILES
 -----
-• pages/forms/cm/applications.js   (NEW — CM Applications page)
-• pages/api/applications-view.js   (NEW — read-only applications view API)
-• pages/forms/index.js             (adds the CM "Applications" card)
-• middleware.js                    (passthrough for /api/applications-view)
+• pages/forms/schedule.js
+
+NOTE: if a specific operative still sees nothing, check their projectAccess in the
+Site App user setup — an empty/explicit list with no projects would correctly show
+none. 'all' or unset shows every project.
