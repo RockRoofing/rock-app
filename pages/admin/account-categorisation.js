@@ -61,6 +61,7 @@ export default function AccountCategorisationPage() {
     labour: accounts.filter(a => a.category === 'labour').length,
     materials: accounts.filter(a => a.category === 'materials').length,
     overheads: accounts.filter(a => a.category === 'overheads').length,
+    sales: accounts.filter(a => a.category === 'sales').length,
     uncategorised: accounts.filter(a => a.category === 'uncategorised').length,
   }
 
@@ -75,7 +76,7 @@ export default function AccountCategorisationPage() {
       <div style={{ maxWidth: 820 }}>
         <h1 style={{ fontSize: 22, color: INK, margin: '0 0 6px' }}>Account Categorisation</h1>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 16px' }}>
-          Assign each account to <strong>Labour</strong>, <strong>Materials</strong> or <strong>Overheads</strong> (Overheads are excluded from project costs). This drives the Labour/Materials split used across Project Financials. Use <strong>Sync chart of accounts</strong> to pull every account (code &amp; name) from Xero. <strong>New codes come in Uncategorised</strong> — they're excluded from project costs and flagged in the Bookkeeping app until you assign them.
+          Assign each account to <strong>Labour</strong>, <strong>Materials</strong>, <strong>Overheads</strong> or <strong>Sales</strong> (only Labour &amp; Materials count as project costs; Overheads and Sales don't). Use <strong>Sync chart of accounts</strong> to pull every P&amp;L account (code &amp; name) from Xero — balance-sheet accounts are excluded. <strong>New codes come in Uncategorised</strong> — excluded from project costs and flagged in the Bookkeeping app until you assign them.
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -101,6 +102,7 @@ export default function AccountCategorisationPage() {
                 <span style={{ color: '#2563eb' }}>{counts.labour} labour</span><span>·</span>
                 <span style={{ color: '#0f766e' }}>{counts.materials} materials</span><span>·</span>
                 <span style={{ color: '#b45309' }}>{counts.overheads} overheads</span><span>·</span>
+                <span style={{ color: '#7c3aed' }}>{counts.sales} sales</span><span>·</span>
                 <span style={{ color: '#dc2626', fontWeight: 600 }}>{counts.uncategorised} uncategorised</span>
               </div>
               <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'hidden' }}>
@@ -122,6 +124,7 @@ export default function AccountCategorisationPage() {
                             <span onClick={() => setCategory(a.code, 'labour')} style={pill(a.category === 'labour', '#2563eb', '#eff6ff')}>Labour</span>
                             <span onClick={() => setCategory(a.code, 'materials')} style={pill(a.category === 'materials', '#0f766e', '#f0fdfa')}>Materials</span>
                             <span onClick={() => setCategory(a.code, 'overheads')} style={pill(a.category === 'overheads', '#b45309', '#fffbeb')}>Overheads</span>
+                            <span onClick={() => setCategory(a.code, 'sales')} style={pill(a.category === 'sales', '#7c3aed', '#f5f3ff')}>Sales</span>
                           </div>
                         </td>
                       </tr>

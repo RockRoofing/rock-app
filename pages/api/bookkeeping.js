@@ -21,7 +21,7 @@ function categoryOf(code, config) {
   if (cfg) {
     let c = cfg.category
     if (c === 'ignore') c = 'overheads'   // legacy migration
-    if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+    if (['labour', 'materials', 'overheads', 'sales', 'uncategorised'].includes(c)) return c
   }
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
           hasCode: knownCodes.has(String(l.accountCode)),
           source: l.accountCode === '320' ? 'wages' : 'bills',
         }
-        if (cat === 'ignore' || cat === 'overheads' || cat === 'uncategorised') ignored.push(rec)
+        if (cat === 'ignore' || cat === 'overheads' || cat === 'sales' || cat === 'uncategorised') ignored.push(rec)
         else if (rec.source === 'wages') wages.push(rec)
         else bills.push(rec)
       }
@@ -123,7 +123,7 @@ export default async function handler(req, res) {
         hasCode: knownCodes.has(String(l.accountCode)),
         source: 'bills',
       }
-      if (cat === 'ignore' || cat === 'overheads' || cat === 'uncategorised') ignored.push(rec)
+      if (cat === 'ignore' || cat === 'overheads' || cat === 'sales' || cat === 'uncategorised') ignored.push(rec)
       else bills.push(rec)
     }
     for (const l of (untWages || [])) {
@@ -190,6 +190,7 @@ export default async function handler(req, res) {
       for (const [code, val] of Object.entries(b.byCode)) {
         const c = String(code)
         if (c === '200') continue   // sales/income, not a cost
+        if (categoryOf(c, catConfig) === 'sales') continue   // any sales code, not a cost
         const sec = (b.codeSection && b.codeSection[c]) || ''
         if (!plCodeTotals[c]) plCodeTotals[c] = { xero: 0, name: chartNames[c] || '', section: sec }
         plCodeTotals[c].xero += Math.abs(val || 0)

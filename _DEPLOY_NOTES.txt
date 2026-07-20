@@ -1,42 +1,39 @@
-Bookkeeping ↔ Xero reconciliation — full P&L coverage + missing-lines detector
-==============================================================================
+Add Sales category + exclude balance-sheet accounts (e.g. 612 Retention)
+========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy AFTER the Chart-of-accounts bundle (shares bookkeeping.js / xero.js — these
-are the newer versions, use them).
+Deploy AFTER the previous chart-of-accounts / reconciliation bundles.
 
-WHAT THIS ADDS
---------------
-1) P&L BENCHMARK NOW COVERS EVERY EXPENSE CODE (incl. OVERHEADS)
-   Previously the Xero P&L benchmark only captured Income + Cost of Sales per code.
-   It now ALSO captures the Overheads / Expenses sections, tagged by section
-   (income / cos / overheads). So the reconciliation can compare every categorised
-   code — Materials, Labour AND Overheads — against Xero, over the same months.
-   • lib/xero.js fetchProfitAndLoss: byCode + codeSection + overheadsTotal.
-   • sync-benchmark stores codeSection + overheadsTotal.
-   ⚠ You must click "Sync Xero figures" after deploy to repopulate the benchmark
-     with the new per-code overhead data.
+1) NEW "SALES" CATEGORY
+   • Categories are now: Labour · Materials · Overheads · Sales · Uncategorised.
+   • Sales is its OWN category — a revenue code is tagged Sales; it's never
+     labour/materials/overheads and never a project cost.
+   • The Sync now pulls REVENUE accounts too (as well as expense), so sales/income
+     accounts appear in the list to be tagged. Code 200 defaults to Sales.
+   • The Bookkeeping reconciliation's Sales figure now sums ALL codes tagged Sales
+     (not just hardcoded 200), so new sales types reconcile correctly.
 
-2) MISSING-LINES / ACCRUALS DETECTOR  (the gap you asked to close)
-   The Bookkeeping app now compares, per account code, Xero's P&L amount vs the app's
-   own bill+wage LINE data for the same code over the synced months. Any code where
-   Xero shows MORE than the app can see (> £1) is surfaced in a collapsible panel:
-   Code · Account · Category · Xero P&L · App lines · Difference.
-   This is exactly the accruals / manual-journal gap — costs that hit Xero's P&L but
-   never came through as an imported bill or wage line.
+2) BALANCE-SHEET ACCOUNTS EXCLUDED  (fixes 612 Retention showing up)
+   • The Sync only brings in P&L accounts (Class EXPENSE or REVENUE). Balance-sheet
+     accounts (ASSET/LIABILITY/EQUITY) are excluded.
+   • More importantly: once a chart has been synced, the categorisation list is
+     restricted to synced (P&L) codes + anything you've explicitly saved. Codes that
+     previously leaked in via cost-data "seen" (like 612 Retention appearing on
+     invoice lines) are no longer added. 612 is also hard-excluded as a known
+     balance-sheet code.
 
-HOW TO BALANCE TO XERO NOW
---------------------------
-1. Sync bills, wages and invoices (existing buttons).
-2. Click "Sync Xero figures" (benchmark) — now with full per-code P&L incl overheads.
-3. Categorise any Uncategorised codes (banner).
-4. Work the "more in Xero than the app can see" panel to zero — each remaining line
-   is a journal/accrual to check in Xero. When that panel is empty and uncategorised
-   is zero, the app ties to the Xero P&L per code.
+AFTER DEPLOY
+------------
+1. Admin → Account Categorisation → "Sync chart of accounts" (re-pull; now incl.
+   revenue, excl. balance sheet). 612 and other balance-sheet codes will drop off.
+2. Tag your revenue account(s) as Sales; assign any Uncategorised codes; Save.
+3. "Sync Xero figures" then reconcile as before.
 
 FILES
 -----
-• lib/xero.js                 (P&L byCode incl overheads + codeSection)
-• pages/api/sync-benchmark.js (store codeSection + overheadsTotal)
-• pages/api/bookkeeping.js    (reconGaps detector in the response)
-• pages/bookkeeping.js        (recon-gap panel + uncategorised banner)
+• lib/xero.js                          (sync pulls EXPENSE + REVENUE, excl balance sheet)
+• pages/api/account-categorisation.js  (sales in model; list restricted to chart; 612 excluded)
+• pages/admin/account-categorisation.js(Sales pill + count + intro)
+• pages/api/bookkeeping.js             (recognise sales; recon skips sales codes)
+• pages/api/import-bills-bulk.js       (sales excluded from project costs)
+• pages/bookkeeping.js                 (Sales P&L sums all sales-tagged codes)

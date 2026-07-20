@@ -43,13 +43,14 @@ export const KNOWN_COS_CODES = Object.keys(BASE_ACCOUNTS)
 // Normalise a stored category, migrating the legacy 'ignore' value to 'overheads'.
 export function normCategory(c) {
   if (c === 'ignore') return 'overheads'
-  if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+  if (['labour', 'materials', 'overheads', 'sales', 'uncategorised'].includes(c)) return c
   return null
 }
 
 export function defaultCategoryFor(code) {
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
+  if (c === '200') return 'sales'          // Sales account defaults to Sales
   if (KNOWN_COS_CODES.includes(c)) return 'materials'
   return 'uncategorised'   // unknown codes are flagged & excluded until assigned
 }
@@ -65,16 +66,30 @@ export default async function handler(req, res) {
       redis.get(SEEN_KEY).then(v => v || {}).catch(() => ({})),
       redis.get(CHART_KEY).then(v => v || []).catch(() => ([])),
     ])
+    const chartArr = Array.isArray(chart) ? chart : []
     const chartNames = {}
-    for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
-    // Merge: synced chart of accounts + base cost-of-sale accounts + every seen
-    // account + any configured one.
-    const codes = new Set([
-      ...Object.keys(chartNames),
-      ...Object.keys(BASE_ACCOUNTS),
-      ...Object.keys(seen),
-      ...Object.keys(config),
-    ])
+    const chartCodes = new Set()
+    for (const a of chartArr) { chartNames[String(a.code)] = a.name; chartCodes.add(String(a.code)) }
+    const hasChart = chartArr.length > 0
+
+    // Codes we know are BALANCE-SHEET movements, not P&L — never categorisable
+    // (e.g. 612 Retention). Excluded even if they appear in seen/cost data.
+    const BALANCE_SHEET_CODES = new Set(['612'])
+
+    let codes
+    if (hasChart) {
+      // Once a chart has been synced it is the authority on which accounts exist.
+      // Only show chart codes (P&L: expense + revenue) plus any explicitly saved
+      // config. Codes that only appear via cost-data "seen" (e.g. a balance-sheet
+      // retention line on an invoice) are NOT added.
+      codes = new Set([...chartCodes, ...Object.keys(config)])
+    } else {
+      // Before any sync, fall back to the old merge so the page is still useful.
+      codes = new Set([...Object.keys(BASE_ACCOUNTS), ...Object.keys(seen), ...Object.keys(config)])
+    }
+    // Drop known balance-sheet codes regardless of source.
+    for (const c of BALANCE_SHEET_CODES) codes.delete(c)
+
     const accounts = [...codes].map(code => {
       const cfg = config[code] || {}
       // A saved category wins (migrating legacy 'ignore' -> 'overheads'); otherwise

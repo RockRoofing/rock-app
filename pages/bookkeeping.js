@@ -581,24 +581,33 @@ function ReconPanel({ data, month, tab, onPickMonth, onPickPL }) {
   //  • Cost of Sale (Bills) = P&L cost lines whose code is marked Materials or
   //    Labour in Account Categorisation, EXCLUDING Direct Wages (320).
   //  • Direct Wages = P&L code 320 only.
-  //  • Sales = P&L code 200.
+  //  • Sales = P&L codes marked Sales in Account Categorisation (code 200 defaults
+  //    to Sales, but any revenue code tagged Sales is included).
   const bm = data.benchmark?.months || {}
   const hasBm = Object.keys(bm).length > 0
   const monthsToSum = month ? [month] : Object.keys(bm)
-  const catCfg = data.categorisation || {}          // { code: { category: 'labour'|'materials'|'ignore' } }
+  const catCfg = data.categorisation || {}          // { code: { category } }
+  const catOf = (code) => {
+    const c = String(code)
+    let cat = catCfg[c]?.category
+    if (cat === 'ignore') cat = 'overheads'
+    if (!cat) { if (c === '200') cat = 'sales'; else if (c === '320') cat = 'labour' }
+    return cat
+  }
   const isBillCode = (code) => {
     const c = String(code)
     if (c === '320') return false                   // wages handled on its own card
-    const cat = catCfg[c]?.category
+    const cat = catOf(c)
     return cat === 'materials' || cat === 'labour'
   }
+  const isSalesCode = (code) => catOf(code) === 'sales'
   let plSales = 0, plWages = 0, plBills = 0
   for (const mo of monthsToSum) {
     const b = bm[mo]; if (!b) continue
     if (b.byCode) {
       for (const [code, val] of Object.entries(b.byCode)) {
         const amt = Math.abs(val || 0); const c = String(code)
-        if (c === '200') plSales += amt
+        if (isSalesCode(c)) plSales += amt
         else if (c === '320') plWages += amt
         else if (isBillCode(c)) plBills += amt        // only Materials/Labour-categorised codes
       }

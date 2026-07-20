@@ -40,7 +40,7 @@ function categoryFor(code, name, config) {
   if (cfg) {
     let c = cfg.category
     if (c === 'ignore') c = 'overheads'   // legacy migration
-    if (['labour', 'materials', 'overheads', 'uncategorised'].includes(c)) return c
+    if (['labour', 'materials', 'overheads', 'sales', 'uncategorised'].includes(c)) return c
   }
   const c = String(code)
   if (DEFAULT_LABOUR_CODES.includes(c)) return 'labour'
@@ -110,7 +110,7 @@ export default async function handler(req, res) {
         untagged.push({ ...lineRec, category })
         continue
       }
-      if (category === 'ignore' || category === 'overheads' || category === 'uncategorised') continue
+      if (category === 'ignore' || category === 'overheads' || category === 'sales' || category === 'uncategorised') continue
 
       if (!byProject.has(tracking)) byProject.set(tracking, { labour: 0, materials: 0, total: 0, lines: [] })
       const g = byProject.get(tracking)
