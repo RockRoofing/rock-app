@@ -1,37 +1,35 @@
-Valuation date — use manual per-month dates, not end-of-month
-=============================================================
+GROUP D (part 2) — PC-date TBC option + "details incomplete" banners
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: lib/db.js
+NEW FILE to create in GitHub: lib/projectComplete.js
 
-THE PROBLEM
------------
-Projects with manually-entered per-month valuation dates (varying each month, no
-fixed "valuation day") showed a margin mismatch: the project page's dropdown listed
-the correct dates, but the DEFAULT/effective valuation date used for the figures
-ignored them and fell back to end-of-month / all-time. So Project Details and the
-EOM report didn't line up.
+1) PC DATE / DEFECTS DATE "TBC" OPTION (edit project details)
+   Each of the two retention dates now has a "TBC" checkbox next to it. Tick it to
+   mark the date as intentionally to-be-confirmed:
+     • the date input is cleared/disabled while TBC is ticked
+     • TBC counts as "complete" for the details-complete check (below)
+     • the Retention tracker shows "⚠ TBC" on that release date, with a tooltip
+       noting it was marked TBC in project details.
+   Stored as pcDateTBC / defectsDateTBC on the project.
 
-THE FIX
--------
-getEffectiveValuationDate() now also reads settings.dateOverrides. When there's no
-fixed valuation day, it uses the MOST RECENT PAST override date (the date actually
-entered in the table). Future-dated overrides are ignored. This feeds:
-  • the project/[id] page figures + WIP (costsAfterDate)
-  • the WIP sync cron
-  • the project report
-so they now match the valuation dates in the table and reconcile with the EOM report
-(when set to the same month/date).
-
-Validated: overrides {28 May, 24 Jun, 31 Jan 2027} -> picks 24 Jun (most recent past;
-future excluded).
-
-AFTER DEPLOY
-------------
-Open the project you were looking at — its default valuation date should now be the
-latest date from its table (not end-of-month), and the Project Details margin should
-match the EOM report for that same date.
+2) "PROJECT DETAILS NOT COMPLETE" BANNER (Project Financials + Retention)
+   A thin amber banner (same style as the Application Calendar "Missing dates" bar)
+   appears above both pages listing every project whose edit-details are incomplete.
+   Each project is an underlined link that goes straight to its Project Details page.
+   Hovering a link shows exactly which fields are missing.
+   Required fields (all must be filled): Application day, Valuation day, Payment day,
+   Contract value, Labour budget, Materials budget, Retention %, PC date (or TBC),
+   Defects date (or TBC). Defined once in lib/projectComplete.js and used by both
+   pages (via the dashboard's detailsMissing field).
 
 FILES
 -----
-• lib/db.js
+• lib/projectComplete.js       (NEW — shared completeness definition)
+• pages/api/dashboard.js       (outputs detailsMissing + pcDateTBC/defectsDateTBC)
+• pages/commercial.js          (banner on Project Financials / Budget Tracker / EOM)
+• pages/retention.js           (banner + TBC-aware release-date warnings)
+• pages/project/[id].js        (TBC checkboxes on PC + defects dates)
+
+NOTE: banners populate from the dashboard cache; after deploying, opening the page
+rebuilds it. Marking dates TBC or completing fields updates on the next load.

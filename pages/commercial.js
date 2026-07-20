@@ -451,6 +451,24 @@ export default function Dashboard() {
 
         <div style={{ padding: '24px' }}>
 
+          {/* Project details incomplete banner — click a job to fix its details */}
+          {(() => {
+            const incomplete = filtered.filter(p => (p.detailsMissing || []).length > 0)
+            if (incomplete.length === 0) return null
+            return (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠ Project details incomplete — update in all locations:</span>
+                {incomplete.map(p => (
+                  <Link key={p.xeroId} href={`/project/${p.xeroId}`}
+                    title={`Missing: ${(p.detailsMissing || []).join(', ')}`}
+                    style={{ fontSize: 12, color: '#92400e', cursor: 'pointer', textDecoration: 'underline' }}>
+                    {p.jobNo || p.name}{p.jobNo && p.name ? ` — ${p.name}` : ''}
+                  </Link>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Summary cards */}
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cards.length}, 1fr)`, gap: 12, marginBottom: 20 }}>
             {cards.map(card => {

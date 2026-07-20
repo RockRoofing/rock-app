@@ -1572,9 +1572,21 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <input type="number" value={retentionDisplay} onChange={e => setOverride('retentionPct', e.target.value === '' ? '' : parseFloat(e.target.value) / 100)} style={inputStyle} placeholder="e.g. 3" />
         {retFromIhm && <div style={{ fontSize: 10, color: '#aaa', marginTop: -4, marginBottom: 8 }}>From the IHM{people?.ihmRetentionRaw ? ` ("${people.ihmRetentionRaw}")` : ''}. Change to override for this project.</div>}
         <label style={labelStyle}>PC date (1st half release)</label>
-        <input type="date" value={form.pcDate || ''} onChange={f('pcDate')} style={inputStyle} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <input type="date" value={form.pcDate || ''} onChange={f('pcDate')} disabled={!!form.pcDateTBC} style={{ ...inputStyle, marginBottom: 0, opacity: form.pcDateTBC ? 0.5 : 1 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#555', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!form.pcDateTBC} onChange={e => setForm({ ...form, pcDateTBC: e.target.checked, ...(e.target.checked ? { pcDate: '' } : {}) })} />
+            TBC
+          </label>
+        </div>
         <label style={labelStyle}>Defects liability end date (2nd half release)</label>
-        <input type="date" value={form.defectsDate || ''} onChange={f('defectsDate')} style={inputStyle} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <input type="date" value={form.defectsDate || ''} onChange={f('defectsDate')} disabled={!!form.defectsDateTBC} style={{ ...inputStyle, marginBottom: 0, opacity: form.defectsDateTBC ? 0.5 : 1 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#555', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!form.defectsDateTBC} onChange={e => setForm({ ...form, defectsDateTBC: e.target.checked, ...(e.target.checked ? { defectsDate: '' } : {}) })} />
+            TBC
+          </label>
+        </div>
         <label style={labelStyle}>Retention comments</label>
         <textarea value={form.retentionComments || ''} onChange={f('retentionComments')} rows={5}
           style={{ ...inputStyle, minHeight: 96, resize: 'vertical', fontFamily: 'inherit' }}

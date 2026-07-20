@@ -1,4 +1,5 @@
 import { getAllProjectSettings } from '../../lib/db'
+import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken } from '../../lib/xero'
@@ -238,6 +239,10 @@ export default async function handler(req, res) {
         amountOutstanding,
         lastInvoiceDate,
         retentionPct: parseFloat(settings.retentionPct || 0),
+        // Edit-details completeness (for the "project details not complete" banner).
+        detailsMissing: missingProjectFields({ ...settings, retentionPct: (parseFloat(settings.retentionPct || 0) || retPct) || '' }),
+        pcDateTBC: !!settings.pcDateTBC,
+        defectsDateTBC: !!settings.defectsDateTBC,
         comment,
         // Raw lines for EOM calculations on the frontend
         _costLines: costLines,

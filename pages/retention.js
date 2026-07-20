@@ -180,6 +180,9 @@ export default function RetentionPage() {
           appliedFor: '',
           retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
+          detailsMissing: p.detailsMissing || [],
+          pcDateTBC: !!p.pcDateTBC,
+          defectsDateTBC: !!p.defectsDateTBC,
           release1Value: (p.totalRetention || 0) / 2 || 0,
           release1Date: '',
           release1Received: false,
@@ -417,6 +420,29 @@ export default function RetentionPage() {
               onCancel={() => { setShowAddForm(false); setAddForm(EMPTY_ENTRY) }} />
           )}
 
+          {/* Project details incomplete banner */}
+          {(() => {
+            const seen = new Set()
+            const incomplete = allEntries.filter(e => {
+              if (!e.xeroId || (e.detailsMissing || []).length === 0) return false
+              if (seen.has(e.xeroId)) return false
+              seen.add(e.xeroId); return true
+            })
+            if (incomplete.length === 0) return null
+            return (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠ Project details incomplete — update in all locations:</span>
+                {incomplete.map(e => (
+                  <Link key={e.xeroId} href={`/project/${e.xeroId}`}
+                    title={`Missing: ${(e.detailsMissing || []).join(', ')}`}
+                    style={{ fontSize: 12, color: '#92400e', cursor: 'pointer', textDecoration: 'underline' }}>
+                    {e.ourRef || e.projectName}{e.ourRef && e.projectName ? ` — ${e.projectName}` : ''}
+                  </Link>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Filters */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', background: '#f0f2f5', borderRadius: 8, overflow: 'hidden' }}>
@@ -604,11 +630,11 @@ export default function RetentionPage() {
                             {/* 1st Value (coloured) */}
                             {releaseCell(entry.release1Value, firstReceived, releaseWarn)}
                             {/* 1st Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (entry.pcDateTBC ? <span title="PC date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>
                             {/* 2nd Value (coloured) */}
                             {releaseCell(entry.release2Value, secondReceived, releaseWarn)}
                             {/* 2nd Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>)}</td>
+                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (entry.defectsDateTBC ? <span title="Defects date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>
                             {/* VAT */}
                             {vatNeedsManual(entry)
                               ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
