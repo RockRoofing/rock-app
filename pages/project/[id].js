@@ -48,13 +48,16 @@ function getPastValuationDates(valuationDay, months = 12, dateOverrides = {}) {
     }
   }
   // 2) Manual per-month override valuation dates (win over the fixed day for
-  //    their month, and cover projects that have NO fixed day at all).
+  //    their month, and cover projects that have NO fixed day at all). Exclude
+  //    FUTURE dates — only valuation dates up to today are valid to view figures at
+  //    (otherwise the page would default to a future date, e.g. 30 Jun 2027).
   for (const [monthKey, ov] of Object.entries(dateOverrides || {})) {
     if (ov?.valuationDate) {
+      const d = new Date(ov.valuationDate + 'T00:00:00Z')
+      if (isNaN(d) || d > now) continue
       // Drop any fixed-day entry in the same month, then add the override.
       for (const k of [...map.keys()]) { if (k.slice(0, 7) === monthKey) map.delete(k) }
-      const d = new Date(ov.valuationDate + 'T00:00:00Z')
-      if (!isNaN(d)) map.set(ov.valuationDate, d)
+      map.set(ov.valuationDate, d)
     }
   }
   return [...map.values()].sort((a, b) => b - a)   // most recent first

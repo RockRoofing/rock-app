@@ -1,35 +1,39 @@
-GROUP D (part 2) — PC-date TBC option + "details incomplete" banners
-====================================================================
+Valuation date dropdown — exclude FUTURE override dates (was defaulting to 2027)
+===============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILE to create in GitHub: lib/projectComplete.js
+Single file: pages/project/[id].js
 
-1) PC DATE / DEFECTS DATE "TBC" OPTION (edit project details)
-   Each of the two retention dates now has a "TBC" checkbox next to it. Tick it to
-   mark the date as intentionally to-be-confirmed:
-     • the date input is cleared/disabled while TBC is ticked
-     • TBC counts as "complete" for the details-complete check (below)
-     • the Retention tracker shows "⚠ TBC" on that release date, with a tooltip
-       noting it was marked TBC in project details.
-   Stored as pcDateTBC / defectsDateTBC on the project.
+THE MISMATCH YOU SAW
+--------------------
+Russell Hill's project page defaulted to valuation date 30 JUNE 2027 (a future date),
+while the EOM report was on June 2026 — a full year apart — so every figure differed
+(more costs/invoices fall within the 2027 cutoff).
 
-2) "PROJECT DETAILS NOT COMPLETE" BANNER (Project Financials + Retention)
-   A thin amber banner (same style as the Application Calendar "Missing dates" bar)
-   appears above both pages listing every project whose edit-details are incomplete.
-   Each project is an underlined link that goes straight to its Project Details page.
-   Hovering a link shows exactly which fields are missing.
-   Required fields (all must be filled): Application day, Valuation day, Payment day,
-   Contract value, Labour budget, Materials budget, Retention %, PC date (or TBC),
-   Defects date (or TBC). Defined once in lib/projectComplete.js and used by both
-   pages (via the dashboard's detailsMissing field).
+ROOT CAUSE
+----------
+getPastValuationDates() added manual per-month override dates WITHOUT a future check
+(the fixed-day branch had one, the override branch didn't). Russell Hill has a
+30 Jun 2027 override row, which sorted to the top of the "most recent first" list and
+became the default selection.
+
+THE FIX
+-------
+Future override dates are now excluded from the valuation-date dropdown, so it only
+offers dates up to today and DEFAULTS to the most recent PAST valuation date. Russell
+Hill will now default to its latest past date (e.g. 30 Jun 2026), which lines up with
+the EOM report's month — and the figures reconcile.
+
+(Pairs with the earlier lib/db.js fix, which made the server-side effective valuation
+date also use the most recent past override.)
+
+WORTH CHECKING IN THE DATA
+--------------------------
+Russell Hill has a valuation-date override entered for June 2027. If that's a typo
+(should be 2026), correct it in Edit Project Details > monthly date overrides. The
+app now handles it correctly either way, but a stray 2027 date won't be used until
+that month actually arrives.
 
 FILES
 -----
-• lib/projectComplete.js       (NEW — shared completeness definition)
-• pages/api/dashboard.js       (outputs detailsMissing + pcDateTBC/defectsDateTBC)
-• pages/commercial.js          (banner on Project Financials / Budget Tracker / EOM)
-• pages/retention.js           (banner + TBC-aware release-date warnings)
-• pages/project/[id].js        (TBC checkboxes on PC + defects dates)
-
-NOTE: banners populate from the dashboard cache; after deploying, opening the page
-rebuilds it. Marking dates TBC or completing fields updates on the next load.
+• pages/project/[id].js
