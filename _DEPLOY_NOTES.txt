@@ -1,45 +1,37 @@
-Chart of Accounts sync + Overheads/Uncategorised categorisation
+Chart of Accounts sync + categorisation — EXPENSE accounts only
 ===============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 NEW FILE to create in GitHub: pages/api/sync-chart-of-accounts.js
+(This supersedes Chart_of_accounts_sync_categorisation.zip — deploy these files.)
 
-1) SYNC CHART OF ACCOUNTS  (Account Categorisation admin area)
-   • New "↻ Sync chart of accounts" button pulls EVERY account from Xero (code +
-     name, via the Accounts endpoint) into the list. Shows last-synced time.
-   • New API: /api/sync-chart-of-accounts (POST, admin/accounts/management only).
-   • Stored at config:chart-of-accounts; the categorisation list merges it in, so
-     all account codes + names appear.
+WHAT CHANGED vs the previous bundle
+-----------------------------------
+The sync now brings in ONLY accounts that can be a project cost or overhead:
+  • Class = EXPENSE (Xero's cost-of-sale + overhead + expense accounts), i.e.
+    types DIRECTCOSTS, OVERHEADS, EXPENSE.
+  • BALANCE-SHEET accounts (ASSET, LIABILITY, EQUITY) and REVENUE/Sales accounts
+    are EXCLUDED — they never appear as a project cost, so they won't clutter the
+    categorisation list or the uncategorised banner.
 
-2) "IGNORE" RENAMED TO "OVERHEADS"
-   The third category is now "Overheads" (was "Ignore"). Overheads are excluded from
-   project costs, same as before. Legacy 'ignore' values are auto-migrated to
-   'overheads' everywhere (display, classification, save).
-
-3) NEW ACCOUNTS DEFAULT TO UNCATEGORISED (flagged)
-   • Any account code with no category assigned is "Uncategorised" — EXCLUDED from
-     project costs (like Overheads) and flagged. Shown with a red row + "needs
-     categorising" in the admin list, and counted in the summary.
-   • Unknown codes seen in cost data also default to Uncategorised (previously they
-     silently defaulted to Ignore).
-
-4) BOOKKEEPING APP BANNER
-   The Bookkeeping app shows a red banner listing every uncategorised account code
-   (code + name) with a link to the Account Categorisation page. It appears whenever
-   any code in the data hasn't been categorised.
+Everything else from the previous bundle is included:
+  1) "↻ Sync chart of accounts" button (pulls code + name from Xero).
+  2) "Ignore" renamed to "Overheads" (legacy ignore auto-migrated).
+  3) New/unassigned codes = "Uncategorised": excluded from project costs + flagged.
+  4) Bookkeeping app banner listing uncategorised codes with a link to fix them.
 
 FILES
 -----
-• lib/xero.js                          (fetchChartOfAccounts)
-• pages/api/sync-chart-of-accounts.js  (NEW — sync endpoint)
-• pages/api/account-categorisation.js  (overheads/uncategorised model + chart merge)
-• pages/admin/account-categorisation.js(Sync button, Overheads pill, uncategorised)
-• pages/api/bookkeeping.js             (route overheads/uncat to excluded; banner data)
-• pages/api/import-bills-bulk.js       (exclude overheads + uncategorised from costs)
-• pages/bookkeeping.js                 (uncategorised banner)
+• lib/xero.js                          (fetchChartOfAccounts — EXPENSE-only filter)
+• pages/api/sync-chart-of-accounts.js  (NEW)
+• pages/api/account-categorisation.js
+• pages/admin/account-categorisation.js
+• pages/api/bookkeeping.js
+• pages/api/import-bills-bulk.js
+• pages/bookkeeping.js
 
 AFTER DEPLOY
 ------------
-1. Open Admin → Account Categorisation and click "Sync chart of accounts".
-2. Assign any Uncategorised codes to Labour / Materials / Overheads and Save.
-3. Re-sync/re-upload bills so costs recalculate with the new categories.
+1. Admin → Account Categorisation → "Sync chart of accounts".
+2. Assign any Uncategorised codes to Labour / Materials / Overheads, Save.
+3. Re-sync/upload bills so costs recalculate.
