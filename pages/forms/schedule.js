@@ -80,7 +80,6 @@ export default function ScheduleOfWorks() {
             ) : (
               <>
                 <Section title="Works" items={above} />
-                {below.length > 0 && <Section title="Additional / optional items" items={below} />}
               </>
             )}
 

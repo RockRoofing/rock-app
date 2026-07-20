@@ -13,6 +13,7 @@ export default function CmContractedRates() {
   const [user, setUser] = useState(null); const [ready, setReady] = useState(false)
   const [proj, setProj] = useState(null)
   const [cr, setCr] = useState(null)
+  const [variations, setVariations] = useState([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -25,7 +26,7 @@ export default function CmContractedRates() {
   const { myProjects, loading: projLoading } = useMyProjects(user)
 
   async function pick(p) {
-    setProj(p); setCr(null); setLoading(true)
+    setProj(p); setCr(null); setVariations([]); setLoading(true)
     try {
       const matchKey = (x) => String(x.jobNo || x.projectNo || '').trim()
       let d = await fetch('/api/dashboard').then(r => r.json())
@@ -37,10 +38,11 @@ export default function CmContractedRates() {
       if (row?.xeroId) {
         const cd = await fetch(`/api/contracted-rates-view?projectId=${encodeURIComponent(row.xeroId)}`).then(r => r.json())
         setCr(cd.contractedRates || { items: [] })
+        setVariations(cd.variations || [])
       } else {
-        setCr({ items: [] })
+        setCr({ items: [] }); setVariations([])
       }
-    } catch { setCr({ items: [] }) }
+    } catch { setCr({ items: [] }); setVariations([]) }
     setLoading(false)
   }
 
@@ -65,14 +67,17 @@ export default function CmContractedRates() {
               <Empty>No contracted rates uploaded for this project yet.</Empty>
             ) : (
               <>
+                {/* Above-the-line contract works only (below-the-line hidden). */}
+                <Section title="Contract works" items={above} accent="#0f766e" />
+                {/* Total line for above-the-line. */}
                 {cr?.totals && (
-                  <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                    <MiniCard label="Contract works" value={money(cr.totals.aboveTotal)} />
-                    <MiniCard label="Below the line" value={money(cr.totals.belowTotal)} muted />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f766e', color: '#fff', borderRadius: 12, padding: '12px 16px', marginTop: 2, marginBottom: 16 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>Contract works total</span>
+                    <span style={{ fontSize: 16, fontWeight: 800 }}>{money(cr.totals.aboveTotal)}</span>
                   </div>
                 )}
-                <Section title="Above the line" items={above} accent="#0f766e" />
-                {below.length > 0 && <Section title="Below the line (optional / variation)" items={below} accent="#b45309" belowLine />}
+                {/* Variations — instructed status + values, below the total. */}
+                <VariationsSection variations={variations} />
               </>
             )}
           </>
@@ -120,6 +125,36 @@ function MiniCard({ label, value, muted }) {
     <div style={{ flex: 1, background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 12 }}>
       <div style={{ fontSize: 11, color: '#888' }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 700, color: muted ? '#b45309' : INK, marginTop: 2 }}>{value}</div>
+    </div>
+  )
+}
+
+// Variations with instructed status and value (CM view — financials shown).
+function VariationsSection({ variations = [] }) {
+  const varValue = (v) => (v.materials != null || v.labour != null || v.profit != null)
+    ? (Number(v.materials || 0) + Number(v.labour || 0) + Number(v.profit || 0))
+    : (v.finalValue ?? v.value ?? null)
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#b45309', margin: '4px 0 8px' }}>Variations</div>
+      {variations.length === 0 ? (
+        <Empty>No variations on this project.</Empty>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {variations.map((v, i) => (
+            <div key={i} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                <div style={{ fontWeight: 700, color: INK, fontSize: 13.5 }}>{v.varNumber || '—'}</div>
+                <div style={{ fontWeight: 700, color: INK, fontSize: 13.5, whiteSpace: 'nowrap' }}>{varValue(v) == null ? '—' : money(varValue(v))}</div>
+              </div>
+              <div style={{ fontSize: 13, color: '#374151', marginTop: 3 }}>{v.description || '—'}</div>
+              <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, fontWeight: 700, borderRadius: 20, padding: '2px 9px', background: v.instructed ? '#dcfce7' : '#fef3c7', color: v.instructed ? '#166534' : '#92400e' }}>
+                {v.instructed ? 'Instructed' : 'Not instructed'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

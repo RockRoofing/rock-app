@@ -1,41 +1,24 @@
-Schedule of Works — source from Commercial + robust job-number linking
-======================================================================
+Site App CR views — totals, hide below-the-line, variations
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-BACKGROUND
-----------
-Commercial projects come from Xero (keyed by xeroId, carry a job number from the
-tracking-category name). Ops projects come from IHMs (keyed by projectNo). The link
-between them is the JOB NUMBER. The Schedule picker was sourced from Ops, so any
-project set up only in Commercial (no IHM) never appeared.
+CM › CONTRACTED RATES  (pages/forms/cm/contracted-rates.js)
+----------------------------------------------------------
+• Below-the-line items are no longer shown at all.
+• A "Contract works total" line now appears at the bottom of the above-the-line
+  items (teal total bar).
+• A "Variations" section is shown BELOW the total line: each variation with its
+  VO number, description, value, and an Instructed / Not instructed badge.
+  (This is the CM area, so values are shown.)
 
-CHANGES
--------
-1) SCHEDULE PICKER NOW SOURCED FROM COMMERCIAL
-   The Schedule of Works lists projects from the dashboard (commercial/Xero) that
-   HAVE contracted rates — so any project with a schedule shows, even if it has no
-   Ops/IHM record yet. The operative's projectAccess permissions still apply.
-   • dashboard.js now outputs hasContractedRates per project.
-
-2) ROBUST JOB-NUMBER MATCHING (shared key)
-   New normJobNo() in lib/cmSiteApp.js normalises job numbers for matching: trims,
-   uppercases, removes inner spaces, and treats "190" == "J190". allowedProjects()
-   and canAccessProject() now use it, so permissions match reliably regardless of
-   formatting differences between Commercial and Ops.
-
-RESULT
-------
-An operative with permission to J190 will see J190 in the Schedule picker as long as
-it has contracted rates in Commercial — no Ops record required, and the job-number
-formatting no longer has to match exactly.
+OPERATIVE › SCHEDULE OF WORKS  (pages/forms/schedule.js)
+-------------------------------------------------------
+• Below-the-line items are no longer shown. Only the above-the-line works appear
+  (item number, description, quantity, unit — still no financials). Variations
+  continue to show without any financial info.
 
 FILES
 -----
-• pages/forms/schedule.js     (picker sourced from commercial projects w/ CRs)
-• lib/cmSiteApp.js            (normJobNo + robust permission matching)
-• pages/api/dashboard.js      (hasContractedRates flag)
-
-NOTE: reads live /api/dashboard; if a project's CRs were just added, the flag appears
-after the dashboard cache next rebuilds (open Project Financials once, or it refreshes
-on its 4h cycle).
+• pages/forms/cm/contracted-rates.js
+• pages/forms/schedule.js
