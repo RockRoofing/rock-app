@@ -28,13 +28,15 @@ export default function ScheduleOfWorks() {
         // Commercial projects come from the dashboard (keyed by Xero id, carry jobNo).
         let d = await fetch('/api/dashboard').then(r => r.json())
         let list = d.projects || []
-        // Keep only projects that actually have contracted rates to show.
-        const withCr = list
-          .filter(p => p.hasContractedRates)
+        // Whether the dashboard is reporting the hasContractedRates flag at all
+        // (older cache may not). If none report it, don't filter it out — show all
+        // accessible projects and let the CR check happen on open.
+        const flagKnown = list.some(p => 'hasContractedRates' in p)
+        const base = (flagKnown ? list.filter(p => p.hasContractedRates) : list)
           .map(p => ({ projectNo: p.jobNo || '', projectName: p.name || '', jobNo: p.jobNo || '', xeroId: p.xeroId }))
           .filter(p => p.projectNo)
         // Apply the operative's project permissions.
-        const permitted = allowedProjects(u, withCr)
+        const permitted = allowedProjects(u, base)
         // De-dupe by projectNo.
         const seen = new Set()
         setProjects(permitted.filter(p => { const k = p.projectNo; if (seen.has(k)) return false; seen.add(k); return true }))

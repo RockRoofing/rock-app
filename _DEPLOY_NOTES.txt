@@ -1,24 +1,29 @@
-Site App CR views — totals, hide below-the-line, variations
-===========================================================
+Fix: Schedule of Works showing no projects (stale-cache flag)
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-CM › CONTRACTED RATES  (pages/forms/cm/contracted-rates.js)
-----------------------------------------------------------
-• Below-the-line items are no longer shown at all.
-• A "Contract works total" line now appears at the bottom of the above-the-line
-  items (teal total bar).
-• A "Variations" section is shown BELOW the total line: each variation with its
-  VO number, description, value, and an Instructed / Not instructed badge.
-  (This is the CM area, so values are shown.)
+CAUSE
+-----
+The Schedule filtered the project list on p.hasContractedRates. That flag is new, so
+a dashboard cache built before it existed returned it as undefined on every project —
+filtering them ALL out -> empty picker. (The cache guard only forced a rebuild when
+detailsMissing was missing, not this new flag.)
 
-OPERATIVE › SCHEDULE OF WORKS  (pages/forms/schedule.js)
--------------------------------------------------------
-• Below-the-line items are no longer shown. Only the above-the-line works appear
-  (item number, description, quantity, unit — still no financials). Variations
-  continue to show without any financial info.
+FIXES
+-----
+1) dashboard.js: the cache guard now also requires hasContractedRates, so a cache
+   lacking it is ignored and rebuilt automatically.
+2) schedule.js: made resilient — if NO project in the returned list carries the
+   hasContractedRates flag (stale cache), it no longer filters on it; it shows all
+   accessible projects and the CR check happens when one is opened ("No schedule
+   uploaded" if none). Once the cache rebuilds, it filters to CR projects as intended.
+
+RESULT
+------
+Projects appear in the Schedule picker again. Permissions (projectAccess) still apply.
 
 FILES
 -----
-• pages/forms/cm/contracted-rates.js
 • pages/forms/schedule.js
+• pages/api/dashboard.js
