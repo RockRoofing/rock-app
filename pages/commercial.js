@@ -972,9 +972,9 @@ export default function Dashboard() {
                                 </td>
                               }
                               return <td key={col.key} style={cell({ bg: bgC }, color, false)}
-                                onClick={() => { setEditingWip(p.xeroId); setWipText(overridden ? String(p.wipMarginOverride) : '') }}
-                                title={overridden ? 'Overridden — click to edit' : 'Click to set a WIP margin override'}>
-                                <span style={{ cursor: 'pointer', borderBottom: '1px dashed #cbd5e1' }}>{val}{overridden ? ' *' : ''}</span>
+                                title={overridden ? 'Overridden — click to edit; ✕ to clear back to project margin' : 'Click to set a WIP margin override'}>
+                                <span onClick={() => { setEditingWip(p.xeroId); setWipText(overridden ? String(p.wipMarginOverride) : '') }} style={{ cursor: 'pointer', borderBottom: '1px dashed #cbd5e1' }}>{val}{overridden ? ' *' : ''}</span>
+                                {overridden && <button onClick={() => saveWipMarginInline(p.xeroId, '')} title="Clear override — follow the actual project margin" style={{ marginLeft: 4, background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>}
                               </td>
                             }
                             return <td key={col.key} style={cell({ bg: bgC }, color, ['labourLeft', 'matsLeft', 'totalLeft', 'remaining', 'profit'].includes(col.key))}>{val}</td>

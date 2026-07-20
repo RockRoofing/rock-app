@@ -1,14 +1,38 @@
-Retention register — Applied-for vs Invoiced check moved right of Invoiced
-==========================================================================
+WIP margin — clear button + two-way sync (EOM ⇄ Project Details)
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/retention.js (latest — includes all prior retention changes)
 
-The Applied-for vs Invoiced match indicator (green tick / red flag) now sits to the
-RIGHT of the Invoiced column (was between Applied for and Invoiced). Column order:
-… Applied for | Invoiced | ✓ | Account Remaining | …
-Its red-flag tooltip reads "Mismatch, applied for and invoiced differ".
+1) CLEAR BUTTON (both places)
+   • EOM report: an overridden WIP Margin cell shows a red ✕ next to it — click to
+     clear the override and go back to following the actual project margin. (Also
+     available while editing the cell.)
+   • Project Details WIP card: a "Clear override" button appears once a manual value
+     is set, reverting to the auto project margin.
+
+2) TWO-WAY SYNC
+   The WIP Margin card in Project Details is editable again. It and the EOM inline
+   editor write the SAME field (wipMarginOverride) via the same API, so changing it in
+   one place updates the other (on next load / after the dashboard refresh the EOM
+   triggers). Card text notes this.
+
+ON YOUR EOM DATE QUESTION (no code change needed — explanation)
+--------------------------------------------------------------
+In EOM mode, ALL columns — Lab spend, Mat spend, Total spend, Invoiced, Profit,
+Profit Margin, WIP — are computed to the MONTH'S VALUATION DATE, not the top
+From/To date-picker range. So:
+ • Profit Margin IS at the valuation date (consistent with the other columns) —
+   that's correct.
+ • Changing the top date-picker does NOT change EOM figures by design; that picker
+   scopes which projects/month show, not the figures. To move EOM figures, change the
+   selected MONTH (which sets the valuation date) or the project's valuation day.
+ • EOM vs Project Details can differ simply because each uses its own valuation date;
+   set both to the same date and they reconcile (same as we found for the Budget
+   Tracker earlier).
+(The upcoming Group E adds a valuation-date dropdown so the exact date in use is
+visible/selectable per month — that will make this much clearer on screen.)
 
 FILES
 -----
-• pages/retention.js
+• pages/commercial.js          (EOM inline clear affordance)
+• pages/project/[id].js        (editable WIP card + Clear override button)
