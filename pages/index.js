@@ -194,6 +194,7 @@ export default function Portal() {
                 <span>⚠</span> Report app improvement
               </button>
               {user.role === 'admin' && <a href="/admin" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
+              {user.role === 'management' && <a href="/operations/users" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
               <span style={{ color: '#888', fontSize: 13 }}>{user.name} · {user.role}</span>
               <button onClick={logout} style={{ background: '#2a2a28', color: '#ccc', border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 13, cursor: 'pointer' }}>Log out</button>
             </div>

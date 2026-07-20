@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     return res.json({ key, sections: stored?.sections || DEFAULTS[key], isCustom: !!stored })
   }
   if (req.method === 'POST') {
-    if (!requireRole(req, res, ['admin'])) return;
+    if (!requireRole(req, res, ['management', 'admin'])) return;
     const me = currentUser(req)
     if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' })
     const { key, sections } = req.body || {}

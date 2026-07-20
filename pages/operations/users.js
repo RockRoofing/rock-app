@@ -86,7 +86,7 @@ export default function UsersPage() {
   }
 
   return (
-    <OperationsShell active="/operations/users" title="Site App Users">
+    <OperationsShell active="/operations/users" title="Site App Users" allow={['management', 'admin']}>
       <PageHeading title="Site App Users" sub="People who can log into the Site App"
         action={<button onClick={() => { setNotice(''); setForm({ firstName: '', lastName: '', role: '', accessLevel: 'operative', phone: '', email: '', company: '', trades: [], active: true }) }} style={primaryBtn}>+ Add user</button>} />
 

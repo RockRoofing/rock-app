@@ -71,7 +71,7 @@ export default function FormsBuilder() {
   }
 
   return (
-    <OperationsShell active="/operations/forms-builder" title="Form Builder">
+    <OperationsShell active="/operations/forms-builder" title="Form Builder" allow={['management', 'admin']}>
       <PageHeading title="Form Builder" sub="Create and edit the forms operatives fill in the Forms App"
         action={<div style={{ display: 'flex', gap: 8 }}>
           <button onClick={reseed} style={ghostBtn}>Reset to latest defaults</button>
@@ -128,7 +128,7 @@ function Editor({ form, setForm, onSave, onCancel, saving }) {
   }
 
   return (
-    <OperationsShell active="/operations/forms-builder" title="Form Builder">
+    <OperationsShell active="/operations/forms-builder" title="Form Builder" allow={['management', 'admin']}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <button onClick={onCancel} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ All forms</button>
       </div>

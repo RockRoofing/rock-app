@@ -34,7 +34,7 @@ export default function AdminDocumentsPage() {
   function removeDoc(cat, id) { persist({ ...docs, [cat]: docs[cat].filter(d => d.id !== id) }) }
 
   return (
-    <AdminShell active="/admin/documents">
+    <AdminShell active="/admin/documents" allow={['management', 'admin']}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, color: INK, margin: '0 0 4px' }}>Documents</h1>
         <p style={{ color: '#888', fontSize: 14, margin: '0 0 4px' }}>Upload and name the documents that appear as cards in the Site App.</p>

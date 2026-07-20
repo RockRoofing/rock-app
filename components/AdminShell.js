@@ -2,20 +2,22 @@ import Head from 'next/head'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 
+const MGMT = ['management', 'admin']
 const TABS = [
-  ['Portal Users', '/admin'],
-  ['Templates', '/admin/templates'],
-  ['Form Builder', '/operations/forms-builder'],
-  ['Site App Users', '/operations/users'],
-  ['Documents', '/admin/documents'],
-  ['RAMS Director', '/admin/rams-director'],
-  ['App Improvements', '/admin/problem-reports'],
+  ['Portal Users', '/admin', ['admin']],
+  ['Templates', '/admin/templates', MGMT],
+  ['Form Builder', '/operations/forms-builder', MGMT],
+  ['Site App Users', '/operations/users', MGMT],
+  ['Documents', '/admin/documents', MGMT],
+  ['RAMS Director', '/admin/rams-director', MGMT],
+  ['App Improvements', '/admin/problem-reports', MGMT],
 ]
 
 // Chrome for Admin-area pages: dark bar + admin sub-nav, admin-gated.
 export default function AdminShell({ active, title, children, wide, allow }) {
   const router = useRouter()
   const [ok, setOk] = useState(false)
+  const [role, setRole] = useState(null)
   // Roles permitted on this page. Defaults to admin-only; pages can widen it
   // (e.g. Bookkeeping upload/categorisation allow the Accounts role too).
   const allowed = allow || ['admin']
@@ -23,6 +25,7 @@ export default function AdminShell({ active, title, children, wide, allow }) {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
       if (!d.user) { router.replace('/login'); return }
       if (!allowed.includes(d.user.role)) { router.replace('/'); return }
+      setRole(d.user.role)
       setOk(true)
     }).catch(() => router.replace('/login'))
   }, [])
@@ -44,7 +47,7 @@ export default function AdminShell({ active, title, children, wide, allow }) {
                 <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
               ))}
             </>
-          ) : TABS.map(([label, href]) => (
+          ) : TABS.filter(([, , roles]) => !roles || roles.includes(role)).map(([label, href]) => (
             <a key={href} href={href} style={{ fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap', color: active === href ? '#fff' : '#bbb', fontWeight: active === href ? 600 : 400, borderBottom: active === href ? '2px solid #ca8a04' : '2px solid transparent' }}>{label}</a>
           ))}
         </div>

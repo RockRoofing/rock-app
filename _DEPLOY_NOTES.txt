@@ -1,39 +1,47 @@
-Add Sales category + exclude balance-sheet accounts (e.g. 612 Retention)
-========================================================================
+Management role — access to a restricted Admin area
+===================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy AFTER the previous chart-of-accounts / reconciliation bundles.
 
-1) NEW "SALES" CATEGORY
-   • Categories are now: Labour · Materials · Overheads · Sales · Uncategorised.
-   • Sales is its OWN category — a revenue code is tagged Sales; it's never
-     labour/materials/overheads and never a project cost.
-   • The Sync now pulls REVENUE accounts too (as well as expense), so sales/income
-     accounts appear in the list to be tagged. Code 200 defaults to Sales.
-   • The Bookkeeping reconciliation's Sales figure now sums ALL codes tagged Sales
-     (not just hardcoded 200), so new sales types reconcile correctly.
-
-2) BALANCE-SHEET ACCOUNTS EXCLUDED  (fixes 612 Retention showing up)
-   • The Sync only brings in P&L accounts (Class EXPENSE or REVENUE). Balance-sheet
-     accounts (ASSET/LIABILITY/EQUITY) are excluded.
-   • More importantly: once a chart has been synced, the categorisation list is
-     restricted to synced (P&L) codes + anything you've explicitly saved. Codes that
-     previously leaked in via cost-data "seen" (like 612 Retention appearing on
-     invoice lines) are no longer added. 612 is also hard-excluded as a known
-     balance-sheet code.
-
-AFTER DEPLOY
+WHAT CHANGED
 ------------
-1. Admin → Account Categorisation → "Sync chart of accounts" (re-pull; now incl.
-   revenue, excl. balance sheet). 612 and other balance-sheet codes will drop off.
-2. Tag your revenue account(s) as Sales; assign any Uncategorised codes; Save.
-3. "Sync Xero figures" then reconcile as before.
+Management users now get the SAME "Admin" button on the portal home and enter the
+Admin area, but with a RESTRICTED set of tabs.
+
+Management CAN access:
+  • Site App Users
+  • Documents
+  • RAMS Director
+  • App Improvements
+  • Templates
+  • Form Builder
+
+Management CANNOT access:
+  • Portal Users (admin only)
+  • Bookkeeping tools (admin/accounts as before)
+
+HOW IT WORKS
+------------
+• pages/index.js — the "Admin" button now shows for management as well as admin.
+  For admin it lands on /admin (Portal Users); for management it lands on
+  /operations/users (their first permitted tab), since they can't open Portal Users.
+• components/AdminShell.js — each admin tab is tagged with the roles allowed to see
+  it; the sub-nav now hides tabs the current role can't use. Portal Users shows for
+  admin only; the other six show for management + admin.
+• Each of the six pages passes allow={['management','admin']} to the shell (or, for
+  Templates, widened its inline guard). Portal Users stays admin-only.
+• APIs: templates.js and rams-director.js widened to ['management','admin']. The
+  others (forms, ops-docs, report-problem, blob-upload) weren't role-gated.
 
 FILES
 -----
-• lib/xero.js                          (sync pulls EXPENSE + REVENUE, excl balance sheet)
-• pages/api/account-categorisation.js  (sales in model; list restricted to chart; 612 excluded)
-• pages/admin/account-categorisation.js(Sales pill + count + intro)
-• pages/api/bookkeeping.js             (recognise sales; recon skips sales codes)
-• pages/api/import-bills-bulk.js       (sales excluded from project costs)
-• pages/bookkeeping.js                 (Sales P&L sums all sales-tagged codes)
+• pages/index.js                     (Admin button for management)
+• components/AdminShell.js           (role-tagged tabs + nav filtering)
+• pages/admin/templates.js           (allow management)
+• pages/admin/documents.js           (allow management)
+• pages/admin/rams-director.js       (allow management)
+• pages/admin/problem-reports.js     (allow management)
+• pages/operations/forms-builder.js  (allow management)
+• pages/operations/users.js          (allow management)
+• pages/api/templates.js             (API allows management)
+• pages/api/rams-director.js         (API allows management)

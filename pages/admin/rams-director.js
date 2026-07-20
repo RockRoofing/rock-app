@@ -42,7 +42,7 @@ export default function RamsDirectorPage() {
   }
 
   return (
-    <AdminShell active="/admin/rams-director" title="RAMS Director">
+    <AdminShell active="/admin/rams-director" title="RAMS Director" allow={['management', 'admin']}>
       <div style={{ maxWidth: 640 }}>
         <h1 style={{ fontSize: 22, color: INK, margin: '0 0 6px' }}>RAMS Director</h1>
         <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>Choose who approves and signs RAMS at the Director stage of the approval chain. They approve in the Site App (matched by their email), so the chosen person must also be a Site App user with the same email address.</p>

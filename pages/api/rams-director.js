@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const session = requireRole(req, res, ['admin'])
+      const session = requireRole(req, res, ['management', 'admin'])
       if (!session) return
       const email = (req.body?.email || '').trim().toLowerCase()
       if (!email) { await set(KEY, null); return res.json({ ok: true, director: null }) }

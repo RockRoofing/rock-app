@@ -59,7 +59,7 @@ export default function AppImprovementsPage() {
     .filter(r => fStatus === 'all' ? true : (r.status || 'open') === fStatus)
 
   return (
-    <AdminShell active="/admin/problem-reports">
+    <AdminShell active="/admin/problem-reports" allow={['management', 'admin']}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <h1 style={{ fontSize: 22, color: '#1a1a19', margin: '0 0 4px' }}>App Improvements</h1>
         <p style={{ color: '#888', fontSize: 14, margin: '0 0 16px' }}>Suggestions from the Portal and Site App. Add comments, then mark resolved to notify the person who raised it.</p>
