@@ -269,6 +269,11 @@ function FormsHomeMenu({ user }) {
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Report Site Issue</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Raise a Site Issue</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
+        <button onClick={() => router.push('/forms/schedule')} style={homeCard}>
+          <div style={{ fontSize: 30 }}>📐</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Schedule of Works</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Items, descriptions & quantities</div></div>
+          <div style={{ color: BRAND, fontSize: 24 }}>›</div>
+        </button>
         <button onClick={() => router.push('/forms/deliveries')} style={homeCard}>
           <div style={{ fontSize: 30 }}>🚚</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Deliveries</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Confirm deliveries & attach proof</div></div>
@@ -288,6 +293,7 @@ function FormsHomeMenu({ user }) {
               ['📝', 'SRATs', 'View & create SRATs', '/forms/cm/srats', 0, null],
               ['🗂️', 'Live Tasks', 'Manage project tasks', '/forms/cm/tasks', overdueTaskCount, '#dc2626'],
               ['💷', 'Variations', 'View project variations', '/forms/cm/variations', 0, null],
+              ['📑', 'Contracted Rates', 'View the rate schedule', '/forms/cm/contracted-rates', 0, null],
             ].map(([icon, title, sub, href, badge, badgeColour]) => (
               <button key={href} onClick={() => router.push(href)} style={homeCard}>
                 <div style={{ fontSize: 30 }}>{icon}</div>
@@ -635,8 +641,21 @@ function ProjectDetailsView({ onBack, only }) {
                   </div>
                 )}
 
+                {/* Site Manager rejected — flow halted; CM must upload a new RAMS. */}
+                {stage === 'rejected' && (
+                  <div style={{ marginTop: 10, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, padding: '12px 14px' }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#b91c1c' }}>✗ Not approved — edits required</div>
+                    {appr.siteManagerRejection?.notes && (
+                      <div style={{ fontSize: 13, color: '#7f1d1d', marginTop: 6, whiteSpace: 'pre-wrap' }}>
+                        <span style={{ fontWeight: 600 }}>{appr.siteManagerRejection.name || 'Site Manager'} said:</span> {appr.siteManagerRejection.notes}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12.5, color: '#991b1b', marginTop: 8 }}>Please make the edits and upload a new set of RAMS in the portal — this restarts the approval chain.</div>
+                  </div>
+                )}
+
                 {/* Operative signing — locked until the chain reaches operatives */}
-                {!sigMap[f.id] && (
+                {stage !== 'rejected' && !sigMap[f.id] && (
                   opsUnlocked ? (
                     <button onClick={() => setSignFile(f)} style={{ ...bigBtn(false), marginTop: 10, background: '#dc2626' }}>
                       ✍ Sign RAMS now
@@ -707,15 +726,17 @@ function stageLabel(stage) {
 // Completed stages green; current stage red+bold; upcoming grey.
 function StagePipeline({ stage }) {
   const labels = [['cm', 'CM'], ['director', 'Director'], ['site-manager', 'Site Manager'], ['operatives', 'Operatives']]
-  const curIdx = stage === 'complete' ? labels.length : STAGE_ORDER.indexOf(stage)
+  const isRejected = stage === 'rejected'
+  const curIdx = stage === 'complete' ? labels.length : isRejected ? 2 : STAGE_ORDER.indexOf(stage)
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginTop: 8, fontSize: 12 }}>
       {labels.map(([k, label], i) => {
         const done = i < curIdx, current = i === curIdx && stage !== 'complete'
-        const colour = done ? '#16a34a' : current ? '#dc2626' : '#bbb'
+        const rejectedNode = isRejected && k === 'site-manager'
+        const colour = rejectedNode ? '#dc2626' : done ? '#16a34a' : current ? '#dc2626' : '#bbb'
         return (
           <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ color: colour, fontWeight: current ? 800 : 600 }}>{done ? '✓ ' : ''}{label}</span>
+            <span style={{ color: colour, fontWeight: (current || rejectedNode) ? 800 : 600 }}>{rejectedNode ? '✗ ' : done ? '✓ ' : ''}{label}</span>
             {i < labels.length - 1 && <span style={{ color: '#ccc' }}>›</span>}
           </span>
         )
