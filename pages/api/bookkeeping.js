@@ -177,12 +177,56 @@ export default async function handler(req, res) {
     const uncategorisedCodes = Object.keys(uncatMap).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
       .map(code => ({ code, name: uncatMap[code] }))
 
+    // ── Reconciliation gap detector ────────────────────────────────────────
+    // For every expense code in Xero's P&L benchmark, compare Xero's amount to the
+    // app's summed line data for the SAME code (across the same months the benchmark
+    // covers). A code where Xero shows value the app can't see is the accruals /
+    // manual-journal gap. We report per-code: xero amount, app amount, difference.
+    const plMonths = (benchmark && benchmark.months) || {}
+    const plCodeTotals = {}     // code -> { xero, name, section }
+    for (const mo of Object.keys(plMonths)) {
+      const b = plMonths[mo]
+      if (!b || !b.byCode) continue
+      for (const [code, val] of Object.entries(b.byCode)) {
+        const c = String(code)
+        if (c === '200') continue   // sales/income, not a cost
+        const sec = (b.codeSection && b.codeSection[c]) || ''
+        if (!plCodeTotals[c]) plCodeTotals[c] = { xero: 0, name: chartNames[c] || '', section: sec }
+        plCodeTotals[c].xero += Math.abs(val || 0)
+        if (sec) plCodeTotals[c].section = sec
+      }
+    }
+    // App's line total per code (bills + wages; net of VAT already).
+    const appCodeTotals = {}
+    for (const l of [...bills, ...wages, ...ignored]) {
+      const c = String(l.accountCode || '')
+      if (!c) continue
+      appCodeTotals[c] = (appCodeTotals[c] || 0) + (l.amount || 0)
+    }
+    const reconGaps = Object.keys(plCodeTotals).map(code => {
+      const xero = plCodeTotals[code].xero
+      const app = Math.abs(appCodeTotals[code] || 0)
+      const diff = xero - app
+      return {
+        code,
+        name: plCodeTotals[code].name,
+        section: plCodeTotals[code].section,
+        category: categoryOf(code, catConfig),
+        xero, app, diff,
+      }
+    })
+      // Only surface codes where Xero has meaningfully more than the app has line
+      // data for (> £1) — that's the missing-lines / accruals / journals gap.
+      .filter(g => g.diff > 1)
+      .sort((a, b) => b.diff - a.diff)
+
     res.json({
       bills, wages, invoices, ignored,
       appCategorised, benchmark,
       categorisation: catConfig,
       knownCodes: [...knownCodes], missingCodes,
       uncategorisedCodes,
+      reconGaps,
       benchmarkUpdatedAt: benchmark?.updatedAt || null,
       _diag: {
         projectsRead: perProject.length,

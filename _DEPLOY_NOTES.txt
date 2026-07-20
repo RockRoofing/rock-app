@@ -1,37 +1,42 @@
-Chart of Accounts sync + categorisation — EXPENSE accounts only
-===============================================================
+Bookkeeping ↔ Xero reconciliation — full P&L coverage + missing-lines detector
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILE to create in GitHub: pages/api/sync-chart-of-accounts.js
-(This supersedes Chart_of_accounts_sync_categorisation.zip — deploy these files.)
+Deploy AFTER the Chart-of-accounts bundle (shares bookkeeping.js / xero.js — these
+are the newer versions, use them).
 
-WHAT CHANGED vs the previous bundle
------------------------------------
-The sync now brings in ONLY accounts that can be a project cost or overhead:
-  • Class = EXPENSE (Xero's cost-of-sale + overhead + expense accounts), i.e.
-    types DIRECTCOSTS, OVERHEADS, EXPENSE.
-  • BALANCE-SHEET accounts (ASSET, LIABILITY, EQUITY) and REVENUE/Sales accounts
-    are EXCLUDED — they never appear as a project cost, so they won't clutter the
-    categorisation list or the uncategorised banner.
+WHAT THIS ADDS
+--------------
+1) P&L BENCHMARK NOW COVERS EVERY EXPENSE CODE (incl. OVERHEADS)
+   Previously the Xero P&L benchmark only captured Income + Cost of Sales per code.
+   It now ALSO captures the Overheads / Expenses sections, tagged by section
+   (income / cos / overheads). So the reconciliation can compare every categorised
+   code — Materials, Labour AND Overheads — against Xero, over the same months.
+   • lib/xero.js fetchProfitAndLoss: byCode + codeSection + overheadsTotal.
+   • sync-benchmark stores codeSection + overheadsTotal.
+   ⚠ You must click "Sync Xero figures" after deploy to repopulate the benchmark
+     with the new per-code overhead data.
 
-Everything else from the previous bundle is included:
-  1) "↻ Sync chart of accounts" button (pulls code + name from Xero).
-  2) "Ignore" renamed to "Overheads" (legacy ignore auto-migrated).
-  3) New/unassigned codes = "Uncategorised": excluded from project costs + flagged.
-  4) Bookkeeping app banner listing uncategorised codes with a link to fix them.
+2) MISSING-LINES / ACCRUALS DETECTOR  (the gap you asked to close)
+   The Bookkeeping app now compares, per account code, Xero's P&L amount vs the app's
+   own bill+wage LINE data for the same code over the synced months. Any code where
+   Xero shows MORE than the app can see (> £1) is surfaced in a collapsible panel:
+   Code · Account · Category · Xero P&L · App lines · Difference.
+   This is exactly the accruals / manual-journal gap — costs that hit Xero's P&L but
+   never came through as an imported bill or wage line.
+
+HOW TO BALANCE TO XERO NOW
+--------------------------
+1. Sync bills, wages and invoices (existing buttons).
+2. Click "Sync Xero figures" (benchmark) — now with full per-code P&L incl overheads.
+3. Categorise any Uncategorised codes (banner).
+4. Work the "more in Xero than the app can see" panel to zero — each remaining line
+   is a journal/accrual to check in Xero. When that panel is empty and uncategorised
+   is zero, the app ties to the Xero P&L per code.
 
 FILES
 -----
-• lib/xero.js                          (fetchChartOfAccounts — EXPENSE-only filter)
-• pages/api/sync-chart-of-accounts.js  (NEW)
-• pages/api/account-categorisation.js
-• pages/admin/account-categorisation.js
-• pages/api/bookkeeping.js
-• pages/api/import-bills-bulk.js
-• pages/bookkeeping.js
-
-AFTER DEPLOY
-------------
-1. Admin → Account Categorisation → "Sync chart of accounts".
-2. Assign any Uncategorised codes to Labour / Materials / Overheads, Save.
-3. Re-sync/upload bills so costs recalculate.
+• lib/xero.js                 (P&L byCode incl overheads + codeSection)
+• pages/api/sync-benchmark.js (store codeSection + overheadsTotal)
+• pages/api/bookkeeping.js    (reconGaps detector in the response)
+• pages/bookkeeping.js        (recon-gap panel + uncategorised banner)

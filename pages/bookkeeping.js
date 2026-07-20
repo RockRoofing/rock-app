@@ -318,6 +318,41 @@ export default function BookkeepingPage() {
                 <span style={{ color: '#7f1d1d' }}> {data.uncategorisedCodes.map(c => `${c.code}${c.name ? ` (${c.name})` : ''}`).join(', ')}</span>
               </div>
             )}
+            {(data.reconGaps || []).length > 0 && (
+              <details style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+                <summary style={{ fontSize: 13, color: '#92400e', fontWeight: 700, cursor: 'pointer' }}>
+                  ⚠ {data.reconGaps.length} account {data.reconGaps.length === 1 ? 'code has' : 'codes have'} more in Xero than the app can see — possible accruals / manual journals not captured as bills or wages
+                </summary>
+                <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ color: '#777', textAlign: 'left' }}>
+                        <th style={{ padding: '6px 8px' }}>Code</th><th style={{ padding: '6px 8px' }}>Account</th>
+                        <th style={{ padding: '6px 8px' }}>Category</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right' }}>Xero P&L</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right' }}>App lines</th>
+                        <th style={{ padding: '6px 8px', textAlign: 'right' }}>Difference</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.reconGaps.map(g => (
+                        <tr key={g.code} style={{ borderTop: '1px solid #f2f0ec' }}>
+                          <td style={{ padding: '6px 8px', fontWeight: 600 }}>{g.code}</td>
+                          <td style={{ padding: '6px 8px' }}>{g.name || '—'}</td>
+                          <td style={{ padding: '6px 8px', color: g.category === 'uncategorised' ? '#dc2626' : '#666' }}>{g.category}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(g.xero)}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right' }}>{fmt(g.app)}</td>
+                          <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#b45309' }}>{fmt(g.diff)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ fontSize: 11, color: '#999', marginTop: 8 }}>
+                  Compares Xero's P&L (per account code, over the synced months) against the app's bill &amp; wage line data for the same code. A positive difference means Xero has costs the app didn't import as lines — usually manual journals or accruals. Re-sync bills/wages first; anything remaining needs checking in Xero.
+                </div>
+              </details>
+            )}
             <ReconPanel data={data} month={month} tab={tab} onPickMonth={setMonth} />
 
             {/* Tabs */}

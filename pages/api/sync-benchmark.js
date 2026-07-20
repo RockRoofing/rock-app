@@ -47,8 +47,10 @@ export default async function handler(req, res) {
           accounts: pl.accounts,
           bySection: pl.bySection,
           byCode: pl.byCode,
+          codeSection: pl.codeSection || {},
           incomeTotal: pl.incomeTotal,
           costOfSalesTotal: pl.costOfSalesTotal,
+          overheadsTotal: pl.overheadsTotal || 0,
         }
         monthsPulled++
         await sleep(250)
