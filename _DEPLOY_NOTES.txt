@@ -1,41 +1,45 @@
-Site App — "Schedule of Works" for operatives (no financials)
-=============================================================
+Site App — Applications view for Contracts Managers
+===================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILE to create in GitHub: pages/forms/schedule.js
-
-WHAT IT IS
-----------
-A read-only Contracted Rates view for operatives inside the Site App, with NO
-financial information.
+NEW FILES to create in GitHub:
+  • pages/forms/cm/applications.js
+  • pages/api/applications-view.js
 
 WHERE
 -----
-• In the operative home menu (the Operative Permissions area) there's a new card:
-  "📐 Schedule of Works". Tap it to open.
+• In the Site App's Contracts Manager area there's a new card: "📄 Applications".
 
 HOW IT BEHAVES
 --------------
-• PROJECT FIRST: you pick a project. It uses the SAME permission model as the rest of
-  the Site App (useMyProjects) — an operative only sees the projects they have
-  permission to view. If you can only see project X, only X's schedule is available.
-• SCHEDULE ITEMS: shows ONLY item number, description, quantity and unit. No rates,
-  no line totals, no section totals — none of the financial columns are rendered.
-• VARIATIONS: listed at the bottom with VO number, description, item and quantity
-  (where present) and an "Instructed / Not instructed" badge. No values, no
-  materials/labour/profit — no financial info at all.
+• PROJECT FIRST: pick a project. Only projects where the logged-in user IS the
+  Contracts Manager are shown (useMyProjects — matches the CM field on the project).
+• APPLICATIONS TABLE: lists ALL applications (any status) for the project, showing:
+    - Application no.
+    - Required application date
+    - Status (Draft / Sent / Paid)
+    - This cert value
+  Sorted newest application first.
+• TAP AN APPLICATION: opens the full summary with ALL sections and columns:
+    - Summary block (required/valuation/payment dates, measured contract sum,
+      variations final, anticipated final account, application total)
+    - Certificate block (Previously / To date / This application × Gross, MCD,
+      Sub-total, Retention, Total)
+    - Contract Works (item, description, qty, unit, rate, total, % complete)
+    - Variations (VO, description, status, final value, % complete)
+    - Materials on Site (description, qty, unit, rate, total, claimed %)
 
 DATA / SAFETY
 -------------
-• Reuses the existing read-only /api/contracted-rates-view endpoint (GET only). That
-  endpoint now also returns variations with NON-FINANCIAL fields only (varNumber,
-  description, item, qty, unit, instructed) — the financial fields are never sent to
-  the Site App for this view.
-• Routing already covered by middleware (/forms/* and /api/contracted-rates-view are
-  in the Site App passthrough) — no middleware change needed.
+• New read-only GET endpoint /api/applications-view (no writes). Added to the Site
+  App middleware passthrough. It computes the same figures as the portal via
+  computeApplicationSummary / resolveAppDates.
+• This is the CM area, so financial columns ARE shown (unlike the operative Schedule
+  of Works). Access is still gated to the user's own CM projects.
 
 FILES
 -----
-• pages/forms/schedule.js            (NEW — operative Schedule of Works page)
-• pages/forms/index.js               (adds the "Schedule of Works" menu card)
-• pages/api/contracted-rates-view.js (adds non-financial variations to the response)
+• pages/forms/cm/applications.js   (NEW — CM Applications page)
+• pages/api/applications-view.js   (NEW — read-only applications view API)
+• pages/forms/index.js             (adds the CM "Applications" card)
+• middleware.js                    (passthrough for /api/applications-view)

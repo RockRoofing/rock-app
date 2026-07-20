@@ -57,6 +57,8 @@ export async function middleware(req) {
       pathname.startsWith('/api/tasks') ||
       pathname.startsWith('/api/forms-missing') ||
       pathname.startsWith('/api/variations') ||
+      pathname.startsWith('/api/contracted-rates-view') ||
+      pathname.startsWith('/api/applications-view') ||
       pathname.startsWith('/api/pre-start')
     if (passthrough) return NextResponse.next()
     if (pathname === '/forms' || pathname.startsWith('/forms/')) return NextResponse.next()

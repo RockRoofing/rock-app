@@ -287,6 +287,7 @@ function FormsHomeMenu({ user }) {
             <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND, margin: '18px 0 2px' }}>Contracts Manager</div>
             {[
               ['🏗️', 'Pre-Start Notifications', 'Up-and-coming projects to Pre-Start', '/forms/cm/pre-start', 0, null],
+              ['📄', 'Applications', 'View applications for payment', '/forms/cm/applications', 0, null],
               ['✅', 'Forms Completed', 'Submitted forms by project', '/forms/cm/forms-completed', 0, null],
               ['📋', 'Missing Forms', 'Outstanding forms on your projects', '/forms/cm/missing-forms', 0, null],
               ['⚠️', 'Issues Log', 'Assess & action site issues', '/forms/issues-log', issueActionCount, '#f59e0b'],
