@@ -25,11 +25,14 @@ export default async function handler(req, res) {
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
-  // Try cache first unless sync=true
+  // Try cache first unless sync=true. Ignore a cache built before the completeness
+  // field existed (so the "details incomplete" banner works without a manual sync).
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached) return res.json({ projects: cached })
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0]) {
+        return res.json({ projects: cached })
+      }
     } catch {}
   }
 

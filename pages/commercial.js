@@ -453,14 +453,35 @@ export default function Dashboard() {
 
           {/* Project details incomplete banner — click a job to fix its details */}
           {(() => {
-            const incomplete = projects.filter(p => !hiddenProjects.includes(String(p.xeroId)) && (p.detailsMissing || []).length > 0)
+            // Prefer the dashboard's detailsMissing; if it's absent (e.g. cache built
+            // before this field existed), compute completeness client-side so the
+            // banner always works.
+            const hasV = (v) => v !== undefined && v !== null && String(v).trim() !== '' && String(v).trim() !== '0'
+            const missingOf = (p) => {
+              if (Array.isArray(p.detailsMissing)) return p.detailsMissing
+              const m = []
+              if (!hasV(p.applicationDay)) m.push('Application day')
+              if (!hasV(p.valuationDay) && !(p.dateOverrides && Object.keys(p.dateOverrides).length)) m.push('Valuation day')
+              if (!hasV(p.paymentDay)) m.push('Payment day')
+              if (!hasV(p.contractValue)) m.push('Contract value')
+              if (!hasV(p.labourBudget)) m.push('Labour budget')
+              if (!hasV(p.materialsBudget)) m.push('Materials budget')
+              if (!hasV(p.retentionPct)) m.push('Retention %')
+              if (!hasV(p.pcDate) && !p.pcDateTBC) m.push('PC date (or TBC)')
+              if (!hasV(p.defectsDate) && !p.defectsDateTBC) m.push('Defects date (or TBC)')
+              return m
+            }
+            const incomplete = projects
+              .filter(p => !hiddenProjects.includes(String(p.xeroId)))
+              .map(p => ({ p, miss: missingOf(p) }))
+              .filter(x => x.miss.length > 0)
             if (incomplete.length === 0) return null
             return (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠ Project details incomplete — update in all locations:</span>
-                {incomplete.map(p => (
+                {incomplete.map(({ p, miss }) => (
                   <Link key={p.xeroId} href={`/project/${p.xeroId}`}
-                    title={`Missing: ${(p.detailsMissing || []).join(', ')}`}
+                    title={`Missing: ${miss.join(', ')}`}
                     style={{ fontSize: 12, color: '#92400e', cursor: 'pointer', textDecoration: 'underline' }}>
                     {p.jobNo || p.name}{p.jobNo && p.name ? ` — ${p.name}` : ''}
                   </Link>

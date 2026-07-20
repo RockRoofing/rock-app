@@ -1,24 +1,33 @@
-Project Financials — everything now NET of VAT (Income tab converted)
-=====================================================================
+Fix: "project details incomplete" banner not showing
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/project/[id].js
 
-VAT AUDIT — CONFIRMED
---------------------
-All Project Financials money figures are now VAT-EXCLUSIVE:
- • Budget Tracker & EOM columns (Invoiced, Profit, Margin, Remaining, Spend, Budget)
-   already used account-code-200 Sales (net of VAT). ✓
- • Project page header cards (AFA, Invoiced Inc. Retention, Total Spent, Total Budget,
-   Current Margin, Remaining to Invoice) use the sales200/cost basis. ✓ (earlier fix)
- • THIS CHANGE: the project page INCOME tab — the monthly invoicing chart, the
-   "X invoices · £Y total" summary, and each invoice row's Amount — now use the
-   net-of-VAT code-200 value (was showing invoice TOTAL inc VAT). The Overview tab's
-   "Monthly Costs vs Income" chart income is likewise net of VAT now.
+ROOT CAUSE
+----------
+The banner reads detailsMissing from the dashboard, but the dashboard was serving a
+CACHED snapshot built before that field existed — so every project came back without
+detailsMissing and the banner found nothing. A normal page load didn't help because
+the old cache kept being served (4h TTL, re-cached on each rebuild).
 
-Costs everywhere are bill line amounts (already net of VAT). No figure on Project
-Financials includes VAT.
+FIXES
+-----
+1) dashboard.js now IGNORES a cache that predates the completeness field — if the
+   cached projects don't contain detailsMissing, it rebuilds fresh automatically. So
+   the banner populates on the next page load with NO manual sync needed.
+2) commercial.js banner now also computes completeness CLIENT-SIDE as a fallback
+   (from the raw fields the dashboard already returns), so it works even if the field
+   is ever missing. Scans ALL projects (not just the filtered view).
+3) retention.js banner reads the (now-present) detailsMissing per project.
+
+WHAT YOU SHOULD SEE
+-------------------
+After deploy, open Project Financials — the amber banner lists every project with any
+blank Edit-Project-Details field, each a link straight to that project. Hover a link
+to see exactly which fields are missing. Same banner on the Retention tab.
 
 FILES
 -----
-• pages/project/[id].js
+• pages/api/dashboard.js       (auto-bust stale cache)
+• pages/commercial.js          (client-side fallback + all-projects scan)
+• pages/retention.js           (banner reads detailsMissing)

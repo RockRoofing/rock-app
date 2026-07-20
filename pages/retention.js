@@ -424,7 +424,9 @@ export default function RetentionPage() {
           {(() => {
             const seen = new Set()
             const incomplete = allEntries.filter(e => {
-              if (!e.xeroId || (e.detailsMissing || []).length === 0) return false
+              if (!e.xeroId) return false
+              const m = Array.isArray(e.detailsMissing) ? e.detailsMissing : []
+              if (m.length === 0) return false
               if (seen.has(e.xeroId)) return false
               seen.add(e.xeroId); return true
             })
