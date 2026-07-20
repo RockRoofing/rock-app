@@ -1,38 +1,37 @@
-WIP margin — clear button + two-way sync (EOM ⇄ Project Details)
-================================================================
+Valuation date — use manual per-month dates, not end-of-month
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Single file: lib/db.js
 
-1) CLEAR BUTTON (both places)
-   • EOM report: an overridden WIP Margin cell shows a red ✕ next to it — click to
-     clear the override and go back to following the actual project margin. (Also
-     available while editing the cell.)
-   • Project Details WIP card: a "Clear override" button appears once a manual value
-     is set, reverting to the auto project margin.
+THE PROBLEM
+-----------
+Projects with manually-entered per-month valuation dates (varying each month, no
+fixed "valuation day") showed a margin mismatch: the project page's dropdown listed
+the correct dates, but the DEFAULT/effective valuation date used for the figures
+ignored them and fell back to end-of-month / all-time. So Project Details and the
+EOM report didn't line up.
 
-2) TWO-WAY SYNC
-   The WIP Margin card in Project Details is editable again. It and the EOM inline
-   editor write the SAME field (wipMarginOverride) via the same API, so changing it in
-   one place updates the other (on next load / after the dashboard refresh the EOM
-   triggers). Card text notes this.
+THE FIX
+-------
+getEffectiveValuationDate() now also reads settings.dateOverrides. When there's no
+fixed valuation day, it uses the MOST RECENT PAST override date (the date actually
+entered in the table). Future-dated overrides are ignored. This feeds:
+  • the project/[id] page figures + WIP (costsAfterDate)
+  • the WIP sync cron
+  • the project report
+so they now match the valuation dates in the table and reconcile with the EOM report
+(when set to the same month/date).
 
-ON YOUR EOM DATE QUESTION (no code change needed — explanation)
---------------------------------------------------------------
-In EOM mode, ALL columns — Lab spend, Mat spend, Total spend, Invoiced, Profit,
-Profit Margin, WIP — are computed to the MONTH'S VALUATION DATE, not the top
-From/To date-picker range. So:
- • Profit Margin IS at the valuation date (consistent with the other columns) —
-   that's correct.
- • Changing the top date-picker does NOT change EOM figures by design; that picker
-   scopes which projects/month show, not the figures. To move EOM figures, change the
-   selected MONTH (which sets the valuation date) or the project's valuation day.
- • EOM vs Project Details can differ simply because each uses its own valuation date;
-   set both to the same date and they reconcile (same as we found for the Budget
-   Tracker earlier).
-(The upcoming Group E adds a valuation-date dropdown so the exact date in use is
-visible/selectable per month — that will make this much clearer on screen.)
+Validated: overrides {28 May, 24 Jun, 31 Jan 2027} -> picks 24 Jun (most recent past;
+future excluded).
+
+AFTER DEPLOY
+------------
+Open the project you were looking at — its default valuation date should now be the
+latest date from its table (not end-of-month), and the Project Details margin should
+match the EOM report for that same date.
 
 FILES
 -----
-• pages/commercial.js          (EOM inline clear affordance)
-• pages/project/[id].js        (editable WIP card + Clear override button)
+• lib/db.js
