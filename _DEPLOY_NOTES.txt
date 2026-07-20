@@ -1,34 +1,24 @@
-Fixes: valuation-day note, project-page vs EOM reconciliation, banner scope
-===========================================================================
+Project Financials — everything now NET of VAT (Income tab converted)
+=====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Single file: pages/project/[id].js
 
-1) "Valuation day: ⚠ Not set" REMOVED
-   On the project page it now reads, in light grey:
-     • "Valuation day: 28th of each month"  (if a fixed day is set), or
-     • "Valuation day: using monthly dates"  (for projects on per-month dates)
-   No more amber warning.
+VAT AUDIT — CONFIRMED
+--------------------
+All Project Financials money figures are now VAT-EXCLUSIVE:
+ • Budget Tracker & EOM columns (Invoiced, Profit, Margin, Remaining, Spend, Budget)
+   already used account-code-200 Sales (net of VAT). ✓
+ • Project page header cards (AFA, Invoiced Inc. Retention, Total Spent, Total Budget,
+   Current Margin, Remaining to Invoice) use the sales200/cost basis. ✓ (earlier fix)
+ • THIS CHANGE: the project page INCOME tab — the monthly invoicing chart, the
+   "X invoices · £Y total" summary, and each invoice row's Amount — now use the
+   net-of-VAT code-200 value (was showing invoice TOTAL inc VAT). The Overview tab's
+   "Monthly Costs vs Income" chart income is likewise net of VAT now.
 
-2) RUSSELL HILL FIGURES NOW RECONCILE WITH EOM  ← the real cause
-   The project page (calcAtDate) was computing Invoiced/Margin on a DIFFERENT basis
-   from the EOM report:
-     • Project page used invoice TOTAL (inc VAT) then grossed retention UP on top.
-     • EOM used account-code-200 Sales (net of VAT, already incl. retention).
-   These never matched even at the same date. calcAtDate now uses the SAME sales200
-   basis as EOM and the Budget Tracker, so at the same valuation date the Invoiced,
-   Gross Invoiced and Margin figures reconcile. (Combined with the earlier valuation-
-   date fixes, project page and EOM now line up.)
-
-3) "PROJECT DETAILS INCOMPLETE" BANNER — now scans ALL projects
-   The banner was only looking at the currently-FILTERED rows, so projects hidden by
-   the stage/date/card filters were missed. It now scans the full project list (minus
-   the shared hide list), so every incomplete project is listed regardless of the
-   active view.
-   NOTE: the banner reads detailsMissing from the dashboard cache. If it's still empty
-   after deploying, the cache predates GroupD2 — open the page once (or Sync) to
-   rebuild it, and ensure lib/projectComplete.js exists in GitHub.
+Costs everywhere are bill line amounts (already net of VAT). No figure on Project
+Financials includes VAT.
 
 FILES
 -----
-• pages/commercial.js          (banner scope; also carries WIP inline + earlier work)
-• pages/project/[id].js        (valuation-day note + calcAtDate sales200 basis)
+• pages/project/[id].js

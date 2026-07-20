@@ -424,8 +424,9 @@ function OverviewTab({ p, settings, atDate, trendData, vDateLabel, costLines, in
       if (!inv.date) continue
       const key = inv.date.slice(0, 7)
       if (!monthlyMap.has(key)) monthlyMap.set(key, { costs: 0, income: 0 })
-      // Use gross invoiced (inc retention)
-      monthlyMap.get(key).income += inv.total || 0
+      // Net of VAT (code 200 Sales, incl. retention) — same basis as the rest of
+      // Project Financials. Fall back to ex-VAT subtotal for older lines.
+      monthlyMap.get(key).income += (inv.sales200 != null ? inv.sales200 : (inv.subTotal != null ? inv.subTotal : 0))
     }
     const months = Array.from(monthlyMap.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
@@ -837,13 +838,16 @@ function IncomeTab({ invoiceLines, atDate }) {
     return true
   })
   const sorted = [...filtered].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-  const filteredTotal = filtered.reduce((s, i) => s + (i.total || 0), 0)
+  // Net of VAT (account-code-200 Sales; incl. retention), matching the rest of
+  // Project Financials. Falls back to ex-VAT subtotal for older lines.
+  const invNet = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
+  const filteredTotal = filtered.reduce((s, i) => s + invNet(i), 0)
 
   const monthlyMap = new Map()
   for (const inv of filtered) {
     if (!inv.date) continue
     const monthKey = inv.date.slice(0, 7)
-    monthlyMap.set(monthKey, (monthlyMap.get(monthKey) || 0) + (inv.total || 0))
+    monthlyMap.set(monthKey, (monthlyMap.get(monthKey) || 0) + invNet(inv))
   }
   const monthlyData = Array.from(monthlyMap.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([key, value]) => ({ key, label: new Date(key + '-01').toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }), value }))
   const maxVal = Math.max(...monthlyData.map(d => d.value), 1)
@@ -936,7 +940,7 @@ function IncomeTab({ invoiceLines, atDate }) {
                 <td style={{ padding: '7px 12px', fontFamily: 'monospace', fontSize: 12 }}>{inv.invoiceNumber || '—'}</td>
                 <td style={{ padding: '7px 12px', color: '#555' }}>{inv.reference || '—'}</td>
                 <td style={{ padding: '7px 12px', color: '#555' }}>{inv.contact || '—'}</td>
-                <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 500, color: '#16a34a' }}>{fmtC(inv.total)}</td>
+                <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 500, color: '#16a34a' }}>{fmtC(invNet(inv))}</td>
                 <td style={{ padding: '7px 12px' }}>
                   <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 20, background: inv.status === 'Paid' ? '#f0fdf4' : '#fefce8', color: inv.status === 'Paid' ? '#16a34a' : '#ca8a04', fontWeight: 600 }}>{inv.status || '—'}</span>
                 </td>
