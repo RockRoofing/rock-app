@@ -39,8 +39,10 @@ export default async function handler(req, res) {
       entries.push(entry)
     }
     await redis.set(KEY, entries)
-
-    // Two-way COMMENTS sync: for a project-linked row (has xeroId), write the
+    // The Retention Tracker is the source of truth for a project's stage
+    // (live/defects/complete), which Project Financials reads. Any save may change
+    // status, so always refresh the dashboard cache.
+    try { await redis.del('dashboard:cache') } catch {}
     // comment back to the project's retentionComments so Project Details stays in
     // step. (Only comments sync back — all other fields are read-only from the
     // project; manual VAT stays only in the tracker.)
@@ -63,6 +65,7 @@ export default async function handler(req, res) {
     try { const d = await redis.get(KEY); if (d) entries = d } catch {}
     entries = entries.filter(e => e.id !== id)
     await redis.set(KEY, entries)
+    try { await redis.del('dashboard:cache') } catch {}
     return res.json({ entries })
   }
 

@@ -357,7 +357,7 @@ export default function BookkeepingPage() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
-              {[['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads']].map(([id, label]) => (
+              {[['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention']].map(([id, label]) => (
                 <button key={id} onClick={() => switchTab(id)}
                   style={{ padding: '9px 16px', fontSize: 13, fontWeight: tab === id ? 700 : 500, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
                     background: tab === id ? '#fff' : '#e8e8ea', color: tab === id ? INK : '#777' }}>{label}</button>
@@ -365,6 +365,12 @@ export default function BookkeepingPage() {
             </div>
 
             <div style={{ background: '#fff', borderRadius: '0 8px 8px 8px', padding: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              {tab === 'retention' ? (
+                <div style={{ margin: -16 }}>
+                  <iframe src="/retention?embed=1" title="Retention Tracker (read-only)"
+                    style={{ width: '100%', height: 'calc(100vh - 220px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
+                </div>
+              ) : (<>
               {/* Filters */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
                 <select value={month} onChange={e => setMonth(e.target.value)} style={sel}>
@@ -456,6 +462,7 @@ export default function BookkeepingPage() {
                     style={{ ...sel, cursor: page >= totalPages ? 'default' : 'pointer', opacity: page >= totalPages ? 0.5 : 1 }}>Next →</button>
                 </div>
               )}
+              </>)}
             </div>
           </>
         )}

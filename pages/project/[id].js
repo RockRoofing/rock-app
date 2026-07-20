@@ -239,6 +239,8 @@ export default function ProjectPage() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
+                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
               <button onClick={() => setEditMode(!editMode)} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 {editMode ? 'Cancel' : 'Edit Project Details'}
               </button>
@@ -1585,6 +1587,12 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <label style={labelStyle}>Retention %{retFromIhm && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{retOverridden && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
         <input type="number" value={retentionDisplay} onChange={e => setOverride('retentionPct', e.target.value === '' ? '' : parseFloat(e.target.value) / 100)} style={inputStyle} placeholder="e.g. 3" />
         {retFromIhm && <div style={{ fontSize: 10, color: '#aaa', marginTop: -4, marginBottom: 8 }}>From the IHM{people?.ihmRetentionRaw ? ` ("${people.ihmRetentionRaw}")` : ''}. Change to override for this project.</div>}
+        <label style={labelStyle}>PC Type (Main/Sub)</label>
+        <select value={form.pcType || ''} onChange={f('pcType')} style={inputStyle}>
+          <option value="">— Select —</option>
+          <option value="Main PC">Main PC</option>
+          <option value="Sub PC">Sub PC</option>
+        </select>
         <label style={labelStyle}>PC date (1st half release)</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <input type="date" value={form.pcDate || ''} onChange={f('pcDate')} disabled={!!form.pcDateTBC} style={{ ...inputStyle, marginBottom: 0, opacity: form.pcDateTBC ? 0.5 : 1 }} />

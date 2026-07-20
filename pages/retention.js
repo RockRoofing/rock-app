@@ -96,6 +96,15 @@ function statusBadge(entry) {
 
 export default function RetentionPage() {
   const [entries, setEntries] = useState([])
+  // Read-only embed mode (?embed=1): renders the page content only (cards, table,
+  // filters) with NO navigation and no edit controls — for the Bookkeeping Portal.
+  const [embed, setEmbed] = useState(false)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search)
+      setEmbed(q.get('embed') === '1' || q.get('embed') === 'true')
+    }
+  }, [])
   const [xeroEntries, setXeroEntries] = useState([])
   const [hiddenIds, setHiddenIds] = useState([])
   const [loading, setLoading] = useState(true)
@@ -362,6 +371,7 @@ export default function RetentionPage() {
     <>
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+        {!embed && (
         <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
@@ -395,6 +405,7 @@ export default function RetentionPage() {
             </div>
           </div>
         </div>
+        )}
 
         <div style={{ padding: 24 }}>
           {/* Summary cards */}
@@ -655,6 +666,7 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', color: '#555', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={entry.comments || ''}>{entry.comments || '—'}</td>
                             {/* Actions */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                              {embed ? <span style={{ color: '#bbb', fontSize: 11 }}>—</span> : <>
                               <button onClick={() => { setEditingId(entry.id); setEditForm({ ...entry }) }}
                                 style={{ background: '#f0f2f5', border: '1px solid #e5e5e5', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333', marginRight: 4 }}>Edit</button>
                               {(() => {
@@ -684,6 +696,7 @@ export default function RetentionPage() {
                                 <button onClick={() => deleteEntry(entry.id)}
                                   style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#e63946' }}>Del</button>
                               )}
+                              </>}
                             </td>
                           </tr>
                           {isEditing && (

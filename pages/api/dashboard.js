@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0] && cached[0].stageSource === 'retention') {
         return res.json({ projects: cached })
       }
     } catch {}
@@ -53,6 +53,21 @@ export default async function handler(req, res) {
     try { opsProjects = (await redis.get('ops:projects')) || [] } catch {}
     try { const { getPortalUsers } = await import('../../lib/db'); portalUsers = await getPortalUsers() } catch {}
     const { resolveProjectPeople } = await import('../../lib/projectPeople')
+
+    // Manual retention status per project (the Retention Tracker is the source of
+    // truth for live → defects → complete). Keyed by xeroId. A manual override row
+    // (manual !== false) wins over a Xero-derived row for the same project.
+    const retStatusByXeroId = {}
+    try {
+      const retEntries = (await redis.get('retention:entries')) || []
+      for (const e of retEntries) {
+        if (!e || !e.xeroId) continue
+        const st = e.retStatus || (e.markedComplete ? 'complete' : 'live')
+        const key = String(e.xeroId)
+        // Prefer an explicit manual entry if one exists for this project.
+        if (!(key in retStatusByXeroId) || e.manual !== false) retStatusByXeroId[key] = st
+      }
+    } catch {}
 
     const projects = await Promise.all(categoryProjects.map(async (cp) => {
       const id = cp.trackingOptionId
@@ -178,12 +193,16 @@ export default async function handler(req, res) {
       } catch {}
 
       // ── Project stage ─────────────────────────────────────────────────────
+      // The RETENTION TRACKER is the single source of truth for a project's
+      // live → defects → complete movement. We map its manual retStatus onto the
+      // Project Financials stage. No automatic date/financial-based movement.
+      //   retStatus 'live'|undefined -> INPROGRESS
+      //   retStatus 'defects'        -> DEFECTS
+      //   retStatus 'complete'       -> CLOSED
+      const rs = retStatusByXeroId[String(id)]
       let stage = 'INPROGRESS'
-      if (afa > 0 && grossInvoiced >= afa * 0.999 && allPaid) {
-        stage = 'CLOSED'
-      } else if (afa > 0 && remainingToClaim <= retentionOutstanding + 1) {
-        stage = 'DEFECTS'
-      }
+      if (rs === 'complete') stage = 'CLOSED'
+      else if (rs === 'defects') stage = 'DEFECTS'
 
       return {
         xeroId: id,
@@ -192,6 +211,7 @@ export default async function handler(req, res) {
         jobNo: cp.jobNo,
         name: cp.name,
         status: stage,
+        stageSource: 'retention',   // marker: stage now driven by Retention Tracker
         customer: settings.customerName || '',
         contractsManager: settings.contractsManager || '',
         estimator: settings.estimator || '',

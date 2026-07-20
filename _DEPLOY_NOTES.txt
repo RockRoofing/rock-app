@@ -1,47 +1,41 @@
-Management role — access to a restricted Admin area
-===================================================
+Retention Tracker controls project stage (live → defects → complete)
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 
-WHAT CHANGED
-------------
-Management users now get the SAME "Admin" button on the portal home and enter the
-Admin area, but with a RESTRICTED set of tabs.
+THE PROBLEM
+-----------
+Project Financials auto-moved projects between In Progress / Defects / Closed based
+on dates and financial completion (PC date passed, invoiced ≥ AFA + paid, etc.),
+independently of the Retention Tracker's MANUAL status. So the two could disagree and
+projects moved on their own.
 
-Management CAN access:
-  • Site App Users
-  • Documents
-  • RAMS Director
-  • App Improvements
-  • Templates
-  • Form Builder
+THE FIX
+-------
+The Retention Tracker is now the SINGLE SOURCE OF TRUTH for a project's movement.
+Project Financials reads each project's manual retStatus from the tracker and maps it:
+  • retStatus 'live' (or unset) -> In Progress
+  • retStatus 'defects'         -> Defects Period
+  • retStatus 'complete'        -> Closed
+The old date/financial auto-derivation is removed. Projects only move when you move
+them in the Retention Tracker (using the existing gated buttons: live→defects requires
+Final Account = Invoiced, etc.).
 
-Management CANNOT access:
-  • Portal Users (admin only)
-  • Bookkeeping tools (admin/accounts as before)
-
-HOW IT WORKS
-------------
-• pages/index.js — the "Admin" button now shows for management as well as admin.
-  For admin it lands on /admin (Portal Users); for management it lands on
-  /operations/users (their first permitted tab), since they can't open Portal Users.
-• components/AdminShell.js — each admin tab is tagged with the roles allowed to see
-  it; the sub-nav now hides tabs the current role can't use. Portal Users shows for
-  admin only; the other six show for management + admin.
-• Each of the six pages passes allow={['management','admin']} to the shell (or, for
-  Templates, widened its inline guard). Portal Users stays admin-only.
-• APIs: templates.js and rams-director.js widened to ['management','admin']. The
-  others (forms, ops-docs, report-problem, blob-upload) weren't role-gated.
+HOW IT STAYS IN SYNC
+--------------------
+• dashboard.js loads retention:entries and maps retStatus onto the project stage.
+• Every save/delete in the Retention Tracker now clears the dashboard cache, so
+  Project Financials reflects the change on next load.
+• A stageSource marker forces existing (pre-deploy) caches to rebuild once, so old
+  auto-derived statuses are replaced immediately.
 
 FILES
 -----
-• pages/index.js                     (Admin button for management)
-• components/AdminShell.js           (role-tagged tabs + nav filtering)
-• pages/admin/templates.js           (allow management)
-• pages/admin/documents.js           (allow management)
-• pages/admin/rams-director.js       (allow management)
-• pages/admin/problem-reports.js     (allow management)
-• pages/operations/forms-builder.js  (allow management)
-• pages/operations/users.js          (allow management)
-• pages/api/templates.js             (API allows management)
-• pages/api/rams-director.js         (API allows management)
+• pages/api/dashboard.js   (stage from retention retStatus; cache-guard marker)
+• pages/api/retention.js   (bust dashboard cache on every save/delete)
+
+AFTER DEPLOY
+------------
+Projects will show the status set in the Retention Tracker. Any project not yet in the
+tracker, or with retStatus 'live', shows as In Progress. Move a project in the tracker
+and Project Financials follows.
