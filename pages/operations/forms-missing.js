@@ -75,18 +75,28 @@ export default function FormsMissingPage() {
           {/* summary cards */}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
             <Card>
-              <div style={cardNum}>{data.summary.pct}%</div>
-              <div style={cardLbl}>Completed</div>
-              <Bar pct={data.summary.pct} />
+              {data.summary.required ? <>
+                <div style={cardNum}>{data.summary.pct}%</div>
+                <div style={cardLbl}>Completed</div>
+                <Bar pct={data.summary.pct} />
+              </> : <>
+                <div style={{ ...cardNum, color: '#bbb' }}>N/A</div>
+                <div style={cardLbl}>Completed</div>
+              </>}
               <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>{data.summary.completed} of {data.summary.required} required forms</div>
             </Card>
             {FORM_ORDER.map(ft => {
               const b = data.byForm[ft] || { required: 0, completed: 0 }
-              const pct = b.required ? Math.round((b.completed / b.required) * 100) : 100
+              const na = !b.required   // no forms needed for this type
+              const pct = na ? null : Math.round((b.completed / b.required) * 100)
               return (
                 <Card key={ft} small>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 4 }}>{ft}</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: pct === 100 ? '#16a34a' : (pct >= 50 ? '#ca8a04' : '#dc2626') }}>{pct}%</div>
+                  {na ? (
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#bbb' }}>N/A</div>
+                  ) : (
+                    <div style={{ fontSize: 20, fontWeight: 800, color: pct === 100 ? '#16a34a' : (pct >= 50 ? '#ca8a04' : '#dc2626') }}>{pct}%</div>
+                  )}
                   <div style={{ fontSize: 12, color: '#666' }}>{b.completed}/{b.required} done{b.required - b.completed > 0 ? ` · ${b.required - b.completed} missing` : ''}</div>
                 </Card>
               )

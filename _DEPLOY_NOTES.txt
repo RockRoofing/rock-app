@@ -1,33 +1,16 @@
-Forms — real PDF download (was opening a print dialog / HTML page)
-==================================================================
+Forms — Missing: show N/A (grey) when no forms are required
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILES to create in GitHub:
-  • lib/submissionsPdf.js
-  • pages/api/submissions-pdf.js
+Single file: pages/operations/forms-missing.js
 
-THE PROBLEM
------------
-On /operations/forms, "Download as PDF" didn't produce a PDF. It built an HTML page,
-opened it in a new tab and called window.print() — so you got a print dialog, and
-cancelling left you on a raw HTML page with no way to save a real PDF. Same in every
-browser (it wasn't a browser issue — it never generated a PDF).
-
-THE FIX
--------
-• New server endpoint /api/submissions-pdf builds a REAL PDF with pdf-lib (branded
-  header with logo, form title, project, operative, submitted date, then each
-  question/answer, with photos embedded) and returns it as application/pdf.
-• The forms page now POSTs the selected submission ids to that endpoint and downloads
-  the returned file straight to the browser's Downloads folder as a .pdf — no print
-  dialog, no HTML tab.
-• All three download buttons now use it: the multi-select "Download PDF", the single
-  "Download PDF" on a submission, and the modal's download.
-• Text is sanitised (emoji/smart-punctuation) so a label like "Water Ingress 💧"
-  can't crash generation.
+CHANGE
+------
+When a form type needs no forms for the period (0/0), it previously showed a green
+"100%". It now shows "N/A" in light grey instead. Same for the overall Completed
+summary card — if nothing is required across the period, it shows N/A rather than
+100%. The "x/y done" line is unchanged.
 
 FILES
 -----
-• lib/submissionsPdf.js          (NEW — pdf-lib builder)
-• pages/api/submissions-pdf.js   (NEW — returns application/pdf)
-• pages/operations/forms.js      (download real PDF blob; legacy print-hack retired)
+• pages/operations/forms-missing.js
