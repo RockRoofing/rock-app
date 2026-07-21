@@ -78,7 +78,18 @@ export default function SubmissionsPage() {
     document.body.appendChild(a); a.click(); a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
   }
-  const safeName = (s) => String(s || 'form-submission').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'form-submission'
+  const safeName = (s) => String(s || 'form-submission').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 90) || 'form-submission'
+  // yyyy-mm-dd for the submitted date.
+  const dateStr = (ts) => { try { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` } catch { return '' } }
+  // [Project Number] [Project Name] - [Form Name] [Date Submitted]
+  // (projectName already holds "J190 — Russell Hill", i.e. number + name.)
+  const fileNameFor = (meta) => {
+    if (!meta) return 'form-submission'
+    const proj = meta.projectName || ''
+    const form = meta.formTitle || 'Form'
+    const dt = dateStr(meta.submittedAt)
+    return safeName(`${proj} - ${form} ${dt}`.trim())
+  }
 
   function downloadSelected() {
     if (!selIds.length) { setSelNote('Select the forms you want to download first.'); return }
@@ -93,13 +104,19 @@ export default function SubmissionsPage() {
     try {
       if (mode === 'combined') {
         const blob = await fetchPdfBlob(selIds)
-        saveBlob(blob, selIds.length === 1 ? 'form-submission.pdf' : `form-submissions-${selIds.length}.pdf`)
+        // Name the combined file after the EARLIEST-dated selected form, marked Combined.
+        const metas = selIds.map(id => subs.find(s => s.id === id)).filter(Boolean)
+        const earliest = metas.slice().sort((a, b) => (a.submittedAt || 0) - (b.submittedAt || 0))[0]
+        const name = selIds.length === 1
+          ? `${fileNameFor(metas[0])}.pdf`
+          : `${safeName(`${(earliest?.projectName) || ''} - ${(earliest?.formTitle) || 'Form'} ${dateStr(earliest?.submittedAt)} Combined`)}.pdf`
+        saveBlob(blob, name)
       } else {
-        // Separate: one PDF file per selected submission.
+        // Separate: one PDF file per selected submission, named per spec.
         for (const id of selIds) {
           const meta = subs.find(s => s.id === id)
           const blob = await fetchPdfBlob([id])
-          saveBlob(blob, `${safeName(meta ? `${meta.projectName || ''}-${meta.formTitle || ''}` : id)}.pdf`)
+          saveBlob(blob, `${fileNameFor(meta)}.pdf`)
           await new Promise(r => setTimeout(r, 300))   // stagger so browsers don't block
         }
       }
@@ -274,7 +291,16 @@ async function printSubmissions(subs, labels) {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = ids.length === 1 ? 'form-submission.pdf' : `form-submissions-${ids.length}.pdf`
+    // Single: [Project Number] [Project Name] - [Form Name] [Date Submitted].
+    const clean = (s) => String(s || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 90)
+    const dstr = (ts) => { try { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` } catch { return '' } }
+    if (ids.length === 1) {
+      const m = list[0]
+      a.download = `${clean(`${m.projectName || ''} - ${m.formTitle || 'Form'} ${dstr(m.submittedAt)}`) || 'form-submission'}.pdf`
+    } else {
+      const earliest = list.slice().sort((x, y) => (x.submittedAt || 0) - (y.submittedAt || 0))[0]
+      a.download = `${clean(`${earliest?.projectName || ''} - ${earliest?.formTitle || 'Form'} ${dstr(earliest?.submittedAt)} Combined`) || 'form-submissions'}.pdf`
+    }
     document.body.appendChild(a); a.click(); a.remove()
     setTimeout(() => URL.revokeObjectURL(url), 4000)
   } catch (e) { alert(e?.message || 'Could not prepare download') }

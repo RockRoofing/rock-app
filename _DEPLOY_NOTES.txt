@@ -1,21 +1,24 @@
-Forms — choose Combined vs Separate on multi-download
-=====================================================
+Forms — downloaded PDF filenames
+================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
 Single file: pages/operations/forms.js
 
 CHANGE
 ------
-When 2+ forms are selected in Ops > Forms > Completed and you click Download, a small
-dialog now asks how you want them:
-  • Separate files — one PDF per form, each downloaded individually (named by
-    project + form title).
-  • Combined file — all forms in a single PDF (the previous behaviour).
-Selecting a single form downloads it directly (no prompt).
+Downloaded form PDFs are now named:
+  [Project Number] [Project Name] - [Form Name] [Date Submitted]
+e.g.  J190-Russell-Hill-Water-Ingress-2026-07-15.pdf
+(The project number + name come from the submission's project field, which already
+holds "J190 — Russell Hill". Date is the submitted date, yyyy-mm-dd.)
 
-Separate downloads are staggered slightly so browsers don't block the multiple
-downloads; you may get a one-time "allow multiple downloads" prompt from the browser
-the first time.
+• Separate downloads: each file named as above for its own form.
+• Combined download: named after the EARLIEST-dated selected form, with "Combined"
+  appended, e.g. J190-Russell-Hill-Water-Ingress-2026-07-15-Combined.pdf
+• Single downloads (row / modal "Download PDF") use the same naming.
+
+Note: spaces and special characters (incl. the — dash) are converted to hyphens so
+the filename is safe on Windows/Mac. The order of the fields matches the spec.
 
 FILES
 -----
