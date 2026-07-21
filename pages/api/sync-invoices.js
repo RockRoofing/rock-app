@@ -82,6 +82,69 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
   return out
 }
 
+// Pull ALL ACCREC (sales) CREDIT NOTES in the window and return them in the SAME
+// shape as sales invoices, but with sales200/retention612/total NEGATED — a customer
+// credit note reduces the invoiced/sales figure. Missed before because we only
+// fetched Type==ACCREC Invoices; credit notes live on the /CreditNotes endpoint.
+async function fetchAllSalesCreditNotes(at, tid, fromDate) {
+  const out = []
+  let page = 1
+  const [wy, wm, wd] = fromDate.split('-').map(n => parseInt(n, 10))
+  const where = encodeURIComponent(`Type=="ACCRECCREDIT" AND Date>=DateTime(${wy},${wm},${wd})`)
+  while (true) {
+    const url = `https://api.xero.com/api.xro/2.0/CreditNotes?where=${where}&page=${page}&pageSize=100`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' } })
+    if (!res.ok) { if (res.status === 429) { await sleep(2000); continue } break }
+    const data = await res.json()
+    const notes = data.CreditNotes || []
+    if (notes.length === 0) break
+    for (const full of notes) {
+      const dateStr = full.DateString?.slice(0, 10) || (full.Date && String(full.Date).match(/\d{4}-\d{2}-\d{2}/) ? String(full.Date).slice(0, 10) : null)
+      if (dateStr && dateStr < fromDate) continue
+      if (full.Type !== 'ACCRECCREDIT') continue
+      if (full.Status === 'DELETED' || full.Status === 'VOIDED') continue
+      let lineItems = full.LineItems
+      if (!Array.isArray(lineItems) || lineItems.length === 0) {
+        lineItems = await fetchCreditNoteLineItems(at, tid, full.CreditNoteID)
+      }
+      const trackingNames = new Set()
+      let sales200 = 0, retention612 = 0
+      for (const line of (lineItems || [])) {
+        if (String(line.AccountCode) === '200') sales200 += (line.LineAmount || 0)
+        if (String(line.AccountCode) === '612') retention612 += (line.LineAmount || 0)
+        for (const t of (line.Tracking || [])) { if (t.Option) trackingNames.add(String(t.Option).trim().toLowerCase()) }
+      }
+      // Negate: a credit note reduces sales/invoiced.
+      out.push({
+        invoiceNumber: full.CreditNoteNumber || '', xeroInvoiceId: full.CreditNoteID || null,
+        date: dateStr, dueDate: '',
+        contact: full.Contact?.Name || '', reference: full.Reference || '',
+        total: -(full.Total || 0), subTotal: -(full.SubTotal != null ? full.SubTotal : (full.Total || 0)),
+        totalTax: -(full.TotalTax || 0), sales200: -sales200, retention612: -retention612,
+        amountPaid: 0, amountDue: 0,
+        status: full.Status || '', trackingNames: [...trackingNames],
+        creditNote: true,
+      })
+    }
+    if (notes.length < 100) break
+    page++; await sleep(1200)
+  }
+  return out
+}
+
+async function fetchCreditNoteLineItems(at, tid, id) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const r = await fetch(`https://api.xero.com/api.xro/2.0/CreditNotes/${id}`, {
+      headers: { Authorization: `Bearer ${at}`, 'Xero-Tenant-Id': tid, Accept: 'application/json' }
+    })
+    if (r.status === 429) { await sleep(2000); continue }
+    if (!r.ok) return []
+    const d = await r.json()
+    return (d.CreditNotes || [])[0]?.LineItems || []
+  }
+  return []
+}
+
 // Re-fetch one invoice's line items, retrying on 429 so it's never dropped.
 async function fetchInvoiceLineItems(at, tid, invoiceId) {
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -129,8 +192,13 @@ export default async function handler(req, res) {
     const nameToId = new Map()
     for (const cp of cats) nameToId.set((cp.name || '').trim().toLowerCase(), cp.trackingOptionId)
 
-    // One pass: fetch all sales invoices in the window.
-    const all = await fetchAllSalesInvoices(tokens.access_token, tenantId, winStr)
+    // One pass: fetch all sales invoices in the window, plus sales credit notes
+    // (which reduce invoiced/sales and are negated), and merge them so every
+    // downstream figure (invoiced, retention, EOM) nets credit notes off.
+    const invoicesOnly = await fetchAllSalesInvoices(tokens.access_token, tenantId, winStr)
+    let creditNotes = []
+    try { creditNotes = await fetchAllSalesCreditNotes(tokens.access_token, tenantId, winStr) } catch (e) { console.error('credit-notes fetch:', e?.message) }
+    const all = [...invoicesOnly, ...creditNotes]
 
     // Group per project by tracking-name match; unmatched -> __UNASSIGNED__.
     const byProject = new Map()   // pid -> invoices[]
