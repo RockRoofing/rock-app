@@ -51,6 +51,7 @@ export default async function handler(req, res) {
 
   const out = []
   let totalWip = 0
+  let totalWipProfit = 0
 
   for (const id of projectIds) {
     const settings = settingsMap[id] || {}
@@ -100,14 +101,19 @@ export default async function handler(req, res) {
     const lastMonthAdj = adjustments.filter(a => a.month === prevMonthKey(month))
     const adjTotal = thisMonthAdj.reduce((s, a) => s + (a.amount || 0), 0)
 
-    // Margin: override if set, else derive from settings budgets (labour+materials vs
-    // contract value). Fall back to 0 so WIP is just the cost if no margin known.
+    // Margin: per-project override wins. Otherwise use the LIVE ACHIEVED margin —
+    // (invoiced − costs to the valuation date) ÷ invoiced — the same basis as
+    // Project Financials / EOM, so the two pages reconcile.
     let margin = null
-    if (settings.wipMarginOverride) margin = parseFloat(settings.wipMarginOverride) / 100
-    else {
-      const cv = parseFloat(settings.contractValue || 0)
-      const budget = parseFloat(settings.labourBudget || 0) + parseFloat(settings.materialsBudget || 0)
-      if (cv > 0 && budget > 0) margin = (cv - budget) / cv
+    if (settings.wipMarginOverride) {
+      margin = parseFloat(settings.wipMarginOverride) / 100
+    } else {
+      const costsToDate = costLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + (l.amount || 0), 0)
+      const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
+      const invoicedToDate = invLines
+        .filter(l => l.date && l.date <= valStr)
+        .reduce((s, l) => s + invVal(l), 0)   // credit notes are negative and net off
+      margin = invoicedToDate > 0 ? (invoicedToDate - costsToDate) / invoicedToDate : null
     }
 
     const adjustedCosts = postValTotal + adjTotal
@@ -123,6 +129,10 @@ export default async function handler(req, res) {
         : gross(a.amount || 0, am)
     }
     wipValue = Math.max(0, wipValue)
+    // Calculated profit in £ = WIP value − the cost that generated it (post-valuation
+    // costs + manual adjustment amounts). This is the margin portion of the WIP.
+    const wipCost = postValTotal + adjTotal
+    const wipProfit = wipValue - wipCost
 
     // Only include projects that have something to show this month.
     const hasContent = postValCosts.length > 0 || creditNotes.length > 0 || thisMonthAdj.length > 0 || lastMonthAdj.length > 0
@@ -131,6 +141,7 @@ export default async function handler(req, res) {
     // Total WIP = costs + margin + manual adjustments only. Credit notes are shown
     // for information (right column) and are NOT deducted from WIP.
     totalWip += wipValue
+    totalWipProfit += wipProfit
     out.push({
       id, name, jobNo,
       valuationDate: valStr,
@@ -143,10 +154,11 @@ export default async function handler(req, res) {
       adjTotal,
       margin,
       wipValue,
+      wipProfit,
     })
   }
 
   out.sort((a, b) => (a.jobNo || a.name).localeCompare(b.jobNo || b.name, undefined, { numeric: true }))
 
-  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, missingDates })
+  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, totalWipProfit, missingDates })
 }

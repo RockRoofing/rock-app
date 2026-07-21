@@ -66,11 +66,29 @@ function calcAtValDate(project, monthKey) {
   const grossInvoiced = invoicedToDate
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
 
-  // No cutoff (completed project) => nothing is "after" the date, so WIP is 0.
-  const costsAfterDate = vDateStr ? costLines.filter(l => l.date && l.date > vDateStr).reduce((s, l) => s + (l.amount || 0), 0) : 0
+  // WIP costs = costs AFTER the valuation date up to the END OF THAT MONTH (matching
+  // the WIP page). If the valuation date is the last day of the month, this window is
+  // empty so there is no WIP. Completed projects (no vDateStr) have no WIP.
+  const monthEndStr = new Date(Date.UTC(year, month, 0)).toISOString().split('T')[0]
+  const costsAfterDate = vDateStr
+    ? costLines.filter(l => l.date && l.date > vDateStr && l.date <= monthEndStr).reduce((s, l) => s + (l.amount || 0), 0)
+    : 0
   const effectiveMargin = project.wipMarginOverride ? parseFloat(project.wipMarginOverride) / 100 : margin
-  const wip = effectiveMargin != null && effectiveMargin < 1 && costsAfterDate > 0
-    ? costsAfterDate / (1 - effectiveMargin) : 0
+  // Manual WIP adjustments for this month (carried on the project object so the
+  // dashboard/EOM WIP matches the WIP page exactly).
+  const wipMonthKey = `${year}-${String(month).padStart(2, '0')}`
+  const monthAdj = Array.isArray(project.wipAdjustments)
+    ? project.wipAdjustments.filter(a => a.month === wipMonthKey)
+    : []
+  const grossOne = (amt, mgn) => (mgn != null && mgn < 1 && amt > 0) ? amt / (1 - mgn) : Math.max(0, amt)
+  let wip = grossOne(costsAfterDate, effectiveMargin)
+  for (const a of monthAdj) {
+    const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : effectiveMargin
+    wip += (a.amount != null && a.amount < 0)
+      ? a.amount / (1 - (am != null && am < 1 ? am : 0))
+      : grossOne(a.amount || 0, am)
+  }
+  wip = Math.max(0, wip)
 
   // Remaining to claim = AFA − (invoiced + WIP). Never below 0.
   const remainingToClaim = Math.max(0, (project.afa || 0) - grossInvoiced - wip)

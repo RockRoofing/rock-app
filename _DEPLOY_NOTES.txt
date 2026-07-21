@@ -1,34 +1,41 @@
-WIP page — banner, default month, per-adjustment margin
-=======================================================
+WIP reconciled across pages + profit + carry-forward tick
+=========================================================
 Deploy target: RockRoofing/rock-app  branch main
-Build: ✓ Compiled successfully
-Deploy AFTER the WIP_page and WIP_page_fixes bundles.
+Build: Compiled successfully
+Deploy AFTER the earlier WIP bundles.
 
-CHANGES
--------
-1. MISSING-DATES BANNER — same amber banner as the Applications / Application Calendar
-   pages, listing projects that don't have application + valuation dates set. Clicking
-   a project opens the EXACT same ProjectDatesModal pop-out (monthly option + per-month
-   override table) used on those pages. Saving refreshes the WIP page.
+1) WIP NOW IDENTICAL ON BOTH PAGES
+   Project Financials / EOM (commercial.js) now calculates WIP on the SAME basis as
+   the WIP page:
+     • Costs AFTER the valuation date up to the END OF THAT MONTH (was: all costs
+       after the valuation date with no month-end limit). If the valuation date is the
+       last day of the month, the window is empty and WIP is 0.
+     • Same live achieved margin ((invoiced - costs) / invoiced), override wins.
+     • Includes this month's manual WIP adjustments (each at its own margin, default
+       project margin).
+   Dashboard now loads per-project wip:adjustments and passes them through so the
+   figures match exactly. (Cache-guard updated so old caches rebuild once.)
 
-2. DEFAULT MONTH — the WIP page now defaults to the LAST COMPLETED month (previous
-   month) instead of the current month. You can still filter back through earlier
-   months.
+2) CALCULATED PROFIT IN £ ON THE WIP PAGE
+   • Each project header shows "profit £X" (WIP value - the cost that generated it).
+   • The Total WIP box at the top shows "Profit in WIP: £X" across all projects.
 
-3. INFO-ONLY ADJUSTMENTS now show the full project name (job no — name) for each
-   last-month adjustment.
-
-4. PER-ADJUSTMENT MARGIN — each manual WIP adjustment now has its own margin %, which
-   DEFAULTS to the project's current margin. Each adjustment's WIP contribution is
-   grossed up at its own margin; the project WIP = post-valuation costs at the project
-   margin + each adjustment at its own margin. Existing adjustments show their margin
-   (or "project" when they inherit it).
+3) CARRY-FORWARD TICK ON LAST MONTH'S ADJUSTMENTS
+   In the "last month's manual adjustments" info area, each item now has a grey tick.
+   Click it and: the item turns fully green (and the tick goes green and stays), and
+   the adjustment is added to THAT project's manual adjustments for the CURRENT month
+   (so it shows in the project's adjustments and counts toward WIP). Items already
+   carried show as green with "carried".
 
 FILES
 -----
-• pages/api/wip.js                              (missingDates list; per-adjustment margin calc)
-• pages/wip.js                                  (banner + modal, default last month, name in info banner, margin field)
-• pages/api/project/[id]/wip-adjustments.js     (store per-adjustment margin)
+• pages/commercial.js       (WIP window capped to month-end + manual adjustments)
+• pages/api/dashboard.js    (load/pass wipAdjustments; cache-guard marker)
+• pages/api/wip.js          (live-margin default; WIP profit £; total profit)
+• pages/wip.js              (profit display; carry-forward tick)
 
-NOTE: the missing-dates banner reads the dashboard cache, so load Project Financials
-once if the list looks empty on a cold cache.
+AFTER DEPLOY
+------------
+The dashboard cache rebuilds automatically on first load (guard updated). If the two
+pages still differ for a month, confirm the same valuation date is set for that month
+on both (they now read the per-month valuation date).

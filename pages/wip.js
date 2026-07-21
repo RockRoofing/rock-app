@@ -29,6 +29,22 @@ export default function WipPage() {
   // Default = the last COMPLETED month (previous month), and lets you filter back.
   const [month, setMonth] = useState(() => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth() - 1, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
   const [datesModal, setDatesModal] = useState(null)
+  const [carriedIds, setCarriedIds] = useState([])
+  const [carrying, setCarrying] = useState(null)
+
+  // Carry a last-month adjustment into the CURRENT (selected) month for its project.
+  async function carryForward(p, a) {
+    setCarrying(a.id)
+    try {
+      await fetch(`/api/project/${p.id}/wip-adjustments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, type: 'cost', description: a.description || '', amount: a.amount, margin: a.margin ?? null }),
+      })
+      setCarriedIds(ids => [...ids, a.id])
+      await load()
+    } catch {}
+    setCarrying(null)
+  }
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -66,6 +82,7 @@ export default function WipPage() {
               <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '10px 18px', textAlign: 'right' }}>
                 <div style={{ fontSize: 11, color: '#888' }}>Total WIP</div>
                 <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a' }}>{fmtC(data?.totalWip)}</div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Profit in WIP: <strong style={{ color: '#0f766e' }}>{fmtC(data?.totalWipProfit)}</strong></div>
               </div>
               <div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>Figures as at valuation date (month)</div>
@@ -89,16 +106,26 @@ export default function WipPage() {
             </div>
           )}
 
-          {/* Previous month's manual adjustments — information only, NOT in the total */}
+          {/* Previous month's manual adjustments — information only, NOT in the total.
+              Click the grey tick to carry an item forward into the current month. */}
           {anyLastMonth && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 18 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Last month's manual adjustments (for information only — not included in this month's total)</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {projects.flatMap(p => (p.lastMonthAdj || []).map((a, i) => (
-                  <span key={p.id + i} style={{ fontSize: 12, background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 10px', color: '#7c5e10' }}>
-                    <strong>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</strong>: {a.description || 'Adjustment'} · {fmtC(a.amount)}
-                  </span>
-                )))}
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>Last month's manual adjustments (for information only — not in this month's total). Tick to carry an item into {monthLabel(month)}.</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {projects.flatMap(p => (p.lastMonthAdj || []).map((a) => {
+                  // Already carried if an equivalent adjustment exists this month.
+                  const carried = (p.thisMonthAdj || []).some(t => t.description === a.description && t.amount === a.amount) || carriedIds.includes(a.id)
+                  return (
+                    <div key={p.id + a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, background: carried ? '#dcfce7' : '#fff', border: `1px solid ${carried ? '#86efac' : '#fde68a'}`, borderRadius: 8, padding: '6px 10px' }}>
+                      <button onClick={() => carryForward(p, a)} disabled={carried || carrying === a.id} title={carried ? 'Carried into this month' : 'Carry into this month'}
+                        style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: carried ? 'default' : 'pointer', background: carried ? '#16a34a' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>✓</button>
+                      <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</span>
+                      <span style={{ flex: 1, color: carried ? '#166534' : '#7c5e10' }}>{a.description || 'Adjustment'}</span>
+                      <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{fmtC(a.amount)}</span>
+                      {carried && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>carried ✓</span>}
+                    </div>
+                  )
+                }))}
               </div>
             </div>
           )}
@@ -184,7 +211,7 @@ function ProjectSection({ p, month, onChange }) {
             <span style={{ fontSize: 11, color: '#888' }}>%</span>
             <button onClick={saveMargin} disabled={savingMargin} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333' }}>{savingMargin ? '…' : 'Save'}</button>
           </div>
-          <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>post-val costs {fmtC(p.postValTotal)}{p.adjTotal ? ` · adj ${fmtC(p.adjTotal)}` : ''}</div>
+          <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>post-val costs {fmtC(p.postValTotal)}{p.adjTotal ? ` · adj ${fmtC(p.adjTotal)}` : ''} · profit {fmtC(p.wipProfit)}</div>
         </div>
       </div>
 

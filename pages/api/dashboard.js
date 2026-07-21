@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0] && cached[0].stageSource === 'retention') {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention') {
         return res.json({ projects: cached })
       }
     } catch {}
@@ -173,6 +173,10 @@ export default async function handler(req, res) {
         const wipCache = await redis.get(`wip:latest:${id}`)
         if (wipCache) wip = wipCache.wip || 0
       } catch {}
+      // Per-project manual WIP adjustments (so the dashboard/EOM WIP can match the
+      // WIP page exactly, incl. this-month adjustments).
+      let wipAdjustments = []
+      try { wipAdjustments = (await redis.get(`wip:adjustments:${id}`)) || [] } catch {}
 
       // Remaining to claim = AFA − what's already accounted for (invoiced + WIP,
       // where WIP is work done but not yet invoiced). Never below 0.
@@ -258,6 +262,7 @@ export default async function handler(req, res) {
         currentMargin,
         wip,
         wipMarginOverride,
+        wipAdjustments,
         allPaid,
         amountOutstanding,
         lastInvoiceDate,
