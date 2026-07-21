@@ -10,6 +10,7 @@ const LINKS = [
   { href: '/contracted-rates', label: 'Contracted Rates' },
   { href: '/applications', label: 'Applications' },
   { href: '/application-calendar', label: 'Application Calendar' },
+  { href: '/wip', label: 'WIP' },
   { href: '/commercial-scorecard', label: 'Commercial Scorecard' },
 ]
 

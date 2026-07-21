@@ -1,42 +1,54 @@
-Credit notes now included in invoiced / retention / EOM
-=======================================================
+WIP Page
+========
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/api/sync-invoices.js
+NEW FILES to create in GitHub:
+  • pages/wip.js
+  • pages/api/wip.js
 
-THE PROBLEM
------------
-Sales credit notes weren't reflected in Project Financials (invoiced), the Retention
-tracker, or the EOM report. Cause: the invoice sync only fetched Type=="ACCREC"
-Invoices and skipped everything else. Credit notes are a SEPARATE Xero document type
-(ACCRECCREDIT) on the /CreditNotes endpoint, so they were never pulled — a customer
-credit note didn't reduce the invoiced/sales figure (and therefore didn't reduce
-retention or the EOM invoiced column).
+NAV
+---
+• "WIP" tab added to the shared Commercial nav, BEFORE Commercial Scorecard. Because
+  the nav is shared, WIP shows on every commercial page, and all the other tabs show
+  on the WIP page.
 
-THE FIX
--------
-sync-invoices now ALSO fetches sales credit notes (ACCRECCREDIT) for the same window
-and merges them into the invoice list with their amounts NEGATED (sales200,
-retention612, total, subTotal, tax all negative). They're matched to projects by the
-same tracking-name method, so:
-  • Project Financials "Invoiced" nets off credit notes.
-  • Retention (retention % × invoiced sales200) reduces accordingly.
-  • The EOM report invoiced column reflects them.
-Downstream sums use reduce() with no positive-only filter, so negatives net correctly.
+THE PAGE
+--------
+• Total WIP shown at the top.
+• "Figures as at valuation date" month filter at the top — defaults to the CURRENT
+  month, and you can filter back through previous months. Because it defaults to the
+  current month, on the 1st the next WIP month shows automatically: manual
+  adjustments (which are stored per-month) drop off the sections, and the new costs
+  from valuation date → end of month appear.
+• Last month's manual adjustments show in an amber banner at the top FOR INFORMATION
+  ONLY — they are NOT added to the total (so you can see if those known WIP items
+  should still apply).
+• One section per project, headed with the project name + job no and the valuation
+  date for the selected month.
+• Under each project, two columns side by side:
+   - LEFT (wider): costs from the DAY AFTER the valuation date to end of month (the
+     same table as the project WIP tab: date, supplier, invoice, account, type,
+     amount, with a total). If the valuation date IS the end of month, nothing is
+     listed.
+   - RIGHT (narrower): credit notes issued against the project — date, credit note
+     number, the invoice it was applied to, and the amount.
+   - Below the left column: the Manual WIP Cost Adjustments editor (add/remove,
+     positive = increases WIP, negative = write-down). Adjustments are per-month.
+• WIP is totalled per project (in each project header) and overall (top).
+
+DATA
+----
+Reads costs:lines:{id}, invoiced:lines:{id} (credit notes flagged), and
+wip:adjustments:{id} per project, plus each project's settings for valuation date and
+margin. Manual adjustments use the existing /api/project/{id}/wip-adjustments endpoint.
+
+Access: post-contract, management, admin (same as other commercial pages).
 
 FILES
 -----
-• pages/api/sync-invoices.js
+• pages/wip.js                 (NEW)
+• pages/api/wip.js             (NEW)
+• components/CommercialNav.js  (WIP tab before Commercial Scorecard)
 
-AFTER DEPLOY
-------------
-Run "Sync Invoices" (Project Financials) to re-pull the window including credit notes.
-The dashboard cache refreshes from the new figures.
-
-STILL TO CONFIRM (cost side)
-----------------------------
-SUPPLIER credit notes (ACCPAYCREDIT) reduce COSTS. Bills are imported via the CSV
-bulk upload, not this API sync — so supplier credits are only captured if they appear
-in your bills CSV export (with negative amounts). If supplier credit notes are also
-being missed on the cost side, tell me and I'll add an equivalent — but that depends
-on how your bills are brought in (CSV vs API).
+NOTE: credit notes appear here once you've re-run "Sync Invoices" (the credit-notes
+fix). The "applied to" invoice shows if that link is present on the credit note.
