@@ -1,4 +1,4 @@
-import { saveProject } from '../../../../lib/db'
+import { saveProject, getProject } from '../../../../lib/db'
 
 async function clearCache() {
   try {
@@ -14,7 +14,10 @@ async function clearCache() {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   const { id } = req.query
-  await saveProject(id, req.body)
+  // Merge with existing settings so a partial update (e.g. just wipMarginOverride
+  // from the WIP page) doesn't wipe the rest. Full-object callers are unaffected.
+  const existing = (await getProject(id)) || {}
+  await saveProject(id, { ...existing, ...req.body })
   await clearCache()
   res.json({ ok: true })
 }

@@ -31,6 +31,14 @@ export default async function handler(req, res) {
   const monthEndStr = iso(monthEnd)
 
   const settingsMap = await getAllProjectSettings()
+  // Real project names/job numbers live on the Xero tracking categories, surfaced via
+  // the dashboard cache (keyed by xeroId). Settings alone only has the GUID key, so
+  // use the cache to resolve display names.
+  const dashCache = (await redis.get('dashboard:cache').catch(() => null)) || []
+  const meta = {}
+  for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
+    if (p && p.xeroId) meta[String(p.xeroId)] = { name: p.name || '', jobNo: p.jobNo || '' }
+  }
   const projectIds = Object.keys(settingsMap)
 
   const out = []
@@ -38,9 +46,13 @@ export default async function handler(req, res) {
 
   for (const id of projectIds) {
     const settings = settingsMap[id] || {}
-    // Only projects that are in-progress and have a contract value / budgets worth WIP.
-    const name = settings.name || settings.projectName || id
-    const jobNo = settings.jobNo || ''
+    // Real name/job number from the dashboard cache; fall back to settings.
+    const m = meta[String(id)] || {}
+    const name = m.name || settings.name || settings.projectName || ''
+    const jobNo = m.jobNo || settings.jobNo || ''
+    // If we can't resolve a real name, this GUID isn't a live tracked project — skip
+    // so we never show a raw ID.
+    if (!name && !jobNo) continue
 
     // Resolve the valuation date FOR THIS MONTH: a per-month override wins, else the
     // fixed valuation day applied to this month.
@@ -97,6 +109,8 @@ export default async function handler(req, res) {
     const hasContent = postValCosts.length > 0 || creditNotes.length > 0 || thisMonthAdj.length > 0 || lastMonthAdj.length > 0
     if (!hasContent && wipValue === 0) continue
 
+    // Total WIP = costs + margin + manual adjustments only. Credit notes are shown
+    // for information (right column) and are NOT deducted from WIP.
     totalWip += wipValue
     out.push({
       id, name, jobNo,

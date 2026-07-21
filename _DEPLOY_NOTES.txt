@@ -1,54 +1,35 @@
-WIP Page
-========
+WIP page fixes
+==============
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-NEW FILES to create in GitHub:
-  • pages/wip.js
-  • pages/api/wip.js
+Deploy AFTER the initial WIP_page bundle.
 
-NAV
----
-• "WIP" tab added to the shared Commercial nav, BEFORE Commercial Scorecard. Because
-  the nav is shared, WIP shows on every commercial page, and all the other tabs show
-  on the WIP page.
+FIXES
+-----
+1. PROJECT NAMES showed as raw IDs (abca7170-…). Cause: names live on the Xero
+   tracking categories, not the settings object. The WIP API now resolves each
+   project's name + job number from the dashboard cache (keyed by xeroId). Projects
+   that can't resolve to a real name are skipped (no more raw GUIDs).
+   → Make sure the dashboard has been loaded/synced at least once so the cache exists.
 
-THE PAGE
---------
-• Total WIP shown at the top.
-• "Figures as at valuation date" month filter at the top — defaults to the CURRENT
-  month, and you can filter back through previous months. Because it defaults to the
-  current month, on the 1st the next WIP month shows automatically: manual
-  adjustments (which are stored per-month) drop off the sections, and the new costs
-  from valuation date → end of month appear.
-• Last month's manual adjustments show in an amber banner at the top FOR INFORMATION
-  ONLY — they are NOT added to the total (so you can see if those known WIP items
-  should still apply).
-• One section per project, headed with the project name + job no and the valuation
-  date for the selected month.
-• Under each project, two columns side by side:
-   - LEFT (wider): costs from the DAY AFTER the valuation date to end of month (the
-     same table as the project WIP tab: date, supplier, invoice, account, type,
-     amount, with a total). If the valuation date IS the end of month, nothing is
-     listed.
-   - RIGHT (narrower): credit notes issued against the project — date, credit note
-     number, the invoice it was applied to, and the amount.
-   - Below the left column: the Manual WIP Cost Adjustments editor (add/remove,
-     positive = increases WIP, negative = write-down). Adjustments are per-month.
-• WIP is totalled per project (in each project header) and overall (top).
+2. COSTS SORTED BY DATE by default, and every column header in BOTH tables (costs and
+   credit notes) is now clickable to sort (asc/desc, with an arrow indicator).
 
-DATA
+3. MARGIN is now editable per project — a % box + Save in each project header. Saving
+   stores it as the project's wipMarginOverride and recomputes that project's WIP.
+
+4. TOTAL WIP at the top does NOT deduct credit notes. It is costs + margin + manual
+   adjustments only (WIP = (post-val costs + manual adjustments) ÷ (1 − margin)).
+   Credit notes are shown on the right for information and never reduce the total.
+
+ALSO
 ----
-Reads costs:lines:{id}, invoiced:lines:{id} (credit notes flagged), and
-wip:adjustments:{id} per project, plus each project's settings for valuation date and
-margin. Manual adjustments use the existing /api/project/{id}/wip-adjustments endpoint.
-
-Access: post-contract, management, admin (same as other commercial pages).
+• pages/api/project/[id]/settings.js now MERGES the posted fields with existing
+  settings (instead of overwriting), so saving just the margin from the WIP page
+  can't wipe other project settings. Full-object callers are unaffected.
 
 FILES
 -----
-• pages/wip.js                 (NEW)
-• pages/api/wip.js             (NEW)
-• components/CommercialNav.js  (WIP tab before Commercial Scorecard)
-
-NOTE: credit notes appear here once you've re-run "Sync Invoices" (the credit-notes
-fix). The "applied to" invoice shows if that link is present on the credit note.
+• pages/api/wip.js                       (names from dashboard cache; total comment)
+• pages/wip.js                           (sortable tables, editable margin)
+• pages/api/project/[id]/settings.js     (merge on save)

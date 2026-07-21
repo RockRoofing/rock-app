@@ -102,6 +102,54 @@ export default function WipPage() {
 }
 
 function ProjectSection({ p, month, onChange }) {
+  const [sortCol, setSortCol] = useState('date')
+  const [sortDir, setSortDir] = useState('asc')
+  const [marginEdit, setMarginEdit] = useState(p.margin != null ? (p.margin * 100).toFixed(1) : '')
+  const [savingMargin, setSavingMargin] = useState(false)
+
+  useEffect(() => { setMarginEdit(p.margin != null ? (p.margin * 100).toFixed(1) : '') }, [p.margin])
+
+  function sortRows(rows) {
+    const arr = [...rows]
+    arr.sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol]
+      if (sortCol === 'amount') return sortDir === 'asc' ? (av - bv) : (bv - av)
+      av = String(av || ''); bv = String(bv || '')
+      return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+    })
+    return arr
+  }
+  function toggleSort(col) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir(col === 'amount' ? 'desc' : 'asc') }
+  }
+  const arrow = (col) => sortCol === col ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
+
+  async function saveMargin() {
+    setSavingMargin(true)
+    try {
+      await fetch(`/api/project/${p.id}/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wipMarginOverride: marginEdit === '' ? null : Number(marginEdit) }),
+      })
+      await onChange()
+    } catch {}
+    setSavingMargin(false)
+  }
+
+  const sortedCosts = sortRows(p.postValCosts)
+
+  // Credit-note table sorting (default: date descending).
+  const [cnCol, setCnCol] = useState('date')
+  const [cnDir, setCnDir] = useState('desc')
+  const cnArrow = (col) => cnCol === col ? (cnDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
+  function cnToggle(col) { if (cnCol === col) setCnDir(d => d === 'asc' ? 'desc' : 'asc'); else { setCnCol(col); setCnDir(col === 'amount' ? 'desc' : 'asc') } }
+  const sortedCredits = [...p.creditNotes].sort((a, b) => {
+    let av = cnCol === 'appliedTo' ? (a.appliedTo || a.number) : a[cnCol], bv = cnCol === 'appliedTo' ? (b.appliedTo || b.number) : b[cnCol]
+    if (cnCol === 'amount') return cnDir === 'asc' ? (av - bv) : (bv - av)
+    av = String(av || ''); bv = String(bv || '')
+    return cnDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
+  })
   return (
     <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, padding: 18, marginBottom: 18 }}>
       {/* Project header */}
@@ -113,7 +161,14 @@ function ProjectSection({ p, month, onChange }) {
         <div style={{ textAlign: 'right' }}>
           <span style={{ fontSize: 11, color: '#888' }}>Project WIP </span>
           <span style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{fmtC(p.wipValue)}</span>
-          <div style={{ fontSize: 10, color: '#aaa' }}>margin {p.margin != null ? (p.margin * 100).toFixed(1) + '%' : '—'} · post-val costs {fmtC(p.postValTotal)}{p.adjTotal ? ` · adj ${fmtC(p.adjTotal)}` : ''}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>Margin</span>
+            <input type="number" value={marginEdit} onChange={e => setMarginEdit(e.target.value)} placeholder="—"
+              style={{ width: 60, padding: '3px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
+            <span style={{ fontSize: 11, color: '#888' }}>%</span>
+            <button onClick={saveMargin} disabled={savingMargin} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333' }}>{savingMargin ? '…' : 'Save'}</button>
+          </div>
+          <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>post-val costs {fmtC(p.postValTotal)}{p.adjTotal ? ` · adj ${fmtC(p.adjTotal)}` : ''}</div>
         </div>
       </div>
 
@@ -131,11 +186,16 @@ function ProjectSection({ p, month, onChange }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                 <thead>
                   <tr style={{ background: '#faf9f7' }}>
-                    <th style={thL}>Date</th><th style={thL}>Supplier</th><th style={thL}>Invoice</th><th style={thL}>Account</th><th style={thL}>Type</th><th style={thR}>Amount</th>
+                    <th style={thSort} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
+                    <th style={thSort} onClick={() => toggleSort('supplier')}>Supplier{arrow('supplier')}</th>
+                    <th style={thSort} onClick={() => toggleSort('reference')}>Invoice{arrow('reference')}</th>
+                    <th style={thSort} onClick={() => toggleSort('accountName')}>Account{arrow('accountName')}</th>
+                    <th style={thSort} onClick={() => toggleSort('type')}>Type{arrow('type')}</th>
+                    <th style={{ ...thSort, textAlign: 'right' }} onClick={() => toggleSort('amount')}>Amount{arrow('amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {p.postValCosts.map((l, i) => (
+                  {sortedCosts.map((l, i) => (
                     <tr key={i} style={{ borderTop: '1px solid #f2f0ec' }}>
                       <td style={tdL}>{fmtDate(l.date)}</td>
                       <td style={tdL}>{l.supplier || '—'}</td>
@@ -166,11 +226,13 @@ function ProjectSection({ p, month, onChange }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
                 <thead>
                   <tr style={{ background: '#faf9f7' }}>
-                    <th style={thL}>Date</th><th style={thL}>Credit / applied to</th><th style={thR}>Amount</th>
+                    <th style={thSort} onClick={() => cnToggle('date')}>Date{cnArrow('date')}</th>
+                    <th style={thSort} onClick={() => cnToggle('appliedTo')}>Credit / applied to{cnArrow('appliedTo')}</th>
+                    <th style={{ ...thSort, textAlign: 'right' }} onClick={() => cnToggle('amount')}>Amount{cnArrow('amount')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {p.creditNotes.map((c, i) => (
+                  {sortedCredits.map((c, i) => (
                     <tr key={i} style={{ borderTop: '1px solid #f2f0ec' }}>
                       <td style={tdL}>{fmtDate(c.date)}</td>
                       <td style={tdL}>
@@ -246,5 +308,6 @@ function ManualAdjustments({ p, month, onChange }) {
 const Empty = ({ children }) => <div style={{ border: '1px dashed #e0ddd6', borderRadius: 10, padding: 16, textAlign: 'center', color: '#bbb', fontSize: 12.5 }}>{children}</div>
 const thL = { textAlign: 'left', padding: '7px 10px', fontSize: 11, color: '#888', fontWeight: 600 }
 const thR = { textAlign: 'right', padding: '7px 10px', fontSize: 11, color: '#888', fontWeight: 600 }
+const thSort = { ...thL, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }
 const tdL = { textAlign: 'left', padding: '6px 10px' }
 const tdR = { textAlign: 'right', padding: '6px 10px' }
