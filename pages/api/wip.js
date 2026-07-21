@@ -120,17 +120,12 @@ export default async function handler(req, res) {
     // Margin: per-project override wins. Otherwise use the LIVE ACHIEVED margin —
     // (invoiced − costs to the valuation date) ÷ invoiced — the same basis as
     // Project Financials / EOM, so the two pages reconcile.
-    let margin = null
-    if (settings.wipMarginOverride) {
-      margin = parseFloat(settings.wipMarginOverride) / 100
-    } else {
-      const costsToDate = costLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + (l.amount || 0), 0)
-      const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
-      const invoicedToDate = invLines
-        .filter(l => l.date && l.date <= valStr)
-        .reduce((s, l) => s + invVal(l), 0)   // credit notes are negative and net off
-      margin = invoicedToDate > 0 ? (invoicedToDate - costsToDate) / invoicedToDate : null
-    }
+    const costsToDate = costLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + (l.amount || 0), 0)
+    const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
+    const invoicedToDate = invLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + invVal(l), 0)
+    const calculatedMargin = invoicedToDate > 0 ? (invoicedToDate - costsToDate) / invoicedToDate : null
+    const marginIsOverride = settings.wipMarginOverride != null && settings.wipMarginOverride !== ''
+    const margin = marginIsOverride ? parseFloat(settings.wipMarginOverride) / 100 : calculatedMargin
 
     const adjustedCosts = postValTotal + adjTotal
     // WIP = post-valuation costs grossed up at the PROJECT margin, PLUS each manual
@@ -174,6 +169,8 @@ export default async function handler(req, res) {
       lastMonthAdj,
       adjTotal,
       margin,
+      marginIsOverride,
+      calculatedMargin,
       wipValue,
       wipProfit,
     })

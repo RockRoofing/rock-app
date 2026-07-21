@@ -1,25 +1,22 @@
-WIP — clear a manual adjustment's margin to inherit the project margin
-======================================================================
+WIP — clear the project WIP margin override per section
+======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
 
 CHANGE
 ------
-You can now clear the margin on a manual WIP adjustment so it falls back to the
-project's current margin (and tracks it if the project margin later changes):
+Each project section on the WIP page can now clear its WIP margin OVERRIDE and revert
+to the calculated (live) margin:
+  • When a project has a manual margin override, a "Clear override" button appears next
+    to the margin box. Clicking it removes the override so the project uses the live
+    calculated margin ((invoiced − costs) / invoiced) again.
+  • Under the margin it now shows whether the current margin is an "override
+    (calculated: X%)" or the "calculated margin", so it's clear which is in effect.
 
-• EXISTING adjustments now show an editable margin box with a "Reset" button. Blank it
-  (or click Reset) and Save -> the adjustment inherits the project margin, shown as
-  "(project X%)". Type a value + Save to set a specific margin.
-• The ADD form's margin box has a "Reset" button too, to blank it back to the project
-  margin before adding.
-• A blank/cleared margin is stored as null and the WIP calc uses the project margin
-  for that line.
-
-API: added a PATCH handler to wip-adjustments to update an adjustment's margin
-(margin=null clears it).
+API now returns marginIsOverride + calculatedMargin per project so the page can show
+this and offer the clear button.
 
 FILES
 -----
-• pages/wip.js
-• pages/api/project/[id]/wip-adjustments.js   (PATCH to update margin)
+• pages/api/wip.js   (marginIsOverride + calculatedMargin)
+• pages/wip.js       (Clear override button + indicator)

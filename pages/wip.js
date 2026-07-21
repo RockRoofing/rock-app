@@ -192,6 +192,19 @@ function ProjectSection({ p, month, onChange }) {
     setSavingMargin(false)
   }
 
+  // Clear the project's WIP margin override -> reverts to the calculated (live) margin.
+  async function clearMargin() {
+    setSavingMargin(true)
+    try {
+      await fetch(`/api/project/${p.id}/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wipMarginOverride: null }),
+      })
+      await onChange()
+    } catch {}
+    setSavingMargin(false)
+  }
+
   const sortedCosts = sortRows(p.postValCosts)
 
   // Credit-note table sorting (default: date descending).
@@ -222,6 +235,12 @@ function ProjectSection({ p, month, onChange }) {
               style={{ width: 60, padding: '3px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
             <span style={{ fontSize: 11, color: '#888' }}>%</span>
             <button onClick={saveMargin} disabled={savingMargin} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333' }}>{savingMargin ? '…' : 'Save'}</button>
+            {p.marginIsOverride && <button onClick={clearMargin} disabled={savingMargin} title="Clear override — revert to calculated margin" style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#666' }}>Clear override</button>}
+          </div>
+          <div style={{ fontSize: 10, color: p.marginIsOverride ? '#b45309' : '#aaa', marginTop: 2 }}>
+            {p.marginIsOverride
+              ? `override (calculated: ${p.calculatedMargin != null ? (p.calculatedMargin * 100).toFixed(1) + '%' : '—'})`
+              : 'calculated margin'}
           </div>
           <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>post-val costs {fmtC(p.postValTotal)}{p.adjTotal ? ` · adj ${fmtC(p.adjTotal)}` : ''} · profit {fmtC(p.wipProfit)}</div>
         </div>
