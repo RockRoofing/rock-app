@@ -810,7 +810,11 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
         </div>
         <div>
           <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>PC Type (Main/Sub)</div>
-          <input value={form.pcType || ''} onChange={f('pcType')} style={inputStyle} />
+          <select value={form.pcType || ''} onChange={f('pcType')} style={inputStyle}>
+            <option value="">— Select —</option>
+            <option value="Main PC">Main PC</option>
+            <option value="Sub PC">Sub PC</option>
+          </select>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 12 }}>

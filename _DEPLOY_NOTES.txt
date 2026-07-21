@@ -1,41 +1,23 @@
-Retention Tracker controls project stage (live → defects → complete)
-====================================================================
+Retention Tracker — PC Type as Main/Sub dropdown
+================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Single file: pages/retention.js
 
-THE PROBLEM
------------
-Project Financials auto-moved projects between In Progress / Defects / Closed based
-on dates and financial completion (PC date passed, invoiced ≥ AFA + paid, etc.),
-independently of the Retention Tracker's MANUAL status. So the two could disagree and
-projects moved on their own.
-
-THE FIX
--------
-The Retention Tracker is now the SINGLE SOURCE OF TRUTH for a project's movement.
-Project Financials reads each project's manual retStatus from the tracker and maps it:
-  • retStatus 'live' (or unset) -> In Progress
-  • retStatus 'defects'         -> Defects Period
-  • retStatus 'complete'        -> Closed
-The old date/financial auto-derivation is removed. Projects only move when you move
-them in the Retention Tracker (using the existing gated buttons: live→defects requires
-Final Account = Invoiced, etc.).
-
-HOW IT STAYS IN SYNC
---------------------
-• dashboard.js loads retention:entries and maps retStatus onto the project stage.
-• Every save/delete in the Retention Tracker now clears the dashboard cache, so
-  Project Financials reflects the change on next load.
-• A stageSource marker forces existing (pre-deploy) caches to rebuild once, so old
-  auto-derived statuses are replaced immediately.
+CHANGE
+------
+The "PC Type (Main/Sub)" field in the Retention Tracker's manual entry form is now a
+dropdown with the same standard options as Edit Project Details:
+  — Select —
+  Main PC
+  Sub PC
+(Was a free-text box.) Because the add and edit forms share the same component, both
+now use the dropdown. Stored as pcType, unchanged.
 
 FILES
 -----
-• pages/api/dashboard.js   (stage from retention retStatus; cache-guard marker)
-• pages/api/retention.js   (bust dashboard cache on every save/delete)
+• pages/retention.js
 
-AFTER DEPLOY
-------------
-Projects will show the status set in the Retention Tracker. Any project not yet in the
-tracker, or with retStatus 'live', shows as In Progress. Move a project in the tracker
-and Project Financials follows.
+NOTE: existing entries with free-text PC Type values that don't exactly match
+"Main PC"/"Sub PC" will show as "— Select —" until re-picked (the stored value is
+preserved unless changed).
