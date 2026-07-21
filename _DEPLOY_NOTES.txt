@@ -1,34 +1,36 @@
-WIP — fix negative manual-adjustment gross-up (symmetric margin)
-================================================================
+WIP — fix "No WIP to show" (names) + confirm per-line margins
+=============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
+Single file: pages/api/wip.js
 
-THE ISSUE (J197 example)
+THE "NO WIP TO SHOW" BUG
 ------------------------
-WIP showed £11,932 when it should have been ~£11,000. Margin was NOT charged twice —
-the total sums each item's grossed value once. The error was in how NEGATIVE manual
-adjustments were grossed:
-  • A +£3,171 cost at 14.4% grossed UP to £3,704.
-  • A −£3,171 "cancel" adjustment did not gross by the same factor, so it only removed
-    ~£2,772 — leaving a stray +£932 (the "profit £932" you saw), giving £11,932.
-Two code faults: the gross() helper ignored negative amounts, and the negative branch
-used the wrong factor.
+The WIP page skipped EVERY project when it couldn't resolve a project name, and name
+resolution depended entirely on a fresh dashboard cache. If the cache was stale/empty
+(which the recent cache-guard change can cause on first load), every project was
+dropped -> "No WIP to show for <any month>".
 
-THE FIX
--------
-Gross-up is now SIGN-SYMMETRIC in both the WIP page and Project Financials/EOM:
-every amount (positive or negative) = amount / (1 − margin). So an equal-and-opposite
-adjustment at the SAME margin cancels a cost exactly.
+FIX: the WIP API now resolves project names/job numbers straight from the Xero
+tracking categories (the authoritative source, same as the dashboard), falling back
+to the dashboard cache. It no longer depends on the cache being fresh, so projects
+show again. (Was also using the wrong field name — trackingOptionId, not xeroId.)
 
-IMPORTANT — DATA NOTE FOR J197
-------------------------------
-For J197 to read £11,000, the "Direct Wages Adjustment" that cancels the £3,171 wages
-must have its margin set to +14.4% (the same margin as the cost it offsets), NOT
-−14.4%. With this fix deployed, set that adjustment's margin to 14.4% and WIP nets to
-£11,000. (A negative amount at a negative margin grosses by the wrong factor and won't
-fully cancel.)
+PER-LINE MARGINS (your point 3) — ALREADY THE BEHAVIOUR
+------------------------------------------------------
+Each manual WIP adjustment is grossed at ITS OWN margin; post-valuation COSTS are
+grossed at the overall project (margin-adjusted) margin. So:
+  • Soprema invoice entered at 0%  -> adds exactly £11,000.
+  • A cost of £3,171 at the project's 14.4% -> £3,704.
+No change needed here; it works as requested. (The earlier £932 came from the
+cancelling adjustment being at −14.4% instead of +14.4%.)
 
 FILES
 -----
-• pages/api/wip.js       (symmetric gross-up)
-• pages/commercial.js    (same, so EOM/Project Financials match)
+• pages/api/wip.js
+
+AFTER DEPLOY
+------------
+Projects should list again. If you still want J197 to net to £11,000, set the "Direct
+Wages Adjustment" margin to +14.4% (or delete it and rely on the 0% Soprema line as
+the WIP cost).

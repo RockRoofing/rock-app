@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getAllProjectSettings } from '../../lib/db'
+import { getAllProjectSettings, getTokens, saveTokens } from '../../lib/db'
+import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -47,6 +48,21 @@ export default async function handler(req, res) {
       missingDates.push({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' })
     }
   }
+  // Also resolve names straight from Xero tracking categories so the WIP page never
+  // depends on a fresh dashboard cache. This is the authoritative name source.
+  try {
+    let tokens = await getTokens()
+    if (tokens) {
+      try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+      const cats = await getProjectsFromCategories(tokens.access_token, tokens.tenant_id)
+      for (const c of (cats || [])) {
+        const cid = c && (c.trackingOptionId || c.xeroId)
+        if (cid && !meta[String(cid)]?.name) {
+          meta[String(cid)] = { name: c.name || meta[String(cid)]?.name || '', jobNo: c.jobNo || meta[String(cid)]?.jobNo || '' }
+        }
+      }
+    }
+  } catch (e) { /* fall back to cache-only names */ }
   const projectIds = Object.keys(settingsMap)
 
   const out = []
