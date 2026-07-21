@@ -66,9 +66,20 @@ export default function SubmissionsPage() {
     setSelNote('')
     setDownloading(true)
     try {
-      const fulls = await Promise.all(selIds.map(id => fetch(`/api/submissions?id=${id}`).then(r => r.json()).then(d => d.submission)))
-      printSubmissions(fulls.filter(Boolean), labels)
-    } catch { alert('Could not prepare download') }
+      const res = await fetch('/api/submissions-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selIds, labels }),
+      })
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'PDF failed') }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = selIds.length === 1 ? 'form-submission.pdf' : `form-submissions-${selIds.length}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 4000)
+    } catch (e) { alert(e?.message || 'Could not prepare download') }
     setDownloading(false)
   }
 
@@ -206,8 +217,30 @@ function SubModal({ sub, labels, onClose }) {
   )
 }
 
-// Branded print-to-PDF for submissions (shared shape with the project view)
-function printSubmissions(subs, labels) {
+// Download one or more submissions as a real PDF file via the server endpoint.
+async function printSubmissions(subs, labels) {
+  const list = Array.isArray(subs) ? subs : [subs]
+  const ids = list.map(s => s && s.id).filter(Boolean)
+  if (!ids.length) { alert('Nothing to download'); return }
+  try {
+    const res = await fetch('/api/submissions-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, labels }),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'PDF failed') }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = ids.length === 1 ? 'form-submission.pdf' : `form-submissions-${ids.length}.pdf`
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+  } catch (e) { alert(e?.message || 'Could not prepare download') }
+}
+
+// (legacy print-to-PDF removed — kept below for reference, now unused)
+function _legacyPrintSubmissions(subs, labels) {
   const logo = `${window.location.origin}/rock-logo.jpg`
   const esc = s => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
   const fmt = ts => new Date(ts).toLocaleString('en-GB')

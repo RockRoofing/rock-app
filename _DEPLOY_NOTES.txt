@@ -1,15 +1,33 @@
-Report App Improvement modal — don't close on click-off
-=======================================================
+Forms — real PDF download (was opening a print dialog / HTML page)
+==================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: components/ReportProblemButton.js
+NEW FILES to create in GitHub:
+  • lib/submissionsPdf.js
+  • pages/api/submissions-pdf.js
 
-CHANGE
-------
-The Report App Improvement pop-out no longer closes when you click the dark backdrop
-around it (users were accidentally clicking off and losing what they'd typed). It now
-closes ONLY via the × button (top right) or the Close/Send buttons.
+THE PROBLEM
+-----------
+On /operations/forms, "Download as PDF" didn't produce a PDF. It built an HTML page,
+opened it in a new tab and called window.print() — so you got a print dialog, and
+cancelling left you on a raw HTML page with no way to save a real PDF. Same in every
+browser (it wasn't a browser issue — it never generated a PDF).
+
+THE FIX
+-------
+• New server endpoint /api/submissions-pdf builds a REAL PDF with pdf-lib (branded
+  header with logo, form title, project, operative, submitted date, then each
+  question/answer, with photos embedded) and returns it as application/pdf.
+• The forms page now POSTs the selected submission ids to that endpoint and downloads
+  the returned file straight to the browser's Downloads folder as a .pdf — no print
+  dialog, no HTML tab.
+• All three download buttons now use it: the multi-select "Download PDF", the single
+  "Download PDF" on a submission, and the modal's download.
+• Text is sanitised (emoji/smart-punctuation) so a label like "Water Ingress 💧"
+  can't crash generation.
 
 FILES
 -----
-• components/ReportProblemButton.js
+• lib/submissionsPdf.js          (NEW — pdf-lib builder)
+• pages/api/submissions-pdf.js   (NEW — returns application/pdf)
+• pages/operations/forms.js      (download real PDF blob; legacy print-hack retired)
