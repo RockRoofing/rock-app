@@ -1,41 +1,18 @@
-WIP reconciled across pages + profit + carry-forward tick
-=========================================================
+WIP page — carry-forward tick is now a toggle (tick on/off)
+===========================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Deploy AFTER the earlier WIP bundles.
+Single file: pages/wip.js
 
-1) WIP NOW IDENTICAL ON BOTH PAGES
-   Project Financials / EOM (commercial.js) now calculates WIP on the SAME basis as
-   the WIP page:
-     • Costs AFTER the valuation date up to the END OF THAT MONTH (was: all costs
-       after the valuation date with no month-end limit). If the valuation date is the
-       last day of the month, the window is empty and WIP is 0.
-     • Same live achieved margin ((invoiced - costs) / invoiced), override wins.
-     • Includes this month's manual WIP adjustments (each at its own margin, default
-       project margin).
-   Dashboard now loads per-project wip:adjustments and passes them through so the
-   figures match exactly. (Cache-guard updated so old caches rebuild once.)
-
-2) CALCULATED PROFIT IN £ ON THE WIP PAGE
-   • Each project header shows "profit £X" (WIP value - the cost that generated it).
-   • The Total WIP box at the top shows "Profit in WIP: £X" across all projects.
-
-3) CARRY-FORWARD TICK ON LAST MONTH'S ADJUSTMENTS
-   In the "last month's manual adjustments" info area, each item now has a grey tick.
-   Click it and: the item turns fully green (and the tick goes green and stays), and
-   the adjustment is added to THAT project's manual adjustments for the CURRENT month
-   (so it shows in the project's adjustments and counts toward WIP). Items already
-   carried show as green with "carried".
+CHANGE
+------
+In the "last month's manual adjustments" info area, the green carry-forward tick can
+now be UN-ticked:
+  • Tick (grey -> green): adds the adjustment to the current month for that project.
+  • Tick again (green -> grey): removes that carried adjustment from the current month
+    again (deletes the this-month copy).
+The item colour and total update accordingly each time.
 
 FILES
 -----
-• pages/commercial.js       (WIP window capped to month-end + manual adjustments)
-• pages/api/dashboard.js    (load/pass wipAdjustments; cache-guard marker)
-• pages/api/wip.js          (live-margin default; WIP profit £; total profit)
-• pages/wip.js              (profit display; carry-forward tick)
-
-AFTER DEPLOY
-------------
-The dashboard cache rebuilds automatically on first load (guard updated). If the two
-pages still differ for a month, confirm the same valuation date is set for that month
-on both (they now read the per-month valuation date).
+• pages/wip.js

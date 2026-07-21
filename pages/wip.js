@@ -33,14 +33,26 @@ export default function WipPage() {
   const [carrying, setCarrying] = useState(null)
 
   // Carry a last-month adjustment into the CURRENT (selected) month for its project.
+  // Toggle a last-month adjustment in/out of the CURRENT month for its project.
   async function carryForward(p, a) {
     setCarrying(a.id)
     try {
-      await fetch(`/api/project/${p.id}/wip-adjustments`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month, type: 'cost', description: a.description || '', amount: a.amount, margin: a.margin ?? null }),
-      })
-      setCarriedIds(ids => [...ids, a.id])
+      // Is there already an equivalent adjustment in this month? If so, un-tick:
+      // remove it. Otherwise, tick on: add it.
+      const existing = (p.thisMonthAdj || []).find(t => t.description === (a.description || '') && t.amount === a.amount)
+      if (existing) {
+        await fetch(`/api/project/${p.id}/wip-adjustments`, {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adjId: existing.id }),
+        })
+        setCarriedIds(ids => ids.filter(x => x !== a.id))
+      } else {
+        await fetch(`/api/project/${p.id}/wip-adjustments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ month, type: 'cost', description: a.description || '', amount: a.amount, margin: a.margin ?? null }),
+        })
+        setCarriedIds(ids => [...ids, a.id])
+      }
       await load()
     } catch {}
     setCarrying(null)
@@ -117,8 +129,8 @@ export default function WipPage() {
                   const carried = (p.thisMonthAdj || []).some(t => t.description === a.description && t.amount === a.amount) || carriedIds.includes(a.id)
                   return (
                     <div key={p.id + a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, background: carried ? '#dcfce7' : '#fff', border: `1px solid ${carried ? '#86efac' : '#fde68a'}`, borderRadius: 8, padding: '6px 10px' }}>
-                      <button onClick={() => carryForward(p, a)} disabled={carried || carrying === a.id} title={carried ? 'Carried into this month' : 'Carry into this month'}
-                        style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: carried ? 'default' : 'pointer', background: carried ? '#16a34a' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1, flexShrink: 0 }}>✓</button>
+                      <button onClick={() => carryForward(p, a)} disabled={carrying === a.id} title={carried ? 'Remove from this month' : 'Carry into this month'}
+                        style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: carrying === a.id ? 'default' : 'pointer', background: carried ? '#16a34a' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1, flexShrink: 0, opacity: carrying === a.id ? 0.5 : 1 }}>✓</button>
                       <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</span>
                       <span style={{ flex: 1, color: carried ? '#166534' : '#7c5e10' }}>{a.description || 'Adjustment'}</span>
                       <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{fmtC(a.amount)}</span>
