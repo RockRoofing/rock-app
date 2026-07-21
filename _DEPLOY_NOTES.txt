@@ -1,22 +1,38 @@
-WIP — clear the project WIP margin override per section
-======================================================
+WIP tab now shows in the nav on ALL commercial pages
+====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
 
-CHANGE
-------
-Each project section on the WIP page can now clear its WIP margin OVERRIDE and revert
-to the calculated (live) margin:
-  • When a project has a manual margin override, a "Clear override" button appears next
-    to the margin box. Clicking it removes the override so the project uses the live
-    calculated margin ((invoiced − costs) / invoiced) again.
-  • Under the margin it now shows whether the current margin is an "override
-    (calculated: X%)" or the "calculated margin", so it's clear which is in effect.
+WHY IT WAS MISSING
+------------------
+The WIP tab lives in the shared CommercialNav, but only Contracted Rates and
+Applications actually use that shared nav. The other commercial pages each have their
+own hand-built nav bar, so the WIP tab didn't appear on them.
 
-API now returns marginIsOverride + calculatedMargin per project so the page can show
-this and offer the clear button.
+FIX
+---
+Added the WIP link (before Commercial Scorecard) to the inline nav on each of these
+pages:
+  • Project Financials (commercial.js)
+  • Outstanding Invoices
+  • Retention
+  • Variations
+  • Application Calendar
+  • Commercial Scorecard
+Contracted Rates and Applications already show it via the shared CommercialNav.
+
+So WIP now appears in the nav on all: Project Financials, Outstanding Invoices,
+Retention, Variations, Contracted Rates, Applications, Application Calendar, WIP and
+Commercial Scorecard.
 
 FILES
 -----
-• pages/api/wip.js   (marginIsOverride + calculatedMargin)
-• pages/wip.js       (Clear override button + indicator)
+• pages/commercial.js
+• pages/outstanding-invoices.js
+• pages/retention.js
+• pages/variations.js
+• pages/application-calendar.js
+• pages/commercial-scorecard.js
+
+NOTE: longer term these pages could all be switched to the shared CommercialNav so a
+single change updates every nav — a tidy-up for later, not needed now.
