@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken, fetchBankSummary } from '../../lib/xero'
+import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -34,6 +34,80 @@ export default async function handler(req, res) {
     redis.get('config:account-categorisation').then(v => v || {}).catch(() => ({})),
     redis.get('bank:summary-by-month').then(v => v || { months: {} }).catch(() => ({ months: {} })),
   ])
+
+  const view = req.query.view || (req.body && req.body.view) || 'summary'
+
+  // ── Budgets (stored monthly targets per category) ─────────────────────────
+  if (view === 'budgets') {
+    if (req.method === 'POST') {
+      const { budgets } = req.body || {}
+      if (budgets && typeof budgets === 'object') {
+        await redis.set('config:business-budgets', budgets)
+        return res.json({ ok: true })
+      }
+      return res.status(400).json({ error: 'budgets object required' })
+    }
+    const budgets = await redis.get('config:business-budgets').then(v => v || {}).catch(() => ({}))
+    // Actuals by month from the benchmark: sales, cos, overheads.
+    const bm = benchmark.months || {}
+    const actuals = {}
+    for (const mo of Object.keys(bm)) {
+      const b = bm[mo]
+      actuals[mo] = {
+        sales: Math.abs(b.incomeTotal || 0),
+        costOfSales: Math.abs(b.costOfSalesTotal || 0),
+        overheads: Math.abs(b.overheadsTotal || 0),
+      }
+    }
+    return res.json({ budgets, actuals, benchmarkUpdatedAt: benchmark.updatedAt || null })
+  }
+
+  // ── Bills to pay (money out) / Invoices owed (money in) ───────────────────
+  if (view === 'bills' || view === 'invoices') {
+    const key = view === 'bills' ? 'bank:outstanding-bills' : 'bank:outstanding-receivables'
+    if (req.method === 'POST' && (req.body || {}).sync) {
+      try {
+        let tokens = await getTokens()
+        if (!tokens) return res.status(401).json({ error: 'Not connected to Xero' })
+        try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+        const items = view === 'bills'
+          ? await fetchOutstandingBills(tokens.access_token, tokens.tenant_id)
+          : await fetchOutstandingReceivables(tokens.access_token, tokens.tenant_id)
+        const payload = { items, updatedAt: new Date().toISOString() }
+        await redis.set(key, payload)
+        return res.json({ ok: true, count: items.length, updatedAt: payload.updatedAt })
+      } catch (e) { return res.status(500).json({ error: e.message }) }
+    }
+    const stored = await redis.get(key).then(v => v || { items: [] }).catch(() => ({ items: [] }))
+    return res.json({ items: stored.items || [], updatedAt: stored.updatedAt || null })
+  }
+
+  // ── Cash flow forecast ────────────────────────────────────────────────────
+  if (view === 'cashflow') {
+    const [billsStore, recStore] = await Promise.all([
+      redis.get('bank:outstanding-bills').then(v => v || { items: [] }).catch(() => ({ items: [] })),
+      redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),
+    ])
+    // Current cash at bank = latest month's closing balance from the bank summary.
+    const bankMonths = bank.months || {}
+    const latestKey = Object.keys(bankMonths).sort().pop()
+    const cashAtBank = latestKey ? (bankMonths[latestKey].closing || 0) : 0
+    // Recent monthly overhead average (for predicted overheads in the forecast).
+    const bm = benchmark.months || {}
+    const ohVals = Object.keys(bm).sort().slice(-3).map(mo => Math.abs(bm[mo].overheadsTotal || 0))
+    const avgOverheadMonthly = ohVals.length ? ohVals.reduce((a, b) => a + b, 0) / ohVals.length : 0
+    // History of closing balances for the "where cash has been" line.
+    const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
+    return res.json({
+      cashAtBank,
+      bills: billsStore.items || [],
+      receivables: recStore.items || [],
+      avgOverheadMonthly,
+      history,
+      billsUpdatedAt: billsStore.updatedAt || null,
+      receivablesUpdatedAt: recStore.updatedAt || null,
+    })
+  }
 
   if (req.method === 'POST' && (req.body || {}).syncBank) {
     try {

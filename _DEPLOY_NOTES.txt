@@ -1,44 +1,67 @@
-Business Financials — Phase 1: Summary page
-===========================================
+Business Financials — all pages
+===============================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
+Deploy AFTER (or with) the Phase 1 summary bundle.
+
 NEW FILES to create in GitHub:
-  • pages/business-financials.js
-  • pages/api/business-financials.js
+  • components/BizNav.js
+  • pages/business-financials.js                 (if not already created in Phase 1)
+  • pages/api/business-financials.js             (if not already created in Phase 1)
+  • pages/business-financials/budgets.js
+  • pages/business-financials/bills.js
+  • pages/business-financials/invoices.js
+  • pages/business-financials/cashflow.js
 
-WHAT'S IN THIS PHASE
---------------------
-The Business Financials tile on the portal home (Admin only) now opens the Summary
-page with five charts:
-  1. Sales — invoiced sales at end of each month (line).
-  2. Gross margin — (sales − cost of sales) ÷ sales, by month (line).
-  3. Direct wages vs sub-contract labour — monthly split (bar). Direct = code 320;
-     sub-contract = 321 + 328 + 334.
-  4. Cost of sale by category — Labour / Materials / Overheads (pie), across the
-     period, using the Account Categorisation.
-  5. Cash in / cash out — ACTUAL money in and out each month (bar), from Xero's Bank
-     Summary report.
-A month-range selector (6/12/18/24) and a "Sync bank" button are at the top.
+PAGES
+-----
+• SUMMARY (existing) — sales, gross margin, wages vs subcontract, cost-of-sale pie,
+  cash in/out. Nav now links to all the pages below.
+• BUDGETS — set a monthly budget per category (Sales / Cost of sales / Overheads).
+  Table shows each month's actual vs budget, green when on/under (costs) or on/above
+  (sales), red when off track. Saved to config:business-budgets.
+• BILLS TO PAY — total outstanding at top; selectable line-item table (running total
+  of selected); bar chart of bills due per month (past + upcoming, "now" marker).
+  "Sync bills" pulls outstanding ACCPAY bills from Xero.
+• INVOICES OWED — date-range filter (defaults to 12 months, 2 into the future); bar
+  chart of invoices falling due per month; detail table. "Sync invoices" pulls
+  outstanding ACCREC invoices from Xero.
+• CASH FLOW — 8–10 week forecast: known invoices in vs known bills + predicted
+  overheads (recent 3-mo overhead average, spread weekly). Cash-at-bank line shows
+  history (actual closing balances) then the projected weekly balance. Start cash
+  comes from Xero (latest bank closing balance) and can be overridden to model
+  scenarios.
 
-DATA SOURCES
-------------
-• Charts 1–4 read the existing P&L benchmark (xero:pl-benchmark). Keep it current via
-  Bookkeeping → "Sync Xero figures".
-• Chart 5 uses a NEW Xero Bank Summary fetch (fetchBankSummary in lib/xero.js),
-  stored at bank:summary-by-month. Click "Sync bank" on the Summary page to populate/
-  refresh it (pulls the last 18 months).
+NEW XERO FETCHES (lib/xero.js)
+------------------------------
+• fetchBankSummary        — cash in/out + opening/closing balance per period.
+• fetchOutstandingBills   — authorised ACCPAY with amount due > 0.
+• fetchOutstandingReceivables — authorised ACCREC with amount due > 0.
 
-The nav shows the future tabs (Budgets, Bills to Pay, Invoices Owed, Cash Flow) as
-greyed "coming soon" — those are the next phases.
+DATA / REDIS KEYS
+-----------------
+• xero:pl-benchmark          (existing) — Summary charts 1–4, Budgets actuals.
+• bank:summary-by-month      — cash in/out + balances (Summary "Sync bank").
+• bank:outstanding-bills     — Bills to Pay ("Sync bills").
+• bank:outstanding-receivables — Invoices Owed ("Sync invoices").
+• config:business-budgets    — saved budgets.
+
+AFTER DEPLOY (to populate everything)
+-------------------------------------
+1. Bookkeeping → "Sync Xero figures"  (P&L benchmark).
+2. Business Financials → Summary → "Sync bank".
+3. Bills to Pay → "Sync bills".
+4. Invoices Owed → "Sync invoices".
+5. Set budgets on the Budgets page.
+Cash Flow then assembles automatically from the above.
 
 FILES
 -----
-• lib/xero.js                       (NEW fetchBankSummary)
-• pages/api/business-financials.js  (NEW — summary data + bank sync)
-• pages/business-financials.js      (NEW — Summary page)
-• pages/index.js                    (wire up the Business Financials tile)
-
-AFTER DEPLOY
-------------
-1. Bookkeeping → "Sync Xero figures" (if not recent) so charts 1–4 have data.
-2. Open Business Financials → "Sync bank" for the cash in/out chart.
+• lib/xero.js
+• pages/api/business-financials.js
+• components/BizNav.js
+• pages/business-financials.js
+• pages/business-financials/budgets.js
+• pages/business-financials/bills.js
+• pages/business-financials/invoices.js
+• pages/business-financials/cashflow.js

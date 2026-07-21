@@ -9,11 +9,11 @@ import {
 const GOLD = '#ca8a04'
 const INK = '#1a1a19'
 const TABS = [
-  ['Summary', '/business-financials', true],
-  ['Budgets', '/business-financials/budgets', false],
-  ['Bills to Pay', '/business-financials/bills', false],
-  ['Invoices Owed', '/business-financials/invoices', false],
-  ['Cash Flow', '/business-financials/cashflow', false],
+  ['Summary', '/business-financials'],
+  ['Budgets', '/business-financials/budgets'],
+  ['Bills to Pay', '/business-financials/bills'],
+  ['Invoices Owed', '/business-financials/invoices'],
+  ['Cash Flow', '/business-financials/cashflow'],
 ]
 
 const gbp = (n) => `£${Math.round(n || 0).toLocaleString('en-GB')}`
@@ -72,9 +72,8 @@ export default function BusinessFinancials() {
         <div style={{ background: INK, padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, flexWrap: 'wrap' }}>
             <a href="/" style={{ color: '#9a9a97', fontSize: 13, textDecoration: 'none', marginRight: 8 }}>← Portal</a>
-            {TABS.map(([label, href, built]) => {
+            {TABS.map(([label, href]) => {
               const active = router.pathname === href
-              if (!built) return <span key={href} title="Coming soon" style={{ color: '#5a5a57', fontSize: 13, padding: '7px 12px', cursor: 'default' }}>{label}</span>
               return <a key={href} href={href} style={{ color: active ? '#fff' : '#9a9a97', background: active ? 'rgba(255,255,255,0.1)' : 'transparent', fontSize: 13, fontWeight: active ? 600 : 500, textDecoration: 'none', padding: '7px 12px', borderRadius: 7 }}>{label}</a>
             })}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
