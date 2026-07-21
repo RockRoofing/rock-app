@@ -127,8 +127,8 @@ const departments = [
   {
     key: 'business-financials',
     label: 'Business Financials',
-    description: 'Company P&L, overheads & turnover (Admin only) — coming soon',
-    href: null,
+    description: 'Company P&L, cash flow, budgets & bills (Admin only)',
+    href: '/business-financials',
     color: '#0f766e',
     lightColor: '#f0fdfa',
     borderColor: '#99f6e4',

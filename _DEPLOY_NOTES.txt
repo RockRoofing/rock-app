@@ -1,23 +1,44 @@
-App Improvements — "On Hold" status
-===================================
+Business Financials — Phase 1: Summary page
+===========================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/admin/problem-reports.js
+NEW FILES to create in GitHub:
+  • pages/business-financials.js
+  • pages/api/business-financials.js
 
-CHANGE
-------
-Added an "On Hold" status to App Improvements:
-  • New "Put on hold" button on each open item (and "Take off hold" to return it to
-    Open). Putting on hold sends NO email to the reporter.
-  • On Hold items are HIDDEN from the default "Open" view (the default filter is Open,
-    which now excludes both Resolved and On Hold).
-  • New "On Hold" option in the Status filter to view them, and a grey "On Hold"
-    label on those cards.
-  • Statuses are now: Open / On Hold / Resolved.
+WHAT'S IN THIS PHASE
+--------------------
+The Business Financials tile on the portal home (Admin only) now opens the Summary
+page with five charts:
+  1. Sales — invoiced sales at end of each month (line).
+  2. Gross margin — (sales − cost of sales) ÷ sales, by month (line).
+  3. Direct wages vs sub-contract labour — monthly split (bar). Direct = code 320;
+     sub-contract = 321 + 328 + 334.
+  4. Cost of sale by category — Labour / Materials / Overheads (pie), across the
+     period, using the Account Categorisation.
+  5. Cash in / cash out — ACTUAL money in and out each month (bar), from Xero's Bank
+     Summary report.
+A month-range selector (6/12/18/24) and a "Sync bank" button are at the top.
 
-No API change needed (the endpoint stores the status as-is and only emails on
-transition to Resolved).
+DATA SOURCES
+------------
+• Charts 1–4 read the existing P&L benchmark (xero:pl-benchmark). Keep it current via
+  Bookkeeping → "Sync Xero figures".
+• Chart 5 uses a NEW Xero Bank Summary fetch (fetchBankSummary in lib/xero.js),
+  stored at bank:summary-by-month. Click "Sync bank" on the Summary page to populate/
+  refresh it (pulls the last 18 months).
+
+The nav shows the future tabs (Budgets, Bills to Pay, Invoices Owed, Cash Flow) as
+greyed "coming soon" — those are the next phases.
 
 FILES
 -----
-• pages/admin/problem-reports.js
+• lib/xero.js                       (NEW fetchBankSummary)
+• pages/api/business-financials.js  (NEW — summary data + bank sync)
+• pages/business-financials.js      (NEW — Summary page)
+• pages/index.js                    (wire up the Business Financials tile)
+
+AFTER DEPLOY
+------------
+1. Bookkeeping → "Sync Xero figures" (if not recent) so charts 1–4 have data.
+2. Open Business Financials → "Sync bank" for the cash in/out chart.
