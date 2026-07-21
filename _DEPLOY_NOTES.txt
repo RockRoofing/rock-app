@@ -1,27 +1,28 @@
-Application PDF — each variation's documents follow its own description
-======================================================================
+Weekly Labour Allocation PDF — fix "WinAnsi cannot encode" crash
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: lib/applicationPdf.js
+Single file: lib/weeklyLabourPdf.js
 
-WHAT WAS WRONG
---------------
-Image attachments already sat under their variation header, but PDF attachments were
-deferred to a single block at the very END of the document. So if a variation's
-supporting document was a PDF, it ended up separated from its variation — unclear
-which docs belonged to which variation.
+THE ERROR
+---------
+{"error":"WinAnsi cannot encode \"\" (0x1f4a7)"} when downloading the Weekly Labour
+Allocation. 0x1f4a7 is the water-drop emoji 💧 — it comes from a "Water Ingress"
+project/visit label. pdf-lib's standard font uses WinAnsi encoding, which can't
+render emoji, so PDF generation threw.
 
 THE FIX
 -------
-In the "Variation Supporting Documents" section, every variation's documents now come
-directly after THAT variation's header/description:
-  • Images: embedded inline beneath the header (scaled to fit, capped ~70% page
-    height), as before.
-  • PDFs: their pages are now embedded INLINE immediately after the header too (with
-    a small caption on the first page), instead of being appended at the end.
-So the order is: VO — description — total, then that variation's documents, then the
-next variation. Material/supplier documents follow at the end of the section.
+Added a san() sanitiser and applied it to every dynamic string drawn in the PDF
+(operative names, company names, and the day-cell project labels in both the team
+grid and the personal "Your Week"/"Your Upcoming Work" views). It:
+  • drops any character WinAnsi can't encode (emoji, symbols),
+  • maps smart quotes / en–em dashes / ellipsis to plain ASCII equivalents,
+  • replaces the previous "…" truncation character with "..." (that was itself
+    non-WinAnsi and could also have thrown).
+So a project called "💧 Water Ingress" now prints as "Water Ingress" and the PDF
+generates without error.
 
 FILES
 -----
-• lib/applicationPdf.js
+• lib/weeklyLabourPdf.js
