@@ -4,6 +4,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import SyncBar from '../components/SyncBar'
 import HideProjectsDropdown from '../components/HideProjectsDropdown'
+import { computeProjectWip } from '../lib/wipCalc'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
@@ -66,27 +67,21 @@ function calcAtValDate(project, monthKey) {
   const grossInvoiced = invoicedToDate
   const margin = grossInvoiced > 0 ? (grossInvoiced - costsToDate) / grossInvoiced : null
 
-  // WIP costs = costs AFTER the valuation date up to the END OF THAT MONTH (matching
-  // the WIP page). If the valuation date is the last day of the month, this window is
-  // empty so there is no WIP. Completed projects (no vDateStr) have no WIP.
+  // WIP via the shared calculation (same source of truth as the WIP page and the
+  // project WIP tab). Costs after the valuation date to end of THAT month, grossed at
+  // the project margin, plus each manual adjustment at its own margin.
   const monthEndStr = new Date(Date.UTC(year, month, 0)).toISOString().split('T')[0]
-  const costsAfterDate = vDateStr
-    ? costLines.filter(l => l.date && l.date > vDateStr && l.date <= monthEndStr).reduce((s, l) => s + (l.amount || 0), 0)
-    : 0
-  const effectiveMargin = project.wipMarginOverride ? parseFloat(project.wipMarginOverride) / 100 : margin
-  // Manual WIP adjustments for this month (carried on the project object so the
-  // dashboard/EOM WIP matches the WIP page exactly).
   const wipMonthKey = `${year}-${String(month).padStart(2, '0')}`
   const monthAdj = Array.isArray(project.wipAdjustments)
     ? project.wipAdjustments.filter(a => a.month === wipMonthKey)
     : []
-  const grossOne = (amt, mgn) => { const m = (mgn != null && mgn < 1) ? mgn : 0; return (amt || 0) / (1 - m) }
-  let wip = grossOne(costsAfterDate, effectiveMargin)
-  for (const a of monthAdj) {
-    const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : effectiveMargin
-    wip += grossOne(a.amount || 0, am)
-  }
-  wip = Math.max(0, wip)
+  const _wip = computeProjectWip({
+    costLines, invoiceLines, valStr: vDateStr, monthEndStr,
+    adjustments: monthAdj, marginOverride: project.wipMarginOverride,
+  })
+  const effectiveMargin = _wip.margin
+  const costsAfterDate = _wip.postValTotal
+  const wip = _wip.wipValue
 
   // Remaining to claim = AFA − (invoiced + WIP). Never below 0.
   const remainingToClaim = Math.max(0, (project.afa || 0) - grossInvoiced - wip)

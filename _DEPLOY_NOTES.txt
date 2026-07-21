@@ -1,29 +1,44 @@
-WIP nav — add missing separator lines around WIP / Commercial Scorecard
-=======================================================================
+WIP — single shared calculation so all pages match the WIP page
+===============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
+NEW FILE to create in GitHub:
+  • lib/wipCalc.js
 
-ISSUE
------
-When the WIP link was added to each page's inline nav, its trailing "|" separator was
-missed, so:
-  • On most pages there was no line between WIP and Commercial Scorecard.
-  • On the Commercial Scorecard page there was no line between Application Calendar
-    and WIP.
+THE PROBLEM
+-----------
+The WIP total differed between the WIP page, the EOM/Project Financials table, and the
+WIP tab on each project's detail page — because each computed WIP with its own copy of
+the formula, and they had drifted:
+  • The project WIP tab capped costs at the CURRENT month-end, not the SELECTED
+    month's end (so past months pulled in too many costs), and it grossed costs +
+    adjustments together at one margin instead of each adjustment at its own margin.
+  • Small differences in margin handling between the three.
 
-FIX
----
-Added the missing "|" separators so the nav reads consistently on every page:
-  ... | Application Calendar | WIP | Commercial Scorecard
-Applied to Project Financials, Outstanding Invoices, Retention, Variations,
-Application Calendar and Commercial Scorecard. (Contracted Rates and Applications use
-the shared CommercialNav, which already draws all separators.)
+THE FIX
+-------
+New lib/wipCalc.js holds ONE authoritative WIP calculation. The WIP page API, the
+EOM/Project Financials table (commercial.js) and the project WIP tab
+(project/[id].js) now ALL call it, so the number is identical everywhere. It uses:
+  • Costs after the valuation date to the END OF THE SELECTED MONTH (empty if the
+    valuation date is the last day of the month).
+  • Live achieved margin ((invoiced − costs to val date) / invoiced), project override
+    wins.
+  • Each manual adjustment grossed at its own margin (default = project margin);
+    positive and negative amounts handled symmetrically.
+
+The WIP page remains the source of truth; the other two now mirror its logic exactly.
 
 FILES
 -----
-• pages/commercial.js
-• pages/outstanding-invoices.js
-• pages/retention.js
-• pages/variations.js
-• pages/application-calendar.js
-• pages/commercial-scorecard.js
+• lib/wipCalc.js            (NEW — shared calc)
+• pages/api/wip.js          (uses shared calc)
+• pages/project/[id].js     (WIP tab uses shared calc; fixes month-end bug)
+• pages/commercial.js       (EOM/Project Financials uses shared calc)
+
+AFTER DEPLOY
+------------
+Compare a project's WIP on all three (WIP page, Project Financials, project WIP tab)
+for the same month — they should now match. Project Financials reads per-project
+wipAdjustments from the dashboard (already wired), so ensure the dashboard has
+refreshed (it rebuilds on load).

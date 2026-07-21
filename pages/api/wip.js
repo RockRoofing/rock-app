@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getAllProjectSettings, getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, getProjectsFromCategories } from '../../lib/xero'
+import { computeProjectWip } from '../../lib/wipCalc'
 
 async function getRedis() {
   try {
@@ -95,8 +96,6 @@ export default async function handler(req, res) {
     // Costs from the DAY AFTER the valuation date to end of month. If the valuation
     // date is the end of the month, this window is empty.
     const costLines = (await redis.get(`costs:lines:${id}`).catch(() => null)) || []
-    const postValCosts = costLines.filter(l => l.date && l.date > valStr && l.date <= monthEndStr)
-    const postValTotal = postValCosts.reduce((s, l) => s + (l.amount || 0), 0)
 
     // Credit notes issued against the project (from the invoice lines, flagged).
     const invLines = (await redis.get(`invoiced:lines:${id}`).catch(() => null)) || []
@@ -115,40 +114,13 @@ export default async function handler(req, res) {
     const adjustments = (await redis.get(`wip:adjustments:${id}`).catch(() => null)) || []
     const thisMonthAdj = adjustments.filter(a => a.month === month)
     const lastMonthAdj = adjustments.filter(a => a.month === prevMonthKey(month))
-    const adjTotal = thisMonthAdj.reduce((s, a) => s + (a.amount || 0), 0)
 
-    // Margin: per-project override wins. Otherwise use the LIVE ACHIEVED margin —
-    // (invoiced − costs to the valuation date) ÷ invoiced — the same basis as
-    // Project Financials / EOM, so the two pages reconcile.
-    const costsToDate = costLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + (l.amount || 0), 0)
-    const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
-    const invoicedToDate = invLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + invVal(l), 0)
-    const calculatedMargin = invoicedToDate > 0 ? (invoicedToDate - costsToDate) / invoicedToDate : null
-    const marginIsOverride = settings.wipMarginOverride != null && settings.wipMarginOverride !== ''
-    const margin = marginIsOverride ? parseFloat(settings.wipMarginOverride) / 100 : calculatedMargin
-
-    const adjustedCosts = postValTotal + adjTotal
-    // WIP = post-valuation costs grossed up at the PROJECT margin, PLUS each manual
-    // adjustment grossed up at ITS OWN margin (which defaults to the project margin
-    // when the adjustment doesn't specify one).
-    // Gross an amount up to its WIP value at a given margin. Works for POSITIVE and
-    // NEGATIVE amounts identically (amt / (1 - margin)), so an equal-and-opposite
-    // adjustment at the SAME margin cancels the cost exactly. A margin of 0 (or none)
-    // means the amount passes through unchanged.
-    const gross = (amt, mgn) => {
-      const m = (mgn != null && mgn < 1) ? mgn : 0
-      return (amt || 0) / (1 - m)
-    }
-    let wipValue = gross(postValTotal, margin)
-    for (const a of thisMonthAdj) {
-      const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : margin
-      wipValue += gross(a.amount || 0, am)
-    }
-    wipValue = Math.max(0, wipValue)
-    // Calculated profit in £ = WIP value − the cost that generated it (post-valuation
-    // costs + manual adjustment amounts). This is the margin portion of the WIP.
-    const wipCost = postValTotal + adjTotal
-    const wipProfit = wipValue - wipCost
+    // Single shared WIP calculation (source of truth for every page).
+    const w = computeProjectWip({
+      costLines, invoiceLines: invLines, valStr, monthEndStr,
+      adjustments: thisMonthAdj, marginOverride: settings.wipMarginOverride,
+    })
+    const { postValCosts, postValTotal, adjTotal, margin, marginIsOverride, calculatedMargin, wipValue, wipProfit } = w
 
     // Only include projects that have something to show this month.
     const hasContent = postValCosts.length > 0 || creditNotes.length > 0 || thisMonthAdj.length > 0 || lastMonthAdj.length > 0

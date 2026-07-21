@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
+import { computeProjectWip } from '../../lib/wipCalc'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
@@ -1051,19 +1052,30 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
 
   const vDateStr = wipVDate ? new Date(wipVDate.getTime() - wipVDate.getTimezoneOffset() * 60000).toISOString().split('T')[0] : null
 
-  const endOfMonth = new Date()
-  endOfMonth.setMonth(endOfMonth.getMonth() + 1, 0)
-  const toDateStr = endOfMonth.toISOString().split('T')[0]
+  // End of the SELECTED valuation month (not the current month) — matches the WIP page.
+  const monthEndStr = wipVDate
+    ? new Date(Date.UTC(wipVDate.getFullYear(), wipVDate.getMonth() + 1, 0)).toISOString().split('T')[0]
+    : null
+  const toDateStr = monthEndStr
 
   const atVDate = calcAtDate(costLines, invoiceLines, wipVDate, settings)
-  const effectiveMargin = marginOverride ? parseFloat(marginOverride) / 100 : atVDate.margin
 
-  const dateFiltered = costLines.filter(l => {
-    if (!l.date || !vDateStr) return false
-    if (l.date <= vDateStr) return false
-    if (l.date > toDateStr) return false
-    return true
+  const wipMonthKey = wipVDate
+    ? `${wipVDate.getFullYear()}-${String(wipVDate.getMonth() + 1).padStart(2, '0')}`
+    : null
+  const monthAdjustments = wipMonthKey ? adjustments.filter(a => a.month === wipMonthKey) : []
+
+  // Shared WIP calculation — identical to the WIP page and EOM.
+  const _wip = computeProjectWip({
+    costLines, invoiceLines, valStr: vDateStr, monthEndStr,
+    adjustments: monthAdjustments, marginOverride: marginOverride || settings.wipMarginOverride,
   })
+  const effectiveMargin = _wip.margin
+  const dateFiltered = _wip.postValCosts
+  const postValTotal = _wip.postValTotal
+  const adjCostTotal = _wip.adjTotal
+  const adjustedPostValCosts = postValTotal + adjCostTotal
+  const wipValue = _wip.wipValue
 
   const suppliers = [...new Set(dateFiltered.map(l => l.supplier).filter(Boolean))].sort()
   const codeName = {}
@@ -1103,19 +1115,7 @@ function WipTab({ costLines, invoiceLines, settings, pastVDates, selectedVDate, 
     return sortDir === 'asc' ? String(av || '').localeCompare(String(bv || '')) : String(bv || '').localeCompare(String(av || ''))
   })
 
-  const postValTotal = dateFiltered.reduce((s, l) => s + (l.amount || 0), 0)
   const filteredTotal = filtered.reduce((s, l) => s + (l.amount || 0), 0)
-
-  // Adjustments for the currently selected WIP month
-  const wipMonthKey = wipVDate
-    ? `${wipVDate.getFullYear()}-${String(wipVDate.getMonth() + 1).padStart(2, '0')}`
-    : null
-  const monthAdjustments = wipMonthKey
-    ? adjustments.filter(a => a.month === wipMonthKey)
-    : []
-  const adjCostTotal = monthAdjustments.reduce((s, a) => s + a.amount, 0)
-  const adjustedPostValCosts = postValTotal + adjCostTotal
-  const wipValue = effectiveMargin != null && effectiveMargin < 1 && adjustedPostValCosts > 0 ? adjustedPostValCosts / (1 - effectiveMargin) : 0
 
   function handleSort(col) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
