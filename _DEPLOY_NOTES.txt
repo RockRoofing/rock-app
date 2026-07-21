@@ -1,28 +1,15 @@
-Weekly Labour Allocation PDF — fix "WinAnsi cannot encode" crash
-================================================================
+Report App Improvement modal — don't close on click-off
+=======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: lib/weeklyLabourPdf.js
+Single file: components/ReportProblemButton.js
 
-THE ERROR
----------
-{"error":"WinAnsi cannot encode \"\" (0x1f4a7)"} when downloading the Weekly Labour
-Allocation. 0x1f4a7 is the water-drop emoji 💧 — it comes from a "Water Ingress"
-project/visit label. pdf-lib's standard font uses WinAnsi encoding, which can't
-render emoji, so PDF generation threw.
-
-THE FIX
--------
-Added a san() sanitiser and applied it to every dynamic string drawn in the PDF
-(operative names, company names, and the day-cell project labels in both the team
-grid and the personal "Your Week"/"Your Upcoming Work" views). It:
-  • drops any character WinAnsi can't encode (emoji, symbols),
-  • maps smart quotes / en–em dashes / ellipsis to plain ASCII equivalents,
-  • replaces the previous "…" truncation character with "..." (that was itself
-    non-WinAnsi and could also have thrown).
-So a project called "💧 Water Ingress" now prints as "Water Ingress" and the PDF
-generates without error.
+CHANGE
+------
+The Report App Improvement pop-out no longer closes when you click the dark backdrop
+around it (users were accidentally clicking off and losing what they'd typed). It now
+closes ONLY via the × button (top right) or the Close/Send buttons.
 
 FILES
 -----
-• lib/weeklyLabourPdf.js
+• components/ReportProblemButton.js
