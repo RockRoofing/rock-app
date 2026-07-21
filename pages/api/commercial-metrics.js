@@ -30,6 +30,19 @@ export default async function handler(req, res) {
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
+  // Save a manual per-month payless (credit-note) count adjustment.
+  if (req.method === 'POST') {
+    try {
+      const { month, adjusted } = req.body || {}
+      if (!month) return res.status(400).json({ error: 'month required' })
+      const cur = (await redis.get('config:payless-adjustments').catch(() => null)) || {}
+      if (adjusted === null || adjusted === '' || adjusted === undefined) delete cur[month]
+      else cur[month] = Number(adjusted)
+      await redis.set('config:payless-adjustments', cur)
+      return res.json({ ok: true, paylessManual: cur })
+    } catch (e) { return res.status(500).json({ error: e.message }) }
+  }
+
   try {
     // Get all live projects from dashboard cache, excluding the shared hidden list.
     const cached = await redis.get('dashboard:cache')
@@ -57,23 +70,40 @@ export default async function handler(req, res) {
     const gpMargin = totalGrossInvoiced > 0 ? (totalGrossInvoiced - totalCosts) / totalGrossInvoiced : null
     const gpProfit = totalGrossInvoiced - totalCosts
 
-    // ── Payless Notices ───────────────────────────────────────────────────
-    // Detected when: amountPaid < total (underpayment) OR hasCreditNote
-    // One per invoice max. Use fullyPaidOnDate month for timing
-    const paylessNotices = allInvoiceLines.filter(inv => {
-      if (inv.status === 'VOIDED' || inv.status === 'DRAFT') return false
-      const underpaid = inv.amountPaid > 0 && inv.amountDue === 0 && inv.amountPaid < inv.total
-      const hasCN = inv.hasCreditNote && inv.creditNoteTotal > 0
-      return underpaid || hasCN
-    })
+    // ── Payless Notices = Credit Notes ────────────────────────────────────
+    // Every credit note applied against a project counts as one payless notice.
+    // Counted by the month the credit note is dated. Each month's count can be
+    // manually overridden (e.g. 7 raw, adjusted to 4 because 3 were minor).
+    const creditNoteDetails = allInvoiceLines
+      .filter(l => l.creditNote)
+      .map(l => ({
+        projectName: l.projectName || '',
+        jobNo: l.jobNo || '',
+        creditNoteNumber: l.invoiceNumber || '',
+        appliedToInvoice: l.appliedToInvoice || l.reference || '',
+        date: l.date || '',
+        amount: Math.abs(l.sales200 != null ? l.sales200 : (l.subTotal || l.total || 0)),
+        contact: l.contact || '',
+      }))
 
-    // Group payless by month (use fullyPaidOnDate or date if no payment date)
+    // Group credit notes by month.
     const paylessByMonth = {}
-    for (const inv of paylessNotices) {
-      const mk = monthKey(inv.fullyPaidOnDate || inv.date)
+    for (const cn of creditNoteDetails) {
+      const mk = monthKey(cn.date)
       if (!mk) continue
       if (!paylessByMonth[mk]) paylessByMonth[mk] = []
-      paylessByMonth[mk].push(inv)
+      paylessByMonth[mk].push(cn)
+    }
+
+    // Manual per-month adjustments: { 'YYYY-MM': adjustedCount }. When set, the
+    // adjusted number is used for the metric; the raw credit notes still show in the
+    // drill-down.
+    const paylessManual = (await redis.get('config:payless-adjustments').catch(() => null)) || {}
+    const paylessCountByMonth = {}
+    for (const mk of Object.keys(paylessByMonth)) {
+      const raw = paylessByMonth[mk].length
+      const adj = paylessManual[mk]
+      paylessCountByMonth[mk] = { raw, adjusted: (adj != null && adj !== '') ? Number(adj) : raw, isAdjusted: adj != null && adj !== '' }
     }
 
     // ── Average Time to Get Paid ──────────────────────────────────────────
@@ -111,7 +141,10 @@ export default async function handler(req, res) {
       totalCosts,
       liveProjectCount: projects.length,
       paylessByMonth,
-      paylessTotal: paylessNotices.length,
+      paylessCountByMonth,
+      paylessManual,
+      paylessTotal: creditNoteDetails.length,
+      paylessAdjustedTotal: Object.values(paylessCountByMonth).reduce((s, m) => s + m.adjusted, 0),
       avgPaymentTime,
       allInvoiceCount: allInvoiceLines.length,
     })

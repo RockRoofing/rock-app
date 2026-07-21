@@ -1,36 +1,35 @@
-Project Financials — always use LIVE WIP override/adjustments/dates
-===================================================================
+Commercial Scorecard — Payless Notices = credit notes (adjustable + drill)
+==========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Single file: pages/api/dashboard.js
-Deploy AFTER the PF_mirror_wip_override and WIP_shared_calc_sync bundles.
+Deploy AFTER the credit-notes sync fix (so credit notes exist in invoiced:lines).
 
-WHY PF STILL DIDN'T MATCH
--------------------------
-PF uses the SAME shared WIP calculation as the WIP page, with the SAME cost/invoice
-lines. The mismatch was the INPUTS coming from the 4-hour dashboard cache: the WIP
-margin override, the manual WIP adjustments, and the per-month valuation-date
-overrides could be stale in the cache even though the WIP page reads them live. So the
-formula was identical but PF was feeding it old override/adjustment/date values.
+WHAT CHANGED
+------------
+Payless Notices now = the number of CREDIT NOTES applied, counted by month. Every
+credit note is one payless notice (previously it was underpayments / a flag).
 
-THE FIX
--------
-When PF serves from the dashboard cache, it now OVERLAYS these three WIP-relevant
-fields from live storage for every project:
-  • wipMarginOverride   (from live project settings)
-  • dateOverrides       (from live project settings — drives the valuation date)
-  • wipAdjustments      (from live wip:adjustments:{id})
-Everything else still comes from the warm cache (fast), but the WIP inputs are always
-current — so PF now mirrors the WIP page immediately, without waiting for a full cache
-rebuild.
+• The card shows the ADJUSTED total across months (with "N raw" underneath when any
+  month has been manually adjusted).
+• Click the card to open a month-by-month view. For each month it shows the raw credit
+  note count and an editable "counts as" number so you can adjust it (e.g. 7 raw ->
+  4 because 3 were minor). Save persists it; Reset clears back to the raw count.
+• Under each month, the credit notes that make up the number are listed: project
+  (job no + name), credit note number, the invoice it was applied to, date and amount.
+• The trend sparkline uses the adjusted monthly count.
+
+DATA
+----
+• Reads credit notes from invoiced:lines:{id} (creditNote flag) per live project.
+• Manual monthly adjustments saved to config:payless-adjustments  { 'YYYY-MM': count }.
+• POST /api/commercial-metrics { month, adjusted } saves an adjustment (adjusted=null
+  clears it).
 
 FILES
 -----
-• pages/api/dashboard.js
+• pages/api/commercial-metrics.js   (credit-note payless + per-month counts + POST)
+• pages/commercial-scorecard.js     (adjusted card value, PaylessModal drill + editor)
 
-AFTER DEPLOY
-------------
-Set/clear a WIP margin override (or add an adjustment) on the WIP page, then open
-Project Financials for the SAME month — the WIP and margin should now match. If they
-still differ, confirm both pages are on the same month (PF defaults to last month;
-WIP page also defaults to the last completed month).
+NOTE: "Applied to invoice" shows if that link is stored on the credit note; some Xero
+credit notes don't carry an allocation reference, in which case it shows the CN number
+/ reference only.

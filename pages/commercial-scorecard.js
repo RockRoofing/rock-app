@@ -78,6 +78,58 @@ function DrillModal({ title, rows, columns, onClose }) {
   )
 }
 
+// Payless (credit note) drill: per-month raw count + editable adjusted count, with
+// the credit notes that make up each month listed below.
+function PaylessModal({ byMonth, countByMonth, columns, onClose, onSaveAdjust, monthLabelFn }) {
+  const months = Object.keys(byMonth || {}).sort().reverse()
+  const tdS = { padding: '6px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12 }
+  const thS = { padding: '7px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 11, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
+  const [edits, setEdits] = useState({})
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 940, maxHeight: '84vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.18)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e1e0d9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Payless Notices (Credit Notes)</span>
+          <button onClick={onClose} style={{ fontSize: 18, border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+          {months.length === 0 && <div style={{ padding: 30, textAlign: 'center', color: '#aaa', fontSize: 13 }}>No credit notes found.</div>}
+          {months.map(mk => {
+            const rows = byMonth[mk] || []
+            const c = countByMonth?.[mk] || { raw: rows.length, adjusted: rows.length, isAdjusted: false }
+            const editVal = edits[mk] !== undefined ? edits[mk] : (c.isAdjusted ? String(c.adjusted) : '')
+            return (
+              <div key={mk} style={{ padding: '10px 20px', borderBottom: '1px solid #f0efec' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{monthLabelFn(mk)}</span>
+                  <span style={{ fontSize: 12, color: '#666' }}>{c.raw} credit note{c.raw === 1 ? '' : 's'}</span>
+                  <span style={{ fontSize: 12, color: '#888' }}>· counts as</span>
+                  <input type="number" value={editVal} onChange={e => setEdits(s => ({ ...s, [mk]: e.target.value }))}
+                    placeholder={String(c.raw)} title="Adjusted count (blank = use raw count)"
+                    style={{ width: 60, padding: '4px 8px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
+                  <button onClick={() => onSaveAdjust(mk, editVal)} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Save</button>
+                  {c.isAdjusted && <button onClick={() => { setEdits(s => ({ ...s, [mk]: '' })); onSaveAdjust(mk, '') }} title="Clear adjustment (use raw count)" style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', color: '#666' }}>Reset</button>}
+                  {c.isAdjusted && <span style={{ fontSize: 11, color: '#b45309', fontWeight: 600 }}>adjusted from {c.raw} to {c.adjusted}</span>}
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead><tr>{columns.map(col => <th key={col.key} style={{ ...thS, textAlign: col.right ? 'right' : 'left' }}>{col.label}</th>)}</tr></thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
+                        {columns.map(col => <td key={col.key} style={{ ...tdS, textAlign: col.right ? 'right' : 'left' }}>{col.format ? col.format(row[col.key], row) : (row[col.key] ?? '—')}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const DEFAULT_TARGETS = {
   gpMargin: 0.20,
   paylessNotices: 0,
@@ -100,6 +152,17 @@ export default function CommercialScorecard() {
   const [targets, setTargets] = useState(DEFAULT_TARGETS)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
+  const [paylessOpen, setPaylessOpen] = useState(false)
+
+  async function savePaylessAdjust(month, adjusted) {
+    try {
+      await fetch('/api/commercial-metrics', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, adjusted: adjusted === '' ? null : Number(adjusted) }),
+      })
+      await loadAll()
+    } catch {}
+  }
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
   const [savingRetention, setSavingRetention] = useState(null)
@@ -157,10 +220,10 @@ export default function CommercialScorecard() {
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
   const CARD_HEIGHT = 210
 
-  function renderCard({ key, label, sub, value, format, target, targetKey, mode, trendData, showAvg, drillData, drillColumns, drillTitle, extra }) {
+  function renderCard({ key, label, sub, value, format, target, targetKey, mode, trendData, showAvg, drillData, drillColumns, drillTitle, extra, onOpen }) {
     const color = rag(value, target, mode)
     const isEditing = editingTarget === key
-    const hasDrill = drillData && drillData.length > 0
+    const hasDrill = onOpen || (drillData && drillData.length > 0)
 
     const trendValues = trendData || []
     const trendlineValues = computeTrendline(trendValues)
@@ -173,7 +236,7 @@ export default function CommercialScorecard() {
     return (
       <div
         key={key}
-        onClick={() => hasDrill && setModal({ title: drillTitle || label, rows: drillData, columns: drillColumns })}
+        onClick={() => { if (onOpen) onOpen(); else if (hasDrill) setModal({ title: drillTitle || label, rows: drillData, columns: drillColumns }) }}
         style={{
           background: '#fff', borderRadius: 10, padding: '14px 16px',
           border: '1px solid #e1e0d9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -243,7 +306,7 @@ export default function CommercialScorecard() {
 
   const paylessTrend = displayMonths.map(m => ({
     month: monthLabel(m),
-    value: metrics?.paylessByMonth?.[m]?.length ?? 0,
+    value: metrics?.paylessCountByMonth?.[m]?.adjusted ?? 0,
   }))
 
   const paymentTimeTrend = displayMonths.map(m => ({
@@ -251,16 +314,14 @@ export default function CommercialScorecard() {
     value: metrics?.avgPaymentTime?.[m]?.avgDays ?? null,
   }))
 
-  // Payless drill columns
+  // Payless (credit note) drill columns
   const paylessColumns = [
     { key: 'jobNo', label: 'Project' },
     { key: 'projectName', label: 'Project Name' },
-    { key: 'invoiceNumber', label: 'Invoice No' },
-    { key: 'date', label: 'Invoice Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '—' },
-    { key: 'total', label: 'Invoice Total', right: true, format: (v) => fmt(v) },
-    { key: 'amountPaid', label: 'Paid', right: true, format: (v) => fmt(v) },
-    { key: 'creditNoteTotal', label: 'Credit Note', right: true, format: (v) => v ? fmt(v) : '—' },
-    { key: 'hasCreditNote', label: 'Type', format: (v) => v ? 'Credit Note' : 'Underpayment' },
+    { key: 'creditNoteNumber', label: 'Credit Note No' },
+    { key: 'appliedToInvoice', label: 'Applied to Invoice' },
+    { key: 'date', label: 'Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '—' },
+    { key: 'amount', label: 'Amount', right: true, format: (v) => fmt(v) },
   ]
 
   const paymentTimeColumns = [
@@ -309,6 +370,13 @@ export default function CommercialScorecard() {
       <Head><title>Rock Roofing — Commercial Scorecard</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#f0f2f5' }}>
         {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} onClose={() => setModal(null)} />}
+        {paylessOpen && <PaylessModal
+          byMonth={metrics?.paylessByMonth || {}}
+          countByMonth={metrics?.paylessCountByMonth || {}}
+          columns={paylessColumns}
+          monthLabelFn={monthLabel}
+          onSaveAdjust={savePaylessAdjust}
+          onClose={() => setPaylessOpen(false)} />}
 
         {/* Nav */}
         <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
@@ -384,19 +452,22 @@ export default function CommercialScorecard() {
                   ),
                 })}
 
-                {/* 2. Payless Notices */}
+                {/* 2. Payless Notices = Credit Notes */}
                 {renderCard({
                   key: 'paylessNotices',
                   label: 'Payless Notices',
-                  sub: 'Credit notes or underpayments on invoices',
-                  value: metrics?.paylessTotal ?? 0,
+                  sub: 'Credit notes applied (adjustable per month) — click to view & adjust',
+                  value: metrics?.paylessAdjustedTotal ?? 0,
                   format: v => v,
                   target: targets.paylessNotices,
                   trendData: paylessTrend,
                   showAvg: true,
                   drillData: allPayless,
                   drillColumns: paylessColumns,
-                  drillTitle: 'Payless Notices — All',
+                  drillTitle: 'Payless Notices (Credit Notes)',
+                  onOpen: () => setPaylessOpen(true),
+                  extra: metrics?.paylessTotal != null && metrics.paylessTotal !== (metrics.paylessAdjustedTotal ?? 0)
+                    ? <span style={{ fontSize: 10, color: '#888' }}>{metrics.paylessTotal} raw</span> : null,
                 })}
 
                 {/* 3. Retentions Invoiced */}
