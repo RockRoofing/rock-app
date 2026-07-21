@@ -1,16 +1,22 @@
-Forms — Missing: show N/A (grey) when no forms are required
-===========================================================
+Forms — choose Combined vs Separate on multi-download
+=====================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/operations/forms-missing.js
+Single file: pages/operations/forms.js
 
 CHANGE
 ------
-When a form type needs no forms for the period (0/0), it previously showed a green
-"100%". It now shows "N/A" in light grey instead. Same for the overall Completed
-summary card — if nothing is required across the period, it shows N/A rather than
-100%. The "x/y done" line is unchanged.
+When 2+ forms are selected in Ops > Forms > Completed and you click Download, a small
+dialog now asks how you want them:
+  • Separate files — one PDF per form, each downloaded individually (named by
+    project + form title).
+  • Combined file — all forms in a single PDF (the previous behaviour).
+Selecting a single form downloads it directly (no prompt).
+
+Separate downloads are staggered slightly so browsers don't block the multiple
+downloads; you may get a one-time "allow multiple downloads" prompt from the browser
+the first time.
 
 FILES
 -----
-• pages/operations/forms-missing.js
+• pages/operations/forms.js

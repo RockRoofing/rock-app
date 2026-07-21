@@ -20,6 +20,7 @@ export default function SubmissionsPage() {
   const [sel, setSel] = useState({})
   const [downloading, setDownloading] = useState(false)
   const [selNote, setSelNote] = useState('')
+  const [chooseDownload, setChooseDownload] = useState(false)
 
   useEffect(() => { (async () => {
     try { const r = await fetch('/api/submissions'); const d = await r.json(); setSubs((d.submissions || []).filter(s => !s.isIssue)) } catch {}
@@ -61,24 +62,47 @@ export default function SubmissionsPage() {
   const pageRows = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
   const hasFilters = fProject || fType || fFrom || fTo
   const selIds = Object.keys(sel).filter(k => sel[k])
-  async function downloadSelected() {
+
+  // Fetch a PDF for a set of ids as a single (combined) document.
+  async function fetchPdfBlob(ids) {
+    const res = await fetch('/api/submissions-pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, labels }),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'PDF failed') }
+    return res.blob()
+  }
+  function saveBlob(blob, name) {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = name
+    document.body.appendChild(a); a.click(); a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 4000)
+  }
+  const safeName = (s) => String(s || 'form-submission').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'form-submission'
+
+  function downloadSelected() {
     if (!selIds.length) { setSelNote('Select the forms you want to download first.'); return }
     setSelNote('')
+    if (selIds.length === 1) { doDownload('combined'); return }
+    setChooseDownload(true)   // 2+ selected: ask combined vs separate
+  }
+
+  async function doDownload(mode) {
+    setChooseDownload(false)
     setDownloading(true)
     try {
-      const res = await fetch('/api/submissions-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selIds, labels }),
-      })
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || 'PDF failed') }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = selIds.length === 1 ? 'form-submission.pdf' : `form-submissions-${selIds.length}.pdf`
-      document.body.appendChild(a); a.click(); a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 4000)
+      if (mode === 'combined') {
+        const blob = await fetchPdfBlob(selIds)
+        saveBlob(blob, selIds.length === 1 ? 'form-submission.pdf' : `form-submissions-${selIds.length}.pdf`)
+      } else {
+        // Separate: one PDF file per selected submission.
+        for (const id of selIds) {
+          const meta = subs.find(s => s.id === id)
+          const blob = await fetchPdfBlob([id])
+          saveBlob(blob, `${safeName(meta ? `${meta.projectName || ''}-${meta.formTitle || ''}` : id)}.pdf`)
+          await new Promise(r => setTimeout(r, 300))   // stagger so browsers don't block
+        }
+      }
     } catch (e) { alert(e?.message || 'Could not prepare download') }
     setDownloading(false)
   }
@@ -164,6 +188,23 @@ export default function SubmissionsPage() {
       )}
 
       {open && <SubmissionModal sub={open} labels={labels} onClose={() => setOpen(null)} onSaved={(s) => setOpen(s)} onDownload={(s) => printSubmissions([s], labels)} />}
+      {chooseDownload && (
+        <Modal onClose={() => setChooseDownload(false)} title={`Download ${selIds.length} forms`}>
+          <p style={{ fontSize: 14, color: '#555', margin: '0 0 18px' }}>
+            How would you like these {selIds.length} forms downloaded?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button onClick={() => doDownload('separate')}
+              style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+              Separate files<div style={{ fontSize: 12, fontWeight: 400, opacity: 0.9, marginTop: 2 }}>One PDF per form, downloaded individually.</div>
+            </button>
+            <button onClick={() => doDownload('combined')}
+              style={{ background: '#fff', color: INK, border: '1px solid #ddd', borderRadius: 8, padding: '11px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+              Combined file<div style={{ fontSize: 12, fontWeight: 400, color: '#777', marginTop: 2 }}>All forms in a single PDF.</div>
+            </button>
+          </div>
+        </Modal>
+      )}
     </OperationsShell>
   )
 }
