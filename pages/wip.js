@@ -340,31 +340,63 @@ function ManualAdjustments({ p, month, onChange }) {
     setBusy(false)
   }
 
+  async function updateMargin(adjId, marginVal) {
+    setBusy(true)
+    try {
+      await fetch(`/api/project/${p.id}/wip-adjustments`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adjId, margin: marginVal === '' ? null : Number(marginVal) }),
+      })
+      await onChange()
+    } catch {}
+    setBusy(false)
+  }
+
   return (
     <div style={{ marginTop: 14, border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: INK }}>Manual WIP Cost Adjustments</div>
-      <div style={{ fontSize: 11, color: '#b45309', margin: '2px 0 10px' }}>One-off adjustments for this month only — never carried forward. Positive = cost incurred but not yet in Xero (increases WIP); negative = cost you won't recover / a WIP write-down (decreases WIP).</div>
+      <div style={{ fontSize: 11, color: '#b45309', margin: '2px 0 10px' }}>One-off adjustments for this month only — never carried forward. Positive = cost incurred but not yet in Xero (increases WIP); negative = cost you won't recover / a WIP write-down (decreases WIP). Blank the margin box and it uses the project margin.</div>
       {(p.thisMonthAdj || []).map(a => (
-        <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fffbeb', borderRadius: 8, padding: '6px 10px', marginBottom: 6, fontSize: 12.5 }}>
-          <span style={{ fontSize: 10, fontWeight: 700, background: '#fde68a', color: '#7c5e10', borderRadius: 6, padding: '1px 6px' }}>{monthLabel(month).split(' ')[0].slice(0, 3)} {month.slice(0, 4)}</span>
-          <span style={{ flex: 1, color: '#333' }}>{a.description || 'Adjustment'}</span>
-          <span style={{ fontSize: 11, color: '#888' }}>margin {(a.margin != null && a.margin !== '') ? `${a.margin}%` : (p.margin != null ? `${(p.margin * 100).toFixed(1)}% (project)` : '—')}</span>
-          <span style={{ fontWeight: 700, color: a.amount < 0 ? '#dc2626' : INK }}>{fmtC(a.amount)}</span>
-          <button onClick={() => remove(a.id)} disabled={busy} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>
-        </div>
+        <AdjRow key={a.id} a={a} p={p} month={month} busy={busy} onSaveMargin={updateMargin} onRemove={remove} />
       ))}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
         <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description" style={{ flex: 1, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }} />
         <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (− to reduce)" style={{ width: 140, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-          <input type="number" value={margin} onChange={e => setMargin(e.target.value)} placeholder="margin" title="Margin % (defaults to project margin)" style={{ width: 66, padding: '7px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, textAlign: 'right' }} />
+          <input type="number" value={margin} onChange={e => setMargin(e.target.value)} placeholder="margin" title="Margin % (blank = project margin)" style={{ width: 66, padding: '7px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, textAlign: 'right' }} />
           <span style={{ fontSize: 12, color: '#888' }}>%</span>
+          <button onClick={() => setMargin('')} disabled={margin === ''} title="Clear - use project margin" style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '5px 7px', fontSize: 11, cursor: margin === '' ? 'default' : 'pointer', color: '#666', opacity: margin === '' ? 0.4 : 1 }}>Reset</button>
         </div>
         <button onClick={add} disabled={busy || !amount} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: busy || !amount ? 'default' : 'pointer', opacity: busy || !amount ? 0.5 : 1, whiteSpace: 'nowrap' }}>+ Add to {monthLabel(month).split(' ')[0]}</button>
       </div>
       {(p.thisMonthAdj || []).length > 0 && (
         <div style={{ fontSize: 12, color: '#777', marginTop: 8 }}>Adjustments for {monthLabel(month)}: <strong style={{ color: '#b45309' }}>Net cost adjustment: {fmtC(p.adjTotal)}</strong></div>
       )}
+    </div>
+  )
+}
+
+// One existing adjustment row with an editable, clearable margin. Blank = inherit
+// the project margin.
+function AdjRow({ a, p, month, busy, onSaveMargin, onRemove }) {
+  const [m, setM] = useState(a.margin != null && a.margin !== '' ? String(a.margin) : '')
+  useEffect(() => { setM(a.margin != null && a.margin !== '' ? String(a.margin) : '') }, [a.margin])
+  const usingProject = (a.margin == null || a.margin === '')
+  const projPct = p.margin != null ? (p.margin * 100).toFixed(1) : '—'
+  const dirty = (m === '' ? null : Number(m)) !== (a.margin == null || a.margin === '' ? null : Number(a.margin))
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fffbeb', borderRadius: 8, padding: '6px 10px', marginBottom: 6, fontSize: 12.5 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, background: '#fde68a', color: '#7c5e10', borderRadius: 6, padding: '1px 6px' }}>{monthLabel(month).split(' ')[0].slice(0, 3)} {month.slice(0, 4)}</span>
+      <span style={{ flex: 1, color: '#333' }}>{a.description || 'Adjustment'}</span>
+      <span style={{ fontSize: 11, color: '#888' }}>margin</span>
+      <input type="number" value={m} onChange={e => setM(e.target.value)} placeholder={usingProject ? projPct : ''} title="Margin % — blank uses the project margin"
+        style={{ width: 58, padding: '4px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
+      <span style={{ fontSize: 11, color: '#888' }}>%</span>
+      {m !== '' && <button onClick={() => { setM(''); onSaveMargin(a.id, '') }} disabled={busy} title="Clear - use project margin" style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '2px 6px', fontSize: 11, cursor: 'pointer', color: '#666' }}>Reset</button>}
+      {dirty && <button onClick={() => onSaveMargin(a.id, m)} disabled={busy} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333' }}>Save</button>}
+      {usingProject && <span style={{ fontSize: 10, color: '#aaa' }}>(project {projPct}%)</span>}
+      <span style={{ fontWeight: 700, color: a.amount < 0 ? '#dc2626' : INK, minWidth: 64, textAlign: 'right' }}>{fmtC(a.amount)}</span>
+      <button onClick={() => onRemove(a.id)} disabled={busy} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>
     </div>
   )
 }

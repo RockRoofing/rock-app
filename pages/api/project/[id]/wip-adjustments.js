@@ -45,6 +45,20 @@ export default async function handler(req, res) {
     return res.json({ adjustment: newAdj, adjustments })
   }
 
+  if (req.method === 'PATCH') {
+    // Update an existing adjustment's margin. Pass margin=null to clear it so the
+    // adjustment inherits the project's current margin.
+    const { adjId, margin } = req.body
+    if (!adjId) return res.status(400).json({ error: 'Missing adjId' })
+    let adjustments = []
+    try { const data = await redis.get(key); if (data) adjustments = data } catch {}
+    adjustments = adjustments.map(a => a.id === adjId
+      ? { ...a, margin: (margin === null || margin === undefined || margin === '') ? null : parseFloat(margin) }
+      : a)
+    await redis.set(key, adjustments)
+    return res.json({ adjustments })
+  }
+
   if (req.method === 'DELETE') {
     const { adjId } = req.body
     let adjustments = []

@@ -1,36 +1,25 @@
-WIP — fix "No WIP to show" (names) + confirm per-line margins
-=============================================================
+WIP — clear a manual adjustment's margin to inherit the project margin
+======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Single file: pages/api/wip.js
 
-THE "NO WIP TO SHOW" BUG
-------------------------
-The WIP page skipped EVERY project when it couldn't resolve a project name, and name
-resolution depended entirely on a fresh dashboard cache. If the cache was stale/empty
-(which the recent cache-guard change can cause on first load), every project was
-dropped -> "No WIP to show for <any month>".
+CHANGE
+------
+You can now clear the margin on a manual WIP adjustment so it falls back to the
+project's current margin (and tracks it if the project margin later changes):
 
-FIX: the WIP API now resolves project names/job numbers straight from the Xero
-tracking categories (the authoritative source, same as the dashboard), falling back
-to the dashboard cache. It no longer depends on the cache being fresh, so projects
-show again. (Was also using the wrong field name — trackingOptionId, not xeroId.)
+• EXISTING adjustments now show an editable margin box with a "Reset" button. Blank it
+  (or click Reset) and Save -> the adjustment inherits the project margin, shown as
+  "(project X%)". Type a value + Save to set a specific margin.
+• The ADD form's margin box has a "Reset" button too, to blank it back to the project
+  margin before adding.
+• A blank/cleared margin is stored as null and the WIP calc uses the project margin
+  for that line.
 
-PER-LINE MARGINS (your point 3) — ALREADY THE BEHAVIOUR
-------------------------------------------------------
-Each manual WIP adjustment is grossed at ITS OWN margin; post-valuation COSTS are
-grossed at the overall project (margin-adjusted) margin. So:
-  • Soprema invoice entered at 0%  -> adds exactly £11,000.
-  • A cost of £3,171 at the project's 14.4% -> £3,704.
-No change needed here; it works as requested. (The earlier £932 came from the
-cancelling adjustment being at −14.4% instead of +14.4%.)
+API: added a PATCH handler to wip-adjustments to update an adjustment's margin
+(margin=null clears it).
 
 FILES
 -----
-• pages/api/wip.js
-
-AFTER DEPLOY
-------------
-Projects should list again. If you still want J197 to net to £11,000, set the "Direct
-Wages Adjustment" margin to +14.4% (or delete it and rely on the 0% Soprema line as
-the WIP cost).
+• pages/wip.js
+• pages/api/project/[id]/wip-adjustments.js   (PATCH to update margin)
