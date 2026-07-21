@@ -243,6 +243,7 @@ export default function ApplicationCalendar() {
             <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Application Calendar</span>
             <span style={{ color: '#444' }}>|</span>
             <Link href="/wip" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>WIP</Link>
+            <span style={{ color: '#444' }}>|</span>
             <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
             <div style={{ flex: 1 }} />
             <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}

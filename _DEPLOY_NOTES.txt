@@ -1,29 +1,23 @@
-WIP tab now shows in the nav on ALL commercial pages
-====================================================
+WIP nav — add missing separator lines around WIP / Commercial Scorecard
+=======================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
 
-WHY IT WAS MISSING
-------------------
-The WIP tab lives in the shared CommercialNav, but only Contracted Rates and
-Applications actually use that shared nav. The other commercial pages each have their
-own hand-built nav bar, so the WIP tab didn't appear on them.
+ISSUE
+-----
+When the WIP link was added to each page's inline nav, its trailing "|" separator was
+missed, so:
+  • On most pages there was no line between WIP and Commercial Scorecard.
+  • On the Commercial Scorecard page there was no line between Application Calendar
+    and WIP.
 
 FIX
 ---
-Added the WIP link (before Commercial Scorecard) to the inline nav on each of these
-pages:
-  • Project Financials (commercial.js)
-  • Outstanding Invoices
-  • Retention
-  • Variations
-  • Application Calendar
-  • Commercial Scorecard
-Contracted Rates and Applications already show it via the shared CommercialNav.
-
-So WIP now appears in the nav on all: Project Financials, Outstanding Invoices,
-Retention, Variations, Contracted Rates, Applications, Application Calendar, WIP and
-Commercial Scorecard.
+Added the missing "|" separators so the nav reads consistently on every page:
+  ... | Application Calendar | WIP | Commercial Scorecard
+Applied to Project Financials, Outstanding Invoices, Retention, Variations,
+Application Calendar and Commercial Scorecard. (Contracted Rates and Applications use
+the shared CommercialNav, which already draws all separators.)
 
 FILES
 -----
@@ -33,6 +27,3 @@ FILES
 • pages/variations.js
 • pages/application-calendar.js
 • pages/commercial-scorecard.js
-
-NOTE: longer term these pages could all be switched to the shared CommercialNav so a
-single change updates every nav — a tidy-up for later, not needed now.
