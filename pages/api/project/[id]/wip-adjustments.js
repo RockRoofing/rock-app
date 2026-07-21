@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     // Add a new adjustment
-    const { month, type, description, amount } = req.body
+    const { month, type, description, amount, margin } = req.body
     if (!month || !type || !amount) return res.status(400).json({ error: 'Missing fields' })
     let adjustments = []
     try {
@@ -37,6 +37,7 @@ export default async function handler(req, res) {
       type,       // 'Cost' or 'Invoice'
       description: description || '',
       amount: parseFloat(amount),
+      margin: (margin === null || margin === undefined || margin === '') ? null : parseFloat(margin),
       createdAt: new Date().toISOString(),
     }
     adjustments.push(newAdj)

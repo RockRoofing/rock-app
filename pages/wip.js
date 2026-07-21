@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import CommercialNav from '../components/CommercialNav'
+import ProjectDatesModal from '../components/ProjectDatesModal'
 
 const GOLD = '#ca8a04'
 const INK = '#1a1a19'
@@ -25,8 +26,9 @@ export default function WipPage() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  // Default = current month, so on the 1st the next WIP month shows automatically.
-  const [month, setMonth] = useState(() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` })
+  // Default = the last COMPLETED month (previous month), and lets you filter back.
+  const [month, setMonth] = useState(() => { const n = new Date(); const d = new Date(n.getFullYear(), n.getMonth() - 1, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
+  const [datesModal, setDatesModal] = useState(null)
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -74,6 +76,19 @@ export default function WipPage() {
             </div>
           </div>
 
+          {/* Missing application/valuation dates — same as Applications / Calendar */}
+          {(data?.missingDates || []).length > 0 && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#92400e' }}>
+              <span style={{ fontWeight: 700, marginRight: 8 }}>⚠ Missing dates:</span>
+              {data.missingDates.map((r, i) => (
+                <span key={r.xeroId}>
+                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
+                  {i < data.missingDates.length - 1 ? <span style={{ margin: '0 6px', color: '#b45309' }}>·</span> : null}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Previous month's manual adjustments — information only, NOT in the total */}
           {anyLastMonth && (
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '12px 16px', marginBottom: 18 }}>
@@ -81,7 +96,7 @@ export default function WipPage() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {projects.flatMap(p => (p.lastMonthAdj || []).map((a, i) => (
                   <span key={p.id + i} style={{ fontSize: 12, background: '#fff', border: '1px solid #fde68a', borderRadius: 8, padding: '4px 10px', color: '#7c5e10' }}>
-                    <strong>{p.jobNo || p.name}</strong>: {a.description || 'Adjustment'} · {fmtC(a.amount)}
+                    <strong>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</strong>: {a.description || 'Adjustment'} · {fmtC(a.amount)}
                   </span>
                 )))}
               </div>
@@ -96,6 +111,7 @@ export default function WipPage() {
             projects.map(p => <ProjectSection key={p.id} p={p} month={month} onChange={load} />)
           )}
         </div>
+        {datesModal && <ProjectDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); load() }} />}
       </div>
     </>
   )
@@ -255,7 +271,11 @@ function ProjectSection({ p, month, onChange }) {
 function ManualAdjustments({ p, month, onChange }) {
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
+  const projMarginPct = p.margin != null ? (p.margin * 100).toFixed(1) : ''
+  const [margin, setMargin] = useState(projMarginPct)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => { setMargin(p.margin != null ? (p.margin * 100).toFixed(1) : '') }, [p.margin])
 
   async function add() {
     if (!amount) return
@@ -263,9 +283,9 @@ function ManualAdjustments({ p, month, onChange }) {
     try {
       await fetch(`/api/project/${p.id}/wip-adjustments`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month, type: 'cost', description: desc, amount: Number(amount) }),
+        body: JSON.stringify({ month, type: 'cost', description: desc, amount: Number(amount), margin: margin === '' ? null : Number(margin) }),
       })
-      setDesc(''); setAmount(''); await onChange()
+      setDesc(''); setAmount(''); setMargin(projMarginPct); await onChange()
     } catch {}
     setBusy(false)
   }
@@ -289,13 +309,18 @@ function ManualAdjustments({ p, month, onChange }) {
         <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fffbeb', borderRadius: 8, padding: '6px 10px', marginBottom: 6, fontSize: 12.5 }}>
           <span style={{ fontSize: 10, fontWeight: 700, background: '#fde68a', color: '#7c5e10', borderRadius: 6, padding: '1px 6px' }}>{monthLabel(month).split(' ')[0].slice(0, 3)} {month.slice(0, 4)}</span>
           <span style={{ flex: 1, color: '#333' }}>{a.description || 'Adjustment'}</span>
+          <span style={{ fontSize: 11, color: '#888' }}>margin {(a.margin != null && a.margin !== '') ? `${a.margin}%` : (p.margin != null ? `${(p.margin * 100).toFixed(1)}% (project)` : '—')}</span>
           <span style={{ fontWeight: 700, color: a.amount < 0 ? '#dc2626' : INK }}>{fmtC(a.amount)}</span>
           <button onClick={() => remove(a.id)} disabled={busy} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }}>✕</button>
         </div>
       ))}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
         <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description" style={{ flex: 1, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }} />
-        <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (− to reduce)" style={{ width: 150, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }} />
+        <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Amount (− to reduce)" style={{ width: 140, padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <input type="number" value={margin} onChange={e => setMargin(e.target.value)} placeholder="margin" title="Margin % (defaults to project margin)" style={{ width: 66, padding: '7px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5, textAlign: 'right' }} />
+          <span style={{ fontSize: 12, color: '#888' }}>%</span>
+        </div>
         <button onClick={add} disabled={busy || !amount} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: busy || !amount ? 'default' : 'pointer', opacity: busy || !amount ? 0.5 : 1, whiteSpace: 'nowrap' }}>+ Add to {monthLabel(month).split(' ')[0]}</button>
       </div>
       {(p.thisMonthAdj || []).length > 0 && (

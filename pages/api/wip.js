@@ -36,8 +36,16 @@ export default async function handler(req, res) {
   // use the cache to resolve display names.
   const dashCache = (await redis.get('dashboard:cache').catch(() => null)) || []
   const meta = {}
+  const missingDates = []
   for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
     if (p && p.xeroId) meta[String(p.xeroId)] = { name: p.name || '', jobNo: p.jobNo || '' }
+    // Projects missing application/valuation days (same test as the Applications page):
+    // no applicationDay/valuationDay and no per-month date overrides.
+    const hasAppDay = !!(parseInt(p.applicationDay) || Object.keys(p.dateOverrides || {}).length)
+    const hasValDay = !!(parseInt(p.valuationDay) || Object.keys(p.dateOverrides || {}).length)
+    if (p && p.xeroId && p.name && !(hasAppDay && hasValDay)) {
+      missingDates.push({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' })
+    }
   }
   const projectIds = Object.keys(settingsMap)
 
@@ -103,7 +111,18 @@ export default async function handler(req, res) {
     }
 
     const adjustedCosts = postValTotal + adjTotal
-    const wipValue = (margin != null && margin < 1 && adjustedCosts > 0) ? adjustedCosts / (1 - margin) : Math.max(0, adjustedCosts)
+    // WIP = post-valuation costs grossed up at the PROJECT margin, PLUS each manual
+    // adjustment grossed up at ITS OWN margin (which defaults to the project margin
+    // when the adjustment doesn't specify one).
+    const gross = (amt, mgn) => (mgn != null && mgn < 1 && amt > 0) ? amt / (1 - mgn) : Math.max(0, amt)
+    let wipValue = gross(postValTotal, margin)
+    for (const a of thisMonthAdj) {
+      const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : margin
+      wipValue += (a.amount != null && a.amount < 0)
+        ? a.amount / (1 - (am != null && am < 1 ? am : 0))   // write-down grossed at margin too
+        : gross(a.amount || 0, am)
+    }
+    wipValue = Math.max(0, wipValue)
 
     // Only include projects that have something to show this month.
     const hasContent = postValCosts.length > 0 || creditNotes.length > 0 || thisMonthAdj.length > 0 || lastMonthAdj.length > 0
@@ -129,5 +148,5 @@ export default async function handler(req, res) {
 
   out.sort((a, b) => (a.jobNo || a.name).localeCompare(b.jobNo || b.name, undefined, { numeric: true }))
 
-  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip })
+  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, missingDates })
 }

@@ -1,35 +1,34 @@
-WIP page fixes
-==============
+WIP page — banner, default month, per-adjustment margin
+=======================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Deploy AFTER the initial WIP_page bundle.
+Deploy AFTER the WIP_page and WIP_page_fixes bundles.
 
-FIXES
------
-1. PROJECT NAMES showed as raw IDs (abca7170-…). Cause: names live on the Xero
-   tracking categories, not the settings object. The WIP API now resolves each
-   project's name + job number from the dashboard cache (keyed by xeroId). Projects
-   that can't resolve to a real name are skipped (no more raw GUIDs).
-   → Make sure the dashboard has been loaded/synced at least once so the cache exists.
+CHANGES
+-------
+1. MISSING-DATES BANNER — same amber banner as the Applications / Application Calendar
+   pages, listing projects that don't have application + valuation dates set. Clicking
+   a project opens the EXACT same ProjectDatesModal pop-out (monthly option + per-month
+   override table) used on those pages. Saving refreshes the WIP page.
 
-2. COSTS SORTED BY DATE by default, and every column header in BOTH tables (costs and
-   credit notes) is now clickable to sort (asc/desc, with an arrow indicator).
+2. DEFAULT MONTH — the WIP page now defaults to the LAST COMPLETED month (previous
+   month) instead of the current month. You can still filter back through earlier
+   months.
 
-3. MARGIN is now editable per project — a % box + Save in each project header. Saving
-   stores it as the project's wipMarginOverride and recomputes that project's WIP.
+3. INFO-ONLY ADJUSTMENTS now show the full project name (job no — name) for each
+   last-month adjustment.
 
-4. TOTAL WIP at the top does NOT deduct credit notes. It is costs + margin + manual
-   adjustments only (WIP = (post-val costs + manual adjustments) ÷ (1 − margin)).
-   Credit notes are shown on the right for information and never reduce the total.
-
-ALSO
-----
-• pages/api/project/[id]/settings.js now MERGES the posted fields with existing
-  settings (instead of overwriting), so saving just the margin from the WIP page
-  can't wipe other project settings. Full-object callers are unaffected.
+4. PER-ADJUSTMENT MARGIN — each manual WIP adjustment now has its own margin %, which
+   DEFAULTS to the project's current margin. Each adjustment's WIP contribution is
+   grossed up at its own margin; the project WIP = post-valuation costs at the project
+   margin + each adjustment at its own margin. Existing adjustments show their margin
+   (or "project" when they inherit it).
 
 FILES
 -----
-• pages/api/wip.js                       (names from dashboard cache; total comment)
-• pages/wip.js                           (sortable tables, editable margin)
-• pages/api/project/[id]/settings.js     (merge on save)
+• pages/api/wip.js                              (missingDates list; per-adjustment margin calc)
+• pages/wip.js                                  (banner + modal, default last month, name in info banner, margin field)
+• pages/api/project/[id]/wip-adjustments.js     (store per-adjustment margin)
+
+NOTE: the missing-dates banner reads the dashboard cache, so load Project Financials
+once if the list looks empty on a cold cache.
