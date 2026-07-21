@@ -1,18 +1,34 @@
-WIP page — carry-forward tick is now a toggle (tick on/off)
-===========================================================
+WIP — fix negative manual-adjustment gross-up (symmetric margin)
+================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Single file: pages/wip.js
 
-CHANGE
-------
-In the "last month's manual adjustments" info area, the green carry-forward tick can
-now be UN-ticked:
-  • Tick (grey -> green): adds the adjustment to the current month for that project.
-  • Tick again (green -> grey): removes that carried adjustment from the current month
-    again (deletes the this-month copy).
-The item colour and total update accordingly each time.
+THE ISSUE (J197 example)
+------------------------
+WIP showed £11,932 when it should have been ~£11,000. Margin was NOT charged twice —
+the total sums each item's grossed value once. The error was in how NEGATIVE manual
+adjustments were grossed:
+  • A +£3,171 cost at 14.4% grossed UP to £3,704.
+  • A −£3,171 "cancel" adjustment did not gross by the same factor, so it only removed
+    ~£2,772 — leaving a stray +£932 (the "profit £932" you saw), giving £11,932.
+Two code faults: the gross() helper ignored negative amounts, and the negative branch
+used the wrong factor.
+
+THE FIX
+-------
+Gross-up is now SIGN-SYMMETRIC in both the WIP page and Project Financials/EOM:
+every amount (positive or negative) = amount / (1 − margin). So an equal-and-opposite
+adjustment at the SAME margin cancels a cost exactly.
+
+IMPORTANT — DATA NOTE FOR J197
+------------------------------
+For J197 to read £11,000, the "Direct Wages Adjustment" that cancels the £3,171 wages
+must have its margin set to +14.4% (the same margin as the cost it offsets), NOT
+−14.4%. With this fix deployed, set that adjustment's margin to 14.4% and WIP nets to
+£11,000. (A negative amount at a negative margin grosses by the wrong factor and won't
+fully cancel.)
 
 FILES
 -----
-• pages/wip.js
+• pages/api/wip.js       (symmetric gross-up)
+• pages/commercial.js    (same, so EOM/Project Financials match)

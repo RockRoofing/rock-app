@@ -80,13 +80,11 @@ function calcAtValDate(project, monthKey) {
   const monthAdj = Array.isArray(project.wipAdjustments)
     ? project.wipAdjustments.filter(a => a.month === wipMonthKey)
     : []
-  const grossOne = (amt, mgn) => (mgn != null && mgn < 1 && amt > 0) ? amt / (1 - mgn) : Math.max(0, amt)
+  const grossOne = (amt, mgn) => { const m = (mgn != null && mgn < 1) ? mgn : 0; return (amt || 0) / (1 - m) }
   let wip = grossOne(costsAfterDate, effectiveMargin)
   for (const a of monthAdj) {
     const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : effectiveMargin
-    wip += (a.amount != null && a.amount < 0)
-      ? a.amount / (1 - (am != null && am < 1 ? am : 0))
-      : grossOne(a.amount || 0, am)
+    wip += grossOne(a.amount || 0, am)
   }
   wip = Math.max(0, wip)
 

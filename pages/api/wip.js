@@ -120,13 +120,18 @@ export default async function handler(req, res) {
     // WIP = post-valuation costs grossed up at the PROJECT margin, PLUS each manual
     // adjustment grossed up at ITS OWN margin (which defaults to the project margin
     // when the adjustment doesn't specify one).
-    const gross = (amt, mgn) => (mgn != null && mgn < 1 && amt > 0) ? amt / (1 - mgn) : Math.max(0, amt)
+    // Gross an amount up to its WIP value at a given margin. Works for POSITIVE and
+    // NEGATIVE amounts identically (amt / (1 - margin)), so an equal-and-opposite
+    // adjustment at the SAME margin cancels the cost exactly. A margin of 0 (or none)
+    // means the amount passes through unchanged.
+    const gross = (amt, mgn) => {
+      const m = (mgn != null && mgn < 1) ? mgn : 0
+      return (amt || 0) / (1 - m)
+    }
     let wipValue = gross(postValTotal, margin)
     for (const a of thisMonthAdj) {
       const am = (a.margin != null && a.margin !== '') ? Number(a.margin) / 100 : margin
-      wipValue += (a.amount != null && a.amount < 0)
-        ? a.amount / (1 - (am != null && am < 1 ? am : 0))   // write-down grossed at margin too
-        : gross(a.amount || 0, am)
+      wipValue += gross(a.amount || 0, am)
     }
     wipValue = Math.max(0, wipValue)
     // Calculated profit in £ = WIP value − the cost that generated it (post-valuation
