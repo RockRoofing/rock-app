@@ -1,44 +1,36 @@
-WIP — single shared calculation so all pages match the WIP page
-===============================================================
+Project Financials mirrors the WIP page (WIP margin read-only) + override sync
+==============================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-NEW FILE to create in GitHub:
-  • lib/wipCalc.js
+Deploy AFTER the WIP_shared_calc_sync bundle.
 
-THE PROBLEM
------------
-The WIP total differed between the WIP page, the EOM/Project Financials table, and the
-WIP tab on each project's detail page — because each computed WIP with its own copy of
-the formula, and they had drifted:
-  • The project WIP tab capped costs at the CURRENT month-end, not the SELECTED
-    month's end (so past months pulled in too many costs), and it grossed costs +
-    adjustments together at one margin instead of each adjustment at its own margin.
-  • Small differences in margin handling between the three.
-
-THE FIX
+CHANGES
 -------
-New lib/wipCalc.js holds ONE authoritative WIP calculation. The WIP page API, the
-EOM/Project Financials table (commercial.js) and the project WIP tab
-(project/[id].js) now ALL call it, so the number is identical everywhere. It uses:
-  • Costs after the valuation date to the END OF THE SELECTED MONTH (empty if the
-    valuation date is the last day of the month).
-  • Live achieved margin ((invoiced − costs to val date) / invoiced), project override
-    wins.
-  • Each manual adjustment grossed at its own margin (default = project margin);
-    positive and negative amounts handled symmetrically.
+1. PROJECT FINANCIALS IS NOW A MIRROR — the WIP Margin column on Project Financials is
+   READ-ONLY. You can no longer edit/override the WIP margin there; it just displays
+   the effective margin ("*" = overridden on the WIP page). Set WIP margin overrides
+   on the WIP page only. PF reflects them.
 
-The WIP page remains the source of truth; the other two now mirror its logic exactly.
+2. OVERRIDE NOW PICKED UP — two reasons it wasn't:
+   • The dashboard dropped a 0% override (used "|| null"); now preserved with a
+     proper nullish check, so any value incl. 0% flows through.
+   • Manual WIP adjustment changes now also clear the dashboard cache, so PF refreshes
+     to match the WIP page (margin overrides already cleared the cache; adjustments
+     didn't).
+
+WHY IT LOOKED STUCK
+-------------------
+PF reads WIP from the dashboard cache (4h). Setting an override on the WIP page busts
+that cache, but adjustment edits previously didn't — so PF could lag. Now every
+WIP-affecting change (override OR adjustment) refreshes PF on next load.
 
 FILES
 -----
-• lib/wipCalc.js            (NEW — shared calc)
-• pages/api/wip.js          (uses shared calc)
-• pages/project/[id].js     (WIP tab uses shared calc; fixes month-end bug)
-• pages/commercial.js       (EOM/Project Financials uses shared calc)
+• pages/commercial.js                        (WIP margin column read-only)
+• pages/api/dashboard.js                      (preserve 0% override)
+• pages/api/project/[id]/wip-adjustments.js   (bust dashboard cache on change)
 
 AFTER DEPLOY
 ------------
-Compare a project's WIP on all three (WIP page, Project Financials, project WIP tab)
-for the same month — they should now match. Project Financials reads per-project
-wipAdjustments from the dashboard (already wired), so ensure the dashboard has
-refreshed (it rebuilds on load).
+Set/clear a WIP margin override on the WIP page, then open Project Financials — it
+should now show the same WIP and margin. (First load rebuilds the cache.)

@@ -168,7 +168,7 @@ export default async function handler(req, res) {
       const currentMargin = grossInvoiced > 0 ? (grossInvoiced - totalCosts) / grossInvoiced : null
 
       // ── WIP ───────────────────────────────────────────────────────────────
-      let wip = 0, wipMarginOverride = settings.wipMarginOverride || null
+      let wip = 0, wipMarginOverride = (settings.wipMarginOverride != null && settings.wipMarginOverride !== '') ? settings.wipMarginOverride : null
       try {
         const wipCache = await redis.get(`wip:latest:${id}`)
         if (wipCache) wip = wipCache.wip || 0

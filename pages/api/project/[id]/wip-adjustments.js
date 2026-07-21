@@ -42,6 +42,7 @@ export default async function handler(req, res) {
     }
     adjustments.push(newAdj)
     await redis.set(key, adjustments)
+    try { await redis.del("dashboard:cache") } catch {}
     return res.json({ adjustment: newAdj, adjustments })
   }
 
@@ -56,6 +57,7 @@ export default async function handler(req, res) {
       ? { ...a, margin: (margin === null || margin === undefined || margin === '') ? null : parseFloat(margin) }
       : a)
     await redis.set(key, adjustments)
+    try { await redis.del("dashboard:cache") } catch {}
     return res.json({ adjustments })
   }
 
@@ -68,6 +70,7 @@ export default async function handler(req, res) {
     } catch {}
     adjustments = adjustments.filter(a => a.id !== adjId)
     await redis.set(key, adjustments)
+    try { await redis.del("dashboard:cache") } catch {}
     return res.json({ adjustments })
   }
 

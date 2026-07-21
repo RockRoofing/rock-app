@@ -1010,23 +1010,10 @@ export default function Dashboard() {
                               val = m != null ? pct(m) : '—'
                               color = m != null ? (m >= 0.25 ? '#16a34a' : m >= 0.21 ? '#ca8a04' : '#e63946') : '#888'
                               const overridden = p.wipMarginOverride != null && p.wipMarginOverride !== ''
-                              if (editingWip === p.xeroId) {
-                                return <td key={col.key} style={cell({ bg: bgC }, color, false)}>
-                                  <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-                                    <input autoFocus type="number" step="0.1" value={wipText}
-                                      onChange={ev => setWipText(ev.target.value)}
-                                      onKeyDown={ev => { if (ev.key === 'Enter') saveWipMarginInline(p.xeroId, wipText); if (ev.key === 'Escape') setEditingWip(null) }}
-                                      placeholder="%"
-                                      style={{ width: 52, padding: '2px 4px', border: '1px solid #ddd', borderRadius: 4, fontSize: 11 }} />
-                                    <button onClick={() => saveWipMarginInline(p.xeroId, wipText)} style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }}>✓</button>
-                                    <button onClick={() => saveWipMarginInline(p.xeroId, '')} title="Clear override (use current margin)" style={{ background: '#eee', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 10 }}>✕</button>
-                                  </div>
-                                </td>
-                              }
+                              // Read-only: PF mirrors the WIP page. Set overrides on the WIP page.
                               return <td key={col.key} style={cell({ bg: bgC }, color, false)}
-                                title={overridden ? 'Overridden — click to edit; ✕ to clear back to project margin' : 'Click to set a WIP margin override'}>
-                                <span onClick={() => { setEditingWip(p.xeroId); setWipText(overridden ? String(p.wipMarginOverride) : '') }} style={{ cursor: 'pointer', borderBottom: '1px dashed #cbd5e1' }}>{val}{overridden ? ' *' : ''}</span>
-                                {overridden && <button onClick={() => saveWipMarginInline(p.xeroId, '')} title="Clear override — follow the actual project margin" style={{ marginLeft: 4, background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 10, padding: 0 }}>✕</button>}
+                                title={overridden ? 'WIP margin override set on the WIP page' : 'Calculated WIP margin'}>
+                                {val}{overridden ? ' *' : ''}
                               </td>
                             }
                             return <td key={col.key} style={cell({ bg: bgC }, color, ['labourLeft', 'matsLeft', 'totalLeft', 'remaining', 'profit'].includes(col.key))}>{val}</td>
