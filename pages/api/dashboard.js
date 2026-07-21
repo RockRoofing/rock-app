@@ -31,7 +31,27 @@ export default async function handler(req, res) {
     try {
       const cached = await redis.get('dashboard:cache')
       if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention') {
-        return res.json({ projects: cached })
+        // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
+        // override, manual adjustment, or valuation-date change made on the WIP page
+        // is reflected immediately even while the rest of the cache is still warm.
+        try {
+          const liveSettings = await getAllProjectSettings()
+          const withLive = await Promise.all(cached.map(async (p) => {
+            if (!p || !p.xeroId) return p
+            const s = liveSettings[String(p.xeroId)] || {}
+            let adj = p.wipAdjustments
+            try { adj = (await redis.get(`wip:adjustments:${p.xeroId}`)) || [] } catch {}
+            return {
+              ...p,
+              wipMarginOverride: (s.wipMarginOverride != null && s.wipMarginOverride !== '') ? s.wipMarginOverride : null,
+              dateOverrides: s.dateOverrides || p.dateOverrides || {},
+              wipAdjustments: adj,
+            }
+          }))
+          return res.json({ projects: withLive })
+        } catch {
+          return res.json({ projects: cached })
+        }
       }
     } catch {}
   }

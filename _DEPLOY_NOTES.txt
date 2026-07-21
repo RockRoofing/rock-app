@@ -1,36 +1,36 @@
-Project Financials mirrors the WIP page (WIP margin read-only) + override sync
-==============================================================================
+Project Financials — always use LIVE WIP override/adjustments/dates
+===================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Deploy AFTER the WIP_shared_calc_sync bundle.
+Single file: pages/api/dashboard.js
+Deploy AFTER the PF_mirror_wip_override and WIP_shared_calc_sync bundles.
 
-CHANGES
+WHY PF STILL DIDN'T MATCH
+-------------------------
+PF uses the SAME shared WIP calculation as the WIP page, with the SAME cost/invoice
+lines. The mismatch was the INPUTS coming from the 4-hour dashboard cache: the WIP
+margin override, the manual WIP adjustments, and the per-month valuation-date
+overrides could be stale in the cache even though the WIP page reads them live. So the
+formula was identical but PF was feeding it old override/adjustment/date values.
+
+THE FIX
 -------
-1. PROJECT FINANCIALS IS NOW A MIRROR — the WIP Margin column on Project Financials is
-   READ-ONLY. You can no longer edit/override the WIP margin there; it just displays
-   the effective margin ("*" = overridden on the WIP page). Set WIP margin overrides
-   on the WIP page only. PF reflects them.
-
-2. OVERRIDE NOW PICKED UP — two reasons it wasn't:
-   • The dashboard dropped a 0% override (used "|| null"); now preserved with a
-     proper nullish check, so any value incl. 0% flows through.
-   • Manual WIP adjustment changes now also clear the dashboard cache, so PF refreshes
-     to match the WIP page (margin overrides already cleared the cache; adjustments
-     didn't).
-
-WHY IT LOOKED STUCK
--------------------
-PF reads WIP from the dashboard cache (4h). Setting an override on the WIP page busts
-that cache, but adjustment edits previously didn't — so PF could lag. Now every
-WIP-affecting change (override OR adjustment) refreshes PF on next load.
+When PF serves from the dashboard cache, it now OVERLAYS these three WIP-relevant
+fields from live storage for every project:
+  • wipMarginOverride   (from live project settings)
+  • dateOverrides       (from live project settings — drives the valuation date)
+  • wipAdjustments      (from live wip:adjustments:{id})
+Everything else still comes from the warm cache (fast), but the WIP inputs are always
+current — so PF now mirrors the WIP page immediately, without waiting for a full cache
+rebuild.
 
 FILES
 -----
-• pages/commercial.js                        (WIP margin column read-only)
-• pages/api/dashboard.js                      (preserve 0% override)
-• pages/api/project/[id]/wip-adjustments.js   (bust dashboard cache on change)
+• pages/api/dashboard.js
 
 AFTER DEPLOY
 ------------
-Set/clear a WIP margin override on the WIP page, then open Project Financials — it
-should now show the same WIP and margin. (First load rebuilds the cache.)
+Set/clear a WIP margin override (or add an adjustment) on the WIP page, then open
+Project Financials for the SAME month — the WIP and margin should now match. If they
+still differ, confirm both pages are on the same month (PF defaults to last month;
+WIP page also defaults to the last completed month).
