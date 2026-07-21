@@ -53,6 +53,14 @@ export default function AppImprovementsPage() {
     setBusy('')
   }
 
+  // Put a report on hold (hidden from the default Open view) or take it off hold.
+  async function setStatus(r, status) {
+    setBusy(r.id)
+    try { await fetch('/api/report-problem', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, status }) }) } catch {}
+    setReports(rs => rs.map(x => x.id === r.id ? { ...x, status } : x))
+    setBusy('')
+  }
+
   const users = useMemo(() => [...new Set(reports.map(r => r.userName).filter(Boolean))].sort(), [reports])
   const rows = reports
     .filter(r => !fUser || r.userName === fUser)
@@ -76,6 +84,7 @@ export default function AppImprovementsPage() {
             <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Status</div>
             <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={sel}>
               <option value="open">Open</option>
+              <option value="onhold">On Hold</option>
               <option value="resolved">Resolved</option>
               <option value="all">All</option>
             </select>
@@ -90,9 +99,13 @@ export default function AppImprovementsPage() {
           : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {rows.map(r => {
-                const resolved = (r.status || 'open') === 'resolved'
+                const st = r.status || 'open'
+                const resolved = st === 'resolved'
+                const onhold = st === 'onhold'
+                const stLabel = resolved ? 'Resolved' : onhold ? 'On Hold' : 'Open'
+                const stColor = resolved ? '#16a34a' : onhold ? '#6b7280' : '#c2410c'
                 return (
-                  <div key={r.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 16, opacity: resolved ? 0.72 : 1 }}>
+                  <div key={r.id} style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 16, opacity: resolved ? 0.72 : onhold ? 0.85 : 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                       <div style={{ fontSize: 13, color: '#777' }}>
                         <strong style={{ color: '#1a1a19' }}>{r.userName}</strong>
@@ -100,7 +113,7 @@ export default function AppImprovementsPage() {
                         {' · '}<span style={{ background: r.platform === 'Site App' ? '#eef2ff' : '#f0fdf4', color: r.platform === 'Site App' ? '#3730a3' : '#166534', borderRadius: 12, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{r.platform}</span>
                         {' · '}{fmt(r.createdAt)}
                       </div>
-                      <span style={{ color: resolved ? '#16a34a' : '#c2410c', fontWeight: 700, fontSize: 12.5 }}>{resolved ? 'Resolved' : 'Open'}</span>
+                      <span style={{ color: stColor, fontWeight: 700, fontSize: 12.5 }}>{stLabel}</span>
                     </div>
                     {r.page && <div style={{ fontSize: 12.5, color: '#999', marginTop: 6 }}>Page: {r.page}</div>}
                     <div style={{ fontSize: 14, color: '#1a1a19', marginTop: 8, whiteSpace: 'pre-wrap' }}>{r.description}</div>
@@ -112,9 +125,16 @@ export default function AppImprovementsPage() {
                         style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit', resize: 'vertical' }} />
                       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                         <button onClick={() => saveComment(r)} disabled={busy === r.id} style={ghost}>Save comment</button>
-                        {!resolved
-                          ? <button onClick={() => resolve(r)} disabled={busy === r.id} style={primary}>{busy === r.id ? 'Working…' : 'Mark resolved' + (r.userEmail ? ' & notify' : '')}</button>
-                          : <button onClick={() => reopen(r)} disabled={busy === r.id} style={ghost}>Reopen</button>}
+                        {resolved ? (
+                          <button onClick={() => reopen(r)} disabled={busy === r.id} style={ghost}>Reopen</button>
+                        ) : (
+                          <>
+                            <button onClick={() => resolve(r)} disabled={busy === r.id} style={primary}>{busy === r.id ? 'Working…' : 'Mark resolved' + (r.userEmail ? ' & notify' : '')}</button>
+                            {onhold
+                              ? <button onClick={() => setStatus(r, 'open')} disabled={busy === r.id} style={ghost}>Take off hold</button>
+                              : <button onClick={() => setStatus(r, 'onhold')} disabled={busy === r.id} style={ghost}>Put on hold</button>}
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>

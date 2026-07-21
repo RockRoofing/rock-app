@@ -1,25 +1,23 @@
-Forms — downloaded PDF filenames
-================================
+App Improvements — "On Hold" status
+===================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: ✓ Compiled successfully
-Single file: pages/operations/forms.js
+Single file: pages/admin/problem-reports.js
 
 CHANGE
 ------
-Downloaded form PDFs are now named:
-  [Project Number] [Project Name] - [Form Name] [Date Submitted]
-e.g.  J190-Russell-Hill-Water-Ingress-2026-07-15.pdf
-(The project number + name come from the submission's project field, which already
-holds "J190 — Russell Hill". Date is the submitted date, yyyy-mm-dd.)
+Added an "On Hold" status to App Improvements:
+  • New "Put on hold" button on each open item (and "Take off hold" to return it to
+    Open). Putting on hold sends NO email to the reporter.
+  • On Hold items are HIDDEN from the default "Open" view (the default filter is Open,
+    which now excludes both Resolved and On Hold).
+  • New "On Hold" option in the Status filter to view them, and a grey "On Hold"
+    label on those cards.
+  • Statuses are now: Open / On Hold / Resolved.
 
-• Separate downloads: each file named as above for its own form.
-• Combined download: named after the EARLIEST-dated selected form, with "Combined"
-  appended, e.g. J190-Russell-Hill-Water-Ingress-2026-07-15-Combined.pdf
-• Single downloads (row / modal "Download PDF") use the same naming.
-
-Note: spaces and special characters (incl. the — dash) are converted to hyphens so
-the filename is safe on Windows/Mac. The order of the fields matches the spec.
+No API change needed (the endpoint stores the status as-is and only emails on
+transition to Resolved).
 
 FILES
 -----
-• pages/operations/forms.js
+• pages/admin/problem-reports.js
