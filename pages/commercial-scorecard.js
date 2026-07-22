@@ -571,13 +571,21 @@ export default function CommercialScorecard() {
                         return Math.round(all.reduce((s, m) => s + m.avgDays, 0) / all.length)
                       })()
                     : null,
-                  format: v => v != null ? `${v} days` : '—',
+                  format: v => v != null ? `${v} days` : '-',
                   target: targets.avgPaymentDays,
                   trendData: paymentTimeTrend,
                   showAvg: true,
                   drillData: allPaymentInvoices,
                   drillColumns: paymentTimeColumns,
-                  drillTitle: 'Invoice Payment Times — All',
+                  drillTitle: 'Invoice Payment Times - All',
+                  extra: metrics?.paymentDiag && (metrics.paymentDiag.qualifiedPaidInvoices === 0) ? (
+                    <div style={{ fontSize: 10, color: '#b45309', marginBottom: 2, lineHeight: 1.5 }}>
+                      No qualifying paid invoices. Of {metrics.paymentDiag.totalInvoiceLines} invoice lines:
+                      {' '}{metrics.paymentDiag.withFullyPaidOnDate} have a paid-on date,
+                      {' '}{metrics.paymentDiag.passedIsPaid} read as paid.
+                      {metrics.paymentDiag.withFullyPaidOnDate === 0 ? ' -> Re-sync invoices to capture paid-on dates.' : ''}
+                    </div>
+                  ) : null,
                 })}
 
               </div>

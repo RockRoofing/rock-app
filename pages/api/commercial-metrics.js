@@ -64,6 +64,22 @@ export default async function handler(req, res) {
       } catch {}
     }
 
+    // For "Average Time to Get Paid" we must look at ALL projects, not just
+    // in-progress ones: invoices are usually fully paid AFTER a job has moved to
+    // defects/closed, so restricting to in-progress hides most paid invoices.
+    const allProjects = (cached || []).filter(p => !hiddenSet.has(String(p.xeroId)))
+    const paymentInvoiceLines = []
+    for (const p of allProjects) {
+      try {
+        const lines = await redis.get(`invoiced:lines:${p.xeroId}`)
+        if (lines) {
+          for (const inv of lines) {
+            paymentInvoiceLines.push({ ...inv, projectName: p.name, jobNo: p.jobNo })
+          }
+        }
+      } catch {}
+    }
+
     // -- GP Margin (EOM basis, last full month, INCLUDING WIP) --
     // Match the EOM report's "inc WIP" header bar exactly: for each in-progress
     // project, at the LAST COMPLETED month's valuation date,
@@ -171,11 +187,17 @@ export default async function handler(req, res) {
     }
 
     // ── Average Time to Get Paid ──────────────────────────────────────────
-    // Days between invoice date and fullyPaidOnDate, for fully-paid SALES invoices.
-    // fullyPaidOnDate is captured by sync-invoices.js from Xero's FullyPaidOnDate.
-    // Credit notes are excluded (they are not "getting paid").
-    const paidInvoices = allInvoiceLines.filter(inv =>
-      inv.fullyPaidOnDate && inv.date && inv.status === 'PAID' && !inv.creditNote
+    // Days between invoice date and fullyPaidOnDate, for fully-paid SALES invoices
+    // across ALL projects. fullyPaidOnDate is required to know WHEN it was paid, and
+    // is captured from Xero's FullyPaidOnDate by both sync-invoices.js and wip-sync.
+    // We treat an invoice as paid if it either has status 'PAID' or shows nothing
+    // outstanding (amountDue == 0 with amountPaid > 0) - the status string alone is
+    // too strict. Credit notes are excluded (they are not "getting paid").
+    const isPaid = (inv) =>
+      inv.status === 'PAID' ||
+      ((Number(inv.amountDue) || 0) === 0 && (Number(inv.amountPaid) || 0) > 0)
+    const paidInvoices = paymentInvoiceLines.filter(inv =>
+      inv.fullyPaidOnDate && inv.date && !inv.creditNote && isPaid(inv)
     )
 
     const paymentTimeByMonth = {}
@@ -200,6 +222,17 @@ export default async function handler(req, res) {
       }
     }
 
+    // Diagnostics: if the card is empty, these show WHERE the invoices fall out.
+    const paymentDiag = {
+      totalInvoiceLines: paymentInvoiceLines.length,
+      withFullyPaidOnDate: paymentInvoiceLines.filter(i => i.fullyPaidOnDate).length,
+      withStatusPaid: paymentInvoiceLines.filter(i => i.status === 'PAID').length,
+      withZeroDue: paymentInvoiceLines.filter(i => (Number(i.amountDue) || 0) === 0 && (Number(i.amountPaid) || 0) > 0).length,
+      passedIsPaid: paymentInvoiceLines.filter(isPaid).length,
+      qualifiedPaidInvoices: paidInvoices.length,
+      monthsWithData: Object.keys(avgPaymentTime).length,
+    }
+
     res.json({
       gpMargin,
       gpProfit,
@@ -217,6 +250,7 @@ export default async function handler(req, res) {
       paylessTotal: creditNoteDetails.length,
       paylessAdjustedTotal: Object.values(paylessCountByMonth).reduce((s, m) => s + m.adjusted, 0),
       avgPaymentTime,
+      paymentDiag,
       allInvoiceCount: allInvoiceLines.length,
     })
 

@@ -1,70 +1,58 @@
-DEPLOY NOTES - Gross Margin now driven by the Account Categorisation tab
-========================================================================
+DEPLOY NOTES - "Average Time to Get Paid" still empty: robust fix + diagnostics
+===============================================================================
 
-WHY IT WAS WRONG
+The first fix added fullyPaidOnDate to the sync, but the card can still be empty
+for TWO other reasons. This update handles all three and adds an on-card diagnostic
+so we can SEE exactly which one it is instead of guessing.
+
+THE THREE CAUSES
 ----------------
-The Gross Margin was using Xero's OWN P&L section grouping (its "Income" and
-"Cost of Sales" section totals) to decide what counts as sales vs cost. That does
-NOT match your Account Categorisation tab. Any account Xero files under Overheads
-(or anywhere other than Cost of Sales) was dropped from costs even if you had
-tagged it Materials/Labour - so costs came out too low and the margin too high.
+1. IN-PROGRESS ONLY (big one): the metric was only looking at invoice lines on
+   IN-PROGRESS projects. But invoices are usually fully paid AFTER a job has moved
+   to defects/closed - so most paid invoices were being excluded. FIXED: payment
+   times now scan ALL projects (still excluding the hidden list). The Gross Profit
+   figures are unchanged and still in-progress only.
 
-THE FIX (your instruction: use the Account Categorisation tab as the arbiter)
------------------------------------------------------------------------------
-Gross Margin is now computed by bucketing EVERY P&L account code by its category in
-the Account Categorisation tab (config:account-categorisation), using the exact same
-category logic as that page (saved category wins; legacy 'ignore' -> 'overheads';
-otherwise the per-code default):
+2. TOO-STRICT PAID GATE: it required status === 'PAID' exactly. Now an invoice
+   counts as paid if status is 'PAID' OR it shows nothing outstanding
+   (amountDue == 0 and amountPaid > 0). Credit notes still excluded.
 
-    Total Sales  = sum of codes categorised 'sales'
-    Total Costs  = sum of codes categorised 'labour' + 'materials'
-    (overheads and uncategorised are EXCLUDED)
-    Gross Profit = Total Sales - Total Costs
-    Gross Margin = Gross Profit / Total Sales
+3. FIELD NOT SYNCED: fullyPaidOnDate only exists on lines written AFTER the earlier
+   fix. Still needs a re-sync if the last sync predates it. (Note: wip-sync already
+   wrote this field, so depending on which sync ran last it may already be present.)
 
-So the formula is: (Total Sales - (Total Labour + Total Materials)) / Total Sales.
+WHAT WAS ADDED TO DIAGNOSE IT
+-----------------------------
+The API now returns paymentDiag counters, and the card shows a small amber line
+WHEN (and only when) there are zero qualifying paid invoices, e.g.:
 
-Whatever you tag in the Account Categorisation tab now directly drives the number.
-Re-tag an account there and the Gross Margin updates on the next Scorecard load.
+  "No qualifying paid invoices. Of 812 invoice lines: 0 have a paid-on date,
+   140 read as paid. -> Re-sync invoices to capture paid-on dates."
 
-Credit notes: still handled automatically. Xero's P&L is accrual-based and already
-nets sales credit notes into the revenue codes and supplier credit notes into the
-cost codes, so no separate /CreditNotes fetch (that would double count).
+That tells us immediately whether it's the sync (0 have a paid-on date) or the
+gates. Once real data shows, the amber line disappears automatically.
 
-Still: last 6 completed months, rolling, live-fetched from Xero each load. Headline
-= latest completed month. The card drill now shows, per month: Sales, Labour,
-Materials, Total Costs, Gross Profit, Gross Margin.
-
-FILES (both EDITS - no new files this time; xero-gross-margin.js already exists)
--------------------------------------------------------------------------------
-  - pages/api/xero-gross-margin.js       (rewritten to use categorisation)
-  - pages/commercial-scorecard.js        (drill now shows Labour/Materials split)
-
-HOW TO DEPLOY (GitHub web editor)
+FILES (both EDITS - no new files)
 ---------------------------------
-Replace both files at their paths. Commit -> Vercel auto-deploys.
+  - pages/api/commercial-metrics.js     (all-projects scan, robust paid gate, diag)
+  - pages/commercial-scorecard.js       (amber diagnostic line when empty)
 
-PREREQUISITE - Chart of Accounts must be synced
------------------------------------------------
-The categorisation-based split needs each P&L line to carry its account CODE. That
-mapping comes from the Chart of Accounts. If you have already synced the Chart of
-Accounts (Account Categorisation page shows your codes), you are fine. If some P&L
-lines have no code mapping they simply won't be bucketed - so make sure the Chart
-of Accounts is synced and every real P&L account is categorised (not left
-'uncategorised', which is excluded from costs by design).
+HOW TO DEPLOY
+-------------
+Replace both files in the GitHub web editor. Commit -> Vercel auto-deploys.
 
-VERIFY
-------
-  - Open the Commercial Scorecard -> Gross Margin card. Click it.
-  - The table lists 6 months: Sales / Labour / Materials / Total Costs / Gross
-    Profit / Gross Margin.
-  - Cross-check one month: Total Costs should equal the sum of every account you
-    tagged Labour or Materials in the Account Categorisation tab for that month;
-    Sales should equal your Sales-tagged accounts (net of credit notes).
-  - If a figure looks off, it's almost always a mis-tagged account in the
-    Account Categorisation tab - fix it there and reload.
+THEN
+----
+1. Open the Commercial Scorecard.
+2. If the card now shows days - done.
+3. If still empty, READ THE AMBER LINE on the card:
+   - "0 have a paid-on date"  -> re-sync invoices (Sync bar on a Commercial page),
+     then reload. If wip-sync is what runs on your schedule the field may already be
+     present after the next scheduled run.
+   - "N have a paid-on date" but 0 qualify -> tell me the numbers from the amber
+     line and I'll adjust the gate; that means the dates are there but something
+     else is filtering them (e.g. all outside the 0-365 day sanity window).
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". (Pre-existing unrelated
-import warnings in some backfill/deep-sync routes are untouched.)
+Validated with `next build` -> "Compiled successfully".
