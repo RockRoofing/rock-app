@@ -1,57 +1,56 @@
-DEPLOY NOTES - "Average Time to Get Paid" still empty: robust fix + diagnostics
-===============================================================================
+DEPLOY NOTES - Gross Margin 6.5% is wrong (expected 22-27%): diagnostic build
+=============================================================================
 
-The first fix added fullyPaidOnDate to the sync, but the card can still be empty
-for TWO other reasons. This update handles all three and adds an on-card diagnostic
-so we can SEE exactly which one it is instead of guessing.
+FIRST, TO ANSWER YOUR QUESTION
+------------------------------
+No - the Gross Margin is NOT a rolling/cumulative 6-month figure. Each month is
+calculated on its OWN month's P&L only, and the headline shows the LATEST single
+month. The trend line plots the 6 individual months. So 6.5% is one month's number,
+not a 6-month blend. (If you WANT it to be a rolling 6-month figure - total sales
+and total costs summed across 6 months, one margin - say the word and I'll switch
+it. That is a real option and might be what you're expecting.)
 
-THE THREE CAUSES
-----------------
-1. IN-PROGRESS ONLY (big one): the metric was only looking at invoice lines on
-   IN-PROGRESS projects. But invoices are usually fully paid AFTER a job has moved
-   to defects/closed - so most paid invoices were being excluded. FIXED: payment
-   times now scan ALL projects (still excluding the hidden list). The Gross Profit
-   figures are unchanged and still in-progress only.
+WHY 6.5% IS ALMOST CERTAINLY WRONG
+----------------------------------
+A margin that low vs an expected 22-27% means either Sales is being UNDER-counted or
+Costs are being OVER-counted in the categorisation bucketing. The likeliest cause is
+the P&L-name-to-code mapping: the Gross Margin calc only sees an account if its P&L
+name maps to a code in the Chart of Accounts. If a big Sales account doesn't map,
+sales is understated and the margin collapses. I can't tell which from here without
+seeing the actual numbers - so this build EXPOSES them.
 
-2. TOO-STRICT PAID GATE: it required status === 'PAID' exactly. Now an invoice
-   counts as paid if status is 'PAID' OR it shows nothing outstanding
-   (amountDue == 0 and amountPaid > 0). Credit notes still excluded.
-
-3. FIELD NOT SYNCED: fullyPaidOnDate only exists on lines written AFTER the earlier
-   fix. Still needs a re-sync if the last sync predates it. (Note: wip-sync already
-   wrote this field, so depending on which sync ran last it may already be present.)
-
-WHAT WAS ADDED TO DIAGNOSE IT
------------------------------
-The API now returns paymentDiag counters, and the card shows a small amber line
-WHEN (and only when) there are zero qualifying paid invoices, e.g.:
-
-  "No qualifying paid invoices. Of 812 invoice lines: 0 have a paid-on date,
-   140 read as paid. -> Re-sync invoices to capture paid-on dates."
-
-That tells us immediately whether it's the sync (0 have a paid-on date) or the
-gates. Once real data shows, the amber line disappears automatically.
+WHAT THIS BUILD ADDS (diagnostic - no formula change yet)
+---------------------------------------------------------
+Click the Gross Margin card. Under the 6-month table there is now a
+"Per-code breakdown - <latest month> (diagnostic)" section showing, for every P&L
+code that month:
+   - the code
+   - how it was TAGGED (sales / labour / materials / overheads / uncategorised)
+     -> overheads & uncategorised are shown amber (they're EXCLUDED from the calc)
+   - which Xero P&L SECTION it came from (income / cos / overheads)
+   - the amount
+Plus a line with Xero's own raw section totals (Income, Cost of Sales, Overheads)
+for that month, so we can compare our Sales total against Xero's Income total at a
+glance.
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/api/commercial-metrics.js     (all-projects scan, robust paid gate, diag)
-  - pages/commercial-scorecard.js       (amber diagnostic line when empty)
+  - pages/api/xero-gross-margin.js     (returns per-code rows + raw Xero totals)
+  - pages/commercial-scorecard.js      (drill now shows the per-code breakdown)
 
 HOW TO DEPLOY
 -------------
-Replace both files in the GitHub web editor. Commit -> Vercel auto-deploys.
+Replace both files. Commit -> Vercel auto-deploys.
 
-THEN
-----
-1. Open the Commercial Scorecard.
-2. If the card now shows days - done.
-3. If still empty, READ THE AMBER LINE on the card:
-   - "0 have a paid-on date"  -> re-sync invoices (Sync bar on a Commercial page),
-     then reload. If wip-sync is what runs on your schedule the field may already be
-     present after the next scheduled run.
-   - "N have a paid-on date" but 0 qualify -> tell me the numbers from the amber
-     line and I'll adjust the gate; that means the dates are there but something
-     else is filtering them (e.g. all outside the 0-365 day sanity window).
+WHAT I NEED BACK
+----------------
+Deploy, open the Scorecard, click the Gross Margin card, and screenshot the
+per-code breakdown for the latest month. From that I can see instantly whether:
+  - Sales is short (a Sales account isn't mapping / is tagged wrong) - most likely,
+  - a cost account is tagged materials/labour when it should be overheads,
+  - or an account is landing in 'uncategorised' and needs tagging.
+Then I fix the specific cause (or switch to a rolling 6-month calc if that's what
+you actually want) and remove the diagnostic.
 
 BUILD
 -----

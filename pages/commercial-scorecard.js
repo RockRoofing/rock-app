@@ -44,7 +44,7 @@ function rag(actual, target, mode = 'normal') {
 }
 
 // Modal for drill-down details
-function DrillModal({ title, rows, columns, onClose, allowEmpty }) {
+function DrillModal({ title, rows, columns, onClose, allowEmpty, footer }) {
   if ((!rows || rows.length === 0) && !allowEmpty) return null
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12 }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
@@ -75,6 +75,7 @@ function DrillModal({ title, rows, columns, onClose, allowEmpty }) {
               ))}
             </tbody>
           </table>
+          {footer && <div style={{ padding: '0 20px 16px' }}>{footer}</div>}
         </div>
       </div>
     </div>
@@ -435,7 +436,7 @@ export default function CommercialScorecard() {
     <>
       <Head><title>Rock Roofing — Commercial Scorecard</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#f0f2f5' }}>
-        {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} allowEmpty={modal.allowEmpty} onClose={() => setModal(null)} />}
+        {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} allowEmpty={modal.allowEmpty} footer={modal.footer} onClose={() => setModal(null)} />}
         {paylessOpen && <PaylessModal
           byMonth={metrics?.paylessByMonth || {}}
           countByMonth={metrics?.paylessCountByMonth || {}}
@@ -520,6 +521,41 @@ export default function CommercialScorecard() {
                     rows: (xeroGM?.months || []).slice().reverse(),  // newest first in the table
                     columns: gmXeroColumns,
                     allowEmpty: true,
+                    footer: xeroGM?.latest ? (
+                      <div style={{ marginTop: 14, borderTop: '1px solid #eee', paddingTop: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
+                          Per-code breakdown - {xeroGM.latest.label} (diagnostic)
+                        </div>
+                        <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
+                          How each P&L code was tagged. Sales counts 'sales'; Total Costs counts
+                          'labour' + 'materials'. Overheads and uncategorised are excluded. If the
+                          margin looks wrong, a code here is tagged wrong in Account Categorisation.
+                          {' '}Xero raw section totals: Income {fmt(xeroGM.latest.xeroIncomeTotal)},
+                          {' '}Cost of Sales {fmt(xeroGM.latest.xeroCostOfSalesTotal)},
+                          {' '}Overheads {fmt(xeroGM.latest.xeroOverheadsTotal)}.
+                        </div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                          <thead>
+                            <tr style={{ textAlign: 'left', color: '#888' }}>
+                              <th style={{ padding: '4px 6px' }}>Code</th>
+                              <th style={{ padding: '4px 6px' }}>Tagged As</th>
+                              <th style={{ padding: '4px 6px' }}>Xero Section</th>
+                              <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(xeroGM.latest.codeRows || []).map(r => (
+                              <tr key={r.code} style={{ borderTop: '1px solid #f2f2f2' }}>
+                                <td style={{ padding: '4px 6px' }}>{r.code}</td>
+                                <td style={{ padding: '4px 6px', color: (r.category === 'uncategorised' || r.category === 'overheads') ? '#b45309' : '#1a1a19' }}>{r.category}</td>
+                                <td style={{ padding: '4px 6px', color: '#999' }}>{r.plSection || '-'}</td>
+                                <td style={{ padding: '4px 6px', textAlign: 'right' }}>{fmt(r.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null,
                   }),
                   extra: !xeroGMLoading && xeroGM?.latest && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>

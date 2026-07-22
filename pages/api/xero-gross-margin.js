@@ -90,6 +90,7 @@ export default async function handler(req, res) {
 
         // Bucket every P&L code by its Account Categorisation category.
         let sales = 0, labour = 0, materials = 0, overheads = 0, uncategorised = 0
+        const codeRows = []
         for (const code of Object.keys(byCode)) {
           const amt = byCode[code] || 0
           const cat = categoryOf(code, catConfig)
@@ -98,7 +99,9 @@ export default async function handler(req, res) {
           else if (cat === 'materials') materials += amt
           else if (cat === 'overheads') overheads += amt
           else uncategorised += amt
+          codeRows.push({ code, amount: amt, category: cat, plSection: pl.codeSection?.[code] || null })
         }
+        codeRows.sort((a, b) => String(a.code).localeCompare(String(b.code), undefined, { numeric: true }))
         // P&L revenue lines are typically positive; cost lines positive as expenses.
         // Use magnitudes so the margin formula is sign-safe regardless of how the
         // report presents each section.
@@ -119,6 +122,12 @@ export default async function handler(req, res) {
           uncategorised: Math.abs(uncategorised),
           grossProfit,
           grossMargin,                              // fraction 0-1 (null if no sales)
+          // Diagnostics (per month): raw signed section totals from Xero's P&L, and
+          // the per-code breakdown showing exactly which category each code fell in.
+          xeroIncomeTotal: pl.incomeTotal,
+          xeroCostOfSalesTotal: pl.costOfSalesTotal,
+          xeroOverheadsTotal: pl.overheadsTotal,
+          codeRows,
         })
         await sleep(250)                            // be gentle on the Xero rate limit
       } catch (e) {
