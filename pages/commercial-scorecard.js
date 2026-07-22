@@ -351,6 +351,15 @@ export default function CommercialScorecard() {
     month: monthLabel(m),
     value: metrics?.paylessCountByMonth?.[m]?.adjusted ?? 0,
   }))
+  // Latest COMPLETED month's payless (credit-note) count, for the card headline -
+  // "how many this month", not an all-time total.
+  const paylessLatestKey = (() => {
+    const d = new Date()
+    const last = new Date(d.getFullYear(), d.getMonth() - 1, 1)   // last full month
+    return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}`
+  })()
+  const paylessLatestCount = metrics?.paylessCountByMonth?.[paylessLatestKey]?.adjusted ?? 0
+  const paylessLatestLabel = monthLabel(paylessLatestKey)
 
   const paymentTimeTrend = displayMonths.map(m => ({
     month: monthLabel(m),
@@ -603,22 +612,23 @@ export default function CommercialScorecard() {
                   ),
                 })}
 
-                {/* 2. Payless Notices = Credit Notes */}
+                {/* 2. Payless Notices = Credit Notes (per month) */}
                 {renderCard({
                   key: 'paylessNotices',
                   label: 'Payless Notices',
-                  sub: 'Credit notes applied (adjustable per month) — click to view & adjust',
-                  value: metrics?.paylessAdjustedTotal ?? 0,
+                  sub: `Credit notes per month${paylessLatestLabel ? ` - ${paylessLatestLabel}: ${paylessLatestCount}` : ''} (click to view & adjust)`,
+                  value: paylessLatestCount,
                   format: v => v,
                   target: targets.paylessNotices,
+                  mode: 'lower_better',
                   trendData: paylessTrend,
                   showAvg: true,
                   drillData: allPayless,
                   drillColumns: paylessColumns,
                   drillTitle: 'Payless Notices (Credit Notes)',
                   onOpen: () => setPaylessOpen(true),
-                  extra: metrics?.paylessTotal != null && metrics.paylessTotal !== (metrics.paylessAdjustedTotal ?? 0)
-                    ? <span style={{ fontSize: 10, color: '#888' }}>{metrics.paylessTotal} raw</span> : null,
+                  extra: metrics?.paylessTotal != null
+                    ? <span style={{ fontSize: 10, color: '#888' }}>{metrics.paylessTotal} total over all months shown</span> : null,
                 })}
 
                 {/* 3. Retentions Invoiced */}

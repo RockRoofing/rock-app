@@ -1,48 +1,47 @@
-DEPLOY NOTES - Confirm the build is live (v3 marker) - do NOT sync
-==================================================================
+DEPLOY NOTES - Payless Notices now per-month (not all-time total)
+================================================================
 
-IMPORTANT: You do NOT need to sync invoices. The diagnostic already showed 93
-invoices qualify with paid dates present - the data is fine. The card you saw was
-still running the OLD code (it lacked the "Avg = N days" text the fix adds), which
-means the previous deploy didn't take effect in the browser/build.
+WHAT CHANGED
+------------
+The Payless Notices card headline was showing the ALL-TIME total of credit notes.
+It now shows the LATEST completed month's count, and the line graph shows the count
+PER MONTH with its trend line (the per-month line was already there; the headline
+was the only all-time figure).
 
-WHAT THIS BUILD ADDS
---------------------
-A visible version marker: the card is now titled
-   "Average Days Beyond Terms (v3)"
-So you can confirm at a glance which build is live. If after deploying + hard-refresh
-the title does NOT say "(v3)", the deploy/caching is the problem (not the data).
+  - Headline = number of credit notes (payless notices) in the last full month.
+  - Sub-label shows that month and its count, e.g. "Credit notes per month - Jun 26: 3".
+  - Trend line = one point per month (each month's count) with the dashed trend line.
+  - Small grey line still shows the total across all months displayed, for reference.
+  - RAG dot: lower-is-better (fewer payless notices = green; target defaults to 0).
+  - Click the card: the per-month drill (raw count + editable adjusted count + the
+    credit notes behind each month) is unchanged.
 
-It also (re)includes the display fix from the last build:
-  - API returns paymentDiag.overallAvgDaysBeyondTerms (one authoritative average).
-  - Headline reads that value directly.
-  - Diagnostic line prints "... 93 qualify. Avg = N days beyond terms."
+NOTE: the per-month counts and manual adjustments are unchanged - this is a display
+change to the headline, using data the API already returns (paylessCountByMonth).
 
-FILES (both EDITS - no new files). BOTH must go up together:
-  - pages/api/commercial-metrics.js
-  - pages/commercial-scorecard.js
+ALSO INCLUDED (cumulative in the scorecard file)
+------------------------------------------------
+This commercial-scorecard.js also carries the earlier, not-yet-confirmed changes:
+  - "Average Days Beyond Terms (v3)" version marker + the headline display fix
+    (reads paymentDiag.overallAvgDaysBeyondTerms; shows "Avg = N days").
+So deploying this supersedes the previous AvgDaysBeyondTerms bundle - you only need
+these two files.
+
+FILES (both EDITS - no new files)
+---------------------------------
+  - pages/api/commercial-metrics.js     (unchanged from last bundle; include to be safe)
+  - pages/commercial-scorecard.js       (per-month payless + v3 marker + avg-days fix)
 
 DEPLOY
 ------
-1. Replace BOTH files in GitHub. Commit.
-2. In the Vercel dashboard, wait until the new deployment shows "Ready".
-3. HARD-refresh the Scorecard (Ctrl/Cmd + Shift + R), or open in a private window.
+Replace both files. Commit -> wait for Vercel "Ready" -> hard-refresh the Scorecard.
 
-THEN CHECK
-----------
-  - Card title should read "Average Days Beyond Terms (v3)". If it doesn't, the new
-    build isn't being served - check Vercel shows the latest commit as Ready, and
-    that BOTH files were committed. Syncing will NOT fix a stale build.
-  - Once (v3) shows: the grey line should read "... 93 qualify. Avg = N days beyond
-    terms." Tell me that N, or click the card and screenshot a few rows of the
-    per-invoice Due Date / Paid Date / Days +/- Terms.
-
-WHY "ON TERMS" MIGHT BE REAL (or not)
--------------------------------------
-93 invoices averaging ~0 days is possible but worth checking. Once (v3) is live and
-we can see "Avg = N", if the per-invoice column shows a realistic spread (some +20,
-some -5) the average is genuine. If many rows show exactly 0, that points to a
-dueDate/terms data issue in Xero (e.g. due date = invoice date) and I'll chase it.
+VERIFY
+------
+  - Payless Notices headline = last month's credit-note count (not a big all-time
+    number); the line graph shows a point per month with a trend line.
+  - While here, confirm the Average Days card title reads "(v3)" - that tells us the
+    build is actually live (see previous notes).
 
 BUILD
 -----
