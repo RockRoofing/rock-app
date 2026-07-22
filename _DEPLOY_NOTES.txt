@@ -1,59 +1,52 @@
-DEPLOY NOTES - Gross Margin trend now = rolling trailing-12-month line
-======================================================================
+DEPLOY NOTES - Always-on diagnostic for "Average Days Beyond Terms"
+===================================================================
 
-CONTEXT (what we learned)
--------------------------
-The wild monthly swings (Jun 6.5%, May -71%, Apr 48%) were NOT a bug. They are
-accrual-timing effects: your WIP journals (code 631, balance-sheet) post against
-code 200 Sales each month-end and auto-reverse the next month, so any single month's
-Sales is inflated or depressed by the WIP accrual. Costs and the matching sale also
-fall in different months. Over a full year this nets out - blended 6 months already
-came to 25.6%, right in the expected 22-27% band.
+WHY
+---
+You reported no amber line. That means either the diagnostic build wasn't live, or
+the amber line's condition (only shown when zero qualify) hid it. This build makes
+the diagnostic ALWAYS visible under the card, so there is no ambiguity.
 
-Decision: keep WIP as revenue (no code change needed for that - it already flows
-through code 200 on the P&L and nets out over 12 months), and make the TREND show
-the trailing-12 rolling margin so the line reflects the trustworthy figure instead
-of the monthly noise.
+WHAT YOU'LL SEE UNDER THE CARD
+------------------------------
+One small line, always present, one of:
 
-WHAT CHANGED
-------------
-  - Headline: unchanged - trailing 12-month Gross Margin (rolling annual).
-  - Trend line: now 6 points, each a FULL trailing-12-month margin ending that
-    month (was individual monthly margins). The newest trend point equals the
-    headline by construction. No more -71% spikes.
-  - To build 6 rolling-12 points the endpoint now fetches 17 completed months
-    (12 + 6 - 1). Each month is fetched ONCE and the rolling windows are computed
-    in memory - no duplicate calls.
-  - "Avg/mo" line removed from this card (an average of rolling averages would
-    mislead; the headline is already the figure that matters).
-  - The drill still lists the raw monthly detail plus the trailing-12 total and the
-    per-code diagnostic.
+  1. Grey: "Of 812 invoice lines: 240 have a paid-on date, 700 have a due date,
+     300 read as paid, 180 qualify."  -> data is fine; if 180 qualify the card
+     value should show. 
 
-SPEED NOTE
-----------
-This now pulls 17 monthly P&L reports from Xero per Scorecard load (~4-5 seconds,
-more API calls). The older months don't change, so if this feels slow we should
-cache them in Redis and only re-fetch the most recent month on each load. Say the
-word and I'll add that - it would cut it to ~1 call most of the time.
+  2. Amber: same counts but "0 qualify" - tells us exactly which gate fails
+     (no paid-on date / no due date / not read as paid). If it says
+     "No paid-on dates in the data (Xero list omits FullyPaidOnDate)", that's the
+     answer to your question: the paid date is NOT in the synced data and we need
+     the payments-date fallback (see below).
 
-FILES (both EDITS - no new files)
+  3. RED: "Diagnostic not present - this build is not deployed yet."
+     -> the earlier build never went live. Deploying THIS file fixes that.
+
+FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/api/xero-gross-margin.js     (17-month fetch + rollingTrend[] + trailing12)
-  - pages/commercial-scorecard.js      (trend uses rollingTrend; showAvg off)
+  - pages/commercial-scorecard.js
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel auto-deploys.
+Replace the file. Commit -> Vercel auto-deploys. Hard-refresh the Scorecard.
 
-VERIFY
-------
-  - Open the Scorecard. Gross Margin headline shows the rolling annual %; the trend
-    line should be smooth (no big spikes) and its last point should match the
-    headline.
-  - Click the card: the trailing-12 total should reconcile, and the raw monthly rows
-    still show the individual (volatile) months for reference.
+WHAT I NEED BACK
+----------------
+Just tell me the numbers from that one line. Specifically:
+  - how many have a paid-on date
+  - how many qualify
+That tells me definitively whether Xero is giving us the paid date at all.
+
+LIKELY NEXT STEP (I'll build once we see the numbers)
+----------------------------------------------------
+If "0 have a paid-on date": Xero's Invoices LIST endpoint isn't returning
+FullyPaidOnDate for your org. The fix is a PAYMENTS-based sync - pull the Xero
+Payments endpoint (bulk, dated, links to invoice IDs) and derive each invoice's
+paid date from its payment. That is reliable regardless of the list quirk. I did
+NOT build it yet to avoid guessing - the diagnostic will confirm it's needed first.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Rolling-window indexing
-unit-checked (6 points, each a full 12-month window; newest window == headline).
+Validated with `next build` -> "Compiled successfully".

@@ -650,15 +650,24 @@ export default function CommercialScorecard() {
                   drillData: allPaymentInvoices,
                   drillColumns: paymentTimeColumns,
                   drillTitle: 'Days Beyond Terms - All Paid Invoices',
-                  extra: metrics?.paymentDiag && (metrics.paymentDiag.qualifiedPaidInvoices === 0) ? (
-                    <div style={{ fontSize: 10, color: '#b45309', marginBottom: 2, lineHeight: 1.5 }}>
-                      No qualifying paid invoices. Of {metrics.paymentDiag.totalInvoiceLines} invoice lines:
-                      {' '}{metrics.paymentDiag.withFullyPaidOnDate} have a paid-on date,
-                      {' '}{metrics.paymentDiag.withDueDate} have a due date,
-                      {' '}{metrics.paymentDiag.passedIsPaid} read as paid.
-                      {metrics.paymentDiag.withFullyPaidOnDate === 0 ? ' -> Re-sync invoices to capture paid-on dates.' : ''}
+                  extra: (
+                    <div style={{ fontSize: 10, color: metrics?.paymentDiag?.qualifiedPaidInvoices ? '#aaa' : '#b45309', marginBottom: 2, lineHeight: 1.5 }}>
+                      {metrics?.paymentDiag ? (
+                        <>
+                          Of {metrics.paymentDiag.totalInvoiceLines} invoice lines:
+                          {' '}{metrics.paymentDiag.withFullyPaidOnDate} have a paid-on date,
+                          {' '}{metrics.paymentDiag.withDueDate} have a due date,
+                          {' '}{metrics.paymentDiag.passedIsPaid} read as paid,
+                          {' '}{metrics.paymentDiag.qualifiedPaidInvoices} qualify.
+                          {metrics.paymentDiag.qualifiedPaidInvoices === 0 && metrics.paymentDiag.withFullyPaidOnDate === 0
+                            ? ' -> No paid-on dates in the data (Xero list omits FullyPaidOnDate). Needs the payments-date fallback.'
+                            : ''}
+                        </>
+                      ) : (
+                        <span style={{ color: '#c00' }}>Diagnostic not present - this build is not deployed yet.</span>
+                      )}
                     </div>
-                  ) : null,
+                  ),
                 })}
 
               </div>
