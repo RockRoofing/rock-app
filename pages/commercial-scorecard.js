@@ -137,12 +137,25 @@ const DEFAULT_TARGETS = {
   gpMargin: 0.20,
   paylessNotices: 0,
   avgPaymentDays: 30,
+  retentionInvoiced: 1,
 }
 
 const LAST_12_MONTHS = (() => {
   const months = []
   const now = new Date()
   for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return months
+})()
+
+// The 6 most recent COMPLETED calendar months (excludes the current in-progress
+// month) - used by the Retentions Invoiced card for both the chips and the % ticked.
+const LAST_6_MONTHS = (() => {
+  const months = []
+  const now = new Date()
+  for (let i = 6; i >= 1; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
@@ -374,11 +387,17 @@ export default function CommercialScorecard() {
     { key: 'total', label: 'Amount', right: true, format: (v) => fmt(v) },
   ]
 
-  // Last 12 months retention invoiced mini-table
+  // Retentions Invoiced: last 6 COMPLETED months. Months not ticked stay visible
+  // (shown red). Percentage = how often retention was ticked across those 6 months.
+  const retentionTickedCount = LAST_6_MONTHS.filter(m => retentionInvoiced[m]).length
+  const retentionPct6mo = LAST_6_MONTHS.length
+    ? retentionTickedCount / LAST_6_MONTHS.length
+    : null
+
   const retentionTable = (
     <div style={{ fontSize: 11, marginBottom: 4 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-        {LAST_12_MONTHS.map(m => {
+        {LAST_6_MONTHS.map(m => {
           const done = retentionInvoiced[m]
           return (
             <div key={m}
@@ -392,10 +411,13 @@ export default function CommercialScorecard() {
                 fontWeight: 600, fontSize: 10,
                 opacity: savingRetention === m ? 0.6 : 1,
               }}>
-              {monthLabel(m)}: {done ? '✓' : '✗'}
+              {monthLabel(m)}: {done ? 'Yes' : 'No'}
             </div>
           )
         })}
+      </div>
+      <div style={{ fontSize: 10, color: '#aaa', marginTop: 4 }}>
+        Ticked {retentionTickedCount} of {LAST_6_MONTHS.length} months (last 6)
       </div>
     </div>
   )
@@ -526,12 +548,11 @@ export default function CommercialScorecard() {
                 {renderCard({
                   key: 'retentionInvoiced',
                   label: 'Retentions Invoiced',
-                  sub: 'Manual — click month to toggle',
-                  value: retentionInvoiced[displayMonths[displayMonths.length - 1]] ? 1 : 0,
-                  format: v => v ? 'Yes' : 'No',
-                  target: 1,
+                  sub: '% of last 6 months ticked - click a month to toggle',
+                  value: retentionPct6mo,
+                  format: pct,
+                  target: targets.retentionInvoiced != null ? targets.retentionInvoiced : 1,
                   targetKey: 'retentionInvoiced',
-                  mode: 'binary',
                   extra: retentionTable,
                 })}
 

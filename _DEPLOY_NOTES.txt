@@ -1,76 +1,40 @@
-DEPLOY NOTES - Gross Margin now comes LIVE from Xero (last 6 completed months, rolling)
-=======================================================================================
+DEPLOY NOTES - Retentions Invoiced: % ticked over last 6 months
+================================================================
 
 WHAT CHANGED
 ------------
-The Commercial Scorecard's Gross Margin card no longer computes margin from project
-lines (invoiced vs costs at valuation date). It now reads the company Gross Margin
-straight from Xero's Profit & Loss:
+The "Retentions Invoiced" card on the Commercial Scorecard now:
 
-    Gross Margin = (Sales - Direct Costs) / Sales      (OVERHEADS EXCLUDED)
+  - Shows the last 6 COMPLETED months as clickable chips (was 12 months).
+  - Each chip toggles Yes / No on click (unchanged behaviour).
+  - Months NOT ticked stay visible - shown red with "No" (they don't disappear).
+  - Headline is now a PERCENTAGE: how often retention was ticked across those
+    6 months (e.g. 4 of 6 = 66.7%), instead of a bare Yes/No for one month.
+  - A small line under the chips reads "Ticked X of 6 months (last 6)".
+  - Target defaults to 100% and is editable like the other cards (enter as a
+    fraction, e.g. 1 = 100%, matching how Gross Margin's target works).
 
-  - Sales        = Xero P&L "Income" section total (account 200 etc.)
-  - Direct Costs = Xero P&L "Cost of Sales / Direct Costs" section total
-  - Overheads    = excluded by design.
-
-  - Headline number = the LAST FULLY COMPLETED calendar month's Gross Margin.
-  - Trend line      = the last 6 completed months, rolling (e.g. in Sept: Mar..Aug).
-  - Click the card  = per-month breakdown table (Month, Sales, Direct Costs,
-                      Gross Profit, Gross Margin), newest first.
-
-Data is LIVE-FETCHED from Xero on every Scorecard load (about 6 Xero calls, one per
-month). Nothing is stored in Redis for this - it's always current.
-
-CREDIT NOTES
-------------
-No special handling needed and NONE was added on purpose. Xero's P&L is accrual-based
-and already nets credit notes into the section totals:
-  - Sales credit notes (ACCRECCREDIT) reduce the Income total.
-  - Supplier credit notes (ACCPAYCREDIT) reduce the Cost of Sales total.
-So using the P&L section totals accounts for credit notes automatically. Fetching the
-/CreditNotes endpoint on top would DOUBLE COUNT, so we deliberately do not.
+The tick data itself is unchanged and still stored the same way
+(commercial:retention_invoiced, keyed 'YYYY-MM' -> true/false), so all existing
+ticks carry over. No API change.
 
 FILES
 -----
-1. NEW FILE  ->  pages/api/xero-gross-margin.js
-   *** This is a NEW file. A zip cannot create files, so in the GitHub web editor:
-       Add file -> Create new file -> path: pages/api/xero-gross-margin.js
-       then paste the contents from the zip. ***
-   Live-fetches the 6-month Gross Margin series from Xero P&L.
-   Role guard: post-contract, management, admin (so QSs can see it).
-   Portal-only route - no middleware.js change needed (portal API routes pass
-   through once logged in; this is NOT under the /api/xero OAuth-open prefix).
-
-2. EDIT     ->  pages/commercial-scorecard.js
-   - Fetches /api/xero-gross-margin on load (parallel to the existing loads).
-   - Gross Margin card now shows the latest completed month from Xero, 6-mo trend,
-     and a Xero per-month drill. Old EOM/WIP breakdown replaced.
+EDIT  ->  pages/commercial-scorecard.js   (single file, no new files)
 
 HOW TO DEPLOY (GitHub web editor)
 ---------------------------------
-  1. Create the NEW file pages/api/xero-gross-margin.js (see note above) and paste.
-  2. Replace pages/commercial-scorecard.js with the version in this zip.
-  3. Commit -> Vercel auto-deploys.
+Replace pages/commercial-scorecard.js with the version in this zip. Commit ->
+Vercel auto-deploys.
 
 VERIFY
 ------
-  - Open the Commercial Scorecard. The Gross Margin card shows the last completed
-    month's % with a 6-month trend line. Sub-label reads "From Xero P&L - <Mon> ...".
-  - Click the card: the table lists 6 months with Sales / Direct Costs / Gross
-    Profit / Gross Margin. Cross-check any month against Xero's own P&L report for
-    that month - the Gross Profit figure should match Xero's Gross Profit line.
-  - If the card shows "Loading from Xero..." and never fills, Xero likely needs
-    reconnecting (Admin centre -> Xero connection).
+  - Open the Commercial Scorecard, find "Retentions Invoiced".
+  - You should see 6 month chips (the last 6 completed months). Click any to
+    toggle Yes/No - unticked ones stay red, they don't vanish.
+  - The big number shows the % of those 6 months that are ticked, and the RAG
+    dot goes green at/above target (100% by default), amber near it, red below.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". /api/xero-gross-margin and
-/commercial-scorecard both compile. (Pre-existing unrelated import warnings in some
-backfill/deep-sync routes are untouched by this change.)
-
-NOTE / OPTIONAL CLEANUP
------------------------
-pages/api/commercial-metrics.js still computes the old project-based GP figures
-(gpMargin/gpBreakdown) but the Scorecard no longer uses them for this card. Left in
-place to avoid touching the Payless/Avg-payment metrics that also live in that file.
-It can be trimmed later if you want.
+Validated with `next build` -> "Compiled successfully".
