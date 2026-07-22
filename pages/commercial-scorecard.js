@@ -151,6 +151,8 @@ const LAST_12_MONTHS = (() => {
 
 export default function CommercialScorecard() {
   const [metrics, setMetrics] = useState(null)
+  const [xeroGM, setXeroGM] = useState(null)
+  const [xeroGMLoading, setXeroGMLoading] = useState(true)
   const [retentionInvoiced, setRetentionInvoiced] = useState({})
   const [targets, setTargets] = useState(DEFAULT_TARGETS)
   const [loading, setLoading] = useState(true)
@@ -177,7 +179,18 @@ export default function CommercialScorecard() {
 
   const displayMonths = getMonthsBetween(dateFrom.substring(0, 7), dateTo.substring(0, 7))
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => { loadAll(); loadXeroGM() }, [])
+
+  async function loadXeroGM() {
+    setXeroGMLoading(true)
+    try {
+      const r = await fetch('/api/xero-gross-margin')
+      const d = await r.json()
+      if (r.ok) setXeroGM(d)
+      else { setXeroGM(null); console.error('Xero gross margin:', d.error) }
+    } catch (e) { console.error(e); setXeroGM(null) }
+    setXeroGMLoading(false)
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -301,11 +314,15 @@ export default function CommercialScorecard() {
     )
   }
 
-  // Build trend data from metrics
-  const gpTrend = displayMonths.map(m => ({
-    month: monthLabel(m),
-    value: metrics?.gpMargin != null ? metrics.gpMargin * 100 : null, // same value for now — would need historical data per month
+  // Gross Margin trend from Xero P&L: last 6 completed months, rolling, live.
+  // grossMargin is a 0-1 fraction; the card formats as a percentage.
+  const gpTrend = (xeroGM?.months || []).map(m => ({
+    month: m.label,
+    value: m.grossMargin != null ? m.grossMargin * 100 : null,
   }))
+  // Headline value = the most recent completed month's Gross Margin (fraction).
+  const gpLatest = xeroGM?.latestGrossMargin ?? null
+  const gpLatestLabel = xeroGM?.latest?.label || null
 
   const paylessTrend = displayMonths.map(m => ({
     month: monthLabel(m),
@@ -317,6 +334,15 @@ export default function CommercialScorecard() {
     value: metrics?.avgPaymentTime?.[m]?.avgDays ?? null,
   }))
 
+  // Gross Margin breakdown drill columns - straight from Xero P&L, per month.
+  const gmXeroColumns = [
+    { key: 'label', label: 'Month' },
+    { key: 'sales', label: 'Sales', right: true, format: (v) => fmt(v) },
+    { key: 'directCosts', label: 'Direct Costs', right: true, format: (v) => fmt(v) },
+    { key: 'grossProfit', label: 'Gross Profit', right: true, format: (v) => fmt(v) },
+    { key: 'grossMargin', label: 'Gross Margin', right: true, format: (v) => v != null ? (v * 100).toFixed(1) + '%' : '-' },
+  ]
+
   // GP margin breakdown drill columns (to reconcile against the EOM report)
   const gpColumns = [
     { key: 'jobNo', label: 'Project' },
@@ -324,7 +350,9 @@ export default function CommercialScorecard() {
     { key: 'valDate', label: 'Valuation Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '— (excluded)' },
     { key: 'invoiced', label: 'Invoiced', right: true, format: (v) => fmt(v) },
     { key: 'costs', label: 'Costs', right: true, format: (v) => fmt(v) },
-    { key: 'margin', label: 'Margin', right: true, format: (v) => v != null ? (v * 100).toFixed(1) + '%' : '—' },
+    { key: 'wip', label: 'WIP', right: true, format: (v) => fmt(v) },
+    { key: 'invoicedIncWip', label: 'Invoiced (inc WIP)', right: true, format: (v) => fmt(v) },
+    { key: 'margin', label: 'Margin (inc WIP)', right: true, format: (v) => v != null ? (v * 100).toFixed(1) + '%' : '—' },
   ]
 
   // Payless (credit note) drill columns
@@ -447,29 +475,31 @@ export default function CommercialScorecard() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                {/* 1. GP Margin */}
+                {/* 1. Gross Margin - live from Xero P&L (last 6 completed months, rolling) */}
                 {renderCard({
                   key: 'gpMargin',
-                  label: 'Gross Profit Margin',
-                  sub: metrics?.gpMarginMonth ? `In-progress projects · at ${monthLabel(metrics.gpMarginMonth)} valuation (EOM basis)` : 'In-progress projects only',
-                  value: metrics?.gpMargin,
+                  label: 'Gross Margin',
+                  sub: xeroGMLoading
+                    ? 'Loading from Xero...'
+                    : (gpLatestLabel ? `From Xero P&L - ${gpLatestLabel} (last full month) - 6-mo trend` : 'From Xero P&L'),
+                  value: gpLatest,
                   format: pct,
                   target: targets.gpMargin,
                   trendData: gpTrend,
                   showAvg: true,
-                  drillData: metrics?.gpBreakdown || [],
-                  drillColumns: gpColumns,
-                  drillTitle: metrics?.gpMarginMonth ? `Gross Margin breakdown — ${monthLabel(metrics.gpMarginMonth)} (in-progress)` : 'Gross Margin breakdown',
+                  drillData: xeroGM?.months || [],
+                  drillColumns: gmXeroColumns,
+                  drillTitle: 'Gross Margin from Xero - last 6 completed months',
                   onOpen: () => setModal({
-                    title: metrics?.gpMarginMonth ? `Gross Margin breakdown — ${monthLabel(metrics.gpMarginMonth)} (in-progress)` : 'Gross Margin breakdown',
-                    rows: metrics?.gpBreakdown || [],
-                    columns: gpColumns,
+                    title: 'Gross Margin from Xero - last 6 completed months',
+                    rows: (xeroGM?.months || []).slice().reverse(),  // newest first in the table
+                    columns: gmXeroColumns,
                     allowEmpty: true,
                   }),
-                  extra: metrics && (
+                  extra: !xeroGMLoading && xeroGM?.latest && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
-                      <div>Profit: <strong>{fmt(metrics.gpProfit)}</strong></div>
-                      <div style={{ color: '#aaa', fontSize: 10 }}>Invoiced: {fmt(metrics.totalGrossInvoiced)} · Costs: {fmt(metrics.totalCosts)}</div>
+                      <div>Gross Profit ({xeroGM.latest.label}): <strong>{fmt(xeroGM.latest.grossProfit)}</strong></div>
+                      <div style={{ color: '#aaa', fontSize: 10 }}>Sales: {fmt(xeroGM.latest.sales)} - Direct Costs: {fmt(xeroGM.latest.directCosts)} - overheads excl.</div>
                     </div>
                   ),
                 })}
