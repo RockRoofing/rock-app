@@ -1,7 +1,33 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, Component } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BizNav, INK, GOLD, gbp } from '../../components/BizNav'
+
+// Error boundary so a bad data shape shows the actual error on-screen instead of the
+// generic "Application error: a client-side exception has occurred" white screen.
+class Boundary extends Component {
+  constructor(p) { super(p); this.state = { err: null } }
+  static getDerivedStateFromError(err) { return { err } }
+  componentDidCatch(err, info) { console.error('Budgets page error:', err, info) }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 24 }}>
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: 16, color: '#7f1d1d', fontSize: 13 }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Something went wrong rendering this page.</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>{String(this.state.err && this.state.err.message || this.state.err)}</div>
+            <div style={{ marginTop: 10 }}><button onClick={() => location.reload()} style={{ border: '1px solid #fca5a5', background: '#fff', borderRadius: 6, padding: '6px 12px', cursor: 'pointer' }}>Reload</button></div>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export default function BudgetsPage() {
+  return <Boundary><Budgets /></Boundary>
+}
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -34,7 +60,7 @@ function cellColour(actual, budget) {
   return '#111'                                     // black - within 15% under
 }
 
-export default function Budgets() {
+function Budgets() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)

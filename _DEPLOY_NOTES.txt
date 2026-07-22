@@ -1,42 +1,38 @@
-DEPLOY NOTES - Overhead Budgets: full width, hide-persist fix, frozen totals row
-================================================================================
+DEPLOY NOTES - Budgets page crash: error boundary to reveal the real error
+==========================================================================
 
-CHANGES
--------
-1) HIDE-COLUMNS NOT SAVING - FIXED. The show/hide selection now saves IMMEDIATELY
-   whenever you tick/untick an account (or use Show all / Hide all), sending the
-   fresh value to the server rather than relying on a later click. The previous
-   version could save a stale value, so hidden rows reappeared on refresh. Now the
-   selection persists for you and everyone on reload. ("Done" just closes the menu.)
+WHAT HAPPENED
+-------------
+After syncing Xero you got "Application error: a client-side exception has occurred".
+That is a React render crash on the Budgets page. The generic message hides the real
+cause, and I can't see your browser console from here - so this build wraps the page
+in an ERROR BOUNDARY. Instead of a white screen, it will now show the ACTUAL error
+message on the page (red box), which tells us exactly what to fix.
 
-2) FULL WIDTH. The page/table now span the full screen width (was capped at 1700px).
+I have NOT added the new features you requested (reconciliation checkbox, forecast
+lock-in cards, 3-month-average card, bar chart) yet - building them onto a crashing
+page would compound the problem. Let's fix the crash first, then I'll add them.
 
-3) TOTALS ROW AT THE TOP, FROZEN. A bold TOTAL row sits directly under the header and
-   sums every column across the visible accounts (monthly actuals/forecasts, Budget/mo,
-   and all four summary columns). Both the HEADER row and the TOTAL row are frozen
-   (sticky) so they stay visible while you scroll the accounts. Hidden accounts are
-   excluded from the totals.
+WHAT TO DO
+----------
+1. Deploy this file (single edit), wait for Vercel "Ready", hard-refresh the page.
+2. If it now shows a RED error box with a message, copy that message to me. That one
+   line will pinpoint the cause and I'll fix it precisely.
+3. If instead the page now loads fine (the boundary can also recover transient
+   states), great - tell me and we proceed to the new features.
+
+Also useful if you can: open the browser console (F12 -> Console) after the sync and
+paste the first red error line - it often names the exact file/line.
+
+LIKELY SUSPECTS (so you know what I'm looking for)
+--------------------------------------------------
+The crash started after the sync populated 13 months + the transaction ledger, so
+it's probably an unexpected data shape from the benchmark or ledger reaching the
+render. The boundary will confirm which.
 
 FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/business-financials/budgets.js
-
-DEPLOY
-------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
-
-VERIFY
-------
-  - Table fills the screen width.
-  - Hide an account via the gear, refresh the page -> it stays hidden.
-  - Scroll the accounts -> the header and the TOTAL row stay pinned at the top.
-  - Totals reflect only the currently-visible accounts.
-
-NOTE
-----
-The frozen totals row sits at top:34px (just under the sticky header). If your header
-wraps to two lines on a very narrow screen the offset may look slightly off - tell me
-and I can measure the header height dynamically instead of using a fixed 34px.
+  - pages/business-financials/budgets.js  (adds an error boundary; no behaviour change)
 
 BUILD
 -----
