@@ -131,6 +131,18 @@ export default async function handler(req, res) {
     })
   }
 
+  // -- Transactions for one overhead account + month (cell drill-down) --
+  // Reads the stored ledger captured at sync time (view=overhead-transactions).
+  if (view === 'overhead-transactions') {
+    const code = String(req.query.code || (req.body && req.body.code) || '')
+    const month = String(req.query.month || (req.body && req.body.month) || '')
+    if (!code || !month) return res.status(400).json({ error: 'code and month required' })
+    const ledger = (await redis.get('overhead:ledger').catch(() => null)) || { byCodeMonth: {} }
+    const lines = (ledger.byCodeMonth?.[code]?.[month]) || []
+    const total = lines.reduce((s, l) => s + (l.amount || 0), 0)
+    return res.json({ code, month, lines, total, ledgerUpdatedAt: ledger.updatedAt || null })
+  }
+
   // ── Bills to pay (money out) / Invoices owed (money in) ───────────────────
   if (view === 'bills' || view === 'invoices') {
     const key = view === 'bills' ? 'bank:outstanding-bills' : 'bank:outstanding-receivables'

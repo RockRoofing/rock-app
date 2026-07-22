@@ -1,51 +1,75 @@
-DEPLOY NOTES - Overhead Budgets: gear row-hide, single Budget column, clear-override
-====================================================================================
+DEPLOY NOTES - Overhead Budgets: cell drill-down, colour key, forecast-driven budget,
+ 4 summary columns, Dec/Jan fix
+=====================================================================================
 
 CHANGES
 -------
-1) GEAR ICON (top-right of the table) -> "Show / hide accounts".
-   - Opens a checklist of every overhead account; untick to hide that whole ROW.
-   - "Show all" / "Hide all" shortcuts. A "hidden" count shows next to the gear.
-   - The selection is SHARED and PERSISTED for everyone (stored in Redis:
-     config:overhead-hidden-rows). "Done & save" writes it; the main Save also
-     persists it.
+1) CLICK A MONTH CELL -> transaction pop-out (date, description, reference, amount,
+   with a total that reconciles to the cell). Data is the GENERAL LEDGER captured at
+   sync time (includes bills, bank payments AND manual journals - so it sums to the
+   P&L figure, unlike bills-only). Stored per account/month; clicking reads from
+   Redis instantly (no per-click Xero calls).
+   - Pulled by the existing "Sync Xero figures" button (once-daily is fine). It full-
+     replaces the last window each sync, so back-dated bills, credit notes, edits and
+     voids are picked up on the next sync.
 
-2) BUDGET is now a single COLUMN (one flat monthly figure per account), placed
-   immediately to the right of the Account name. The old per-cell budget boxes are
-   gone. Every completed month is coloured against this one budget:
-   green at/under budget, red over.
-   (Storage config:overhead-budgets changed from { code: { month: amt } } to a flat
-    { code: amt }. Any previously-saved per-month budgets are ignored; just re-enter
-    the flat monthly budget once per account.)
+2) COLOUR SCHEME + KEY (completed months vs monthly budget):
+     BLACK  = within 15% under budget
+     ORANGE = more than 15% under budget
+     RED    = over budget
+   A key is shown above the table. Future months stay grey (forecast).
 
-3) CLEAR BUTTON on overridden future cells. Type a value into a future (forecast)
-   cell to override it; a small red x appears - click it to clear the override and
-   revert the cell to its automatic forecast.
+3) FORECAST DRIVES THE BUDGET/MO COLUMN. If you haven't typed a budget, the Budget/mo
+   field shows the forecast figure (amber text) as the suggested budget; type to set
+   your own. Changing the forecast method updates the suggestion.
 
-Unchanged: forecast method selector per line (1 avg this FY / 2 last 3 mo / 3 same
-mo last yr), FY switcher (Dec-Nov), actuals from the P&L benchmark.
+4) "Same as last month" forecast option is now "3 - Last full month" and uses the
+   most recent COMPLETED month's actual for that account.
 
-FILES (both EDITS - no new files)
----------------------------------
-  - pages/business-financials/budgets.js   (page rewrite)
-  - pages/api/business-financials.js        (flat budgets + hiddenRows in the
-                                             budgets-overheads view)
-NOTE: sync-benchmark.js (13-month pull) was in the previous bundle - if you already
-deployed that, no need again; if not, include it from the previous zip.
+5) FOUR SUMMARY COLUMNS after the last month:
+     - Budget to date   = monthly budget x completed months this FY
+     - Actual to date   = sum of completed months this FY
+     - Full-yr budget   = monthly budget x 12
+     - Tracking (yr)    = projected full year (actual to date + forecast for the
+                          remaining months) minus full-yr budget. Red if over,
+                          green if under.
+
+6) DEC / JAN SHOWING BLANK: this was because the benchmark hadn't been re-synced
+   since it was extended to 13 months - Dec 2025 / Jan 2026 weren't in the stored
+   data. After deploying, click "Sync Xero figures" once; the 13-month pull now
+   includes them. (If a month is still blank afterwards it genuinely has no data in
+   Xero for that period.)
+
+FILES
+-----
+1. EDIT  lib/xero.js                         (adds fetchGeneralLedgerByAccountMonth)
+2. EDIT  pages/api/sync-benchmark.js          (pulls + stores overhead ledger; 13 mo)
+3. EDIT  pages/api/business-financials.js     (overhead-transactions view)
+4. EDIT  pages/business-financials/budgets.js (colours/key, budget-from-forecast,
+                                               method 3 relabel, summary cols, drill)
+All EDITS - no new files.
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh.
+Replace all four files. Commit -> Vercel "Ready" -> hard-refresh.
+THEN click "Sync Xero figures" once. First sync now also pulls the general ledger for
+overhead accounts (a few extra API calls, well within limits; ~20-40 calls total).
 
 VERIFY
 ------
-  - Gear (top-right) opens the show/hide list; hiding an account removes its row and
-    persists for all viewers after Save / Done & save.
-  - A single "Budget / mo" column sits right of Account; entering a figure colours the
-    completed months green/red.
-  - Override a future cell -> red x appears -> clicking it reverts to the grey forecast.
+  - Dec/Jan now show figures after the sync.
+  - Click a completed month cell -> transaction list appears; its Total matches the
+    cell figure.
+  - Colours follow the key; budget-less rows show the forecast (amber) in Budget/mo.
+  - The four summary columns appear to the right of Nov.
+
+API-LIMIT NOTE
+--------------
+The ledger is pulled ONCE per sync (paging the Journals endpoint), not per cell click.
+Cell clicks read stored data. Xero limit is 60/min, 5000/day; a sync uses ~35-55 calls
+total. Once daily is comfortable.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Icons use HTML entities to
-stay ASCII-safe in source.
+Validated with `next build` -> "Compiled successfully". Ledger paging + FY logic
+unit-checked (no infinite loop; correct offset advance and termination).
