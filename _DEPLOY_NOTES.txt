@@ -1,51 +1,60 @@
-DEPLOY NOTES - The API file (commercial-metrics.js) never deployed - THIS is the issue
-======================================================================================
+DEPLOY NOTES - ROOT CAUSE FOUND: date parser broke both cards (Payless + Avg Days)
+==================================================================================
 
-WHAT YOUR SCREENSHOT PROVED
----------------------------
-Good news: the card title shows "(v3)", so the PAGE (commercial-scorecard.js) IS
-deploying fine. Caching is NOT the problem.
+THE SMOKING GUN
+---------------
+Your Payless diagnostic said: "8 total ... By month: Jan 70: 8." All 8 credit notes
+landed in JANUARY 1970. 1970 is the Unix epoch - the tell-tale sign of a broken date
+parse.
 
-But the diagnostic line still shows the OLD text (no "Avg = N days") and the headline
-is a dash. The "(v3)" marker and the "Avg =" text came from the SAME page edit - so
-if (v3) shows, the page is current. The only way "Avg =" is missing AND the headline
-is blank is if the value it reads (overallAvgDaysBeyondTerms) is undefined.
+Root cause: parseXeroDate() in commercial-metrics.js did:
+    String(d).match(/\d+/)   // first run of digits
+For a normal ISO date "2026-03-15" that grabs "2026" and builds new Date(2026),
+which is 2026 MILLISECONDS after 1 Jan 1970 = Jan 1970. It only worked for Xero's
+/Date(1710460800000+0000)/ format, not for the plain YYYY-MM-DD dates actually
+stored on the invoice/credit-note lines.
 
-That value comes from a DIFFERENT file: the API, pages/api/commercial-metrics.js.
-Conclusion: previous commits updated the PAGE but NOT the API file. The API is still
-running an old version without overallAvgDaysBeyondTerms.
+This one bug broke BOTH cards:
+  - Payless: every credit note bucketed into "Jan 1970", so no real month had any ->
+    0 every month, 8 total.
+  - Average Days Beyond Terms: due/paid dates parsed to ~1970 too, so the day
+    differences were nonsense and got filtered out -> headline blank, no "Avg =".
 
-=> The fix is simply to deploy pages/api/commercial-metrics.js. It clearly wasn't
-included in the last commit(s).
+THE FIX
+-------
+parseXeroDate() now ONLY extracts the timestamp when the string is genuinely the
+/Date(...)/ format; otherwise it parses the string normally (ISO etc.). Verified:
+  "2026-03-15" -> 2026-03 (correct)
+  "/Date(1710460800000+0000)/" -> 2024-03 (still works)
+  paid 2026-03-06 minus due 2026-03-01 -> 5 days (correct)
 
-HOW TO CONFIRM IT THIS TIME
----------------------------
-I added version markers to BOTH files so you can see each independently:
-  - PAGE marker: card title "Average Days Beyond Terms (v3)"  (already live)
-  - API marker : the diagnostic line now starts with "[API: metrics-v3] ..."
-    If after deploying it says "[API: OLD - not deployed]", the API file STILL didn't
-    go up - re-check that pages/api/commercial-metrics.js was actually committed.
-
-FILES (both EDITS - no new files). The API one is the important one this round:
-  - pages/api/commercial-metrics.js   <-- MUST be committed (this is what was missing)
-  - pages/commercial-scorecard.js     (adds the [API: ...] marker; also has the
-                                        earlier Payless per-month window fix)
-
-DEPLOY - be deliberate about the API file
------------------------------------------
-1. In GitHub, open pages/api/commercial-metrics.js and replace it with the version in
-   this zip. CONFIRM the commit shows this file changed.
-2. Replace pages/commercial-scorecard.js too.
-3. Wait for Vercel "Ready", hard-refresh the Scorecard.
+Also added:
+  - API marker bumped to "metrics-v4" (diagnostic line shows "[API: metrics-v4]").
+  - Payless diagnostic now reports credit notes with NO valid date, e.g.
+    "3 have no valid date (excluded)", so if any genuinely lack a date we see it.
 
 EXPECTED AFTER DEPLOY
 ---------------------
-  - Diagnostic line begins "[API: metrics-v3] Of 152 invoice lines: ... 93 qualify.
-    Avg = N days beyond terms."
-  - The big headline shows that N ("+N days late" / "N days early" / "On terms").
-If you still see "[API: OLD - not deployed]", the API file didn't commit - that's the
-whole problem, and nothing on this card will change until it does.
+  - Payless Notices: the 8 credit notes now fall in their REAL months; the line
+    graph shows points in those months; the headline shows the latest month's count.
+  - Average Days Beyond Terms: diagnostic reads "[API: metrics-v4] ... 93 qualify.
+    Avg = N days beyond terms." and the headline shows N.
+
+FILES (both EDITS - no new files). The API file is the critical one:
+  - pages/api/commercial-metrics.js   <-- the actual fix; MUST be committed
+  - pages/commercial-scorecard.js     (undated diagnostic text)
+
+DEPLOY
+------
+Replace BOTH files. Confirm in GitHub that commercial-metrics.js shows as changed in
+the commit (this file has repeatedly been the one left behind). Wait for Vercel
+"Ready", hard-refresh.
+
+CONFIRM
+-------
+Diagnostic line must start "[API: metrics-v4]". If it still says v3 (or "OLD"), the
+API file did not deploy again - that is the thing to fix.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". Date logic unit-tested.

@@ -14,10 +14,16 @@ async function getRedis() {
 
 function parseXeroDate(d) {
   if (!d) return null
-  // Xero dates come as /Date(1234567890000+0000)/
-  const match = String(d).match(/\d+/)
-  if (match) return new Date(parseInt(match[0]))
-  return new Date(d)
+  const s = String(d)
+  // Xero's Microsoft-JSON format: /Date(1234567890000+0000)/ - extract the ms.
+  // IMPORTANT: only do this for that exact format. A plain ISO date like
+  // "2026-03-15" also contains digits; matching \d+ there would grab "2026" and
+  // build new Date(2026ms) = Jan 1970. So we guard on the /Date(...)/ shape.
+  const msMatch = s.match(/\/Date\((\d+)/)
+  if (msMatch) return new Date(parseInt(msMatch[1]))
+  // Otherwise parse as a normal date string (ISO 'YYYY-MM-DD', etc.).
+  const dt = new Date(s)
+  return isNaN(dt) ? null : dt
 }
 
 function monthKey(date) {
@@ -168,9 +174,10 @@ export default async function handler(req, res) {
 
     // Group credit notes by month.
     const paylessByMonth = {}
+    let paylessUndated = 0
     for (const cn of creditNoteDetails) {
       const mk = monthKey(cn.date)
-      if (!mk) continue
+      if (!mk) { paylessUndated++; continue }
       if (!paylessByMonth[mk]) paylessByMonth[mk] = []
       paylessByMonth[mk].push(cn)
     }
@@ -234,7 +241,7 @@ export default async function handler(req, res) {
 
     // Diagnostics: if the card is empty, these show WHERE the invoices fall out.
     const paymentDiag = {
-      apiVersion: 'metrics-v3',
+      apiVersion: 'metrics-v4',
       totalInvoiceLines: paymentInvoiceLines.length,
       withFullyPaidOnDate: paymentInvoiceLines.filter(i => i.fullyPaidOnDate).length,
       withDueDate: paymentInvoiceLines.filter(i => i.dueDate).length,
@@ -261,6 +268,7 @@ export default async function handler(req, res) {
       paylessCountByMonth,
       paylessManual,
       paylessTotal: creditNoteDetails.length,
+      paylessUndated,
       paylessAdjustedTotal: Object.values(paylessCountByMonth).reduce((s, m) => s + m.adjusted, 0),
       avgPaymentTime,
       paymentDiag,

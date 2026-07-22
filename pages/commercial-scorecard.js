@@ -637,9 +637,10 @@ export default function CommercialScorecard() {
                   extra: (
                     <div style={{ fontSize: 10, color: '#888', marginBottom: 2, lineHeight: 1.5 }}>
                       {metrics?.paylessTotal != null ? `${metrics.paylessTotal} total across all months shown.` : ''}
+                      {metrics?.paylessUndated ? ` ${metrics.paylessUndated} have no valid date (excluded).` : ''}
                       {paylessMonthsWithData.length
                         ? ` By month: ${paylessMonthsWithData.join(', ')}.`
-                        : (metrics?.paylessTotal ? ' None fall in the last 12 months (older credit notes, or a date issue).' : '')}
+                        : (metrics?.paylessTotal ? ' None fall in the last 12 months (older, or a date issue).' : '')}
                     </div>
                   ),
                 })}
