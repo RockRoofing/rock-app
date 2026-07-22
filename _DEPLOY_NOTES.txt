@@ -1,34 +1,66 @@
-DEPLOY NOTES - Two display fixes: GM tooltip 1930% -> 19.3%, Payless avg to 1 dp
-================================================================================
+DEPLOY NOTES - Business Financials > Budgets rebuilt as an Overheads P&L grid
+=============================================================================
 
-1) GROSS MARGIN GRAPH TOOLTIP showed 1930% instead of 19.3%
------------------------------------------------------------
-The trend value was being pre-multiplied by 100 (stored as 19.3), then the tooltip
-formatter pct() multiplied by 100 AGAIN (19.3 -> 1930.0%). Fixed by storing the
-trend value as the raw fraction (0.193) and letting pct() do the single x100. The
-plotted line looks identical (chart auto-scales); only the tooltip is corrected.
-Verified: 0.193 -> "19.3%".
+WHAT IT NOW DOES (as specified)
+-------------------------------
+The Budgets page is now a mirror of the Overheads P&L for a financial year:
 
-2) PAYLESS NOTICES average now shows to 1 decimal place
--------------------------------------------------------
-The "Avg: N/mo" line under Payless Notices now formats to one decimal (e.g.
-"Avg: 0.7/mo"). Added an optional avgFormat to the card renderer so the average can
-format differently from the headline (headline stays a whole number for a month's
-count; the average shows 1 dp). Verified: 0.6667 -> "0.7".
+  - Rows: every account categorised OVERHEADS in Account Categorisation, shown as
+    Code (far left) then Account name.
+  - Columns: the 12 months of the financial year (1 Dec - 30 Nov).
+  - Financial-year switcher (top right): "Dec 2024 - Nov 2025 (FY2025)" etc.
+  - Per line, a FORECAST method selector: 1 = average of completed months this FY,
+    2 = trailing 3 months, 3 = same month last year. Future months autopopulate
+    from the chosen method.
+  - Per month cell:
+      * Completed month -> the ACTUAL overhead spend from Xero, coloured GREEN if
+        at/under budget, RED if over budget.
+      * Future month -> the FORECAST in light grey; type over it to override. When
+        the month completes, the actual replaces it automatically.
+  - Under each figure is a small BUDGET box (per month, individually editable). When
+    you enter a budget and leave the box, it asks "Apply this budget to the
+    following months in this year too?" - Yes fills it forward across the FY.
+  - "Save" persists budgets, forecast methods and overrides.
 
-FILE (single EDIT - no new files)
----------------------------------
-  - pages/commercial-scorecard.js
+DATA SOURCE
+-----------
+Actuals come from the P&L benchmark (xero:pl-benchmark), per account code per month.
+sync-benchmark now pulls 13 months (was 6) so a full FY + same-month-last-year is
+available. IMPORTANT: to populate history, click "Sync Xero figures" on a Business
+Financials page. Older months accumulate as you sync over time.
+
+New Redis keys (created automatically on first save):
+  config:overhead-budgets            { code: { 'YYYY-MM': amount } }
+  config:overhead-forecast-methods   { code: 1|2|3 }
+  config:overhead-forecast-overrides { code: { 'YYYY-MM': amount } }
+
+FILES
+-----
+1. EDIT  pages/business-financials/budgets.js   (full rewrite of the page)
+2. EDIT  pages/api/business-financials.js        (adds view=budgets-overheads)
+3. EDIT  pages/api/sync-benchmark.js             (6 -> 13 months)
+No NEW files - all three already exist; just replace them.
 
 DEPLOY
 ------
-Replace the file. Commit -> wait for Vercel "Ready" -> hard-refresh the Scorecard.
+Replace all three files. Commit -> Vercel "Ready" -> hard-refresh.
+Then click "Sync Xero figures" so 13 months of actuals load.
 
 VERIFY
 ------
-  - Hover the Gross Margin line: tooltip shows e.g. "19.3%", not "1930%".
-  - Payless Notices "Avg: N/mo" shows one decimal, e.g. "0.7".
+  - Budgets page shows overhead accounts down the left (code + name), FY months across.
+  - Completed months show actuals (green/red vs budget); future months show grey
+    forecasts; changing the forecast selector repopulates them.
+  - Enter a budget in a cell -> it asks to apply forward -> Save persists it.
+  - Switch financial year -> grid reloads for that FY.
+
+NOTE
+----
+Admin-only page (unchanged). If a month shows blank actuals, that month isn't in the
+benchmark yet - sync Xero figures. Same-month-last-year forecasts need last year's
+month to be in the benchmark (13-month pull covers the most recent one).
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Both formats unit-checked.
+Validated with `next build` -> "Compiled successfully". FY month/boundary logic
+unit-checked (FY2026 = Dec 2025 .. Nov 2026).

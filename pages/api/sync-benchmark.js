@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     // One Chart-of-Accounts fetch so P&L lines carry account CODES (lets the grey
     // P&L reference respect the app's code-based Account Categorisation).
     const nameToCode = await fetchAccountCodeMap(tokens.access_token, tenantId).catch(() => ({}))
-    for (let k = 0; k < 6; k++) {   // current + previous 5 months (matches the graph)
+    for (let k = 0; k < 13; k++) {   // current + previous 12 months (full FY + same-month-last-year)
       const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
       const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
       const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)

@@ -62,6 +62,72 @@ export default async function handler(req, res) {
     return res.json({ budgets, actuals, benchmarkUpdatedAt: benchmark.updatedAt || null })
   }
 
+  // -- Overheads budget grid (mirror of the Overheads P&L by financial year) --
+  // Rows = every account categorised 'overheads'; columns = FY months.
+  // Stores per-code/per-month budgets and a per-code forecast method.
+  if (view === 'budgets-overheads') {
+    if (req.method === 'POST') {
+      const { budgetCells, forecastMethods, forecastOverrides } = req.body || {}
+      if (budgetCells !== undefined) await redis.set('config:overhead-budgets', budgetCells || {})
+      if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
+      if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
+      return res.json({ ok: true })
+    }
+
+    const [budgetCells, forecastMethods, forecastOverrides, chart] = await Promise.all([
+      redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),          // { code: { 'YYYY-MM': amount } }
+      redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),  // { code: 1|2|3 }
+      redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),// { code: { 'YYYY-MM': amount } }
+      redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
+    ])
+    const chartNames = {}
+    for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
+
+    const bm = benchmark.months || {}
+
+    // Which codes are overheads: any code categorised 'overheads' in the config,
+    // PLUS any code that appears in the benchmark and resolves to 'overheads'.
+    const overheadCodes = new Set()
+    for (const [code, cfg] of Object.entries(catConfig)) {
+      if (CATEGORY_OF(code, catConfig) === 'overheads') overheadCodes.add(String(code))
+    }
+    for (const mo of Object.keys(bm)) {
+      for (const code of Object.keys(bm[mo].byCode || {})) {
+        if (CATEGORY_OF(code, catConfig) === 'overheads') overheadCodes.add(String(code))
+      }
+    }
+
+    const overheadAccounts = [...overheadCodes].map(code => ({
+      code,
+      name: (catConfig[code] && catConfig[code].name) || chartNames[code] || '',
+    })).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+
+    // Per-code, per-month ACTUALS from the benchmark (magnitude).
+    const actualsByCode = {}
+    for (const { code } of overheadAccounts) {
+      actualsByCode[code] = {}
+      for (const mo of Object.keys(bm)) {
+        const v = (bm[mo].byCode || {})[code]
+        if (v != null) actualsByCode[code][mo] = Math.abs(v)
+      }
+    }
+
+    // Which months have benchmark data at all (so the client knows a month is
+    // "complete" = has actuals). A month is treated as complete if it exists in the
+    // benchmark AND is not in the future.
+    const availableMonths = Object.keys(bm).sort()
+
+    return res.json({
+      overheadAccounts,
+      actualsByCode,
+      availableMonths,
+      budgetCells,
+      forecastMethods,
+      forecastOverrides,
+      benchmarkUpdatedAt: benchmark.updatedAt || null,
+    })
+  }
+
   // ── Bills to pay (money out) / Invoices owed (money in) ───────────────────
   if (view === 'bills' || view === 'invoices') {
     const key = view === 'bills' ? 'bank:outstanding-bills' : 'bank:outstanding-receivables'
