@@ -67,17 +67,19 @@ export default async function handler(req, res) {
   // Stores per-code/per-month budgets and a per-code forecast method.
   if (view === 'budgets-overheads') {
     if (req.method === 'POST') {
-      const { budgetCells, forecastMethods, forecastOverrides } = req.body || {}
-      if (budgetCells !== undefined) await redis.set('config:overhead-budgets', budgetCells || {})
+      const { budgets, forecastMethods, forecastOverrides, hiddenRows } = req.body || {}
+      if (budgets !== undefined) await redis.set('config:overhead-budgets', budgets || {})
       if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
       if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
+      if (hiddenRows !== undefined) await redis.set('config:overhead-hidden-rows', hiddenRows || [])
       return res.json({ ok: true })
     }
 
-    const [budgetCells, forecastMethods, forecastOverrides, chart] = await Promise.all([
-      redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),          // { code: { 'YYYY-MM': amount } }
+    const [budgets, forecastMethods, forecastOverrides, hiddenRows, chart] = await Promise.all([
+      redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),          // { code: amount }  (flat monthly budget)
       redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),  // { code: 1|2|3 }
       redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),// { code: { 'YYYY-MM': amount } }
+      redis.get('config:overhead-hidden-rows').then(v => v || []).catch(() => ([])),        // [ code, ... ]
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
     const chartNames = {}
@@ -121,9 +123,10 @@ export default async function handler(req, res) {
       overheadAccounts,
       actualsByCode,
       availableMonths,
-      budgetCells,
+      budgets,
       forecastMethods,
       forecastOverrides,
+      hiddenRows,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
     })
   }

@@ -1,66 +1,51 @@
-DEPLOY NOTES - Business Financials > Budgets rebuilt as an Overheads P&L grid
-=============================================================================
+DEPLOY NOTES - Overhead Budgets: gear row-hide, single Budget column, clear-override
+====================================================================================
 
-WHAT IT NOW DOES (as specified)
--------------------------------
-The Budgets page is now a mirror of the Overheads P&L for a financial year:
+CHANGES
+-------
+1) GEAR ICON (top-right of the table) -> "Show / hide accounts".
+   - Opens a checklist of every overhead account; untick to hide that whole ROW.
+   - "Show all" / "Hide all" shortcuts. A "hidden" count shows next to the gear.
+   - The selection is SHARED and PERSISTED for everyone (stored in Redis:
+     config:overhead-hidden-rows). "Done & save" writes it; the main Save also
+     persists it.
 
-  - Rows: every account categorised OVERHEADS in Account Categorisation, shown as
-    Code (far left) then Account name.
-  - Columns: the 12 months of the financial year (1 Dec - 30 Nov).
-  - Financial-year switcher (top right): "Dec 2024 - Nov 2025 (FY2025)" etc.
-  - Per line, a FORECAST method selector: 1 = average of completed months this FY,
-    2 = trailing 3 months, 3 = same month last year. Future months autopopulate
-    from the chosen method.
-  - Per month cell:
-      * Completed month -> the ACTUAL overhead spend from Xero, coloured GREEN if
-        at/under budget, RED if over budget.
-      * Future month -> the FORECAST in light grey; type over it to override. When
-        the month completes, the actual replaces it automatically.
-  - Under each figure is a small BUDGET box (per month, individually editable). When
-    you enter a budget and leave the box, it asks "Apply this budget to the
-    following months in this year too?" - Yes fills it forward across the FY.
-  - "Save" persists budgets, forecast methods and overrides.
+2) BUDGET is now a single COLUMN (one flat monthly figure per account), placed
+   immediately to the right of the Account name. The old per-cell budget boxes are
+   gone. Every completed month is coloured against this one budget:
+   green at/under budget, red over.
+   (Storage config:overhead-budgets changed from { code: { month: amt } } to a flat
+    { code: amt }. Any previously-saved per-month budgets are ignored; just re-enter
+    the flat monthly budget once per account.)
 
-DATA SOURCE
------------
-Actuals come from the P&L benchmark (xero:pl-benchmark), per account code per month.
-sync-benchmark now pulls 13 months (was 6) so a full FY + same-month-last-year is
-available. IMPORTANT: to populate history, click "Sync Xero figures" on a Business
-Financials page. Older months accumulate as you sync over time.
+3) CLEAR BUTTON on overridden future cells. Type a value into a future (forecast)
+   cell to override it; a small red x appears - click it to clear the override and
+   revert the cell to its automatic forecast.
 
-New Redis keys (created automatically on first save):
-  config:overhead-budgets            { code: { 'YYYY-MM': amount } }
-  config:overhead-forecast-methods   { code: 1|2|3 }
-  config:overhead-forecast-overrides { code: { 'YYYY-MM': amount } }
+Unchanged: forecast method selector per line (1 avg this FY / 2 last 3 mo / 3 same
+mo last yr), FY switcher (Dec-Nov), actuals from the P&L benchmark.
 
-FILES
------
-1. EDIT  pages/business-financials/budgets.js   (full rewrite of the page)
-2. EDIT  pages/api/business-financials.js        (adds view=budgets-overheads)
-3. EDIT  pages/api/sync-benchmark.js             (6 -> 13 months)
-No NEW files - all three already exist; just replace them.
+FILES (both EDITS - no new files)
+---------------------------------
+  - pages/business-financials/budgets.js   (page rewrite)
+  - pages/api/business-financials.js        (flat budgets + hiddenRows in the
+                                             budgets-overheads view)
+NOTE: sync-benchmark.js (13-month pull) was in the previous bundle - if you already
+deployed that, no need again; if not, include it from the previous zip.
 
 DEPLOY
 ------
-Replace all three files. Commit -> Vercel "Ready" -> hard-refresh.
-Then click "Sync Xero figures" so 13 months of actuals load.
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-  - Budgets page shows overhead accounts down the left (code + name), FY months across.
-  - Completed months show actuals (green/red vs budget); future months show grey
-    forecasts; changing the forecast selector repopulates them.
-  - Enter a budget in a cell -> it asks to apply forward -> Save persists it.
-  - Switch financial year -> grid reloads for that FY.
-
-NOTE
-----
-Admin-only page (unchanged). If a month shows blank actuals, that month isn't in the
-benchmark yet - sync Xero figures. Same-month-last-year forecasts need last year's
-month to be in the benchmark (13-month pull covers the most recent one).
+  - Gear (top-right) opens the show/hide list; hiding an account removes its row and
+    persists for all viewers after Save / Done & save.
+  - A single "Budget / mo" column sits right of Account; entering a figure colours the
+    completed months green/red.
+  - Override a future cell -> red x appears -> clicking it reverts to the grey forecast.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". FY month/boundary logic
-unit-checked (FY2026 = Dec 2025 .. Nov 2026).
+Validated with `next build` -> "Compiled successfully". Icons use HTML entities to
+stay ASCII-safe in source.
