@@ -73,6 +73,7 @@ async function fetchAllSalesInvoices(at, tid, fromDate) {
         total: full.Total || 0, subTotal: full.SubTotal != null ? full.SubTotal : (full.Total || 0),
         totalTax: full.TotalTax || 0, sales200, retention612,
         amountPaid: full.AmountPaid || 0, amountDue: full.AmountDue || 0,
+        fullyPaidOnDate: full.FullyPaidOnDate || null,
         status: full.Status || '', trackingNames: [...trackingNames],
       })
     }

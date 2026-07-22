@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getCachedProjects } from '../../lib/db'
+import { computeProjectWip } from '../../lib/wipCalc'
 
 async function getRedis() {
   try {
@@ -63,18 +64,24 @@ export default async function handler(req, res) {
       } catch {}
     }
 
-    // ── GP Margin (EOM basis, last full month) ────────────────────────────
-    // Match the EOM report: margin at the LAST COMPLETED month's valuation date,
-    // over in-progress projects only. costsToDate / grossInvoiced are summed up to
-    // each project's valuation date for that month — NOT all-time.
+    // -- GP Margin (EOM basis, last full month, INCLUDING WIP) --
+    // Match the EOM report's "inc WIP" header bar exactly: for each in-progress
+    // project, at the LAST COMPLETED month's valuation date,
+    //   Invoiced (inc WIP) = invoiced to val date + WIP
+    //   Profit   (inc WIP) = profit to date + profit portion of WIP
+    //   GP Margin          = sum profit(inc WIP) / sum invoiced(inc WIP)
+    // WIP comes from the shared computeProjectWip (lib/wipCalc.js) so all pages
+    // agree. Projects with no valuation date this month are excluded on BOTH sides.
     const nowD = new Date()
     const lastFull = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1)
     const eomYear = lastFull.getFullYear()
     const eomMonth = lastFull.getMonth() + 1              // 1-12
     const eomMonthKey = `${eomYear}-${String(eomMonth).padStart(2, '0')}`
+    const monthEndStr = new Date(Date.UTC(eomYear, eomMonth, 0)).toISOString().split('T')[0]
     const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
 
-    let eomGross = 0, eomCosts = 0
+    let eomGross = 0, eomCosts = 0        // to-val-date totals (ex WIP)
+    let eomWip = 0, eomWipProfit = 0      // WIP totals
     const gpBreakdown = []
     for (const p of projects) {
       // Valuation date for the last full month: per-month override wins, else the
@@ -87,25 +94,45 @@ export default async function handler(req, res) {
         const day = Math.min(parseInt(p.valuationDay), dim)
         vStr = new Date(Date.UTC(eomYear, eomMonth - 1, day)).toISOString().split('T')[0]
       }
-      if (!vStr) { gpBreakdown.push({ jobNo: p.jobNo, projectName: p.name, valDate: null, invoiced: 0, costs: 0, margin: null, included: false, note: 'no valuation date this month' }); continue }
+      if (!vStr) { gpBreakdown.push({ jobNo: p.jobNo, projectName: p.name, valDate: null, invoiced: 0, costs: 0, wip: 0, invoicedIncWip: 0, margin: null, included: false, note: 'no valuation date this month' }); continue }
       const cLines = (await redis.get(`costs:lines:${p.xeroId}`).catch(() => null)) || p._costLines || []
       const iLines = (await redis.get(`invoiced:lines:${p.xeroId}`).catch(() => null)) || p._invoiceLines || []
       const costsToDate = cLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + (l.amount || 0), 0)
       const grossInvoicedToDate = iLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + invVal(l), 0)
+      const profitToDate = grossInvoicedToDate - costsToDate
+
+      // WIP for this month via the shared calc (same source as the EOM bar).
+      const monthAdj = Array.isArray(p.wipAdjustments)
+        ? p.wipAdjustments.filter(a => a.month === eomMonthKey)
+        : []
+      const _wip = computeProjectWip({
+        costLines: cLines, invoiceLines: iLines, valStr: vStr, monthEndStr,
+        adjustments: monthAdj, marginOverride: p.wipMarginOverride,
+      })
+      const wip = _wip.wipValue
+      const wipProfit = _wip.wipProfit
+
       eomGross += grossInvoicedToDate
       eomCosts += costsToDate
+      eomWip += wip
+      eomWipProfit += wipProfit
+
+      const invoicedIncWip = grossInvoicedToDate + wip
+      const profitIncWip = profitToDate + wipProfit
       gpBreakdown.push({
         jobNo: p.jobNo, projectName: p.name, valDate: vStr,
-        invoiced: grossInvoicedToDate, costs: costsToDate,
-        margin: grossInvoicedToDate > 0 ? (grossInvoicedToDate - costsToDate) / grossInvoicedToDate : null,
+        invoiced: grossInvoicedToDate, costs: costsToDate, wip,
+        invoicedIncWip,
+        margin: invoicedIncWip > 0 ? profitIncWip / invoicedIncWip : null,
         included: true,
       })
     }
     gpBreakdown.sort((a, b) => String(a.jobNo || '').localeCompare(String(b.jobNo || ''), undefined, { numeric: true }))
-    const totalGrossInvoiced = eomGross
-    const totalCosts = eomCosts
-    const gpMargin = totalGrossInvoiced > 0 ? (totalGrossInvoiced - totalCosts) / totalGrossInvoiced : null
-    const gpProfit = totalGrossInvoiced - totalCosts
+    // Totals INCLUDING WIP - these match the EOM report's "inc WIP" header bar.
+    const totalGrossInvoiced = eomGross + eomWip           // Invoiced (inc WIP)
+    const totalCosts = eomCosts                            // costs to val date (ex WIP)
+    const gpProfit = (eomGross - eomCosts) + eomWipProfit  // Profit (inc WIP)
+    const gpMargin = totalGrossInvoiced > 0 ? gpProfit / totalGrossInvoiced : null
 
     // ── Payless Notices = Credit Notes ────────────────────────────────────
     // Every credit note applied against a project counts as one payless notice.
@@ -144,9 +171,11 @@ export default async function handler(req, res) {
     }
 
     // ── Average Time to Get Paid ──────────────────────────────────────────
-    // Days between invoice date and fullyPaidOnDate, for paid invoices
+    // Days between invoice date and fullyPaidOnDate, for fully-paid SALES invoices.
+    // fullyPaidOnDate is captured by sync-invoices.js from Xero's FullyPaidOnDate.
+    // Credit notes are excluded (they are not "getting paid").
     const paidInvoices = allInvoiceLines.filter(inv =>
-      inv.fullyPaidOnDate && inv.date && inv.status === 'PAID'
+      inv.fullyPaidOnDate && inv.date && inv.status === 'PAID' && !inv.creditNote
     )
 
     const paymentTimeByMonth = {}
@@ -178,6 +207,9 @@ export default async function handler(req, res) {
       gpBreakdown,
       totalGrossInvoiced,
       totalCosts,
+      totalWip: eomWip,
+      totalWipProfit: eomWipProfit,
+      totalInvoicedExWip: eomGross,
       liveProjectCount: projects.length,
       paylessByMonth,
       paylessCountByMonth,

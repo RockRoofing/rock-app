@@ -1,40 +1,58 @@
-DEPLOY NOTES - Retentions Invoiced: % ticked over last 6 months
-================================================================
+DEPLOY NOTES - Fix: "Average Time to Get Paid" showing no data
+==============================================================
 
-WHAT CHANGED
-------------
-The "Retentions Invoiced" card on the Commercial Scorecard now:
+WHY IT WAS BLANK (root cause)
+-----------------------------
+The metric needs three fields on each stored invoice line: date, status ('PAID'),
+and fullyPaidOnDate. commercial-metrics.js filters:
 
-  - Shows the last 6 COMPLETED months as clickable chips (was 12 months).
-  - Each chip toggles Yes / No on click (unchanged behaviour).
-  - Months NOT ticked stay visible - shown red with "No" (they don't disappear).
-  - Headline is now a PERCENTAGE: how often retention was ticked across those
-    6 months (e.g. 4 of 6 = 66.7%), instead of a bare Yes/No for one month.
-  - A small line under the chips reads "Ticked X of 6 months (last 6)".
-  - Target defaults to 100% and is editable like the other cards (enter as a
-    fraction, e.g. 1 = 100%, matching how Gross Margin's target works).
+    inv.fullyPaidOnDate && inv.date && inv.status === 'PAID'
 
-The tick data itself is unchanged and still stored the same way
-(commercial:retention_invoiced, keyed 'YYYY-MM' -> true/false), so all existing
-ticks carry over. No API change.
+BUT the main invoice sync (pages/api/sync-invoices.js) that writes invoiced:lines
+NEVER captured fullyPaidOnDate - the line object had date, dueDate, status,
+amountPaid, amountDue, but no fullyPaidOnDate. So inv.fullyPaidOnDate was always
+undefined, the filter matched zero invoices, and the card showed nothing.
 
-FILES
------
-EDIT  ->  pages/commercial-scorecard.js   (single file, no new files)
+(Note: pages/api/cron/wip-sync.js already maps this field correctly as
+`fullyPaidOnDate: inv.FullyPaidOnDate`, which confirms the correct Xero field name
+is FullyPaidOnDate. The main sync-invoices.js was just missing it.)
+
+THE FIX
+-------
+1. pages/api/sync-invoices.js
+   - Sales invoice lines now capture: fullyPaidOnDate: full.FullyPaidOnDate || null
+   - Credit-note lines intentionally do NOT get this field (a credit note is not
+     "getting paid").
+
+2. pages/api/commercial-metrics.js
+   - paidInvoices filter now also excludes credit notes explicitly
+     (&& !inv.creditNote) so they can never skew the average.
+
+FILES (both EDITS, no new files)
+--------------------------------
+  - pages/api/sync-invoices.js
+  - pages/api/commercial-metrics.js
 
 HOW TO DEPLOY (GitHub web editor)
 ---------------------------------
-Replace pages/commercial-scorecard.js with the version in this zip. Commit ->
-Vercel auto-deploys.
+Replace both files at their paths. Commit -> Vercel auto-deploys.
 
-VERIFY
-------
-  - Open the Commercial Scorecard, find "Retentions Invoiced".
-  - You should see 6 month chips (the last 6 completed months). Click any to
-    toggle Yes/No - unticked ones stay red, they don't vanish.
-  - The big number shows the % of those 6 months that are ticked, and the RAG
-    dot goes green at/above target (100% by default), amber near it, red below.
+*** IMPORTANT - YOU MUST RE-SYNC AFTER DEPLOYING ***
+The fix only adds the field going forward. Existing stored invoice lines were
+written WITHOUT fullyPaidOnDate, so the card stays blank until you re-sync:
+  1. Deploy both files.
+  2. Go to a Commercial page with the Sync bar (e.g. Project Financials) and run
+     the invoice sync so invoiced:lines are rewritten WITH fullyPaidOnDate.
+  3. Open the Commercial Scorecard - "Average Time to Get Paid" should now show
+     days, with a trend and a clickable drill listing the paid invoices.
+
+IF IT'S STILL BLANK AFTER A FULL RE-SYNC
+----------------------------------------
+That would mean Xero's Invoices *list* endpoint isn't returning FullyPaidOnDate
+for your org (it usually does). In that case the next step is to source the field
+the way wip-sync.js does. Tell me and I'll wire that in - but a normal re-sync
+should populate it.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully" for both routes.
