@@ -1,56 +1,50 @@
-DEPLOY NOTES - Gross Margin 6.5% is wrong (expected 22-27%): diagnostic build
-=============================================================================
+DEPLOY NOTES - "Average Time to Get Paid" changed to "Average Days Beyond Terms"
+================================================================================
 
-FIRST, TO ANSWER YOUR QUESTION
-------------------------------
-No - the Gross Margin is NOT a rolling/cumulative 6-month figure. Each month is
-calculated on its OWN month's P&L only, and the headline shows the LATEST single
-month. The trend line plots the 6 individual months. So 6.5% is one month's number,
-not a 6-month blend. (If you WANT it to be a rolling 6-month figure - total sales
-and total costs summed across 6 months, one margin - say the word and I'll switch
-it. That is a real option and might be what you're expecting.)
+NEW DEFINITION (as requested)
+-----------------------------
+Per fully-paid sales invoice:
+    daysBeyondTerms = Paid Date (FullyPaidOnDate) - Due Date
+      positive = paid LATE, negative = paid EARLY, 0 = on terms.
+The metric = the AVERAGE of daysBeyondTerms across all qualifying paid invoices.
+Example: 10 invoices each paid 5 days after their due date -> average = +5.
 
-WHY 6.5% IS ALMOST CERTAINLY WRONG
-----------------------------------
-A margin that low vs an expected 22-27% means either Sales is being UNDER-counted or
-Costs are being OVER-counted in the categorisation bucketing. The likeliest cause is
-the P&L-name-to-code mapping: the Gross Margin calc only sees an account if its P&L
-name maps to a code in the Chart of Accounts. If a big Sales account doesn't map,
-sales is understated and the margin collapses. I can't tell which from here without
-seeing the actual numbers - so this build EXPOSES them.
+Changes from before:
+  - Measured against the DUE DATE, not the invoice date.
+  - Early payments (negatives) now COUNT (previously the days<0 filter dropped
+    them, which would have skewed the average).
+  - The headline is a true invoice-weighted average (not an average of monthly
+    averages), so it matches your example exactly.
+  - Sanity window widened to -365..+365 days so early payments are kept.
 
-WHAT THIS BUILD ADDS (diagnostic - no formula change yet)
----------------------------------------------------------
-Click the Gross Margin card. Under the 6-month table there is now a
-"Per-code breakdown - <latest month> (diagnostic)" section showing, for every P&L
-code that month:
-   - the code
-   - how it was TAGGED (sales / labour / materials / overheads / uncategorised)
-     -> overheads & uncategorised are shown amber (they're EXCLUDED from the calc)
-   - which Xero P&L SECTION it came from (income / cos / overheads)
-   - the amount
-Plus a line with Xero's own raw section totals (Income, Cost of Sales, Overheads)
-for that month, so we can compare our Sales total against Xero's Income total at a
-glance.
+CARD BEHAVIOUR
+--------------
+  - Label: "Average Days Beyond Terms".
+  - Value shows "+N days late", "N days early", or "On terms".
+  - RAG dot uses lower-is-better: at/below target = green, up to 15 days over =
+    amber, beyond = red. Target defaults to 0 (paid on time); editable.
+  - Trend line plots each month's average (can go negative).
+  - Drill ("Days Beyond Terms - All Paid Invoices") now shows Due Date, Paid Date,
+    and a signed "Days +/- Terms" column per invoice.
+
+DATA USED (all already on the stored invoice lines)
+---------------------------------------------------
+dueDate, fullyPaidOnDate, status, amountDue, amountPaid. An invoice counts as paid
+if status is 'PAID' OR nothing is outstanding (amountDue == 0 and amountPaid > 0).
+Credit notes excluded. Scans ALL projects (paid invoices often sit on completed
+jobs). If fullyPaidOnDate is missing on older lines, a re-sync fills it (the on-card
+amber diagnostic will say so, and now also reports how many have a due date).
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/api/xero-gross-margin.js     (returns per-code rows + raw Xero totals)
-  - pages/commercial-scorecard.js      (drill now shows the per-code breakdown)
+  - pages/api/commercial-metrics.js
+  - pages/commercial-scorecard.js
 
-HOW TO DEPLOY
--------------
-Replace both files. Commit -> Vercel auto-deploys.
-
-WHAT I NEED BACK
-----------------
-Deploy, open the Scorecard, click the Gross Margin card, and screenshot the
-per-code breakdown for the latest month. From that I can see instantly whether:
-  - Sales is short (a Sales account isn't mapping / is tagged wrong) - most likely,
-  - a cost account is tagged materials/labour when it should be overheads,
-  - or an account is landing in 'uncategorised' and needs tagging.
-Then I fix the specific cause (or switch to a rolling 6-month calc if that's what
-you actually want) and remove the diagnostic.
+DEPLOY
+------
+Replace both files. Commit -> Vercel auto-deploys. Then open the Scorecard; if the
+card is blank, read the amber diagnostic line (re-sync if it says 0 have a paid-on
+date).
 
 BUILD
 -----

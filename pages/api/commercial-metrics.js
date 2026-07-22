@@ -186,29 +186,32 @@ export default async function handler(req, res) {
       paylessCountByMonth[mk] = { raw, adjusted: (adj != null && adj !== '') ? Number(adj) : raw, isAdjusted: adj != null && adj !== '' }
     }
 
-    // ── Average Time to Get Paid ──────────────────────────────────────────
-    // Days between invoice date and fullyPaidOnDate, for fully-paid SALES invoices
-    // across ALL projects. fullyPaidOnDate is required to know WHEN it was paid, and
-    // is captured from Xero's FullyPaidOnDate by both sync-invoices.js and wip-sync.
-    // We treat an invoice as paid if it either has status 'PAID' or shows nothing
-    // outstanding (amountDue == 0 with amountPaid > 0) - the status string alone is
-    // too strict. Credit notes are excluded (they are not "getting paid").
+    // -- Average Days Beyond Terms (paid vs due date) --
+    // For each fully-paid SALES invoice: daysOverdue = fullyPaidOnDate - dueDate.
+    // Negative = paid early, positive = paid late. The metric is the AVERAGE of
+    // these per month (grouped by the month the invoice was paid). e.g. 10 invoices
+    // each paid 5 days after their due date -> average +5.
+    // Needs BOTH fullyPaidOnDate (when it was actually paid) and dueDate (the terms).
+    // fullyPaidOnDate is captured from Xero by sync-invoices.js and wip-sync.
+    // Paid = status 'PAID' OR nothing outstanding (amountDue == 0, amountPaid > 0).
+    // Credit notes excluded.
     const isPaid = (inv) =>
       inv.status === 'PAID' ||
       ((Number(inv.amountDue) || 0) === 0 && (Number(inv.amountPaid) || 0) > 0)
     const paidInvoices = paymentInvoiceLines.filter(inv =>
-      inv.fullyPaidOnDate && inv.date && !inv.creditNote && isPaid(inv)
+      inv.fullyPaidOnDate && inv.dueDate && !inv.creditNote && isPaid(inv)
     )
 
     const paymentTimeByMonth = {}
     for (const inv of paidInvoices) {
       const mk = monthKey(inv.fullyPaidOnDate)
       if (!mk) continue
-      const invDate = parseXeroDate(inv.date)
+      const dueDate = parseXeroDate(inv.dueDate)
       const paidDate = parseXeroDate(inv.fullyPaidOnDate)
-      if (!invDate || !paidDate) continue
-      const days = Math.round((paidDate - invDate) / (1000 * 60 * 60 * 24))
-      if (days < 0 || days > 365) continue // sanity check
+      if (!dueDate || !paidDate || isNaN(dueDate) || isNaN(paidDate)) continue
+      // Positive = paid AFTER the due date (late); negative = paid early.
+      const days = Math.round((paidDate - dueDate) / (1000 * 60 * 60 * 24))
+      if (days < -365 || days > 365) continue // sanity window (keeps early payments)
       if (!paymentTimeByMonth[mk]) paymentTimeByMonth[mk] = []
       paymentTimeByMonth[mk].push({ days, inv })
     }
@@ -218,7 +221,7 @@ export default async function handler(req, res) {
       avgPaymentTime[mk] = {
         avgDays: Math.round(entries.reduce((s, e) => s + e.days, 0) / entries.length),
         count: entries.length,
-        invoices: entries.map(e => e.inv),
+        invoices: entries.map(e => ({ ...e.inv, daysBeyondTerms: e.days })),
       }
     }
 
@@ -226,6 +229,7 @@ export default async function handler(req, res) {
     const paymentDiag = {
       totalInvoiceLines: paymentInvoiceLines.length,
       withFullyPaidOnDate: paymentInvoiceLines.filter(i => i.fullyPaidOnDate).length,
+      withDueDate: paymentInvoiceLines.filter(i => i.dueDate).length,
       withStatusPaid: paymentInvoiceLines.filter(i => i.status === 'PAID').length,
       withZeroDue: paymentInvoiceLines.filter(i => (Number(i.amountDue) || 0) === 0 && (Number(i.amountPaid) || 0) > 0).length,
       passedIsPaid: paymentInvoiceLines.filter(isPaid).length,

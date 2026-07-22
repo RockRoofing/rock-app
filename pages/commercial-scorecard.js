@@ -37,6 +37,13 @@ function computeTrendline(data) {
 function rag(actual, target, mode = 'normal') {
   if (actual == null || target == null) return '#aaa'
   if (mode === 'binary') return actual ? '#16a34a' : '#e63946'
+  if (mode === 'lower_better') {
+    // For metrics where a LOWER value is better (e.g. days beyond payment terms).
+    // At or below target = green; within 15 days over = amber; beyond = red.
+    if (actual <= target) return '#16a34a'
+    if (actual <= target + 15) return '#ca8a04'
+    return '#e63946'
+  }
   const ratio = actual / target
   if (ratio >= 1) return '#16a34a'
   if (ratio >= 0.85) return '#ca8a04'
@@ -137,7 +144,7 @@ function PaylessModal({ byMonth, countByMonth, columns, onClose, onSaveAdjust, m
 const DEFAULT_TARGETS = {
   gpMargin: 0.20,
   paylessNotices: 0,
-  avgPaymentDays: 30,
+  avgPaymentDays: 0,
   retentionInvoiced: 1,
 }
 
@@ -386,8 +393,9 @@ export default function CommercialScorecard() {
     { key: 'jobNo', label: 'Project' },
     { key: 'projectName', label: 'Project Name' },
     { key: 'invoiceNumber', label: 'Invoice No' },
-    { key: 'date', label: 'Invoice Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '—' },
-    { key: 'fullyPaidOnDate', label: 'Paid Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '—' },
+    { key: 'dueDate', label: 'Due Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '-' },
+    { key: 'fullyPaidOnDate', label: 'Paid Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '-' },
+    { key: 'daysBeyondTerms', label: 'Days +/- Terms', right: true, format: (v) => v == null ? '-' : (v > 0 ? `+${v}` : `${v}`) },
     { key: 'total', label: 'Amount', right: true, format: (v) => fmt(v) },
   ]
 
@@ -595,29 +603,35 @@ export default function CommercialScorecard() {
                   extra: retentionTable,
                 })}
 
-                {/* 4. Average Time to Get Paid */}
+                {/* 4. Average Days Beyond Terms (paid vs due date) */}
                 {renderCard({
                   key: 'avgPaymentDays',
-                  label: 'Average Time to Get Paid',
-                  sub: 'Days from invoice to payment',
+                  label: 'Average Days Beyond Terms',
+                  sub: 'Paid date minus due date (+ late / - early)',
                   value: metrics?.avgPaymentTime
                     ? (() => {
                         const all = Object.values(metrics.avgPaymentTime)
                         if (!all.length) return null
-                        return Math.round(all.reduce((s, m) => s + m.avgDays, 0) / all.length)
+                        // True average across ALL invoices (weighted by count), not
+                        // an average of monthly averages.
+                        const totalDays = all.reduce((s, m) => s + m.avgDays * m.count, 0)
+                        const totalCount = all.reduce((s, m) => s + m.count, 0)
+                        return totalCount ? Math.round(totalDays / totalCount) : null
                       })()
                     : null,
-                  format: v => v != null ? `${v} days` : '-',
-                  target: targets.avgPaymentDays,
+                  format: v => v == null ? '-' : (v > 0 ? `+${v} days late` : v < 0 ? `${Math.abs(v)} days early` : 'On terms'),
+                  target: targets.avgPaymentDays != null ? targets.avgPaymentDays : 0,
+                  mode: 'lower_better',
                   trendData: paymentTimeTrend,
                   showAvg: true,
                   drillData: allPaymentInvoices,
                   drillColumns: paymentTimeColumns,
-                  drillTitle: 'Invoice Payment Times - All',
+                  drillTitle: 'Days Beyond Terms - All Paid Invoices',
                   extra: metrics?.paymentDiag && (metrics.paymentDiag.qualifiedPaidInvoices === 0) ? (
                     <div style={{ fontSize: 10, color: '#b45309', marginBottom: 2, lineHeight: 1.5 }}>
                       No qualifying paid invoices. Of {metrics.paymentDiag.totalInvoiceLines} invoice lines:
                       {' '}{metrics.paymentDiag.withFullyPaidOnDate} have a paid-on date,
+                      {' '}{metrics.paymentDiag.withDueDate} have a due date,
                       {' '}{metrics.paymentDiag.passedIsPaid} read as paid.
                       {metrics.paymentDiag.withFullyPaidOnDate === 0 ? ' -> Re-sync invoices to capture paid-on dates.' : ''}
                     </div>
