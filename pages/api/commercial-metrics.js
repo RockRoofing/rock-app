@@ -234,6 +234,7 @@ export default async function handler(req, res) {
 
     // Diagnostics: if the card is empty, these show WHERE the invoices fall out.
     const paymentDiag = {
+      apiVersion: 'metrics-v3',
       totalInvoiceLines: paymentInvoiceLines.length,
       withFullyPaidOnDate: paymentInvoiceLines.filter(i => i.fullyPaidOnDate).length,
       withDueDate: paymentInvoiceLines.filter(i => i.dueDate).length,

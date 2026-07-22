@@ -1,43 +1,50 @@
-DEPLOY NOTES - Payless Notices: 0 every month but 8 total - window/diagnostic fix
-=================================================================================
+DEPLOY NOTES - The API file (commercial-metrics.js) never deployed - THIS is the issue
+======================================================================================
 
-THE CONTRADICTION
------------------
-"8 total across all months" but every month shows 0 and the average is 0. That means
-the 8 credit notes ARE being found and counted (total), but they aren't landing in
-the months the line graph was looking at. The most likely reason: the trend was tied
-to the page's DATE-RANGE FILTER (dateFrom..dateTo), and the 8 credit notes are dated
-in months outside that window (or the window didn't line up).
+WHAT YOUR SCREENSHOT PROVED
+---------------------------
+Good news: the card title shows "(v3)", so the PAGE (commercial-scorecard.js) IS
+deploying fine. Caching is NOT the problem.
 
-THE FIX
--------
-1. The Payless line graph now uses a FIXED last-12-completed-months window (same as
-   Gross Margin), independent of the date-range filter. So the months always line up
-   with where the credit notes actually are.
-2. Added a diagnostic line under the card that lists WHICH months hold credit notes,
-   e.g. "8 total across all months shown. By month: Mar 26: 2, Apr 26: 3, ...". If it
-   says "None fall in the last 12 months (older credit notes, or a date issue)", then
-   the 8 are older than 12 months or have a date problem - and we'll know instantly.
+But the diagnostic line still shows the OLD text (no "Avg = N days") and the headline
+is a dash. The "(v3)" marker and the "Avg =" text came from the SAME page edit - so
+if (v3) shows, the page is current. The only way "Avg =" is missing AND the headline
+is blank is if the value it reads (overallAvgDaysBeyondTerms) is undefined.
 
-FILE (single EDIT - no new files)
----------------------------------
-  - pages/commercial-scorecard.js
+That value comes from a DIFFERENT file: the API, pages/api/commercial-metrics.js.
+Conclusion: previous commits updated the PAGE but NOT the API file. The API is still
+running an old version without overallAvgDaysBeyondTerms.
 
-DEPLOY
-------
-Replace the file. Commit -> wait for Vercel "Ready" -> HARD-refresh the Scorecard.
+=> The fix is simply to deploy pages/api/commercial-metrics.js. It clearly wasn't
+included in the last commit(s).
 
-WHAT TO CHECK / SEND BACK
--------------------------
-Look at the diagnostic line under Payless Notices:
-  - "By month: <Mon>: N, ..."  -> those months should now show bars/points on the
-    line graph. If they do, we're done.
-  - "None fall in the last 12 months ..."  -> the 8 credit notes are older than 12
-    months (or mis-dated). Tell me and I'll widen the window or check the dates.
+HOW TO CONFIRM IT THIS TIME
+---------------------------
+I added version markers to BOTH files so you can see each independently:
+  - PAGE marker: card title "Average Days Beyond Terms (v3)"  (already live)
+  - API marker : the diagnostic line now starts with "[API: metrics-v3] ..."
+    If after deploying it says "[API: OLD - not deployed]", the API file STILL didn't
+    go up - re-check that pages/api/commercial-metrics.js was actually committed.
 
-NOTE: still confirm the Average Days card shows "(v3)" so we know the build is live
-(from the previous notes) - if it doesn't, the deploy isn't taking effect and that
-must be resolved first, as it affects this card too.
+FILES (both EDITS - no new files). The API one is the important one this round:
+  - pages/api/commercial-metrics.js   <-- MUST be committed (this is what was missing)
+  - pages/commercial-scorecard.js     (adds the [API: ...] marker; also has the
+                                        earlier Payless per-month window fix)
+
+DEPLOY - be deliberate about the API file
+-----------------------------------------
+1. In GitHub, open pages/api/commercial-metrics.js and replace it with the version in
+   this zip. CONFIRM the commit shows this file changed.
+2. Replace pages/commercial-scorecard.js too.
+3. Wait for Vercel "Ready", hard-refresh the Scorecard.
+
+EXPECTED AFTER DEPLOY
+---------------------
+  - Diagnostic line begins "[API: metrics-v3] Of 152 invoice lines: ... 93 qualify.
+    Avg = N days beyond terms."
+  - The big headline shows that N ("+N days late" / "N days early" / "On terms").
+If you still see "[API: OLD - not deployed]", the API file didn't commit - that's the
+whole problem, and nothing on this card will change until it does.
 
 BUILD
 -----

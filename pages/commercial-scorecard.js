@@ -674,6 +674,7 @@ export default function CommercialScorecard() {
                     <div style={{ fontSize: 10, color: metrics?.paymentDiag?.qualifiedPaidInvoices ? '#aaa' : '#b45309', marginBottom: 2, lineHeight: 1.5 }}>
                       {metrics?.paymentDiag ? (
                         <>
+                          [API: {metrics.paymentDiag.apiVersion || 'OLD - not deployed'}]{' '}
                           Of {metrics.paymentDiag.totalInvoiceLines} invoice lines:
                           {' '}{metrics.paymentDiag.withFullyPaidOnDate} have a paid-on date,
                           {' '}{metrics.paymentDiag.withDueDate} have a due date,
