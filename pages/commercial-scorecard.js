@@ -438,7 +438,7 @@ export default function CommercialScorecard() {
                 {renderCard({
                   key: 'gpMargin',
                   label: 'Gross Profit Margin',
-                  sub: 'Live & in-progress projects only',
+                  sub: metrics?.gpMarginMonth ? `In-progress projects · at ${monthLabel(metrics.gpMarginMonth)} valuation (EOM basis)` : 'In-progress projects only',
                   value: metrics?.gpMargin,
                   format: pct,
                   target: targets.gpMargin,

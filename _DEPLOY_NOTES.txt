@@ -1,35 +1,36 @@
-Commercial Scorecard — Payless Notices = credit notes (adjustable + drill)
-==========================================================================
+Commercial Scorecard — Gross Margin now matches the EOM report
+==============================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
-Deploy AFTER the credit-notes sync fix (so credit notes exist in invoiced:lines).
 
-WHAT CHANGED
-------------
-Payless Notices now = the number of CREDIT NOTES applied, counted by month. Every
-credit note is one payless notice (previously it was underpayments / a flag).
+WHY THEY DIDN'T MATCH
+---------------------
+The Scorecard's Gross Profit Margin used each project's ALL-TIME grossInvoiced and
+totalCosts. The EOM report uses figures UP TO the selected month's valuation date.
+Different periods -> different margin.
 
-• The card shows the ADJUSTED total across months (with "N raw" underneath when any
-  month has been manually adjusted).
-• Click the card to open a month-by-month view. For each month it shows the raw credit
-  note count and an editable "counts as" number so you can adjust it (e.g. 7 raw ->
-  4 because 3 were minor). Save persists it; Reset clears back to the raw count.
-• Under each month, the credit notes that make up the number are listed: project
-  (job no + name), credit note number, the invoice it was applied to, date and amount.
-• The trend sparkline uses the adjusted monthly count.
+THE FIX
+-------
+The Scorecard now computes Gross Profit Margin on the EOM basis for the LAST FULL
+MONTH, over in-progress projects only:
+  • For each in-progress project, it finds the valuation date for the last completed
+    month (per-month override, else the fixed valuation day).
+  • Sums costs and account-200 invoiced UP TO that valuation date (reading the same
+    costs:lines / invoiced:lines as EOM).
+  • Gross Margin = (Σ invoiced − Σ costs) / Σ invoiced   (pooled, same as EOM totals).
+Projects with no valuation date for that month are excluded (they aren't in the EOM
+snapshot either).
 
-DATA
-----
-• Reads credit notes from invoiced:lines:{id} (creditNote flag) per live project.
-• Manual monthly adjustments saved to config:payless-adjustments  { 'YYYY-MM': count }.
-• POST /api/commercial-metrics { month, adjusted } saves an adjustment (adjusted=null
-  clears it).
+The card sub-text now shows the month it reflects, e.g. "at June 2025 valuation (EOM
+basis)".
 
 FILES
 -----
-• pages/api/commercial-metrics.js   (credit-note payless + per-month counts + POST)
-• pages/commercial-scorecard.js     (adjusted card value, PaylessModal drill + editor)
+• pages/api/commercial-metrics.js   (EOM-basis gross margin, last full month)
+• pages/commercial-scorecard.js     (card sub-text shows the month)
 
-NOTE: "Applied to invoice" shows if that link is stored on the credit note; some Xero
-credit notes don't carry an allocation reference, in which case it shows the CN number
-/ reference only.
+TO VERIFY
+---------
+Open the EOM report for the last full month (in-progress projects) and compare its
+total gross margin to the Scorecard GP Margin card — they should now agree. Both read
+the same cost/invoice lines, so ensure syncs are up to date.

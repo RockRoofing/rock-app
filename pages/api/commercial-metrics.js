@@ -63,10 +63,40 @@ export default async function handler(req, res) {
       } catch {}
     }
 
-    // ── GP Margin by month ────────────────────────────────────────────────
-    // Average across all live projects — same as scorecard card
-    const totalGrossInvoiced = projects.reduce((s, p) => s + (p.grossInvoiced || 0), 0)
-    const totalCosts = projects.reduce((s, p) => s + (p.totalCosts || 0), 0)
+    // ── GP Margin (EOM basis, last full month) ────────────────────────────
+    // Match the EOM report: margin at the LAST COMPLETED month's valuation date,
+    // over in-progress projects only. costsToDate / grossInvoiced are summed up to
+    // each project's valuation date for that month — NOT all-time.
+    const nowD = new Date()
+    const lastFull = new Date(nowD.getFullYear(), nowD.getMonth() - 1, 1)
+    const eomYear = lastFull.getFullYear()
+    const eomMonth = lastFull.getMonth() + 1              // 1-12
+    const eomMonthKey = `${eomYear}-${String(eomMonth).padStart(2, '0')}`
+    const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
+
+    let eomGross = 0, eomCosts = 0
+    for (const p of projects) {
+      // Valuation date for the last full month: per-month override wins, else the
+      // fixed valuation day applied to that month.
+      let vStr = null
+      const ov = p.dateOverrides?.[eomMonthKey]?.valuationDate
+      if (ov) vStr = ov
+      else if (p.valuationDay) {
+        const dim = new Date(eomYear, eomMonth, 0).getDate()
+        const day = Math.min(parseInt(p.valuationDay), dim)
+        vStr = new Date(Date.UTC(eomYear, eomMonth - 1, day)).toISOString().split('T')[0]
+      }
+      if (!vStr) continue   // no valuation date this month -> not part of the EOM snapshot
+      // Read lines straight from Redis (same source as the WIP/EOM calc).
+      const cLines = (await redis.get(`costs:lines:${p.xeroId}`).catch(() => null)) || p._costLines || []
+      const iLines = (await redis.get(`invoiced:lines:${p.xeroId}`).catch(() => null)) || p._invoiceLines || []
+      const costsToDate = cLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + (l.amount || 0), 0)
+      const grossInvoicedToDate = iLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + invVal(l), 0)
+      eomGross += grossInvoicedToDate
+      eomCosts += costsToDate
+    }
+    const totalGrossInvoiced = eomGross
+    const totalCosts = eomCosts
     const gpMargin = totalGrossInvoiced > 0 ? (totalGrossInvoiced - totalCosts) / totalGrossInvoiced : null
     const gpProfit = totalGrossInvoiced - totalCosts
 
@@ -137,6 +167,7 @@ export default async function handler(req, res) {
     res.json({
       gpMargin,
       gpProfit,
+      gpMarginMonth: eomMonthKey,
       totalGrossInvoiced,
       totalCosts,
       liveProjectCount: projects.length,
