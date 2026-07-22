@@ -44,8 +44,8 @@ function rag(actual, target, mode = 'normal') {
 }
 
 // Modal for drill-down details
-function DrillModal({ title, rows, columns, onClose }) {
-  if (!rows || rows.length === 0) return null
+function DrillModal({ title, rows, columns, onClose, allowEmpty }) {
+  if ((!rows || rows.length === 0) && !allowEmpty) return null
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12 }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', fontSize: 12, borderBottom: '1px solid #e1e0d9', whiteSpace: 'nowrap' }
   return (
@@ -61,6 +61,9 @@ function DrillModal({ title, rows, columns, onClose }) {
               <tr>{columns.map(c => <th key={c.key} style={{ ...thS, textAlign: c.right ? 'right' : 'left' }}>{c.label}</th>)}</tr>
             </thead>
             <tbody>
+              {(!rows || rows.length === 0) && (
+                <tr><td colSpan={columns.length} style={{ ...tdS, textAlign: 'center', color: '#aaa', padding: 24 }}>No projects to show. If the Scorecard number is non-zero but this is empty, tell me — it points to where the mismatch is.</td></tr>
+              )}
               {rows.map((row, i) => (
                 <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#fafaf9' }}>
                   {columns.map(c => (
@@ -379,7 +382,7 @@ export default function CommercialScorecard() {
     <>
       <Head><title>Rock Roofing — Commercial Scorecard</title></Head>
       <div style={{ ...s, minHeight: '100vh', background: '#f0f2f5' }}>
-        {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} onClose={() => setModal(null)} />}
+        {modal && <DrillModal title={modal.title} rows={modal.rows} columns={modal.columns} allowEmpty={modal.allowEmpty} onClose={() => setModal(null)} />}
         {paylessOpen && <PaylessModal
           byMonth={metrics?.paylessByMonth || {}}
           countByMonth={metrics?.paylessCountByMonth || {}}
@@ -457,6 +460,12 @@ export default function CommercialScorecard() {
                   drillData: metrics?.gpBreakdown || [],
                   drillColumns: gpColumns,
                   drillTitle: metrics?.gpMarginMonth ? `Gross Margin breakdown — ${monthLabel(metrics.gpMarginMonth)} (in-progress)` : 'Gross Margin breakdown',
+                  onOpen: () => setModal({
+                    title: metrics?.gpMarginMonth ? `Gross Margin breakdown — ${monthLabel(metrics.gpMarginMonth)} (in-progress)` : 'Gross Margin breakdown',
+                    rows: metrics?.gpBreakdown || [],
+                    columns: gpColumns,
+                    allowEmpty: true,
+                  }),
                   extra: metrics && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
                       <div>Profit: <strong>{fmt(metrics.gpProfit)}</strong></div>

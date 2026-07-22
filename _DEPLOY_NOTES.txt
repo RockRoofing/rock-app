@@ -1,21 +1,31 @@
-Scorecard — GP Margin card no longer overflows (target + indicator clipped)
-===========================================================================
+Scorecard — GP Margin card breakdown always opens
+=================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
 Single file: pages/commercial-scorecard.js
 
-ISSUE
------
-The scorecard cards had a FIXED height (210px). The Gross Profit Margin card has extra
-content (Profit / Invoiced / Costs lines + a longer sub-heading), which pushed the
-Target control and the RAG indicator (the coloured dot) below the fixed height — so
-they sat outside the card and were hidden by the card below.
+WHY YOU SAW NO BREAKDOWN
+------------------------
+The GP Margin card opened the generic drill modal, which returned nothing when the
+breakdown list was empty (or if the click didn't register as a drill). So clicking
+appeared to do nothing.
 
 FIX
 ---
-Cards now use minHeight instead of a fixed height, so a card grows to fit its content.
-The Target row and indicator stay inside the GP Margin card; other cards are unchanged
-(they keep the same minimum height).
+• Clicking the Gross Profit Margin card now ALWAYS opens the breakdown modal.
+• If the breakdown is empty, it shows a message instead of silently doing nothing.
+• The breakdown lists, per in-progress project for the last full month:
+  Project, Project Name, Valuation Date (or "— (excluded)"), Invoiced, Costs, Margin.
+
+HOW TO SEND ME THE NUMBERS
+--------------------------
+1. Open the Commercial Scorecard, click the Gross Profit Margin card -> the breakdown
+   opens.
+2. Screenshot it (or copy the rows).
+3. Open the EOM report (Project Financials, EOM mode) for the SAME month, in-progress,
+   and screenshot the equivalent columns.
+4. Send both. Rows where Invoiced/Costs differ, or projects shown "excluded" here but
+   present in EOM, will pinpoint the cause.
 
 FILES
 -----
