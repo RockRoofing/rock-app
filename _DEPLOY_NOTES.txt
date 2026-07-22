@@ -1,39 +1,47 @@
-DEPLOY NOTES - Budgets page crash: error boundary to reveal the real error
-==========================================================================
+DEPLOY NOTES - Budgets page crash FIXED (React #310, hooks order)
+=================================================================
 
-WHAT HAPPENED
--------------
-After syncing Xero you got "Application error: a client-side exception has occurred".
-That is a React render crash on the Budgets page. The generic message hides the real
-cause, and I can't see your browser console from here - so this build wraps the page
-in an ERROR BOUNDARY. Instead of a white screen, it will now show the ACTUAL error
-message on the page (red box), which tells us exactly what to fix.
-
-I have NOT added the new features you requested (reconciliation checkbox, forecast
-lock-in cards, 3-month-average card, bar chart) yet - building them onto a crashing
-page would compound the problem. Let's fix the crash first, then I'll add them.
-
-WHAT TO DO
+ROOT CAUSE
 ----------
-1. Deploy this file (single edit), wait for Vercel "Ready", hard-refresh the page.
-2. If it now shows a RED error box with a message, copy that message to me. That one
-   line will pinpoint the cause and I'll fix it precisely.
-3. If instead the page now loads fine (the boundary can also recover transient
-   states), great - tell me and we proceed to the new features.
+React error #310 = "rendered more hooks than during the previous render". The page's
+totals useMemo was placed AFTER the early `if (!ok) return null` auth gate. On the
+first render (before auth resolves) that hook didn't run; once authed it did - one
+more hook than before -> crash. This was my mistake when I added the totals row, and
+it breaks the rule in our own notes: ALL hooks must be before any early return. It was
+not caused by the sync data - the page would crash regardless; the sync just happened
+to be when you reloaded.
 
-Also useful if you can: open the browser console (F12 -> Console) after the sync and
-paste the first red error line - it often names the exact file/line.
-
-LIKELY SUSPECTS (so you know what I'm looking for)
---------------------------------------------------
-The crash started after the sync populated 13 months + the transaction ledger, so
-it's probably an unexpected data shape from the benchmark or ledger reaching the
-render. The boundary will confirm which.
+THE FIX
+-------
+Moved the totals useMemo (and the visibleAccounts / completedFyMonths derivations it
+uses) ABOVE the `if (!ok) return null`. All hooks now run on every render. The error
+boundary added last time stays in (harmless; it will now simply never trigger for this).
 
 FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/business-financials/budgets.js  (adds an error boundary; no behaviour change)
+  - pages/business-financials/budgets.js
+
+DEPLOY
+------
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
+
+VERIFY
+------
+The Budgets page loads normally (no red box, no white screen). Dec/Jan and all months
+render; the frozen header + totals row, full-width table, gear hide-persist, colours,
+summary columns and cell drill-down all work as before.
+
+NEXT
+----
+With the page stable, I'll build the features you asked for:
+  - Reconciliation checkbox (all categories vs visible; red on mismatch, green on match)
+  - Forecast lock-in cards (lock a forecast, view history + dates)
+  - Last-3-months-average overheads card
+  - Forecasted overheads for the year card (actuals + future forecast)
+  - Actual/forecast bar chart (blue actual, grey forecast beside it, light-blue future)
+Say go and I'll add them now that the crash is resolved.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". Confirmed all hooks precede
+the early return.

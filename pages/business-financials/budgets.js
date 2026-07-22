@@ -214,9 +214,9 @@ function Budgets() {
     persistHidden([...s])
   }
 
-  if (!ok) return null
+  // NOTE: all hooks (incl. this useMemo) MUST be above the early return below,
+  // or React throws error #310 (rendered more hooks than previous render).
   const visibleAccounts = accounts.filter(a => !hiddenSet.has(String(a.code)))
-
   // How many months of THIS FY are complete (for the to-date summary columns).
   const completedFyMonths = months.filter(isComplete)
   const nCompleted = completedFyMonths.length
@@ -248,6 +248,8 @@ function Budgets() {
     return t
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleAccounts, months, budgets, forecastMethods, forecastOverrides, actualsByCode, availableSet])
+
+  if (!ok) return null
 
   return (
     <>
