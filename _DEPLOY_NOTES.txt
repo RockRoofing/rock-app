@@ -1,49 +1,48 @@
-DEPLOY NOTES - Average Days Beyond Terms: data is fine, fixing the headline display
-===================================================================================
+DEPLOY NOTES - Confirm the build is live (v3 marker) - do NOT sync
+==================================================================
 
-WHAT THE DIAGNOSTIC TOLD US (good news)
----------------------------------------
-Your card showed: "Of 152 invoice lines: 93 have a paid-on date, 144 have a due
-date, 136 read as paid, 93 QUALIFY."
+IMPORTANT: You do NOT need to sync invoices. The diagnostic already showed 93
+invoices qualify with paid dates present - the data is fine. The card you saw was
+still running the OLD code (it lacked the "Avg = N days" text the fix adds), which
+means the previous deploy didn't take effect in the browser/build.
 
-So the paid dates ARE in the data and 93 invoices are being measured. This was never
-an empty-data problem - the earlier fixes worked. The card just wasn't showing the
-headline number cleanly (the big figure area looked blank while the small "Avg"
-line showed "On terms").
+WHAT THIS BUILD ADDS
+--------------------
+A visible version marker: the card is now titled
+   "Average Days Beyond Terms (v3)"
+So you can confirm at a glance which build is live. If after deploying + hard-refresh
+the title does NOT say "(v3)", the deploy/caching is the problem (not the data).
 
-THE FIX
--------
-1. The API now computes ONE authoritative overall average across all 93 qualifying
-   invoices (all months pooled) and returns it as
-   paymentDiag.overallAvgDaysBeyondTerms.
-2. The card headline now reads that single value directly, instead of re-deriving it
-   from the monthly buckets (which is what caused the headline/avg mismatch).
-3. The diagnostic line now also prints the computed average, e.g.
-   "... 93 qualify. Avg = 2 days beyond terms." - so the number is visible and
-   verifiable at a glance.
+It also (re)includes the display fix from the last build:
+  - API returns paymentDiag.overallAvgDaysBeyondTerms (one authoritative average).
+  - Headline reads that value directly.
+  - Diagnostic line prints "... 93 qualify. Avg = N days beyond terms."
 
-Value formatting (unchanged, already correct): positive = "+N days late",
-negative = "N days early", zero = "On terms".
-
-NOTE: if the true average really is ~0, the headline will legitimately read
-"On terms" - that's a real result (on average you're paying on terms), not a bug.
-The diagnostic line's "Avg = N days" now makes that explicit.
-
-FILES (both EDITS - no new files)
----------------------------------
+FILES (both EDITS - no new files). BOTH must go up together:
   - pages/api/commercial-metrics.js
   - pages/commercial-scorecard.js
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel auto-deploys. Hard-refresh the Scorecard.
+1. Replace BOTH files in GitHub. Commit.
+2. In the Vercel dashboard, wait until the new deployment shows "Ready".
+3. HARD-refresh the Scorecard (Ctrl/Cmd + Shift + R), or open in a private window.
 
-VERIFY
-------
-The Average Days Beyond Terms card should now show a clear headline (e.g.
-"+2 days late" or "On terms") AND the grey diagnostic line should read
-"... 93 qualify. Avg = N days beyond terms." Click the card to see the per-invoice
-Due Date / Paid Date / Days +/- Terms breakdown for all 93.
+THEN CHECK
+----------
+  - Card title should read "Average Days Beyond Terms (v3)". If it doesn't, the new
+    build isn't being served - check Vercel shows the latest commit as Ready, and
+    that BOTH files were committed. Syncing will NOT fix a stale build.
+  - Once (v3) shows: the grey line should read "... 93 qualify. Avg = N days beyond
+    terms." Tell me that N, or click the card and screenshot a few rows of the
+    per-invoice Due Date / Paid Date / Days +/- Terms.
+
+WHY "ON TERMS" MIGHT BE REAL (or not)
+-------------------------------------
+93 invoices averaging ~0 days is possible but worth checking. Once (v3) is live and
+we can see "Avg = N", if the per-invoice column shows a realistic spread (some +20,
+some -5) the average is genuine. If many rows show exactly 0, that points to a
+dueDate/terms data issue in Xero (e.g. due date = invoice date) and I'll chase it.
 
 BUILD
 -----

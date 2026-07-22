@@ -636,7 +636,7 @@ export default function CommercialScorecard() {
                 {/* 4. Average Days Beyond Terms (paid vs due date) */}
                 {renderCard({
                   key: 'avgPaymentDays',
-                  label: 'Average Days Beyond Terms',
+                  label: 'Average Days Beyond Terms (v3)',
                   sub: 'Paid date minus due date (+ late / - early)',
                   value: metrics?.paymentDiag?.overallAvgDaysBeyondTerms ?? null,
                   format: v => v == null ? '-' : (v > 0 ? `+${v} days late` : v < 0 ? `${Math.abs(v)} days early` : 'On terms'),
