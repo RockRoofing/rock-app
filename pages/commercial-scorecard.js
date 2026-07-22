@@ -335,15 +335,17 @@ export default function CommercialScorecard() {
     )
   }
 
-  // Gross Margin trend from Xero P&L: last 6 completed months, rolling, live.
-  // grossMargin is a 0-1 fraction; the card formats as a percentage.
-  const gpTrend = (xeroGM?.months || []).map(m => ({
-    month: m.label,
+  // Gross Margin trend from Xero P&L: 6 TRAILING-12-MONTH rolling points, so the
+  // line matches the headline basis and isn't distorted by accrual-timing swings in
+  // any single month. grossMargin is a 0-1 fraction; the card formats as a %.
+  const gpTrend = (xeroGM?.rollingTrend || []).map(m => ({
+    month: m.month,
     value: m.grossMargin != null ? m.grossMargin * 100 : null,
   }))
-  // Headline value = the most recent completed month's Gross Margin (fraction).
-  const gpLatest = xeroGM?.latestGrossMargin ?? null
-  const gpLatestLabel = xeroGM?.latest?.label || null
+  // Headline value = the TRAILING 12-MONTH Gross Margin (rolling annual figure).
+  const gpTrailing = xeroGM?.trailing12 || null
+  const gpLatest = gpTrailing?.grossMargin ?? null
+  const gpRangeLabel = gpTrailing?.rangeLabel || null
 
   const paylessTrend = displayMonths.map(m => ({
     month: monthLabel(m),
@@ -509,66 +511,87 @@ export default function CommercialScorecard() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                {/* 1. Gross Margin - live from Xero P&L (last 6 completed months, rolling) */}
+                {/* 1. Gross Margin - live from Xero P&L, trailing 12-month rolling */}
                 {renderCard({
                   key: 'gpMargin',
                   label: 'Gross Margin',
                   sub: xeroGMLoading
                     ? 'Loading from Xero...'
-                    : (gpLatestLabel ? `From Xero P&L - ${gpLatestLabel} (last full month) - 6-mo trend` : 'From Xero P&L'),
+                    : (gpRangeLabel ? `Trailing 12 months (${gpRangeLabel}) - from Xero P&L` : 'Trailing 12 months - from Xero P&L'),
                   value: gpLatest,
                   format: pct,
                   target: targets.gpMargin,
                   trendData: gpTrend,
-                  showAvg: true,
+                  showAvg: false,
                   drillData: xeroGM?.months || [],
                   drillColumns: gmXeroColumns,
-                  drillTitle: 'Gross Margin from Xero - last 6 completed months',
+                  drillTitle: 'Gross Margin from Xero - trailing 12 months',
                   onOpen: () => setModal({
-                    title: 'Gross Margin from Xero - last 6 completed months',
+                    title: 'Gross Margin from Xero - trailing 12 months',
                     rows: (xeroGM?.months || []).slice().reverse(),  // newest first in the table
                     columns: gmXeroColumns,
                     allowEmpty: true,
-                    footer: xeroGM?.latest ? (
-                      <div style={{ marginTop: 14, borderTop: '1px solid #eee', paddingTop: 10 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
-                          Per-code breakdown - {xeroGM.latest.label} (diagnostic)
-                        </div>
-                        <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
-                          How each P&L code was tagged. Sales counts 'sales'; Total Costs counts
-                          'labour' + 'materials'. Overheads and uncategorised are excluded. If the
-                          margin looks wrong, a code here is tagged wrong in Account Categorisation.
-                          {' '}Xero raw section totals: Income {fmt(xeroGM.latest.xeroIncomeTotal)},
-                          {' '}Cost of Sales {fmt(xeroGM.latest.xeroCostOfSalesTotal)},
-                          {' '}Overheads {fmt(xeroGM.latest.xeroOverheadsTotal)}.
-                        </div>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                          <thead>
-                            <tr style={{ textAlign: 'left', color: '#888' }}>
-                              <th style={{ padding: '4px 6px' }}>Code</th>
-                              <th style={{ padding: '4px 6px' }}>Tagged As</th>
-                              <th style={{ padding: '4px 6px' }}>Xero Section</th>
-                              <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(xeroGM.latest.codeRows || []).map(r => (
-                              <tr key={r.code} style={{ borderTop: '1px solid #f2f2f2' }}>
-                                <td style={{ padding: '4px 6px' }}>{r.code}</td>
-                                <td style={{ padding: '4px 6px', color: (r.category === 'uncategorised' || r.category === 'overheads') ? '#b45309' : '#1a1a19' }}>{r.category}</td>
-                                <td style={{ padding: '4px 6px', color: '#999' }}>{r.plSection || '-'}</td>
-                                <td style={{ padding: '4px 6px', textAlign: 'right' }}>{fmt(r.amount)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    footer: (
+                      <div>
+                        {gpTrailing && (
+                          <div style={{ marginTop: 14, borderTop: '2px solid #ddd', paddingTop: 10 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                              Trailing 12-month total{gpTrailing.rangeLabel ? ` (${gpTrailing.rangeLabel})` : ''}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#555', lineHeight: 1.7 }}>
+                              Sales: <strong>{fmt(gpTrailing.sales)}</strong> &nbsp;|&nbsp;
+                              Total Costs: <strong>{fmt(gpTrailing.directCosts)}</strong> (Labour {fmt(gpTrailing.labour)} + Materials {fmt(gpTrailing.materials)}) &nbsp;|&nbsp;
+                              Gross Profit: <strong>{fmt(gpTrailing.grossProfit)}</strong> &nbsp;|&nbsp;
+                              Gross Margin: <strong>{gpTrailing.grossMargin != null ? (gpTrailing.grossMargin * 100).toFixed(1) + '%' : '-'}</strong>
+                            </div>
+                            <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>
+                              Overheads excluded. Based on {gpTrailing.monthsIncluded} completed months.
+                            </div>
+                          </div>
+                        )}
+                        {xeroGM?.latest && (
+                          <div style={{ marginTop: 14, borderTop: '1px solid #eee', paddingTop: 10 }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>
+                              Per-code breakdown - {xeroGM.latest.label} (diagnostic)
+                            </div>
+                            <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
+                              How each P&L code was tagged for the latest month. Sales counts 'sales';
+                              Total Costs counts 'labour' + 'materials'. Overheads and uncategorised are
+                              excluded. If the margin looks wrong, a code here is tagged wrong in Account
+                              Categorisation.
+                              {' '}Xero raw section totals: Income {fmt(xeroGM.latest.xeroIncomeTotal)},
+                              {' '}Cost of Sales {fmt(xeroGM.latest.xeroCostOfSalesTotal)},
+                              {' '}Overheads {fmt(xeroGM.latest.xeroOverheadsTotal)}.
+                            </div>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                              <thead>
+                                <tr style={{ textAlign: 'left', color: '#888' }}>
+                                  <th style={{ padding: '4px 6px' }}>Code</th>
+                                  <th style={{ padding: '4px 6px' }}>Tagged As</th>
+                                  <th style={{ padding: '4px 6px' }}>Xero Section</th>
+                                  <th style={{ padding: '4px 6px', textAlign: 'right' }}>Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(xeroGM.latest.codeRows || []).map(r => (
+                                  <tr key={r.code} style={{ borderTop: '1px solid #f2f2f2' }}>
+                                    <td style={{ padding: '4px 6px' }}>{r.code}</td>
+                                    <td style={{ padding: '4px 6px', color: (r.category === 'uncategorised' || r.category === 'overheads') ? '#b45309' : '#1a1a19' }}>{r.category}</td>
+                                    <td style={{ padding: '4px 6px', color: '#999' }}>{r.plSection || '-'}</td>
+                                    <td style={{ padding: '4px 6px', textAlign: 'right' }}>{fmt(r.amount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
-                    ) : null,
+                    ),
                   }),
-                  extra: !xeroGMLoading && xeroGM?.latest && (
+                  extra: !xeroGMLoading && gpTrailing && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
-                      <div>Gross Profit ({xeroGM.latest.label}): <strong>{fmt(xeroGM.latest.grossProfit)}</strong></div>
-                      <div style={{ color: '#aaa', fontSize: 10 }}>Sales: {fmt(xeroGM.latest.sales)} - Costs: {fmt(xeroGM.latest.directCosts)} (Labour {fmt(xeroGM.latest.labour)} + Materials {fmt(xeroGM.latest.materials)}) - overheads excl.</div>
+                      <div>Gross Profit (12-mo): <strong>{fmt(gpTrailing.grossProfit)}</strong></div>
+                      <div style={{ color: '#aaa', fontSize: 10 }}>Sales: {fmt(gpTrailing.sales)} - Costs: {fmt(gpTrailing.directCosts)} (Labour {fmt(gpTrailing.labour)} + Materials {fmt(gpTrailing.materials)}) - overheads excl.</div>
                     </div>
                   ),
                 })}

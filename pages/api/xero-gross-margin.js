@@ -3,8 +3,8 @@ import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap } from '../../lib/xero'
 import { normCategory, defaultCategoryFor } from './account-categorisation'
 
-// Live Gross Margin straight from Xero's Profit & Loss, for the last 6 COMPLETED
-// months (rolling).
+// Live Gross Margin straight from Xero's Profit & Loss, as a TRAILING 12-MONTH
+// rolling figure (the last 12 fully completed months).
 //
 // The split is driven ENTIRELY by the Account Categorisation tab
 // (config:account-categorisation) - NOT by Xero's own P&L section grouping. Every
@@ -73,9 +73,14 @@ export default async function handler(req, res) {
 
     const now = new Date()
     const months = []
-    // k = 6..1 => the last 6 FULLY COMPLETED calendar months (excludes the current,
-    // in-progress month). On any day in September this yields Mar..Aug.
-    for (let k = 6; k >= 1; k--) {
+    // We want 6 TRAILING-12-MONTH rolling points for the trend. The earliest point
+    // needs the 12 months before it, so we fetch 17 completed months in total
+    // (17 = 12 + 6 - 1). Each month is fetched ONCE; the rolling windows are then
+    // computed in memory - no duplicate fetches.
+    const TREND_POINTS = 6
+    const WINDOW = 12
+    const MONTHS_TO_FETCH = WINDOW + TREND_POINTS - 1   // 17
+    for (let k = MONTHS_TO_FETCH; k >= 1; k--) {
       const d = new Date(now.getFullYear(), now.getMonth() - k, 1)
       const y = d.getFullYear()
       const m = d.getMonth()                       // 0-11
@@ -136,15 +141,58 @@ export default async function handler(req, res) {
       }
     }
 
-    // Latest = most recent completed month that actually returned a margin.
-    const withMargin = months.filter(mo => mo.grossMargin != null)
-    const latest = withMargin.length ? withMargin[withMargin.length - 1] : null
+    // months[] now holds up to 17 completed months, oldest -> newest.
+    const okAll = months.filter(mo => !mo.error)
+
+    // Helper: sum a slice of months into a trailing-window aggregate.
+    const aggregate = (slice) => {
+      const sales = slice.reduce((s, mo) => s + (mo.sales || 0), 0)
+      const labour = slice.reduce((s, mo) => s + (mo.labour || 0), 0)
+      const materials = slice.reduce((s, mo) => s + (mo.materials || 0), 0)
+      const costs = labour + materials
+      const grossProfit = sales - costs
+      return {
+        sales, labour, materials, directCosts: costs, grossProfit,
+        grossMargin: sales > 0 ? grossProfit / sales : null,
+        monthsIncluded: slice.length,
+        rangeLabel: slice.length ? `${slice[0].label} - ${slice[slice.length - 1].label}` : null,
+      }
+    }
+
+    // -- Headline: trailing 12 months ending the most recent completed month --
+    const last12 = months.slice(-WINDOW)
+    const trailing12 = aggregate(last12.filter(mo => !mo.error))
+
+    // -- Trend: 6 points, each a TRAILING-12-MONTH margin ending that month --
+    // Point i ends at months[end], covering months[end-11 .. end]. Only build a
+    // point when a full 12-month window is available so every point is comparable.
+    const rollingTrend = []
+    for (let end = months.length - 1; end >= WINDOW - 1 && rollingTrend.length < TREND_POINTS; end--) {
+      const windowSlice = months.slice(end - WINDOW + 1, end + 1)
+      const agg = aggregate(windowSlice.filter(mo => !mo.error))
+      rollingTrend.push({
+        month: months[end].label,                    // the month the window ENDS on
+        endMonth: months[end].month,
+        grossMargin: agg.grossMargin,
+        sales: agg.sales,
+        directCosts: agg.directCosts,
+        grossProfit: agg.grossProfit,
+        rangeLabel: agg.rangeLabel,
+      })
+    }
+    rollingTrend.reverse()   // oldest -> newest for the chart
+
+    // Latest single completed month (kept for the per-code diagnostic only).
+    const latest = okAll.length ? okAll[okAll.length - 1] : null
 
     res.json({
-      months,                                       // oldest -> newest
-      latest,                                        // { month, label, grossMargin, ... } | null
+      months,                                       // oldest -> newest (up to 17)
+      trailing12,                                    // rolling-annual headline
+      rollingTrend,                                  // 6 trailing-12 points for the trend
+      latest,                                        // most recent single month (diagnostic)
       latestGrossMargin: latest ? latest.grossMargin : null,
       basis: 'account-categorisation',
+      window: 'trailing-12-months',
       fetchedAt: new Date().toISOString(),
     })
   } catch (e) {

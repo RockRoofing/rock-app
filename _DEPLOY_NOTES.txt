@@ -1,51 +1,59 @@
-DEPLOY NOTES - "Average Time to Get Paid" changed to "Average Days Beyond Terms"
-================================================================================
+DEPLOY NOTES - Gross Margin trend now = rolling trailing-12-month line
+======================================================================
 
-NEW DEFINITION (as requested)
------------------------------
-Per fully-paid sales invoice:
-    daysBeyondTerms = Paid Date (FullyPaidOnDate) - Due Date
-      positive = paid LATE, negative = paid EARLY, 0 = on terms.
-The metric = the AVERAGE of daysBeyondTerms across all qualifying paid invoices.
-Example: 10 invoices each paid 5 days after their due date -> average = +5.
+CONTEXT (what we learned)
+-------------------------
+The wild monthly swings (Jun 6.5%, May -71%, Apr 48%) were NOT a bug. They are
+accrual-timing effects: your WIP journals (code 631, balance-sheet) post against
+code 200 Sales each month-end and auto-reverse the next month, so any single month's
+Sales is inflated or depressed by the WIP accrual. Costs and the matching sale also
+fall in different months. Over a full year this nets out - blended 6 months already
+came to 25.6%, right in the expected 22-27% band.
 
-Changes from before:
-  - Measured against the DUE DATE, not the invoice date.
-  - Early payments (negatives) now COUNT (previously the days<0 filter dropped
-    them, which would have skewed the average).
-  - The headline is a true invoice-weighted average (not an average of monthly
-    averages), so it matches your example exactly.
-  - Sanity window widened to -365..+365 days so early payments are kept.
+Decision: keep WIP as revenue (no code change needed for that - it already flows
+through code 200 on the P&L and nets out over 12 months), and make the TREND show
+the trailing-12 rolling margin so the line reflects the trustworthy figure instead
+of the monthly noise.
 
-CARD BEHAVIOUR
---------------
-  - Label: "Average Days Beyond Terms".
-  - Value shows "+N days late", "N days early", or "On terms".
-  - RAG dot uses lower-is-better: at/below target = green, up to 15 days over =
-    amber, beyond = red. Target defaults to 0 (paid on time); editable.
-  - Trend line plots each month's average (can go negative).
-  - Drill ("Days Beyond Terms - All Paid Invoices") now shows Due Date, Paid Date,
-    and a signed "Days +/- Terms" column per invoice.
+WHAT CHANGED
+------------
+  - Headline: unchanged - trailing 12-month Gross Margin (rolling annual).
+  - Trend line: now 6 points, each a FULL trailing-12-month margin ending that
+    month (was individual monthly margins). The newest trend point equals the
+    headline by construction. No more -71% spikes.
+  - To build 6 rolling-12 points the endpoint now fetches 17 completed months
+    (12 + 6 - 1). Each month is fetched ONCE and the rolling windows are computed
+    in memory - no duplicate calls.
+  - "Avg/mo" line removed from this card (an average of rolling averages would
+    mislead; the headline is already the figure that matters).
+  - The drill still lists the raw monthly detail plus the trailing-12 total and the
+    per-code diagnostic.
 
-DATA USED (all already on the stored invoice lines)
----------------------------------------------------
-dueDate, fullyPaidOnDate, status, amountDue, amountPaid. An invoice counts as paid
-if status is 'PAID' OR nothing is outstanding (amountDue == 0 and amountPaid > 0).
-Credit notes excluded. Scans ALL projects (paid invoices often sit on completed
-jobs). If fullyPaidOnDate is missing on older lines, a re-sync fills it (the on-card
-amber diagnostic will say so, and now also reports how many have a due date).
+SPEED NOTE
+----------
+This now pulls 17 monthly P&L reports from Xero per Scorecard load (~4-5 seconds,
+more API calls). The older months don't change, so if this feels slow we should
+cache them in Redis and only re-fetch the most recent month on each load. Say the
+word and I'll add that - it would cut it to ~1 call most of the time.
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/api/commercial-metrics.js
-  - pages/commercial-scorecard.js
+  - pages/api/xero-gross-margin.js     (17-month fetch + rollingTrend[] + trailing12)
+  - pages/commercial-scorecard.js      (trend uses rollingTrend; showAvg off)
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel auto-deploys. Then open the Scorecard; if the
-card is blank, read the amber diagnostic line (re-sync if it says 0 have a paid-on
-date).
+Replace both files. Commit -> Vercel auto-deploys.
+
+VERIFY
+------
+  - Open the Scorecard. Gross Margin headline shows the rolling annual %; the trend
+    line should be smooth (no big spikes) and its last point should match the
+    headline.
+  - Click the card: the trailing-12 total should reconcile, and the raw monthly rows
+    still show the individual (volatile) months for reference.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". Rolling-window indexing
+unit-checked (6 points, each a full 12-month window; newest window == headline).
