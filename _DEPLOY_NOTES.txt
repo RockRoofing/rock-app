@@ -1,58 +1,70 @@
-DEPLOY NOTES - Fix: "Average Time to Get Paid" showing no data
-==============================================================
+DEPLOY NOTES - Gross Margin now driven by the Account Categorisation tab
+========================================================================
 
-WHY IT WAS BLANK (root cause)
------------------------------
-The metric needs three fields on each stored invoice line: date, status ('PAID'),
-and fullyPaidOnDate. commercial-metrics.js filters:
+WHY IT WAS WRONG
+----------------
+The Gross Margin was using Xero's OWN P&L section grouping (its "Income" and
+"Cost of Sales" section totals) to decide what counts as sales vs cost. That does
+NOT match your Account Categorisation tab. Any account Xero files under Overheads
+(or anywhere other than Cost of Sales) was dropped from costs even if you had
+tagged it Materials/Labour - so costs came out too low and the margin too high.
 
-    inv.fullyPaidOnDate && inv.date && inv.status === 'PAID'
+THE FIX (your instruction: use the Account Categorisation tab as the arbiter)
+-----------------------------------------------------------------------------
+Gross Margin is now computed by bucketing EVERY P&L account code by its category in
+the Account Categorisation tab (config:account-categorisation), using the exact same
+category logic as that page (saved category wins; legacy 'ignore' -> 'overheads';
+otherwise the per-code default):
 
-BUT the main invoice sync (pages/api/sync-invoices.js) that writes invoiced:lines
-NEVER captured fullyPaidOnDate - the line object had date, dueDate, status,
-amountPaid, amountDue, but no fullyPaidOnDate. So inv.fullyPaidOnDate was always
-undefined, the filter matched zero invoices, and the card showed nothing.
+    Total Sales  = sum of codes categorised 'sales'
+    Total Costs  = sum of codes categorised 'labour' + 'materials'
+    (overheads and uncategorised are EXCLUDED)
+    Gross Profit = Total Sales - Total Costs
+    Gross Margin = Gross Profit / Total Sales
 
-(Note: pages/api/cron/wip-sync.js already maps this field correctly as
-`fullyPaidOnDate: inv.FullyPaidOnDate`, which confirms the correct Xero field name
-is FullyPaidOnDate. The main sync-invoices.js was just missing it.)
+So the formula is: (Total Sales - (Total Labour + Total Materials)) / Total Sales.
 
-THE FIX
--------
-1. pages/api/sync-invoices.js
-   - Sales invoice lines now capture: fullyPaidOnDate: full.FullyPaidOnDate || null
-   - Credit-note lines intentionally do NOT get this field (a credit note is not
-     "getting paid").
+Whatever you tag in the Account Categorisation tab now directly drives the number.
+Re-tag an account there and the Gross Margin updates on the next Scorecard load.
 
-2. pages/api/commercial-metrics.js
-   - paidInvoices filter now also excludes credit notes explicitly
-     (&& !inv.creditNote) so they can never skew the average.
+Credit notes: still handled automatically. Xero's P&L is accrual-based and already
+nets sales credit notes into the revenue codes and supplier credit notes into the
+cost codes, so no separate /CreditNotes fetch (that would double count).
 
-FILES (both EDITS, no new files)
---------------------------------
-  - pages/api/sync-invoices.js
-  - pages/api/commercial-metrics.js
+Still: last 6 completed months, rolling, live-fetched from Xero each load. Headline
+= latest completed month. The card drill now shows, per month: Sales, Labour,
+Materials, Total Costs, Gross Profit, Gross Margin.
+
+FILES (both EDITS - no new files this time; xero-gross-margin.js already exists)
+-------------------------------------------------------------------------------
+  - pages/api/xero-gross-margin.js       (rewritten to use categorisation)
+  - pages/commercial-scorecard.js        (drill now shows Labour/Materials split)
 
 HOW TO DEPLOY (GitHub web editor)
 ---------------------------------
 Replace both files at their paths. Commit -> Vercel auto-deploys.
 
-*** IMPORTANT - YOU MUST RE-SYNC AFTER DEPLOYING ***
-The fix only adds the field going forward. Existing stored invoice lines were
-written WITHOUT fullyPaidOnDate, so the card stays blank until you re-sync:
-  1. Deploy both files.
-  2. Go to a Commercial page with the Sync bar (e.g. Project Financials) and run
-     the invoice sync so invoiced:lines are rewritten WITH fullyPaidOnDate.
-  3. Open the Commercial Scorecard - "Average Time to Get Paid" should now show
-     days, with a trend and a clickable drill listing the paid invoices.
+PREREQUISITE - Chart of Accounts must be synced
+-----------------------------------------------
+The categorisation-based split needs each P&L line to carry its account CODE. That
+mapping comes from the Chart of Accounts. If you have already synced the Chart of
+Accounts (Account Categorisation page shows your codes), you are fine. If some P&L
+lines have no code mapping they simply won't be bucketed - so make sure the Chart
+of Accounts is synced and every real P&L account is categorised (not left
+'uncategorised', which is excluded from costs by design).
 
-IF IT'S STILL BLANK AFTER A FULL RE-SYNC
-----------------------------------------
-That would mean Xero's Invoices *list* endpoint isn't returning FullyPaidOnDate
-for your org (it usually does). In that case the next step is to source the field
-the way wip-sync.js does. Tell me and I'll wire that in - but a normal re-sync
-should populate it.
+VERIFY
+------
+  - Open the Commercial Scorecard -> Gross Margin card. Click it.
+  - The table lists 6 months: Sales / Labour / Materials / Total Costs / Gross
+    Profit / Gross Margin.
+  - Cross-check one month: Total Costs should equal the sum of every account you
+    tagged Labour or Materials in the Account Categorisation tab for that month;
+    Sales should equal your Sales-tagged accounts (net of credit notes).
+  - If a figure looks off, it's almost always a mis-tagged account in the
+    Account Categorisation tab - fix it there and reload.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully" for both routes.
+Validated with `next build` -> "Compiled successfully". (Pre-existing unrelated
+import warnings in some backfill/deep-sync routes are untouched.)

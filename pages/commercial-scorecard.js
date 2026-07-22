@@ -347,11 +347,14 @@ export default function CommercialScorecard() {
     value: metrics?.avgPaymentTime?.[m]?.avgDays ?? null,
   }))
 
-  // Gross Margin breakdown drill columns - straight from Xero P&L, per month.
+  // Gross Margin breakdown drill columns - from Xero P&L, categorised via the
+  // Account Categorisation tab, per month.
   const gmXeroColumns = [
     { key: 'label', label: 'Month' },
     { key: 'sales', label: 'Sales', right: true, format: (v) => fmt(v) },
-    { key: 'directCosts', label: 'Direct Costs', right: true, format: (v) => fmt(v) },
+    { key: 'labour', label: 'Labour', right: true, format: (v) => fmt(v) },
+    { key: 'materials', label: 'Materials', right: true, format: (v) => fmt(v) },
+    { key: 'directCosts', label: 'Total Costs', right: true, format: (v) => fmt(v) },
     { key: 'grossProfit', label: 'Gross Profit', right: true, format: (v) => fmt(v) },
     { key: 'grossMargin', label: 'Gross Margin', right: true, format: (v) => v != null ? (v * 100).toFixed(1) + '%' : '-' },
   ]
@@ -521,7 +524,7 @@ export default function CommercialScorecard() {
                   extra: !xeroGMLoading && xeroGM?.latest && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
                       <div>Gross Profit ({xeroGM.latest.label}): <strong>{fmt(xeroGM.latest.grossProfit)}</strong></div>
-                      <div style={{ color: '#aaa', fontSize: 10 }}>Sales: {fmt(xeroGM.latest.sales)} - Direct Costs: {fmt(xeroGM.latest.directCosts)} - overheads excl.</div>
+                      <div style={{ color: '#aaa', fontSize: 10 }}>Sales: {fmt(xeroGM.latest.sales)} - Costs: {fmt(xeroGM.latest.directCosts)} (Labour {fmt(xeroGM.latest.labour)} + Materials {fmt(xeroGM.latest.materials)}) - overheads excl.</div>
                     </div>
                   ),
                 })}
