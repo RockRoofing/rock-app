@@ -257,7 +257,7 @@ export default function CommercialScorecard() {
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
   const CARD_HEIGHT = 210
 
-  function renderCard({ key, label, sub, value, format, target, targetKey, mode, trendData, showAvg, drillData, drillColumns, drillTitle, extra, onOpen }) {
+  function renderCard({ key, label, sub, value, format, avgFormat, target, targetKey, mode, trendData, showAvg, drillData, drillColumns, drillTitle, extra, onOpen }) {
     const color = rag(value, target, mode)
     const isEditing = editingTarget === key
     const hasDrill = onOpen || (drillData && drillData.length > 0)
@@ -296,7 +296,7 @@ export default function CommercialScorecard() {
             {value != null ? format(value) : '—'}
           </div>
           {avgVal != null && (
-            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 2 }}>Avg: {format(avgVal)}/mo</div>
+            <div style={{ fontSize: 11, color: '#aaa', marginBottom: 2 }}>Avg: {(avgFormat || format)(avgVal)}/mo</div>
           )}
           {extra}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 48, width: '100%' }}
@@ -340,7 +340,7 @@ export default function CommercialScorecard() {
   // any single month. grossMargin is a 0-1 fraction; the card formats as a %.
   const gpTrend = (xeroGM?.rollingTrend || []).map(m => ({
     month: m.month,
-    value: m.grossMargin != null ? m.grossMargin * 100 : null,
+    value: m.grossMargin != null ? m.grossMargin : null,   // fraction 0-1; pct() formats it
   }))
   // Headline value = the TRAILING 12-MONTH Gross Margin (rolling annual figure).
   const gpTrailing = xeroGM?.trailing12 || null
@@ -626,6 +626,7 @@ export default function CommercialScorecard() {
                   sub: `Credit notes per month${paylessLatestLabel ? ` - ${paylessLatestLabel}: ${paylessLatestCount}` : ''} (click to view & adjust)`,
                   value: paylessLatestCount,
                   format: v => v,
+                  avgFormat: v => Number(v).toFixed(1),
                   target: targets.paylessNotices,
                   mode: 'lower_better',
                   trendData: paylessTrend,

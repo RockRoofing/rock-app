@@ -1,60 +1,34 @@
-DEPLOY NOTES - ROOT CAUSE FOUND: date parser broke both cards (Payless + Avg Days)
-==================================================================================
+DEPLOY NOTES - Two display fixes: GM tooltip 1930% -> 19.3%, Payless avg to 1 dp
+================================================================================
 
-THE SMOKING GUN
----------------
-Your Payless diagnostic said: "8 total ... By month: Jan 70: 8." All 8 credit notes
-landed in JANUARY 1970. 1970 is the Unix epoch - the tell-tale sign of a broken date
-parse.
+1) GROSS MARGIN GRAPH TOOLTIP showed 1930% instead of 19.3%
+-----------------------------------------------------------
+The trend value was being pre-multiplied by 100 (stored as 19.3), then the tooltip
+formatter pct() multiplied by 100 AGAIN (19.3 -> 1930.0%). Fixed by storing the
+trend value as the raw fraction (0.193) and letting pct() do the single x100. The
+plotted line looks identical (chart auto-scales); only the tooltip is corrected.
+Verified: 0.193 -> "19.3%".
 
-Root cause: parseXeroDate() in commercial-metrics.js did:
-    String(d).match(/\d+/)   // first run of digits
-For a normal ISO date "2026-03-15" that grabs "2026" and builds new Date(2026),
-which is 2026 MILLISECONDS after 1 Jan 1970 = Jan 1970. It only worked for Xero's
-/Date(1710460800000+0000)/ format, not for the plain YYYY-MM-DD dates actually
-stored on the invoice/credit-note lines.
+2) PAYLESS NOTICES average now shows to 1 decimal place
+-------------------------------------------------------
+The "Avg: N/mo" line under Payless Notices now formats to one decimal (e.g.
+"Avg: 0.7/mo"). Added an optional avgFormat to the card renderer so the average can
+format differently from the headline (headline stays a whole number for a month's
+count; the average shows 1 dp). Verified: 0.6667 -> "0.7".
 
-This one bug broke BOTH cards:
-  - Payless: every credit note bucketed into "Jan 1970", so no real month had any ->
-    0 every month, 8 total.
-  - Average Days Beyond Terms: due/paid dates parsed to ~1970 too, so the day
-    differences were nonsense and got filtered out -> headline blank, no "Avg =".
-
-THE FIX
--------
-parseXeroDate() now ONLY extracts the timestamp when the string is genuinely the
-/Date(...)/ format; otherwise it parses the string normally (ISO etc.). Verified:
-  "2026-03-15" -> 2026-03 (correct)
-  "/Date(1710460800000+0000)/" -> 2024-03 (still works)
-  paid 2026-03-06 minus due 2026-03-01 -> 5 days (correct)
-
-Also added:
-  - API marker bumped to "metrics-v4" (diagnostic line shows "[API: metrics-v4]").
-  - Payless diagnostic now reports credit notes with NO valid date, e.g.
-    "3 have no valid date (excluded)", so if any genuinely lack a date we see it.
-
-EXPECTED AFTER DEPLOY
----------------------
-  - Payless Notices: the 8 credit notes now fall in their REAL months; the line
-    graph shows points in those months; the headline shows the latest month's count.
-  - Average Days Beyond Terms: diagnostic reads "[API: metrics-v4] ... 93 qualify.
-    Avg = N days beyond terms." and the headline shows N.
-
-FILES (both EDITS - no new files). The API file is the critical one:
-  - pages/api/commercial-metrics.js   <-- the actual fix; MUST be committed
-  - pages/commercial-scorecard.js     (undated diagnostic text)
+FILE (single EDIT - no new files)
+---------------------------------
+  - pages/commercial-scorecard.js
 
 DEPLOY
 ------
-Replace BOTH files. Confirm in GitHub that commercial-metrics.js shows as changed in
-the commit (this file has repeatedly been the one left behind). Wait for Vercel
-"Ready", hard-refresh.
+Replace the file. Commit -> wait for Vercel "Ready" -> hard-refresh the Scorecard.
 
-CONFIRM
--------
-Diagnostic line must start "[API: metrics-v4]". If it still says v3 (or "OLD"), the
-API file did not deploy again - that is the thing to fix.
+VERIFY
+------
+  - Hover the Gross Margin line: tooltip shows e.g. "19.3%", not "1930%".
+  - Payless Notices "Avg: N/mo" shows one decimal, e.g. "0.7".
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Date logic unit-tested.
+Validated with `next build` -> "Compiled successfully". Both formats unit-checked.
