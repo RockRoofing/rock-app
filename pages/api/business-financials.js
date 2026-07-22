@@ -72,6 +72,7 @@ export default async function handler(req, res) {
       if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
       if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
       if (hiddenRows !== undefined) await redis.set('config:overhead-hidden-rows', hiddenRows || [])
+      if (req.body && req.body.card3moCodes !== undefined) await redis.set('config:overhead-3mo-card-codes', req.body.card3moCodes || [])
       // Lock in a full-year forecast snapshot (kept as a dated history).
       if (lockForecast) {
         const locks = (await redis.get('config:overhead-forecast-locks').catch(() => null)) || []
@@ -87,12 +88,13 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
-    const [budgets, forecastMethods, forecastOverrides, hiddenRows, forecastLocks, chart] = await Promise.all([
+    const [budgets, forecastMethods, forecastOverrides, hiddenRows, forecastLocks, card3moCodes, chart] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),          // { code: amount }  (flat monthly budget)
       redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),  // { code: 1|2|3 }
       redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),// { code: { 'YYYY-MM': amount } }
       redis.get('config:overhead-hidden-rows').then(v => v || []).catch(() => ([])),        // [ code, ... ]
       redis.get('config:overhead-forecast-locks').then(v => v || []).catch(() => ([])),     // [ {lockedAt, fyEnd, total, note} ]
+      redis.get('config:overhead-3mo-card-codes').then(v => v || null).catch(() => null),   // [ code ] or null = all
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
     const chartNames = {}
@@ -141,6 +143,7 @@ export default async function handler(req, res) {
       forecastOverrides,
       hiddenRows,
       forecastLocks,
+      card3moCodes,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
     })
   }

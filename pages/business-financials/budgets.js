@@ -53,11 +53,11 @@ const nowMonthKey = () => {
 // Colour for a completed month's actual vs the monthly budget.
 //   over budget                 -> red
 //   0-15% under budget          -> black
-//   more than 15% under budget  -> orange
+//   more than 15% under budget  -> green
 function cellColour(actual, budget) {
   if (budget == null || budget <= 0) return '#333'
   if (actual > budget) return '#b91c1c'            // red - over
-  if (actual < budget * 0.85) return '#ea580c'     // orange - >15% under
+  if (actual < budget * 0.85) return '#16a34a'     // green - >15% under
   return '#111'                                     // black - within 15% under
 }
 
@@ -78,6 +78,8 @@ function Budgets() {
   const [forecastLocks, setForecastLocks] = useState([])     // [ {lockedAt, fyEnd, total, note} ]
   const [showLockHistory, setShowLockHistory] = useState(false)
   const [reconcile, setReconcile] = useState(false)          // reconciliation checkbox
+  const [card3moCodes, setCard3moCodes] = useState(null)     // [code] included in the custom 3-mo card; null = all
+  const [card3moGear, setCard3moGear] = useState(false)
 
   const [fyEnd, setFyEnd] = useState(() => fyOf(nowMonthKey()))
 
@@ -99,6 +101,7 @@ function Budgets() {
       setForecastOverrides(d.forecastOverrides || {})
       setHiddenRows(d.hiddenRows || [])
       setForecastLocks(d.forecastLocks || [])
+      setCard3moCodes(d.card3moCodes ?? null)
     } catch {}
     setLoading(false)
   }
@@ -309,7 +312,32 @@ function Budgets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleAccounts, availableSet, actualsByCode, thisMonth])
 
+  // Custom 3-month average card: same window, but only the account codes selected for
+  // THIS card (card3moCodes === null means all overhead accounts).
+  const last3Custom = useMemo(() => {
+    const completedAll = [...availableSet].filter(mo => mo < thisMonth).sort()
+    const last3mo = completedAll.slice(-3)
+    const includeSet = card3moCodes == null ? null : new Set(card3moCodes.map(String))
+    const accts = includeSet ? accounts.filter(a => includeSet.has(String(a.code))) : accounts
+    let sum = 0
+    for (const mo of last3mo) for (const { code } of accts) sum += actualOf(code, mo) || 0
+    return { months: last3mo, sum, avg: last3mo.length ? sum / last3mo.length : 0, nAccts: accts.length }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, card3moCodes, availableSet, actualsByCode, thisMonth])
+
   if (!ok) return null
+
+  function persistCard3mo(next) {
+    setCard3moCodes(next)
+    save({ card3moCodes: next })
+  }
+  function toggleCard3mo(code) {
+    // Work from an explicit list; null means "all", so start from all codes.
+    const base = card3moCodes == null ? accounts.map(a => String(a.code)) : card3moCodes.map(String)
+    const s = new Set(base)
+    if (s.has(String(code))) s.delete(String(code)); else s.add(String(code))
+    persistCard3mo([...s])
+  }
 
   async function lockInForecast() {
     if (typeof window !== 'undefined' && !window.confirm(`Lock in this year's forecast of ${gbp(totals.projectedYear)} for FY${fyEnd}?`)) return
@@ -349,7 +377,7 @@ function Budgets() {
           <div style={{ display: 'flex', gap: 18, alignItems: 'center', marginTop: 10, fontSize: 12, color: '#666', flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600 }}>Key:</span>
             <span><b style={{ color: '#111' }}>Black</b> = within 15% under budget</span>
-            <span><b style={{ color: '#ea580c' }}>Orange</b> = more than 15% under budget</span>
+            <span><b style={{ color: '#16a34a' }}>Green</b> = more than 15% under budget</span>
             <span><b style={{ color: '#b91c1c' }}>Red</b> = over budget</span>
             <span style={{ color: '#b8b8b8' }}>Grey = forecast (future month)</span>
           </div>
@@ -388,6 +416,40 @@ function Budgets() {
                   <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
                     {last3.months.length ? `${last3.months.map(monthShort).join(', ')} - total ${gbp(last3.sum)}` : 'No completed months yet'}
                   </div>
+                </div>
+
+                {/* Custom 3 months average (own account selection) */}
+                <div style={{ ...cardBox, position: 'relative' }}>
+                  <button onClick={() => setCard3moGear(o => !o)} title="Choose accounts for this card"
+                    style={{ position: 'absolute', top: 10, right: 10, border: '1px solid #e2e0da', background: card3moGear ? '#f3f1ea' : '#fff', borderRadius: 7, padding: '3px 7px', cursor: 'pointer', fontSize: 13 }}>&#9881;</button>
+                  <div style={cardLabel}>3-month avg (selected)</div>
+                  <div style={cardValue}>{gbp(last3Custom.avg)}</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                    {card3moCodes == null ? 'All overhead accounts' : `${last3Custom.nAccts} of ${accounts.length} accounts`}
+                    {last3Custom.months.length ? ` - total ${gbp(last3Custom.sum)}` : ' - no completed months'}
+                  </div>
+                  {card3moGear && (
+                    <div style={{ position: 'absolute', top: 40, right: 10, zIndex: 25, background: '#fff', border: '1px solid #e2e0da', borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)', width: 280, maxHeight: 360, overflowY: 'auto', padding: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: INK }}>Accounts in this average</span>
+                        <button onClick={() => setCard3moGear(false)} style={{ fontSize: 11, border: 'none', background: GOLD, color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>Done</button>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <button onClick={() => persistCard3mo(null)} style={miniBtn}>All</button>
+                        <button onClick={() => persistCard3mo([])} style={miniBtn}>None</button>
+                      </div>
+                      {accounts.map(a => {
+                        const included = card3moCodes == null || card3moCodes.map(String).includes(String(a.code))
+                        return (
+                          <label key={a.code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', fontSize: 12, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={included} onChange={() => toggleCard3mo(a.code)} />
+                            <span style={{ color: '#999', width: 34, fontVariantNumeric: 'tabular-nums' }}>{a.code}</span>
+                            <span>{a.name || '(unnamed)'}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Forecast overheads for the year */}

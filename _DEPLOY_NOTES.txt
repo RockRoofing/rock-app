@@ -1,34 +1,33 @@
-DEPLOY NOTES - Overhead Budgets: bar chart, reconciliation, 3 cards
-===================================================================
+DEPLOY NOTES - Overhead Budgets: green (not orange), custom 3-month-avg card
+============================================================================
 
-NEW FEATURES
-------------
-1) BAR CHART (top of page) - actual vs forecast per month, FY:
-     - Blue bar  = Actual (completed months)
-     - Grey bar  = Forecast for that same completed month (sits beside the blue)
-     - Light-blue bar = Forecast for future months
-   Respects the gear (only visible accounts are charted).
+CHANGES
+-------
+1) ORANGE -> GREEN. "More than 15% under budget" now shows GREEN instead of orange,
+   in both the month cells and the colour key.
+   Bands now: over budget = red; within 15% under = black; more than 15% under = green.
 
-2) RECONCILIATION CHECKBOX - "Reconcile: all accounts vs shown". When ticked it shows
-   the projected-year total across ALL overhead accounts vs the currently-SHOWN
-   (unhidden) accounts. The box is GREEN when they match and RED when they differ
-   (with the difference and a nudge to unhide accounts via the gear). Use it to make
-   sure hiding rows hasn't dropped a category you needed.
+2) NEW CARD: "3-month avg (selected)" sits to the right of the standard "Last 3 months
+   avg overheads" card. It averages the last 3 completed months' overheads but ONLY for
+   the accounts you choose via a GEAR on the card itself.
+   - Click the gear (top-right of that card) to tick/untick which overhead accounts are
+     included; "All" / "None" shortcuts included.
+   - The selection is remembered (persisted server-side in
+     config:overhead-3mo-card-codes) so it sticks for you and other viewers.
+   - This is independent of the main table gear - hiding rows in the table does not
+     change this card, and vice versa.
 
-3) THREE CARDS at the top:
-   - Locked-in forecast (FYxxxx): shows the last locked full-year forecast and its
-     date. "Lock in current" button snapshots this year's projected total (actual to
-     date + forecast). "History" reveals previous locked figures with the dates they
-     were locked. (Stored server-side in config:overhead-forecast-locks, last 24 kept.)
-   - Last 3 months avg overheads: average monthly overhead over the last 3 completed
-     months (shows which months + the total), visible accounts.
-   - Forecast overheads (FYxxxx): actual to date + forecast for remaining months
-     (= the projected year).
+ABOUT THE RECONCILE CHECKBOX (you asked)
+----------------------------------------
+It's a safety check for when you hide accounts with the main gear. Ticked, it compares
+the projected-year total of ALL overhead accounts vs just the SHOWN ones: GREEN if they
+match (what you see is everything), RED if they differ (you've hidden something, with
+the gap shown). If you don't find it useful, say and I'll remove it.
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/business-financials/budgets.js   (chart, checkbox, cards)
-  - pages/api/business-financials.js        (forecast lock-in storage + return)
+  - pages/business-financials/budgets.js
+  - pages/api/business-financials.js   (stores/returns the new card's account selection)
 
 DEPLOY
 ------
@@ -36,19 +35,11 @@ Replace both files. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-  - Chart shows blue actual + grey forecast on past months, light-blue on future.
-  - Tick "Reconcile" -> green if all == shown; hide an account -> turns red with the
-    difference.
-  - "Lock in current" -> card updates to the locked figure + today's date; "History"
-    lists past locks.
-  - Cards show sensible numbers; hiding accounts updates chart, cards and reconciliation.
-
-NOTE
-----
-The reconciliation and cards use the projected-year basis (actual to date + forecast)
-so they line up with the "Forecast overheads" card and the table's Tracking column.
+  - Under-budget-by->15% figures and the key now show green.
+  - The new "3-month avg (selected)" card appears; its gear lets you choose accounts;
+    the average updates; refresh the page and the selection is remembered.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". All hooks confirmed above the
-early return (no repeat of the #310 crash).
+Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
+return.
