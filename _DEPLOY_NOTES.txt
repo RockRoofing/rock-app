@@ -1,51 +1,49 @@
-DEPLOY NOTES - Always-on diagnostic for "Average Days Beyond Terms"
-===================================================================
+DEPLOY NOTES - Average Days Beyond Terms: data is fine, fixing the headline display
+===================================================================================
 
-WHY
----
-You reported no amber line. That means either the diagnostic build wasn't live, or
-the amber line's condition (only shown when zero qualify) hid it. This build makes
-the diagnostic ALWAYS visible under the card, so there is no ambiguity.
+WHAT THE DIAGNOSTIC TOLD US (good news)
+---------------------------------------
+Your card showed: "Of 152 invoice lines: 93 have a paid-on date, 144 have a due
+date, 136 read as paid, 93 QUALIFY."
 
-WHAT YOU'LL SEE UNDER THE CARD
-------------------------------
-One small line, always present, one of:
+So the paid dates ARE in the data and 93 invoices are being measured. This was never
+an empty-data problem - the earlier fixes worked. The card just wasn't showing the
+headline number cleanly (the big figure area looked blank while the small "Avg"
+line showed "On terms").
 
-  1. Grey: "Of 812 invoice lines: 240 have a paid-on date, 700 have a due date,
-     300 read as paid, 180 qualify."  -> data is fine; if 180 qualify the card
-     value should show. 
+THE FIX
+-------
+1. The API now computes ONE authoritative overall average across all 93 qualifying
+   invoices (all months pooled) and returns it as
+   paymentDiag.overallAvgDaysBeyondTerms.
+2. The card headline now reads that single value directly, instead of re-deriving it
+   from the monthly buckets (which is what caused the headline/avg mismatch).
+3. The diagnostic line now also prints the computed average, e.g.
+   "... 93 qualify. Avg = 2 days beyond terms." - so the number is visible and
+   verifiable at a glance.
 
-  2. Amber: same counts but "0 qualify" - tells us exactly which gate fails
-     (no paid-on date / no due date / not read as paid). If it says
-     "No paid-on dates in the data (Xero list omits FullyPaidOnDate)", that's the
-     answer to your question: the paid date is NOT in the synced data and we need
-     the payments-date fallback (see below).
+Value formatting (unchanged, already correct): positive = "+N days late",
+negative = "N days early", zero = "On terms".
 
-  3. RED: "Diagnostic not present - this build is not deployed yet."
-     -> the earlier build never went live. Deploying THIS file fixes that.
+NOTE: if the true average really is ~0, the headline will legitimately read
+"On terms" - that's a real result (on average you're paying on terms), not a bug.
+The diagnostic line's "Avg = N days" now makes that explicit.
 
-FILE (single EDIT - no new files)
+FILES (both EDITS - no new files)
 ---------------------------------
+  - pages/api/commercial-metrics.js
   - pages/commercial-scorecard.js
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel auto-deploys. Hard-refresh the Scorecard.
+Replace both files. Commit -> Vercel auto-deploys. Hard-refresh the Scorecard.
 
-WHAT I NEED BACK
-----------------
-Just tell me the numbers from that one line. Specifically:
-  - how many have a paid-on date
-  - how many qualify
-That tells me definitively whether Xero is giving us the paid date at all.
-
-LIKELY NEXT STEP (I'll build once we see the numbers)
-----------------------------------------------------
-If "0 have a paid-on date": Xero's Invoices LIST endpoint isn't returning
-FullyPaidOnDate for your org. The fix is a PAYMENTS-based sync - pull the Xero
-Payments endpoint (bulk, dated, links to invoice IDs) and derive each invoice's
-paid date from its payment. That is reliable regardless of the list quirk. I did
-NOT build it yet to avoid guessing - the diagnostic will confirm it's needed first.
+VERIFY
+------
+The Average Days Beyond Terms card should now show a clear headline (e.g.
+"+2 days late" or "On terms") AND the grey diagnostic line should read
+"... 93 qualify. Avg = N days beyond terms." Click the card to see the per-invoice
+Due Date / Paid Date / Days +/- Terms breakdown for all 93.
 
 BUILD
 -----

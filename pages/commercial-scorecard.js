@@ -547,6 +547,13 @@ export default function CommercialScorecard() {
                             <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>
                               Overheads excluded. Based on {gpTrailing.monthsIncluded} completed months.
                             </div>
+                            <div style={{ fontSize: 10, color: '#2a78d6', marginTop: 6, background: '#f0f6fd', border: '1px solid #d6e6fa', borderRadius: 6, padding: '6px 8px', lineHeight: 1.5 }}>
+                              Verify against Xero: run Xero's Profit &amp; Loss for
+                              {gpTrailing.rangeLabel ? ` ${gpTrailing.rangeLabel}` : ' the same 12 months'}.
+                              This card's Sales should equal Xero Total Turnover and Total Costs should
+                              equal Xero Total Cost of Sales for that range. (A shorter Xero period will
+                              read higher/lower - this is a rolling 12-month figure, not a single month.)
+                            </div>
                           </div>
                         )}
                         {xeroGM?.latest && (
@@ -631,17 +638,7 @@ export default function CommercialScorecard() {
                   key: 'avgPaymentDays',
                   label: 'Average Days Beyond Terms',
                   sub: 'Paid date minus due date (+ late / - early)',
-                  value: metrics?.avgPaymentTime
-                    ? (() => {
-                        const all = Object.values(metrics.avgPaymentTime)
-                        if (!all.length) return null
-                        // True average across ALL invoices (weighted by count), not
-                        // an average of monthly averages.
-                        const totalDays = all.reduce((s, m) => s + m.avgDays * m.count, 0)
-                        const totalCount = all.reduce((s, m) => s + m.count, 0)
-                        return totalCount ? Math.round(totalDays / totalCount) : null
-                      })()
-                    : null,
+                  value: metrics?.paymentDiag?.overallAvgDaysBeyondTerms ?? null,
                   format: v => v == null ? '-' : (v > 0 ? `+${v} days late` : v < 0 ? `${Math.abs(v)} days early` : 'On terms'),
                   target: targets.avgPaymentDays != null ? targets.avgPaymentDays : 0,
                   mode: 'lower_better',
@@ -659,6 +656,9 @@ export default function CommercialScorecard() {
                           {' '}{metrics.paymentDiag.withDueDate} have a due date,
                           {' '}{metrics.paymentDiag.passedIsPaid} read as paid,
                           {' '}{metrics.paymentDiag.qualifiedPaidInvoices} qualify.
+                          {metrics.paymentDiag.overallAvgDaysBeyondTerms != null
+                            ? ` Avg = ${metrics.paymentDiag.overallAvgDaysBeyondTerms} days beyond terms.`
+                            : ''}
                           {metrics.paymentDiag.qualifiedPaidInvoices === 0 && metrics.paymentDiag.withFullyPaidOnDate === 0
                             ? ' -> No paid-on dates in the data (Xero list omits FullyPaidOnDate). Needs the payments-date fallback.'
                             : ''}

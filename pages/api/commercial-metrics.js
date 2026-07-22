@@ -225,6 +225,13 @@ export default async function handler(req, res) {
       }
     }
 
+    // Single authoritative overall average across ALL qualifying invoices (every
+    // month pooled), so the headline can't disagree with the drill. Rounded.
+    const allEntries = Object.values(paymentTimeByMonth).flat()
+    const overallAvgDaysBeyondTerms = allEntries.length
+      ? Math.round(allEntries.reduce((s, e) => s + e.days, 0) / allEntries.length)
+      : null
+
     // Diagnostics: if the card is empty, these show WHERE the invoices fall out.
     const paymentDiag = {
       totalInvoiceLines: paymentInvoiceLines.length,
@@ -235,6 +242,7 @@ export default async function handler(req, res) {
       passedIsPaid: paymentInvoiceLines.filter(isPaid).length,
       qualifiedPaidInvoices: paidInvoices.length,
       monthsWithData: Object.keys(avgPaymentTime).length,
+      overallAvgDaysBeyondTerms,
     }
 
     res.json({
