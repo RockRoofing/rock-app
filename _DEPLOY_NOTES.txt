@@ -1,75 +1,43 @@
-DEPLOY NOTES - Overhead Budgets: cell drill-down, colour key, forecast-driven budget,
- 4 summary columns, Dec/Jan fix
-=====================================================================================
+DEPLOY NOTES - Overhead Budgets: full width, hide-persist fix, frozen totals row
+================================================================================
 
 CHANGES
 -------
-1) CLICK A MONTH CELL -> transaction pop-out (date, description, reference, amount,
-   with a total that reconciles to the cell). Data is the GENERAL LEDGER captured at
-   sync time (includes bills, bank payments AND manual journals - so it sums to the
-   P&L figure, unlike bills-only). Stored per account/month; clicking reads from
-   Redis instantly (no per-click Xero calls).
-   - Pulled by the existing "Sync Xero figures" button (once-daily is fine). It full-
-     replaces the last window each sync, so back-dated bills, credit notes, edits and
-     voids are picked up on the next sync.
+1) HIDE-COLUMNS NOT SAVING - FIXED. The show/hide selection now saves IMMEDIATELY
+   whenever you tick/untick an account (or use Show all / Hide all), sending the
+   fresh value to the server rather than relying on a later click. The previous
+   version could save a stale value, so hidden rows reappeared on refresh. Now the
+   selection persists for you and everyone on reload. ("Done" just closes the menu.)
 
-2) COLOUR SCHEME + KEY (completed months vs monthly budget):
-     BLACK  = within 15% under budget
-     ORANGE = more than 15% under budget
-     RED    = over budget
-   A key is shown above the table. Future months stay grey (forecast).
+2) FULL WIDTH. The page/table now span the full screen width (was capped at 1700px).
 
-3) FORECAST DRIVES THE BUDGET/MO COLUMN. If you haven't typed a budget, the Budget/mo
-   field shows the forecast figure (amber text) as the suggested budget; type to set
-   your own. Changing the forecast method updates the suggestion.
+3) TOTALS ROW AT THE TOP, FROZEN. A bold TOTAL row sits directly under the header and
+   sums every column across the visible accounts (monthly actuals/forecasts, Budget/mo,
+   and all four summary columns). Both the HEADER row and the TOTAL row are frozen
+   (sticky) so they stay visible while you scroll the accounts. Hidden accounts are
+   excluded from the totals.
 
-4) "Same as last month" forecast option is now "3 - Last full month" and uses the
-   most recent COMPLETED month's actual for that account.
-
-5) FOUR SUMMARY COLUMNS after the last month:
-     - Budget to date   = monthly budget x completed months this FY
-     - Actual to date   = sum of completed months this FY
-     - Full-yr budget   = monthly budget x 12
-     - Tracking (yr)    = projected full year (actual to date + forecast for the
-                          remaining months) minus full-yr budget. Red if over,
-                          green if under.
-
-6) DEC / JAN SHOWING BLANK: this was because the benchmark hadn't been re-synced
-   since it was extended to 13 months - Dec 2025 / Jan 2026 weren't in the stored
-   data. After deploying, click "Sync Xero figures" once; the 13-month pull now
-   includes them. (If a month is still blank afterwards it genuinely has no data in
-   Xero for that period.)
-
-FILES
------
-1. EDIT  lib/xero.js                         (adds fetchGeneralLedgerByAccountMonth)
-2. EDIT  pages/api/sync-benchmark.js          (pulls + stores overhead ledger; 13 mo)
-3. EDIT  pages/api/business-financials.js     (overhead-transactions view)
-4. EDIT  pages/business-financials/budgets.js (colours/key, budget-from-forecast,
-                                               method 3 relabel, summary cols, drill)
-All EDITS - no new files.
+FILE (single EDIT - no new files)
+---------------------------------
+  - pages/business-financials/budgets.js
 
 DEPLOY
 ------
-Replace all four files. Commit -> Vercel "Ready" -> hard-refresh.
-THEN click "Sync Xero figures" once. First sync now also pulls the general ledger for
-overhead accounts (a few extra API calls, well within limits; ~20-40 calls total).
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-  - Dec/Jan now show figures after the sync.
-  - Click a completed month cell -> transaction list appears; its Total matches the
-    cell figure.
-  - Colours follow the key; budget-less rows show the forecast (amber) in Budget/mo.
-  - The four summary columns appear to the right of Nov.
+  - Table fills the screen width.
+  - Hide an account via the gear, refresh the page -> it stays hidden.
+  - Scroll the accounts -> the header and the TOTAL row stay pinned at the top.
+  - Totals reflect only the currently-visible accounts.
 
-API-LIMIT NOTE
---------------
-The ledger is pulled ONCE per sync (paging the Journals endpoint), not per cell click.
-Cell clicks read stored data. Xero limit is 60/min, 5000/day; a sync uses ~35-55 calls
-total. Once daily is comfortable.
+NOTE
+----
+The frozen totals row sits at top:34px (just under the sticky header). If your header
+wraps to two lines on a very narrow screen the offset may look slightly off - tell me
+and I can measure the header height dynamically instead of using a fixed 34px.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Ledger paging + FY logic
-unit-checked (no infinite loop; correct offset advance and termination).
+Validated with `next build` -> "Compiled successfully".

@@ -176,12 +176,16 @@ export default function Budgets() {
       return next
     })
   }
+  function persistHidden(next) {
+    setHiddenRows(next)
+    // Save immediately with the fresh value so a refresh keeps the selection
+    // (avoids the stale-closure problem of relying on state in save()).
+    save({ hiddenRows: next })
+  }
   function toggleRow(code) {
-    setHiddenRows(prev => {
-      const s = new Set(prev.map(String))
-      if (s.has(String(code))) s.delete(String(code)); else s.add(String(code))
-      return [...s]
-    })
+    const s = new Set((hiddenRows || []).map(String))
+    if (s.has(String(code))) s.delete(String(code)); else s.add(String(code))
+    persistHidden([...s])
   }
 
   if (!ok) return null
@@ -191,12 +195,40 @@ export default function Budgets() {
   const completedFyMonths = months.filter(isComplete)
   const nCompleted = completedFyMonths.length
 
+  // Column totals across visible accounts (for the frozen totals row).
+  const totals = useMemo(() => {
+    const t = { budget: 0, months: {}, budgetToDate: 0, actualToDate: 0, fullYr: 0, projectedYear: 0 }
+    for (const mo of months) t.months[mo] = { value: 0, complete: isComplete(mo) }
+    for (const { code } of visibleAccounts) {
+      const budget = effectiveBudget(code)
+      if (budget != null) { t.budget += budget; t.budgetToDate += budget * nCompleted; t.fullYr += budget * 12 }
+      let projected = 0
+      for (const mo of months) {
+        if (isComplete(mo)) {
+          const a = actualOf(code, mo) || 0
+          t.months[mo].value += a
+          projected += a
+        } else {
+          const fc = forecastOf(code, mo)
+          const v = fc.value != null ? fc.value : (budget || 0)
+          t.months[mo].value += v
+          projected += v
+        }
+      }
+      t.actualToDate += completedFyMonths.reduce((s, mo) => s + (actualOf(code, mo) || 0), 0)
+      t.projectedYear += projected
+    }
+    t.trackDiff = t.projectedYear - t.fullYr
+    return t
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleAccounts, months, budgets, forecastMethods, forecastOverrides, actualsByCode, availableSet])
+
   return (
     <>
       <Head><title>Overhead Budgets - Business Financials</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <BizNav />
-        <div style={{ padding: 24, maxWidth: 1700, margin: '0 auto' }}>
+        <div style={{ padding: '24px 16px', maxWidth: '100%', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <div>
               <h1 style={{ fontSize: 22, color: INK, margin: '0 0 4px' }}>Overhead Budgets</h1>
@@ -238,11 +270,11 @@ export default function Budgets() {
                   <div style={{ position: 'absolute', top: 42, right: 10, zIndex: 20, background: '#fff', border: '1px solid #e2e0da', borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)', width: 300, maxHeight: 420, overflowY: 'auto', padding: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: INK }}>Show / hide accounts</span>
-                      <button onClick={() => { setGearOpen(false); save() }} style={{ fontSize: 11, border: 'none', background: GOLD, color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>Done &amp; save</button>
+                      <button onClick={() => { setGearOpen(false) }} style={{ fontSize: 11, border: 'none', background: GOLD, color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>Done</button>
                     </div>
                     <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <button onClick={() => setHiddenRows([])} style={miniBtn}>Show all</button>
-                      <button onClick={() => setHiddenRows(accounts.map(a => String(a.code)))} style={miniBtn}>Hide all</button>
+                      <button onClick={() => persistHidden([])} style={miniBtn}>Show all</button>
+                      <button onClick={() => persistHidden(accounts.map(a => String(a.code)))} style={miniBtn}>Hide all</button>
                     </div>
                     {accounts.map(a => (
                       <label key={a.code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', fontSize: 12, cursor: 'pointer' }}>
@@ -255,24 +287,39 @@ export default function Budgets() {
                 )}
               </div>
 
-              <div style={{ overflow: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap' }}>
+              <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+                <table style={{ borderCollapse: 'collapse', fontSize: 12, whiteSpace: 'nowrap', width: '100%' }}>
                   <thead>
                     <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
-                      <th style={{ ...thL, position: 'sticky', left: 0, background: '#faf9f7', zIndex: 2 }}>Code</th>
-                      <th style={{ ...thL, position: 'sticky', left: 52, background: '#faf9f7', zIndex: 2, minWidth: 180 }}>Account</th>
-                      <th style={{ ...th, background: '#f4f1e8' }}>Budget / mo</th>
-                      <th style={thL}>Forecast</th>
+                      <th style={{ ...th, ...stickyTop, textAlign: 'left', left: 0, zIndex: 5, background: '#faf9f7' }}>Code</th>
+                      <th style={{ ...th, ...stickyTop, textAlign: 'left', left: 52, zIndex: 5, minWidth: 180, background: '#faf9f7' }}>Account</th>
+                      <th style={{ ...th, ...stickyTop, background: '#f4f1e8', zIndex: 4 }}>Budget / mo</th>
+                      <th style={{ ...th, ...stickyTop, textAlign: 'left', background: '#faf9f7', zIndex: 4 }}>Forecast</th>
                       {months.map(mo => (
-                        <th key={mo} style={{ ...th, background: mo === thisMonth ? '#fff8e6' : '#faf9f7' }}>{monthShort(mo)}</th>
+                        <th key={mo} style={{ ...th, ...stickyTop, background: mo === thisMonth ? '#fff8e6' : '#faf9f7', zIndex: 4 }}>{monthShort(mo)}</th>
                       ))}
-                      <th style={{ ...th, background: '#eef3fb' }}>Budget to date</th>
-                      <th style={{ ...th, background: '#eef3fb' }}>Actual to date</th>
-                      <th style={{ ...th, background: '#eef3fb' }}>Full-yr budget</th>
-                      <th style={{ ...th, background: '#eef3fb' }}>Tracking (yr)</th>
+                      <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Budget to date</th>
+                      <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Actual to date</th>
+                      <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Full-yr budget</th>
+                      <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Tracking (yr)</th>
                     </tr>
                   </thead>
                   <tbody>
+                    {visibleAccounts.length > 0 && (
+                      <tr style={{ borderBottom: '2px solid #e6e3dc', fontWeight: 700 }}>
+                        <td style={{ ...tdL, ...stickyTotals, left: 0, zIndex: 5, background: '#f7f5ee' }}></td>
+                        <td style={{ ...tdL, ...stickyTotals, left: 52, zIndex: 5, background: '#f7f5ee', minWidth: 180 }}>TOTAL ({visibleAccounts.length})</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#f4f1e8', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.budget)}</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#f7f5ee', zIndex: 4 }}></td>
+                        {months.map(mo => (
+                          <td key={mo} style={{ ...tdCell, ...stickyTotals, background: totals.months[mo].complete ? '#f7f5ee' : '#fbfbf8', zIndex: 4, color: totals.months[mo].complete ? '#111' : '#999', fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.months[mo].value)}</td>
+                        ))}
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.budgetToDate)}</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.actualToDate)}</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.fullYr)}</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums', color: totals.trackDiff > 0 ? '#b91c1c' : '#166534' }}>{`${totals.trackDiff > 0 ? '+' : ''}${gbp(totals.trackDiff)}`}</td>
+                      </tr>
+                    )}
                     {visibleAccounts.length === 0 && (
                       <tr><td colSpan={months.length + 8} style={{ padding: 24, textAlign: 'center', color: '#aaa' }}>
                         {accounts.length === 0 ? 'No overhead accounts found. Sync Xero figures and check Account Categorisation.' : 'All accounts hidden. Use the gear to show some.'}
@@ -426,3 +473,6 @@ const thL = { padding: '8px 10px', fontSize: 11, color: '#777', fontWeight: 600,
 const tdL = { padding: '6px 10px', textAlign: 'left' }
 const tdCell = { padding: '5px 8px', textAlign: 'right', borderLeft: '1px solid #f6f5f2' }
 const miniBtn = { flex: 1, fontSize: 11, border: '1px solid #e2e0da', background: '#fff', borderRadius: 6, padding: '4px 6px', cursor: 'pointer' }
+// Sticky header row at top:0; frozen totals row directly beneath it.
+const stickyTop = { position: 'sticky', top: 0 }
+const stickyTotals = { position: 'sticky', top: 34 }
