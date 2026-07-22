@@ -242,7 +242,7 @@ export default function CommercialScorecard() {
           border: '1px solid #e1e0d9', boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           display: 'grid', gridTemplateColumns: trendData ? '160px 1fr' : '1fr',
           gap: 16, alignItems: 'center',
-          height: CARD_HEIGHT, boxSizing: 'border-box',
+          minHeight: CARD_HEIGHT, boxSizing: 'border-box',
           cursor: hasDrill ? 'pointer' : 'default',
           transition: 'box-shadow 0.15s',
         }}

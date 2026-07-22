@@ -1,35 +1,22 @@
-Scorecard Gross Margin — diagnostic breakdown (to find the mismatch)
-====================================================================
+Scorecard — GP Margin card no longer overflows (target + indicator clipped)
+===========================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
+Single file: pages/commercial-scorecard.js
 
-WHAT THIS ADDS
---------------
-Click the Gross Profit Margin card on the Commercial Scorecard to open a per-project
-breakdown for the last full month (in-progress projects), showing exactly what makes
-up the Scorecard figure:
-  • Project (job no + name)
-  • Valuation date used (or "— (excluded)" if the project has no valuation date that
-    month, in which case it is NOT in the Scorecard number)
-  • Invoiced to that date (account-200 / sales)
-  • Costs to that date
-  • Margin
+ISSUE
+-----
+The scorecard cards had a FIXED height (210px). The Gross Profit Margin card has extra
+content (Profit / Invoiced / Costs lines + a longer sub-heading), which pushed the
+Target control and the RAG indicator (the coloured dot) below the fixed height — so
+they sat outside the card and were hidden by the card below.
 
-HOW TO USE IT
--------------
-Open the EOM report for the SAME last full month, in-progress only, and compare each
-project line to this breakdown:
-  • A project in EOM but shown "excluded" here -> it has no valuation date for the
-    month (EOM includes projects with no val date as "all to date"; the Scorecard
-    excludes them). That's the most likely mismatch cause.
-  • A project whose Invoiced or Costs differs -> different lines/dates; tell me which
-    project and the two figures and I'll trace it.
-  • Extra/missing projects -> stage filter or the EOM date-range filter differs.
-
-Send me a screenshot of this breakdown next to the EOM table (or just the rows that
-differ) and I can pinpoint and fix the exact cause.
+FIX
+---
+Cards now use minHeight instead of a fixed height, so a card grows to fit its content.
+The Target row and indicator stay inside the GP Margin card; other cards are unchanged
+(they keep the same minimum height).
 
 FILES
 -----
-• pages/api/commercial-metrics.js   (returns gpBreakdown)
-• pages/commercial-scorecard.js     (GP card drill-down)
+• pages/commercial-scorecard.js
