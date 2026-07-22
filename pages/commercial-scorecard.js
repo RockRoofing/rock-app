@@ -347,10 +347,17 @@ export default function CommercialScorecard() {
   const gpLatest = gpTrailing?.grossMargin ?? null
   const gpRangeLabel = gpTrailing?.rangeLabel || null
 
-  const paylessTrend = displayMonths.map(m => ({
+  // Payless (credit-note) counts per month over the last 12 completed months, so the
+  // line graph is stable regardless of the date-range filter. paylessCountByMonth is
+  // keyed 'YYYY-MM'.
+  const paylessTrend = LAST_12_MONTHS.map(m => ({
     month: monthLabel(m),
     value: metrics?.paylessCountByMonth?.[m]?.adjusted ?? 0,
   }))
+  // Which months actually hold credit notes (for the diagnostic line below).
+  const paylessMonthsWithData = Object.entries(metrics?.paylessCountByMonth || {})
+    .filter(([, v]) => (v?.adjusted ?? 0) > 0)
+    .map(([k, v]) => `${monthLabel(k)}: ${v.adjusted}`)
   // Latest COMPLETED month's payless (credit-note) count, for the card headline -
   // "how many this month", not an all-time total.
   const paylessLatestKey = (() => {
@@ -627,8 +634,14 @@ export default function CommercialScorecard() {
                   drillColumns: paylessColumns,
                   drillTitle: 'Payless Notices (Credit Notes)',
                   onOpen: () => setPaylessOpen(true),
-                  extra: metrics?.paylessTotal != null
-                    ? <span style={{ fontSize: 10, color: '#888' }}>{metrics.paylessTotal} total over all months shown</span> : null,
+                  extra: (
+                    <div style={{ fontSize: 10, color: '#888', marginBottom: 2, lineHeight: 1.5 }}>
+                      {metrics?.paylessTotal != null ? `${metrics.paylessTotal} total across all months shown.` : ''}
+                      {paylessMonthsWithData.length
+                        ? ` By month: ${paylessMonthsWithData.join(', ')}.`
+                        : (metrics?.paylessTotal ? ' None fall in the last 12 months (older credit notes, or a date issue).' : '')}
+                    </div>
+                  ),
                 })}
 
                 {/* 3. Retentions Invoiced */}

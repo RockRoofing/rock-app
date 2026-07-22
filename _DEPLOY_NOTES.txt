@@ -1,47 +1,43 @@
-DEPLOY NOTES - Payless Notices now per-month (not all-time total)
-================================================================
+DEPLOY NOTES - Payless Notices: 0 every month but 8 total - window/diagnostic fix
+=================================================================================
 
-WHAT CHANGED
-------------
-The Payless Notices card headline was showing the ALL-TIME total of credit notes.
-It now shows the LATEST completed month's count, and the line graph shows the count
-PER MONTH with its trend line (the per-month line was already there; the headline
-was the only all-time figure).
+THE CONTRADICTION
+-----------------
+"8 total across all months" but every month shows 0 and the average is 0. That means
+the 8 credit notes ARE being found and counted (total), but they aren't landing in
+the months the line graph was looking at. The most likely reason: the trend was tied
+to the page's DATE-RANGE FILTER (dateFrom..dateTo), and the 8 credit notes are dated
+in months outside that window (or the window didn't line up).
 
-  - Headline = number of credit notes (payless notices) in the last full month.
-  - Sub-label shows that month and its count, e.g. "Credit notes per month - Jun 26: 3".
-  - Trend line = one point per month (each month's count) with the dashed trend line.
-  - Small grey line still shows the total across all months displayed, for reference.
-  - RAG dot: lower-is-better (fewer payless notices = green; target defaults to 0).
-  - Click the card: the per-month drill (raw count + editable adjusted count + the
-    credit notes behind each month) is unchanged.
+THE FIX
+-------
+1. The Payless line graph now uses a FIXED last-12-completed-months window (same as
+   Gross Margin), independent of the date-range filter. So the months always line up
+   with where the credit notes actually are.
+2. Added a diagnostic line under the card that lists WHICH months hold credit notes,
+   e.g. "8 total across all months shown. By month: Mar 26: 2, Apr 26: 3, ...". If it
+   says "None fall in the last 12 months (older credit notes, or a date issue)", then
+   the 8 are older than 12 months or have a date problem - and we'll know instantly.
 
-NOTE: the per-month counts and manual adjustments are unchanged - this is a display
-change to the headline, using data the API already returns (paylessCountByMonth).
-
-ALSO INCLUDED (cumulative in the scorecard file)
-------------------------------------------------
-This commercial-scorecard.js also carries the earlier, not-yet-confirmed changes:
-  - "Average Days Beyond Terms (v3)" version marker + the headline display fix
-    (reads paymentDiag.overallAvgDaysBeyondTerms; shows "Avg = N days").
-So deploying this supersedes the previous AvgDaysBeyondTerms bundle - you only need
-these two files.
-
-FILES (both EDITS - no new files)
+FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/api/commercial-metrics.js     (unchanged from last bundle; include to be safe)
-  - pages/commercial-scorecard.js       (per-month payless + v3 marker + avg-days fix)
+  - pages/commercial-scorecard.js
 
 DEPLOY
 ------
-Replace both files. Commit -> wait for Vercel "Ready" -> hard-refresh the Scorecard.
+Replace the file. Commit -> wait for Vercel "Ready" -> HARD-refresh the Scorecard.
 
-VERIFY
-------
-  - Payless Notices headline = last month's credit-note count (not a big all-time
-    number); the line graph shows a point per month with a trend line.
-  - While here, confirm the Average Days card title reads "(v3)" - that tells us the
-    build is actually live (see previous notes).
+WHAT TO CHECK / SEND BACK
+-------------------------
+Look at the diagnostic line under Payless Notices:
+  - "By month: <Mon>: N, ..."  -> those months should now show bars/points on the
+    line graph. If they do, we're done.
+  - "None fall in the last 12 months ..."  -> the 8 credit notes are older than 12
+    months (or mis-dated). Tell me and I'll widen the window or check the dates.
+
+NOTE: still confirm the Average Days card shows "(v3)" so we know the build is live
+(from the previous notes) - if it doesn't, the deploy isn't taking effect and that
+must be resolved first, as it affects this card too.
 
 BUILD
 -----
