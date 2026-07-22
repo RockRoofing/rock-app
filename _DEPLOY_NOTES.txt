@@ -1,36 +1,35 @@
-Commercial Scorecard — Gross Margin now matches the EOM report
-==============================================================
+Scorecard Gross Margin — diagnostic breakdown (to find the mismatch)
+====================================================================
 Deploy target: RockRoofing/rock-app  branch main
 Build: Compiled successfully
 
-WHY THEY DIDN'T MATCH
----------------------
-The Scorecard's Gross Profit Margin used each project's ALL-TIME grossInvoiced and
-totalCosts. The EOM report uses figures UP TO the selected month's valuation date.
-Different periods -> different margin.
+WHAT THIS ADDS
+--------------
+Click the Gross Profit Margin card on the Commercial Scorecard to open a per-project
+breakdown for the last full month (in-progress projects), showing exactly what makes
+up the Scorecard figure:
+  • Project (job no + name)
+  • Valuation date used (or "— (excluded)" if the project has no valuation date that
+    month, in which case it is NOT in the Scorecard number)
+  • Invoiced to that date (account-200 / sales)
+  • Costs to that date
+  • Margin
 
-THE FIX
--------
-The Scorecard now computes Gross Profit Margin on the EOM basis for the LAST FULL
-MONTH, over in-progress projects only:
-  • For each in-progress project, it finds the valuation date for the last completed
-    month (per-month override, else the fixed valuation day).
-  • Sums costs and account-200 invoiced UP TO that valuation date (reading the same
-    costs:lines / invoiced:lines as EOM).
-  • Gross Margin = (Σ invoiced − Σ costs) / Σ invoiced   (pooled, same as EOM totals).
-Projects with no valuation date for that month are excluded (they aren't in the EOM
-snapshot either).
+HOW TO USE IT
+-------------
+Open the EOM report for the SAME last full month, in-progress only, and compare each
+project line to this breakdown:
+  • A project in EOM but shown "excluded" here -> it has no valuation date for the
+    month (EOM includes projects with no val date as "all to date"; the Scorecard
+    excludes them). That's the most likely mismatch cause.
+  • A project whose Invoiced or Costs differs -> different lines/dates; tell me which
+    project and the two figures and I'll trace it.
+  • Extra/missing projects -> stage filter or the EOM date-range filter differs.
 
-The card sub-text now shows the month it reflects, e.g. "at June 2025 valuation (EOM
-basis)".
+Send me a screenshot of this breakdown next to the EOM table (or just the rows that
+differ) and I can pinpoint and fix the exact cause.
 
 FILES
 -----
-• pages/api/commercial-metrics.js   (EOM-basis gross margin, last full month)
-• pages/commercial-scorecard.js     (card sub-text shows the month)
-
-TO VERIFY
----------
-Open the EOM report for the last full month (in-progress projects) and compare its
-total gross margin to the Scorecard GP Margin card — they should now agree. Both read
-the same cost/invoice lines, so ensure syncs are up to date.
+• pages/api/commercial-metrics.js   (returns gpBreakdown)
+• pages/commercial-scorecard.js     (GP card drill-down)

@@ -75,6 +75,7 @@ export default async function handler(req, res) {
     const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
 
     let eomGross = 0, eomCosts = 0
+    const gpBreakdown = []
     for (const p of projects) {
       // Valuation date for the last full month: per-month override wins, else the
       // fixed valuation day applied to that month.
@@ -86,15 +87,21 @@ export default async function handler(req, res) {
         const day = Math.min(parseInt(p.valuationDay), dim)
         vStr = new Date(Date.UTC(eomYear, eomMonth - 1, day)).toISOString().split('T')[0]
       }
-      if (!vStr) continue   // no valuation date this month -> not part of the EOM snapshot
-      // Read lines straight from Redis (same source as the WIP/EOM calc).
+      if (!vStr) { gpBreakdown.push({ jobNo: p.jobNo, projectName: p.name, valDate: null, invoiced: 0, costs: 0, margin: null, included: false, note: 'no valuation date this month' }); continue }
       const cLines = (await redis.get(`costs:lines:${p.xeroId}`).catch(() => null)) || p._costLines || []
       const iLines = (await redis.get(`invoiced:lines:${p.xeroId}`).catch(() => null)) || p._invoiceLines || []
       const costsToDate = cLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + (l.amount || 0), 0)
       const grossInvoicedToDate = iLines.filter(l => l.date && l.date <= vStr).reduce((s, l) => s + invVal(l), 0)
       eomGross += grossInvoicedToDate
       eomCosts += costsToDate
+      gpBreakdown.push({
+        jobNo: p.jobNo, projectName: p.name, valDate: vStr,
+        invoiced: grossInvoicedToDate, costs: costsToDate,
+        margin: grossInvoicedToDate > 0 ? (grossInvoicedToDate - costsToDate) / grossInvoicedToDate : null,
+        included: true,
+      })
     }
+    gpBreakdown.sort((a, b) => String(a.jobNo || '').localeCompare(String(b.jobNo || ''), undefined, { numeric: true }))
     const totalGrossInvoiced = eomGross
     const totalCosts = eomCosts
     const gpMargin = totalGrossInvoiced > 0 ? (totalGrossInvoiced - totalCosts) / totalGrossInvoiced : null
@@ -168,6 +175,7 @@ export default async function handler(req, res) {
       gpMargin,
       gpProfit,
       gpMarginMonth: eomMonthKey,
+      gpBreakdown,
       totalGrossInvoiced,
       totalCosts,
       liveProjectCount: projects.length,

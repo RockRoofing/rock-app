@@ -314,6 +314,16 @@ export default function CommercialScorecard() {
     value: metrics?.avgPaymentTime?.[m]?.avgDays ?? null,
   }))
 
+  // GP margin breakdown drill columns (to reconcile against the EOM report)
+  const gpColumns = [
+    { key: 'jobNo', label: 'Project' },
+    { key: 'projectName', label: 'Project Name' },
+    { key: 'valDate', label: 'Valuation Date', format: (v) => v ? new Date(v).toLocaleDateString('en-GB') : '— (excluded)' },
+    { key: 'invoiced', label: 'Invoiced', right: true, format: (v) => fmt(v) },
+    { key: 'costs', label: 'Costs', right: true, format: (v) => fmt(v) },
+    { key: 'margin', label: 'Margin', right: true, format: (v) => v != null ? (v * 100).toFixed(1) + '%' : '—' },
+  ]
+
   // Payless (credit note) drill columns
   const paylessColumns = [
     { key: 'jobNo', label: 'Project' },
@@ -444,6 +454,9 @@ export default function CommercialScorecard() {
                   target: targets.gpMargin,
                   trendData: gpTrend,
                   showAvg: true,
+                  drillData: metrics?.gpBreakdown || [],
+                  drillColumns: gpColumns,
+                  drillTitle: metrics?.gpMarginMonth ? `Gross Margin breakdown — ${monthLabel(metrics.gpMarginMonth)} (in-progress)` : 'Gross Margin breakdown',
                   extra: metrics && (
                     <div style={{ fontSize: 11, color: '#555', marginBottom: 2, lineHeight: 1.6 }}>
                       <div>Profit: <strong>{fmt(metrics.gpProfit)}</strong></div>
