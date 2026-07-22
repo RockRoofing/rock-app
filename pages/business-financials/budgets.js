@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Component } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BizNav, INK, GOLD, gbp } from '../../components/BizNav'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 // Error boundary so a bad data shape shows the actual error on-screen instead of the
 // generic "Application error: a client-side exception has occurred" white screen.
@@ -74,6 +75,9 @@ function Budgets() {
   const [forecastMethods, setForecastMethods] = useState({}) // { code: 1|2|3 }
   const [forecastOverrides, setForecastOverrides] = useState({}) // { code: { 'YYYY-MM': amount } }
   const [hiddenRows, setHiddenRows] = useState([])           // [ code, ... ]
+  const [forecastLocks, setForecastLocks] = useState([])     // [ {lockedAt, fyEnd, total, note} ]
+  const [showLockHistory, setShowLockHistory] = useState(false)
+  const [reconcile, setReconcile] = useState(false)          // reconciliation checkbox
 
   const [fyEnd, setFyEnd] = useState(() => fyOf(nowMonthKey()))
 
@@ -94,6 +98,7 @@ function Budgets() {
       setForecastMethods(d.forecastMethods || {})
       setForecastOverrides(d.forecastOverrides || {})
       setHiddenRows(d.hiddenRows || [])
+      setForecastLocks(d.forecastLocks || [])
     } catch {}
     setLoading(false)
   }
@@ -249,7 +254,69 @@ function Budgets() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleAccounts, months, budgets, forecastMethods, forecastOverrides, actualsByCode, availableSet])
 
+  // Bar-chart data per month: actual (blue) + forecast-beside (grey) on completed
+  // months; future forecast (light blue) on future months.
+  const chartData = useMemo(() => {
+    return months.map(mo => {
+      const complete = isComplete(mo)
+      let actual = 0, forecastBeside = 0, futureForecast = 0
+      for (const { code } of visibleAccounts) {
+        if (complete) {
+          actual += actualOf(code, mo) || 0
+          const fc = forecastOf(code, mo)
+          forecastBeside += fc.value != null ? fc.value : (effectiveBudget(code) || 0)
+        } else {
+          const fc = forecastOf(code, mo)
+          futureForecast += fc.value != null ? fc.value : (effectiveBudget(code) || 0)
+        }
+      }
+      return {
+        month: monthShort(mo),
+        Actual: complete ? Math.round(actual) : null,
+        Forecast: complete ? Math.round(forecastBeside) : null,
+        'Forecast (future)': complete ? null : Math.round(futureForecast),
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleAccounts, months, budgets, forecastMethods, forecastOverrides, actualsByCode, availableSet])
+
+  // Reconciliation: total across ALL overhead accounts vs the visible ones, for the
+  // current FY (actual to date + forecast for the rest = projected year).
+  const reconTotals = useMemo(() => {
+    const projFor = (accts) => {
+      let sum = 0
+      for (const { code } of accts) {
+        for (const mo of months) {
+          if (isComplete(mo)) sum += actualOf(code, mo) || 0
+          else { const fc = forecastOf(code, mo); sum += fc.value != null ? fc.value : (effectiveBudget(code) || 0) }
+        }
+      }
+      return sum
+    }
+    const all = projFor(accounts)
+    const vis = projFor(visibleAccounts)
+    return { all, vis, match: Math.abs(all - vis) < 1 }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accounts, visibleAccounts, months, budgets, forecastMethods, forecastOverrides, actualsByCode, availableSet])
+
+  // Last 3 completed months' total overhead spend (visible accounts) and its average.
+  const last3 = useMemo(() => {
+    const completedAll = [...availableSet].filter(mo => mo < thisMonth).sort()
+    const last3mo = completedAll.slice(-3)
+    let sum = 0
+    for (const mo of last3mo) for (const { code } of visibleAccounts) sum += actualOf(code, mo) || 0
+    return { months: last3mo, sum, avg: last3mo.length ? sum / last3mo.length : 0 }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleAccounts, availableSet, actualsByCode, thisMonth])
+
   if (!ok) return null
+
+  async function lockInForecast() {
+    if (typeof window !== 'undefined' && !window.confirm(`Lock in this year's forecast of ${gbp(totals.projectedYear)} for FY${fyEnd}?`)) return
+    await save({ lockForecast: { fyEnd, total: totals.projectedYear } })
+    load()
+  }
+  const lastLock = forecastLocks[0] || null
 
   return (
     <>
@@ -286,6 +353,81 @@ function Budgets() {
             <span><b style={{ color: '#b91c1c' }}>Red</b> = over budget</span>
             <span style={{ color: '#b8b8b8' }}>Grey = forecast (future month)</span>
           </div>
+
+          {!loading && (
+            <>
+              {/* Summary cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginTop: 14 }}>
+                {/* Locked-in forecast */}
+                <div style={cardBox}>
+                  <div style={cardLabel}>Locked-in forecast (FY{fyEnd})</div>
+                  <div style={cardValue}>{lastLock ? gbp(lastLock.total) : '-'}</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                    {lastLock ? `Locked ${new Date(lastLock.lockedAt).toLocaleDateString('en-GB')}` : 'No forecast locked yet'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button onClick={lockInForecast} style={{ fontSize: 11, border: 'none', background: GOLD, color: '#fff', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>Lock in current ({gbp(totals.projectedYear)})</button>
+                    {forecastLocks.length > 0 && <button onClick={() => setShowLockHistory(h => !h)} style={{ fontSize: 11, border: '1px solid #e2e0da', background: '#fff', borderRadius: 6, padding: '5px 10px', cursor: 'pointer' }}>{showLockHistory ? 'Hide' : 'History'}</button>}
+                  </div>
+                  {showLockHistory && forecastLocks.length > 0 && (
+                    <div style={{ marginTop: 8, borderTop: '1px solid #f0efec', paddingTop: 6, maxHeight: 130, overflowY: 'auto' }}>
+                      {forecastLocks.map((l, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#666', padding: '2px 0' }}>
+                          <span>{new Date(l.lockedAt).toLocaleDateString('en-GB')}{l.fyEnd ? ` (FY${l.fyEnd})` : ''}</span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{gbp(l.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Last 3 months average */}
+                <div style={cardBox}>
+                  <div style={cardLabel}>Last 3 months avg overheads</div>
+                  <div style={cardValue}>{gbp(last3.avg)}</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>
+                    {last3.months.length ? `${last3.months.map(monthShort).join(', ')} - total ${gbp(last3.sum)}` : 'No completed months yet'}
+                  </div>
+                </div>
+
+                {/* Forecast overheads for the year */}
+                <div style={cardBox}>
+                  <div style={cardLabel}>Forecast overheads (FY{fyEnd})</div>
+                  <div style={cardValue}>{gbp(totals.projectedYear)}</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>Actual to date {gbp(totals.actualToDate)} + forecast for remaining months</div>
+                </div>
+              </div>
+
+              {/* Reconciliation checkbox */}
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: reconcile ? (reconTotals.match ? '#f0fdf4' : '#fef2f2') : '#fff', border: `1px solid ${reconcile ? (reconTotals.match ? '#86efac' : '#fca5a5') : '#e2e0da'}`, color: reconcile ? (reconTotals.match ? '#166534' : '#b91c1c') : '#555' }}>
+                <input type="checkbox" checked={reconcile} onChange={e => setReconcile(e.target.checked)} />
+                Reconcile: all accounts vs shown
+                {reconcile && (
+                  <span style={{ fontWeight: 400 }}>
+                    &nbsp;- All: <b style={{ fontVariantNumeric: 'tabular-nums' }}>{gbp(reconTotals.all)}</b> &nbsp;|&nbsp; Shown: <b style={{ fontVariantNumeric: 'tabular-nums' }}>{gbp(reconTotals.vis)}</b>
+                    {reconTotals.match ? ' - matches' : ` - differs by ${gbp(Math.abs(reconTotals.all - reconTotals.vis))} (unhide accounts via the gear)`}
+                  </span>
+                )}
+              </label>
+
+              {/* Actual vs forecast bar chart */}
+              <div style={{ marginTop: 14, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, padding: '14px 12px 4px' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: INK, margin: '0 0 8px 6px' }}>Actual vs forecast by month (FY{fyEnd})</div>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={chartData} margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : v} width={44} />
+                    <Tooltip formatter={v => v == null ? '-' : gbp(v)} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="Actual" fill="#2563eb" />
+                    <Bar dataKey="Forecast" fill="#9ca3af" />
+                    <Bar dataKey="Forecast (future)" fill="#93c5fd" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
             <div style={{ marginTop: 12, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'visible' }}>
@@ -504,3 +646,6 @@ const miniBtn = { flex: 1, fontSize: 11, border: '1px solid #e2e0da', background
 // Sticky header row at top:0; frozen totals row directly beneath it.
 const stickyTop = { position: 'sticky', top: 0 }
 const stickyTotals = { position: 'sticky', top: 34 }
+const cardBox = { background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 14px' }
+const cardLabel = { fontSize: 11, color: '#888', fontWeight: 600, marginBottom: 4 }
+const cardValue = { fontSize: 24, fontWeight: 700, color: INK, fontVariantNumeric: 'tabular-nums' }

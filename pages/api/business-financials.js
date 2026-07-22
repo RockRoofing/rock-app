@@ -67,19 +67,32 @@ export default async function handler(req, res) {
   // Stores per-code/per-month budgets and a per-code forecast method.
   if (view === 'budgets-overheads') {
     if (req.method === 'POST') {
-      const { budgets, forecastMethods, forecastOverrides, hiddenRows } = req.body || {}
+      const { budgets, forecastMethods, forecastOverrides, hiddenRows, lockForecast } = req.body || {}
       if (budgets !== undefined) await redis.set('config:overhead-budgets', budgets || {})
       if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
       if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
       if (hiddenRows !== undefined) await redis.set('config:overhead-hidden-rows', hiddenRows || [])
+      // Lock in a full-year forecast snapshot (kept as a dated history).
+      if (lockForecast) {
+        const locks = (await redis.get('config:overhead-forecast-locks').catch(() => null)) || []
+        locks.unshift({
+          lockedAt: new Date().toISOString(),
+          fyEnd: lockForecast.fyEnd || null,
+          total: Number(lockForecast.total) || 0,
+          note: lockForecast.note || '',
+        })
+        // Keep the most recent 24 locks.
+        await redis.set('config:overhead-forecast-locks', locks.slice(0, 24))
+      }
       return res.json({ ok: true })
     }
 
-    const [budgets, forecastMethods, forecastOverrides, hiddenRows, chart] = await Promise.all([
+    const [budgets, forecastMethods, forecastOverrides, hiddenRows, forecastLocks, chart] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),          // { code: amount }  (flat monthly budget)
       redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),  // { code: 1|2|3 }
       redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),// { code: { 'YYYY-MM': amount } }
       redis.get('config:overhead-hidden-rows').then(v => v || []).catch(() => ([])),        // [ code, ... ]
+      redis.get('config:overhead-forecast-locks').then(v => v || []).catch(() => ([])),     // [ {lockedAt, fyEnd, total, note} ]
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
     const chartNames = {}
@@ -127,6 +140,7 @@ export default async function handler(req, res) {
       forecastMethods,
       forecastOverrides,
       hiddenRows,
+      forecastLocks,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
     })
   }

@@ -1,47 +1,54 @@
-DEPLOY NOTES - Budgets page crash FIXED (React #310, hooks order)
-=================================================================
+DEPLOY NOTES - Overhead Budgets: bar chart, reconciliation, 3 cards
+===================================================================
 
-ROOT CAUSE
-----------
-React error #310 = "rendered more hooks than during the previous render". The page's
-totals useMemo was placed AFTER the early `if (!ok) return null` auth gate. On the
-first render (before auth resolves) that hook didn't run; once authed it did - one
-more hook than before -> crash. This was my mistake when I added the totals row, and
-it breaks the rule in our own notes: ALL hooks must be before any early return. It was
-not caused by the sync data - the page would crash regardless; the sync just happened
-to be when you reloaded.
+NEW FEATURES
+------------
+1) BAR CHART (top of page) - actual vs forecast per month, FY:
+     - Blue bar  = Actual (completed months)
+     - Grey bar  = Forecast for that same completed month (sits beside the blue)
+     - Light-blue bar = Forecast for future months
+   Respects the gear (only visible accounts are charted).
 
-THE FIX
--------
-Moved the totals useMemo (and the visibleAccounts / completedFyMonths derivations it
-uses) ABOVE the `if (!ok) return null`. All hooks now run on every render. The error
-boundary added last time stays in (harmless; it will now simply never trigger for this).
+2) RECONCILIATION CHECKBOX - "Reconcile: all accounts vs shown". When ticked it shows
+   the projected-year total across ALL overhead accounts vs the currently-SHOWN
+   (unhidden) accounts. The box is GREEN when they match and RED when they differ
+   (with the difference and a nudge to unhide accounts via the gear). Use it to make
+   sure hiding rows hasn't dropped a category you needed.
 
-FILE (single EDIT - no new files)
+3) THREE CARDS at the top:
+   - Locked-in forecast (FYxxxx): shows the last locked full-year forecast and its
+     date. "Lock in current" button snapshots this year's projected total (actual to
+     date + forecast). "History" reveals previous locked figures with the dates they
+     were locked. (Stored server-side in config:overhead-forecast-locks, last 24 kept.)
+   - Last 3 months avg overheads: average monthly overhead over the last 3 completed
+     months (shows which months + the total), visible accounts.
+   - Forecast overheads (FYxxxx): actual to date + forecast for remaining months
+     (= the projected year).
+
+FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/business-financials/budgets.js
+  - pages/business-financials/budgets.js   (chart, checkbox, cards)
+  - pages/api/business-financials.js        (forecast lock-in storage + return)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-The Budgets page loads normally (no red box, no white screen). Dec/Jan and all months
-render; the frozen header + totals row, full-width table, gear hide-persist, colours,
-summary columns and cell drill-down all work as before.
+  - Chart shows blue actual + grey forecast on past months, light-blue on future.
+  - Tick "Reconcile" -> green if all == shown; hide an account -> turns red with the
+    difference.
+  - "Lock in current" -> card updates to the locked figure + today's date; "History"
+    lists past locks.
+  - Cards show sensible numbers; hiding accounts updates chart, cards and reconciliation.
 
-NEXT
+NOTE
 ----
-With the page stable, I'll build the features you asked for:
-  - Reconciliation checkbox (all categories vs visible; red on mismatch, green on match)
-  - Forecast lock-in cards (lock a forecast, view history + dates)
-  - Last-3-months-average overheads card
-  - Forecasted overheads for the year card (actuals + future forecast)
-  - Actual/forecast bar chart (blue actual, grey forecast beside it, light-blue future)
-Say go and I'll add them now that the crash is resolved.
+The reconciliation and cards use the projected-year basis (actual to date + forecast)
+so they line up with the "Forecast overheads" card and the table's Tracking column.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Confirmed all hooks precede
-the early return.
+Validated with `next build` -> "Compiled successfully". All hooks confirmed above the
+early return (no repeat of the #310 crash).
