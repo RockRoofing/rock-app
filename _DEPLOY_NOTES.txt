@@ -1,45 +1,55 @@
-DEPLOY NOTES - Overhead Budgets: green (not orange), custom 3-month-avg card
-============================================================================
+DEPLOY NOTES - Bills to Pay page rebuilt (supplier bills only + filters + 2 charts)
+===================================================================================
+
+FIRST, THE "SALES INVOICES MIXED IN" POINT
+-------------------------------------------
+The Bills page data already comes only from Xero SUPPLIER bills (Type=ACCPAY,
+AUTHORISED, AmountDue>0) - sales invoices (ACCREC) are a separate feed used by the
+Outstanding Invoices page. So the backend was already bills-only. If you saw sales
+invoices, it was likely stale/looking at the wrong page. This rebuild makes it explicit
+(title now says "supplier bills only", footer notes ACCPAY) and everything on the page
+is bills. If you STILL see anything that looks like a customer/sales invoice after a
+"Sync bills", tell me the supplier name shown and I'll trace that specific record.
 
 CHANGES
 -------
-1) ORANGE -> GREEN. "More than 15% under budget" now shows GREEN instead of orange,
-   in both the month cells and the colour key.
-   Bands now: over budget = red; within 15% under = black; more than 15% under = green.
+1) DATE RANGE FILTER (above the table): "Due from" / "Due to", defaulting to 12 months
+   back -> 12 months forward (by due date). "Reset dates" restores the default.
 
-2) NEW CARD: "3-month avg (selected)" sits to the right of the standard "Last 3 months
-   avg overheads" card. It averages the last 3 completed months' overheads but ONLY for
-   the accounts you choose via a GEAR on the card itself.
-   - Click the gear (top-right of that card) to tick/untick which overhead accounts are
-     included; "All" / "None" shortcuts included.
-   - The selection is remembered (persisted server-side in
-     config:overhead-3mo-card-codes) so it sticks for you and other viewers.
-   - This is independent of the main table gear - hiding rows in the table does not
-     change this card, and vice versa.
+2) SUPPLIER FILTER: a dropdown that is a TYPE-AHEAD search - start typing and the list
+   narrows to matches. MULTI-SELECT (tick as many as you like). "Clear" and "Select
+   shown" helpers. Empty selection = all suppliers.
 
-ABOUT THE RECONCILE CHECKBOX (you asked)
-----------------------------------------
-It's a safety check for when you hide accounts with the main gear. Ticked, it compares
-the projected-year total of ALL overhead accounts vs just the SHOWN ones: GREEN if they
-match (what you see is everything), RED if they differ (you've hidden something, with
-the gap shown). If you don't find it useful, say and I'll remove it.
+3) SORTABLE COLUMNS: click any column header (Supplier, Ref, Bill date, Due date,
+   Amount due) to sort; click again to flip direction. An arrow shows the active sort.
 
-FILES (both EDITS - no new files)
+4) FULL WIDTH table.
+
+5) TWO CHARTS SIDE BY SIDE (half the screen each):
+   - LEFT "Bills due by month (all bills)": every outstanding bill, unfiltered (red).
+   - RIGHT: if any rows are TICKED it shows just those; otherwise it follows the
+     supplier + date filters (blue). Title updates to say which mode it's in.
+
+Also added a "Bill date" column (previously only due date), and the filtered/selected
+totals now sit in the filter bar.
+
+FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/business-financials/budgets.js
-  - pages/api/business-financials.js   (stores/returns the new card's account selection)
+  - pages/business-financials/bills.js
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh.
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh. (No sync needed, but you
+can click "Sync bills" to refresh from Xero.)
 
 VERIFY
 ------
-  - Under-budget-by->15% figures and the key now show green.
-  - The new "3-month avg (selected)" card appears; its gear lets you choose accounts;
-    the average updates; refresh the page and the selection is remembered.
+  - Only supplier bills listed; date range defaults to -12..+12 months.
+  - Type in the supplier box -> list narrows; tick several -> table + right chart follow.
+  - Click headers to sort; table is full width.
+  - Left chart = all bills; right chart = ticked (or filtered if none ticked).
 
 BUILD
 -----
 Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
-return.
+return; sort arrows use \u escapes to stay ASCII-safe.
