@@ -68,11 +68,12 @@ export default function BillsToPay() {
 
   const thisMonth = new Date().toISOString().slice(0, 7)
 
-  // GUARD: this page is supplier bills only. Drop anything that isn't ACCPAY, even if
-  // it's in the stored data, so sales invoices can never appear here. Older stored
-  // records may not have a `type` field - those are treated as bills (they came from
-  // the bills feed) unless explicitly ACCREC.
-  const billsOnly = useMemo(() => items.filter(i => (i.type || 'ACCPAY') !== 'ACCREC'), [items])
+  // GUARD: this page is supplier bills only. After a sync with current code every bill
+  // is stamped type:'ACCPAY'. Show ONLY those. Anything without an explicit ACCPAY type
+  // is stale/mis-stored data (older syncs wrote sales invoices here) - exclude it and
+  // prompt a re-sync, which fully replaces the stored key with correctly-typed bills.
+  const billsOnly = useMemo(() => items.filter(i => i.type === 'ACCPAY'), [items])
+  const needsSync = items.some(i => i.type !== 'ACCPAY')
   const droppedNonBills = items.length - billsOnly.length
 
   // All supplier names (for the filter list).
@@ -163,9 +164,9 @@ export default function BillsToPay() {
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
             <>
-              {droppedNonBills > 0 && (
+              {(droppedNonBills > 0 || needsSync) && (
                 <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#7f1d1d', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
-                  Hidden {droppedNonBills} record{droppedNonBills === 1 ? '' : 's'} that were NOT supplier bills (sales invoices in the stored data). They are excluded here. Click "Sync bills" to refresh from Xero and clear them from storage.
+                  {droppedNonBills} stored record{droppedNonBills === 1 ? '' : 's'} are not confirmed supplier bills (older data that pre-dates the bills/sales split, or sales invoices). They are hidden here. Click <b>"Sync bills"</b> once to refresh from Xero - this fully replaces the stored data with supplier bills (ACCPAY) only and clears this message.
                 </div>
               )}
               {/* Filters */}

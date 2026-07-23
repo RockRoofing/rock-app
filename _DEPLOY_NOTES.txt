@@ -1,47 +1,52 @@
-DEPLOY NOTES - Bills page: hard guard against sales invoices (ACCREC)
-====================================================================
+DEPLOY NOTES - Bills page: strict ACCPAY guard (your INV- records are sales invoices)
+=====================================================================================
 
-WHY IT WAS STILL MIXING
------------------------
-The bills feed requests Xero Type=ACCPAY (supplier bills), so in theory sales invoices
-(ACCREC) can't appear. Since you still see them, either (a) the STORED bills data was
-saved by older code and contains sales invoices, or (b) Xero is returning mixed types
-for that query. I can't see your Redis/Xero from here, so this fix handles BOTH and
-proves which it is.
+DIAGNOSIS CONFIRMED
+-------------------
+The examples you sent (LINDUM Construction INV-1533, Deeley Construction INV-1663, etc.)
+are SALES INVOICES:
+  - "INV-" is Xero's default numbering for sales invoices (ACCREC).
+  - Those contacts are your CUSTOMERS, not suppliers.
+So the stored bills data (bank:outstanding-bills) contains sales invoices - almost
+certainly written by an OLDER sync before bills/sales were separated. No banner appeared
+last time because those old records have no `type` field, and my previous guard treated
+"no type" as a bill. That was too lenient.
 
-WHAT THIS DOES
---------------
-1) SERVER (lib/xero.js): the invoice fetch now HARD-FILTERS by inv.Type in code (not
-   just via the query param) and stamps each record with its `type`. So a re-sync can
-   never store an ACCREC record in the bills key.
+THE FIX
+-------
+The page now shows ONLY records explicitly stamped type:'ACCPAY' (supplier bills). Any
+record without that stamp is treated as stale/mis-stored and hidden, with a banner
+telling you to sync. Because the fetch (from the previous update) stamps every bill with
+type:'ACCPAY', a single "Sync bills" fully REPLACES the stored data with correctly-typed
+supplier bills and the sales invoices disappear for good.
 
-2) PAGE (bills.js): a client-side GUARD drops any record whose type is ACCREC before
-   anything is displayed - so even the CURRENT stored data is shown bills-only without
-   needing a sync. Records with no type (older data from the bills feed) are treated as
-   bills unless explicitly ACCREC.
+IMPORTANT - YOU MUST SYNC ONCE
+------------------------------
+After deploying:
+  1. Hard-refresh the Bills page. You'll likely see the whole list empty with a red
+     banner (because none of the OLD stored records are stamped ACCPAY yet).
+  2. Click "Sync bills" once. This pulls supplier bills (ACCPAY) fresh from Xero,
+     stamps them, and overwrites the bad stored data.
+  3. The banner clears and only supplier bills remain - the INV- sales invoices are gone.
 
-3) DIAGNOSTIC BANNER: if any non-bill records are found in the stored data, a red banner
-   shows how many were hidden. This tells us whether sales invoices really were baked
-   into storage. Clicking "Sync bills" then refreshes from Xero and clears them.
-
-WHAT I NEED FROM YOU AFTER DEPLOY
----------------------------------
-- If the red banner appears ("Hidden N records that were NOT supplier bills"): the
-  stored data had sales invoices. Click "Sync bills" once - the banner should then go
-  to zero. Tell me the number N you saw.
-- If NO banner appears but you STILL see something that looks like a sales invoice:
-  then those records are typed ACCPAY in Xero (i.e. they ARE supplier bills, just to a
-  customer-looking contact). Tell me the exact Supplier name + Ref shown and I'll look
-  at why Xero classifies it as a bill.
+This is expected: the page is now strict, so it needs that one sync to repopulate with
+properly-typed bills. (A sync fully replaces the key, so the old sales invoices are
+removed from storage entirely.)
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - lib/xero.js                         (type hard-filter + type field)
-  - pages/business-financials/bills.js  (client guard + banner)
+  - pages/business-financials/bills.js  (strict ACCPAY-only guard + banner)
+  - lib/xero.js                         (type stamping - include to be safe)
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh. Then click "Sync bills".
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh -> CLICK "SYNC BILLS".
+
+VERIFY
+------
+  - After sync: no INV- records, no customer names; only supplier bills; banner gone.
+  - If any INV- record REMAINS after a successful sync, tell me - that would mean Xero
+    itself has it typed as ACCPAY, which needs a closer look in Xero.
 
 BUILD
 -----
