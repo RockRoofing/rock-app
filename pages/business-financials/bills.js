@@ -68,12 +68,19 @@ export default function BillsToPay() {
 
   const thisMonth = new Date().toISOString().slice(0, 7)
 
+  // GUARD: this page is supplier bills only. Drop anything that isn't ACCPAY, even if
+  // it's in the stored data, so sales invoices can never appear here. Older stored
+  // records may not have a `type` field - those are treated as bills (they came from
+  // the bills feed) unless explicitly ACCREC.
+  const billsOnly = useMemo(() => items.filter(i => (i.type || 'ACCPAY') !== 'ACCREC'), [items])
+  const droppedNonBills = items.length - billsOnly.length
+
   // All supplier names (for the filter list).
   const allSuppliers = useMemo(() => {
     const s = new Set()
-    for (const i of items) if (i.contact) s.add(i.contact)
+    for (const i of billsOnly) if (i.contact) s.add(i.contact)
     return [...s].sort((a, b) => a.localeCompare(b))
-  }, [items])
+  }, [billsOnly])
 
   const supplierMatches = useMemo(() => {
     const q = supplierSearch.trim().toLowerCase()
@@ -84,7 +91,7 @@ export default function BillsToPay() {
 
   // Rows after date + supplier filters.
   const filtered = useMemo(() => {
-    return items.filter(i => {
+    return billsOnly.filter(i => {
       const d = i.dueDate || ''
       if (fromDate && d && d < fromDate) return false
       if (toDate && d && d > toDate) return false
@@ -92,7 +99,7 @@ export default function BillsToPay() {
       if (pickSet.size && !pickSet.has(i.contact)) return false
       return true
     })
-  }, [items, fromDate, toDate, pickSet])
+  }, [billsOnly, fromDate, toDate, pickSet])
 
   // Sorting.
   const sorted = useMemo(() => {
@@ -128,9 +135,9 @@ export default function BillsToPay() {
   // LEFT chart: ALL bills (unfiltered), by due month.
   const byMonthAll = useMemo(() => {
     const m = {}
-    for (const i of items) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.amountDue || 0) }
+    for (const i of billsOnly) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.amountDue || 0) }
     return Object.keys(m).sort().map(k => ({ month: k, amount: Math.round(m[k]) }))
-  }, [items])
+  }, [billsOnly])
 
   // RIGHT chart: ticked rows if any ticked, else all filtered rows.
   const byMonthSel = useMemo(() => {
@@ -156,6 +163,11 @@ export default function BillsToPay() {
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
             <>
+              {droppedNonBills > 0 && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#7f1d1d', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 12 }}>
+                  Hidden {droppedNonBills} record{droppedNonBills === 1 ? '' : 's'} that were NOT supplier bills (sales invoices in the stored data). They are excluded here. Click "Sync bills" to refresh from Xero and clear them from storage.
+                </div>
+              )}
               {/* Filters */}
               <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: 12 }}>
                 <div>

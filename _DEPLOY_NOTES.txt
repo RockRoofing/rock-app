@@ -1,55 +1,48 @@
-DEPLOY NOTES - Bills to Pay page rebuilt (supplier bills only + filters + 2 charts)
-===================================================================================
+DEPLOY NOTES - Bills page: hard guard against sales invoices (ACCREC)
+====================================================================
 
-FIRST, THE "SALES INVOICES MIXED IN" POINT
--------------------------------------------
-The Bills page data already comes only from Xero SUPPLIER bills (Type=ACCPAY,
-AUTHORISED, AmountDue>0) - sales invoices (ACCREC) are a separate feed used by the
-Outstanding Invoices page. So the backend was already bills-only. If you saw sales
-invoices, it was likely stale/looking at the wrong page. This rebuild makes it explicit
-(title now says "supplier bills only", footer notes ACCPAY) and everything on the page
-is bills. If you STILL see anything that looks like a customer/sales invoice after a
-"Sync bills", tell me the supplier name shown and I'll trace that specific record.
+WHY IT WAS STILL MIXING
+-----------------------
+The bills feed requests Xero Type=ACCPAY (supplier bills), so in theory sales invoices
+(ACCREC) can't appear. Since you still see them, either (a) the STORED bills data was
+saved by older code and contains sales invoices, or (b) Xero is returning mixed types
+for that query. I can't see your Redis/Xero from here, so this fix handles BOTH and
+proves which it is.
 
-CHANGES
--------
-1) DATE RANGE FILTER (above the table): "Due from" / "Due to", defaulting to 12 months
-   back -> 12 months forward (by due date). "Reset dates" restores the default.
+WHAT THIS DOES
+--------------
+1) SERVER (lib/xero.js): the invoice fetch now HARD-FILTERS by inv.Type in code (not
+   just via the query param) and stamps each record with its `type`. So a re-sync can
+   never store an ACCREC record in the bills key.
 
-2) SUPPLIER FILTER: a dropdown that is a TYPE-AHEAD search - start typing and the list
-   narrows to matches. MULTI-SELECT (tick as many as you like). "Clear" and "Select
-   shown" helpers. Empty selection = all suppliers.
+2) PAGE (bills.js): a client-side GUARD drops any record whose type is ACCREC before
+   anything is displayed - so even the CURRENT stored data is shown bills-only without
+   needing a sync. Records with no type (older data from the bills feed) are treated as
+   bills unless explicitly ACCREC.
 
-3) SORTABLE COLUMNS: click any column header (Supplier, Ref, Bill date, Due date,
-   Amount due) to sort; click again to flip direction. An arrow shows the active sort.
+3) DIAGNOSTIC BANNER: if any non-bill records are found in the stored data, a red banner
+   shows how many were hidden. This tells us whether sales invoices really were baked
+   into storage. Clicking "Sync bills" then refreshes from Xero and clears them.
 
-4) FULL WIDTH table.
-
-5) TWO CHARTS SIDE BY SIDE (half the screen each):
-   - LEFT "Bills due by month (all bills)": every outstanding bill, unfiltered (red).
-   - RIGHT: if any rows are TICKED it shows just those; otherwise it follows the
-     supplier + date filters (blue). Title updates to say which mode it's in.
-
-Also added a "Bill date" column (previously only due date), and the filtered/selected
-totals now sit in the filter bar.
-
-FILE (single EDIT - no new files)
+WHAT I NEED FROM YOU AFTER DEPLOY
 ---------------------------------
-  - pages/business-financials/bills.js
+- If the red banner appears ("Hidden N records that were NOT supplier bills"): the
+  stored data had sales invoices. Click "Sync bills" once - the banner should then go
+  to zero. Tell me the number N you saw.
+- If NO banner appears but you STILL see something that looks like a sales invoice:
+  then those records are typed ACCPAY in Xero (i.e. they ARE supplier bills, just to a
+  customer-looking contact). Tell me the exact Supplier name + Ref shown and I'll look
+  at why Xero classifies it as a bill.
+
+FILES (both EDITS - no new files)
+---------------------------------
+  - lib/xero.js                         (type hard-filter + type field)
+  - pages/business-financials/bills.js  (client guard + banner)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh. (No sync needed, but you
-can click "Sync bills" to refresh from Xero.)
-
-VERIFY
-------
-  - Only supplier bills listed; date range defaults to -12..+12 months.
-  - Type in the supplier box -> list narrows; tick several -> table + right chart follow.
-  - Click headers to sort; table is full width.
-  - Left chart = all bills; right chart = ticked (or filtered if none ticked).
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh. Then click "Sync bills".
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
-return; sort arrows use \u escapes to stay ASCII-safe.
+Validated with `next build` -> "Compiled successfully".
