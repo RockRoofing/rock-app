@@ -1,69 +1,52 @@
-DEPLOY NOTES - Sales reorder + Retentions Due page + VAT Refund page
-====================================================================
+DEPLOY NOTES - VAT Refund: live anticipated position (no report endpoint, no reconnect)
+======================================================================================
 
-*** THIS PACK CONTAINS TWO BRAND-NEW PAGES - the zip cannot create files for you. ***
-After unzipping, in GitHub use "Add file" -> "Create new file" for these TWO, pasting the
-contents from the zip:
-  - pages/business-financials/retentions-due.js   (NEW)
-  - pages/business-financials/vat-refund.js        (NEW)
-The other four are edits to existing files - just replace them.
+WHAT WAS WRONG + WHAT YOU ACTUALLY WANT
+---------------------------------------
+- The 404 was because Reports/TaxSummary and Reports/TaxReturns are not valid Xero
+  endpoints - so that whole "pull the filed report" approach was a dead end.
+- You clarified you don't want FILED returns - you want the ANTICIPATED position: what a
+  VAT return WOULD show for the period. That's a live calculation, and it needs no
+  special report scope and NO reconnect.
 
-1) NAV ORDER
-------------
-components/BizNav.js: Sales now sits straight after Summary. New tabs added:
-  Summary | Sales | Budgets | Bills to Pay | Invoices Owed | Retentions Due | VAT Refund | Cash Flow
+HOW IT WORKS NOW
+----------------
+Anticipated VAT = Output VAT (on sales) minus Input VAT (on purchases), by month:
+  Output VAT  = TotalTax on authorised/paid ACCREC invoices, minus ACCREC credit notes
+  Input VAT   = TotalTax on authorised/paid ACCPAY bills, minus ACCPAY credit notes
+  Net VAT     = output - input   (negative = REFUND due from HMRC; positive = payable)
+Grouped by transaction month. The page shows: this month's position, period totals, a
+net-VAT-by-month chart (green below zero = refund), and a month table with sales/purchases
+net, output/input VAT, net VAT and the position.
 
-2) RETENTIONS DUE  (pages/business-financials/retentions-due.js)
----------------------------------------------------------------
-Shows WHEN outstanding retention is due to land and its value. It loads the SAME sources
-as the Retention Tracker (dashboard projects + manual retention entries + hidden list)
-and merges them identically, then lists every release that is NOT yet received, by its
-release date. Chart = due by month (click a bar to filter); table = the schedule.
-
-BALANCES WITH THE TRACKER: the page sums each entry's outstanding balance
-((release1+release2) minus received) exactly as the Tracker does. A green banner confirms
-"Balanced with the Retention Tracker: outstanding X = total shown". If they ever differ
-(e.g. a project marked Complete with a release still flagged unreceived) it shows an amber
-banner explaining what to fix in the Tracker. Marking a release received in the Tracker
-removes it here and reduces the total - so it moves in step with the Tracker.
-
-3) VAT REFUND  (pages/business-financials/vat-refund.js)  -- pulls direct from Xero
-----------------------------------------------------------------------------------
-You chose "direct from Xero". This adds:
-  - connect.js: requests accounting.reports.taxreports.read (this IS in your app's
-    authorised scope list, so it will NOT throw invalid_scope like journals did). Also
-    added accounting.banktransactions.read explicitly (used by the sales page).
-  - lib/xero.js: fetchVatReturns() - calls Xero's tax report endpoint(s).
-  - business-financials.js: view=vat returns the report + a diag.
-  - The page renders the returned VAT return; a negative net figure (green) = refund due.
-
-  *** REQUIRES A RECONNECT ***  The taxreports permission is granted at connect time.
-  After deploying: go to /connect, reconnect Xero, approve the tax reports permission,
-  then open VAT Refund.
-
-  HONEST NOTE: Xero's VAT report shape varies by org / MTD status. The page renders
-  whatever comes back and prints a small "diag:" line at the bottom. Please open the page
-  after reconnecting and SEND ME that diag line (and a screenshot of the rendered rows).
-  I'll then map the exact fields (Box 5 net VAT / refund) cleanly and remove the diag.
-  If diag shows hasTaxScope:false, the reconnect didn't grant it - disconnect the app in
-  Xero (Settings -> Connected apps) and reconnect so it re-prompts.
-
-FILES
------
-  EDITS:
-   - components/BizNav.js
-   - pages/connect.js
-   - lib/xero.js
-   - pages/api/business-financials.js
-  NEW (create via GitHub "Add file"):
-   - pages/business-financials/retentions-due.js
-   - pages/business-financials/vat-refund.js
+Reverted connect.js (removed the tax-report scope - not needed). Kept
+accounting.banktransactions.read (used by Sales).
 
 DEPLOY
 ------
-Add the two new files + replace the four edits. Commit -> Vercel "Ready".
-For VAT: reconnect Xero, then open VAT Refund and send me the diag line.
+Replace these files:
+  - pages/connect.js
+  - lib/xero.js
+  - pages/api/business-financials.js
+  - pages/business-financials/vat-refund.js   (REPLACE if you already added it from the
+      previous pack; if you have NOT added it yet, create it via GitHub "Add file".)
+Commit -> Vercel "Ready" -> open VAT Refund. It calculates live (no sync needed) - give
+it a few seconds as it reads invoices + bills + credit notes.
+
+VERIFY
+------
+- The month table populates with Output VAT and Input VAT.
+- A month where input > output shows green "X refund"; otherwise "X to pay".
+- Spot-check one month against Xero's VAT return in Xero itself - the net should be close.
+  (It's an anticipated guide, not a filed return - small timing differences are normal.)
+- If everything is zero or there's an error, a "diag:" line appears at the bottom - send
+  it to me and I'll adjust (e.g. if bills use a different status).
+
+FILES
+-----
+  EDITS: pages/connect.js, lib/xero.js, pages/api/business-financials.js
+  EDIT-or-NEW: pages/business-financials/vat-refund.js
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully" (both new pages compiled).
+Validated with `next build` -> "Compiled successfully".
