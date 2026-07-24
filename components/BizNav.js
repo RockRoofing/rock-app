@@ -18,6 +18,7 @@ const TABS = [
   ['Budgets', '/business-financials/budgets'],
   ['Cash Schedule', '/business-financials/cash-schedule'],
   ['Cash Flow', '/business-financials/cashflow'],
+  ['Invoice Finance', '/business-financials/invoice-finance'],
 ]
 
 export function BizNav() {

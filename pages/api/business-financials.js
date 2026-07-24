@@ -337,6 +337,45 @@ export default async function handler(req, res) {
     return res.json({ months, benchmarkUpdatedAt: benchmark.updatedAt || null })
   }
 
+  if (view === 'invoice-finance') {
+    const [recStore, ifConfig, ifLimits] = await Promise.all([
+      redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),
+      redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
+      redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
+    ])
+    return res.json({
+      receivables: recStore.items || [],
+      receivablesUpdatedAt: recStore.updatedAt || null,
+      settings: {
+        advanceRate: ifConfig.advanceRate != null ? ifConfig.advanceRate : 60,
+        drawn: ifConfig.drawn != null ? ifConfig.drawn : 0,
+        excludeMaterials: !!ifConfig.excludeMaterials,
+      },
+      debtorLimits: ifLimits,        // { [debtorName]: { insuredLimit, materialsOnSite } }
+    })
+  }
+
+  if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-settings') {
+    try {
+      const s = (req.body || {}).settings || {}
+      const cfg = {
+        advanceRate: Number(s.advanceRate) || 0,
+        drawn: Number(s.drawn) || 0,
+        excludeMaterials: !!s.excludeMaterials,
+      }
+      await redis.set('config:if-settings', cfg)
+      return res.json({ ok: true, settings: cfg })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
+  if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-limits') {
+    try {
+      const limits = (req.body || {}).debtorLimits || {}
+      await redis.set('config:if-debtor-limits', limits)
+      return res.json({ ok: true, debtorLimits: limits })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
   if (view === 'cashflow') {
     const [billsStore, recStore] = await Promise.all([
       redis.get('bank:outstanding-bills').then(v => v || { items: [] }).catch(() => ({ items: [] })),
@@ -353,7 +392,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -362,7 +401,30 @@ export default async function handler(req, res) {
       redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
       redis.get('bank:account-balances').then(v => v || null).catch(() => null),
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
+      redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
+      redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
     ])
+
+    // Invoice-finance availability calculated from the Invoice Finance page config:
+    // per debtor, min(rate% x outstanding, insured limit), summed, minus drawn.
+    let ifAvailability = null
+    try {
+      const rate = (Number(ifSettings.advanceRate ?? 60) || 0) / 100
+      const drawn = Number(ifSettings.drawn) || 0
+      const byName = {}
+      for (const inv of (recStore.items || [])) {
+        const n = inv.contact || '(no name)'
+        byName[n] = (byName[n] || 0) + (inv.amountDue || 0)
+      }
+      let totalAdvance = 0
+      for (const [name, outstanding] of Object.entries(byName)) {
+        const lim = ifLimits[name] || {}
+        const insured = Number(lim.insuredLimit) || 0
+        if (insured <= 0 || lim.materialsOnSite) continue
+        totalAdvance += Math.min(outstanding * rate, insured)
+      }
+      ifAvailability = { totalAdvance: Math.round(totalAdvance), drawn, availability: Math.round(totalAdvance - drawn) }
+    } catch { ifAvailability = null }
 
     // Prefer the live per-account balances (bank cash only) for opening cash; fall
     // back to the old bank-summary closing balance if we've never fetched balances.
@@ -380,6 +442,7 @@ export default async function handler(req, res) {
       cashAtBankLegacy: cashAtBank,
       balances: balancesStore || null,
       financeCfg,
+      ifAvailability,
       bills: billsStore.items || [],
       receivables,
       avgOverheadMonthly,

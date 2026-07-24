@@ -1,50 +1,57 @@
-DEPLOY NOTES - Cash Flow: live balances, credit cards, invoice finance
-======================================================================
+DEPLOY NOTES - Invoice Finance availability page + Cash Flow wiring
+===================================================================
 
-THREE files, all EDITS - just replace them.
-  lib/xero.js                              (new fetchBankAndCardBalances)
-  pages/api/business-financials.js         (balances + facility endpoints)
-  pages/business-financials/cashflow.js    (balance boxes + facilities UI)
+FOUR files. THREE are edits. ONE is NEW.
 
-WHAT CHANGED
-------------
-1) OPENING CASH NOW WORKS (properly)
-   Adds a "Refresh balances from Xero" button. It reads the Balance Sheet and pulls
-   EACH bank + credit-card account balance. Opening cash for the forecast now uses
-   the combined BANK balance (not the old bank-summary closing figure, which was
-   never being synced and lumped cards in with cash).
+** NEW FILE - add via GitHub "Add file" (a zip can't create it) **
+  pages/business-financials/invoice-finance.js
 
-2) BALANCE BOXES AT THE TOP (shown separately, as you asked)
-   - One box per bank account (by name)
-   - One box per credit card (by name), flagged "credit card"
-   - "Opening cash (all bank combined)" = sum of the bank accounts
-   - "Credit card debt" = total owed on cards
-   - "Max cash available" = bank cash + undrawn invoice finance + unused card
-     headroom (see below)
+EDITS (replace):
+  components/BizNav.js                      (new "Invoice Finance" tab, after Cash Flow)
+  pages/api/business-financials.js         (invoice-finance view + save; availability into cashflow)
+  pages/business-financials/cashflow.js    (max cash now uses calculated IF availability)
 
-3) INVOICE FINANCE = a facility you draw down when YOU choose
-   Since you decide how/if cash is released, it is NOT modelled as automatic weekly
-   cash. Instead you enter, under "Facilities":
-     - Invoice finance limit
-     - Invoice finance drawn
-     - Credit card limit (total)
-   Undrawn invoice finance (limit - drawn) + unused card headroom (limit - debt) is
-   added to your bank cash to show "Max cash available" - the most you could raise
-   right now. These settings are saved (Save facilities).
+-----------------------------------------------------
+INVOICE FINANCE PAGE (Bibby availability - v1)
+-----------------------------------------------------
+Answers "how much can Bibby make available right now", built from your Xero sales
+ledger + the insured limits.
 
-HOW CARDS ARE DETECTED
-   Any Balance Sheet bank-section account whose name contains card words (credit
-   card / visa / mastercard / amex / cc) OR has a negative balance is treated as a
-   card. If a card isn't picking up, tell me its exact name in Xero and I'll add it.
+  For each debtor:  eligible advance = min( 60% x outstanding , insured limit )
+  Debtors with NO insured limit are excluded (flagged amber so you can spot them).
+  "Materials only" debtors can be ticked to exclude (Bibby don't advance materials).
+  Availability now = total eligible advance  -  currently drawn.
 
-IF BALANCES DON'T LOAD
-   If the Balance Sheet call is blocked by Xero permissions, you'll see an amber
-   note and opening cash falls back to the old figure. If that happens, the Xero
-   connection may need reconnecting with report access - let me know and we'll sort
-   the scope.
+Set-up:
+  - Advance rate defaults to 60% (editable).
+  - Enter "currently drawn" (from Bibby) so availability nets it off.
+  - Insured limits: type per debtor, OR click "Import Bibby limit list (CSV)" and
+    select your exported list. It reads Buyer Name + Approved Amount, sums duplicate
+    buyers (e.g. EPC's two CLNs), and matches names to your Xero debtors (ignoring
+    Ltd/Limited/punctuation differences). Unmatched buyers are kept under the Bibby
+    name and reported so you can reconcile. Then click Save.
 
-TRY IT
-   Deploy -> open Cash Flow -> click "Refresh balances from Xero". Check the per-
-   account boxes match Xero, then enter your facility limits and Save.
+The debtor table shows outstanding, insured limit, raw vs capped advance, and a
+status (Full advance / Capped at limit / No insured limit / Materials only).
+
+-----------------------------------------------------
+YOUR QUESTION: how does the forecast handle the changing IF balance + invoices
+paid off against it?
+-----------------------------------------------------
+The Cash Flow "Max cash available" now pulls the CALCULATED availability from this
+page (not a static typed number). So as invoices are raised/collected in Xero and
+as you update "drawn", the availability - and therefore max cash available - moves
+with it. The manual IF limit/drawn boxes on Cash Flow are now only a fallback if the
+Invoice Finance page hasn't been set up.
+
+NOTE (honest): this gives you an accurate CURRENT availability that updates every
+time you refresh. It does not yet roll the drawdown forward week-by-week inside the
+13-week grid (advancing new invoices / repaying as customers pay across future
+weeks). That "rolling facility ledger" is the natural next step once you've
+confirmed this current-availability figure reconciles to Bibby. Say the word and
+I'll build it on top.
+
+v1 simplifications (as agreed): disallowed/overdue handled manually (lower the
+insured limit or tick materials-only); final applications not auto-excluded yet.
 
 BUILD: next build -> Compiled successfully.

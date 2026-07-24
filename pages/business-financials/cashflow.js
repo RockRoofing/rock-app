@@ -226,9 +226,10 @@ export default function CashFlow() {
               const cardDebt = Math.abs(Math.min(0, cardTotal))
               const ccLimit = Number(finance.ccLimit) || 0
               const ccHeadroom = Math.max(0, ccLimit - cardDebt)
-              const ifLimit = Number(finance.ifLimit) || 0
-              const ifDrawn = Number(finance.ifDrawn) || 0
-              const ifHeadroom = Math.max(0, ifLimit - ifDrawn)
+              // Invoice-finance headroom: prefer the calculated availability from the
+              // Invoice Finance page; fall back to the manual limit-minus-drawn entry.
+              const ifCalc = data.ifAvailability
+              const ifHeadroom = ifCalc ? Math.max(0, ifCalc.availability) : Math.max(0, (Number(finance.ifLimit) || 0) - (Number(finance.ifDrawn) || 0))
               const maxCash = bankTotal + ifHeadroom + ccHeadroom
               return (
                 <>
@@ -238,7 +239,8 @@ export default function CashFlow() {
                     {cardAccts.map((a, i) => <BalBox key={'c' + i} label={a.name} value={gbp(a.balance)} sub="credit card" color={a.balance < 0 ? '#dc2626' : '#16a34a'} />)}
                     <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong />
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
-                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + undrawn IF + card headroom" color="#0f766e" strong />
+                    {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
+                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + card headroom" color="#0f766e" strong />
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <button onClick={refreshBalances} disabled={refreshingBal} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: refreshingBal ? 0.6 : 1 }}>{refreshingBal ? 'Refreshing...' : 'Refresh balances from Xero'}</button>
                     </div>
@@ -253,7 +255,7 @@ export default function CashFlow() {
                     <FinInput label="Invoice finance drawn" value={finance.ifDrawn} onChange={v => setFinance(f => ({ ...f, ifDrawn: v }))} />
                     <FinInput label="Credit card limit (total)" value={finance.ccLimit} onChange={v => setFinance(f => ({ ...f, ccLimit: v }))} />
                     <button onClick={saveFinance} disabled={savingFin} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: savingFin ? 0.6 : 1 }}>{savingFin ? 'Saving...' : 'Save facilities'}</button>
-                    <div style={{ fontSize: 11, color: '#9a958c', flexBasis: '100%' }}>Invoice finance is a facility you draw down when you choose - so it is shown as available headroom, not automatic weekly cash. Undrawn IF (limit &minus; drawn) plus unused card headroom is added to your bank cash to show the most you could raise.</div>
+                    <div style={{ fontSize: 11, color: '#9a958c', flexBasis: '100%' }}>Credit card limit sets your card headroom. Invoice finance availability is now calculated on the Invoice Finance page (per-debtor insured limits x advance rate, minus drawn) and feeds &quot;max cash available&quot; automatically - the invoice finance boxes below are only used as a fallback if that page hasn&apos;t been set up.</div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
