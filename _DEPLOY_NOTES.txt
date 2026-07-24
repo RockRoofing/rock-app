@@ -1,42 +1,35 @@
-DEPLOY NOTES - Sales: fix May (wrong invoices pulled) + average = completed months only
-=======================================================================================
+DEPLOY NOTES - Sales: per-month reconciliation strip (to pinpoint May)
+=====================================================================
 
-WHY MAY WAS WRONG (found by comparing your app vs Xero line-by-line)
--------------------------------------------------------------------
-The May LINE LIST in the app was a DIFFERENT set of invoices than Xero's May list
-(app showed Bosden/Atlas/Farmstead/J190/J197...; Xero showed Vale Southern/MAYLIM/
-Trident/Barnfield/Selsdon/Torsion...). That's because the fetch was sending an
-"If-Modified-Since" header, which tells Xero "only return records MODIFIED since date X"
-- a modification filter, NOT a date filter. So the app pulled a partial/incorrect set of
-invoices, then bucketed them by date - giving the wrong invoices in the wrong months.
-Most months happened to look right; May didn't.
+May still shows the wrong figure, so I need to see EXACTLY what it's made of rather than
+guess. This adds a reconciliation strip that appears when you click a month.
 
-THE FIX
--------
-Removed "If-Modified-Since" from the invoice, credit-note and bank-transaction fetches.
-They now pull the full set and keep everything dated on/after the window start, bucketed
-by the Xero accounting date - matching Xero's period membership.
+WHAT TO DO
+----------
+1. Deploy this file. Hard-refresh Sales. (No sync needed - it reads existing data.)
+2. Click the MAY bar (or the May row via the month).
+3. A yellow strip appears above the table showing:
+     "May 26 reconciliation: lines total <X> (<n> lines) vs P&L <Y> (diff <Z>)
+      - by source: Invoice: <a> | Manual journal: <b> | Credit note: <c> | Bank receipt: <d>"
 
-  *** REQUIRES A RE-SYNC ***  Deploy -> Sales -> "Sync Xero figures" to re-pull the
-  correct invoice set. May (and any other month) should then match Xero.
+SEND ME THAT STRIP. It tells us instantly which it is:
+  - If one SOURCE is negative when it should be positive (or vice-versa) -> a sign issue
+    on that source only.
+  - If "Manual journal" is roughly DOUBLE the expected WIP -> double counting.
+  - If the P&L diff is large and one source is missing -> a missing transaction type.
+  - If lines total is the NEGATIVE of the right number -> a total-level sign flip.
 
-AVERAGE = COMPLETED MONTHS ONLY
--------------------------------
-The average dashed line now uses only COMPLETED months (excludes the current month,
-which is always partial, and any future months). The key now reads:
-  "Average of completed months (£x) - above/below target".
+Right now the app shows May = -102,521 while Xero = +92,417. The visible rows appeared to
+sum to +102,522 (same size, opposite sign), which this strip will confirm or correct by
+showing the true per-source breakdown and line count.
 
-AFTER DEPLOY - PLEASE CHECK
----------------------------
-- May detail total should equal Xero's 200-Sales running balance (92,416.84) and its bar.
-- The P&L cross-check note under the chart should say "(match)" for the period. If it
-  still shows a difference, send me the number - a residual gap would mean one more
-  transaction type posts to 200 that we haven't included yet.
-
-FILES (both EDITS - no new files)
+FILE (single EDIT - no new files)
 ---------------------------------
-  - lib/xero.js                          (remove If-Modified-Since from sales sources)
-  - pages/business-financials/sales.js   (average = completed months + key note)
+  - pages/business-financials/sales.js
+
+DEPLOY
+------
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> click May -> send the strip.
 
 BUILD
 -----

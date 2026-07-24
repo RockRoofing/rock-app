@@ -159,6 +159,21 @@ export default function Sales() {
   const arrow = (key) => sortKey === key ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
   const total = useMemo(() => filteredLines.reduce((s, l) => s + (l.amount || 0), 0), [filteredLines])
 
+  // Per-month reconciliation readout (visible when a month is selected): compares the
+  // summed lines to the P&L figure for that month, and breaks the sum down by source.
+  const monthRecon = useMemo(() => {
+    if (!selectedMonth) return null
+    const pl = (data?.plByMonth || {})[selectedMonth]
+    const bySource = {}
+    let sum = 0
+    for (const l of filteredLines) {
+      sum += (l.amount || 0)
+      const k = l.sourceType || 'Other'
+      bySource[k] = Math.round(((bySource[k] || 0) + (l.amount || 0)) * 100) / 100
+    }
+    return { month: selectedMonth, sum: Math.round(sum * 100) / 100, pl: pl != null ? Math.round(pl * 100) / 100 : null, count: filteredLines.length, bySource }
+  }, [selectedMonth, filteredLines, data])
+
   if (!ok) return null
   return (
     <>
@@ -223,6 +238,13 @@ export default function Sales() {
                 )}
               </Card>
 
+              {monthRecon && (
+                <div style={{ marginTop: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400e' }}>
+                  <strong>{monthLbl(monthRecon.month)} reconciliation:</strong> lines total {gbp(monthRecon.sum)} ({monthRecon.count} lines)
+                  {monthRecon.pl != null && <> vs P&amp;L {gbp(monthRecon.pl)} {Math.abs(monthRecon.sum - monthRecon.pl) < 1 ? '(match)' : `(diff ${gbp(monthRecon.sum - monthRecon.pl)})`}</>}
+                  {' - '}by source: {Object.entries(monthRecon.bySource).map(([k, v]) => `${k}: ${gbp(v)}`).join('  |  ')}
+                </div>
+              )}
               <div style={{ marginTop: 16, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
