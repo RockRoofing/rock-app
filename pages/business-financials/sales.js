@@ -190,7 +190,6 @@ export default function Sales() {
                 <div style={{ display: 'flex', gap: 18, alignItems: 'center', margin: '0 0 8px 6px', fontSize: 12, color: '#666', flexWrap: 'wrap' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color="#6b7280" /> Target ({gbp(liveTarget)})</span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color={avgColor} /> Average ({gbp(avg)}) - {liveTarget > 0 ? (avgAboveTarget ? 'above target' : 'below target') : 'set a target'}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color="#16a34a" solid /> Now</span>
                 </div>
                 {chart.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No sales in this range. Click "Sync Xero figures".</div> : (
                   <ResponsiveContainer width="100%" height={300}>
@@ -201,7 +200,6 @@ export default function Sales() {
                       <Tooltip formatter={(v) => gbp(v)} labelFormatter={monthLbl} />
                       {(Number(targetDraft) || target) > 0 && <ReferenceLine y={Number(targetDraft) || target} stroke="#6b7280" strokeDasharray="6 4" strokeWidth={2} ifOverflow="extendDomain" />}
                       <ReferenceLine y={avg} stroke={avgColor} strokeDasharray="6 4" strokeWidth={2} ifOverflow="extendDomain" />
-                      <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" />
                       <Bar dataKey="amount" name="Sales" cursor="pointer" onClick={(d) => setSelectedMonth(sm => sm === d.month ? null : d.month)}>
                         {chart.map((e) => <Cell key={e.month} fill={selectedMonth === e.month ? '#1d4ed8' : (selectedMonth ? '#bcd0f5' : '#2563eb')} />)}
                       </Bar>

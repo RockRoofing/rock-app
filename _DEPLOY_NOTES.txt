@@ -1,48 +1,37 @@
-DEPLOY NOTES - Sales: add credit notes, Source column to spot non-sales lines
-=============================================================================
+DEPLOY NOTES - Sales: fix signs (sales +, credit notes -), remove "now" line
+============================================================================
 
-DEPLOY ORDER
-------------
-If you have NOT yet deployed the previous pack (Sales_ledger_invoices_journals.zip -
-connect.js, lib/xero.js, sync-benchmark.js), deploy that first, THEN this. This pack's
-lib/xero.js already INCLUDES everything from that one plus the changes below, so it's
-safe to just use this lib/xero.js.
+SIGN FIX
+--------
+Your WIP manual journals post the sale to the sales code as a POSITIVE amount, but the
+code was flipping it - so sales showed as MINUS. Fixed: manual-journal sales now show
+POSITIVE. Result:
+  - Invoices        -> positive (sales)
+  - Manual journals -> positive (WIP sales)
+  - Credit notes    -> negative (reductions)
+So sales read as plus and credit notes as minus, as expected. (Totals are unchanged in
+magnitude - they already matched - this only corrects the display sign.)
 
-WHAT CHANGED
-------------
-1) SALES CREDIT NOTES: now pulls ACCREC credit notes (ACCRECCREDIT) coded to your sales
-   codes and shows them as NEGATIVE (reductions), per your steer. Codes stay 200/260/270.
-2) SOURCE COLUMN: the detail table now has a "Source" column showing whether each line
-   is an Invoice, a Manual journal (WIP), or a Credit note. Manual journals are purple,
-   credit notes red. This makes any "cost-looking" line identifiable at a glance.
-
-ABOUT THE "COSTS" YOU SAW
--------------------------
-The fetch only ever keeps lines coded to 200/260/270 - it never pulls cost codes. So a
-"cost-looking" row is almost certainly a MANUAL JOURNAL debit posted to a sales code
-(e.g. a WIP reversal), which correctly shows as a negative sale. The new Source column
-lets you confirm this: sort by Amount or look at Source.
-  -> If you still see genuine COSTS (wrong account) after this, tell me the Source +
-     Code + a couple of descriptions from those rows and I'll trace exactly where they
-     come from. It's possible some non-sales activity is being posted to 260/270 - if so
-     we may want to drop those codes and keep only 200 (quick change).
+CHART
+-----
+Removed the green "now" vertical line from the chart and its "Now" entry from the key.
+The key now shows just Target and Average.
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures.
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures
+(to re-pull with the corrected sign).
 
 VERIFY
 ------
-- Source column shows Invoice / Manual journal / Credit note.
-- Credit notes appear as negative (red) and reduce the month total.
-- Any row you thought was a "cost" - check its Source. If it's a Manual journal, that's
-  a WIP/sales-code journal, not a cost. If it's an Invoice on a non-sales code, that
-  can't happen now (filtered). Send me anything that still looks wrong.
+- Sales lines (Invoice / Manual journal) show as positive; credit notes negative.
+- No green "now" line on the chart; key shows Target + Average only.
+- Month totals unchanged from before (only signs corrected).
 
 FILES (both EDITS - no new files)
 ---------------------------------
-  - lib/xero.js                          (adds ACCREC credit notes to sales ledger)
-  - pages/business-financials/sales.js   (Source column)
+  - lib/xero.js                          (manual-journal sign: sales positive)
+  - pages/business-financials/sales.js   (remove now line + key entry)
 
 BUILD
 -----
