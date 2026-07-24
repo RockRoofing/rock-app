@@ -1,67 +1,36 @@
-DEPLOY NOTES - New Sales page (by transaction date, incl. WIP)
-=============================================================
+DEPLOY NOTES - Invoices Owed: date-range removed, due/expected basis toggle
+===========================================================================
 
-WHAT IT IS
-----------
-A new "Sales" tab under Business Financials showing sales by transaction date,
-INCLUDING WIP (which posts to Sales code 200 in your Xero). Chosen source (as agreed):
-  - CHART (top): monthly sales totals from the P&L benchmark, sales code 200 - this
-    already includes WIP. Bar chart by month.
-  - DETAIL TABLE (below): line-level general-ledger entries for the sales code(s) -
-    every sales transaction incl. WIP journals - with Date, Description, Reference,
-    Code, Amount, sortable, date-filterable, with a running total.
-
-HOW THE DATA IS PULLED
-----------------------
-The existing "Sync Xero figures" run now pulls the general ledger for BOTH overhead
-AND sales codes in ONE pass (no extra API cost beyond what Budgets already added), and
-stores a new key sales:ledger. The chart reads the P&L benchmark (already stored); the
-detail reads sales:ledger.
-
-IMPORTANT - SYNC ONCE
----------------------
-The detail table needs the sales ledger, which only populates on a sync with this new
-code:
-  1. Deploy all files, hard-refresh.
-  2. Open the Sales tab and click "Sync Xero figures" once.
-  3. Chart shows immediately (from the existing benchmark); the detail table fills in
-     after the sync completes.
-
-NEW NAV
+CHANGES
 -------
-A "Sales" tab is added to the Business Financials nav (between Budgets and Bills).
+1) REMOVED the "Due between ... and ..." date-range filter (and its Reset).
+2) ADDED a "Date basis" toggle: Expected | Due. It controls which date the page uses
+   for the charts (month buckets), the sort, and the Overdue column.
+   - DEFAULT = Expected.
+   - Expected falls back to the invoice's due date when no expected date has been set,
+     so nothing disappears.
+3) The two charts and the Overdue column now follow the chosen basis; titles/subs note
+   "(by expected date)" / "(by due date)".
 
-FILES
------
-1. NEW   pages/business-financials/sales.js   <-- NEW FILE - create it in GitHub
-2. EDIT  pages/api/business-financials.js       (adds view=sales)
-3. EDIT  pages/api/sync-benchmark.js            (pulls overhead + sales ledger; stores sales:ledger)
-4. EDIT  components/BizNav.js                    (adds the Sales tab)
+Everything else (ticks + selected total, customer multi-select filter, sortable
+columns, comments, full width) is unchanged. The whole outstanding list now shows (no
+date window) - use the customer filter / column sort to navigate.
 
-NOTE: sales.js is a NEW file - the zip can't create it for you; add it via GitHub
-"Add file" in pages/business-financials/, then replace the three edited files.
+FILE (single EDIT - no new files)
+---------------------------------
+  - pages/business-financials/invoices.js
 
 DEPLOY
 ------
-Add sales.js, replace the 3 edited files. Commit -> Vercel "Ready" -> hard-refresh ->
-open Sales -> Sync Xero figures.
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-  - Sales tab appears; chart shows monthly sales (incl. WIP) from the P&L.
-  - After sync: detail table lists individual sales ledger lines; the table total for a
-    full month should match that month's chart bar (small differences only if a sales
-    entry posted after the ledger pull).
-  - Date filter adjusts both chart and table; columns sortable.
-
-RECONCILIATION NOTE
--------------------
-Chart = P&L monthly total (authoritative for "sales incl. WIP"). Table = ledger lines.
-They come from the same underlying data captured at the same sync, so a full month's
-lines should sum to that month's bar. If you see a gap, it's usually a timing thing -
-re-sync. Tell me the month + the two figures if it persists.
+  - No date-range inputs; a Date basis toggle (Expected | Due) defaulting to Expected.
+  - Switching to Due re-buckets the charts and re-computes Overdue against the due date.
+  - Setting an Expected date on a row moves it in the Expected-basis charts/sort.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Sales sign logic unit-checked
-(credits show as positive sales).
+Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
+return.

@@ -43,10 +43,7 @@ export default function InvoicesOwed() {
   const [commentInvoice, setCommentInvoice] = useState(null)
 
   const today = new Date()
-  const defFrom = isoDay(new Date(today.getFullYear(), today.getMonth() - 10, 1))
-  const defTo = isoDay(new Date(today.getFullYear(), today.getMonth() + 3, 0))
-  const [from, setFrom] = useState(defFrom)
-  const [to, setTo] = useState(defTo)
+  const [dateBasis, setDateBasis] = useState('expected')   // 'expected' | 'due'
   const [view, setView] = useState('outstanding')   // outstanding | all
   const [sortKey, setSortKey] = useState('dueDate')
   const [sortDir, setSortDir] = useState('asc')
@@ -122,21 +119,27 @@ export default function InvoicesOwed() {
   }
 
   // All customer names (respecting the outstanding/all + date filters, but not the
-  // customer pick itself) for the filter list.
-  const dateViewFiltered = useMemo(() => invoices.filter(i => {
+  // Effective date per invoice, per the chosen basis. Expected falls back to due date
+  // when no expected date has been set, so nothing disappears.
+  const effDate = (i) => {
+    if (dateBasis === 'expected') {
+      const exp = meta[i.invoiceNumber]?.expectedDate
+      return exp || i.dueDate || ''
+    }
+    return i.dueDate || ''
+  }
+
+  // Outstanding/All view only (date-range filter removed).
+  const viewFiltered = useMemo(() => invoices.filter(i => {
     if (view === 'outstanding' && i.settled) return false
-    const d = i.dueDate || ''
-    if (from && d && d < from) return false
-    if (to && d && d > to) return false
-    if (from && !d) return false
     return true
-  }), [invoices, view, from, to])
+  }), [invoices, view])
 
   const allCustomers = useMemo(() => {
     const s = new Set()
-    for (const i of dateViewFiltered) if (i.customer) s.add(i.customer)
+    for (const i of viewFiltered) if (i.customer) s.add(i.customer)
     return [...s].sort((a, b) => a.localeCompare(b))
-  }, [dateViewFiltered])
+  }, [viewFiltered])
   const custMatches = useMemo(() => {
     const q = custSearch.trim().toLowerCase()
     return q ? allCustomers.filter(s => s.toLowerCase().includes(q)) : allCustomers
@@ -144,11 +147,11 @@ export default function InvoicesOwed() {
   const custSet = useMemo(() => new Set(custPick), [custPick])
 
   const filtered = useMemo(() => {
-    return dateViewFiltered.filter(i => {
+    return viewFiltered.filter(i => {
       if (custSet.size && !custSet.has(i.customer)) return false
       return true
     })
-  }, [dateViewFiltered, custSet])
+  }, [viewFiltered, custSet])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
@@ -162,6 +165,7 @@ export default function InvoicesOwed() {
         case 'date': av = a.date || ''; bv = b.date || ''; break
         case 'paid': av = a.paid || 0; bv = b.paid || 0; break
         case 'due': av = a.due || 0; bv = b.due || 0; break
+        case 'basisDate': av = effDate(a); bv = effDate(b); break
         case 'dueDate': default: av = a.dueDate || ''; bv = b.dueDate || ''; break
       }
       if (av < bv) return -1 * dir
@@ -169,7 +173,8 @@ export default function InvoicesOwed() {
       return 0
     })
     return arr
-  }, [filtered, sortKey, sortDir])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sortKey, sortDir, dateBasis, meta])
 
   function toggleSort(key) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -181,22 +186,23 @@ export default function InvoicesOwed() {
   const selTotal = useMemo(() => sorted.filter(i => sel[i.invoiceNumber]).reduce((s, i) => s + (i.due || 0), 0), [sorted, sel])
   const selCount = Object.values(sel).filter(Boolean).length
 
-  // LEFT chart: ALL invoices falling due (only the outstanding/all + date view, NOT the
-  // customer filter or row selection). Stays fixed to "all falling due".
+  // LEFT chart: ALL invoices (view only), bucketed by the chosen date basis.
   const byMonthAll = useMemo(() => {
     const m = {}
-    for (const i of dateViewFiltered) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
+    for (const i of viewFiltered) { const k = monthKey(effDate(i)) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
     return Object.keys(m).sort().map(k => ({ month: k, amount: Math.round(m[k]) }))
-  }, [dateViewFiltered])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewFiltered, dateBasis, meta])
 
-  // RIGHT chart: ticked rows if any ticked, else the filtered (supplier + date) rows.
+  // RIGHT chart: ticked rows if any ticked, else the filtered rows.
   const byMonthSel = useMemo(() => {
     const anyTicked = Object.values(sel).some(Boolean)
     const base = anyTicked ? sorted.filter(i => sel[i.invoiceNumber]) : filtered
     const m = {}
-    for (const i of base) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
+    for (const i of base) { const k = monthKey(effDate(i)) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
     return Object.keys(m).sort().map(k => ({ month: k, amount: Math.round(m[k]) }))
-  }, [sorted, filtered, sel])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, filtered, sel, dateBasis, meta])
   const rightIsTicked = Object.values(sel).some(Boolean)
   const thisMonth = today.toISOString().slice(0, 7)
 
@@ -218,11 +224,13 @@ export default function InvoicesOwed() {
               <button onClick={() => setView('outstanding')} style={{ ...toggle, background: view === 'outstanding' ? GOLD : '#fff', color: view === 'outstanding' ? '#fff' : '#666' }}>Outstanding</button>
               <button onClick={() => setView('all')} style={{ ...toggle, background: view === 'all' ? GOLD : '#fff', color: view === 'all' ? '#fff' : '#666' }}>All</button>
             </div>
-            <span style={{ fontSize: 12, color: '#888' }}>Due between</span>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={dateInp} />
-            <span style={{ fontSize: 12, color: '#888' }}>and</span>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={dateInp} />
-            <button onClick={() => { setFrom(defFrom); setTo(defTo) }} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: '#666' }}>Reset</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>Date basis:</span>
+              <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1px solid #ddd' }}>
+                <button onClick={() => setDateBasis('expected')} style={{ ...toggle, background: dateBasis === 'expected' ? GOLD : '#fff', color: dateBasis === 'expected' ? '#fff' : '#666' }}>Expected</button>
+                <button onClick={() => setDateBasis('due')} style={{ ...toggle, background: dateBasis === 'due' ? GOLD : '#fff', color: dateBasis === 'due' ? '#fff' : '#666' }}>Due</button>
+              </div>
+            </div>
 
             {/* Customer multi-select with type-ahead */}
             <div ref={custRef} style={{ position: 'relative', minWidth: 240 }}>
@@ -261,8 +269,8 @@ export default function InvoicesOwed() {
             <>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: '1 1 45%', minWidth: 320 }}>
-                  <Card title="Invoices falling due by month (all)" sub="Everything falling due - unaffected by the customer filter or selection">
-                    {byMonthAll.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices due in this range.</div> : (
+                  <Card title={`Invoices by month (all, by ${dateBasis} date)`} sub="Everything owed - unaffected by the customer filter or selection">
+                    {byMonthAll.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices to show.</div> : (
                       <ResponsiveContainer width="100%" height={260}>
                         <BarChart data={byMonthAll} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -277,7 +285,7 @@ export default function InvoicesOwed() {
                   </Card>
                 </div>
                 <div style={{ flex: '1 1 45%', minWidth: 320 }}>
-                  <Card title={rightIsTicked ? 'Selected invoices by month (ticked)' : 'Filtered invoices by month'} sub={rightIsTicked ? 'Only the rows you have ticked' : 'Follows the customer + date filters'}>
+                  <Card title={rightIsTicked ? 'Selected invoices by month (ticked)' : 'Filtered invoices by month'} sub={rightIsTicked ? `Only the rows you have ticked (by ${dateBasis} date)` : `Follows the customer filter (by ${dateBasis} date)`}>
                     {byMonthSel.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices match the current filter/selection.</div> : (
                       <ResponsiveContainer width="100%" height={260}>
                         <BarChart data={byMonthSel} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
@@ -314,7 +322,7 @@ export default function InvoicesOwed() {
                   </thead>
                   <tbody>
                     {sorted.map((i, idx) => {
-                      const od = daysOverdue(i.dueDate)
+                      const od = daysOverdue(effDate(i))
                       const overdue = od != null && od > 0 && i.due > 0.005
                       const m = meta[i.invoiceNumber] || {}
                       const nComments = (m.comments || []).length
