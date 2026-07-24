@@ -1,19 +1,33 @@
-DEPLOY NOTES - Fix invalid_scope (remove finance.statements.read)
-=================================================================
+DEPLOY NOTES - Isolate the invalid_scope: remove taxreports for now
+===================================================================
 
-The invalid_scope error was caused by finance.statements.read, which I added as a
-fallback - that's a separate Xero Finance API product your app isn't enabled for, and it
-wasn't in your authorised scopes list. Removed it.
+Reconnect still failed with invalid_scope even after removing finance.statements.read.
+That means accounting.reports.taxreports.read is ALSO being rejected by your app - even
+though it appeared in the authorisation list, it isn't grantable in the OAuth flow (Xero
+sometimes lists a scope that the app tier can't actually request).
 
-Kept accounting.reports.taxreports.read (which IS in your app's authorised list, so it
-won't trip invalid_scope).
+So we can't pull the filed VAT return via that scope. This build removes it and returns
+connect.js to a WORKING state (keeps accounting.banktransactions.read, which the Sales
+page needs).
 
-DEPLOY
-------
-Replace pages/connect.js. Commit -> Vercel "Ready" -> go to /connect and reconnect Xero.
-The consent screen should now load and ask you to approve the reports permission.
+DEPLOY + TEST
+-------------
+1. Replace pages/connect.js. Commit -> Vercel "Ready".
+2. Go to /connect and reconnect Xero. The consent screen SHOULD now load (no
+   invalid_scope). Approve it.
+3. If it STILL says invalid_scope, then the culprit is accounting.banktransactions.read -
+   tell me and I'll remove that too and we'll know exactly which scope your app rejects.
 
-Then open VAT Refund and send me the diag line as before.
+WHAT THIS MEANS FOR VAT
+-----------------------
+If taxreports genuinely can't be granted, we can't read the filed return via the standard
+accounting API. Options I'll lay out once you confirm the reconnect works:
+  (a) Check the Xero Developer app config - the scope may need enabling there (like the
+      journals one did), OR the app may need to be a "custom connection"/certified app to
+      get taxreports.
+  (b) Fall back to: manual entry of the filed Box 5 per past month (quick, reliable), with
+      the transaction estimate for current/future. Least moving parts.
+  (c) You export the VAT return (like the xlsx you sent) and we import it.
 
 FILE
 ----
