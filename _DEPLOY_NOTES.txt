@@ -1,54 +1,46 @@
-DEPLOY NOTES - Sales: fix empty table (income-code mismatch) + two dashed lines
-===============================================================================
+DEPLOY NOTES - Sales table still empty: on-page diagnostic to pinpoint it
+========================================================================
 
-WHY THE TABLE WAS EMPTY (the real reason)
------------------------------------------
-The chart is built from the P&L benchmark, which keys sales by the account NAME mapped
-to a code. Your sales P&L figure may sit under a code that ISN'T 200 (e.g. a different
-income account). The sales LEDGER pull was only fetching code 200 (+ codes tagged
-'sales'), so if your sales journals use a different income code, the ledger had nothing
-- hence an empty table even though the chart had bars.
+I'm no longer guessing - this build PRINTS the diagnosis on the page.
 
-FIX: both the sync (ledger pull) and the sales view now treat ANY code the P&L puts in
-the INCOME section as a sales code - not just 200. So the ledger now pulls the same
-codes the chart is built from, and the table fills.
+WHAT TO DO
+----------
+1. Deploy all three files. Hard-refresh the Sales page.
+2. Click "Sync Xero figures" and wait for it to finish.
+3. If the table is still empty, a grey monospace line appears where the table would be,
+   e.g.:
+     diag - chart codes: {"201":123456} | ledger codes: [] | ledger lines: 0 | requested: ["200","201"]
+   COPY THAT LINE TO ME. It tells us exactly:
+     - chart codes  = the account code(s) your sales figure sits under (from the P&L)
+     - ledger codes = what the sales ledger actually captured
+     - requested    = the codes the sync tried to pull
+   From that I can see precisely why they don't line up and fix it in one go.
 
-You MUST RE-SYNC after deploying so the ledger is re-pulled with the broader code set:
-  Deploy -> hard-refresh -> click "Sync Xero figures" once.
+WHAT THIS BUILD ALREADY TRIES
+-----------------------------
+The sync now pulls the general ledger for code 200, any code tagged 'sales', AND any
+code the P&L puts in the INCOME section (whatever its number). The chart and ledger use
+the same code set. codeSection flows P&L -> benchmark -> ledger, so ONE sync should
+populate it. If it still comes up empty, the diag line will show whether:
+  (a) the ledger genuinely returned no lines for those codes (a Xero/journal issue), or
+  (b) the codes still don't match (config issue) - either way the numbers make it clear.
 
-DIAGNOSTIC (so we can confirm)
-------------------------------
-The sales API now returns a `diag` object. If the table is still empty after a sync,
-open (while logged in) /api/business-financials?view=sales in the browser and send me
-the "diag" section - it lists:
-  - benchmarkSalesCodes: the codes (and totals) the chart is built from
-  - ledgerCodesPresent: the codes the sales ledger actually holds
-If these two lists differ, we'll see exactly which income code needs including.
-
-TWO DASHED LINES (target + average)
------------------------------------
-When a target is set there are now clearly TWO lines:
-  - GREY dashed = the target (draws as soon as you type it, before/after saving).
-  - GREEN or RED dashed = the average revenue for the shown period; GREEN if the
-    average is at/above target, RED if below.
-Both are thicker now and set to extend the chart's scale so they can't be hidden off
-the top. The key above the chart labels all three (Target / Average / Now).
+LIKELY culprits the diag will confirm:
+  - Your sales P&L line maps to a code other than 200 AND the benchmark wasn't re-synced
+    with codeSection yet (this sync fixes that).
+  - Sales are posted in a way the Journals endpoint reports under a code we're not
+    requesting.
 
 FILES (all EDITS - no new files)
 --------------------------------
-  - pages/business-financials/sales.js        (two-line target/avg, live draft)
-  - pages/api/business-financials.js           (income-section sales codes + diag)
+  - pages/business-financials/sales.js        (on-page diag when table empty)
+  - pages/api/business-financials.js           (diag payload + income-section codes)
   - pages/api/sync-benchmark.js                (ledger pulls income-section codes)
 
 DEPLOY
 ------
-Replace all three. Commit -> Vercel "Ready" -> hard-refresh -> "Sync Xero figures".
-
-VERIFY
-------
-  - After sync: table lists sales transactions; click a bar filters to that month.
-  - Enter a target: grey target line + green/red average line both show.
-  - If table still empty: send me the /api/business-financials?view=sales "diag".
+Replace all three. Commit -> Vercel "Ready" -> hard-refresh -> Sync Xero figures ->
+if empty, send me the diag line.
 
 BUILD
 -----

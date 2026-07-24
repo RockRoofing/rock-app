@@ -235,6 +235,13 @@ export default function Sales() {
                       {lines.length === 0 ? 'No sales ledger yet - click "Sync Xero figures" to pull sales transactions.' : 'No sales transactions in this range.'}
                     </td></tr>}
                   </tbody>
+                  {sortedLines.length === 0 && data?.diag && (
+                    <tfoot>
+                      <tr><td colSpan={5} style={{ padding: '10px 14px', fontSize: 11, color: '#999', textAlign: 'left', background: '#fafafa', fontFamily: 'monospace' }}>
+                        diag - chart codes: {JSON.stringify(data.diag.benchmarkSalesCodes)} | ledger codes: {JSON.stringify(data.diag.ledgerCodesPresent)} | ledger lines: {data.diag.ledgerLineCount} | requested: {JSON.stringify(data.diag.salesCodesRequested)}
+                      </td></tr>
+                    </tfoot>
+                  )}
                   {sortedLines.length > 0 && (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid #eee', fontWeight: 700, background: '#faf9f7' }}>
