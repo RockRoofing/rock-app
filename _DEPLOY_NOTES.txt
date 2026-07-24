@@ -1,22 +1,22 @@
-DEPLOY NOTES - Budgets forecast dropdown: clean labels + holds "Budget / mo"
-============================================================================
+DEPLOY NOTES - Budgets: last-FY average, last-full-month fix, clear-budget x
+===========================================================================
 
-** Supersedes "Budget_forecast_option". One file, an EDIT - just replace it. **
+ONE file, an EDIT - just replace it.
   pages/business-financials/budgets.js
 
-CHANGES
-  1. Removed the "1 - / 2 - / 3 -" number prefixes from the Forecast dropdown.
-     Options now read: Avg this FY | Last 3 mo | Last full month |
-     Make same as Budget / mo
+THREE CHANGES
+-------------
+1. NEW forecast option: "Avg last financial year"
+   Averages the code's actuals across the whole PREVIOUS financial year (completed
+   months). Needs last FY to be synced in the P&L benchmark; if there's no prior-year
+   data for a code it just shows the placeholder.
 
-  2. When you pick "Make same as Budget / mo", the dropdown now HOLDS that label
-     (previously it snapped back). It still fills the remaining months of the FY
-     with the Budget / Mo figure, and now also remembers the choice on the row.
+2. "Last full month" now uses the LAST COMPLETED MONTH even if it was 0.
+   Previously it skipped months with no cost entry and jumped to an earlier month.
+   Now a completed month with zero cost is correctly treated as 0.
 
-  Notes:
-  - Filled months are stored as overrides, so future cells stay at the budget figure
-    even if you later tweak the monthly Budget. To re-apply a NEW budget figure to
-    the rest of the year, just pick the option again.
-  - Completed months keep their actuals. Change is saved immediately.
+3. Clear (x) on a manual Budget / Mo.
+   When you've typed a manual budget figure, a small red x appears next to it. Click
+   it to clear the manual value and revert that row's budget to the forecast figure.
 
 BUILD: next build -> Compiled successfully.

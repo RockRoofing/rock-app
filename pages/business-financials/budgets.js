@@ -153,11 +153,24 @@ function Budgets() {
   }
 
   // The most recent completed month's actual for a code (for method 3 + budget hint).
+  // Uses the last COMPLETED month in the FY even if its value is 0 (a completed month
+  // with no cost is a real 0, not "skip to an earlier month").
   function lastFullMonthValue(code) {
-    const m = actualsByCode[code] || {}
-    const completed = Object.keys(m).filter(k => isComplete(k)).sort()
+    const completed = months.filter(k => isComplete(k)).sort()
     if (!completed.length) return null
-    return m[completed[completed.length - 1]]
+    return actualOf(code, completed[completed.length - 1])
+  }
+
+  // Average of a code's actuals across the PREVIOUS financial year (completed months
+  // only). Returns null if there's no prior-year data at all.
+  function lastFyAverage(code) {
+    const prevMonths = fyMonths(fyEnd - 1)
+    const vals = prevMonths
+      .filter(mo => availableSet.has(mo))
+      .map(mo => actualOf(code, mo))
+      .filter(v => v != null)
+    if (!vals.length) return null
+    return vals.reduce((s, v) => s + v, 0) / vals.length
   }
 
   // Forecast for a code (per its method). Used for future cells AND as the budget hint.
@@ -172,6 +185,7 @@ function Budgets() {
       // fall through to method-1 average below
     }
     const method = Number(raw)
+    if (method === 4) return lastFyAverage(code)           // avg of last financial year
     if (method === 3) return lastFullMonthValue(code)      // last FULL month
     if (method === 2) {                                     // trailing 3 completed
       const completed = Object.keys(m).filter(k => isComplete(k)).sort().slice(-3)
@@ -611,6 +625,7 @@ function Budgets() {
                                 placeholder={fcHint != null ? Math.round(fcHint).toLocaleString('en-GB') : '0'}
                                 title={fcHint != null ? `Forecast suggests ${gbp(fcHint)} - type to set a budget` : 'Set a monthly budget'}
                                 style={{ width: 82, padding: '4px 6px', border: '1px solid #e2ddc9', borderRadius: 6, fontSize: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: (budgets[code] ?? '') === '' ? '#b8860b' : '#333' }} />
+                              {(budgets[code] ?? '') !== '' && <button onClick={() => setBudget(code, '')} title="Clear manual budget - revert to forecast" style={{ background: 'none', border: 'none', color: '#c0392b', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '0 2px' }}>&times;</button>}
                             </div>
                           </td>
                           <td style={tdL}>
@@ -620,6 +635,7 @@ function Budgets() {
                               <option value={1}>Avg this FY</option>
                               <option value={2}>Last 3 mo</option>
                               <option value={3}>Last full month</option>
+                              <option value={4}>Avg last financial year</option>
                               <option value="budget">Make same as Budget / mo</option>
                             </select>
                           </td>
