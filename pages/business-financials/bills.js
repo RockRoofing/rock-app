@@ -130,6 +130,7 @@ export default function BillsToPay() {
   const sortArrow = (key) => sortKey === key ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
 
   const total = useMemo(() => filtered.reduce((s, i) => s + (i.amountDue || 0), 0), [filtered])
+  const grandTotal = useMemo(() => billsOnly.reduce((s, i) => s + (i.amountDue || 0), 0), [billsOnly])
   const selTotal = useMemo(() => sorted.filter(i => sel[i.id]).reduce((s, i) => s + (i.amountDue || 0), 0), [sorted, sel])
   const selCount = Object.values(sel).filter(Boolean).length
 
@@ -212,6 +213,7 @@ export default function BillsToPay() {
                 </div>
 
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 14 }}>
+                  <Stat label="All outstanding bills" value={gbp(grandTotal)} sub={`${billsOnly.length} bills (reconciles to Xero)`} />
                   <Stat label="Filtered total" value={gbp(total)} sub={`${filtered.length} bills`} />
                   <Stat label="Selected" value={gbp(selTotal)} sub={`${selCount} ticked`} accent />
                 </div>
