@@ -95,6 +95,7 @@ export default function CashFlow() {
   const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '' })
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
+  const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -115,6 +116,9 @@ export default function CashFlow() {
       const seed = {}
       for (const b of (d.bills || [])) if (b.payDate) seed[b.id] = b.payDate
       setBillOverrides(seed)
+      const cseed = {}
+      for (const b of (d.bills || [])) if (b.cis) cseed[b.id] = true
+      setCisFlags(cseed)
     } catch {}
     setLoading(false)
   }
@@ -143,6 +147,11 @@ export default function CashFlow() {
     fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-bill-paydate', billId, payDate }) }).catch(() => {})
   }
 
+  function setBillCis(billId, cis) {
+    setCisFlags(prev => { const n = { ...prev }; if (cis) n[billId] = true; else delete n[billId]; return n })
+    fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-bill-cis', billId, cis }) }).catch(() => {})
+  }
+
   const WEEKS = 13
   const forecast = useMemo(() => {
     if (!data) return []
@@ -168,6 +177,30 @@ export default function CashFlow() {
       }
     }
 
+    const cisBill = (i) => !!cisFlags[i.id]
+    // In Xero the CIS deduction is ALREADY applied - a labour bill's Amount Due is the
+    // NET figure paid to the subcontractor (e.g. GBP1,000 on a GBP1,250 gross bill). So the
+    // bill pays its full Amount Due; the extra cash event is the 20% CIS to HMRC. From a
+    // net figure, gross = net / 0.8, so CIS = gross - net = net * 0.25.
+    const cisFromNet = (net) => net * 0.25
+
+    // CIS withheld on labour bills is paid to HMRC on the 22nd of the FOLLOWING month.
+    // Group by the month the bill is paid, then schedule the HMRC payment.
+    const cisByPayMonth = {}
+    for (const i of (data.bills || [])) {
+      if (!cisBill(i)) continue
+      const pd = billOverrides[i.id] || i.payDate || i.dueDate || ''
+      if (!pd) continue
+      const mk = pd.slice(0, 7)
+      cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(i.amountDue || 0)
+    }
+    // Map to actual HMRC payment dates: 22nd of the month after the pay month.
+    const cisPayments = Object.entries(cisByPayMonth).map(([mk, amt]) => {
+      const [yy, mm] = mk.split('-').map(Number)   // mm is 1-based
+      const payMonth = new Date(yy, mm, 22)         // mm (0-based next month), day 22
+      return { date: isoDay(payMonth), amount: amt }
+    })
+
     const rows = []
     let running = openBank
     for (let w = 0; w < WEEKS; w++) {
@@ -188,24 +221,28 @@ export default function CashFlow() {
       const vatInPos = vatIn > 0 ? vatIn : 0
       const vatOut = vatIn < 0 ? -vatIn : 0
 
-      const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || '')).reduce((a, i) => a + (i.amountDue || 0), 0)
+      // Bills out: pay the full Amount Due (Xero already nets CIS off labour bills).
+      // The 20% CIS to HMRC is scheduled separately below.
+      const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+        .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
+      const cisOut = cisPayments.filter(c => inWk(c.date)).reduce((a, c) => a + c.amount, 0)
 
       const moneyIn = invoicesIn + retIn + vatInPos
-      const moneyOut = billsOut + ohOut + vatOut
+      const moneyOut = billsOut + ohOut + vatOut + cisOut
       const net = moneyIn - moneyOut
       running += net
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
-        bills: Math.round(billsOut), overheads: Math.round(ohOut), vatOut: Math.round(vatOut),
+        bills: Math.round(billsOut), overheads: Math.round(ohOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
     }
     return rows
-  }, [data, startCash, billOverrides])
+  }, [data, startCash, billOverrides, cisFlags])
 
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
@@ -327,6 +364,7 @@ export default function CashFlow() {
                     <th style={th}>Bills out</th>
                     <th style={th}>Overheads out</th>
                     <th style={th}>VAT out</th>
+                    <th style={th}>CIS to HMRC</th>
                     <th style={th}>Net</th>
                     <th style={th}>Closing cash</th>
                   </tr>
@@ -341,6 +379,7 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc' }}>{r.overheads ? gbp(-r.overheads) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
+                      <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
@@ -358,7 +397,7 @@ export default function CashFlow() {
               return (
                 <div style={{ marginTop: 22 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Bills to pay</div>
-                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. {bills.length} bills, {gbp(totalBills)} total.</div>
+                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. Tick &quot;CIS 20%&quot; on labour bills - the bill still pays its full (already net-of-CIS) amount to the subcontractor, and an extra 20% CIS goes to HMRC on the 22nd of the following month. {bills.length} bills, {gbp(totalBills)} total.</div>
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, maxHeight: 340, overflow: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
@@ -367,6 +406,7 @@ export default function CashFlow() {
                           <th style={{ ...th, textAlign: 'left' }}>Ref</th>
                           <th style={th}>Due date</th>
                           <th style={th}>Amount</th>
+                          <th style={{ ...th, textAlign: 'center' }} title="Tick if this is a CIS labour bill. Bill pays its full net amount; an extra 20% CIS goes to HMRC on the 22nd of next month.">CIS</th>
                           <th style={{ ...th, textAlign: 'left' }}>Planned payment date</th>
                         </tr>
                       </thead>
@@ -378,7 +418,10 @@ export default function CashFlow() {
                               <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.contact}>{b.contact || '-'}</td>
                               <td style={{ ...td, textAlign: 'left', color: '#777', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.reference || b.number}>{b.reference || b.number || '-'}</td>
                               <td style={{ ...td, color: '#666' }}>{b.dueDate ? new Date(b.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
-                              <td style={{ ...td, fontWeight: 600 }}>{gbp(b.amountDue)}</td>
+                              <td style={{ ...td, fontWeight: 600 }}>{gbp(b.amountDue)}{cisFlags[b.id] && <div style={{ fontSize: 10, color: '#ea580c', fontWeight: 400 }}>+{gbp(b.amountDue * 0.25)} CIS to HMRC</div>}</td>
+                              <td style={{ ...td, textAlign: 'center' }}>
+                                <input type="checkbox" checked={!!cisFlags[b.id]} onChange={e => setBillCis(b.id, e.target.checked)} title="CIS labour - withhold 20%" />
+                              </td>
                               <td style={{ ...td, textAlign: 'left' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <input type="date" value={billOverrides[b.id] || b.payDate || ''} onChange={e => setBillPayDate(b.id, e.target.value)}
@@ -389,7 +432,7 @@ export default function CashFlow() {
                             </tr>
                           )
                         })}
-                        {bills.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
+                        {bills.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
                       </tbody>
                     </table>
                   </div>

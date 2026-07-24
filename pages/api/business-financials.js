@@ -392,7 +392,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -404,6 +404,7 @@ export default async function handler(req, res) {
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
       redis.get('config:bill-payment-dates').then(v => v || {}).catch(() => ({})),
+      redis.get('config:bill-cis-flags').then(v => v || {}).catch(() => ({})),
     ])
 
     // Invoice-finance availability calculated from the Invoice Finance page config:
@@ -439,7 +440,7 @@ export default async function handler(req, res) {
     })
 
     // Attach the manual planned payment date (override of the due date) to each bill.
-    const bills = (billsStore.items || []).map(b => ({ ...b, payDate: billPayDates[b.id] || '' }))
+    const bills = (billsStore.items || []).map(b => ({ ...b, payDate: billPayDates[b.id] || '', cis: !!billCisFlags[b.id] }))
 
     return res.json({
       cashAtBank: openingCash,
@@ -449,6 +450,7 @@ export default async function handler(req, res) {
       ifAvailability,
       bills,
       billPayDates,
+      billCisFlags,
       receivables,
       avgOverheadMonthly,
       history,
@@ -496,6 +498,20 @@ export default async function handler(req, res) {
       const map = await redis.get('config:bill-payment-dates').then(v => v || {}).catch(() => ({}))
       if (payDate) map[billId] = payDate; else delete map[billId]
       await redis.set('config:bill-payment-dates', map)
+      return res.json({ ok: true })
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
+  // Flag/unflag a bill as CIS labour (20% withheld, paid to HMRC on the 22nd).
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-bill-cis') {
+    try {
+      const { billId, cis } = req.body || {}
+      if (!billId) return res.status(400).json({ ok: false, error: 'missing billId' })
+      const map = await redis.get('config:bill-cis-flags').then(v => v || {}).catch(() => ({}))
+      if (cis) map[billId] = true; else delete map[billId]
+      await redis.set('config:bill-cis-flags', map)
       return res.json({ ok: true })
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message })

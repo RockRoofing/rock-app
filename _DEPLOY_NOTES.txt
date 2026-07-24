@@ -1,29 +1,39 @@
-DEPLOY NOTES - Cash Flow: editable Bills-to-Pay table with payment dates
-========================================================================
+DEPLOY NOTES - Cash Flow: CIS to HMRC (corrected) + bill payment dates
+======================================================================
+
+** This REPLACES the earlier "Cashflow_CIS" package - do NOT deploy that one.
+   These two files contain everything: the editable bills table with payment
+   dates AND the corrected CIS handling. **
 
 TWO files, both EDITS - just replace them.
-  pages/api/business-financials.js         (store + return per-bill payment dates)
-  pages/business-financials/cashflow.js    (bills table + forecast wiring)
+  pages/api/business-financials.js
+  pages/business-financials/cashflow.js
 
-WHAT'S NEW
-----------
-A "Bills to pay" table at the BOTTOM of the Cash Flow page, in a compact scrollable
-window (max ~340px tall) so it doesn't take over the page - just scroll through it.
+WHY THE CHANGE FROM THE LAST VERSION
+------------------------------------
+Your Xero bill screenshot showed that Xero ALREADY applies the CIS deduction: a
+Ł1,250 gross labour bill shows "Amount Due Ł1,000" (net of the 20%). My previous
+version wrongly deducted a further 20% (paying Ł800). Corrected:
 
-Each bill row shows: Supplier, Ref, Due date, Amount, and an editable
-"Planned payment date".
+  - A CIS-flagged bill now pays its FULL Amount Due (the Ł1,000 net) on the payment
+    date - exactly what leaves your bank.
+  - The 20% CIS to HMRC is added as a SEPARATE outflow on the 22nd of the following
+    month. Because Amount Due is already net, CIS = net x 0.25 (Ł1,000 -> Ł250),
+    which reconciles to your Xero bill exactly.
 
-  - Set a planned payment date on any bill and the 13-week forecast above updates
-    immediately (that bill's cash-out moves to the week you chose).
-  - A planned date is highlighted ORANGE so you can see which bills you've moved.
-  - Leave it blank (or click the x to clear) and the bill falls back to its Xero
-    due date, as before.
-  - Rows are sorted by planned payment date. Payment dates are saved per bill and
-    persist across sessions and page loads.
+WHAT YOU DO
+   In the Bills to pay table (bottom of Cash Flow), tick "CIS" on labour bills.
+   The amount cell shows the bill's full amount plus a small "+Ł.. CIS to HMRC"
+   note. The forecast's new "CIS to HMRC" column shows the 20% landing on the 22nd
+   of the following month.
 
-HOW IT FEEDS THE FORECAST
-   The forecast's "Bills out" now uses: planned payment date if set, otherwise the
-   Xero due date. So the running cash line, lowest point and closing balance all
-   reflect when you actually plan to pay.
+WHY IT MATTERS
+   The subcontractor payment was already correct (Amount Due is net). What was
+   genuinely missing was the CIS payment to HMRC - a real outflow that wasn't in
+   the forecast at all. This adds it. Rate 20%, all flagged bills. Flags saved.
+
+ALSO IN THIS PACKAGE (from before, if not yet deployed)
+   - Editable "Planned payment date" per bill; moving a date reschedules that bill's
+     cash-out in the 13-week forecast. Orange = moved. Saved per bill.
 
 BUILD: next build -> Compiled successfully.
