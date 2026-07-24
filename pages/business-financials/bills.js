@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
 import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card } from '../../components/BizNav'
 
 const monthKey = (s) => (s || '').slice(0, 7)
@@ -37,6 +37,7 @@ export default function BillsToPay() {
   // Sorting
   const [sortKey, setSortKey] = useState('dueDate')
   const [sortDir, setSortDir] = useState('asc')
+  const [selMonth, setSelMonth] = useState('')   // 'YYYY-MM' due-in-month filter / bar click
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -90,7 +91,7 @@ export default function BillsToPay() {
 
   const pickSet = useMemo(() => new Set(supplierPick), [supplierPick])
 
-  // Rows after date + supplier filters.
+  // Rows after date + supplier + due-in-month filters.
   const filtered = useMemo(() => {
     return billsOnly.filter(i => {
       const d = i.dueDate || ''
@@ -98,8 +99,23 @@ export default function BillsToPay() {
       if (toDate && d && d > toDate) return false
       if (fromDate && !d) return false   // undated excluded once a range is set
       if (pickSet.size && !pickSet.has(i.contact)) return false
+      if (selMonth && monthKey(d) !== selMonth) return false
       return true
     })
+  }, [billsOnly, fromDate, toDate, pickSet, selMonth])
+
+  // Months available to pick (respecting date range + supplier, ignoring the month pick).
+  const monthOptions = useMemo(() => {
+    const s = new Set()
+    for (const i of billsOnly) {
+      const d = i.dueDate || ''
+      if (fromDate && d && d < fromDate) continue
+      if (toDate && d && d > toDate) continue
+      if (pickSet.size && !pickSet.has(i.contact)) continue
+      const mk = monthKey(d)
+      if (mk) s.add(mk)
+    }
+    return [...s].sort()
   }, [billsOnly, fromDate, toDate, pickSet])
 
   // Sorting.
@@ -206,6 +222,14 @@ export default function BillsToPay() {
                 </div>
                 <button onClick={() => { const d = defaultRange(); setFromDate(d.from); setToDate(d.to) }} style={{ ...miniBtn, height: 34 }}>Reset dates</button>
 
+                <div>
+                  <div style={flabel}>Due in month</div>
+                  <select value={selMonth} onChange={e => setSelMonth(e.target.value)} style={{ ...finput, cursor: 'pointer' }}>
+                    <option value="">All months</option>
+                    {monthOptions.map(m => <option key={m} value={m}>{monthLbl(m)}</option>)}
+                  </select>
+                </div>
+
                 {/* Supplier multi-select with type-ahead */}
                 <div ref={supplierRef} style={{ position: 'relative', minWidth: 260 }}>
                   <div style={flabel}>Suppliers {supplierPick.length ? `(${supplierPick.length})` : '(all)'}</div>
@@ -255,7 +279,9 @@ export default function BillsToPay() {
                           <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
                           <Tooltip formatter={(v) => gbp(v)} labelFormatter={(m) => m === 'No date' ? 'No due date' : monthLbl(m)} />
                           <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
-                          <Bar dataKey="amount" name="Due" fill="#dc2626" />
+                          <Bar dataKey="amount" name="Due" cursor="pointer" onClick={(d) => setSelMonth(sm => (sm === d.month || d.month === 'No date') ? '' : d.month)}>
+                            {byMonthAll.map((e) => <Cell key={e.month} fill={selMonth === e.month ? '#7f1d1d' : (selMonth ? '#f3b4b4' : '#dc2626')} />)}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     )}
@@ -271,7 +297,9 @@ export default function BillsToPay() {
                           <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
                           <Tooltip formatter={(v) => gbp(v)} labelFormatter={(m) => m === 'No date' ? 'No due date' : monthLbl(m)} />
                           <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
-                          <Bar dataKey="amount" name="Due" fill="#2563eb" />
+                          <Bar dataKey="amount" name="Due" cursor="pointer" onClick={(d) => setSelMonth(sm => (sm === d.month || d.month === 'No date') ? '' : d.month)}>
+                            {byMonthSel.map((e) => <Cell key={e.month} fill={selMonth === e.month ? '#1e3a8a' : (selMonth ? '#b7ccf3' : '#2563eb')} />)}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     )}

@@ -1,56 +1,38 @@
-DEPLOY NOTES - Sales: bar = table = Xero (single source, + bank receipts)
-========================================================================
+DEPLOY NOTES - Bills to Pay: "Due in month" filter + click-a-bar to filter table
+================================================================================
 
-THE CAUSE OF THE MISMATCH
--------------------------
-The BAR came from the P&L benchmark; the TABLE summed the lines I pulled. They diverged
-month-to-month for two reasons:
-  1. The table was MISSING bank receipts (receive money) coded to sales - the P&L
-     includes those, so the table came out low on months with bank-coded sales.
-  2. Bar (P&L snapshot) and table (live lines) could be from slightly different points
-     in time, so each matched Xero in different months.
+CHANGES
+-------
+1) DUE IN MONTH filter: a new dropdown in the filter bar. Pick a month to show only
+   bills due in that month. "All months" clears it. The month list respects your current
+   date range + supplier filter.
+2) CLICK A BAR: clicking a bar on EITHER chart now filters the table to just that
+   month's bills (and highlights the clicked bar). Clicking the same bar again, or
+   choosing "All months", clears it. The month dropdown and the bar click are the same
+   filter, so they stay in sync.
 
-THE FIX (makes all three agree by construction)
------------------------------------------------
-1) Added BANK TRANSACTIONS coded to sales (receive money = +, spend money = -) to the
-   pulled lines. The table now contains every transaction type that hits code 200:
-   invoices, WIP manual journals, credit notes AND bank receipts - the same set the P&L
-   sums.
-2) The BAR is now built by summing THOSE SAME LINES per month (not from the P&L
-   benchmark). So the bar and the table total are now ALWAYS identical.
-3) Because the lines now match what the P&L is made of, both also match Xero.
+Notes:
+- The LEFT chart stays "all bills" so you can always click a different month.
+- The RIGHT chart follows the filters (so it narrows to the picked month too) - matches
+  its "Filtered bills by month" purpose.
+- Selecting a month also updates the Filtered total.
 
-CROSS-CHECK BUILT IN
---------------------
-Under the chart there's now a P&L cross-check for the visible period:
-  "P&L cross-check: app <x> vs P&L <y> (match)" - or it shows the difference.
-If every month is captured, it will say (match). If a month still differs, that tells us
-a sales entry is posted in yet another way - send me that month and I'll add the source.
-
-SCOPES
-------
-Uses accounting.banktransactions.read - which your Xero app already has (it's in your
-scopes list). No reconnect needed.
+FILE (single EDIT - no new files)
+---------------------------------
+  - pages/business-financials/bills.js
 
 DEPLOY
 ------
-Replace all three files. Commit -> Vercel "Ready" -> hard-refresh Sales ->
-click "Sync Xero figures" and let it finish (it now also pulls bank transactions, so
-it may take a little longer).
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-- Each month's chart bar == the table total for that month (click a bar to check).
-- Both match Xero's 200-Sales monthly figure.
-- The P&L cross-check line under the chart says "(match)" for the period.
-- New Source values may appear: "Bank receipt" / "Bank payment".
-
-FILES (all EDITS - no new files)
---------------------------------
-  - lib/xero.js                          (adds bank transactions to sales ledger)
-  - pages/api/business-financials.js      (bar summed from lines; P&L kept as cross-check)
-  - pages/business-financials/sales.js    (cross-check note under chart)
+- "Due in month" dropdown lists the months that have bills; picking one filters the table.
+- Click a bar on the left (red) or right (blue) chart -> table shows only that month;
+  the bar highlights; Filtered total updates.
+- Click the same bar again or pick "All months" -> filter clears.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". Hooks confirmed before the early
+return.
