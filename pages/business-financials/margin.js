@@ -196,7 +196,7 @@ export default function Margin() {
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              Figures come from the monthly Profit &amp; Loss in your Xero benchmark sync. The 12-month rolling charts only plot a month once a full trailing 12 months of data exists. Margins are blank for any month with zero income.
+              Figures come from the monthly Profit &amp; Loss in your Xero benchmark sync. The 12-month rolling charts plot each month using up to 12 trailing months (fewer for the earliest months, until a full year of data has built up). Margins are blank for any month with zero income. Monthly margins are naturally volatile in a project business because costs and sales land in different months - the rolling view smooths this out.
             </div>
           </>
         )}
