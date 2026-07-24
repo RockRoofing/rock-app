@@ -94,6 +94,7 @@ export default function CashFlow() {
   const [refreshingBal, setRefreshingBal] = useState(false)
   const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '' })
   const [savingFin, setSavingFin] = useState(false)
+  const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -110,6 +111,10 @@ export default function CashFlow() {
       setData(d)
       const fc = d.financeCfg || {}
       setFinance({ ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '' })
+      // Seed local bill payment-date overrides from what's saved.
+      const seed = {}
+      for (const b of (d.bills || [])) if (b.payDate) seed[b.id] = b.payDate
+      setBillOverrides(seed)
     } catch {}
     setLoading(false)
   }
@@ -131,6 +136,11 @@ export default function CashFlow() {
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
     } catch {}
     setSavingFin(false)
+  }
+
+  function setBillPayDate(billId, payDate) {
+    setBillOverrides(prev => { const n = { ...prev }; if (payDate) n[billId] = payDate; else delete n[billId]; return n })
+    fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-bill-paydate', billId, payDate }) }).catch(() => {})
   }
 
   const WEEKS = 13
@@ -178,7 +188,7 @@ export default function CashFlow() {
       const vatInPos = vatIn > 0 ? vatIn : 0
       const vatOut = vatIn < 0 ? -vatIn : 0
 
-      const billsOut = (data.bills || []).filter(i => inWk(i.dueDate || '')).reduce((a, i) => a + (i.amountDue || 0), 0)
+      const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || '')).reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
 
       const moneyIn = invoicesIn + retIn + vatInPos
@@ -195,7 +205,7 @@ export default function CashFlow() {
       })
     }
     return rows
-  }, [data, startCash])
+  }, [data, startCash, billOverrides])
 
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
@@ -338,6 +348,54 @@ export default function CashFlow() {
                 </tbody>
               </table>
             </div>
+
+            {/* Bills to pay - adjust planned payment dates; feeds the forecast above */}
+            {(() => {
+              const bills = (data.bills || []).filter(b => (b.amountDue || 0) > 0)
+                .map(b => ({ ...b, effPay: billOverrides[b.id] || b.payDate || b.dueDate || '' }))
+                .sort((a, b) => (a.effPay || '').localeCompare(b.effPay || ''))
+              const totalBills = bills.reduce((s, b) => s + (b.amountDue || 0), 0)
+              return (
+                <div style={{ marginTop: 22 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Bills to pay</div>
+                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. {bills.length} bills, {gbp(totalBills)} total.</div>
+                  <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, maxHeight: 340, overflow: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee', position: 'sticky', top: 0, zIndex: 1 }}>
+                          <th style={{ ...th, textAlign: 'left' }}>Supplier</th>
+                          <th style={{ ...th, textAlign: 'left' }}>Ref</th>
+                          <th style={th}>Due date</th>
+                          <th style={th}>Amount</th>
+                          <th style={{ ...th, textAlign: 'left' }}>Planned payment date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bills.map((b, i) => {
+                          const overridden = !!(billOverrides[b.id] || b.payDate)
+                          return (
+                            <tr key={b.id || i} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                              <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.contact}>{b.contact || '-'}</td>
+                              <td style={{ ...td, textAlign: 'left', color: '#777', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.reference || b.number}>{b.reference || b.number || '-'}</td>
+                              <td style={{ ...td, color: '#666' }}>{b.dueDate ? new Date(b.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
+                              <td style={{ ...td, fontWeight: 600 }}>{gbp(b.amountDue)}</td>
+                              <td style={{ ...td, textAlign: 'left' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <input type="date" value={billOverrides[b.id] || b.payDate || ''} onChange={e => setBillPayDate(b.id, e.target.value)}
+                                    style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (overridden ? '#fed7aa' : '#e5e5e5'), borderRadius: 5, color: overridden ? '#ea580c' : '#555', background: overridden ? '#fff7ed' : '#fff', fontWeight: overridden ? 600 : 400 }} />
+                                  {overridden && <button onClick={() => setBillPayDate(b.id, '')} title="Clear - use due date" style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>&times;</button>}
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {bills.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )
+            })()}
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
               Opening cash and bills/invoices come from your Xero syncs (Bills to Pay, Invoices Owed, and the bank summary). Overheads are timed by the Cash Schedule using your Budgets figures. Retention lands on each release date from the Retention Tracker. VAT lands at month-end using the filed Box 5 (or estimate) from the VAT Refund page. Keep those pages synced for accuracy. Sales pipeline is not yet included.

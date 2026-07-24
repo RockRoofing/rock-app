@@ -392,7 +392,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -403,6 +403,7 @@ export default async function handler(req, res) {
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
+      redis.get('config:bill-payment-dates').then(v => v || {}).catch(() => ({})),
     ])
 
     // Invoice-finance availability calculated from the Invoice Finance page config:
@@ -437,13 +438,17 @@ export default async function handler(req, res) {
       return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
     })
 
+    // Attach the manual planned payment date (override of the due date) to each bill.
+    const bills = (billsStore.items || []).map(b => ({ ...b, payDate: billPayDates[b.id] || '' }))
+
     return res.json({
       cashAtBank: openingCash,
       cashAtBankLegacy: cashAtBank,
       balances: balancesStore || null,
       financeCfg,
       ifAvailability,
-      bills: billsStore.items || [],
+      bills,
+      billPayDates,
       receivables,
       avgOverheadMonthly,
       history,
@@ -478,6 +483,20 @@ export default async function handler(req, res) {
       const cfg = (req.body || {}).financeCfg || {}
       await redis.set('config:cashflow-finance', cfg)
       return res.json({ ok: true, financeCfg: cfg })
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
+  // Save a manual planned payment date for a bill (or clear it with empty string).
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-bill-paydate') {
+    try {
+      const { billId, payDate } = req.body || {}
+      if (!billId) return res.status(400).json({ ok: false, error: 'missing billId' })
+      const map = await redis.get('config:bill-payment-dates').then(v => v || {}).catch(() => ({}))
+      if (payDate) map[billId] = payDate; else delete map[billId]
+      await redis.set('config:bill-payment-dates', map)
+      return res.json({ ok: true })
     } catch (e) {
       return res.status(500).json({ ok: false, error: e.message })
     }

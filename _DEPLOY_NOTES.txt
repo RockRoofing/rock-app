@@ -1,39 +1,29 @@
-DEPLOY NOTES - Expected date behaviour (Commercial + Business Financials)
-=========================================================================
+DEPLOY NOTES - Cash Flow: editable Bills-to-Pay table with payment dates
+========================================================================
 
-THREE files, all EDITS - just replace them. Changes apply to BOTH the Commercial
-"Outstanding Invoices" page and the Business Financials "Invoices Owed" page, and
-they share the same stored data.
+TWO files, both EDITS - just replace them.
+  pages/api/business-financials.js         (store + return per-bill payment dates)
+  pages/business-financials/cashflow.js    (bills table + forecast wiring)
 
-  pages/outstanding-invoices.js             (Commercial page)
-  pages/business-financials/invoices.js     (Business Financials page)
-  pages/api/outstanding-invoices.js         (stores the new "confirmed" flag)
+WHAT'S NEW
+----------
+A "Bills to pay" table at the BOTTOM of the Cash Flow page, in a compact scrollable
+window (max ~340px tall) so it doesn't take over the page - just scroll through it.
 
-EXPECTED DATE COLUMN - new behaviour
-------------------------------------
-- Auto-set to the DUE DATE and shown LIGHT GREY until you change it.
-- If you adjust it: ORANGE, not bold.
-- If you adjust it AND the invoice is overdue (by due date): ORANGE and BOLD.
-- Once CONFIRMED (new column): the date turns GREEN (bold if overdue, else normal).
+Each bill row shows: Supplier, Ref, Due date, Amount, and an editable
+"Planned payment date".
 
-OVERDUE still shows even with an expected date
-----------------------------------------------
-Overdue is judged on the DUE DATE, so entering an expected date does NOT hide an
-overdue invoice - the Due date and Overdue columns stay RED and BOLD as normal.
+  - Set a planned payment date on any bill and the 13-week forecast above updates
+    immediately (that bill's cash-out moves to the week you chose).
+  - A planned date is highlighted ORANGE so you can see which bills you've moved.
+  - Leave it blank (or click the x to clear) and the bill falls back to its Xero
+    due date, as before.
+  - Rows are sorted by planned payment date. Payment dates are saved per bill and
+    persist across sessions and page loads.
 
-"EXPECTED DATE PAST" warning
-----------------------------
-If the (effective) expected date is in the past, a red warning appears under the
-date: "! Expected Date Past" with a warning symbol.
-
-NEW "CONFIRMED" COLUMN
-----------------------
-A toggle button per invoice:
-  - Not confirmed = ORANGE ("Not confirmed")
-  - Confirmed = GREEN ("Confirmed")
-Confirming turns the expected-date field green. Changing the expected date
-automatically resets it back to "Not confirmed" (so a new date must be re-confirmed).
-
-The confirmed state is saved and shared between both pages.
+HOW IT FEEDS THE FORECAST
+   The forecast's "Bills out" now uses: planned payment date if set, otherwise the
+   Xero due date. So the running cash line, lowest point and closing balance all
+   reflect when you actually plan to pay.
 
 BUILD: next build -> Compiled successfully.
