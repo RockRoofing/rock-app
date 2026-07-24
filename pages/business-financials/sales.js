@@ -238,7 +238,7 @@ export default function Sales() {
                   {sortedLines.length === 0 && data?.diag && (
                     <tfoot>
                       <tr><td colSpan={5} style={{ padding: '10px 14px', fontSize: 11, color: '#999', textAlign: 'left', background: '#fafafa', fontFamily: 'monospace' }}>
-                        diag - chart codes: {JSON.stringify(data.diag.benchmarkSalesCodes)} | ledger codes: {JSON.stringify(data.diag.ledgerCodesPresent)} | ledger lines: {data.diag.ledgerLineCount} | requested: {JSON.stringify(data.diag.salesCodesRequested)} | fetch: {JSON.stringify(data.diag.fetchMeta)}
+                        diag - chart codes: {JSON.stringify(data.diag.benchmarkSalesCodes)} | ledger codes: {JSON.stringify(data.diag.ledgerCodesPresent)} | ledger lines: {data.diag.ledgerLineCount} | requested: {JSON.stringify(data.diag.salesCodesRequested)} | fetch: {JSON.stringify(data.diag.fetchMeta)} | has journals scope: {String(data.diag.hasJournalsScope)} | token scope: {data.diag.tokenScope || '(none)'}
                       </td></tr>
                     </tfoot>
                   )}

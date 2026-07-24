@@ -1,55 +1,49 @@
-DEPLOY NOTES - THE FIX: Xero was missing the Journals permission (401)
-======================================================================
+DEPLOY NOTES - Confirm whether the Xero token actually has the journals permission
+=================================================================================
 
-ROOT CAUSE (confirmed by your diag)
------------------------------------
-The diag showed:
-  fetch: {"pages":0, ... "lastError":"HTTP 401: AuthorizationUnsuccessful"}
-The Xero Journals (general ledger) endpoint returned 401 on the FIRST request - while
-your P&L, invoices and bills calls all work with the same token. That happens when the
-connection is missing a specific PERMISSION (OAuth scope).
+WHY STILL 401
+-------------
+The sync refreshes the Xero token and uses the SAME token for the P&L (works) and the
+Journals endpoint (401). So the token itself lacks the journals permission. Two causes:
+  (A) The reconnect didn't actually grant it (old refresh token still in use / consent
+      not completed with the new scope), OR
+  (B) The scope isn't enabled on the Xero Developer APP, so Xero won't grant it even
+      when asked.
 
-Your Xero connection was requested with these scopes (pages/connect.js):
-  openid offline_access accounting.invoices.read accounting.contacts.read
-  accounting.reports.profitandloss.read accounting.settings.read
-  accounting.manualjournals.read projects.read
-It was NOT asking for accounting.journals.read - which is the exact permission the
-general-ledger (Journals) endpoint requires. So the sales table (and the overhead
-transaction drill-down) had no data, even though the codes were correct.
+This build shows EXACTLY which, by printing the current token's granted scope.
 
-THE FIX
+DEPLOY
+------
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures.
+The diag line now ends with:
+  ... | has journals scope: true/false | token scope: openid offline_access ...
+
+READ THE RESULT
+---------------
+- has journals scope: FALSE
+    -> The connection still doesn't have the permission. Do a CLEAN reconnect:
+       1. Go to https://app.rockroofing.co.uk/connect
+       2. Complete the Xero consent. IMPORTANT: if Xero shows the org already connected
+          and doesn't re-prompt, first DISCONNECT the app in Xero:
+          Xero -> Settings -> Connected apps -> (your app) -> Disconnect,
+          then connect again from /connect so it re-asks for permissions.
+       3. Sync again. If it flips to TRUE, the table fills.
+
+- has journals scope: TRUE but STILL 401
+    -> The permission is on the connection but the Xero DEVELOPER APP config is the
+       blocker. Go to developer.xero.com -> My Apps -> (your app) -> and make sure the
+       app is allowed the Accounting Journals scope, then reconnect. Tell me and I'll
+       walk through it.
+
+SEND ME
 -------
-Added accounting.journals.read to the Xero connect scopes.
+Whichever it is, paste the new diag line (the "has journals scope" + "token scope"
+part). That tells us the next step precisely.
 
-  *** THIS REQUIRES RECONNECTING XERO ***
-  The permission is granted at connect time. Your current token was issued WITHOUT it,
-  so you must reconnect to get a new token that includes it.
-
-STEPS (important - in order)
-----------------------------
-1. Deploy pages/connect.js. Commit -> Vercel "Ready".
-2. Go to the Xero connect page: https://app.rockroofing.co.uk/connect
-   (or the "Connect Xero" link in the Admin centre).
-3. Click connect and COMPLETE THE XERO CONSENT SCREEN. You should now see Xero ask for
-   an additional permission about "journals" / "transactions" - approve it.
-4. Back in the app, open Sales -> click "Sync Xero figures" and let it finish.
-5. The detail table should now populate (and the Budgets cell drill-down too).
-
-HOW TO CONFIRM IT WORKED
-------------------------
-If the table is still empty, check the diag line again - the "fetch" part should now
-show pages > 0 and lastError: null. If it STILL says 401, the reconsent didn't take -
-tell me and we'll check the Xero app config.
-
-NOTE ON THE XERO DEVELOPER APP
-------------------------------
-Occasionally the scope also has to be enabled on the Xero app itself (developer.xero.com
--> your app -> configuration). If reconnecting still 401s, that's the next place to look;
-let me know and I'll guide you.
-
-FILE (single EDIT - no new files)
+FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/connect.js   (adds accounting.journals.read)
+  - pages/api/business-financials.js      (adds tokenScope + hasJournalsScope to diag)
+  - pages/business-financials/sales.js    (shows them on the diag line)
 
 BUILD
 -----

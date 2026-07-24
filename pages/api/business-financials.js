@@ -184,6 +184,8 @@ export default async function handler(req, res) {
 
     const ledger = (await redis.get('sales:ledger').catch(() => null)) || { byCodeMonth: {} }
     const monthlyTarget = (await redis.get('config:sales-monthly-target').catch(() => null)) || 0
+    let tokenScope = null
+    try { const tk = await getTokens(); tokenScope = tk?.scope || null } catch {}
     // Flatten ledger lines to a single list (sales amounts are credits => negative in
     // the ledger; show as positive sales).
     const lines = []
@@ -212,6 +214,8 @@ export default async function handler(req, res) {
       ledgerCodesPresent: ledgerCodes,        // codes the sales ledger actually has
       ledgerLineCount: lines.length,
       fetchMeta: ledger.fetchMeta || null,    // pages/journals/error from the ledger pull
+      tokenScope,                             // what the CURRENT Xero token actually grants
+      hasJournalsScope: !!(tokenScope && tokenScope.includes('accounting.journals.read')),
       ledgerUpdatedAt: ledger.updatedAt || null,
     }
 
