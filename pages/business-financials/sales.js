@@ -103,7 +103,9 @@ export default function Sales() {
       .map(m => ({ month: m, amount: Math.round(byMonthAll[m]) }))
   }, [byMonthAll, from, to])
 
-  const avg = useMemo(() => chart.length ? chart.reduce((s, m) => s + m.amount, 0) / chart.length : 0, [chart])
+  // Average over COMPLETED months only (exclude the current month and any future).
+  const completedChart = useMemo(() => chart.filter(m => m.month < nowMonth()), [chart])
+  const avg = useMemo(() => completedChart.length ? completedChart.reduce((s, m) => s + m.amount, 0) / completedChart.length : 0, [completedChart])
 
   // Cross-check the summed bars against the P&L benchmark for the same months.
   const plCheck = useMemo(() => {
@@ -202,7 +204,7 @@ export default function Sales() {
                 {/* Key for the dashed lines */}
                 <div style={{ display: 'flex', gap: 18, alignItems: 'center', margin: '0 0 8px 6px', fontSize: 12, color: '#666', flexWrap: 'wrap' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color="#6b7280" /> Target ({gbp(liveTarget)})</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color={avgColor} /> Average ({gbp(avg)}) - {liveTarget > 0 ? (avgAboveTarget ? 'above target' : 'below target') : 'set a target'}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color={avgColor} /> Average of completed months ({gbp(avg)}) - {liveTarget > 0 ? (avgAboveTarget ? 'above target' : 'below target') : 'set a target'}</span>
                 </div>
                 {chart.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No sales in this range. Click "Sync Xero figures".</div> : (
                   <ResponsiveContainer width="100%" height={300}>

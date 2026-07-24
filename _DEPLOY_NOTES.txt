@@ -1,38 +1,43 @@
-DEPLOY NOTES - Bills to Pay: "Due in month" filter + click-a-bar to filter table
-================================================================================
+DEPLOY NOTES - Sales: fix May (wrong invoices pulled) + average = completed months only
+=======================================================================================
 
-CHANGES
+WHY MAY WAS WRONG (found by comparing your app vs Xero line-by-line)
+-------------------------------------------------------------------
+The May LINE LIST in the app was a DIFFERENT set of invoices than Xero's May list
+(app showed Bosden/Atlas/Farmstead/J190/J197...; Xero showed Vale Southern/MAYLIM/
+Trident/Barnfield/Selsdon/Torsion...). That's because the fetch was sending an
+"If-Modified-Since" header, which tells Xero "only return records MODIFIED since date X"
+- a modification filter, NOT a date filter. So the app pulled a partial/incorrect set of
+invoices, then bucketed them by date - giving the wrong invoices in the wrong months.
+Most months happened to look right; May didn't.
+
+THE FIX
 -------
-1) DUE IN MONTH filter: a new dropdown in the filter bar. Pick a month to show only
-   bills due in that month. "All months" clears it. The month list respects your current
-   date range + supplier filter.
-2) CLICK A BAR: clicking a bar on EITHER chart now filters the table to just that
-   month's bills (and highlights the clicked bar). Clicking the same bar again, or
-   choosing "All months", clears it. The month dropdown and the bar click are the same
-   filter, so they stay in sync.
+Removed "If-Modified-Since" from the invoice, credit-note and bank-transaction fetches.
+They now pull the full set and keep everything dated on/after the window start, bucketed
+by the Xero accounting date - matching Xero's period membership.
 
-Notes:
-- The LEFT chart stays "all bills" so you can always click a different month.
-- The RIGHT chart follows the filters (so it narrows to the picked month too) - matches
-  its "Filtered bills by month" purpose.
-- Selecting a month also updates the Filtered total.
+  *** REQUIRES A RE-SYNC ***  Deploy -> Sales -> "Sync Xero figures" to re-pull the
+  correct invoice set. May (and any other month) should then match Xero.
 
-FILE (single EDIT - no new files)
+AVERAGE = COMPLETED MONTHS ONLY
+-------------------------------
+The average dashed line now uses only COMPLETED months (excludes the current month,
+which is always partial, and any future months). The key now reads:
+  "Average of completed months (£x) - above/below target".
+
+AFTER DEPLOY - PLEASE CHECK
+---------------------------
+- May detail total should equal Xero's 200-Sales running balance (92,416.84) and its bar.
+- The P&L cross-check note under the chart should say "(match)" for the period. If it
+  still shows a difference, send me the number - a residual gap would mean one more
+  transaction type posts to 200 that we haven't included yet.
+
+FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/business-financials/bills.js
-
-DEPLOY
-------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
-
-VERIFY
-------
-- "Due in month" dropdown lists the months that have bills; picking one filters the table.
-- Click a bar on the left (red) or right (blue) chart -> table shows only that month;
-  the bar highlights; Filtered total updates.
-- Click the same bar again or pick "All months" -> filter clears.
+  - lib/xero.js                          (remove If-Modified-Since from sales sources)
+  - pages/business-financials/sales.js   (average = completed months + key note)
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Hooks confirmed before the early
-return.
+Validated with `next build` -> "Compiled successfully".
