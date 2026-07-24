@@ -60,7 +60,7 @@ export default function VatRefund() {
     } catch (e) { setData({ months: {}, filed: {}, diag: { lastError: e.message } }) }
     setLoading(false)
   }
-  useEffect(() => { if (ok) load() }, [ok])
+  useEffect(() => { if (ok) load() }, [ok, from, to])
 
   const months = data?.months || {}
   const filed = data?.filed || {}
@@ -89,8 +89,14 @@ export default function VatRefund() {
         estOutputVat, estInputVat, estNet,
         netVat: estNet, refund: estNet < 0 ? -estNet : 0, payable: estNet > 0 ? estNet : 0,
       }
+    }).filter(r => {
+      const fromMo = (from || '').slice(0, 7)
+      const toMo = (to || '').slice(0, 7)
+      if (fromMo && r.month < fromMo) return false
+      if (toMo && r.month > toMo) return false
+      return true
     })
-  }, [months, filed])
+  }, [months, filed, from, to])
 
   async function saveFiled(month, box5, direction) {
     try {
@@ -112,7 +118,7 @@ export default function VatRefund() {
     <>
       <Head><title>VAT Refund - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 80px' }}>
+      <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
         <div style={{ marginBottom: 18 }}>
           <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Anticipated VAT Refund</h1>
           <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>The live VAT position - what a return would show if filed for each month. Output VAT on sales minus input VAT on purchases. Rock files monthly; a positive net (green) means a refund is due from HMRC, negative (red) means VAT is payable.</div>

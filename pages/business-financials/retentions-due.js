@@ -164,7 +164,7 @@ export default function RetentionsDue() {
     <>
       <Head><title>Retentions Due - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '24px 24px 80px' }}>
+      <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
           <div>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Retentions Due</h1>

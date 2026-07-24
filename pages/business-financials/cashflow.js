@@ -180,7 +180,7 @@ export default function CashFlow() {
     <>
       <Head><title>Cash Flow (13 week) - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '24px 24px 80px' }}>
+      <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>13-Week Cash Flow</h1>

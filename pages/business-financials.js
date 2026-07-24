@@ -83,7 +83,7 @@ export default function BusinessFinancials() {
           </div>
         </div>
 
-        <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
+        <div style={{ padding: '24px 32px', maxWidth: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
             <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Summary</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

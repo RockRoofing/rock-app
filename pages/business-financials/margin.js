@@ -84,8 +84,8 @@ export default function Margin() {
     const keys = allMonths.map(m => m.month).sort()
     const out = []
     for (let i = 0; i < keys.length; i++) {
+      // Trailing up to 12 months (uses fewer for early months so the line plots backwards too).
       const windowKeys = keys.slice(Math.max(0, i - 11), i + 1)
-      if (windowKeys.length < 12) continue // only show once a full 12 months exist
       let income = 0, cos = 0, overheads = 0
       for (const k of windowKeys) { const m = byMonth[k]; income += m.income; cos += m.cos; overheads += m.overheads }
       const gp = income - cos, np = income - cos - overheads
@@ -93,7 +93,7 @@ export default function Margin() {
         month: keys[i], label: monthLbl(keys[i]),
         grossMargin: income ? +((gp / income) * 100).toFixed(2) : null,
         netMargin: income ? +((np / income) * 100).toFixed(2) : null,
-        income, cos, overheads,
+        income, cos, overheads, windowMonths: windowKeys.length,
       })
     }
     // Apply date range / FY-ish narrowing consistent with the other charts:
@@ -128,7 +128,7 @@ export default function Margin() {
     <>
       <Head><title>Margin - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: '24px 24px 80px' }}>
+      <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
         <div style={{ marginBottom: 16 }}>
           <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Margin</h1>
           <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Gross and net margins from the monthly P&amp;L, completed months only. Gross = (Income &minus; Cost of Sales) / Income. Net also deducts overheads.</div>

@@ -70,7 +70,7 @@ export default function CashSchedule() {
     <>
       <Head><title>Cash Schedule - Rock Roofing</title></Head>
       <BizNav />
-      <div style={{ maxWidth: 1180, margin: '0 auto', padding: '24px 24px 90px' }}>
+      <div style={{ maxWidth: '100%', padding: '24px 32px 90px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
           <div>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Cash Schedule</h1>

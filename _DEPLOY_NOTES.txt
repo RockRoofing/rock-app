@@ -1,57 +1,36 @@
-DEPLOY NOTES - Margin page + VAT tweaks + nav reorder
-=====================================================
+DEPLOY NOTES - VAT filter fix + rolling margin fix + full-width pages
+=====================================================================
 
-FOUR files. THREE are edits (replace them). ONE is NEW - see below.
+All SIX files are EDITS - just replace them.
 
-** NEW FILE - must be added via GitHub "Add file" (a zip upload can't create it) **
-  pages/business-financials/margin.js
+1) VAT REFUND - filters now actually work
+   - The table and bar chart now refresh when you change Financial year / From / To.
+     (Previously the page only loaded once and ignored filter changes.)
+   - Also filters the rows client-side to the exact month window, so what you see
+     always matches the dates chosen.
 
-EDITS (just replace):
-  components/BizNav.js
-  pages/api/business-financials.js
-  pages/business-financials/vat-refund.js
+2) MARGIN - 12-month rolling now plots backwards
+   - Previously only the latest month showed (it required a FULL 12 months before
+     plotting a point). Now every month plots, using up to 12 trailing months
+     (fewer for the earliest months), so the rolling line runs across the range.
 
------------------------------------------------------
-1) MARGIN PAGE  (new tab: Summary | Sales | MARGIN | Bills ...)
------------------------------------------------------
-Gross and net margins from the monthly P&L, completed months only.
-  Gross margin = (Income - Cost of Sales) / Income
-  Net margin   = (Income - Cost of Sales - Overheads) / Income
+3) FULL WIDTH pages
+   Margin, Retentions Due, VAT Refund, Cash Schedule, Cash Flow and Summary now
+   span the full window width (were previously capped ~1200-1320px and centred).
 
-FOUR line charts, each with an amber dashed TREND line:
-  - Gross margin - current FY
-  - Net margin - current FY
-  - Gross margin - 12-month rolling (each point = trailing 12 months aggregated)
-  - Net margin - 12-month rolling
+FILES
+  pages/business-financials.js                        (Summary - full width)
+  pages/business-financials/margin.js                 (rolling fix + full width)
+  pages/business-financials/vat-refund.js             (filter fix + full width)
+  pages/business-financials/retentions-due.js         (full width)
+  pages/business-financials/cash-schedule.js          (full width)
+  pages/business-financials/cashflow.js               (full width)
 
-Filters: Financial year (Dec-Nov, same as Sales) + a From/To month range.
-Below the charts: a table showing exactly how each month in the selected FY was
-calculated (income, cost of sales, gross profit, gross margin, overheads, net
-profit, net margin).
-
-Data comes from your Xero benchmark sync (the same P&L figures the Summary uses).
-The rolling charts only plot a month once a full trailing 12 months exists, so
-early months won't have a rolling point - that's expected.
-
------------------------------------------------------
-2) VAT REFUND page
------------------------------------------------------
-  - Date filters now default to your FINANCIAL YEAR and there's a Financial year
-    dropdown (Dec-Nov) that sets the range. From/To still adjustable after.
-  - Bar chart TURNED ROUND: bars now go UP (green) for a refund due and DOWN (red)
-    for VAT payable - matching how you read money in vs money out. Tooltip says
-    "refund" or "to pay" accordingly.
-
------------------------------------------------------
-3) NAV REORDER
------------------------------------------------------
-Budgets moved to sit directly BEFORE Cash Schedule:
-  Summary | Sales | Margin | Bills to Pay | Invoices Owed | Retentions Due |
-  VAT Refund | Budgets | Cash Schedule | Cash Flow
-
------------------------------------------------------
-DEPLOY
-Add margin.js as a new file, replace the other three, commit, wait for Vercel
-"Ready", then check the Margin tab and the flipped VAT chart.
+STILL TO DO (waiting on your screenshots)
+  You mentioned some Margin / Sales figures don't look right. Send the images when
+  you can. Most likely cause: the monthly P&L totals (income / cost of sales /
+  overheads) come from the Account Categorisation config via the benchmark sync -
+  if any account code is uncategorised or in the wrong section, the margins and
+  sales will be off. I'll confirm once I can see the numbers.
 
 BUILD: next build -> Compiled successfully.
