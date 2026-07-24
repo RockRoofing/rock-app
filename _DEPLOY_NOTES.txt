@@ -1,46 +1,48 @@
-DEPLOY NOTES - Sales table still empty: on-page diagnostic to pinpoint it
-========================================================================
+DEPLOY NOTES - Sales ledger empty: the general-ledger FETCH is returning nothing
+================================================================================
 
-I'm no longer guessing - this build PRINTS the diagnosis on the page.
+WHAT THE DIAG PROVED
+--------------------
+Your diag: chart codes {200, 260, 270}, requested {200,260,270}, but LEDGER CODES [] /
+0 lines. So the codes are RIGHT - the general-ledger (Xero Journals) fetch itself is
+returning nothing for ANY code. This also means the overhead drill-down is affected by
+the same thing.
 
-WHAT TO DO
-----------
-1. Deploy all three files. Hard-refresh the Sales page.
-2. Click "Sync Xero figures" and wait for it to finish.
-3. If the table is still empty, a grey monospace line appears where the table would be,
-   e.g.:
-     diag - chart codes: {"201":123456} | ledger codes: [] | ledger lines: 0 | requested: ["200","201"]
-   COPY THAT LINE TO ME. It tells us exactly:
-     - chart codes  = the account code(s) your sales figure sits under (from the P&L)
-     - ledger codes = what the sales ledger actually captured
-     - requested    = the codes the sync tried to pull
-   From that I can see precisely why they don't line up and fix it in one go.
+WHY (most likely)
+-----------------
+The Journals endpoint returns journals oldest-first, 100 at a time, paged by offset.
+For a company with a long history there are thousands of journals; the code has to page
+through ALL of them to reach the last 13 months. Two possible failures:
+  (a) the request errors (e.g. a permissions/scope issue on Journals) and the old code
+      silently returned empty; or
+  (b) it runs out of time/pages before reaching recent journals.
 
-WHAT THIS BUILD ALREADY TRIES
------------------------------
-The sync now pulls the general ledger for code 200, any code tagged 'sales', AND any
-code the P&L puts in the INCOME section (whatever its number). The chart and ledger use
-the same code set. codeSection flows P&L -> benchmark -> ledger, so ONE sync should
-populate it. If it still comes up empty, the diag line will show whether:
-  (a) the ledger genuinely returned no lines for those codes (a Xero/journal issue), or
-  (b) the codes still don't match (config issue) - either way the numbers make it clear.
+WHAT THIS BUILD DOES
+--------------------
+The ledger fetch now RECORDS what happened - pages read, journals seen, and any HTTP
+error - and stores it. The Sales page diag line now also shows a "fetch: {...}" section,
+e.g.:
+  fetch: {"pages":1,"totalJournalsSeen":0,"journalCount":0,"lastError":"HTTP 403: ..."}
+or
+  fetch: {"pages":200,"totalJournalsSeen":20000,"journalCount":48213,"lastError":null}
 
-LIKELY culprits the diag will confirm:
-  - Your sales P&L line maps to a code other than 200 AND the benchmark wasn't re-synced
-    with codeSection yet (this sync fixes that).
-  - Sales are posted in a way the Journals endpoint reports under a code we're not
-    requesting.
+DEPLOY & REPORT
+---------------
+1. Replace all four files. Commit -> Vercel "Ready" -> hard-refresh.
+2. Click "Sync Xero figures", wait for it to FINISH (may take longer now it reports).
+3. Send me the diag line, especially the "fetch: {...}" part. That tells us definitively:
+   - lastError set        -> a permissions/HTTP problem (I'll fix the scope/call).
+   - pages high, no lines -> it's paging the whole history and not reaching recent
+                             dates in time -> I'll switch to a date-windowed approach
+                             (e.g. Reports/GeneralLedger or a bounded pull).
+   - totalJournalsSeen 0  -> the endpoint returns nothing at all for this org.
 
 FILES (all EDITS - no new files)
 --------------------------------
-  - pages/business-financials/sales.js        (on-page diag when table empty)
-  - pages/api/business-financials.js           (diag payload + income-section codes)
-  - pages/api/sync-benchmark.js                (ledger pulls income-section codes)
-
-DEPLOY
-------
-Replace all three. Commit -> Vercel "Ready" -> hard-refresh -> Sync Xero figures ->
-if empty, send me the diag line.
+  - lib/xero.js                          (ledger fetch reports pages/journals/error)
+  - pages/api/sync-benchmark.js           (stores fetchMeta)
+  - pages/api/business-financials.js      (diag shows fetchMeta)
+  - pages/business-financials/sales.js    (diag line shows fetch:{...})
 
 BUILD
 -----

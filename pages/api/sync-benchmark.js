@@ -103,7 +103,8 @@ export default async function handler(req, res) {
       const fromDateStr = monthKeys.length ? `${monthKeys[0]}-01` : null
       const allCodes = new Set([...overheadCodes, ...salesCodes])
       if (allCodes.size && fromDateStr) {
-        const { byCodeMonth } = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, allCodes)
+        const glResult = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, allCodes)
+        const { byCodeMonth } = glResult
         // Split into overhead vs sales ledgers.
         const ohLedger = {}, salesLedger = {}
         for (const code of Object.keys(byCodeMonth)) {
@@ -111,8 +112,9 @@ export default async function handler(req, res) {
           if (salesCodes.has(code)) salesLedger[code] = byCodeMonth[code]
         }
         const now = new Date().toISOString()
-        await redis.set('overhead:ledger', { byCodeMonth: ohLedger, updatedAt: now, fromDate: fromDateStr })
-        await redis.set('sales:ledger', { byCodeMonth: salesLedger, updatedAt: now, fromDate: fromDateStr })
+        const fetchMeta = { pages: glResult.pages, totalJournalsSeen: glResult.totalJournalsSeen, journalCount: glResult.journalCount, lastError: glResult.lastError || null, salesCodes: [...salesCodes], overheadCodes: [...overheadCodes] }
+        await redis.set('overhead:ledger', { byCodeMonth: ohLedger, updatedAt: now, fromDate: fromDateStr, fetchMeta })
+        await redis.set('sales:ledger', { byCodeMonth: salesLedger, updatedAt: now, fromDate: fromDateStr, fetchMeta })
         ledgerMonths = Object.keys(byCodeMonth).length
       }
     } catch (e) {

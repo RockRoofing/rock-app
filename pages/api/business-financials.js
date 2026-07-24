@@ -211,6 +211,7 @@ export default async function handler(req, res) {
       benchmarkSalesCodes,                    // codes+totals the chart is built from
       ledgerCodesPresent: ledgerCodes,        // codes the sales ledger actually has
       ledgerLineCount: lines.length,
+      fetchMeta: ledger.fetchMeta || null,    // pages/journals/error from the ledger pull
       ledgerUpdatedAt: ledger.updatedAt || null,
     }
 
