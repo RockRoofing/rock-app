@@ -1,55 +1,50 @@
-DEPLOY NOTES - Bills page: why it didn't match Xero + all-bills total added
-==========================================================================
+DEPLOY NOTES - Bills page now nets credit notes -> reconciles to Xero
+====================================================================
 
-GOOD NEWS
----------
-The sales invoices are gone - the strict ACCPAY guard worked (it hid 126 mis-stored
-records; after your sync only real supplier bills remain).
+WHY IT DIDN'T MATCH (confirmed from your screenshots)
+-----------------------------------------------------
+Xero's "Awaiting payment" nets SUPPLIER CREDIT NOTES against bills. Examples from your
+Xero screen: UK Postbox (24.65), Fixfast "CN re INV 1558824" (136.08) - negative
+balances that REDUCE the total. The app only pulled ACCPAY invoices and excluded
+anything <= 0, so those credits were missing and the app total sat higher than Xero.
+(Also, Xero's screen was filtered by transaction date; the app filters by due date -
+different field, slightly different set.)
 
-WHY THE TOTAL DIDN'T MATCH XERO
--------------------------------
-It's a DATE-RANGE mismatch, not a data error:
-  - Xero screen: "Awaiting payment", dates May 10 2024 -> Jul 31 2026 -> 108 bills,
-    247,081.79.
-  - App: was showing the FILTERED total (99 bills, 251,124) using the page's default
-    due-date window of -12 to +12 months, which runs to Jul 2027 - a year FURTHER than
-    your Xero screen. Different date windows = different sets of bills = different
-    totals. The app pulls ALL outstanding AUTHORISED bills with AmountDue>0 (same
-    definition as Xero's "Awaiting payment"); the page was just filtering them to a
-    different window before totalling.
+WHAT CHANGED
+------------
+1) The bills fetch now ALSO pulls outstanding ACCPAY credit notes (Xero CreditNotes,
+   Type=ACCPAYCREDIT, AUTHORISED, RemainingCredit>0) and includes them as NEGATIVE
+   lines. The net total now matches Xero's "Awaiting payment".
+2) Credit-note rows are shown with a green "CREDIT" tag and a negative (green) amount,
+   on a light-green row, so they're obvious and clearly not something to "pay".
+3) Totals (All outstanding / Filtered / Selected) all net the credits automatically.
 
-WHAT I CHANGED
---------------
-Added an "All outstanding bills" figure (unfiltered) next to the Filtered and Selected
-totals. THIS is the number that should reconcile to Xero's "Awaiting payment" total
-when you set the same date range. The Filtered total still reflects whatever date/
-supplier filters you've applied.
+MUST RE-SYNC
+------------
+The credit notes only appear after a fresh pull:
+  1. Deploy both files, hard-refresh.
+  2. Click "Sync bills" once (this now also fetches credit notes).
+  3. The "All outstanding bills" figure should drop to match Xero's Awaiting payment
+     total (when the date ranges line up).
 
-HOW TO RECONCILE TO THE PENNY
------------------------------
-  - "All outstanding bills" in the app should match Xero Purchases > Bills > Awaiting
-    payment with the date type set to "Any date" and no range (i.e. everything).
-  - If you want it to match the 247,081.79 exactly, set the app "Due to" date to
-    31 Jul 2026 and "Due from" to match Xero, OR compare against the app's
-    "All outstanding bills" with Xero's range cleared.
-  - Small differences can remain from PARTIALLY-PAID bills (Xero shows original amount
-    in some views; the app sums the OUTSTANDING AmountDue), and from bills with no due
-    date. If after matching ranges it's still off by more than a few pounds, tell me the
-    two totals and I'll pull an itemised comparison.
+RECONCILING EXACTLY
+-------------------
+  - Compare the app's "All outstanding bills" to Xero Purchases > Bills > Awaiting
+    payment with date type "Any date" / range cleared.
+  - Remember Xero's earlier screen was TRANSACTION-date filtered; clear that to compare
+    like-for-like. The app filter is by DUE date.
+  - If it's still off after a sync + matching ranges, the remaining cause is usually a
+    handful of part-paid bills or credit notes dated outside the window - tell me the
+    two totals and I'll produce a line-by-line diff.
 
-FILE (single EDIT - no new files)
+FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/business-financials/bills.js
+  - lib/xero.js                         (fetch ACCPAY credit notes as negative lines)
+  - pages/business-financials/bills.js  (credit-note styling)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
-
-VERIFY
-------
-  - "All outstanding bills" shows the full total across every synced supplier bill.
-  - Setting the date range to match Xero brings the Filtered total in line with Xero's
-    "Awaiting payment" total for that range.
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh -> CLICK "SYNC BILLS".
 
 BUILD
 -----

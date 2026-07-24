@@ -272,15 +272,16 @@ export default function BillsToPay() {
                   </thead>
                   <tbody>
                     {sorted.map(i => {
-                      const overdue = i.dueDate && i.dueDate < new Date().toISOString().slice(0, 10)
+                      const overdue = i.dueDate && i.dueDate < new Date().toISOString().slice(0, 10) && !i.isCreditNote
+                      const cn = i.isCreditNote
                       return (
-                        <tr key={i.id} style={{ borderBottom: '1px solid #f2f0ec', background: sel[i.id] ? '#fffbeb' : 'transparent' }}>
+                        <tr key={i.id} style={{ borderBottom: '1px solid #f2f0ec', background: sel[i.id] ? '#fffbeb' : (cn ? '#f0f9f4' : 'transparent') }}>
                           <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[i.id]} onChange={e => setSel(s => ({ ...s, [i.id]: e.target.checked }))} /></td>
-                          <td style={{ ...td, textAlign: 'left' }}>{i.contact || '-'}</td>
+                          <td style={{ ...td, textAlign: 'left' }}>{i.contact || '-'}{cn && <span style={{ marginLeft: 6, fontSize: 10, color: '#16a34a', fontWeight: 700, border: '1px solid #86efac', borderRadius: 4, padding: '1px 4px' }}>CREDIT</span>}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#888' }}>{i.number || '-'}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#555' }}>{fmtDate(i.date)}</td>
                           <td style={{ ...td, textAlign: 'left', color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(i.dueDate)}{overdue ? ' - overdue' : ''}</td>
-                          <td style={{ ...td, fontWeight: 600 }}>{gbp(i.amountDue)}</td>
+                          <td style={{ ...td, fontWeight: 600, color: i.amountDue < 0 ? '#16a34a' : INK }}>{gbp(i.amountDue)}</td>
                         </tr>
                       )
                     })}
