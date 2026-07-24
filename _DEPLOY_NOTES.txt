@@ -1,36 +1,52 @@
-DEPLOY NOTES - Invoices Owed: date-range removed, due/expected basis toggle
-===========================================================================
+DEPLOY NOTES - Sales page: target + average lines, FY filter, click-a-bar, table fix
+====================================================================================
 
-CHANGES
--------
-1) REMOVED the "Due between ... and ..." date-range filter (and its Reset).
-2) ADDED a "Date basis" toggle: Expected | Due. It controls which date the page uses
-   for the charts (month buckets), the sort, and the Overdue column.
-   - DEFAULT = Expected.
-   - Expected falls back to the invoice's due date when no expected date has been set,
-     so nothing disappears.
-3) The two charts and the Overdue column now follow the chosen basis; titles/subs note
-   "(by expected date)" / "(by due date)".
+EMPTY TABLE - THE FIX
+---------------------
+The table was empty because the SALES LEDGER (sales:ledger) had not been pulled yet -
+it only populates when "Sync Xero figures" runs the updated sync (which now pulls sales
+code 200's ledger). After deploying, click "Sync Xero figures" ONCE and the table fills.
+The table now also shows a clear message when the ledger is empty ("click Sync Xero
+figures") so it's obvious rather than just blank.
+(The chart already worked because it reads the P&L benchmark, not the ledger.)
 
-Everything else (ticks + selected total, customer multi-select filter, sortable
-columns, comments, full width) is unchanged. The whole outstanding list now shows (no
-date window) - use the customer filter / column sort to navigate.
+NEW FEATURES
+------------
+1) MONTHLY TARGET: editable figure in the filter bar (top). Saved server-side
+   (config:sales-monthly-target). Drawn as a grey dashed line on the chart.
+2) AVERAGE LINE: the average revenue across the shown period, as a dashed line -
+   GREEN if the average is at/above target, RED if below.
+3) KEY for the three dashed lines (Target / Average / Now) above the chart.
+4) FINANCIAL-YEAR FILTER: a FY selector (Dec-Nov) that sets the date range to that year
+   (last FY, this FY, etc.). You can then still fine-tune with the From/To date inputs.
+   "Reset to FY" snaps the range back to the selected financial year.
+5) CLICK A BAR: clicking a month's bar filters the table to just that month's
+   transactions (and highlights the bar). Click again, or "clear", to show all.
 
-FILE (single EDIT - no new files)
+FILES (both EDITS - no new files)
 ---------------------------------
-  - pages/business-financials/invoices.js
+  - pages/business-financials/sales.js         (all the above)
+  - pages/api/business-financials.js            (save/return monthly target)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh -> click "Sync Xero
+figures" once (to populate the sales ledger / table).
 
 VERIFY
 ------
-  - No date-range inputs; a Date basis toggle (Expected | Due) defaulting to Expected.
-  - Switching to Due re-buckets the charts and re-computes Overdue against the due date.
-  - Setting an Expected date on a row moves it in the Expected-basis charts/sort.
+  - FY selector switches the range (try last FY vs this FY); From/To still adjustable.
+  - Enter a monthly target -> grey dashed line appears; average line shows green/red vs it.
+  - Key above the chart explains the three lines.
+  - After sync: table lists sales transactions; click a bar -> table shows only that
+    month; "clear" resets.
+
+NOTE
+----
+If after a sync the table is STILL empty but the chart has bars, tell me - that would
+mean the sales ledger pull isn't capturing code 200 lines and I'll investigate (the
+fetch is set to keep code 200's credit lines, so a sync should fill it).
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
-return.
+Validated with `next build` -> "Compiled successfully".

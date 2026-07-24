@@ -152,6 +152,12 @@ export default async function handler(req, res) {
   // Monthly totals from the P&L benchmark (sales codes); line-level detail from the
   // stored sales ledger captured at sync time.
   if (view === 'sales') {
+    if (req.method === 'POST') {
+      if (req.body && req.body.monthlyTarget !== undefined) {
+        await redis.set('config:sales-monthly-target', Number(req.body.monthlyTarget) || 0)
+      }
+      return res.json({ ok: true })
+    }
     const bm = benchmark.months || {}
     const normCategory = (code) => {
       const c = CATEGORY_OF(code, catConfig)
@@ -172,6 +178,7 @@ export default async function handler(req, res) {
     }
 
     const ledger = (await redis.get('sales:ledger').catch(() => null)) || { byCodeMonth: {} }
+    const monthlyTarget = (await redis.get('config:sales-monthly-target').catch(() => null)) || 0
     // Flatten ledger lines to a single list (sales amounts are credits => negative in
     // the ledger; show as positive sales).
     const lines = []
@@ -188,6 +195,7 @@ export default async function handler(req, res) {
       byMonth,
       lines,
       salesCodes: [...salesCodes],
+      monthlyTarget,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
       ledgerUpdatedAt: ledger.updatedAt || null,
     })

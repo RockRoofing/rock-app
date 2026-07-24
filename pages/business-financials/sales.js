@@ -1,11 +1,23 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
 import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card } from '../../components/BizNav'
 
 const monthKey = (s) => (s || '').slice(0, 7)
-const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const pad = (n) => String(n).padStart(2, '0')
+
+// Financial year: 1 Dec -> 30 Nov, labelled by the year it ENDS in.
+function fyMonths(endYear) {
+  const out = [`${endYear - 1}-12`]
+  for (let m = 1; m <= 11; m++) out.push(`${endYear}-${pad(m)}`)
+  return out
+}
+function fyOf(mo) { const [y, m] = mo.split('-').map(Number); return m === 12 ? y + 1 : y }
+const nowMonth = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
+function fyRange(endYear) {
+  return { from: `${endYear - 1}-12-01`, to: `${endYear}-11-30` }
+}
 
 export default function Sales() {
   const router = useRouter()
@@ -14,11 +26,14 @@ export default function Sales() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
 
-  const today = new Date()
-  const defFrom = isoDay(new Date(today.getFullYear(), today.getMonth() - 11, 1))
-  const defTo = isoDay(new Date(today.getFullYear(), today.getMonth() + 1, 0))
-  const [from, setFrom] = useState(defFrom)
-  const [to, setTo] = useState(defTo)
+  const [fyEnd, setFyEnd] = useState(() => fyOf(nowMonth()))
+  const initRange = fyRange(fyOf(nowMonth()))
+  const [from, setFrom] = useState(initRange.from)
+  const [to, setTo] = useState(initRange.to)
+
+  const [target, setTarget] = useState(0)
+  const [targetDraft, setTargetDraft] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState(null)   // click-a-bar filter
 
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
@@ -33,7 +48,12 @@ export default function Sales() {
 
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/business-financials?view=sales').then(r => r.json()); setData(d) } catch {}
+    try {
+      const d = await fetch('/api/business-financials?view=sales').then(r => r.json())
+      setData(d)
+      setTarget(d.monthlyTarget || 0)
+      setTargetDraft(d.monthlyTarget ? String(d.monthlyTarget) : '')
+    } catch {}
     setLoading(false)
   }
   useEffect(() => { if (ok) load() }, [ok])
@@ -44,11 +64,37 @@ export default function Sales() {
     setSyncing(false)
   }
 
+  async function saveTarget() {
+    const v = Number(targetDraft) || 0
+    setTarget(v)
+    try {
+      await fetch('/api/business-financials?view=sales', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'sales', monthlyTarget: v }),
+      })
+    } catch {}
+  }
+
+  // Selecting a financial year sets the date range to that FY (still editable after).
+  function pickFy(endYear) {
+    setFyEnd(endYear)
+    const r = fyRange(endYear)
+    setFrom(r.from); setTo(r.to)
+    setSelectedMonth(null)
+  }
+
   const byMonthAll = data?.byMonth || {}
   const lines = data?.lines || []
-  const thisMonth = today.toISOString().slice(0, 7)
+  const thisMonth = nowMonth()
 
-  // Chart data: months within the from/to window (by month).
+  // FY options: from earliest data (or this FY) back a few years.
+  const fyOptions = useMemo(() => {
+    const years = new Set([fyOf(thisMonth)])
+    for (const m of Object.keys(byMonthAll)) years.add(fyOf(m))
+    for (const l of lines) if (l.date) years.add(fyOf(monthKey(l.date)))
+    return [...years].sort((a, b) => b - a)
+  }, [byMonthAll, lines, thisMonth])
+
   const chart = useMemo(() => {
     const fromM = monthKey(from), toM = monthKey(to)
     return Object.keys(byMonthAll)
@@ -57,15 +103,20 @@ export default function Sales() {
       .map(m => ({ month: m, amount: Math.round(byMonthAll[m]) }))
   }, [byMonthAll, from, to])
 
-  // Detail lines within the date window.
+  const avg = useMemo(() => chart.length ? chart.reduce((s, m) => s + m.amount, 0) / chart.length : 0, [chart])
+  const avgAboveTarget = avg >= target
+  const avgColor = target > 0 ? (avgAboveTarget ? '#16a34a' : '#dc2626') : '#6b7280'
+
+  // Detail lines within window, optionally narrowed to a clicked month.
   const filteredLines = useMemo(() => {
     return lines.filter(l => {
       const d = l.date || ''
       if (from && d && d < from) return false
       if (to && d && d > to) return false
+      if (selectedMonth && monthKey(d) !== selectedMonth) return false
       return true
     })
-  }, [lines, from, to])
+  }, [lines, from, to, selectedMonth])
 
   const sortedLines = useMemo(() => {
     const arr = [...filteredLines]
@@ -87,12 +138,10 @@ export default function Sales() {
 
   function toggleSort(key) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir(key === 'amount' ? 'desc' : (key === 'date' ? 'desc' : 'asc')) }
+    else { setSortKey(key); setSortDir(key === 'amount' || key === 'date' ? 'desc' : 'asc') }
   }
   const arrow = (key) => sortKey === key ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
-
   const total = useMemo(() => filteredLines.reduce((s, l) => s + (l.amount || 0), 0), [filteredLines])
-  const chartTotal = useMemo(() => chart.reduce((s, m) => s + m.amount, 0), [chart])
 
   if (!ok) return null
   return (
@@ -106,28 +155,55 @@ export default function Sales() {
             <button onClick={sync} disabled={syncing} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.6 : 1 }}>{syncing ? 'Syncing...' : 'Sync Xero figures'}</button>
           </div>
 
-          {/* Date filter */}
+          {/* Filters */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 16 }}>
-            <span style={{ fontSize: 12, color: '#888' }}>Between</span>
-            <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={dateInp} />
-            <span style={{ fontSize: 12, color: '#888' }}>and</span>
-            <input type="date" value={to} onChange={e => setTo(e.target.value)} style={dateInp} />
-            <button onClick={() => { setFrom(defFrom); setTo(defTo) }} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: '#666' }}>Reset</button>
-            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>Sales in range (lines): <strong style={{ color: INK }}>{gbp(total)}</strong> - {filteredLines.length} transactions</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>Financial year</span>
+              <select value={fyEnd} onChange={e => pickFy(Number(e.target.value))} style={dateInp}>
+                {fyOptions.map(y => <option key={y} value={y}>Dec {y - 1} - Nov {y} (FY{y})</option>)}
+              </select>
+            </div>
+            <span style={{ fontSize: 12, color: '#888' }}>From</span>
+            <input type="date" value={from} onChange={e => { setFrom(e.target.value); setSelectedMonth(null) }} style={dateInp} />
+            <span style={{ fontSize: 12, color: '#888' }}>to</span>
+            <input type="date" value={to} onChange={e => { setTo(e.target.value); setSelectedMonth(null) }} style={dateInp} />
+            <button onClick={() => pickFy(fyEnd)} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: '#666' }}>Reset to FY</button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
+              <span style={{ fontSize: 12, color: '#888' }}>Monthly target</span>
+              <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
+              <input type="number" value={targetDraft} onChange={e => setTargetDraft(e.target.value)} onBlur={saveTarget}
+                placeholder="0" style={{ ...dateInp, width: 110, textAlign: 'right' }} />
+            </div>
+
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>
+              {selectedMonth ? <>Showing <strong>{monthLbl(selectedMonth)}</strong> - <button onClick={() => setSelectedMonth(null)} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 13, textDecoration: 'underline' }}>clear</button> - </> : null}
+              Sales in range: <strong style={{ color: INK }}>{gbp(total)}</strong> ({filteredLines.length})
+            </span>
           </div>
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
             <>
-              <Card title="Sales by month (transaction date, incl. WIP)" sub={`From the P&L (code 200). Total shown: ${gbp(chartTotal)}`}>
+              <Card title="Sales by month (transaction date, incl. WIP)" sub="Click a bar to show only that month's transactions below">
+                {/* Key for the dashed lines */}
+                <div style={{ display: 'flex', gap: 18, alignItems: 'center', margin: '0 0 8px 6px', fontSize: 12, color: '#666', flexWrap: 'wrap' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color="#6b7280" /> Target ({gbp(target)})</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color={avgColor} /> Average ({gbp(avg)}) - {target > 0 ? (avgAboveTarget ? 'above target' : 'below target') : 'set a target'}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Dash color="#16a34a" solid /> Now</span>
+                </div>
                 {chart.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No sales in this range. Click "Sync Xero figures".</div> : (
-                  <ResponsiveContainer width="100%" height={280}>
+                  <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={chart} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                       <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 11 }} />
                       <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={52} />
                       <Tooltip formatter={(v) => gbp(v)} labelFormatter={monthLbl} />
-                      <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
-                      <Bar dataKey="amount" name="Sales" fill="#2563eb" />
+                      {target > 0 && <ReferenceLine y={target} stroke="#6b7280" strokeDasharray="6 4" strokeWidth={1.5} />}
+                      <ReferenceLine y={avg} stroke={avgColor} strokeDasharray="6 4" strokeWidth={1.5} />
+                      <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" />
+                      <Bar dataKey="amount" name="Sales" cursor="pointer" onClick={(d) => setSelectedMonth(sm => sm === d.month ? null : d.month)}>
+                        {chart.map((e) => <Cell key={e.month} fill={selectedMonth === e.month ? '#1d4ed8' : (selectedMonth ? '#bcd0f5' : '#2563eb')} />)}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -154,12 +230,14 @@ export default function Sales() {
                         <td style={{ ...td, fontWeight: 600, color: l.amount < 0 ? '#dc2626' : INK }}>{gbp(l.amount)}</td>
                       </tr>
                     ))}
-                    {sortedLines.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No sales transactions in this range.</td></tr>}
+                    {sortedLines.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>
+                      {lines.length === 0 ? 'No sales ledger yet - click "Sync Xero figures" to pull sales transactions.' : 'No sales transactions in this range.'}
+                    </td></tr>}
                   </tbody>
                   {sortedLines.length > 0 && (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid #eee', fontWeight: 700, background: '#faf9f7' }}>
-                        <td colSpan={4} style={{ ...td, textAlign: 'right' }}>Total</td>
+                        <td colSpan={4} style={{ ...td, textAlign: 'right' }}>Total{selectedMonth ? ` (${monthLbl(selectedMonth)})` : ''}</td>
                         <td style={{ ...td, fontWeight: 800 }}>{gbp(total)}</td>
                       </tr>
                     </tfoot>
@@ -169,7 +247,7 @@ export default function Sales() {
               <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
                 Chart from the P&amp;L benchmark (sales code 200, includes WIP), synced {data?.benchmarkUpdatedAt ? new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB') : 'never'}.
                 Line detail from the general ledger, synced {data?.ledgerUpdatedAt ? new Date(data.ledgerUpdatedAt).toLocaleDateString('en-GB') : 'never'}.
-                The chart uses the P&amp;L monthly total; the line detail lists every ledger entry - small differences between the two can occur if a sales entry was posted after the last ledger pull.
+                Average and target are dashed lines on the chart; the average is green when at/above target, red when below.
               </div>
             </>
           )}
@@ -179,6 +257,10 @@ export default function Sales() {
   )
 }
 
+function Dash({ color, solid }) {
+  return <span style={{ display: 'inline-block', width: 22, height: 0, borderTop: `2px ${solid ? 'solid' : 'dashed'} ${color}` }} />
+}
+
 const th = { padding: '10px 12px', fontSize: 12, color: '#777', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap' }
 const td = { padding: '9px 12px', textAlign: 'right' }
-const dateInp = { padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13 }
+const dateInp = { padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, background: '#fff' }
