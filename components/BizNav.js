@@ -10,11 +10,12 @@ export const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s); ret
 const TABS = [
   ['Summary', '/business-financials'],
   ['Sales', '/business-financials/sales'],
-  ['Budgets', '/business-financials/budgets'],
+  ['Margin', '/business-financials/margin'],
   ['Bills to Pay', '/business-financials/bills'],
   ['Invoices Owed', '/business-financials/invoices'],
   ['Retentions Due', '/business-financials/retentions-due'],
   ['VAT Refund', '/business-financials/vat-refund'],
+  ['Budgets', '/business-financials/budgets'],
   ['Cash Schedule', '/business-financials/cash-schedule'],
   ['Cash Flow', '/business-financials/cashflow'],
 ]

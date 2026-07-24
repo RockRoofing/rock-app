@@ -319,6 +319,24 @@ export default async function handler(req, res) {
   }
 
   // ── Cash flow forecast ────────────────────────────────────────────────────
+  if (view === 'margin') {
+    const bm = benchmark.months || {}
+    const months = Object.keys(bm).sort().map(mo => {
+      const m = bm[mo]
+      const income = Math.abs(m.incomeTotal || 0)
+      const cos = Math.abs(m.costOfSalesTotal || 0)
+      const overheads = Math.abs(m.overheadsTotal || 0)
+      const grossProfit = income - cos
+      const netProfit = income - cos - overheads
+      return {
+        month: mo, income, cos, overheads, grossProfit, netProfit,
+        grossMargin: income ? (grossProfit / income) * 100 : null,
+        netMargin: income ? (netProfit / income) * 100 : null,
+      }
+    })
+    return res.json({ months, benchmarkUpdatedAt: benchmark.updatedAt || null })
+  }
+
   if (view === 'cashflow') {
     const [billsStore, recStore] = await Promise.all([
       redis.get('bank:outstanding-bills').then(v => v || { items: [] }).catch(() => ({ items: [] })),

@@ -1,57 +1,57 @@
-DEPLOY NOTES - Cash flow PART B: the 13-week forecast
+DEPLOY NOTES - Margin page + VAT tweaks + nav reorder
 =====================================================
 
-Both files are EDITS to existing files - just replace them.
+FOUR files. THREE are edits (replace them). ONE is NEW - see below.
 
-WHAT THIS IS
-------------
-The Cash Flow tab is now a proper 13-week rolling weekly forecast that pulls everything
-together:
+** NEW FILE - must be added via GitHub "Add file" (a zip upload can't create it) **
+  pages/business-financials/margin.js
 
-MONEY IN
-  - Invoices owed  -> landed on the EXPECTED date from Invoices Owed (falls back to due
-    date if no expected date set).
-  - Retention releases -> landed on each unreceived release date from the Retention
-    Tracker.
-  - VAT refunds -> landed at month-end, using your filed Box 5 (or the estimate) from the
-    VAT Refund page.
+EDITS (just replace):
+  components/BizNav.js
+  pages/api/business-financials.js
+  pages/business-financials/vat-refund.js
 
-MONEY OUT
-  - Bills to pay -> on their due date (from the Bills sync).
-  - Overheads -> timed by the CASH SCHEDULE you set up, using the Budgets amounts
-    (spread evenly / one day / specific days, with carry-forwards applied).
-  - VAT payments -> month-end, when Box 5 is a payment.
+-----------------------------------------------------
+1) MARGIN PAGE  (new tab: Summary | Sales | MARGIN | Bills ...)
+-----------------------------------------------------
+Gross and net margins from the monthly P&L, completed months only.
+  Gross margin = (Income - Cost of Sales) / Income
+  Net margin   = (Income - Cost of Sales - Overheads) / Income
 
-Opening balance = cash at bank from your Xero bank summary (editable to model scenarios).
-Running weekly closing balance, with the lowest point highlighted and negative weeks shown
-in red. Two charts (balance line; weekly in vs out) and a full week-by-week table.
+FOUR line charts, each with an amber dashed TREND line:
+  - Gross margin - current FY
+  - Net margin - current FY
+  - Gross margin - 12-month rolling (each point = trailing 12 months aggregated)
+  - Net margin - 12-month rolling
 
-DEPENDENCIES (for accurate numbers)
------------------------------------
-It reads the STORED data from the other pages, so keep them synced:
-  - Bills to Pay (sync)          -> bills out
-  - Invoices Owed (sync)         -> invoices in + expected dates
-  - VAT Refund                    -> filed Box 5 / estimate  (click Refresh estimate once)
-  - Cash Schedule + Budgets       -> overheads out
-  - Bank summary (Cash Flow syncs it) -> opening balance
-If a source is empty, that line simply shows as nothing - no crash.
+Filters: Financial year (Dec-Nov, same as Sales) + a From/To month range.
+Below the charts: a table showing exactly how each month in the selected FY was
+calculated (income, cost of sales, gross profit, gross margin, overheads, net
+profit, net margin).
 
-NOTE / LIKELY FIRST-LOOK ITEMS
-------------------------------
-- Retention only lands if the release has a DATE set in the Retention Tracker (undated
-  releases can't be timed - they show on Retentions Due as "TBC").
-- Overheads only appear for lines you gave a timing in Cash Schedule.
-- Sales pipeline is intentionally NOT included yet.
+Data comes from your Xero benchmark sync (the same P&L figures the Summary uses).
+The rolling charts only plot a month once a full trailing 12 months exists, so
+early months won't have a rolling point - that's expected.
 
+-----------------------------------------------------
+2) VAT REFUND page
+-----------------------------------------------------
+  - Date filters now default to your FINANCIAL YEAR and there's a Financial year
+    dropdown (Dec-Nov) that sets the range. From/To still adjustable after.
+  - Bar chart TURNED ROUND: bars now go UP (green) for a refund due and DOWN (red)
+    for VAT payable - matching how you read money in vs money out. Tooltip says
+    "refund" or "to pay" accordingly.
+
+-----------------------------------------------------
+3) NAV REORDER
+-----------------------------------------------------
+Budgets moved to sit directly BEFORE Cash Schedule:
+  Summary | Sales | Margin | Bills to Pay | Invoices Owed | Retentions Due |
+  VAT Refund | Budgets | Cash Schedule | Cash Flow
+
+-----------------------------------------------------
 DEPLOY
-------
-Replace both files. Commit -> Vercel "Ready" -> open Cash Flow.
-Have a look and tell me what looks off - especially whether the weekly TIMING of
-overheads and VAT lands where you expect.
-
-FILES
------
-  - pages/api/business-financials.js        (cashflow view returns schedule/budgets/VAT/retention + expected dates)
-  - pages/business-financials/cashflow.js   (13-week forecast engine + UI)
+Add margin.js as a new file, replace the other three, commit, wait for Vercel
+"Ready", then check the Margin tab and the flipped VAT chart.
 
 BUILD: next build -> Compiled successfully.

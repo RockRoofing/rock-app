@@ -7,6 +7,9 @@ import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, Card } from '../../components/B
 const pad = (n) => String(n).padStart(2, '0')
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const nowMonth = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
+// Financial year: 1 Dec -> 30 Nov, labelled by the year it ENDS in.
+const fyOfMonth = (mo) => { const [y, m] = mo.split('-').map(Number); return m >= 12 ? y + 1 : y }
+const fyOfNow = () => fyOfMonth(nowMonth())
 
 export default function VatRefund() {
   const router = useRouter()
@@ -14,10 +17,24 @@ export default function VatRefund() {
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState(null)
 
-  // Default: trailing 12 months to end of current month.
+  // Default: current financial year (1 Dec -> 30 Nov).
   const now = new Date()
-  const [from, setFrom] = useState(iso(new Date(now.getFullYear(), now.getMonth() - 11, 1)))
-  const [to, setTo] = useState(iso(new Date(now.getFullYear(), now.getMonth() + 1, 0)))
+  const [fyEnd, setFyEnd] = useState(() => fyOfNow())
+  const [from, setFrom] = useState(`${fyOfNow() - 1}-12-01`)
+  const [to, setTo] = useState(iso(new Date(fyOfNow(), 10, 30))) // 30 Nov of ending year (month index 10)
+
+  function pickFy(y) {
+    setFyEnd(y)
+    setFrom(`${y - 1}-12-01`)
+    setTo(iso(new Date(y, 10, 30)))
+  }
+  // FY options: a few years around the data window.
+  const fyOptions = useMemo(() => {
+    const base = fyOfNow()
+    const arr = []
+    for (let y = base + 1; y >= base - 4; y--) arr.push(y)
+    return arr
+  }, [])
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -81,7 +98,8 @@ export default function VatRefund() {
       load()
     } catch (e) { console.error(e) }
   }
-  const chart = useMemo(() => rows.map(r => ({ month: r.month, netVat: r.netVat, refund: r.refund, payable: r.payable })), [rows])
+  // Chart convention: POSITIVE bar = refund due (money in), NEGATIVE = payment to make.
+  const chart = useMemo(() => rows.map(r => ({ month: r.month, barValue: -r.netVat, netVat: r.netVat, refund: r.refund, payable: r.payable })), [rows])
 
   const totalRefund = useMemo(() => rows.reduce((s, r) => s + (r.refund || 0), 0), [rows])
   const totalPayable = useMemo(() => rows.reduce((s, r) => s + (r.payable || 0), 0), [rows])
@@ -97,10 +115,15 @@ export default function VatRefund() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 24px 80px' }}>
         <div style={{ marginBottom: 18 }}>
           <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Anticipated VAT Refund</h1>
-          <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>The live VAT position - what a return would show if filed for each month. Output VAT on sales minus input VAT on purchases. Rock files monthly; a negative net (green) means a refund is due from HMRC.</div>
+          <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>The live VAT position - what a return would show if filed for each month. Output VAT on sales minus input VAT on purchases. Rock files monthly; a positive net (green) means a refund is due from HMRC, negative (red) means VAT is payable.</div>
         </div>
 
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 18, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: 12 }}>
+          <div><div style={flabel}>Financial year</div>
+            <select value={fyEnd} onChange={e => pickFy(Number(e.target.value))} style={finput}>
+              {fyOptions.map(y => <option key={y} value={y}>Dec {y - 1} - Nov {y} (FY{y})</option>)}
+            </select>
+          </div>
           <div><div style={flabel}>From</div><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={finput} /></div>
           <div><div style={flabel}>To</div><input type="date" value={to} onChange={e => setTo(e.target.value)} style={finput} /></div>
           <button onClick={refreshFromXero} disabled={loading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? 'Working...' : 'Refresh estimate from Xero'}</button>
@@ -116,17 +139,17 @@ export default function VatRefund() {
               <Stat label="Net over period" value={gbp(Math.abs(netAll)) + (netAll < 0 ? ' refund' : ' to pay')} sub="Payable minus refunds" accent={netAll < 0} />
             </div>
 
-            <Card title="Net VAT by month" sub="Bars below zero (green) are refunds due; bars above zero are VAT payable.">
+            <Card title="Net VAT by month" sub="Bars above zero (green) are refunds due from HMRC; bars below zero (red) are VAT payable.">
               {chart.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No VAT activity for this period. If you expected data, check the diag line below.</div> : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={chart} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                     <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={52} />
-                    <Tooltip formatter={(v) => gbp(v)} labelFormatter={monthLbl} />
+                    <Tooltip formatter={(v) => [gbp(Math.abs(v)) + (v >= 0 ? ' refund' : ' to pay'), 'VAT']} labelFormatter={monthLbl} />
                     <ReferenceLine y={0} stroke="#999" />
-                    <Bar dataKey="netVat" name="Net VAT">
-                      {chart.map((e) => <Cell key={e.month} fill={e.netVat < 0 ? '#16a34a' : '#dc2626'} />)}
+                    <Bar dataKey="barValue" name="Net VAT">
+                      {chart.map((e) => <Cell key={e.month} fill={e.barValue >= 0 ? '#16a34a' : '#dc2626'} />)}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
