@@ -1,46 +1,69 @@
-DEPLOY NOTES - Sales: May now matches Xero (exclude draft/submitted invoices)
-=============================================================================
+DEPLOY NOTES - Sales reorder + Retentions Due page + VAT Refund page
+====================================================================
 
-FOUND IT (from your reconciliation strip)
------------------------------------------
-Your May strip: lines £102,521 vs P&L £92,417 (diff £10,105), by source:
-  Manual journal £69,169  (correct: WIP May 145,340 - WIP Apr reversal 76,172 = 69,168)
-  Credit note   -£26,740  (correct: CN-1686 -26,230 + CN-1688 -510)
-  Invoice        £60,093  (TOO HIGH - Xero's May invoices sum to £49,988)
+*** THIS PACK CONTAINS TWO BRAND-NEW PAGES - the zip cannot create files for you. ***
+After unzipping, in GitHub use "Add file" -> "Create new file" for these TWO, pasting the
+contents from the zip:
+  - pages/business-financials/retentions-due.js   (NEW)
+  - pages/business-financials/vat-refund.js        (NEW)
+The other four are edits to existing files - just replace them.
 
-So invoices were £10,105 too high. Cause: the fetch counted ALL ACCREC invoices
-regardless of status, including DRAFT / SUBMITTED ones. Xero's P&L only counts
-AUTHORISED / PAID invoices, so those unapproved invoices inflated the app.
+1) NAV ORDER
+------------
+components/BizNav.js: Sales now sits straight after Summary. New tabs added:
+  Summary | Sales | Budgets | Bills to Pay | Invoices Owed | Retentions Due | VAT Refund | Cash Flow
 
-THE FIX
--------
-Only count invoices (and credit notes) with status AUTHORISED or PAID; DRAFT, SUBMITTED,
-VOIDED and DELETED are ignored - exactly as the P&L does.
+2) RETENTIONS DUE  (pages/business-financials/retentions-due.js)
+---------------------------------------------------------------
+Shows WHEN outstanding retention is due to land and its value. It loads the SAME sources
+as the Retention Tracker (dashboard projects + manual retention entries + hidden list)
+and merges them identically, then lists every release that is NOT yet received, by its
+release date. Chart = due by month (click a bar to filter); table = the schedule.
 
-Verified arithmetic: 69,169 (MJ) - 26,740 (CN) + 49,988 (authorised invoices) =
-92,417 = Xero's May running balance. Match.
+BALANCES WITH THE TRACKER: the page sums each entry's outstanding balance
+((release1+release2) minus received) exactly as the Tracker does. A green banner confirms
+"Balanced with the Retention Tracker: outstanding X = total shown". If they ever differ
+(e.g. a project marked Complete with a release still flagged unreceived) it shows an amber
+banner explaining what to fix in the Tracker. Marking a release received in the Tracker
+removes it here and reduces the total - so it moves in step with the Tracker.
 
-*** REQUIRES A RE-SYNC ***
-Deploy -> Sales -> "Sync Xero figures" to re-pull with the status filter. May should
-then read 92,417 and its reconciliation strip should say "(match)".
+3) VAT REFUND  (pages/business-financials/vat-refund.js)  -- pulls direct from Xero
+----------------------------------------------------------------------------------
+You chose "direct from Xero". This adds:
+  - connect.js: requests accounting.reports.taxreports.read (this IS in your app's
+    authorised scope list, so it will NOT throw invalid_scope like journals did). Also
+    added accounting.banktransactions.read explicitly (used by the sales page).
+  - lib/xero.js: fetchVatReturns() - calls Xero's tax report endpoint(s).
+  - business-financials.js: view=vat returns the report + a diag.
+  - The page renders the returned VAT return; a negative net figure (green) = refund due.
 
-FILE (single EDIT - no new files)
----------------------------------
-  - lib/xero.js   (invoices + credit notes: AUTHORISED/PAID only)
+  *** REQUIRES A RECONNECT ***  The taxreports permission is granted at connect time.
+  After deploying: go to /connect, reconnect Xero, approve the tax reports permission,
+  then open VAT Refund.
+
+  HONEST NOTE: Xero's VAT report shape varies by org / MTD status. The page renders
+  whatever comes back and prints a small "diag:" line at the bottom. Please open the page
+  after reconnecting and SEND ME that diag line (and a screenshot of the rendered rows).
+  I'll then map the exact fields (Box 5 net VAT / refund) cleanly and remove the diag.
+  If diag shows hasTaxScope:false, the reconnect didn't grant it - disconnect the app in
+  Xero (Settings -> Connected apps) and reconnect so it re-prompts.
+
+FILES
+-----
+  EDITS:
+   - components/BizNav.js
+   - pages/connect.js
+   - lib/xero.js
+   - pages/api/business-financials.js
+  NEW (create via GitHub "Add file"):
+   - pages/business-financials/retentions-due.js
+   - pages/business-financials/vat-refund.js
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> Sync Xero figures.
-
-VERIFY
-------
-- Click May -> reconciliation strip shows lines total 92,417 vs P&L 92,417 (match).
-- Invoice source total for May = ~49,988.
-- Other months still match (they were already right; this only removes unapproved
-  invoices, which most months didn't have).
-- The chart bar for May should stay the same (P&L was already 92,417) and now equals the
-  table total.
+Add the two new files + replace the four edits. Commit -> Vercel "Ready".
+For VAT: reconnect Xero, then open VAT Refund and send me the diag line.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". May unit-checked to 92,417.
+Validated with `next build` -> "Compiled successfully" (both new pages compiled).
