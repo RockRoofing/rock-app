@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition } from '../../lib/xero'
+import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchFiledVatReturns } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -242,12 +242,19 @@ export default async function handler(req, res) {
   // Reads the stored ledger captured at sync time (view=overhead-transactions).
   if (view === 'vat') {
     let tokens = await getTokens()
-    if (!tokens?.access_token) return res.status(200).json({ months: {}, diag: { lastError: 'Xero not connected' } })
+    if (!tokens?.access_token) return res.status(200).json({ months: {}, filed: [], diag: { lastError: 'Xero not connected' } })
     try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
     const from = String(req.query.from || (req.body && req.body.from) || '')
     const to = String(req.query.to || (req.body && req.body.to) || '')
+    let tokenScope = null; try { tokenScope = tokens?.scope || null } catch {}
+    // Estimate (transactions) for all months, used for the current/future months.
     const { months, meta } = await fetchVatPosition(tokens.access_token, tokens.tenant_id, from, to)
-    return res.json({ months, diag: meta })
+    // Filed returns (authoritative) for completed months.
+    const { returns, diag: filedDiag } = await fetchFiledVatReturns(tokens.access_token, tokens.tenant_id, from, to)
+    return res.json({
+      months, filed: returns,
+      diag: { estimate: meta, filed: filedDiag, tokenScope, hasTaxScope: !!(tokenScope && tokenScope.includes('accounting.reports.taxreports.read')) },
+    })
   }
 
   if (view === 'overhead-transactions') {

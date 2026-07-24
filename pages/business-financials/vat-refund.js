@@ -38,7 +38,33 @@ export default function VatRefund() {
   useEffect(() => { if (ok) load() }, [ok])
 
   const months = data?.months || {}
-  const rows = useMemo(() => Object.keys(months).sort().map(mk => ({ month: mk, ...months[mk] })), [months])
+  const filed = data?.filed || []
+  const filedByMonth = useMemo(() => {
+    const m = {}
+    for (const f of filed) { if (f.periodKey) m[f.periodKey] = f }
+    return m
+  }, [filed])
+
+  // For each month: use the FILED return if we have it (past, authoritative);
+  // otherwise the transaction ESTIMATE (current/future).
+  const rows = useMemo(() => {
+    const keys = new Set([...Object.keys(months), ...Object.keys(filedByMonth)])
+    return [...keys].sort().map(mk => {
+      const est = months[mk]
+      const f = filedByMonth[mk]
+      const isCurrentOrFuture = mk >= nowMonth()
+      if (f && !isCurrentOrFuture) {
+        const netVat = f.netVat != null ? f.netVat : ((f.box1 || 0) - (f.box4 || 0))
+        return {
+          month: mk, source: 'Filed return',
+          outputVat: f.box1 || 0, inputVat: f.box4 || 0,
+          outputNet: est?.outputNet || 0, inputNet: est?.inputNet || 0,
+          netVat, refund: netVat < 0 ? -netVat : 0, payable: netVat > 0 ? netVat : 0,
+        }
+      }
+      return { month: mk, source: isCurrentOrFuture ? 'Estimate' : 'Estimate (no return)', ...(est || { outputVat: 0, inputVat: 0, outputNet: 0, inputNet: 0, netVat: 0, refund: 0, payable: 0 }) }
+    })
+  }, [months, filedByMonth])
   const chart = useMemo(() => rows.map(r => ({ month: r.month, netVat: r.netVat, refund: r.refund, payable: r.payable })), [rows])
 
   const totalRefund = useMemo(() => rows.reduce((s, r) => s + (r.refund || 0), 0), [rows])
@@ -95,6 +121,7 @@ export default function VatRefund() {
                 <thead>
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left' }}>Month</th>
+                    <th style={{ ...th, textAlign: 'left' }}>Source</th>
                     <th style={th}>Sales (net)</th>
                     <th style={th}>Output VAT</th>
                     <th style={th}>Purchases (net)</th>
@@ -104,10 +131,11 @@ export default function VatRefund() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No VAT data.</td></tr>}
+                  {rows.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No VAT data.</td></tr>}
                   {rows.map((r) => (
                     <tr key={r.month} style={{ borderBottom: '1px solid #f2f0ec', background: r.month === nowMonth() ? '#f5faff' : '#fff' }}>
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(r.month)}</td>
+                      <td style={{ ...td, textAlign: 'left', fontSize: 11, color: r.source === 'Filed return' ? '#16a34a' : '#b45309' }}>{r.source}</td>
                       <td style={{ ...td, color: '#666' }}>{gbp(r.outputNet)}</td>
                       <td style={td}>{gbp(r.outputVat)}</td>
                       <td style={{ ...td, color: '#666' }}>{gbp(r.inputNet)}</td>
@@ -121,10 +149,10 @@ export default function VatRefund() {
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              Live calculation from Xero transaction VAT (authorised/paid sales &amp; purchase invoices and credit notes) by transaction date. This is an anticipated figure to guide cash flow, not a filed return - always reconcile against Xero&apos;s VAT return before submitting to HMRC.
+              Completed months show Xero&apos;s <strong>filed VAT return</strong> (the real figure, including late claims, reverse charge and zero-rating). The current and future months show a <strong>transaction estimate</strong> - a return doesn&apos;t exist yet, so this is indicative for cash-flow planning and will move as more invoices and bills are posted.
             </div>
 
-            {data?.diag && (data.diag.lastError || (data.diag.counts && Object.values(data.diag.counts).every(v => !v))) && (
+            {data?.diag && (
               <div style={{ fontSize: 11, color: '#bbb', marginTop: 12, fontFamily: 'monospace', wordBreak: 'break-word' }}>diag: {JSON.stringify(data.diag)}</div>
             )}
           </>
