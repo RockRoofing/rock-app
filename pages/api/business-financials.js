@@ -439,8 +439,13 @@ export default async function handler(req, res) {
       return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
     })
 
-    // Attach the manual planned payment date (override of the due date) to each bill.
-    const bills = (billsStore.items || []).map(b => ({ ...b, payDate: billPayDates[b.id] || '', cis: !!billCisFlags[b.id] }))
+    // Attach planned payment date + CIS status. CIS auto-defaults to bills on account
+    // 321 (cisAuto from the sync); a manual flag in config overrides it either way.
+    const bills = (billsStore.items || []).map(b => {
+      const manual = billCisFlags[b.id]   // true / false (explicit) / undefined
+      const cis = (manual === undefined || manual === null) ? !!b.cisAuto : !!manual
+      return { ...b, payDate: billPayDates[b.id] || '', cis, cisAuto: !!b.cisAuto }
+    })
 
     return res.json({
       cashAtBank: openingCash,
@@ -504,13 +509,14 @@ export default async function handler(req, res) {
     }
   }
 
-  // Flag/unflag a bill as CIS labour (20% withheld, paid to HMRC on the 22nd).
+  // Flag/unflag a bill as CIS labour. Stores an explicit true/false so an
+  // auto-detected (account 321) bill can be manually un-ticked (gross status).
   if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-bill-cis') {
     try {
       const { billId, cis } = req.body || {}
       if (!billId) return res.status(400).json({ ok: false, error: 'missing billId' })
       const map = await redis.get('config:bill-cis-flags').then(v => v || {}).catch(() => ({}))
-      if (cis) map[billId] = true; else delete map[billId]
+      map[billId] = !!cis   // store explicit boolean (overrides auto-detection)
       await redis.set('config:bill-cis-flags', map)
       return res.json({ ok: true })
     } catch (e) {

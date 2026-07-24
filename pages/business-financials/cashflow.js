@@ -418,7 +418,7 @@ export default function CashFlow() {
                               <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.contact}>{b.contact || '-'}</td>
                               <td style={{ ...td, textAlign: 'left', color: '#777', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.reference || b.number}>{b.reference || b.number || '-'}</td>
                               <td style={{ ...td, color: '#666' }}>{b.dueDate ? new Date(b.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
-                              <td style={{ ...td, fontWeight: 600 }}>{gbp(b.amountDue)}{cisFlags[b.id] && <div style={{ fontSize: 10, color: '#ea580c', fontWeight: 400 }}>+{gbp(b.amountDue * 0.25)} CIS to HMRC</div>}</td>
+                              <td style={{ ...td, fontWeight: 600 }}>{gbp(b.amountDue)}{cisFlags[b.id] && <div style={{ fontSize: 10, color: '#ea580c', fontWeight: 400, lineHeight: 1.35, marginTop: 2 }}>{gbp(b.amountDue * 1.25)} gross =<br />{gbp(b.amountDue)} to sub + {gbp(b.amountDue * 0.25)} CIS</div>}</td>
                               <td style={{ ...td, textAlign: 'center' }}>
                                 <input type="checkbox" checked={!!cisFlags[b.id]} onChange={e => setBillCis(b.id, e.target.checked)} title="CIS labour - withhold 20%" />
                               </td>

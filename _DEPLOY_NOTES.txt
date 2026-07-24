@@ -1,39 +1,41 @@
-DEPLOY NOTES - Cash Flow: CIS to HMRC (corrected) + bill payment dates
-======================================================================
+DEPLOY NOTES - CIS auto-detect from account 321 (supersedes all prior CIS packages)
+===================================================================================
 
-** This REPLACES the earlier "Cashflow_CIS" package - do NOT deploy that one.
-   These two files contain everything: the editable bills table with payment
-   dates AND the corrected CIS handling. **
+** Use THIS package. It replaces Cashflow_CIS / _corrected / _clearer. Contains all
+   the CIS work plus auto-ticking. **
 
-TWO files, both EDITS - just replace them.
-  pages/api/business-financials.js
-  pages/business-financials/cashflow.js
+THREE files, all EDITS:
+  lib/xero.js                              (detects account 321 on bill line items)
+  pages/api/business-financials.js         (auto CIS default + manual override)
+  pages/business-financials/cashflow.js    (unchanged logic; already correct)
 
-WHY THE CHANGE FROM THE LAST VERSION
-------------------------------------
-Your Xero bill screenshot showed that Xero ALREADY applies the CIS deduction: a
-Ł1,250 gross labour bill shows "Amount Due Ł1,000" (net of the 20%). My previous
-version wrongly deducted a further 20% (paying Ł800). Corrected:
+WHERE DOES THE CIS GO / IS IT DOUBLE COUNTED?
+---------------------------------------------
+Confirmed with you: Xero applies the CIS deduction ON THE BILL. A Ł1,250 gross
+labour bill splits into:
+   Ł1,000  -> payable to the subcontractor (this is the bill's Amount Due)
+   Ł250    -> WITHHELD ON THE BALANCE SHEET as a CIS liability (your 821-type
+             control account) - NOT a bill in "Bills to pay".
 
-  - A CIS-flagged bill now pays its FULL Amount Due (the Ł1,000 net) on the payment
-    date - exactly what leaves your bank.
-  - The 20% CIS to HMRC is added as a SEPARATE outflow on the 22nd of the following
-    month. Because Amount Due is already net, CIS = net x 0.25 (Ł1,000 -> Ł250),
-    which reconciles to your Xero bill exactly.
+So the Ł250 is NOT in your outstanding bills and NOT in Amount Due. Adding it as a
+separate "CIS to HMRC" outflow on the 22nd is therefore CORRECT and NOT a double
+count - it represents clearing that balance-sheet liability, which nothing else in
+the forecast captures. (The only way it would double up is if you also entered the
+HMRC CIS payment as a payable BILL in Xero - you don't; it's a liability
+settlement.)
 
-WHAT YOU DO
-   In the Bills to pay table (bottom of Cash Flow), tick "CIS" on labour bills.
-   The amount cell shows the bill's full amount plus a small "+Ł.. CIS to HMRC"
-   note. The forecast's new "CIS to HMRC" column shows the 20% landing on the 22nd
-   of the following month.
+AUTO-TICK FROM ACCOUNT 321
+--------------------------
+Bills with any line on account 321 (CIS Labour Expense) now auto-tick as CIS - no
+manual ticking needed. You can still UN-tick any bill (e.g. gross-status
+subcontractors) and that choice is remembered and overrides the auto-detection.
+Re-ticking restores it.
 
-WHY IT MATTERS
-   The subcontractor payment was already correct (Amount Due is net). What was
-   genuinely missing was the CIS payment to HMRC - a real outflow that wasn't in
-   the forecast at all. This adds it. Rate 20%, all flagged bills. Flags saved.
+** IMPORTANT: re-sync Bills to Pay after deploying. ** The 321 detection is added
+when bills are fetched from Xero, so already-synced bills won't show auto-ticked
+until you run the Bills to Pay sync once. New/re-synced bills will auto-tick.
 
-ALSO IN THIS PACKAGE (from before, if not yet deployed)
-   - Editable "Planned payment date" per bill; moving a date reschedules that bill's
-     cash-out in the 13-week forecast. Orange = moved. Saved per bill.
+No extra Xero calls - the account code comes from line items already returned by the
+bills fetch, so no timeout risk.
 
 BUILD: next build -> Compiled successfully.
