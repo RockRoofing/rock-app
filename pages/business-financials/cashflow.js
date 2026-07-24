@@ -91,6 +91,9 @@ export default function CashFlow() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [startCash, setStartCash] = useState('')   // optional manual override
+  const [refreshingBal, setRefreshingBal] = useState(false)
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '' })
+  const [savingFin, setSavingFin] = useState(false)
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -102,10 +105,33 @@ export default function CashFlow() {
 
   async function load() {
     setLoading(true)
-    try { setData(await fetch('/api/business-financials?view=cashflow').then(r => r.json())) } catch {}
+    try {
+      const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
+      setData(d)
+      const fc = d.financeCfg || {}
+      setFinance({ ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '' })
+    } catch {}
     setLoading(false)
   }
   useEffect(() => { if (ok) load() }, [ok])
+
+  async function refreshBalances() {
+    setRefreshingBal(true)
+    try {
+      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'refresh-balances' }) })
+      await load()
+    } catch {}
+    setRefreshingBal(false)
+  }
+
+  async function saveFinance() {
+    setSavingFin(true)
+    try {
+      const cfg = { ifLimit: Number(finance.ifLimit) || 0, ifDrawn: Number(finance.ifDrawn) || 0, ccLimit: Number(finance.ccLimit) || 0 }
+      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
+    } catch {}
+    setSavingFin(false)
+  }
 
   const WEEKS = 13
   const forecast = useMemo(() => {
@@ -191,21 +217,63 @@ export default function CashFlow() {
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
-              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 18px', minWidth: 230 }}>
-                <div style={{ fontSize: 12, color: '#888' }}>Opening cash (from Xero)</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                  <span style={{ color: '#999' }}>&pound;</span>
-                  <input type="number" value={startCash} onChange={e => setStartCash(e.target.value)} placeholder={String(Math.round(data.cashAtBank || 0))}
-                    style={{ width: 150, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 18, fontWeight: 700 }} />
-                </div>
-                <div style={{ fontSize: 11, color: '#999', marginTop: 3 }}>Xero: {gbp(data.cashAtBank)}. Override to model a scenario.</div>
-              </div>
-              <Stat label="Total money in (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyIn, 0))} color="#16a34a" />
-              <Stat label="Total money out (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyOut, 0))} color="#dc2626" />
-              <Stat label="Projected closing (wk 13)" value={gbp(forecast.length ? forecast[forecast.length - 1].closing : data.cashAtBank)} color={forecast.length && forecast[forecast.length - 1].closing < 0 ? '#dc2626' : INK} />
-              <Stat label="Lowest point" value={gbp(lowest)} sub={lowestWk?.wk} color={lowest < 0 ? '#dc2626' : '#b45309'} />
-            </div>
+            {(() => {
+              const bal = data.balances
+              const bankAccts = (bal?.accounts || []).filter(a => !a.isCard)
+              const cardAccts = (bal?.accounts || []).filter(a => a.isCard)
+              const bankTotal = bal?.ok ? (bal.bankTotal || 0) : (data.cashAtBank || 0)
+              const cardTotal = bal?.ok ? (bal.cardTotal || 0) : 0   // negative = owed
+              const cardDebt = Math.abs(Math.min(0, cardTotal))
+              const ccLimit = Number(finance.ccLimit) || 0
+              const ccHeadroom = Math.max(0, ccLimit - cardDebt)
+              const ifLimit = Number(finance.ifLimit) || 0
+              const ifDrawn = Number(finance.ifDrawn) || 0
+              const ifHeadroom = Math.max(0, ifLimit - ifDrawn)
+              const maxCash = bankTotal + ifHeadroom + ccHeadroom
+              return (
+                <>
+                  {/* Balance boxes: each account, then combined + max available */}
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14, alignItems: 'stretch' }}>
+                    {bankAccts.map((a, i) => <BalBox key={'b' + i} label={a.name} value={gbp(a.balance)} color={a.balance < 0 ? '#dc2626' : INK} />)}
+                    {cardAccts.map((a, i) => <BalBox key={'c' + i} label={a.name} value={gbp(a.balance)} sub="credit card" color={a.balance < 0 ? '#dc2626' : '#16a34a'} />)}
+                    <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong />
+                    {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
+                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + undrawn IF + card headroom" color="#0f766e" strong />
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <button onClick={refreshBalances} disabled={refreshingBal} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: refreshingBal ? 0.6 : 1 }}>{refreshingBal ? 'Refreshing...' : 'Refresh balances from Xero'}</button>
+                    </div>
+                  </div>
+                  {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
+                  {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
+
+                  {/* Facility settings */}
+                  <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: INK, alignSelf: 'center' }}>Facilities (for &quot;max cash available&quot;)</div>
+                    <FinInput label="Invoice finance limit" value={finance.ifLimit} onChange={v => setFinance(f => ({ ...f, ifLimit: v }))} />
+                    <FinInput label="Invoice finance drawn" value={finance.ifDrawn} onChange={v => setFinance(f => ({ ...f, ifDrawn: v }))} />
+                    <FinInput label="Credit card limit (total)" value={finance.ccLimit} onChange={v => setFinance(f => ({ ...f, ccLimit: v }))} />
+                    <button onClick={saveFinance} disabled={savingFin} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: savingFin ? 0.6 : 1 }}>{savingFin ? 'Saving...' : 'Save facilities'}</button>
+                    <div style={{ fontSize: 11, color: '#9a958c', flexBasis: '100%' }}>Invoice finance is a facility you draw down when you choose - so it is shown as available headroom, not automatic weekly cash. Undrawn IF (limit &minus; drawn) plus unused card headroom is added to your bank cash to show the most you could raise.</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
+                    <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 18px', minWidth: 230 }}>
+                      <div style={{ fontSize: 12, color: '#888' }}>Opening cash used in forecast</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                        <span style={{ color: '#999' }}>&pound;</span>
+                        <input type="number" value={startCash} onChange={e => setStartCash(e.target.value)} placeholder={String(Math.round(bankTotal))}
+                          style={{ width: 150, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 18, fontWeight: 700 }} />
+                      </div>
+                      <div style={{ fontSize: 11, color: '#999', marginTop: 3 }}>Defaults to combined bank cash ({gbp(bankTotal)}). Override to model a scenario.</div>
+                    </div>
+                    <Stat label="Total money in (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyIn, 0))} color="#16a34a" />
+                    <Stat label="Total money out (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyOut, 0))} color="#dc2626" />
+                    <Stat label="Projected closing (wk 13)" value={gbp(forecast.length ? forecast[forecast.length - 1].closing : bankTotal)} color={forecast.length && forecast[forecast.length - 1].closing < 0 ? '#dc2626' : INK} />
+                    <Stat label="Lowest point" value={gbp(lowest)} sub={lowestWk?.wk} color={lowest < 0 ? '#dc2626' : '#b45309'} />
+                  </div>
+                </>
+              )
+            })()}
 
             <Card title="Projected cash balance" sub="Weekly closing balance across the next 13 weeks. Red line = zero.">
               <ResponsiveContainer width="100%" height={300}>
@@ -285,6 +353,29 @@ function Stat({ label, value, sub, color }) {
       <div style={{ fontSize: 12, color: '#888' }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: '#9a958c', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function BalBox({ label, value, sub, color, strong }) {
+  return (
+    <div style={{ background: strong ? '#f7faf9' : '#fff', border: strong ? '1.5px solid #0f766e' : '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', minWidth: 160 }}>
+      <div style={{ fontSize: 11.5, color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{label}</div>
+      <div style={{ fontSize: strong ? 22 : 19, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10.5, color: '#9a958c', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
+
+function FinInput({ label, value, onChange }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ color: '#999', fontSize: 13 }}>&pound;</span>
+        <input type="number" value={value} onChange={e => onChange(e.target.value)} placeholder="0"
+          style={{ width: 120, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }} />
+      </div>
     </div>
   )
 }

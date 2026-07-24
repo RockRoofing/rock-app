@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition } from '../../lib/xero'
+import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -353,14 +353,21 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
       redis.get('vat:estimate').then(v => v || { months: {} }).catch(() => ({ months: {} })),
       redis.get('retention:entries').then(v => v || { entries: [] }).catch(() => ({ entries: [] })),
       redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
+      redis.get('bank:account-balances').then(v => v || null).catch(() => null),
+      redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
     ])
+
+    // Prefer the live per-account balances (bank cash only) for opening cash; fall
+    // back to the old bank-summary closing balance if we've never fetched balances.
+    const liveBankTotal = balancesStore && balancesStore.ok ? (balancesStore.bankTotal || 0) : null
+    const openingCash = liveBankTotal != null ? liveBankTotal : cashAtBank
 
     // Attach the expected payment date (from Invoices Owed) to each receivable.
     const receivables = (recStore.items || []).map(i => {
@@ -369,7 +376,10 @@ export default async function handler(req, res) {
     })
 
     return res.json({
-      cashAtBank,
+      cashAtBank: openingCash,
+      cashAtBankLegacy: cashAtBank,
+      balances: balancesStore || null,
+      financeCfg,
       bills: billsStore.items || [],
       receivables,
       avgOverheadMonthly,
@@ -382,6 +392,32 @@ export default async function handler(req, res) {
       billsUpdatedAt: billsStore.updatedAt || null,
       receivablesUpdatedAt: recStore.updatedAt || null,
     })
+  }
+
+  // Refresh live bank + credit-card balances from Xero (Balance Sheet).
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'refresh-balances') {
+    try {
+      let tokens = await getTokens()
+      if (!tokens) return res.status(401).json({ error: 'Not connected to Xero' })
+      try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+      const bal = await fetchBankAndCardBalances(tokens.access_token, tokens.tenant_id)
+      const payload = { ...bal, updatedAt: new Date().toISOString() }
+      if (bal.ok) await redis.set('bank:account-balances', payload)
+      return res.json(payload)
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message })
+    }
+  }
+
+  // Save invoice-finance / facility settings.
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-finance') {
+    try {
+      const cfg = (req.body || {}).financeCfg || {}
+      await redis.set('config:cashflow-finance', cfg)
+      return res.json({ ok: true, financeCfg: cfg })
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message })
+    }
   }
 
   if (req.method === 'POST' && (req.body || {}).syncBank) {
