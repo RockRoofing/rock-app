@@ -195,6 +195,23 @@ function Budgets() {
   function setForecastMethod(code, method) {
     setForecastMethods(prev => ({ ...prev, [code]: Number(method) }))
   }
+  // "Make same as Budget / mo": stamp the current Budget/Mo value into every remaining
+  // (current + future) month of the FY as a forecast override, so the rest of the year
+  // uses the budget figure. Completed months are left untouched (they use actuals).
+  function applyBudgetToRemaining(code) {
+    const val = effectiveBudget(code)
+    if (val == null || val === '' || isNaN(val)) return
+    const remaining = months.filter(mo => !isComplete(mo))
+    let freshOverrides
+    setForecastOverrides(prev => {
+      const next = { ...prev, [code]: { ...(prev[code] || {}) } }
+      for (const mo of remaining) next[code][mo] = Number(val)
+      freshOverrides = next
+      return next
+    })
+    // Persist immediately with the fresh value (avoids stale-closure in save()).
+    if (freshOverrides) save({ forecastOverrides: freshOverrides })
+  }
   function setOverride(code, mo, raw) {
     const val = raw === '' ? '' : Number(raw)
     setForecastOverrides(prev => {
@@ -586,11 +603,13 @@ function Budgets() {
                             </div>
                           </td>
                           <td style={tdL}>
-                            <select value={forecastMethods[code] || 1} onChange={e => setForecastMethod(code, e.target.value)}
+                            <select value={forecastMethods[code] || 1}
+                              onChange={e => { if (e.target.value === 'budget') { applyBudgetToRemaining(code) } else { setForecastMethod(code, e.target.value) } }}
                               style={{ padding: '4px 6px', border: '1px solid #e2e0da', borderRadius: 6, fontSize: 11, background: '#fff' }}>
                               <option value={1}>1 - Avg this FY</option>
                               <option value={2}>2 - Last 3 mo</option>
                               <option value={3}>3 - Last full month</option>
+                              <option value="budget">Make same as Budget / mo</option>
                             </select>
                           </td>
                           {months.map(mo => {

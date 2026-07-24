@@ -1,41 +1,22 @@
-DEPLOY NOTES - CIS auto-detect from account 321 (supersedes all prior CIS packages)
-===================================================================================
+DEPLOY NOTES - Budgets: "Make same as Budget / mo" forecast option
+==================================================================
 
-** Use THIS package. It replaces Cashflow_CIS / _corrected / _clearer. Contains all
-   the CIS work plus auto-ticking. **
+ONE file, an EDIT - just replace it.
+  pages/business-financials/budgets.js
 
-THREE files, all EDITS:
-  lib/xero.js                              (detects account 321 on bill line items)
-  pages/api/business-financials.js         (auto CIS default + manual override)
-  pages/business-financials/cashflow.js    (unchanged logic; already correct)
+WHAT'S NEW
+  The per-row Forecast method dropdown has a new option:
+     "Make same as Budget / mo"
 
-WHERE DOES THE CIS GO / IS IT DOUBLE COUNTED?
----------------------------------------------
-Confirmed with you: Xero applies the CIS deduction ON THE BILL. A Ł1,250 gross
-labour bill splits into:
-   Ł1,000  -> payable to the subcontractor (this is the bill's Amount Due)
-   Ł250    -> WITHHELD ON THE BALANCE SHEET as a CIS liability (your 821-type
-             control account) - NOT a bill in "Bills to pay".
+  When you pick it for a row, it stamps that row's Budget / Mo figure into every
+  REMAINING month of the financial year (the current month + all future months) as
+  the forecast value. Completed months keep their actuals.
 
-So the Ł250 is NOT in your outstanding bills and NOT in Amount Due. Adding it as a
-separate "CIS to HMRC" outflow on the 22nd is therefore CORRECT and NOT a double
-count - it represents clearing that balance-sheet liability, which nothing else in
-the forecast captures. (The only way it would double up is if you also entered the
-HMRC CIS payment as a payable BILL in Xero - you don't; it's a liability
-settlement.)
+  It's an ACTION, not a sticky mode - after it runs, the dropdown returns to the
+  row's normal method (1/2/3). The filled months become editable overrides, so you
+  can still fine-tune any individual month afterwards. The change is saved
+  immediately.
 
-AUTO-TICK FROM ACCOUNT 321
---------------------------
-Bills with any line on account 321 (CIS Labour Expense) now auto-tick as CIS - no
-manual ticking needed. You can still UN-tick any bill (e.g. gross-status
-subcontractors) and that choice is remembered and overrides the auto-detection.
-Re-ticking restores it.
-
-** IMPORTANT: re-sync Bills to Pay after deploying. ** The 321 detection is added
-when bills are fetched from Xero, so already-synced bills won't show auto-ticked
-until you run the Bills to Pay sync once. New/re-synced bills will auto-tick.
-
-No extra Xero calls - the account code comes from line items already returned by the
-bills fetch, so no timeout risk.
+  If a row has no Budget / Mo value set, the option does nothing (nothing to apply).
 
 BUILD: next build -> Compiled successfully.
