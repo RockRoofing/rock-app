@@ -1,53 +1,22 @@
-DEPLOY NOTES - VAT Refund: filed returns (past) + estimate (current/future)
-===========================================================================
+DEPLOY NOTES - Fix invalid_scope (remove finance.statements.read)
+=================================================================
 
-THE MODEL (agreed)
-------------------
-- COMPLETED months  -> Xero's FILED VAT return (the real figure - it already handles late
-  claims, domestic reverse charge, zero-rating and the retention accounts, which a simple
-  transaction sum never can).
-- CURRENT + FUTURE months -> a transaction ESTIMATE, because no return exists yet. Clearly
-  labelled "Estimate". It's indicative for cash flow and moves as invoices/bills post.
+The invalid_scope error was caused by finance.statements.read, which I added as a
+fallback - that's a separate Xero Finance API product your app isn't enabled for, and it
+wasn't in your authorised scopes list. Removed it.
 
-The table now has a Source column: green "Filed return" vs amber "Estimate".
-
-WHY THE OLD VERSION WAS WRONG
------------------------------
-Your VAT return xlsx showed the return includes: late claims from prior periods (back to
-Oct 2024), DRC reverse charge on CIS labour (adds to BOTH box 1 and box 4), zero-rated
-income, and retention (612) lines. Summing TotalTax by month can't reproduce that - hence
-the monthly mismatches. So past months now come straight from the filed return.
-
-*** REQUIRES A RECONNECT ***
-Adds accounting.reports.taxreports.read (and finance.statements.read as a fallback).
-After deploying: go to /connect, reconnect Xero, approve the reports permission.
-
-IMPORTANT - THIS IS A PROBE BUILD FOR THE ENDPOINT
---------------------------------------------------
-We've had 404s guessing the VAT report URL. This build TRIES the candidate endpoints and
-prints a "diag:" line showing the exact status of each (Reports/TaxReturns,
-Reports/TaxSummary). After you deploy + reconnect + open VAT Refund, PLEASE SEND ME THE
-DIAG LINE. It will show something like:
-  diag: {"filed":{"tried":[{"label":"Reports/TaxReturns","status":404}, ...]}, "hasTaxScope":true, ...}
-That tells me which endpoint your org accepts (or if it's still a scope issue), and I'll
-lock the parser onto the working one and map Box 5 exactly, then remove the diag.
-
-If filed returns come back, completed months should match your xlsx (e.g. Jun 2026 =
-17,293.94 refund). If "tried" shows all 404/403, don't worry - send it and I'll switch to
-the correct Xero finance endpoint.
+Kept accounting.reports.taxreports.read (which IS in your app's authorised list, so it
+won't trip invalid_scope).
 
 DEPLOY
 ------
-Replace all four files. Commit -> Vercel "Ready" -> RECONNECT Xero at /connect -> open
-VAT Refund -> send me the diag line (and a screenshot if easy).
+Replace pages/connect.js. Commit -> Vercel "Ready" -> go to /connect and reconnect Xero.
+The consent screen should now load and ask you to approve the reports permission.
 
-FILES
------
+Then open VAT Refund and send me the diag line as before.
+
+FILE
+----
   - pages/connect.js
-  - lib/xero.js
-  - pages/api/business-financials.js
-  - pages/business-financials/vat-refund.js
 
-BUILD
------
-Validated with `next build` -> "Compiled successfully".
+BUILD: next build -> Compiled successfully.
