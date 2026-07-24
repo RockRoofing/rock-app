@@ -1,6 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens } from '../../lib/db'
-import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap, fetchGeneralLedgerByAccountMonth } from '../../lib/xero'
+import { refreshXeroToken, fetchProfitAndLoss, fetchAccountCodeMap, fetchGeneralLedgerByAccountMonth, fetchSalesLedgerFromInvoicesAndJournals } from '../../lib/xero'
 
 async function getRedis() {
   try {
@@ -101,21 +101,36 @@ export default async function handler(req, res) {
 
       const monthKeys = Object.keys(months).sort()
       const fromDateStr = monthKeys.length ? `${monthKeys[0]}-01` : null
-      const allCodes = new Set([...overheadCodes, ...salesCodes])
-      if (allCodes.size && fromDateStr) {
-        const glResult = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, allCodes)
-        const { byCodeMonth } = glResult
-        // Split into overhead vs sales ledgers.
-        const ohLedger = {}, salesLedger = {}
-        for (const code of Object.keys(byCodeMonth)) {
-          if (overheadCodes.has(code)) ohLedger[code] = byCodeMonth[code]
-          if (salesCodes.has(code)) salesLedger[code] = byCodeMonth[code]
+      const now = new Date().toISOString()
+
+      // SALES ledger: from ACCREC invoices + manual journals (scopes the app has).
+      if (salesCodes.size && fromDateStr) {
+        const sres = await fetchSalesLedgerFromInvoicesAndJournals(tokens.access_token, tenantId, fromDateStr, salesCodes)
+        await redis.set('sales:ledger', {
+          byCodeMonth: sres.byCodeMonth, updatedAt: now, fromDate: fromDateStr,
+          fetchMeta: { ...sres.meta, salesCodes: [...salesCodes], source: 'invoices+manualjournals' },
+        })
+        ledgerMonths += Object.keys(sres.byCodeMonth).length
+      }
+
+      // OVERHEAD ledger: still via the general-ledger endpoint (best-effort; may be
+      // empty if the app lacks the journals scope - that only affects the Budgets
+      // cell drill-down, not sales).
+      if (overheadCodes.size && fromDateStr) {
+        try {
+          const glResult = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, overheadCodes)
+          const ohLedger = {}
+          for (const code of Object.keys(glResult.byCodeMonth)) {
+            if (overheadCodes.has(code)) ohLedger[code] = glResult.byCodeMonth[code]
+          }
+          await redis.set('overhead:ledger', {
+            byCodeMonth: ohLedger, updatedAt: now, fromDate: fromDateStr,
+            fetchMeta: { pages: glResult.pages, journalCount: glResult.journalCount, lastError: glResult.lastError || null, overheadCodes: [...overheadCodes] },
+          })
+          ledgerMonths += Object.keys(ohLedger).length
+        } catch (e) {
+          console.error('overhead ledger pull failed:', e.message)
         }
-        const now = new Date().toISOString()
-        const fetchMeta = { pages: glResult.pages, totalJournalsSeen: glResult.totalJournalsSeen, journalCount: glResult.journalCount, lastError: glResult.lastError || null, salesCodes: [...salesCodes], overheadCodes: [...overheadCodes] }
-        await redis.set('overhead:ledger', { byCodeMonth: ohLedger, updatedAt: now, fromDate: fromDateStr, fetchMeta })
-        await redis.set('sales:ledger', { byCodeMonth: salesLedger, updatedAt: now, fromDate: fromDateStr, fetchMeta })
-        ledgerMonths = Object.keys(byCodeMonth).length
       }
     } catch (e) {
       console.error('ledger pull failed:', e.message)

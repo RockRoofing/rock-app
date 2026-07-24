@@ -1,49 +1,54 @@
-DEPLOY NOTES - Confirm whether the Xero token actually has the journals permission
-=================================================================================
+DEPLOY NOTES - Sales ledger WITHOUT the journals scope (uses invoices + manual journals)
+========================================================================================
 
-WHY STILL 401
--------------
-The sync refreshes the Xero token and uses the SAME token for the P&L (works) and the
-Journals endpoint (401). So the token itself lacks the journals permission. Two causes:
-  (A) The reconnect didn't actually grant it (old refresh token still in use / consent
-      not completed with the new scope), OR
-  (B) The scope isn't enabled on the Xero Developer APP, so Xero won't grant it even
-      when asked.
+WHY THE SCOPE ROUTE FAILED
+--------------------------
+Your Xero app's allowed scopes list does NOT include accounting.journals.read - so
+requesting it gave "invalid_scope" at the Xero login screen. That scope isn't available
+to your app, so the /Journals general-ledger endpoint is off the table.
 
-This build shows EXACTLY which, by printing the current token's granted scope.
+NEW APPROACH (agreed)
+---------------------
+Build the sales detail from sources your app ALREADY has permission for:
+  - ACCREC invoices (accounting.invoices.read) - your sales invoices
+  - Manual journals (accounting.manualjournals.read) - where your WIP is posted
+Both filtered to the sales codes (200/260/270). Sales invoice lines are positive;
+manual-journal sales credits are flipped to show as positive sales. This covers real
+sales AND the WIP journals, with no Xero portal change and no invalid_scope.
+
+  connect.js reverted - it no longer requests accounting.journals.read, so the Xero
+  connect screen works normally again. You do NOT need to reconnect for the sales fix
+  (your current token already has invoices + manual journals). A reconnect is only
+  needed if your token has since expired in the usual way.
+
+NOTE ON OVERHEAD DRILL-DOWN
+---------------------------
+The Budgets cell drill-down still uses the /Journals endpoint and will stay empty while
+the app lacks that scope. That's separate from sales and doesn't block anything here -
+we can revisit it later (e.g. rebuild it from bills/spend money) if you want.
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures.
-The diag line now ends with:
-  ... | has journals scope: true/false | token scope: openid offline_access ...
+Replace all three files. Commit -> Vercel "Ready" -> hard-refresh Sales ->
+click "Sync Xero figures" and let it finish (it now reads invoices + manual journals,
+so it may take a little while).
 
-READ THE RESULT
----------------
-- has journals scope: FALSE
-    -> The connection still doesn't have the permission. Do a CLEAN reconnect:
-       1. Go to https://app.rockroofing.co.uk/connect
-       2. Complete the Xero consent. IMPORTANT: if Xero shows the org already connected
-          and doesn't re-prompt, first DISCONNECT the app in Xero:
-          Xero -> Settings -> Connected apps -> (your app) -> Disconnect,
-          then connect again from /connect so it re-asks for permissions.
-       3. Sync again. If it flips to TRUE, the table fills.
+VERIFY
+------
+- The sales detail table fills with invoice + manual-journal lines.
+- Click a bar -> table shows just that month.
+- The diag line (if the table is ever empty) now shows invoice/journal counts and any
+  error, e.g. fetch: {"invoicePages":..,"invoicesSeen":..,"journalLines":..,"lastError":null}
+- Sanity check: a full month's table total should be close to that month's chart bar.
+  Small differences are expected because the chart is the P&L total (accrual, includes
+  everything in code 200) while the table lists invoice + manual-journal lines - if
+  sales are posted another way too, tell me and I'll add that source.
 
-- has journals scope: TRUE but STILL 401
-    -> The permission is on the connection but the Xero DEVELOPER APP config is the
-       blocker. Go to developer.xero.com -> My Apps -> (your app) -> and make sure the
-       app is allowed the Accounting Journals scope, then reconnect. Tell me and I'll
-       walk through it.
-
-SEND ME
--------
-Whichever it is, paste the new diag line (the "has journals scope" + "token scope"
-part). That tells us the next step precisely.
-
-FILES (both EDITS - no new files)
----------------------------------
-  - pages/api/business-financials.js      (adds tokenScope + hasJournalsScope to diag)
-  - pages/business-financials/sales.js    (shows them on the diag line)
+FILES (all EDITS - no new files)
+--------------------------------
+  - pages/connect.js            (revert: drop accounting.journals.read)
+  - lib/xero.js                 (new fetchSalesLedgerFromInvoicesAndJournals)
+  - pages/api/sync-benchmark.js (sales ledger now from invoices + manual journals)
 
 BUILD
 -----

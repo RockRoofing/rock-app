@@ -14,7 +14,7 @@ export default function ConnectPage() {
   function connectXero() {
 const clientId = '934571EC178A488AAFFB4C7E8C4DDD43'
 const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback')
-    const scope = encodeURIComponent('openid offline_access accounting.invoices.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.journals.read projects.read')
+    const scope = encodeURIComponent('openid offline_access accounting.invoices.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read projects.read')
     window.location.href = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=xero_auth&prompt=consent`
   }
 
