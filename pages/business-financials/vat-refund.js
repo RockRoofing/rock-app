@@ -38,33 +38,34 @@ export default function VatRefund() {
   useEffect(() => { if (ok) load() }, [ok])
 
   const months = data?.months || {}
-  const filed = data?.filed || []
-  const filedByMonth = useMemo(() => {
-    const m = {}
-    for (const f of filed) { if (f.periodKey) m[f.periodKey] = f }
-    return m
-  }, [filed])
+  const filed = data?.filed || {}
 
-  // For each month: use the FILED return if we have it (past, authoritative);
-  // otherwise the transaction ESTIMATE (current/future).
+  // For each month: use the manually-entered FILED Box 5 if present (past); otherwise the
+  // transaction ESTIMATE.
   const rows = useMemo(() => {
-    const keys = new Set([...Object.keys(months), ...Object.keys(filedByMonth)])
+    const keys = new Set([...Object.keys(months), ...Object.keys(filed)])
     return [...keys].sort().map(mk => {
-      const est = months[mk]
-      const f = filedByMonth[mk]
+      const est = months[mk] || { outputVat: 0, inputVat: 0, outputNet: 0, inputNet: 0, netVat: 0, refund: 0, payable: 0 }
+      const f = filed[mk]
       const isCurrentOrFuture = mk >= nowMonth()
-      if (f && !isCurrentOrFuture) {
-        const netVat = f.netVat != null ? f.netVat : ((f.box1 || 0) - (f.box4 || 0))
+      if (f && f.box5 != null && !isCurrentOrFuture) {
+        const netVat = f.direction === 'payable' ? Math.abs(f.box5) : -Math.abs(f.box5)
         return {
-          month: mk, source: 'Filed return',
-          outputVat: f.box1 || 0, inputVat: f.box4 || 0,
-          outputNet: est?.outputNet || 0, inputNet: est?.inputNet || 0,
+          month: mk, source: 'Filed', filedBox5: f.box5, filedDir: f.direction,
+          outputVat: est.outputVat, inputVat: est.inputVat, outputNet: est.outputNet, inputNet: est.inputNet,
           netVat, refund: netVat < 0 ? -netVat : 0, payable: netVat > 0 ? netVat : 0,
         }
       }
-      return { month: mk, source: isCurrentOrFuture ? 'Estimate' : 'Estimate (no return)', ...(est || { outputVat: 0, inputVat: 0, outputNet: 0, inputNet: 0, netVat: 0, refund: 0, payable: 0 }) }
+      return { month: mk, source: isCurrentOrFuture ? 'Estimate' : 'Estimate', filedBox5: f?.box5 ?? null, filedDir: f?.direction || 'refund', ...est }
     })
-  }, [months, filedByMonth])
+  }, [months, filed])
+
+  async function saveFiled(month, box5, direction) {
+    try {
+      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'vat', action: 'set-filed', month, box5, direction }) })
+      load()
+    } catch (e) { console.error(e) }
+  }
   const chart = useMemo(() => rows.map(r => ({ month: r.month, netVat: r.netVat, refund: r.refund, payable: r.payable })), [rows])
 
   const totalRefund = useMemo(() => rows.reduce((s, r) => s + (r.refund || 0), 0), [rows])
@@ -122,43 +123,62 @@ export default function VatRefund() {
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left' }}>Month</th>
                     <th style={{ ...th, textAlign: 'left' }}>Source</th>
-                    <th style={th}>Sales (net)</th>
-                    <th style={th}>Output VAT</th>
-                    <th style={th}>Purchases (net)</th>
-                    <th style={th}>Input VAT</th>
-                    <th style={th}>Net VAT</th>
-                    <th style={th}>Position</th>
+                    <th style={th}>Output VAT (est)</th>
+                    <th style={th}>Input VAT (est)</th>
+                    <th style={th}>Estimated net</th>
+                    <th style={{ ...th, textAlign: 'center' }}>Filed Box 5</th>
+                    <th style={th}>Position used</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No VAT data.</td></tr>}
-                  {rows.map((r) => (
-                    <tr key={r.month} style={{ borderBottom: '1px solid #f2f0ec', background: r.month === nowMonth() ? '#f5faff' : '#fff' }}>
-                      <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(r.month)}</td>
-                      <td style={{ ...td, textAlign: 'left', fontSize: 11, color: r.source === 'Filed return' ? '#16a34a' : '#b45309' }}>{r.source}</td>
-                      <td style={{ ...td, color: '#666' }}>{gbp(r.outputNet)}</td>
-                      <td style={td}>{gbp(r.outputVat)}</td>
-                      <td style={{ ...td, color: '#666' }}>{gbp(r.inputNet)}</td>
-                      <td style={td}>{gbp(r.inputVat)}</td>
-                      <td style={{ ...td, fontWeight: 700, color: r.netVat < 0 ? '#16a34a' : INK }}>{gbp(r.netVat)}</td>
-                      <td style={{ ...td, fontWeight: 700, color: r.netVat < 0 ? '#16a34a' : '#dc2626' }}>{r.netVat < 0 ? `${gbp(r.refund)} refund` : `${gbp(r.payable)} to pay`}</td>
-                    </tr>
-                  ))}
+                  {rows.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No VAT data.</td></tr>}
+                  {rows.map((r) => {
+                    const isPast = r.month < nowMonth()
+                    return (
+                      <tr key={r.month} style={{ borderBottom: '1px solid #f2f0ec', background: r.month === nowMonth() ? '#f5faff' : '#fff' }}>
+                        <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(r.month)}</td>
+                        <td style={{ ...td, textAlign: 'left', fontSize: 11, fontWeight: 600, color: r.source === 'Filed' ? '#16a34a' : '#b45309' }}>{r.source}</td>
+                        <td style={{ ...td, color: '#999' }}>{gbp(r.outputVat)}</td>
+                        <td style={{ ...td, color: '#999' }}>{gbp(r.inputVat)}</td>
+                        <td style={{ ...td, color: '#666' }}>{gbp(r.netVat < 0 && r.source === 'Filed' ? -(r.outputVat - r.inputVat) : (r.outputVat - r.inputVat))}</td>
+                        <td style={{ ...td, textAlign: 'center' }}>
+                          {isPast ? <FiledEditor row={r} onSave={saveFiled} /> : <span style={{ color: '#ccc', fontSize: 11 }}>n/a (not filed)</span>}
+                        </td>
+                        <td style={{ ...td, fontWeight: 700, color: r.netVat < 0 ? '#16a34a' : '#dc2626' }}>{r.netVat < 0 ? `${gbp(r.refund)} refund` : `${gbp(r.payable)} to pay`}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              Completed months show Xero&apos;s <strong>filed VAT return</strong> (the real figure, including late claims, reverse charge and zero-rating). The current and future months show a <strong>transaction estimate</strong> - a return doesn&apos;t exist yet, so this is indicative for cash-flow planning and will move as more invoices and bills are posted.
+              Completed months use the <strong>filed Box 5</strong> you enter from your Xero VAT return (the real figure - it already includes late claims, reverse charge and zero-rating, which an estimate can&apos;t capture). Enter it once per month and pick refund or to-pay. The current and future months show a <strong>transaction estimate</strong> (no return exists yet) - indicative for cash flow and moves as invoices and bills post. Box 5 is the net VAT: VAT on sales minus VAT reclaimed on purchases.
             </div>
 
-            {data?.diag && (
-              <div style={{ fontSize: 11, color: '#bbb', marginTop: 12, fontFamily: 'monospace', wordBreak: 'break-word' }}>diag: {JSON.stringify(data.diag)}</div>
-            )}
           </>
         )}
       </div>
     </>
+  )
+}
+
+// Inline editor for a month's filed Box 5: amount + refund/pay direction.
+function FiledEditor({ row, onSave }) {
+  const [val, setVal] = useState(row.filedBox5 != null ? String(row.filedBox5) : '')
+  const [dir, setDir] = useState(row.filedDir || 'refund')
+  useEffect(() => { setVal(row.filedBox5 != null ? String(row.filedBox5) : ''); setDir(row.filedDir || 'refund') }, [row.filedBox5, row.filedDir])
+  const commit = () => { onSave(row.month, val === '' ? '' : Number(val), dir) }
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <span style={{ color: '#999' }}>&pound;</span>
+      <input value={val} onChange={e => setVal(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={commit}
+        placeholder="Box 5" style={{ width: 84, padding: '4px 6px', border: '1px solid ' + (row.source === 'Filed' ? '#bbf7d0' : '#ddd'), borderRadius: 6, fontSize: 12, textAlign: 'right' }} />
+      <select value={dir} onChange={e => { setDir(e.target.value); onSave(row.month, val === '' ? '' : Number(val), e.target.value) }} style={{ padding: '4px 4px', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>
+        <option value="refund">refund</option>
+        <option value="payable">to pay</option>
+      </select>
+    </span>
   )
 }
 

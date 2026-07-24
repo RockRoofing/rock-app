@@ -1,36 +1,52 @@
-DEPLOY NOTES - Isolate the invalid_scope: remove taxreports for now
-===================================================================
+DEPLOY NOTES - VAT Refund: manual filed Box 5 (past) + estimate (current/future)
+================================================================================
 
-Reconnect still failed with invalid_scope even after removing finance.statements.read.
-That means accounting.reports.taxreports.read is ALSO being rejected by your app - even
-though it appeared in the authorisation list, it isn't grantable in the OAuth flow (Xero
-sometimes lists a scope that the app tier can't actually request).
-
-So we can't pull the filed VAT return via that scope. This build removes it and returns
-connect.js to a WORKING state (keeps accounting.banktransactions.read, which the Sales
-page needs).
-
-DEPLOY + TEST
+WHAT BOX 5 IS
 -------------
-1. Replace pages/connect.js. Commit -> Vercel "Ready".
-2. Go to /connect and reconnect Xero. The consent screen SHOULD now load (no
-   invalid_scope). Approve it.
-3. If it STILL says invalid_scope, then the culprit is accounting.banktransactions.read -
-   tell me and I'll remove that too and we'll know exactly which scope your app rejects.
+Box 5 is the headline net VAT figure on a UK VAT return: VAT on sales (Box 1) minus VAT
+reclaimed on purchases (Box 4). If Box 4 is bigger (your usual case), Box 5 is a REFUND
+from HMRC. Example: your June return had Box 1 6,535.40, Box 4 23,829.34, so Box 5 =
+17,293.94 refund.
 
-WHAT THIS MEANS FOR VAT
------------------------
-If taxreports genuinely can't be granted, we can't read the filed return via the standard
-accounting API. Options I'll lay out once you confirm the reconnect works:
-  (a) Check the Xero Developer app config - the scope may need enabling there (like the
-      journals one did), OR the app may need to be a "custom connection"/certified app to
-      get taxreports.
-  (b) Fall back to: manual entry of the filed Box 5 per past month (quick, reliable), with
-      the transaction estimate for current/future. Least moving parts.
-  (c) You export the VAT return (like the xlsx you sent) and we import it.
+APPROACH (Option B - chosen)
+----------------------------
+We can't pull the filed return automatically (Xero won't grant your app the tax-reports
+scope - it throws invalid_scope). So:
+  - PAST months: you type the filed Box 5 straight off your Xero VAT return, and pick
+    "refund" or "to pay". Saved permanently (Redis key vat:filed). This is the real,
+    reliable figure.
+  - CURRENT + FUTURE months: a transaction ESTIMATE (no return exists yet) - indicative
+    for cash flow, moves as invoices/bills post.
 
-FILE
-----
-  - pages/connect.js
+connect.js is reverted to a working scope set (no tax-reports scope), so reconnect works.
+You do NOT need to reconnect for this to function - it uses existing access.
 
-BUILD: next build -> Compiled successfully.
+HOW TO USE
+----------
+1. Open VAT Refund. Past months show a "Filed Box 5" input.
+2. For each past month, type the Box 5 amount from your Xero VAT return and choose
+   refund / to pay. It saves on tab-out (amount) or immediately (dropdown).
+3. That month's "Position used" then shows your filed figure (green Filed); the chart
+   updates. Leave a month blank to fall back to the estimate.
+
+DEPLOY
+------
+Replace all three files. Commit -> Vercel "Ready" -> open VAT Refund -> enter your filed
+Box 5 figures for past months.
+
+VERIFY
+------
+- Enter 17293.94 / refund for Jun 2026 -> row shows "17,293.94 refund", Source = Filed
+  (green), and the June chart bar sits at -17,293.94.
+- Current/future months stay as Estimate.
+- Reload the page - your entered figures persist.
+
+FILES
+-----
+  - pages/connect.js                       (reverted to working scopes)
+  - pages/api/business-financials.js        (vat view: estimate + saved filed Box 5)
+  - pages/business-financials/vat-refund.js (editable filed Box 5 per past month)
+
+BUILD
+-----
+Validated with `next build` -> "Compiled successfully".
