@@ -1,51 +1,54 @@
-DEPLOY NOTES - Sales page: target + average lines, FY filter, click-a-bar, table fix
-====================================================================================
+DEPLOY NOTES - Sales: fix empty table (income-code mismatch) + two dashed lines
+===============================================================================
 
-EMPTY TABLE - THE FIX
----------------------
-The table was empty because the SALES LEDGER (sales:ledger) had not been pulled yet -
-it only populates when "Sync Xero figures" runs the updated sync (which now pulls sales
-code 200's ledger). After deploying, click "Sync Xero figures" ONCE and the table fills.
-The table now also shows a clear message when the ledger is empty ("click Sync Xero
-figures") so it's obvious rather than just blank.
-(The chart already worked because it reads the P&L benchmark, not the ledger.)
+WHY THE TABLE WAS EMPTY (the real reason)
+-----------------------------------------
+The chart is built from the P&L benchmark, which keys sales by the account NAME mapped
+to a code. Your sales P&L figure may sit under a code that ISN'T 200 (e.g. a different
+income account). The sales LEDGER pull was only fetching code 200 (+ codes tagged
+'sales'), so if your sales journals use a different income code, the ledger had nothing
+- hence an empty table even though the chart had bars.
 
-NEW FEATURES
-------------
-1) MONTHLY TARGET: editable figure in the filter bar (top). Saved server-side
-   (config:sales-monthly-target). Drawn as a grey dashed line on the chart.
-2) AVERAGE LINE: the average revenue across the shown period, as a dashed line -
-   GREEN if the average is at/above target, RED if below.
-3) KEY for the three dashed lines (Target / Average / Now) above the chart.
-4) FINANCIAL-YEAR FILTER: a FY selector (Dec-Nov) that sets the date range to that year
-   (last FY, this FY, etc.). You can then still fine-tune with the From/To date inputs.
-   "Reset to FY" snaps the range back to the selected financial year.
-5) CLICK A BAR: clicking a month's bar filters the table to just that month's
-   transactions (and highlights the bar). Click again, or "clear", to show all.
+FIX: both the sync (ledger pull) and the sales view now treat ANY code the P&L puts in
+the INCOME section as a sales code - not just 200. So the ledger now pulls the same
+codes the chart is built from, and the table fills.
 
-FILES (both EDITS - no new files)
----------------------------------
-  - pages/business-financials/sales.js         (all the above)
-  - pages/api/business-financials.js            (save/return monthly target)
+You MUST RE-SYNC after deploying so the ledger is re-pulled with the broader code set:
+  Deploy -> hard-refresh -> click "Sync Xero figures" once.
+
+DIAGNOSTIC (so we can confirm)
+------------------------------
+The sales API now returns a `diag` object. If the table is still empty after a sync,
+open (while logged in) /api/business-financials?view=sales in the browser and send me
+the "diag" section - it lists:
+  - benchmarkSalesCodes: the codes (and totals) the chart is built from
+  - ledgerCodesPresent: the codes the sales ledger actually holds
+If these two lists differ, we'll see exactly which income code needs including.
+
+TWO DASHED LINES (target + average)
+-----------------------------------
+When a target is set there are now clearly TWO lines:
+  - GREY dashed = the target (draws as soon as you type it, before/after saving).
+  - GREEN or RED dashed = the average revenue for the shown period; GREEN if the
+    average is at/above target, RED if below.
+Both are thicker now and set to extend the chart's scale so they can't be hidden off
+the top. The key above the chart labels all three (Target / Average / Now).
+
+FILES (all EDITS - no new files)
+--------------------------------
+  - pages/business-financials/sales.js        (two-line target/avg, live draft)
+  - pages/api/business-financials.js           (income-section sales codes + diag)
+  - pages/api/sync-benchmark.js                (ledger pulls income-section codes)
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh -> click "Sync Xero
-figures" once (to populate the sales ledger / table).
+Replace all three. Commit -> Vercel "Ready" -> hard-refresh -> "Sync Xero figures".
 
 VERIFY
 ------
-  - FY selector switches the range (try last FY vs this FY); From/To still adjustable.
-  - Enter a monthly target -> grey dashed line appears; average line shows green/red vs it.
-  - Key above the chart explains the three lines.
-  - After sync: table lists sales transactions; click a bar -> table shows only that
-    month; "clear" resets.
-
-NOTE
-----
-If after a sync the table is STILL empty but the chart has bars, tell me - that would
-mean the sales ledger pull isn't capturing code 200 lines and I'll investigate (the
-fetch is set to keep code 200's credit lines, so a sync should fill it).
+  - After sync: table lists sales transactions; click a bar filters to that month.
+  - Enter a target: grey target line + green/red average line both show.
+  - If table still empty: send me the /api/business-financials?view=sales "diag".
 
 BUILD
 -----

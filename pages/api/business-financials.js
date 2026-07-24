@@ -164,9 +164,14 @@ export default async function handler(req, res) {
       if (String(code) === '200') return 'sales'
       return c
     }
-    // Sales codes = code 200 plus anything categorised 'sales'.
+    // Sales codes = code 200, anything categorised 'sales', plus any code the P&L
+    // classifies in the INCOME section (matches the chart to the ledger).
     const salesCodes = new Set(['200'])
     for (const code of Object.keys(catConfig)) if (normCategory(code) === 'sales') salesCodes.add(String(code))
+    for (const mo of Object.keys(bm)) {
+      const cs = bm[mo].codeSection || {}
+      for (const code of Object.keys(cs)) if (cs[code] === 'income') salesCodes.add(String(code))
+    }
 
     // Monthly sales totals (magnitude) from the benchmark.
     const byMonth = {}
@@ -191,11 +196,30 @@ export default async function handler(req, res) {
     }
     lines.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
 
+    // Diagnostic: which codes contributed to the chart (from benchmark) vs which codes
+    // the sales ledger actually holds. If these differ, the ledger pull is keyed to a
+    // code the sales P&L figure doesn't use.
+    const benchmarkSalesCodes = {}
+    for (const mo of Object.keys(bm)) {
+      for (const code of Object.keys(bm[mo].byCode || {})) {
+        if (salesCodes.has(String(code))) benchmarkSalesCodes[code] = (benchmarkSalesCodes[code] || 0) + Math.abs(bm[mo].byCode[code])
+      }
+    }
+    const ledgerCodes = Object.keys(ledger.byCodeMonth || {})
+    const diag = {
+      salesCodesRequested: [...salesCodes],
+      benchmarkSalesCodes,                    // codes+totals the chart is built from
+      ledgerCodesPresent: ledgerCodes,        // codes the sales ledger actually has
+      ledgerLineCount: lines.length,
+      ledgerUpdatedAt: ledger.updatedAt || null,
+    }
+
     return res.json({
       byMonth,
       lines,
       salesCodes: [...salesCodes],
       monthlyTarget,
+      diag,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
       ledgerUpdatedAt: ledger.updatedAt || null,
     })

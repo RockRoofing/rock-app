@@ -90,6 +90,12 @@ export default async function handler(req, res) {
       for (const code of Object.keys(catConfig)) consider(code)
       for (const mo of Object.keys(mergedMonths)) {
         for (const code of Object.keys(mergedMonths[mo].byCode || {})) consider(code)
+        // Any code the P&L puts in the INCOME section is a sales code, whatever its
+        // number - so the ledger pull matches the chart's sales figure exactly.
+        const cs = mergedMonths[mo].codeSection || {}
+        for (const code of Object.keys(cs)) {
+          if (cs[code] === 'income') salesCodes.add(String(code))
+        }
       }
       salesCodes.add('200')   // Sales is always code 200
 
