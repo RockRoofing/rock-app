@@ -1,44 +1,55 @@
-DEPLOY NOTES - Bills: find the last £736 (reconciliation export)
-===============================================================
+DEPLOY NOTES - Business Financials "Invoices Owed": sales invoices only + columns + comments
+============================================================================================
 
-WHERE YOU ARE
--------------
-App "All outstanding bills" 257,686 vs Xero 256,950.14 - a 736 gap, with BOTH showing
-103 bills. Good match on count; small value gap.
+WHAT WAS WRONG
+--------------
+The Business Financials "Invoices Owed" page pulled from view=invoices, which was
+bringing in the wrong data (costs). It now uses the SAME data source as the commercial
+Outstanding Invoices page (which matches Xero):
+  - Invoice lines from /api/dashboard (projects[]._invoiceLines) - sales invoices (ACCREC).
+  - Manual meta (expected date + comments) from /api/outstanding-invoices (shared store
+    invoice:meta).
+So it will now match Xero exactly like the Outstanding Invoices page does.
 
-IT IS NOT ROUNDING
--------------------
-The app totals sum the EXACT pence (amountDue is full precision); only the DISPLAY is
-rounded to whole pounds by the gbp() formatter. So the 736 is a real data difference,
-not rounding. Most likely a stale part-paid bill: e.g. Xero shows Island Scaffolding
-SI-1407 as Paid 18,448.08 / Due 9,881.92 - if that payment landed after your last app
-sync, the app would still show more due on that line. Xero is live; the app is a
-snapshot from the last "Sync bills".
-
-WHAT I ADDED (to find it precisely, not guess)
-----------------------------------------------
-1) "Export CSV" button (top right) - downloads the app's bill list with EXACT pence
-   amounts, sorted by due date, including credit notes and a total. Diff this against
-   your Xero CSV to see the exact line(s) that differ.
-2) The "All outstanding bills" card now shows the exact figure to the penny in its
-   sub-label (e.g. "103 bills - exact 257,686.00"), so you can compare precisely.
-
-HOW TO CLOSE THE GAP
---------------------
-  1. Deploy, hard-refresh, click "Sync bills" FIRST (in case the difference is just a
-     payment recorded in Xero since your last sync - this alone may fix it).
-  2. If still off: click "Export CSV" here and compare to your Xero export. The one or
-     two lines that differ will jump out (usually a part-paid bill with a different
-     "Due" figure). Send me those lines and I'll confirm the cause.
+CHANGES
+-------
+1) SALES INVOICES ONLY - no more costs. Same source/API/data location as Outstanding
+   Invoices.
+2) GRAPH KEPT - "Invoices falling due by month" (green), now follows the filters.
+3) FULL WIDTH page.
+4) COLUMNS from your screenshot: INV No, Ref, To (customer), Date, Due date, Overdue
+   (days late / days left), Expected (editable date - saved to shared meta), Paid, Due,
+   Comments.
+5) COMMENTS: click the Comments button on any row to VIEW and ADD comments (with @Name
+   mentions). These are the SAME comments as the Outstanding Invoices / Invoices Owed
+   commercial page - they read and write the shared invoice:meta store, so a comment
+   added here shows there and vice versa. You can also delete comments.
+6) Outstanding/All toggle + date range (default ~12 months, 2 ahead) + sortable columns.
 
 FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/business-financials/bills.js
+  - pages/business-financials/invoices.js
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> Sync bills -> (if needed)
-Export CSV and diff.
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh. No sync button here - it
+reads the same live dashboard data the Outstanding Invoices page uses (sync invoices
+from that page or the existing invoice sync as before).
+
+VERIFY
+------
+  - Only sales invoices (INV- numbers, customers as "To"); totals match Xero like the
+    Outstanding Invoices page.
+  - Columns match your screenshot; Expected date is editable and persists.
+  - Comments button opens a pop-out; adding a comment here appears on the Outstanding
+    Invoices page too.
+  - Page is full width; graph retained.
+
+NOTE
+----
+The "Expected" and comments are stored per invoice NUMBER, shared with the other page.
+If an invoice has no number (rare), its expected/comments can't be keyed - tell me if
+you hit that and I'll add a fallback key.
 
 BUILD
 -----
