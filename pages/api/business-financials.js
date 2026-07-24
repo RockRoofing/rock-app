@@ -334,12 +334,33 @@ export default async function handler(req, res) {
     const avgOverheadMonthly = ohVals.length ? ohVals.reduce((a, b) => a + b, 0) / ohVals.length : 0
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
+
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta] = await Promise.all([
+      redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
+      redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
+      redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
+      redis.get('vat:estimate').then(v => v || { months: {} }).catch(() => ({ months: {} })),
+      redis.get('retention:entries').then(v => v || { entries: [] }).catch(() => ({ entries: [] })),
+      redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
+    ])
+
+    // Attach the expected payment date (from Invoices Owed) to each receivable.
+    const receivables = (recStore.items || []).map(i => {
+      const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
+      return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
+    })
+
     return res.json({
       cashAtBank,
       bills: billsStore.items || [],
-      receivables: recStore.items || [],
+      receivables,
       avgOverheadMonthly,
       history,
+      ohBudgets,
+      cashflowSchedule,
+      vatFiled,
+      vatEstimateMonths: vatEstimate.months || {},
+      retentionEntries: retentionStore.entries || [],
       billsUpdatedAt: billsStore.updatedAt || null,
       receivablesUpdatedAt: recStore.updatedAt || null,
     })

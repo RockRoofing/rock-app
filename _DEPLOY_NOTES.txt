@@ -1,53 +1,57 @@
-DEPLOY NOTES - Cash flow PART A: overhead Cash Schedule editor
-==============================================================
+DEPLOY NOTES - Cash flow PART B: the 13-week forecast
+=====================================================
 
-*** CONTAINS ONE NEW FILE - the zip can't create it. In GitHub use "Add file" ->
-"Create new file" for:
-   pages/business-financials/cash-schedule.js
-The other two are edits - just replace them.
+Both files are EDITS to existing files - just replace them.
 
 WHAT THIS IS
 ------------
-Part A of the 13-week cash flow. This is the editor where you set WHEN each overhead's
-monthly budget lands, so Part B (the forecast) can time it into weeks. Nothing is
-scheduled by default - you configure each line you want in the forecast.
+The Cash Flow tab is now a proper 13-week rolling weekly forecast that pulls everything
+together:
 
-New tab: Summary | Sales | Budgets | Bills | Invoices Owed | Retentions Due | VAT Refund |
-Cash Schedule | Cash Flow.
+MONEY IN
+  - Invoices owed  -> landed on the EXPECTED date from Invoices Owed (falls back to due
+    date if no expected date set).
+  - Retention releases -> landed on each unreceived release date from the Retention
+    Tracker.
+  - VAT refunds -> landed at month-end, using your filed Box 5 (or the estimate) from the
+    VAT Refund page.
 
-PER OVERHEAD LINE you choose a Timing:
-  - (not in forecast)  - default; the line is ignored by cash flow.
-  - Spread evenly      - the monthly budget is divided across the month's weeks.
-  - One day            - whole monthly amount lands on a day you pick (e.g. PAYE 22nd).
-  - Specific days      - split the month across several dates; must add up to the budget
-                         (it shows "Balances to budget" / "£X unallocated").
-Plus CARRY FORWARD on any scheduled line: move £X from one month to a later month without
-touching the budgets (e.g. defer a payment).
+MONEY OUT
+  - Bills to pay -> on their due date (from the Bills sync).
+  - Overheads -> timed by the CASH SCHEDULE you set up, using the Budgets amounts
+    (spread evenly / one day / specific days, with carry-forwards applied).
+  - VAT payments -> month-end, when Box 5 is a payment.
 
-The monthly AMOUNTS still come from the Budgets page (per code). This page only sets the
-TIMING. There's a link through to Budgets at the top.
+Opening balance = cash at bank from your Xero bank summary (editable to model scenarios).
+Running weekly closing balance, with the lowest point highlighted and negative weeks shown
+in red. Two charts (balance line; weekly in vs out) and a full week-by-week table.
 
-Saves to Redis (config:overhead-cashflow-schedule). A sticky "Save schedule" bar appears
-when you have unsaved changes.
+DEPENDENCIES (for accurate numbers)
+-----------------------------------
+It reads the STORED data from the other pages, so keep them synced:
+  - Bills to Pay (sync)          -> bills out
+  - Invoices Owed (sync)         -> invoices in + expected dates
+  - VAT Refund                    -> filed Box 5 / estimate  (click Refresh estimate once)
+  - Cash Schedule + Budgets       -> overheads out
+  - Bank summary (Cash Flow syncs it) -> opening balance
+If a source is empty, that line simply shows as nothing - no crash.
+
+NOTE / LIKELY FIRST-LOOK ITEMS
+------------------------------
+- Retention only lands if the release has a DATE set in the Retention Tracker (undated
+  releases can't be timed - they show on Retentions Due as "TBC").
+- Overheads only appear for lines you gave a timing in Cash Schedule.
+- Sales pipeline is intentionally NOT included yet.
 
 DEPLOY
 ------
-1. Add pages/business-financials/cash-schedule.js via GitHub "Add file".
-2. Replace components/BizNav.js and pages/api/business-financials.js.
-3. Commit -> Vercel "Ready" -> open the Cash Schedule tab.
-
-USE IT NOW
-----------
-Set timings for your key overheads (payroll, PAYE, CIS, rent, insurance, etc.). Once
-you're happy, tell me and I'll build PART B - the 13-week forecast that reads this
-schedule + Invoices Owed + Retentions + VAT + your Xero opening balance.
+Replace both files. Commit -> Vercel "Ready" -> open Cash Flow.
+Have a look and tell me what looks off - especially whether the weekly TIMING of
+overheads and VAT lands where you expect.
 
 FILES
 -----
-  EDITS:
-   - components/BizNav.js
-   - pages/api/business-financials.js
-  NEW:
-   - pages/business-financials/cash-schedule.js
+  - pages/api/business-financials.js        (cashflow view returns schedule/budgets/VAT/retention + expected dates)
+  - pages/business-financials/cashflow.js   (13-week forecast engine + UI)
 
 BUILD: next build -> Compiled successfully.
