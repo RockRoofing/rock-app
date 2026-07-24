@@ -1,47 +1,56 @@
-DEPLOY NOTES - Sales signs now reconcile to Xero EXACTLY (May = 92,416.84)
-=========================================================================
+DEPLOY NOTES - Sales: bar = table = Xero (single source, + bank receipts)
+========================================================================
 
-WHAT WAS WRONG
---------------
-Two sign handlers were fighting each other:
-  1. The sales ledger stored signs one way, and
-  2. the sales API view then FLIPPED every amount again (a leftover from when the data
-     came from the general-ledger endpoint).
-Net result: everything was inverted - sales (credits) showed negative, reductions
-(debits) showed positive. May stood out because its bar (from the P&L, +92k) didn't
-match its inverted table total (-102k). The other months were inverted too; they just
-weren't scrutinised.
+THE CAUSE OF THE MISMATCH
+-------------------------
+The BAR came from the P&L benchmark; the TABLE summed the lines I pulled. They diverged
+month-to-month for two reasons:
+  1. The table was MISSING bank receipts (receive money) coded to sales - the P&L
+     includes those, so the table came out low on months with bank-coded sales.
+  2. Bar (P&L snapshot) and table (live lines) could be from slightly different points
+     in time, so each matched Xero in different months.
 
-THE FIX (verified against your Xero screenshot)
+THE FIX (makes all three agree by construction)
 -----------------------------------------------
-- Removed the double sign-flip in the sales view.
-- Manual journals: a sale is a Xero CREDIT -> now shows POSITIVE; a reversal is a DEBIT
-  -> NEGATIVE.
-- Invoices: sales POSITIVE; debit "Dis"/adjustment lines NEGATIVE.
-- Credit notes: NEGATIVE (reductions).
+1) Added BANK TRANSACTIONS coded to sales (receive money = +, spend money = -) to the
+   pulled lines. The table now contains every transaction type that hits code 200:
+   invoices, WIP manual journals, credit notes AND bank receipts - the same set the P&L
+   sums.
+2) The BAR is now built by summing THOSE SAME LINES per month (not from the P&L
+   benchmark). So the bar and the table total are now ALWAYS identical.
+3) Because the lines now match what the P&L is made of, both also match Xero.
 
-Checked against your May figures: the corrected app total comes to 92,416.84 - the EXACT
-running balance Xero shows for 200-Sales, 1-31 May 2026. So it now matches Xero to the
-penny, and the WIP May (+145,340) / WIP Apr reversal (-76,172) / CN-1686 (-26,230) /
-CN-1688 (-510) all carry the right sign.
+CROSS-CHECK BUILT IN
+--------------------
+Under the chart there's now a P&L cross-check for the visible period:
+  "P&L cross-check: app <x> vs P&L <y> (match)" - or it shows the difference.
+If every month is captured, it will say (match). If a month still differs, that tells us
+a sales entry is posted in yet another way - send me that month and I'll add the source.
+
+SCOPES
+------
+Uses accounting.banktransactions.read - which your Xero app already has (it's in your
+scopes list). No reconnect needed.
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures
-(re-pull with corrected signs).
+Replace all three files. Commit -> Vercel "Ready" -> hard-refresh Sales ->
+click "Sync Xero figures" and let it finish (it now also pulls bank transactions, so
+it may take a little longer).
 
 VERIFY
 ------
-- May detail total = +92,416.84 (matches Xero 200-Sales running balance for May).
-- Sales lines +, credit notes/reversals -, across ALL months (not just May).
-- Each month's table total should now line up with its chart bar.
+- Each month's chart bar == the table total for that month (click a bar to check).
+- Both match Xero's 200-Sales monthly figure.
+- The P&L cross-check line under the chart says "(match)" for the period.
+- New Source values may appear: "Bank receipt" / "Bank payment".
 
-FILES (both EDITS - no new files)
----------------------------------
-  - lib/xero.js                     (manual-journal sign: credit=sale=positive)
-  - pages/api/business-financials.js (remove the double flip in the sales view)
+FILES (all EDITS - no new files)
+--------------------------------
+  - lib/xero.js                          (adds bank transactions to sales ledger)
+  - pages/api/business-financials.js      (bar summed from lines; P&L kept as cross-check)
+  - pages/business-financials/sales.js    (cross-check note under chart)
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". May total unit-checked to
-92,416.84 against your Xero report.
+Validated with `next build` -> "Compiled successfully".

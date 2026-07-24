@@ -104,6 +104,19 @@ export default function Sales() {
   }, [byMonthAll, from, to])
 
   const avg = useMemo(() => chart.length ? chart.reduce((s, m) => s + m.amount, 0) / chart.length : 0, [chart])
+
+  // Cross-check the summed bars against the P&L benchmark for the same months.
+  const plCheck = useMemo(() => {
+    const pl = data?.plByMonth || {}
+    const fromM = monthKey(from), toM = monthKey(to)
+    let appSum = 0, plSum = 0
+    for (const m of chart) appSum += m.amount
+    for (const mo of Object.keys(pl)) {
+      if ((!fromM || mo >= fromM) && (!toM || mo <= toM)) plSum += pl[mo]
+    }
+    if (!Object.keys(pl).length) return null
+    return { app: appSum, pl: plSum }
+  }, [chart, data, from, to])
   const liveTarget = Number(targetDraft) || target || 0
   const avgAboveTarget = avg >= liveTarget
   const avgColor = liveTarget > 0 ? (avgAboveTarget ? '#16a34a' : '#dc2626') : '#6b7280'
@@ -253,9 +266,8 @@ export default function Sales() {
                 </table>
               </div>
               <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-                Chart from the P&amp;L benchmark (sales code 200, includes WIP), synced {data?.benchmarkUpdatedAt ? new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB') : 'never'}.
-                Line detail from the general ledger, synced {data?.ledgerUpdatedAt ? new Date(data.ledgerUpdatedAt).toLocaleDateString('en-GB') : 'never'}.
-                Average and target are dashed lines on the chart; the average is green when at/above target, red when below.
+                Chart bars and the table total are the SAME figures - both summed from the transactions below (invoices, WIP journals, credit notes and bank receipts coded to sales), synced {data?.ledgerUpdatedAt ? new Date(data.ledgerUpdatedAt).toLocaleDateString('en-GB') : 'never'}.
+                {plCheck && <span> P&amp;L cross-check for this period: app {gbp(plCheck.app)} vs P&amp;L {gbp(plCheck.pl)}{Math.abs(plCheck.app - plCheck.pl) < 1 ? ' (match)' : ` (diff ${gbp(plCheck.app - plCheck.pl)})`}.</span>}
               </div>
             </>
           )}

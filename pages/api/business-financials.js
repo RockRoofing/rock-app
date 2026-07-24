@@ -173,30 +173,39 @@ export default async function handler(req, res) {
       for (const code of Object.keys(cs)) if (cs[code] === 'income') salesCodes.add(String(code))
     }
 
-    // Monthly sales totals (magnitude) from the benchmark.
-    const byMonth = {}
-    for (const mo of Object.keys(bm)) {
-      let sum = 0
-      const codes = bm[mo].byCode || {}
-      for (const code of salesCodes) if (codes[code] != null) sum += Math.abs(codes[code])
-      if (sum !== 0 || codes['200'] != null) byMonth[mo] = Math.round(sum * 100) / 100
-    }
-
     const ledger = (await redis.get('sales:ledger').catch(() => null)) || { byCodeMonth: {} }
     const monthlyTarget = (await redis.get('config:sales-monthly-target').catch(() => null)) || 0
     let tokenScope = null
     try { const tk = await getTokens(); tokenScope = tk?.scope || null } catch {}
-    // Flatten ledger lines to a single list (sales amounts are credits => negative in
-    // the ledger; show as positive sales).
+    // Flatten ledger lines to a single list. Ledger is already signed: sales +,
+    // reductions -.
     const lines = []
     for (const code of Object.keys(ledger.byCodeMonth || {})) {
       for (const mo of Object.keys(ledger.byCodeMonth[code] || {})) {
         for (const l of ledger.byCodeMonth[code][mo]) {
-          lines.push({ ...l, code, month: mo, amount: (l.amount || 0) })   // ledger already signed: sales +, reductions -
+          lines.push({ ...l, code, month: mo, amount: (l.amount || 0) })
         }
       }
     }
     lines.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+
+    // BAR = sum of the SAME lines shown in the table, per month. This guarantees the
+    // bar and the table total always agree (and both are the live figure).
+    const byMonth = {}
+    for (const l of lines) {
+      const mk = (l.date || '').slice(0, 7) || l.month
+      if (!mk) continue
+      byMonth[mk] = Math.round(((byMonth[mk] || 0) + (l.amount || 0)) * 100) / 100
+    }
+
+    // Keep the P&L benchmark figure per month as a cross-check (not charted).
+    const plByMonth = {}
+    for (const mo of Object.keys(bm)) {
+      let sum = 0
+      const codes = bm[mo].byCode || {}
+      for (const code of salesCodes) if (codes[code] != null) sum += Math.abs(codes[code])
+      if (sum !== 0 || codes['200'] != null) plByMonth[mo] = Math.round(sum * 100) / 100
+    }
 
     // Diagnostic: which codes contributed to the chart (from benchmark) vs which codes
     // the sales ledger actually holds. If these differ, the ledger pull is keyed to a
@@ -221,6 +230,7 @@ export default async function handler(req, res) {
 
     return res.json({
       byMonth,
+      plByMonth,
       lines,
       salesCodes: [...salesCodes],
       monthlyTarget,
