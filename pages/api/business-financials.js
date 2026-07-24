@@ -272,7 +272,15 @@ export default async function handler(req, res) {
       try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
       const est = await fetchVatPosition(tokens.access_token, tokens.tenant_id, from, to)
       months = est.months; meta = est.meta
-      await redis2.set('vat:estimate', { months, meta, updatedAt: new Date().toISOString(), from, to })
+      // Only overwrite the cache if we actually got data - never clobber good data with an empty/errored pull.
+      const gotData = months && Object.keys(months).length > 0
+      if (gotData) {
+        await redis2.set('vat:estimate', { months, meta, updatedAt: new Date().toISOString(), from, to })
+      } else {
+        const prev = (await redis2.get('vat:estimate').catch(() => null)) || null
+        if (prev) months = prev.months
+        return res.json({ months, filed, estimateUpdatedAt: prev?.updatedAt || null, diag: { ...meta, note: 'no data from Xero - kept previous cache' } })
+      }
     }
     return res.json({ months, filed, estimateUpdatedAt: new Date().toISOString(), diag: meta })
   }

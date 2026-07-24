@@ -1,38 +1,44 @@
-DEPLOY NOTES - VAT: fix speed + Box 5 accuracy
-==============================================
+DEPLOY NOTES - VAT: past = filed Box 5 only; future = estimate (clearer)
+========================================================================
 
-1) SPEED
---------
-The page was recomputing the whole estimate from Xero (paging through all invoices, bills
-and credit notes) on EVERY load - slow. Now:
-  - Normal page load reads a CACHED estimate from Redis (instant).
-  - A new button "Refresh estimate from Xero" recomputes + caches it (use this
-    occasionally, or when you want the current-month estimate updated).
-  - Entering a filed Box 5 no longer calls Xero at all - it just saves and re-reads the
-    cache, so it's instant.
-First time: click "Refresh estimate from Xero" once to populate the cache.
+(This pack includes the earlier un-deployed changes too - just deploy these two files.)
 
-2) BOX 5 ACCURACY
------------------
-Bug: after entering a filed Box 5, the "Estimated net" column flipped its sign and looked
-wrong, because that cell was mixing the filed figure into the estimate maths. Fixed - the
-estimate columns (Output/Input VAT est, Estimated net) now ALWAYS show the raw transaction
-estimate, completely independent of the filed Box 5. The "Position used" column is the one
-that switches to your filed figure. So:
-  - Output VAT (est) / Input VAT (est) / Estimated net = always the transaction estimate.
-  - Filed Box 5 = what you type.
-  - Position used = filed figure for past months (green "Filed"), estimate otherwise.
+HOW IT NOW WORKS - to answer your questions directly
+----------------------------------------------------
+- "Do I just add Box 5 and that's the VAT return?"  YES. For a past month, type the Box 5
+  from your Xero VAT return and choose refund / to-pay. That IS the figure the page (and
+  cash flow) uses for that month. You don't need the estimate to match it - the estimate
+  is only a rough transaction guess and never includes late claims / reverse charge, so it
+  won't equal the filed figure. That's expected.
+
+- "Why does it show Position used for past dates - remove it?"  Kept, but cleaned up:
+  * Past month WITH a filed Box 5 entered -> Source "Filed return", Position used = your
+    filed figure. The estimate columns are hidden for past months now (they were just
+    noise).
+  * Past month WITHOUT a filed Box 5 yet -> Source "Estimate (enter filed)", and it falls
+    back to the estimate as a placeholder so the forecast isn't blank (per your choice).
+  * Current / future months -> estimate only (no return exists yet).
+
+So past months now show ONLY the filed Box 5 (no estimate clutter beside it), which
+removes the "looks inaccurate" side-by-side mismatch.
+
+DEPLOY
+------
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh VAT Refund.
+Then enter your filed Box 5 for each past month. (No Xero sync needed for that - it's
+instant. Use "Refresh estimate from Xero" only to update the current-month estimate.)
 
 VERIFY
 ------
-- Click "Refresh estimate from Xero" - completes, shows "Estimate synced ..." time.
-- Reload page - loads instantly from cache.
-- Enter 17293.94 / refund for Jun 2026 -> Position used = "17,293.94 refund"; the Estimated
-  net column for June is UNCHANGED (still the estimate). Chart June bar = -17,293.94.
+- Past rows show "Filed figure used" / "No filed figure yet - using estimate" in place of
+  the estimate columns.
+- Enter Jun 2026 = 17293.94 refund -> Jun Source = "Filed return", Position used =
+  "17,293.94 refund", chart bar updates to -17,293.94.
+- Current/future rows still show the estimate columns.
 
 FILES
 -----
-  - pages/api/business-financials.js        (cache estimate; refresh action)
-  - pages/business-financials/vat-refund.js (fast load, refresh button, fixed est columns)
+  - pages/api/business-financials.js        (cache estimate; don't cache empty; diag)
+  - pages/business-financials/vat-refund.js (past = filed only; future = estimate)
 
 BUILD: next build -> Compiled successfully.

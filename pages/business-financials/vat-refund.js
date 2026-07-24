@@ -150,13 +150,20 @@ export default function VatRefund() {
                   {rows.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No VAT data.</td></tr>}
                   {rows.map((r) => {
                     const isPast = r.month < nowMonth()
+                    const usingFiled = r.source === 'Filed'
                     return (
                       <tr key={r.month} style={{ borderBottom: '1px solid #f2f0ec', background: r.month === nowMonth() ? '#f5faff' : '#fff' }}>
                         <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(r.month)}</td>
-                        <td style={{ ...td, textAlign: 'left', fontSize: 11, fontWeight: 600, color: r.source === 'Filed' ? '#16a34a' : '#b45309' }}>{r.source}</td>
-                        <td style={{ ...td, color: '#999' }}>{gbp(r.estOutputVat)}</td>
-                        <td style={{ ...td, color: '#999' }}>{gbp(r.estInputVat)}</td>
-                        <td style={{ ...td, color: '#666' }}>{gbp(r.estNet)}</td>
+                        <td style={{ ...td, textAlign: 'left', fontSize: 11, fontWeight: 600, color: usingFiled ? '#16a34a' : '#b45309' }}>{isPast ? (usingFiled ? 'Filed return' : 'Estimate (enter filed)') : 'Estimate'}</td>
+                        {isPast ? (
+                          <td colSpan={3} style={{ ...td, textAlign: 'center', color: '#cbb99a', fontSize: 11, fontStyle: 'italic' }}>{usingFiled ? 'Filed figure used' : 'No filed figure yet - using estimate below'}</td>
+                        ) : (
+                          <>
+                            <td style={{ ...td, color: '#999' }}>{gbp(r.estOutputVat)}</td>
+                            <td style={{ ...td, color: '#999' }}>{gbp(r.estInputVat)}</td>
+                            <td style={{ ...td, color: '#666' }}>{gbp(r.estNet)}</td>
+                          </>
+                        )}
                         <td style={{ ...td, textAlign: 'center' }}>
                           {isPast ? <FiledEditor row={r} onSave={saveFiled} /> : <span style={{ color: '#ccc', fontSize: 11 }}>n/a (not filed)</span>}
                         </td>
@@ -169,8 +176,12 @@ export default function VatRefund() {
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              Completed months use the <strong>filed Box 5</strong> you enter from your Xero VAT return (the real figure - it already includes late claims, reverse charge and zero-rating, which an estimate can&apos;t capture). Enter it once per month and pick refund or to-pay. The current and future months show a <strong>transaction estimate</strong> (no return exists yet) - indicative for cash flow and moves as invoices and bills post. Box 5 is the net VAT: VAT on sales minus VAT reclaimed on purchases.
+              <strong>Past months</strong> use the <strong>filed Box 5</strong> from your Xero VAT return - enter it once per month and pick refund or to-pay; that becomes the figure used. Until you enter it, the estimate is used as a placeholder (shown as &quot;Estimate (enter filed)&quot;). <strong>Current and future months</strong> show a transaction estimate, since no return exists yet - indicative for cash flow and moving as invoices and bills post. Box 5 is the net VAT: VAT on sales minus VAT reclaimed on purchases.
             </div>
+
+            {data?.diag && (
+              <div style={{ fontSize: 11, color: '#bbb', marginTop: 12, fontFamily: 'monospace', wordBreak: 'break-word' }}>diag: {JSON.stringify(data.diag)}</div>
+            )}
 
           </>
         )}
