@@ -1,48 +1,55 @@
-DEPLOY NOTES - Sales ledger empty: the general-ledger FETCH is returning nothing
-================================================================================
+DEPLOY NOTES - THE FIX: Xero was missing the Journals permission (401)
+======================================================================
 
-WHAT THE DIAG PROVED
---------------------
-Your diag: chart codes {200, 260, 270}, requested {200,260,270}, but LEDGER CODES [] /
-0 lines. So the codes are RIGHT - the general-ledger (Xero Journals) fetch itself is
-returning nothing for ANY code. This also means the overhead drill-down is affected by
-the same thing.
+ROOT CAUSE (confirmed by your diag)
+-----------------------------------
+The diag showed:
+  fetch: {"pages":0, ... "lastError":"HTTP 401: AuthorizationUnsuccessful"}
+The Xero Journals (general ledger) endpoint returned 401 on the FIRST request - while
+your P&L, invoices and bills calls all work with the same token. That happens when the
+connection is missing a specific PERMISSION (OAuth scope).
 
-WHY (most likely)
------------------
-The Journals endpoint returns journals oldest-first, 100 at a time, paged by offset.
-For a company with a long history there are thousands of journals; the code has to page
-through ALL of them to reach the last 13 months. Two possible failures:
-  (a) the request errors (e.g. a permissions/scope issue on Journals) and the old code
-      silently returned empty; or
-  (b) it runs out of time/pages before reaching recent journals.
+Your Xero connection was requested with these scopes (pages/connect.js):
+  openid offline_access accounting.invoices.read accounting.contacts.read
+  accounting.reports.profitandloss.read accounting.settings.read
+  accounting.manualjournals.read projects.read
+It was NOT asking for accounting.journals.read - which is the exact permission the
+general-ledger (Journals) endpoint requires. So the sales table (and the overhead
+transaction drill-down) had no data, even though the codes were correct.
 
-WHAT THIS BUILD DOES
---------------------
-The ledger fetch now RECORDS what happened - pages read, journals seen, and any HTTP
-error - and stores it. The Sales page diag line now also shows a "fetch: {...}" section,
-e.g.:
-  fetch: {"pages":1,"totalJournalsSeen":0,"journalCount":0,"lastError":"HTTP 403: ..."}
-or
-  fetch: {"pages":200,"totalJournalsSeen":20000,"journalCount":48213,"lastError":null}
+THE FIX
+-------
+Added accounting.journals.read to the Xero connect scopes.
 
-DEPLOY & REPORT
----------------
-1. Replace all four files. Commit -> Vercel "Ready" -> hard-refresh.
-2. Click "Sync Xero figures", wait for it to FINISH (may take longer now it reports).
-3. Send me the diag line, especially the "fetch: {...}" part. That tells us definitively:
-   - lastError set        -> a permissions/HTTP problem (I'll fix the scope/call).
-   - pages high, no lines -> it's paging the whole history and not reaching recent
-                             dates in time -> I'll switch to a date-windowed approach
-                             (e.g. Reports/GeneralLedger or a bounded pull).
-   - totalJournalsSeen 0  -> the endpoint returns nothing at all for this org.
+  *** THIS REQUIRES RECONNECTING XERO ***
+  The permission is granted at connect time. Your current token was issued WITHOUT it,
+  so you must reconnect to get a new token that includes it.
 
-FILES (all EDITS - no new files)
---------------------------------
-  - lib/xero.js                          (ledger fetch reports pages/journals/error)
-  - pages/api/sync-benchmark.js           (stores fetchMeta)
-  - pages/api/business-financials.js      (diag shows fetchMeta)
-  - pages/business-financials/sales.js    (diag line shows fetch:{...})
+STEPS (important - in order)
+----------------------------
+1. Deploy pages/connect.js. Commit -> Vercel "Ready".
+2. Go to the Xero connect page: https://app.rockroofing.co.uk/connect
+   (or the "Connect Xero" link in the Admin centre).
+3. Click connect and COMPLETE THE XERO CONSENT SCREEN. You should now see Xero ask for
+   an additional permission about "journals" / "transactions" - approve it.
+4. Back in the app, open Sales -> click "Sync Xero figures" and let it finish.
+5. The detail table should now populate (and the Budgets cell drill-down too).
+
+HOW TO CONFIRM IT WORKED
+------------------------
+If the table is still empty, check the diag line again - the "fetch" part should now
+show pages > 0 and lastError: null. If it STILL says 401, the reconsent didn't take -
+tell me and we'll check the Xero app config.
+
+NOTE ON THE XERO DEVELOPER APP
+------------------------------
+Occasionally the scope also has to be enabled on the Xero app itself (developer.xero.com
+-> your app -> configuration). If reconnecting still 401s, that's the next place to look;
+let me know and I'll guide you.
+
+FILE (single EDIT - no new files)
+---------------------------------
+  - pages/connect.js   (adds accounting.journals.read)
 
 BUILD
 -----
