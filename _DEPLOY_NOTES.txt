@@ -1,50 +1,44 @@
-DEPLOY NOTES - Bills page now nets credit notes -> reconciles to Xero
-====================================================================
+DEPLOY NOTES - Bills: find the last £736 (reconciliation export)
+===============================================================
 
-WHY IT DIDN'T MATCH (confirmed from your screenshots)
------------------------------------------------------
-Xero's "Awaiting payment" nets SUPPLIER CREDIT NOTES against bills. Examples from your
-Xero screen: UK Postbox (24.65), Fixfast "CN re INV 1558824" (136.08) - negative
-balances that REDUCE the total. The app only pulled ACCPAY invoices and excluded
-anything <= 0, so those credits were missing and the app total sat higher than Xero.
-(Also, Xero's screen was filtered by transaction date; the app filters by due date -
-different field, slightly different set.)
+WHERE YOU ARE
+-------------
+App "All outstanding bills" 257,686 vs Xero 256,950.14 - a 736 gap, with BOTH showing
+103 bills. Good match on count; small value gap.
 
-WHAT CHANGED
-------------
-1) The bills fetch now ALSO pulls outstanding ACCPAY credit notes (Xero CreditNotes,
-   Type=ACCPAYCREDIT, AUTHORISED, RemainingCredit>0) and includes them as NEGATIVE
-   lines. The net total now matches Xero's "Awaiting payment".
-2) Credit-note rows are shown with a green "CREDIT" tag and a negative (green) amount,
-   on a light-green row, so they're obvious and clearly not something to "pay".
-3) Totals (All outstanding / Filtered / Selected) all net the credits automatically.
-
-MUST RE-SYNC
-------------
-The credit notes only appear after a fresh pull:
-  1. Deploy both files, hard-refresh.
-  2. Click "Sync bills" once (this now also fetches credit notes).
-  3. The "All outstanding bills" figure should drop to match Xero's Awaiting payment
-     total (when the date ranges line up).
-
-RECONCILING EXACTLY
+IT IS NOT ROUNDING
 -------------------
-  - Compare the app's "All outstanding bills" to Xero Purchases > Bills > Awaiting
-    payment with date type "Any date" / range cleared.
-  - Remember Xero's earlier screen was TRANSACTION-date filtered; clear that to compare
-    like-for-like. The app filter is by DUE date.
-  - If it's still off after a sync + matching ranges, the remaining cause is usually a
-    handful of part-paid bills or credit notes dated outside the window - tell me the
-    two totals and I'll produce a line-by-line diff.
+The app totals sum the EXACT pence (amountDue is full precision); only the DISPLAY is
+rounded to whole pounds by the gbp() formatter. So the 736 is a real data difference,
+not rounding. Most likely a stale part-paid bill: e.g. Xero shows Island Scaffolding
+SI-1407 as Paid 18,448.08 / Due 9,881.92 - if that payment landed after your last app
+sync, the app would still show more due on that line. Xero is live; the app is a
+snapshot from the last "Sync bills".
 
-FILES (both EDITS - no new files)
+WHAT I ADDED (to find it precisely, not guess)
+----------------------------------------------
+1) "Export CSV" button (top right) - downloads the app's bill list with EXACT pence
+   amounts, sorted by due date, including credit notes and a total. Diff this against
+   your Xero CSV to see the exact line(s) that differ.
+2) The "All outstanding bills" card now shows the exact figure to the penny in its
+   sub-label (e.g. "103 bills - exact 257,686.00"), so you can compare precisely.
+
+HOW TO CLOSE THE GAP
+--------------------
+  1. Deploy, hard-refresh, click "Sync bills" FIRST (in case the difference is just a
+     payment recorded in Xero since your last sync - this alone may fix it).
+  2. If still off: click "Export CSV" here and compare to your Xero export. The one or
+     two lines that differ will jump out (usually a part-paid bill with a different
+     "Due" figure). Send me those lines and I'll confirm the cause.
+
+FILE (single EDIT - no new files)
 ---------------------------------
-  - lib/xero.js                         (fetch ACCPAY credit notes as negative lines)
-  - pages/business-financials/bills.js  (credit-note styling)
+  - pages/business-financials/bills.js
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh -> CLICK "SYNC BILLS".
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> Sync bills -> (if needed)
+Export CSV and diff.
 
 BUILD
 -----

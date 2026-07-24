@@ -131,6 +131,27 @@ export default function BillsToPay() {
 
   const total = useMemo(() => filtered.reduce((s, i) => s + (i.amountDue || 0), 0), [filtered])
   const grandTotal = useMemo(() => billsOnly.reduce((s, i) => s + (i.amountDue || 0), 0), [billsOnly])
+
+  function exportCsv() {
+    const rows = [['Supplier', 'Ref', 'Bill date', 'Due date', 'Type', 'Amount due (exact)']]
+    for (const i of [...billsOnly].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))) {
+      rows.push([
+        (i.contact || '').replace(/"/g, '""'),
+        (i.number || '').replace(/"/g, '""'),
+        i.date || '', i.dueDate || '',
+        i.isCreditNote ? 'CREDIT' : 'BILL',
+        (i.amountDue || 0).toFixed(2),
+      ])
+    }
+    rows.push([])
+    rows.push(['TOTAL', '', '', '', '', billsOnly.reduce((s, i) => s + (i.amountDue || 0), 0).toFixed(2)])
+    const csv = rows.map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${c}"` : c).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `app-bills-${new Date().toISOString().slice(0, 10)}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
   const selTotal = useMemo(() => sorted.filter(i => sel[i.id]).reduce((s, i) => s + (i.amountDue || 0), 0), [sorted, sel])
   const selCount = Object.values(sel).filter(Boolean).length
 
@@ -160,7 +181,10 @@ export default function BillsToPay() {
         <div style={{ padding: '24px 16px', maxWidth: '100%', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
             <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Bills to Pay <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(supplier bills only)</span></h1>
-            <button onClick={sync} disabled={syncing} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.6 : 1 }}>{syncing ? 'Syncing...' : 'Sync bills'}</button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={exportCsv} style={{ background: '#fff', color: INK, border: '1px solid #e2e0da', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Export CSV</button>
+              <button onClick={sync} disabled={syncing} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.6 : 1 }}>{syncing ? 'Syncing...' : 'Sync bills'}</button>
+            </div>
           </div>
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
@@ -213,7 +237,7 @@ export default function BillsToPay() {
                 </div>
 
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 14 }}>
-                  <Stat label="All outstanding bills" value={gbp(grandTotal)} sub={`${billsOnly.length} bills (reconciles to Xero)`} />
+                  <Stat label="All outstanding bills" value={gbp(grandTotal)} sub={`${billsOnly.length} bills - exact ${grandTotal.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} />
                   <Stat label="Filtered total" value={gbp(total)} sub={`${filtered.length} bills`} />
                   <Stat label="Selected" value={gbp(selTotal)} sub={`${selCount} ticked`} accent />
                 </div>
