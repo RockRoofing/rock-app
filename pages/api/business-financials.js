@@ -253,17 +253,28 @@ export default async function handler(req, res) {
       await redis2.set('vat:filed', store)
       return res.json({ ok: true, filed: store })
     }
-    let tokens = await getTokens()
+
     const from = String(req.query.from || (req.body && req.body.from) || '')
     const to = String(req.query.to || (req.body && req.body.to) || '')
+    const doRefresh = req.method === 'POST' && req.body?.action === 'refresh'
+    const filed = (await redis2.get('vat:filed').catch(() => null)) || {}
+
+    if (!doRefresh) {
+      // Fast path: return the cached estimate + filed figures. No Xero calls.
+      const cached = (await redis2.get('vat:estimate').catch(() => null)) || { months: {}, updatedAt: null }
+      return res.json({ months: cached.months || {}, filed, estimateUpdatedAt: cached.updatedAt || null, diag: cached.meta || null })
+    }
+
+    // Refresh path: recompute the estimate from Xero and cache it.
+    let tokens = await getTokens()
     let months = {}, meta = { lastError: 'Xero not connected' }
     if (tokens?.access_token) {
       try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
       const est = await fetchVatPosition(tokens.access_token, tokens.tenant_id, from, to)
       months = est.months; meta = est.meta
+      await redis2.set('vat:estimate', { months, meta, updatedAt: new Date().toISOString(), from, to })
     }
-    const filed = (await redis2.get('vat:filed').catch(() => null)) || {}
-    return res.json({ months, filed, diag: meta })
+    return res.json({ months, filed, estimateUpdatedAt: new Date().toISOString(), diag: meta })
   }
 
   if (view === 'overhead-transactions') {

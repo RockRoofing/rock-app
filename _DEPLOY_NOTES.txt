@@ -1,52 +1,38 @@
-DEPLOY NOTES - VAT Refund: manual filed Box 5 (past) + estimate (current/future)
-================================================================================
+DEPLOY NOTES - VAT: fix speed + Box 5 accuracy
+==============================================
 
-WHAT BOX 5 IS
--------------
-Box 5 is the headline net VAT figure on a UK VAT return: VAT on sales (Box 1) minus VAT
-reclaimed on purchases (Box 4). If Box 4 is bigger (your usual case), Box 5 is a REFUND
-from HMRC. Example: your June return had Box 1 6,535.40, Box 4 23,829.34, so Box 5 =
-17,293.94 refund.
+1) SPEED
+--------
+The page was recomputing the whole estimate from Xero (paging through all invoices, bills
+and credit notes) on EVERY load - slow. Now:
+  - Normal page load reads a CACHED estimate from Redis (instant).
+  - A new button "Refresh estimate from Xero" recomputes + caches it (use this
+    occasionally, or when you want the current-month estimate updated).
+  - Entering a filed Box 5 no longer calls Xero at all - it just saves and re-reads the
+    cache, so it's instant.
+First time: click "Refresh estimate from Xero" once to populate the cache.
 
-APPROACH (Option B - chosen)
-----------------------------
-We can't pull the filed return automatically (Xero won't grant your app the tax-reports
-scope - it throws invalid_scope). So:
-  - PAST months: you type the filed Box 5 straight off your Xero VAT return, and pick
-    "refund" or "to pay". Saved permanently (Redis key vat:filed). This is the real,
-    reliable figure.
-  - CURRENT + FUTURE months: a transaction ESTIMATE (no return exists yet) - indicative
-    for cash flow, moves as invoices/bills post.
-
-connect.js is reverted to a working scope set (no tax-reports scope), so reconnect works.
-You do NOT need to reconnect for this to function - it uses existing access.
-
-HOW TO USE
-----------
-1. Open VAT Refund. Past months show a "Filed Box 5" input.
-2. For each past month, type the Box 5 amount from your Xero VAT return and choose
-   refund / to pay. It saves on tab-out (amount) or immediately (dropdown).
-3. That month's "Position used" then shows your filed figure (green Filed); the chart
-   updates. Leave a month blank to fall back to the estimate.
-
-DEPLOY
-------
-Replace all three files. Commit -> Vercel "Ready" -> open VAT Refund -> enter your filed
-Box 5 figures for past months.
+2) BOX 5 ACCURACY
+-----------------
+Bug: after entering a filed Box 5, the "Estimated net" column flipped its sign and looked
+wrong, because that cell was mixing the filed figure into the estimate maths. Fixed - the
+estimate columns (Output/Input VAT est, Estimated net) now ALWAYS show the raw transaction
+estimate, completely independent of the filed Box 5. The "Position used" column is the one
+that switches to your filed figure. So:
+  - Output VAT (est) / Input VAT (est) / Estimated net = always the transaction estimate.
+  - Filed Box 5 = what you type.
+  - Position used = filed figure for past months (green "Filed"), estimate otherwise.
 
 VERIFY
 ------
-- Enter 17293.94 / refund for Jun 2026 -> row shows "17,293.94 refund", Source = Filed
-  (green), and the June chart bar sits at -17,293.94.
-- Current/future months stay as Estimate.
-- Reload the page - your entered figures persist.
+- Click "Refresh estimate from Xero" - completes, shows "Estimate synced ..." time.
+- Reload page - loads instantly from cache.
+- Enter 17293.94 / refund for Jun 2026 -> Position used = "17,293.94 refund"; the Estimated
+  net column for June is UNCHANGED (still the estimate). Chart June bar = -17,293.94.
 
 FILES
 -----
-  - pages/connect.js                       (reverted to working scopes)
-  - pages/api/business-financials.js        (vat view: estimate + saved filed Box 5)
-  - pages/business-financials/vat-refund.js (editable filed Box 5 per past month)
+  - pages/api/business-financials.js        (cache estimate; refresh action)
+  - pages/business-financials/vat-refund.js (fast load, refresh button, fixed est columns)
 
-BUILD
------
-Validated with `next build` -> "Compiled successfully".
+BUILD: next build -> Compiled successfully.

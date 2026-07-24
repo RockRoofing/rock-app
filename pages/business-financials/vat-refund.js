@@ -32,7 +32,15 @@ export default function VatRefund() {
     try {
       const r = await fetch(`/api/business-financials?view=vat&from=${from}&to=${to}`)
       setData(await r.json())
-    } catch (e) { setData({ months: {}, diag: { lastError: e.message } }) }
+    } catch (e) { setData({ months: {}, filed: {}, diag: { lastError: e.message } }) }
+    setLoading(false)
+  }
+  async function refreshFromXero() {
+    setLoading(true)
+    try {
+      const r = await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'vat', action: 'refresh', from, to }) })
+      setData(await r.json())
+    } catch (e) { setData({ months: {}, filed: {}, diag: { lastError: e.message } }) }
     setLoading(false)
   }
   useEffect(() => { if (ok) load() }, [ok])
@@ -46,17 +54,24 @@ export default function VatRefund() {
     const keys = new Set([...Object.keys(months), ...Object.keys(filed)])
     return [...keys].sort().map(mk => {
       const est = months[mk] || { outputVat: 0, inputVat: 0, outputNet: 0, inputNet: 0, netVat: 0, refund: 0, payable: 0 }
+      const estOutputVat = est.outputVat || 0
+      const estInputVat = est.inputVat || 0
+      const estNet = Math.round((estOutputVat - estInputVat) * 100) / 100
       const f = filed[mk]
       const isCurrentOrFuture = mk >= nowMonth()
       if (f && f.box5 != null && !isCurrentOrFuture) {
         const netVat = f.direction === 'payable' ? Math.abs(f.box5) : -Math.abs(f.box5)
         return {
           month: mk, source: 'Filed', filedBox5: f.box5, filedDir: f.direction,
-          outputVat: est.outputVat, inputVat: est.inputVat, outputNet: est.outputNet, inputNet: est.inputNet,
+          estOutputVat, estInputVat, estNet,
           netVat, refund: netVat < 0 ? -netVat : 0, payable: netVat > 0 ? netVat : 0,
         }
       }
-      return { month: mk, source: isCurrentOrFuture ? 'Estimate' : 'Estimate', filedBox5: f?.box5 ?? null, filedDir: f?.direction || 'refund', ...est }
+      return {
+        month: mk, source: 'Estimate', filedBox5: f?.box5 ?? null, filedDir: f?.direction || 'refund',
+        estOutputVat, estInputVat, estNet,
+        netVat: estNet, refund: estNet < 0 ? -estNet : 0, payable: estNet > 0 ? estNet : 0,
+      }
     })
   }, [months, filed])
 
@@ -88,7 +103,8 @@ export default function VatRefund() {
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 18, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: 12 }}>
           <div><div style={flabel}>From</div><input type="date" value={from} onChange={e => setFrom(e.target.value)} style={finput} /></div>
           <div><div style={flabel}>To</div><input type="date" value={to} onChange={e => setTo(e.target.value)} style={finput} /></div>
-          <button onClick={load} disabled={loading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? 'Loading...' : 'Refresh from Xero'}</button>
+          <button onClick={refreshFromXero} disabled={loading} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? 'Working...' : 'Refresh estimate from Xero'}</button>
+          {data?.estimateUpdatedAt && <span style={{ fontSize: 11, color: '#9a958c' }}>Estimate synced {new Date(data.estimateUpdatedAt).toLocaleString('en-GB')}</span>}
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Calculating VAT position from Xero...</div> : (
@@ -138,9 +154,9 @@ export default function VatRefund() {
                       <tr key={r.month} style={{ borderBottom: '1px solid #f2f0ec', background: r.month === nowMonth() ? '#f5faff' : '#fff' }}>
                         <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(r.month)}</td>
                         <td style={{ ...td, textAlign: 'left', fontSize: 11, fontWeight: 600, color: r.source === 'Filed' ? '#16a34a' : '#b45309' }}>{r.source}</td>
-                        <td style={{ ...td, color: '#999' }}>{gbp(r.outputVat)}</td>
-                        <td style={{ ...td, color: '#999' }}>{gbp(r.inputVat)}</td>
-                        <td style={{ ...td, color: '#666' }}>{gbp(r.netVat < 0 && r.source === 'Filed' ? -(r.outputVat - r.inputVat) : (r.outputVat - r.inputVat))}</td>
+                        <td style={{ ...td, color: '#999' }}>{gbp(r.estOutputVat)}</td>
+                        <td style={{ ...td, color: '#999' }}>{gbp(r.estInputVat)}</td>
+                        <td style={{ ...td, color: '#666' }}>{gbp(r.estNet)}</td>
                         <td style={{ ...td, textAlign: 'center' }}>
                           {isPast ? <FiledEditor row={r} onSave={saveFiled} /> : <span style={{ color: '#ccc', fontSize: 11 }}>n/a (not filed)</span>}
                         </td>
