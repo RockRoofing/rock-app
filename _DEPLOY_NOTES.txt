@@ -1,54 +1,48 @@
-DEPLOY NOTES - Sales ledger WITHOUT the journals scope (uses invoices + manual journals)
-========================================================================================
+DEPLOY NOTES - Sales: add credit notes, Source column to spot non-sales lines
+=============================================================================
 
-WHY THE SCOPE ROUTE FAILED
---------------------------
-Your Xero app's allowed scopes list does NOT include accounting.journals.read - so
-requesting it gave "invalid_scope" at the Xero login screen. That scope isn't available
-to your app, so the /Journals general-ledger endpoint is off the table.
+DEPLOY ORDER
+------------
+If you have NOT yet deployed the previous pack (Sales_ledger_invoices_journals.zip -
+connect.js, lib/xero.js, sync-benchmark.js), deploy that first, THEN this. This pack's
+lib/xero.js already INCLUDES everything from that one plus the changes below, so it's
+safe to just use this lib/xero.js.
 
-NEW APPROACH (agreed)
----------------------
-Build the sales detail from sources your app ALREADY has permission for:
-  - ACCREC invoices (accounting.invoices.read) - your sales invoices
-  - Manual journals (accounting.manualjournals.read) - where your WIP is posted
-Both filtered to the sales codes (200/260/270). Sales invoice lines are positive;
-manual-journal sales credits are flipped to show as positive sales. This covers real
-sales AND the WIP journals, with no Xero portal change and no invalid_scope.
+WHAT CHANGED
+------------
+1) SALES CREDIT NOTES: now pulls ACCREC credit notes (ACCRECCREDIT) coded to your sales
+   codes and shows them as NEGATIVE (reductions), per your steer. Codes stay 200/260/270.
+2) SOURCE COLUMN: the detail table now has a "Source" column showing whether each line
+   is an Invoice, a Manual journal (WIP), or a Credit note. Manual journals are purple,
+   credit notes red. This makes any "cost-looking" line identifiable at a glance.
 
-  connect.js reverted - it no longer requests accounting.journals.read, so the Xero
-  connect screen works normally again. You do NOT need to reconnect for the sales fix
-  (your current token already has invoices + manual journals). A reconnect is only
-  needed if your token has since expired in the usual way.
-
-NOTE ON OVERHEAD DRILL-DOWN
----------------------------
-The Budgets cell drill-down still uses the /Journals endpoint and will stay empty while
-the app lacks that scope. That's separate from sales and doesn't block anything here -
-we can revisit it later (e.g. rebuild it from bills/spend money) if you want.
+ABOUT THE "COSTS" YOU SAW
+-------------------------
+The fetch only ever keeps lines coded to 200/260/270 - it never pulls cost codes. So a
+"cost-looking" row is almost certainly a MANUAL JOURNAL debit posted to a sales code
+(e.g. a WIP reversal), which correctly shows as a negative sale. The new Source column
+lets you confirm this: sort by Amount or look at Source.
+  -> If you still see genuine COSTS (wrong account) after this, tell me the Source +
+     Code + a couple of descriptions from those rows and I'll trace exactly where they
+     come from. It's possible some non-sales activity is being posted to 260/270 - if so
+     we may want to drop those codes and keep only 200 (quick change).
 
 DEPLOY
 ------
-Replace all three files. Commit -> Vercel "Ready" -> hard-refresh Sales ->
-click "Sync Xero figures" and let it finish (it now reads invoices + manual journals,
-so it may take a little while).
+Replace both files. Commit -> Vercel "Ready" -> hard-refresh Sales -> Sync Xero figures.
 
 VERIFY
 ------
-- The sales detail table fills with invoice + manual-journal lines.
-- Click a bar -> table shows just that month.
-- The diag line (if the table is ever empty) now shows invoice/journal counts and any
-  error, e.g. fetch: {"invoicePages":..,"invoicesSeen":..,"journalLines":..,"lastError":null}
-- Sanity check: a full month's table total should be close to that month's chart bar.
-  Small differences are expected because the chart is the P&L total (accrual, includes
-  everything in code 200) while the table lists invoice + manual-journal lines - if
-  sales are posted another way too, tell me and I'll add that source.
+- Source column shows Invoice / Manual journal / Credit note.
+- Credit notes appear as negative (red) and reduce the month total.
+- Any row you thought was a "cost" - check its Source. If it's a Manual journal, that's
+  a WIP/sales-code journal, not a cost. If it's an Invoice on a non-sales code, that
+  can't happen now (filtered). Send me anything that still looks wrong.
 
-FILES (all EDITS - no new files)
---------------------------------
-  - pages/connect.js            (revert: drop accounting.journals.read)
-  - lib/xero.js                 (new fetchSalesLedgerFromInvoicesAndJournals)
-  - pages/api/sync-benchmark.js (sales ledger now from invoices + manual journals)
+FILES (both EDITS - no new files)
+---------------------------------
+  - lib/xero.js                          (adds ACCREC credit notes to sales ledger)
+  - pages/business-financials/sales.js   (Source column)
 
 BUILD
 -----

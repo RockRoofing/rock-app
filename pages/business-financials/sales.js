@@ -217,6 +217,7 @@ export default function Sales() {
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('description')}>Description{arrow('description')}</th>
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('reference')}>Reference{arrow('reference')}</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Source</th>
                       <th style={{ ...th, textAlign: 'left' }}>Code</th>
                       <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('amount')}>Amount{arrow('amount')}</th>
                     </tr>
@@ -227,17 +228,18 @@ export default function Sales() {
                         <td style={{ ...td, textAlign: 'left', color: '#555' }}>{fmtDate(l.date)}</td>
                         <td style={{ ...td, textAlign: 'left' }}>{l.description || '-'}</td>
                         <td style={{ ...td, textAlign: 'left', color: '#888' }}>{l.reference || '-'}</td>
+                        <td style={{ ...td, textAlign: 'left', color: l.sourceType === 'Credit note' ? '#dc2626' : (l.sourceType === 'Manual journal' ? '#7c3aed' : '#555') }}>{l.sourceType || '-'}</td>
                         <td style={{ ...td, textAlign: 'left', color: '#aaa' }}>{l.code}</td>
                         <td style={{ ...td, fontWeight: 600, color: l.amount < 0 ? '#dc2626' : INK }}>{gbp(l.amount)}</td>
                       </tr>
                     ))}
-                    {sortedLines.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>
+                    {sortedLines.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>
                       {lines.length === 0 ? 'No sales ledger yet - click "Sync Xero figures" to pull sales transactions.' : 'No sales transactions in this range.'}
                     </td></tr>}
                   </tbody>
                   {sortedLines.length === 0 && data?.diag && (
                     <tfoot>
-                      <tr><td colSpan={5} style={{ padding: '10px 14px', fontSize: 11, color: '#999', textAlign: 'left', background: '#fafafa', fontFamily: 'monospace' }}>
+                      <tr><td colSpan={6} style={{ padding: '10px 14px', fontSize: 11, color: '#999', textAlign: 'left', background: '#fafafa', fontFamily: 'monospace' }}>
                         diag - chart codes: {JSON.stringify(data.diag.benchmarkSalesCodes)} | ledger codes: {JSON.stringify(data.diag.ledgerCodesPresent)} | ledger lines: {data.diag.ledgerLineCount} | requested: {JSON.stringify(data.diag.salesCodesRequested)} | fetch: {JSON.stringify(data.diag.fetchMeta)} | has journals scope: {String(data.diag.hasJournalsScope)} | token scope: {data.diag.tokenScope || '(none)'}
                       </td></tr>
                     </tfoot>
@@ -245,7 +247,7 @@ export default function Sales() {
                   {sortedLines.length > 0 && (
                     <tfoot>
                       <tr style={{ borderTop: '2px solid #eee', fontWeight: 700, background: '#faf9f7' }}>
-                        <td colSpan={4} style={{ ...td, textAlign: 'right' }}>Total{selectedMonth ? ` (${monthLbl(selectedMonth)})` : ''}</td>
+                        <td colSpan={5} style={{ ...td, textAlign: 'right' }}>Total{selectedMonth ? ` (${monthLbl(selectedMonth)})` : ''}</td>
                         <td style={{ ...td, fontWeight: 800 }}>{gbp(total)}</td>
                       </tr>
                     </tfoot>
