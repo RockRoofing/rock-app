@@ -72,6 +72,7 @@ export default async function handler(req, res) {
       if (forecastMethods !== undefined) await redis.set('config:overhead-forecast-methods', forecastMethods || {})
       if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
       if (hiddenRows !== undefined) await redis.set('config:overhead-hidden-rows', hiddenRows || [])
+      if (req.body && req.body.cashflowSchedule !== undefined) await redis.set('config:overhead-cashflow-schedule', req.body.cashflowSchedule || {})
       if (req.body && req.body.card3moCodes !== undefined) await redis.set('config:overhead-3mo-card-codes', req.body.card3moCodes || [])
       // Lock in a full-year forecast snapshot (kept as a dated history).
       if (lockForecast) {
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
       redis.get('config:overhead-3mo-card-codes').then(v => v || null).catch(() => null),   // [ code ] or null = all
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
+    const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
     const chartNames = {}
     for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
 
@@ -144,6 +146,7 @@ export default async function handler(req, res) {
       hiddenRows,
       forecastLocks,
       card3moCodes,
+      cashflowSchedule,
       benchmarkUpdatedAt: benchmark.updatedAt || null,
     })
   }

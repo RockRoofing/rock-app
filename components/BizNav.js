@@ -15,6 +15,7 @@ const TABS = [
   ['Invoices Owed', '/business-financials/invoices'],
   ['Retentions Due', '/business-financials/retentions-due'],
   ['VAT Refund', '/business-financials/vat-refund'],
+  ['Cash Schedule', '/business-financials/cash-schedule'],
   ['Cash Flow', '/business-financials/cashflow'],
 ]
 

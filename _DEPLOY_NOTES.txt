@@ -1,44 +1,53 @@
-DEPLOY NOTES - VAT: past = filed Box 5 only; future = estimate (clearer)
-========================================================================
+DEPLOY NOTES - Cash flow PART A: overhead Cash Schedule editor
+==============================================================
 
-(This pack includes the earlier un-deployed changes too - just deploy these two files.)
+*** CONTAINS ONE NEW FILE - the zip can't create it. In GitHub use "Add file" ->
+"Create new file" for:
+   pages/business-financials/cash-schedule.js
+The other two are edits - just replace them.
 
-HOW IT NOW WORKS - to answer your questions directly
-----------------------------------------------------
-- "Do I just add Box 5 and that's the VAT return?"  YES. For a past month, type the Box 5
-  from your Xero VAT return and choose refund / to-pay. That IS the figure the page (and
-  cash flow) uses for that month. You don't need the estimate to match it - the estimate
-  is only a rough transaction guess and never includes late claims / reverse charge, so it
-  won't equal the filed figure. That's expected.
+WHAT THIS IS
+------------
+Part A of the 13-week cash flow. This is the editor where you set WHEN each overhead's
+monthly budget lands, so Part B (the forecast) can time it into weeks. Nothing is
+scheduled by default - you configure each line you want in the forecast.
 
-- "Why does it show Position used for past dates - remove it?"  Kept, but cleaned up:
-  * Past month WITH a filed Box 5 entered -> Source "Filed return", Position used = your
-    filed figure. The estimate columns are hidden for past months now (they were just
-    noise).
-  * Past month WITHOUT a filed Box 5 yet -> Source "Estimate (enter filed)", and it falls
-    back to the estimate as a placeholder so the forecast isn't blank (per your choice).
-  * Current / future months -> estimate only (no return exists yet).
+New tab: Summary | Sales | Budgets | Bills | Invoices Owed | Retentions Due | VAT Refund |
+Cash Schedule | Cash Flow.
 
-So past months now show ONLY the filed Box 5 (no estimate clutter beside it), which
-removes the "looks inaccurate" side-by-side mismatch.
+PER OVERHEAD LINE you choose a Timing:
+  - (not in forecast)  - default; the line is ignored by cash flow.
+  - Spread evenly      - the monthly budget is divided across the month's weeks.
+  - One day            - whole monthly amount lands on a day you pick (e.g. PAYE 22nd).
+  - Specific days      - split the month across several dates; must add up to the budget
+                         (it shows "Balances to budget" / "£X unallocated").
+Plus CARRY FORWARD on any scheduled line: move £X from one month to a later month without
+touching the budgets (e.g. defer a payment).
+
+The monthly AMOUNTS still come from the Budgets page (per code). This page only sets the
+TIMING. There's a link through to Budgets at the top.
+
+Saves to Redis (config:overhead-cashflow-schedule). A sticky "Save schedule" bar appears
+when you have unsaved changes.
 
 DEPLOY
 ------
-Replace both files. Commit -> Vercel "Ready" -> hard-refresh VAT Refund.
-Then enter your filed Box 5 for each past month. (No Xero sync needed for that - it's
-instant. Use "Refresh estimate from Xero" only to update the current-month estimate.)
+1. Add pages/business-financials/cash-schedule.js via GitHub "Add file".
+2. Replace components/BizNav.js and pages/api/business-financials.js.
+3. Commit -> Vercel "Ready" -> open the Cash Schedule tab.
 
-VERIFY
-------
-- Past rows show "Filed figure used" / "No filed figure yet - using estimate" in place of
-  the estimate columns.
-- Enter Jun 2026 = 17293.94 refund -> Jun Source = "Filed return", Position used =
-  "17,293.94 refund", chart bar updates to -17,293.94.
-- Current/future rows still show the estimate columns.
+USE IT NOW
+----------
+Set timings for your key overheads (payroll, PAYE, CIS, rent, insurance, etc.). Once
+you're happy, tell me and I'll build PART B - the 13-week forecast that reads this
+schedule + Invoices Owed + Retentions + VAT + your Xero opening balance.
 
 FILES
 -----
-  - pages/api/business-financials.js        (cache estimate; don't cache empty; diag)
-  - pages/business-financials/vat-refund.js (past = filed only; future = estimate)
+  EDITS:
+   - components/BizNav.js
+   - pages/api/business-financials.js
+  NEW:
+   - pages/business-financials/cash-schedule.js
 
 BUILD: next build -> Compiled successfully.
