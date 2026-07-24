@@ -177,7 +177,7 @@ export default function Margin() {
                     </thead>
                     <tbody>
                       {fySeries.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No completed months in this selection.</td></tr>}
-                      {fySeries.map((m, i) => (
+                      {[...fySeries].reverse().map((m, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
                           <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{monthLbl(m.month)}</td>
                           <td style={td}>{gbp0(m.income)}</td>

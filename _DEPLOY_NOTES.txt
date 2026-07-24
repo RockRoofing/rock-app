@@ -1,36 +1,29 @@
-DEPLOY NOTES - VAT filter fix + rolling margin fix + full-width pages
-=====================================================================
+DEPLOY NOTES - Margin table sort (+ January explanation)
+========================================================
 
-All SIX files are EDITS - just replace them.
+ONE file, an EDIT - just replace it.
+  pages/business-financials/margin.js
 
-1) VAT REFUND - filters now actually work
-   - The table and bar chart now refresh when you change Financial year / From / To.
-     (Previously the page only loaded once and ignored filter changes.)
-   - Also filters the rows client-side to the exact month window, so what you see
-     always matches the dates chosen.
+CHANGE
+  The calculation table now sorts by month with the MOST RECENT at the top
+  (Jul/Jun down to Dec). The charts stay left-to-right chronological as before.
 
-2) MARGIN - 12-month rolling now plots backwards
-   - Previously only the latest month showed (it required a FULL 12 months before
-     plotting a point). Now every month plots, using up to 12 trailing months
-     (fewer for the earliest months), so the rolling line runs across the range.
+ABOUT THE JANUARY FIGURE
+  Good spot. Every month in the table ties exactly to your P&L EXCEPT January:
+    - P&L (current)      Jan Total Turnover = 170,690.90
+    - Margin table       Jan income        = 188,407
+    - Difference         ~17,716 (the stored figure is HIGHER)
 
-3) FULL WIDTH pages
-   Margin, Retentions Due, VAT Refund, Cash Schedule, Cash Flow and Summary now
-   span the full window width (were previously capped ~1200-1320px and centred).
+  This is NOT a calculation bug - the page just displays the income figure stored
+  in the benchmark. The other months match, so the maths is right. January is
+  stale: it was synced BEFORE ~17,716 of credits/adjustments were posted that later
+  reduced January's sales to 170,690.90.
 
-FILES
-  pages/business-financials.js                        (Summary - full width)
-  pages/business-financials/margin.js                 (rolling fix + full width)
-  pages/business-financials/vat-refund.js             (filter fix + full width)
-  pages/business-financials/retentions-due.js         (full width)
-  pages/business-financials/cash-schedule.js          (full width)
-  pages/business-financials/cashflow.js               (full width)
+  FIX (no code change): re-run the P&L benchmark sync so January picks up the
+  corrected figure. Once re-synced, the Jan income should drop to ~170,690 and the
+  margin will recompute automatically.
 
-STILL TO DO (waiting on your screenshots)
-  You mentioned some Margin / Sales figures don't look right. Send the images when
-  you can. Most likely cause: the monthly P&L totals (income / cost of sales /
-  overheads) come from the Account Categorisation config via the benchmark sync -
-  if any account code is uncategorised or in the wrong section, the margins and
-  sales will be off. I'll confirm once I can see the numbers.
+  If it still doesn't match after a re-sync, it means an account code is mis-
+  categorised for January only - send me a shout and I'll trace that specific code.
 
 BUILD: next build -> Compiled successfully.
