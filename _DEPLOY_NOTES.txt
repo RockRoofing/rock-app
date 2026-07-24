@@ -1,22 +1,22 @@
-DEPLOY NOTES - Budgets: "Make same as Budget / mo" forecast option
-==================================================================
+DEPLOY NOTES - Budgets forecast dropdown: clean labels + holds "Budget / mo"
+============================================================================
 
-ONE file, an EDIT - just replace it.
+** Supersedes "Budget_forecast_option". One file, an EDIT - just replace it. **
   pages/business-financials/budgets.js
 
-WHAT'S NEW
-  The per-row Forecast method dropdown has a new option:
-     "Make same as Budget / mo"
+CHANGES
+  1. Removed the "1 - / 2 - / 3 -" number prefixes from the Forecast dropdown.
+     Options now read: Avg this FY | Last 3 mo | Last full month |
+     Make same as Budget / mo
 
-  When you pick it for a row, it stamps that row's Budget / Mo figure into every
-  REMAINING month of the financial year (the current month + all future months) as
-  the forecast value. Completed months keep their actuals.
+  2. When you pick "Make same as Budget / mo", the dropdown now HOLDS that label
+     (previously it snapped back). It still fills the remaining months of the FY
+     with the Budget / Mo figure, and now also remembers the choice on the row.
 
-  It's an ACTION, not a sticky mode - after it runs, the dropdown returns to the
-  row's normal method (1/2/3). The filled months become editable overrides, so you
-  can still fine-tune any individual month afterwards. The change is saved
-  immediately.
-
-  If a row has no Budget / Mo value set, the option does nothing (nothing to apply).
+  Notes:
+  - Filled months are stored as overrides, so future cells stay at the budget figure
+    even if you later tweak the monthly Budget. To re-apply a NEW budget figure to
+    the rest of the year, just pick the option again.
+  - Completed months keep their actuals. Change is saved immediately.
 
 BUILD: next build -> Compiled successfully.

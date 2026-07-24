@@ -162,8 +162,16 @@ function Budgets() {
 
   // Forecast for a code (per its method). Used for future cells AND as the budget hint.
   function baseForecast(code) {
-    const method = Number(forecastMethods[code] || 1)
+    const raw = forecastMethods[code] || 1
     const m = actualsByCode[code] || {}
+    // "budget" method: use the manual Budget / Mo figure directly. Fall back to the
+    // avg-this-FY calc if no manual budget is set (avoids recursing into effectiveBudget).
+    if (raw === 'budget') {
+      const b = budgets[code]
+      if (b !== '' && b != null) return Number(b)
+      // fall through to method-1 average below
+    }
+    const method = Number(raw)
     if (method === 3) return lastFullMonthValue(code)      // last FULL month
     if (method === 2) {                                     // trailing 3 completed
       const completed = Object.keys(m).filter(k => isComplete(k)).sort().slice(-3)
@@ -193,24 +201,27 @@ function Budgets() {
     setBudgets(prev => ({ ...prev, [code]: raw === '' ? '' : Number(raw) }))
   }
   function setForecastMethod(code, method) {
-    setForecastMethods(prev => ({ ...prev, [code]: Number(method) }))
+    const val = method === 'budget' ? 'budget' : Number(method)
+    setForecastMethods(prev => ({ ...prev, [code]: val }))
   }
   // "Make same as Budget / mo": stamp the current Budget/Mo value into every remaining
   // (current + future) month of the FY as a forecast override, so the rest of the year
   // uses the budget figure. Completed months are left untouched (they use actuals).
+  // Also sets the row's method to 'budget' so the dropdown holds that label.
   function applyBudgetToRemaining(code) {
     const val = effectiveBudget(code)
     if (val == null || val === '' || isNaN(val)) return
     const remaining = months.filter(mo => !isComplete(mo))
-    let freshOverrides
+    let freshOverrides, freshMethods
     setForecastOverrides(prev => {
       const next = { ...prev, [code]: { ...(prev[code] || {}) } }
       for (const mo of remaining) next[code][mo] = Number(val)
       freshOverrides = next
       return next
     })
-    // Persist immediately with the fresh value (avoids stale-closure in save()).
-    if (freshOverrides) save({ forecastOverrides: freshOverrides })
+    setForecastMethods(prev => { freshMethods = { ...prev, [code]: 'budget' }; return freshMethods })
+    // Persist immediately with the fresh values (avoids stale-closure in save()).
+    save({ forecastOverrides: freshOverrides, forecastMethods: freshMethods })
   }
   function setOverride(code, mo, raw) {
     const val = raw === '' ? '' : Number(raw)
@@ -606,9 +617,9 @@ function Budgets() {
                             <select value={forecastMethods[code] || 1}
                               onChange={e => { if (e.target.value === 'budget') { applyBudgetToRemaining(code) } else { setForecastMethod(code, e.target.value) } }}
                               style={{ padding: '4px 6px', border: '1px solid #e2e0da', borderRadius: 6, fontSize: 11, background: '#fff' }}>
-                              <option value={1}>1 - Avg this FY</option>
-                              <option value={2}>2 - Last 3 mo</option>
-                              <option value={3}>3 - Last full month</option>
+                              <option value={1}>Avg this FY</option>
+                              <option value={2}>Last 3 mo</option>
+                              <option value={3}>Last full month</option>
                               <option value="budget">Make same as Budget / mo</option>
                             </select>
                           </td>
