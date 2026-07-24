@@ -109,11 +109,21 @@ export default function InvoicesOwed() {
   }, [])
 
   async function setExpected(invoiceNumber, expectedDate) {
-    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedDate } }))
+    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedDate, expectedConfirmed: false } }))
     try {
       await fetch('/api/outstanding-invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set-expected', invoiceNumber, expectedDate }),
+      })
+    } catch (e) { console.error(e) }
+  }
+
+  async function setConfirmed(invoiceNumber, confirmed) {
+    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedConfirmed: confirmed } }))
+    try {
+      await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-expected-confirmed', invoiceNumber, confirmed }),
       })
     } catch (e) { console.error(e) }
   }
@@ -315,6 +325,7 @@ export default function InvoicesOwed() {
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('dueDate')}>Due date{arrow('dueDate')}</th>
                       <th style={th}>Overdue</th>
                       <th style={{ ...th, textAlign: 'left' }}>Expected</th>
+                      <th style={th}>Confirmed</th>
                       <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('paid')}>Paid{arrow('paid')}</th>
                       <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('due')}>Due{arrow('due')}</th>
                       <th style={th}>Comments</th>
@@ -322,10 +333,20 @@ export default function InvoicesOwed() {
                   </thead>
                   <tbody>
                     {sorted.map((i, idx) => {
-                      const od = daysOverdue(effDate(i))
+                      // Overdue is judged on the DUE DATE (even if an expected date is set).
+                      const od = daysOverdue(i.dueDate)
                       const overdue = od != null && od > 0 && i.due > 0.005
                       const m = meta[i.invoiceNumber] || {}
                       const nComments = (m.comments || []).length
+                      const dueISO = i.dueDate || ''
+                      const rawExpected = m.expectedDate || ''
+                      const effectiveExpected = rawExpected || dueISO
+                      const expectedAdjusted = !!rawExpected && rawExpected !== dueISO
+                      const expectedConfirmed = !!m.expectedConfirmed
+                      const expOd = daysOverdue(effectiveExpected)
+                      const expectedIsPast = expOd != null && expOd > 0 && i.due > 0.005
+                      const expCol = expectedConfirmed ? '#16a34a' : (expectedAdjusted ? '#ea580c' : '#9ca3af')
+                      const expWeight = overdue ? 700 : 400
                       return (
                         <tr key={(i.invoiceNumber || idx) + '_' + idx} style={{ borderBottom: '1px solid #f2f0ec', background: sel[i.invoiceNumber] ? '#fffbeb' : 'transparent' }}>
                           <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[i.invoiceNumber]} onChange={e => setSel(s => ({ ...s, [i.invoiceNumber]: e.target.checked }))} /></td>
@@ -333,11 +354,21 @@ export default function InvoicesOwed() {
                           <td style={{ ...td, textAlign: 'left', color: '#666', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={i.reference}>{i.reference || '-'}</td>
                           <td style={{ ...td, textAlign: 'left' }}>{i.customer || '-'}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#555' }}>{fmtDate(i.date)}</td>
-                          <td style={{ ...td, textAlign: 'left', color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(i.dueDate)}</td>
+                          <td style={{ ...td, textAlign: 'left', color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 700 : 400 }}>{fmtDate(i.dueDate)}</td>
                           <td style={{ ...td, color: overdue ? '#dc2626' : '#aaa', fontWeight: overdue ? 700 : 400 }}>{overdue ? `${od}d` : (i.settled ? '-' : (od != null && od <= 0 ? `${-od}d left` : '-'))}</td>
                           <td style={{ ...td, textAlign: 'left' }}>
-                            <input type="date" value={m.expectedDate || ''} onChange={e => setExpected(i.invoiceNumber, e.target.value)}
-                              style={{ padding: '4px 6px', border: '1px solid #e2e0da', borderRadius: 6, fontSize: 12 }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <input type="date" value={effectiveExpected || ''} onChange={e => setExpected(i.invoiceNumber, e.target.value)}
+                                style={{ padding: '4px 6px', border: '1px solid ' + (expectedConfirmed ? '#86efac' : (expectedAdjusted ? '#fed7aa' : '#e2e0da')), borderRadius: 6, fontSize: 12, color: expCol, fontWeight: expWeight, background: expectedConfirmed ? '#f0fdf4' : (expectedAdjusted ? '#fff7ed' : '#fff') }} />
+                              {expectedIsPast && <span title="The expected payment date is in the past" style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 2 }}>&#9888; Expected Date Past</span>}
+                            </div>
+                          </td>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            <button onClick={() => setConfirmed(i.invoiceNumber, !expectedConfirmed)}
+                              title={expectedConfirmed ? 'Confirmed - click to un-confirm' : 'Not confirmed - click to confirm the expected date'}
+                              style={{ border: '1px solid ' + (expectedConfirmed ? '#86efac' : '#fed7aa'), background: expectedConfirmed ? '#dcfce7' : '#fff7ed', color: expectedConfirmed ? '#16a34a' : '#ea580c', borderRadius: 12, padding: '3px 10px', fontSize: 10.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {expectedConfirmed ? '\u2713 Confirmed' : 'Not confirmed'}
+                            </button>
                           </td>
                           <td style={{ ...td, color: '#166534' }}>{i.paid ? gbp(i.paid) : '-'}</td>
                           <td style={{ ...td, fontWeight: 700, color: i.due > 0.005 ? INK : '#999' }}>{gbp(i.due)}</td>
@@ -350,7 +381,7 @@ export default function InvoicesOwed() {
                         </tr>
                       )
                     })}
-                    {sorted.length === 0 && <tr><td colSpan={11} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No invoices match the current filters.</td></tr>}
+                    {sorted.length === 0 && <tr><td colSpan={12} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No invoices match the current filters.</td></tr>}
                   </tbody>
                 </table>
               </div>

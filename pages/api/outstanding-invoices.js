@@ -86,7 +86,7 @@ export default async function handler(req, res) {
     if (!invoiceNumber) return res.status(400).json({ error: 'invoiceNumber required' })
     let meta = {}
     try { meta = (await redis.get(META_KEY)) || {} } catch {}
-    if (!meta[invoiceNumber]) meta[invoiceNumber] = { expectedDate: '', comments: [] }
+    if (!meta[invoiceNumber]) meta[invoiceNumber] = { expectedDate: '', expectedConfirmed: false, comments: [] }
 
     if (action === 'record-chase') {
       // Record that a chase-email stage was sent for this invoice. Timeline never
@@ -158,6 +158,14 @@ export default async function handler(req, res) {
 
     if (action === 'set-expected') {
       meta[invoiceNumber].expectedDate = req.body.expectedDate || ''
+      // Changing the expected date invalidates a prior confirmation.
+      meta[invoiceNumber].expectedConfirmed = false
+      await redis.set(META_KEY, meta)
+      return res.json({ ok: true, meta: meta[invoiceNumber] })
+    }
+
+    if (action === 'set-expected-confirmed') {
+      meta[invoiceNumber].expectedConfirmed = !!req.body.confirmed
       await redis.set(META_KEY, meta)
       return res.json({ ok: true, meta: meta[invoiceNumber] })
     }

@@ -412,8 +412,8 @@ export default function OutstandingInvoicesPage() {
   }
 
   async function setExpected(invoiceNumber, expectedDate) {
-    // optimistic
-    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedDate } }))
+    // optimistic - changing the date also clears any prior confirmation
+    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedDate, expectedConfirmed: false } }))
     try {
       await fetch('/api/outstanding-invoices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -422,9 +422,20 @@ export default function OutstandingInvoicesPage() {
     } catch {}
   }
 
+  async function setConfirmed(invoiceNumber, confirmed) {
+    setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedConfirmed: confirmed } }))
+    try {
+      await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-expected-confirmed', invoiceNumber, confirmed }),
+      })
+    } catch {}
+  }
+
   const today = new Date(); today.setHours(0, 0, 0, 0)
 
   const rows = useMemo(() => {
+    const toISO = (d) => d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : ''
     let r = invoices.map(inv => {
       const dd = parseDMY(inv.dueDate)
       // Xero counts the overdue period inclusively (the day after the due date is
@@ -432,7 +443,21 @@ export default function OutstandingInvoicesPage() {
       const gap = dd ? daysBetween(today, dd) : null
       const overdueBy = gap != null && gap >= 0 ? gap + 1 : gap
       const m = meta[inv.invoiceNumber] || {}
-      return { ...inv, overdueBy: (overdueBy > 0 && !inv.settled) ? overdueBy : null, expectedDate: m.expectedDate || '', commentCount: (m.comments || []).length }
+      const dueISO = dd ? toISO(dd) : ''
+      const rawExpected = m.expectedDate || ''
+      // Expected date defaults to the due date when nothing has been entered.
+      const effectiveExpected = rawExpected || dueISO
+      const expectedAdjusted = !!rawExpected && rawExpected !== dueISO
+      const expectedConfirmed = !!m.expectedConfirmed
+      const expDate = parseDMY(effectiveExpected)
+      const expectedIsPast = !!expDate && expDate < today && !inv.settled
+      return {
+        ...inv,
+        overdueBy: (overdueBy > 0 && !inv.settled) ? overdueBy : null,
+        expectedDate: rawExpected, effectiveExpected, dueISO,
+        expectedAdjusted, expectedConfirmed, expectedIsPast,
+        commentCount: (m.comments || []).length,
+      }
     })
     // Outstanding (default) hides settled/paid invoices; All shows everything.
     if (view === 'outstanding') r = r.filter(x => !x.settled)
@@ -602,6 +627,7 @@ export default function OutstandingInvoicesPage() {
                         <th style={th}>Due Date</th>
                         <th style={th}>Overdue</th>
                         <th style={th}>Expected</th>
+                        <th style={th}>Confirmed</th>
                         <th style={thR}>Paid</th>
                         <th style={thR}>Due</th>
                         <th style={th}>Comments</th>
@@ -628,8 +654,26 @@ export default function OutstandingInvoicesPage() {
                             <td style={{ ...td, color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(r.dueDate)}</td>
                             <td style={{ ...td, color: '#dc2626', fontWeight: 700 }}>{r.overdueBy ? `${r.overdueBy}d` : ''}</td>
                             <td style={td}>
-                              <input type="date" value={r.expectedDate || ''} onChange={e => setExpected(r.invoiceNumber, e.target.value)}
-                                style={{ fontSize: 11, padding: '3px 5px', border: '1px solid #e5e5e5', borderRadius: 5, fontFamily: 'inherit' }} />
+                              {(() => {
+                                // Colour: light grey if unchanged (defaults to due date); green
+                                // if confirmed; orange if adjusted but not confirmed. Bold when overdue.
+                                const col = r.expectedConfirmed ? '#16a34a' : (r.expectedAdjusted ? '#ea580c' : '#9ca3af')
+                                const weight = overdue ? 700 : 400
+                                return (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    <input type="date" value={r.effectiveExpected || ''} onChange={e => setExpected(r.invoiceNumber, e.target.value)}
+                                      style={{ fontSize: 11, padding: '3px 5px', border: '1px solid ' + (r.expectedConfirmed ? '#86efac' : (r.expectedAdjusted ? '#fed7aa' : '#e5e5e5')), borderRadius: 5, fontFamily: 'inherit', color: col, fontWeight: weight, background: r.expectedConfirmed ? '#f0fdf4' : (r.expectedAdjusted ? '#fff7ed' : '#fff') }} />
+                                    {r.expectedIsPast && <span title="The expected payment date is in the past" style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 2 }}>&#9888; Expected Date Past</span>}
+                                  </div>
+                                )
+                              })()}
+                            </td>
+                            <td style={tdC}>
+                              <button onClick={() => setConfirmed(r.invoiceNumber, !r.expectedConfirmed)}
+                                title={r.expectedConfirmed ? 'Confirmed - click to un-confirm' : 'Not confirmed - click to confirm the expected date'}
+                                style={{ border: '1px solid ' + (r.expectedConfirmed ? '#86efac' : '#fed7aa'), background: r.expectedConfirmed ? '#dcfce7' : '#fff7ed', color: r.expectedConfirmed ? '#16a34a' : '#ea580c', borderRadius: 12, padding: '3px 10px', fontSize: 10.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                {r.expectedConfirmed ? '\u2713 Confirmed' : 'Not confirmed'}
+                              </button>
                             </td>
                             <td style={{ ...td, textAlign: 'right', color: '#555' }}>{fmt(r.paid)}</td>
                             <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: r.settled ? '#16a34a' : (overdue ? '#dc2626' : '#1a1a2e') }}>{fmt(r.due)}</td>

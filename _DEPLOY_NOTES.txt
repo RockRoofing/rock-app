@@ -1,57 +1,39 @@
-DEPLOY NOTES - Invoice Finance availability page + Cash Flow wiring
-===================================================================
+DEPLOY NOTES - Expected date behaviour (Commercial + Business Financials)
+=========================================================================
 
-FOUR files. THREE are edits. ONE is NEW.
+THREE files, all EDITS - just replace them. Changes apply to BOTH the Commercial
+"Outstanding Invoices" page and the Business Financials "Invoices Owed" page, and
+they share the same stored data.
 
-** NEW FILE - add via GitHub "Add file" (a zip can't create it) **
-  pages/business-financials/invoice-finance.js
+  pages/outstanding-invoices.js             (Commercial page)
+  pages/business-financials/invoices.js     (Business Financials page)
+  pages/api/outstanding-invoices.js         (stores the new "confirmed" flag)
 
-EDITS (replace):
-  components/BizNav.js                      (new "Invoice Finance" tab, after Cash Flow)
-  pages/api/business-financials.js         (invoice-finance view + save; availability into cashflow)
-  pages/business-financials/cashflow.js    (max cash now uses calculated IF availability)
+EXPECTED DATE COLUMN - new behaviour
+------------------------------------
+- Auto-set to the DUE DATE and shown LIGHT GREY until you change it.
+- If you adjust it: ORANGE, not bold.
+- If you adjust it AND the invoice is overdue (by due date): ORANGE and BOLD.
+- Once CONFIRMED (new column): the date turns GREEN (bold if overdue, else normal).
 
------------------------------------------------------
-INVOICE FINANCE PAGE (Bibby availability - v1)
------------------------------------------------------
-Answers "how much can Bibby make available right now", built from your Xero sales
-ledger + the insured limits.
+OVERDUE still shows even with an expected date
+----------------------------------------------
+Overdue is judged on the DUE DATE, so entering an expected date does NOT hide an
+overdue invoice - the Due date and Overdue columns stay RED and BOLD as normal.
 
-  For each debtor:  eligible advance = min( 60% x outstanding , insured limit )
-  Debtors with NO insured limit are excluded (flagged amber so you can spot them).
-  "Materials only" debtors can be ticked to exclude (Bibby don't advance materials).
-  Availability now = total eligible advance  -  currently drawn.
+"EXPECTED DATE PAST" warning
+----------------------------
+If the (effective) expected date is in the past, a red warning appears under the
+date: "! Expected Date Past" with a warning symbol.
 
-Set-up:
-  - Advance rate defaults to 60% (editable).
-  - Enter "currently drawn" (from Bibby) so availability nets it off.
-  - Insured limits: type per debtor, OR click "Import Bibby limit list (CSV)" and
-    select your exported list. It reads Buyer Name + Approved Amount, sums duplicate
-    buyers (e.g. EPC's two CLNs), and matches names to your Xero debtors (ignoring
-    Ltd/Limited/punctuation differences). Unmatched buyers are kept under the Bibby
-    name and reported so you can reconcile. Then click Save.
+NEW "CONFIRMED" COLUMN
+----------------------
+A toggle button per invoice:
+  - Not confirmed = ORANGE ("Not confirmed")
+  - Confirmed = GREEN ("Confirmed")
+Confirming turns the expected-date field green. Changing the expected date
+automatically resets it back to "Not confirmed" (so a new date must be re-confirmed).
 
-The debtor table shows outstanding, insured limit, raw vs capped advance, and a
-status (Full advance / Capped at limit / No insured limit / Materials only).
-
------------------------------------------------------
-YOUR QUESTION: how does the forecast handle the changing IF balance + invoices
-paid off against it?
------------------------------------------------------
-The Cash Flow "Max cash available" now pulls the CALCULATED availability from this
-page (not a static typed number). So as invoices are raised/collected in Xero and
-as you update "drawn", the availability - and therefore max cash available - moves
-with it. The manual IF limit/drawn boxes on Cash Flow are now only a fallback if the
-Invoice Finance page hasn't been set up.
-
-NOTE (honest): this gives you an accurate CURRENT availability that updates every
-time you refresh. It does not yet roll the drawdown forward week-by-week inside the
-13-week grid (advancing new invoices / repaying as customers pay across future
-weeks). That "rolling facility ledger" is the natural next step once you've
-confirmed this current-availability figure reconciles to Bibby. Say the word and
-I'll build it on top.
-
-v1 simplifications (as agreed): disallowed/overdue handled manually (lower the
-insured limit or tick materials-only); final applications not auto-excluded yet.
+The confirmed state is saved and shared between both pages.
 
 BUILD: next build -> Compiled successfully.
