@@ -148,7 +148,50 @@ export default async function handler(req, res) {
     })
   }
 
-  // -- Transactions for one overhead account + month (cell drill-down) --
+  // -- Sales by transaction date (includes WIP, which posts to code 200) --
+  // Monthly totals from the P&L benchmark (sales codes); line-level detail from the
+  // stored sales ledger captured at sync time.
+  if (view === 'sales') {
+    const bm = benchmark.months || {}
+    const normCategory = (code) => {
+      const c = CATEGORY_OF(code, catConfig)
+      if (String(code) === '200') return 'sales'
+      return c
+    }
+    // Sales codes = code 200 plus anything categorised 'sales'.
+    const salesCodes = new Set(['200'])
+    for (const code of Object.keys(catConfig)) if (normCategory(code) === 'sales') salesCodes.add(String(code))
+
+    // Monthly sales totals (magnitude) from the benchmark.
+    const byMonth = {}
+    for (const mo of Object.keys(bm)) {
+      let sum = 0
+      const codes = bm[mo].byCode || {}
+      for (const code of salesCodes) if (codes[code] != null) sum += Math.abs(codes[code])
+      if (sum !== 0 || codes['200'] != null) byMonth[mo] = Math.round(sum * 100) / 100
+    }
+
+    const ledger = (await redis.get('sales:ledger').catch(() => null)) || { byCodeMonth: {} }
+    // Flatten ledger lines to a single list (sales amounts are credits => negative in
+    // the ledger; show as positive sales).
+    const lines = []
+    for (const code of Object.keys(ledger.byCodeMonth || {})) {
+      for (const mo of Object.keys(ledger.byCodeMonth[code] || {})) {
+        for (const l of ledger.byCodeMonth[code][mo]) {
+          lines.push({ ...l, code, month: mo, amount: -(l.amount || 0) })   // flip sign so sales are positive
+        }
+      }
+    }
+    lines.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+
+    return res.json({
+      byMonth,
+      lines,
+      salesCodes: [...salesCodes],
+      benchmarkUpdatedAt: benchmark.updatedAt || null,
+      ledgerUpdatedAt: ledger.updatedAt || null,
+    })
+  }
   // Reads the stored ledger captured at sync time (view=overhead-transactions).
   if (view === 'overhead-transactions') {
     const code = String(req.query.code || (req.body && req.body.code) || '')

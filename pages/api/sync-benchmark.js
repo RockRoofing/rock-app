@@ -65,11 +65,9 @@ export default async function handler(req, res) {
     const payload = { months: mergedMonths, updatedAt: new Date().toISOString() }
     await redis.set('xero:pl-benchmark', payload)
 
-    // -- Overhead transaction ledger (for the Budgets page cell drill-down) --
-    // Pull the general ledger once and keep only lines for OVERHEAD account codes,
-    // grouped by account/month. Full-replace so back-dated bills, credit notes,
-    // edits and voids in the last window are all picked up. If this fails we still
-    // return the P&L sync as OK (the drill-down just won't have data).
+    // -- General-ledger pull for OVERHEAD and SALES codes (one pass) --
+    // Used by the Budgets cell drill-down (overheads) and the new Sales page (sales).
+    // Full-replace so back-dated items, credit notes, edits and voids are picked up.
     let ledgerMonths = 0
     try {
       const catConfig = (await redis.get('config:account-categorisation').catch(() => null)) || {}
@@ -82,25 +80,37 @@ export default async function handler(req, res) {
         if (String(code) === '200') return 'sales'
         return 'materials'
       }
-      // Overhead codes = tagged overheads in config, plus any P&L code in the
-      // benchmark that resolves to overheads.
       const overheadCodes = new Set()
-      for (const code of Object.keys(catConfig)) if (normCat(code) === 'overheads') overheadCodes.add(String(code))
-      for (const mo of Object.keys(mergedMonths)) {
-        for (const code of Object.keys(mergedMonths[mo].byCode || {})) {
-          if (normCat(code) === 'overheads') overheadCodes.add(String(code))
-        }
+      const salesCodes = new Set()
+      const consider = (code) => {
+        const cat = normCat(code)
+        if (cat === 'overheads') overheadCodes.add(String(code))
+        else if (cat === 'sales') salesCodes.add(String(code))
       }
-      // Window start = earliest month we pulled (first of that month).
+      for (const code of Object.keys(catConfig)) consider(code)
+      for (const mo of Object.keys(mergedMonths)) {
+        for (const code of Object.keys(mergedMonths[mo].byCode || {})) consider(code)
+      }
+      salesCodes.add('200')   // Sales is always code 200
+
       const monthKeys = Object.keys(months).sort()
       const fromDateStr = monthKeys.length ? `${monthKeys[0]}-01` : null
-      if (overheadCodes.size && fromDateStr) {
-        const { byCodeMonth } = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, overheadCodes)
-        await redis.set('overhead:ledger', { byCodeMonth, updatedAt: new Date().toISOString(), fromDate: fromDateStr })
+      const allCodes = new Set([...overheadCodes, ...salesCodes])
+      if (allCodes.size && fromDateStr) {
+        const { byCodeMonth } = await fetchGeneralLedgerByAccountMonth(tokens.access_token, tenantId, fromDateStr, allCodes)
+        // Split into overhead vs sales ledgers.
+        const ohLedger = {}, salesLedger = {}
+        for (const code of Object.keys(byCodeMonth)) {
+          if (overheadCodes.has(code)) ohLedger[code] = byCodeMonth[code]
+          if (salesCodes.has(code)) salesLedger[code] = byCodeMonth[code]
+        }
+        const now = new Date().toISOString()
+        await redis.set('overhead:ledger', { byCodeMonth: ohLedger, updatedAt: now, fromDate: fromDateStr })
+        await redis.set('sales:ledger', { byCodeMonth: salesLedger, updatedAt: now, fromDate: fromDateStr })
         ledgerMonths = Object.keys(byCodeMonth).length
       }
     } catch (e) {
-      console.error('overhead ledger pull failed:', e.message)
+      console.error('ledger pull failed:', e.message)
     }
 
     res.json({ ok: true, monthsPulled, ledgerAccounts: ledgerMonths, updatedAt: payload.updatedAt })

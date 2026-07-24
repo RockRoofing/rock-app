@@ -1,39 +1,67 @@
-DEPLOY NOTES - Invoices Owed: tick totals, supplier filter, two charts
-======================================================================
+DEPLOY NOTES - New Sales page (by transaction date, incl. WIP)
+=============================================================
 
-CHANGES
+WHAT IT IS
+----------
+A new "Sales" tab under Business Financials showing sales by transaction date,
+INCLUDING WIP (which posts to Sales code 200 in your Xero). Chosen source (as agreed):
+  - CHART (top): monthly sales totals from the P&L benchmark, sales code 200 - this
+    already includes WIP. Bar chart by month.
+  - DETAIL TABLE (below): line-level general-ledger entries for the sales code(s) -
+    every sales transaction incl. WIP journals - with Date, Description, Reference,
+    Code, Amount, sortable, date-filterable, with a running total.
+
+HOW THE DATA IS PULLED
+----------------------
+The existing "Sync Xero figures" run now pulls the general ledger for BOTH overhead
+AND sales codes in ONE pass (no extra API cost beyond what Budgets already added), and
+stores a new key sales:ledger. The chart reads the P&L benchmark (already stored); the
+detail reads sales:ledger.
+
+IMPORTANT - SYNC ONCE
+---------------------
+The detail table needs the sales ledger, which only populates on a sync with this new
+code:
+  1. Deploy all files, hard-refresh.
+  2. Open the Sales tab and click "Sync Xero figures" once.
+  3. Chart shows immediately (from the existing benchmark); the detail table fills in
+     after the sync completes.
+
+NEW NAV
 -------
-1) TICK BOXES on each invoice row + a "Selected" total at the top (next to Total due).
-   Tick rows to tally them up; header checkbox selects/clears all shown rows.
-2) SORTABLE COLUMNS (INV No, Ref, To, Date, Due date, Paid, Due) - click a header to
-   sort, click again to reverse. Already default-sorted by DUE DATE, OLDEST FIRST.
-3) SUPPLIER (customer) FILTER: type-ahead search, multi-select. Empty = all customers.
-   "Clear" / "Select shown" helpers.
-4) TWO CHARTS side by side:
-   - LEFT "Invoices falling due by month (all)": everything falling due in the date/
-     outstanding view - NOT affected by the customer filter or row ticks (stays "all").
-   - RIGHT: shows ticked rows if any are ticked; otherwise follows the customer + date
-     filters. Title says which mode it's in. (Blue = right, green = left.)
+A "Sales" tab is added to the Business Financials nav (between Budgets and Bills).
 
-Everything else (columns, Expected date, shared comments, full width) unchanged.
+FILES
+-----
+1. NEW   pages/business-financials/sales.js   <-- NEW FILE - create it in GitHub
+2. EDIT  pages/api/business-financials.js       (adds view=sales)
+3. EDIT  pages/api/sync-benchmark.js            (pulls overhead + sales ledger; stores sales:ledger)
+4. EDIT  components/BizNav.js                    (adds the Sales tab)
 
-FILE (single EDIT - no new files)
----------------------------------
-  - pages/business-financials/invoices.js
+NOTE: sales.js is a NEW file - the zip can't create it for you; add it via GitHub
+"Add file" in pages/business-financials/, then replace the three edited files.
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
+Add sales.js, replace the 3 edited files. Commit -> Vercel "Ready" -> hard-refresh ->
+open Sales -> Sync Xero figures.
 
 VERIFY
 ------
-  - Tick a few rows -> "Selected" total updates and the RIGHT chart switches to just
-    those rows; the LEFT chart stays as all invoices due.
-  - Type in the customer box -> list narrows; pick several -> table + right chart follow;
-    left chart unchanged.
-  - Click headers to sort; default is due date oldest-first.
+  - Sales tab appears; chart shows monthly sales (incl. WIP) from the P&L.
+  - After sync: detail table lists individual sales ledger lines; the table total for a
+    full month should match that month's chart bar (small differences only if a sales
+    entry posted after the ledger pull).
+  - Date filter adjusts both chart and table; columns sortable.
+
+RECONCILIATION NOTE
+-------------------
+Chart = P&L monthly total (authoritative for "sales incl. WIP"). Table = ledger lines.
+They come from the same underlying data captured at the same sync, so a full month's
+lines should sum to that month's bar. If you see a gap, it's usually a timing thing -
+re-sync. Tell me the month + the two figures if it persists.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
-return.
+Validated with `next build` -> "Compiled successfully". Sales sign logic unit-checked
+(credits show as positive sales).
