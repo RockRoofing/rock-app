@@ -192,7 +192,7 @@ export default async function handler(req, res) {
     for (const code of Object.keys(ledger.byCodeMonth || {})) {
       for (const mo of Object.keys(ledger.byCodeMonth[code] || {})) {
         for (const l of ledger.byCodeMonth[code][mo]) {
-          lines.push({ ...l, code, month: mo, amount: -(l.amount || 0) })   // flip sign so sales are positive
+          lines.push({ ...l, code, month: mo, amount: (l.amount || 0) })   // ledger already signed: sales +, reductions -
         }
       }
     }
