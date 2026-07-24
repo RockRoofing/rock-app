@@ -1,36 +1,46 @@
-DEPLOY NOTES - Sales: per-month reconciliation strip (to pinpoint May)
-=====================================================================
+DEPLOY NOTES - Sales: May now matches Xero (exclude draft/submitted invoices)
+=============================================================================
 
-May still shows the wrong figure, so I need to see EXACTLY what it's made of rather than
-guess. This adds a reconciliation strip that appears when you click a month.
+FOUND IT (from your reconciliation strip)
+-----------------------------------------
+Your May strip: lines £102,521 vs P&L £92,417 (diff £10,105), by source:
+  Manual journal £69,169  (correct: WIP May 145,340 - WIP Apr reversal 76,172 = 69,168)
+  Credit note   -£26,740  (correct: CN-1686 -26,230 + CN-1688 -510)
+  Invoice        £60,093  (TOO HIGH - Xero's May invoices sum to £49,988)
 
-WHAT TO DO
-----------
-1. Deploy this file. Hard-refresh Sales. (No sync needed - it reads existing data.)
-2. Click the MAY bar (or the May row via the month).
-3. A yellow strip appears above the table showing:
-     "May 26 reconciliation: lines total <X> (<n> lines) vs P&L <Y> (diff <Z>)
-      - by source: Invoice: <a> | Manual journal: <b> | Credit note: <c> | Bank receipt: <d>"
+So invoices were £10,105 too high. Cause: the fetch counted ALL ACCREC invoices
+regardless of status, including DRAFT / SUBMITTED ones. Xero's P&L only counts
+AUTHORISED / PAID invoices, so those unapproved invoices inflated the app.
 
-SEND ME THAT STRIP. It tells us instantly which it is:
-  - If one SOURCE is negative when it should be positive (or vice-versa) -> a sign issue
-    on that source only.
-  - If "Manual journal" is roughly DOUBLE the expected WIP -> double counting.
-  - If the P&L diff is large and one source is missing -> a missing transaction type.
-  - If lines total is the NEGATIVE of the right number -> a total-level sign flip.
+THE FIX
+-------
+Only count invoices (and credit notes) with status AUTHORISED or PAID; DRAFT, SUBMITTED,
+VOIDED and DELETED are ignored - exactly as the P&L does.
 
-Right now the app shows May = -102,521 while Xero = +92,417. The visible rows appeared to
-sum to +102,522 (same size, opposite sign), which this strip will confirm or correct by
-showing the true per-source breakdown and line count.
+Verified arithmetic: 69,169 (MJ) - 26,740 (CN) + 49,988 (authorised invoices) =
+92,417 = Xero's May running balance. Match.
+
+*** REQUIRES A RE-SYNC ***
+Deploy -> Sales -> "Sync Xero figures" to re-pull with the status filter. May should
+then read 92,417 and its reconciliation strip should say "(match)".
 
 FILE (single EDIT - no new files)
 ---------------------------------
-  - pages/business-financials/sales.js
+  - lib/xero.js   (invoices + credit notes: AUTHORISED/PAID only)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> click May -> send the strip.
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh -> Sync Xero figures.
+
+VERIFY
+------
+- Click May -> reconciliation strip shows lines total 92,417 vs P&L 92,417 (match).
+- Invoice source total for May = ~49,988.
+- Other months still match (they were already right; this only removes unapproved
+  invoices, which most months didn't have).
+- The chart bar for May should stay the same (P&L was already 92,417) and now equals the
+  table total.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". May unit-checked to 92,417.
