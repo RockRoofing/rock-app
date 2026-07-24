@@ -1,30 +1,21 @@
-DEPLOY NOTES - Business Financials "Invoices Owed": sales invoices only + columns + comments
-============================================================================================
-
-WHAT WAS WRONG
---------------
-The Business Financials "Invoices Owed" page pulled from view=invoices, which was
-bringing in the wrong data (costs). It now uses the SAME data source as the commercial
-Outstanding Invoices page (which matches Xero):
-  - Invoice lines from /api/dashboard (projects[]._invoiceLines) - sales invoices (ACCREC).
-  - Manual meta (expected date + comments) from /api/outstanding-invoices (shared store
-    invoice:meta).
-So it will now match Xero exactly like the Outstanding Invoices page does.
+DEPLOY NOTES - Invoices Owed: tick totals, supplier filter, two charts
+======================================================================
 
 CHANGES
 -------
-1) SALES INVOICES ONLY - no more costs. Same source/API/data location as Outstanding
-   Invoices.
-2) GRAPH KEPT - "Invoices falling due by month" (green), now follows the filters.
-3) FULL WIDTH page.
-4) COLUMNS from your screenshot: INV No, Ref, To (customer), Date, Due date, Overdue
-   (days late / days left), Expected (editable date - saved to shared meta), Paid, Due,
-   Comments.
-5) COMMENTS: click the Comments button on any row to VIEW and ADD comments (with @Name
-   mentions). These are the SAME comments as the Outstanding Invoices / Invoices Owed
-   commercial page - they read and write the shared invoice:meta store, so a comment
-   added here shows there and vice versa. You can also delete comments.
-6) Outstanding/All toggle + date range (default ~12 months, 2 ahead) + sortable columns.
+1) TICK BOXES on each invoice row + a "Selected" total at the top (next to Total due).
+   Tick rows to tally them up; header checkbox selects/clears all shown rows.
+2) SORTABLE COLUMNS (INV No, Ref, To, Date, Due date, Paid, Due) - click a header to
+   sort, click again to reverse. Already default-sorted by DUE DATE, OLDEST FIRST.
+3) SUPPLIER (customer) FILTER: type-ahead search, multi-select. Empty = all customers.
+   "Clear" / "Select shown" helpers.
+4) TWO CHARTS side by side:
+   - LEFT "Invoices falling due by month (all)": everything falling due in the date/
+     outstanding view - NOT affected by the customer filter or row ticks (stays "all").
+   - RIGHT: shows ticked rows if any are ticked; otherwise follows the customer + date
+     filters. Title says which mode it's in. (Blue = right, green = left.)
+
+Everything else (columns, Expected date, shared comments, full width) unchanged.
 
 FILE (single EDIT - no new files)
 ---------------------------------
@@ -32,25 +23,17 @@ FILE (single EDIT - no new files)
 
 DEPLOY
 ------
-Replace the file. Commit -> Vercel "Ready" -> hard-refresh. No sync button here - it
-reads the same live dashboard data the Outstanding Invoices page uses (sync invoices
-from that page or the existing invoice sync as before).
+Replace the file. Commit -> Vercel "Ready" -> hard-refresh.
 
 VERIFY
 ------
-  - Only sales invoices (INV- numbers, customers as "To"); totals match Xero like the
-    Outstanding Invoices page.
-  - Columns match your screenshot; Expected date is editable and persists.
-  - Comments button opens a pop-out; adding a comment here appears on the Outstanding
-    Invoices page too.
-  - Page is full width; graph retained.
-
-NOTE
-----
-The "Expected" and comments are stored per invoice NUMBER, shared with the other page.
-If an invoice has no number (rare), its expected/comments can't be keyed - tell me if
-you hit that and I'll add a fallback key.
+  - Tick a few rows -> "Selected" total updates and the RIGHT chart switches to just
+    those rows; the LEFT chart stays as all invoices due.
+  - Type in the customer box -> list narrows; pick several -> table + right chart follow;
+    left chart unchanged.
+  - Click headers to sort; default is due date oldest-first.
 
 BUILD
 -----
-Validated with `next build` -> "Compiled successfully".
+Validated with `next build` -> "Compiled successfully". Hooks confirmed above the early
+return.

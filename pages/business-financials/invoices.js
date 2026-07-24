@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -50,6 +50,13 @@ export default function InvoicesOwed() {
   const [view, setView] = useState('outstanding')   // outstanding | all
   const [sortKey, setSortKey] = useState('dueDate')
   const [sortDir, setSortDir] = useState('asc')
+  const [sel, setSel] = useState({})   // { invoiceNumber: true }
+
+  // Supplier (customer) multi-select filter with type-ahead.
+  const [custPick, setCustPick] = useState([])
+  const [custOpen, setCustOpen] = useState(false)
+  const [custSearch, setCustSearch] = useState('')
+  const custRef = useRef(null)
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -98,6 +105,12 @@ export default function InvoicesOwed() {
   }
   useEffect(() => { if (ok) loadAll() }, [ok])
 
+  useEffect(() => {
+    function onDoc(e) { if (custRef.current && !custRef.current.contains(e.target)) setCustOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+
   async function setExpected(invoiceNumber, expectedDate) {
     setMeta(m => ({ ...m, [invoiceNumber]: { ...(m[invoiceNumber] || { comments: [] }), expectedDate } }))
     try {
@@ -108,16 +121,34 @@ export default function InvoicesOwed() {
     } catch (e) { console.error(e) }
   }
 
+  // All customer names (respecting the outstanding/all + date filters, but not the
+  // customer pick itself) for the filter list.
+  const dateViewFiltered = useMemo(() => invoices.filter(i => {
+    if (view === 'outstanding' && i.settled) return false
+    const d = i.dueDate || ''
+    if (from && d && d < from) return false
+    if (to && d && d > to) return false
+    if (from && !d) return false
+    return true
+  }), [invoices, view, from, to])
+
+  const allCustomers = useMemo(() => {
+    const s = new Set()
+    for (const i of dateViewFiltered) if (i.customer) s.add(i.customer)
+    return [...s].sort((a, b) => a.localeCompare(b))
+  }, [dateViewFiltered])
+  const custMatches = useMemo(() => {
+    const q = custSearch.trim().toLowerCase()
+    return q ? allCustomers.filter(s => s.toLowerCase().includes(q)) : allCustomers
+  }, [allCustomers, custSearch])
+  const custSet = useMemo(() => new Set(custPick), [custPick])
+
   const filtered = useMemo(() => {
-    return invoices.filter(i => {
-      if (view === 'outstanding' && i.settled) return false
-      const d = i.dueDate || ''
-      if (from && d && d < from) return false
-      if (to && d && d > to) return false
-      if (from && !d) return false
+    return dateViewFiltered.filter(i => {
+      if (custSet.size && !custSet.has(i.customer)) return false
       return true
     })
-  }, [invoices, view, from, to])
+  }, [dateViewFiltered, custSet])
 
   const sorted = useMemo(() => {
     const arr = [...filtered]
@@ -147,11 +178,26 @@ export default function InvoicesOwed() {
   const arrow = (key) => sortKey === key ? (sortDir === 'asc' ? ' \u25B2' : ' \u25BC') : ''
 
   const total = useMemo(() => filtered.reduce((s, i) => s + (i.due || 0), 0), [filtered])
-  const byMonth = useMemo(() => {
+  const selTotal = useMemo(() => sorted.filter(i => sel[i.invoiceNumber]).reduce((s, i) => s + (i.due || 0), 0), [sorted, sel])
+  const selCount = Object.values(sel).filter(Boolean).length
+
+  // LEFT chart: ALL invoices falling due (only the outstanding/all + date view, NOT the
+  // customer filter or row selection). Stays fixed to "all falling due".
+  const byMonthAll = useMemo(() => {
     const m = {}
-    for (const i of filtered) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
+    for (const i of dateViewFiltered) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
     return Object.keys(m).sort().map(k => ({ month: k, amount: Math.round(m[k]) }))
-  }, [filtered])
+  }, [dateViewFiltered])
+
+  // RIGHT chart: ticked rows if any ticked, else the filtered (supplier + date) rows.
+  const byMonthSel = useMemo(() => {
+    const anyTicked = Object.values(sel).some(Boolean)
+    const base = anyTicked ? sorted.filter(i => sel[i.invoiceNumber]) : filtered
+    const m = {}
+    for (const i of base) { const k = monthKey(i.dueDate) || 'No date'; m[k] = (m[k] || 0) + (i.due || 0) }
+    return Object.keys(m).sort().map(k => ({ month: k, amount: Math.round(m[k]) }))
+  }, [sorted, filtered, sel])
+  const rightIsTicked = Object.values(sel).some(Boolean)
   const thisMonth = today.toISOString().slice(0, 7)
 
   if (!ok) return null
@@ -177,30 +223,83 @@ export default function InvoicesOwed() {
             <span style={{ fontSize: 12, color: '#888' }}>and</span>
             <input type="date" value={to} onChange={e => setTo(e.target.value)} style={dateInp} />
             <button onClick={() => { setFrom(defFrom); setTo(defTo) }} style={{ background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer', color: '#666' }}>Reset</button>
-            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>Total due in range: <strong style={{ color: INK }}>{gbp(total)}</strong> - {filtered.length} invoices</span>
+
+            {/* Customer multi-select with type-ahead */}
+            <div ref={custRef} style={{ position: 'relative', minWidth: 240 }}>
+              <div onClick={() => setCustOpen(o => !o)} style={{ ...dateInp, minWidth: 240, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: custPick.length ? INK : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                  {custPick.length ? custPick.join(', ') : 'All customers'}
+                </span>
+                <span style={{ color: '#999' }}>{custOpen ? '\u25B2' : '\u25BC'}</span>
+              </div>
+              {custOpen && (
+                <div style={{ position: 'absolute', top: 40, left: 0, zIndex: 30, background: '#fff', border: '1px solid #e2e0da', borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)', width: 320, padding: 8 }}>
+                  <input autoFocus value={custSearch} onChange={e => setCustSearch(e.target.value)} placeholder="Type to search customers..."
+                    style={{ width: '100%', padding: '7px 9px', border: '1px solid #e2e0da', borderRadius: 7, fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }} />
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <button onClick={() => setCustPick([])} style={miniBtn}>Clear</button>
+                    <button onClick={() => setCustPick(custMatches)} style={miniBtn}>Select shown</button>
+                  </div>
+                  <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                    {custMatches.length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: 8 }}>No customers match.</div>}
+                    {custMatches.map(s => (
+                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', fontSize: 12, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={custSet.has(s)} onChange={() => setCustPick(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <span style={{ marginLeft: 'auto', fontSize: 13, color: '#555' }}>Total due: <strong style={{ color: INK }}>{gbp(total)}</strong> ({filtered.length})</span>
+            <span style={{ fontSize: 13, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '6px 12px' }}>Selected: <strong>{gbp(selTotal)}</strong> ({selCount})</span>
           </div>
 
           {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (
             <>
-              <Card title="Invoices falling due by month" sub="Amount owed to us, by due month">
-                {byMonth.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices due in this range.</div> : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={byMonth} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                      <XAxis dataKey="month" tickFormatter={(m) => m === 'No date' ? 'No date' : monthLbl(m)} tick={{ fontSize: 11 }} />
-                      <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
-                      <Tooltip formatter={(v) => gbp(v)} labelFormatter={(m) => m === 'No date' ? 'No due date' : monthLbl(m)} />
-                      <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
-                      <Bar dataKey="amount" name="Owed" fill="#16a34a" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </Card>
-
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 45%', minWidth: 320 }}>
+                  <Card title="Invoices falling due by month (all)" sub="Everything falling due - unaffected by the customer filter or selection">
+                    {byMonthAll.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices due in this range.</div> : (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={byMonthAll} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                          <XAxis dataKey="month" tickFormatter={(m) => m === 'No date' ? 'No date' : monthLbl(m)} tick={{ fontSize: 11 }} />
+                          <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
+                          <Tooltip formatter={(v) => gbp(v)} labelFormatter={(m) => m === 'No date' ? 'No due date' : monthLbl(m)} />
+                          <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
+                          <Bar dataKey="amount" name="Owed" fill="#16a34a" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </Card>
+                </div>
+                <div style={{ flex: '1 1 45%', minWidth: 320 }}>
+                  <Card title={rightIsTicked ? 'Selected invoices by month (ticked)' : 'Filtered invoices by month'} sub={rightIsTicked ? 'Only the rows you have ticked' : 'Follows the customer + date filters'}>
+                    {byMonthSel.length === 0 ? <div style={{ color: '#bbb', padding: 30, textAlign: 'center' }}>No invoices match the current filter/selection.</div> : (
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={byMonthSel} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                          <XAxis dataKey="month" tickFormatter={(m) => m === 'No date' ? 'No date' : monthLbl(m)} tick={{ fontSize: 11 }} />
+                          <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
+                          <Tooltip formatter={(v) => gbp(v)} labelFormatter={(m) => m === 'No date' ? 'No due date' : monthLbl(m)} />
+                          <ReferenceLine x={thisMonth} stroke="#16a34a" strokeDasharray="4 3" label={{ value: 'now', fontSize: 10, fill: '#16a34a' }} />
+                          <Bar dataKey="amount" name="Owed" fill="#2563eb" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </Card>
+                </div>
+              </div>
               <div style={{ marginTop: 16, background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                      <th style={{ ...th, width: 36 }}>
+                        <input type="checkbox" checked={selCount > 0 && selCount === sorted.length} onChange={e => setSel(e.target.checked ? Object.fromEntries(sorted.map(i => [i.invoiceNumber, true])) : {})} />
+                      </th>
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('invoiceNumber')}>INV No{arrow('invoiceNumber')}</th>
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('reference')}>Ref{arrow('reference')}</th>
                       <th style={{ ...th, textAlign: 'left', cursor: 'pointer' }} onClick={() => toggleSort('customer')}>To{arrow('customer')}</th>
@@ -220,7 +319,8 @@ export default function InvoicesOwed() {
                       const m = meta[i.invoiceNumber] || {}
                       const nComments = (m.comments || []).length
                       return (
-                        <tr key={(i.invoiceNumber || idx) + '_' + idx} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                        <tr key={(i.invoiceNumber || idx) + '_' + idx} style={{ borderBottom: '1px solid #f2f0ec', background: sel[i.invoiceNumber] ? '#fffbeb' : 'transparent' }}>
+                          <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[i.invoiceNumber]} onChange={e => setSel(s => ({ ...s, [i.invoiceNumber]: e.target.checked }))} /></td>
                           <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{i.invoiceNumber || '-'}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#666', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={i.reference}>{i.reference || '-'}</td>
                           <td style={{ ...td, textAlign: 'left' }}>{i.customer || '-'}</td>
@@ -242,7 +342,7 @@ export default function InvoicesOwed() {
                         </tr>
                       )
                     })}
-                    {sorted.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No invoices match the current filters.</td></tr>}
+                    {sorted.length === 0 && <tr><td colSpan={11} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No invoices match the current filters.</td></tr>}
                   </tbody>
                 </table>
               </div>
@@ -340,3 +440,4 @@ const th = { padding: '10px 12px', fontSize: 12, color: '#777', fontWeight: 600,
 const td = { padding: '9px 12px', textAlign: 'right' }
 const dateInp = { padding: '7px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13 }
 const toggle = { padding: '7px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer' }
+const miniBtn = { flex: 1, fontSize: 11, border: '1px solid #e2e0da', background: '#fff', borderRadius: 6, padding: '6px 10px', cursor: 'pointer' }
