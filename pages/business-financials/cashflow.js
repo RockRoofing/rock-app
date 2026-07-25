@@ -423,6 +423,29 @@ export default function CashFlow() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const sum = (k) => forecast.reduce((a, r) => a + (r[k] || 0), 0)
+                    const tIn = sum('invoicesIn'), tRet = sum('retIn'), tVatIn = sum('vatIn')
+                    const tBills = sum('bills'), tOh = sum('overheads'), tComm = sum('commitments')
+                    const tVatOut = sum('vatOut'), tCis = sum('cisOut'), tNet = sum('net')
+                    return (
+                      <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
+                        <td style={{ ...td, textAlign: 'left' }}>13-week total</td>
+                        <td style={{ ...td, color: '#16a34a' }}>{tIn ? gbp(tIn) : '-'}</td>
+                        <td style={{ ...td, color: '#16a34a' }}>{tRet ? gbp(tRet) : '-'}</td>
+                        <td style={{ ...td, color: '#16a34a' }}>{tVatIn ? gbp(tVatIn) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tBills ? gbp(-tBills) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tOh ? gbp(-tOh) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tComm ? gbp(-tComm) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tVatOut ? gbp(-tVatOut) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tCis ? gbp(-tCis) : '-'}</td>
+                        <td style={{ ...td, color: tNet < 0 ? '#dc2626' : '#16a34a' }}>{gbp(tNet)}</td>
+                        <td style={{ ...td }}></td>
+                      </tr>
+                    )
+                  })()}
+                </tfoot>
               </table>
             </div>
 
@@ -472,6 +495,21 @@ export default function CashFlow() {
                         })}
                         {bills.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
                       </tbody>
+                      <tfoot>
+                        {(() => {
+                          const cisTotal = bills.reduce((s, b) => s + (cisFlags[b.id] ? (b.amountDue || 0) * 0.25 : 0), 0)
+                          return (
+                            <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700, position: 'sticky', bottom: 0 }}>
+                              <td style={{ ...td, textAlign: 'left' }}>Total ({bills.length})</td>
+                              <td style={td}></td>
+                              <td style={td}></td>
+                              <td style={{ ...td, fontWeight: 800 }}>{gbp(totalBills)}{cisTotal ? <div style={{ fontSize: 10, color: '#ea580c', fontWeight: 400 }}>+{gbp(cisTotal)} CIS to HMRC</div> : null}</td>
+                              <td style={td}></td>
+                              <td style={td}></td>
+                            </tr>
+                          )
+                        })()}
+                      </tfoot>
                     </table>
                   </div>
                 </div>

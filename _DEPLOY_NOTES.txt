@@ -1,19 +1,31 @@
-DEPLOY NOTES - FIX: Cash Flow page client-side exception
-========================================================
+DEPLOY NOTES - Cash Flow: column totals + bills totals (includes the crash fix)
+===============================================================================
 
-ONE file, an EDIT - just replace it.
+** Use THIS instead of "Cashflow_fix" - it contains that fix PLUS the totals. **
+ONE file, an EDIT.
   pages/business-financials/cashflow.js
 
-WHAT WAS WRONG
-  The Cash Flow page threw "a client-side exception has occurred" on load. Cause: a
-  leftover CIS-diagnostic message block was still referencing three variables
-  (autoCount / anyLineCodes / codeSet) that had been removed. The page compiled fine
-  but crashed at render because those variables no longer existed.
+CHANGES
+1. Crash fix (from the previous package) is included - the orphaned CIS diagnostic
+   block that crashed the page is removed.
 
-FIX
-  Removed the orphaned diagnostic block. The bills table and CIS auto-tick behaviour
-  are unchanged and intact.
+2. Forecast table: a "13-week total" row at the bottom totals every column
+   (invoices in, retention, VAT in, bills out, overheads, vehicles, VAT out, CIS,
+   and net).
 
-Deploy this and the Cash Flow page will load normally again.
+3. Bills to pay table: a sticky "Total" row at the bottom showing the number of
+   bills and the total amount, plus the total CIS-to-HMRC due if any bills are
+   CIS-flagged.
+
+ABOUT THE "OVERHEADS OUT" COLUMN (your question)
+   That column is ONLY the scheduled overheads from the Cash Schedule - not all
+   outgoings. Total weekly out = Bills + Overheads + Vehicles + VAT + CIS (which is
+   what the Net column reflects). The new totals row makes the split clear.
+
+   WATCH-OUT: "Depreciation Expense" (code 416) is currently scheduled in your
+   overheads, but depreciation is a NON-CASH accounting entry - it doesn't actually
+   leave the bank. Including it overstates cash-out by ~£1,101/mo. Consider setting
+   its timing to "- not in forecast -". (Bad debts / Profit-Loss on Disposal are
+   already not set - good.)
 
 BUILD: next build -> Compiled successfully.
