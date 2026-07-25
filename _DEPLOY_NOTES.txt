@@ -1,28 +1,17 @@
-DEPLOY NOTES - Planning: Planned/Actual start + clash detection on shift
-========================================================================
+DEPLOY NOTES - Planning: unlimited historic back-scroll
+=======================================================
 
-** Supersedes "Planning_planned_start" - same two files, now with clash detection.
-   Still Phase 1 (planning gantt) before the Commercial Cash Flow page. **
-
-TWO files, both EDITS - just replace them.
-  pages/api/planning.js
+ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
-INCLUDES (from before)
-  - "Planned / Actual" column before Start; auto-populated from the first on-site bar;
-    blue when future, green once started; blank until the first bar is added.
-  - Editing it shifts the WHOLE project's gantt by the same offset. One project only.
+WHAT CHANGED
+  Historic mode previously stopped scrolling back at a ~6-week floor, so older
+  programmed / actual works couldn't be viewed. Now:
+    - "Historic" still OPENS 2 weeks before today (unchanged default).
+    - You can scroll BACK with no limit (the "<" back button is never disabled) to
+      view any previously programmed or actual works, however far back.
 
-NEW - LABOUR CLASH DETECTION ON SHIFT
-  Moving a project can land its operatives on days they're already booked on OTHER
-  projects. The move is still APPLIED (as agreed), then a red banner appears at the
-  top of the page listing every clash:
-        <Operative name> on <date> - also on <other project>
-  using the same rule as normal allocation (a same-day double-booking is only OK if
-  both are half-days). Dismiss the banner with the x once you've reallocated the
-  clashed days.
-
-  This means you can reschedule freely and immediately see exactly which labour needs
-  sorting, rather than creating silent double-bookings.
+  Nothing else changes - forward horizon, editing, and the clash/planned-start
+  features are all as before.
 
 BUILD: next build -> Compiled successfully.

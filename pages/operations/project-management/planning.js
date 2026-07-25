@@ -106,23 +106,9 @@ export default function PlanningPage() {
   }
   useEffect(() => { load() }, [])
 
-  // Default forward horizon = 3 years; historic view starts 2 weeks before today
-  // and can scroll back to 6 weeks (or as far as data exists).
+  // Default forward horizon = 3 years; historic view opens 2 weeks before today and
+  // can scroll back with no limit.
   const RANGE_WEEKS = 156
-
-  // Earliest allocated day across all projects — lets historic scroll back as far
-  // as there is data, beyond the default 6-week floor.
-  const earliestAlloc = useMemo(() => {
-    if (!data) return null
-    let earliest = null
-    for (const alloc of Object.values(data.allocations || {})) {
-      for (const dk of Object.keys(alloc || {})) {
-        const cd = cellData(alloc[dk]); if (cd.count <= 0) continue
-        if (!earliest || dk < earliest) earliest = dk
-      }
-    }
-    return earliest ? mondayOf(parseISO(earliest)) : null
-  }, [data])
 
   const days = useMemo(() => {
     let start = anchorMonday
@@ -169,16 +155,9 @@ export default function PlanningPage() {
     for (const p of [...liveRows, ...negRows]) t += countOnDay(p, key)
     return t
   }
-  // Historic back-scroll floor: 6 weeks before this Monday, or the earliest
-  // allocation if data goes further back.
-  const sixWeekFloor = mondayOf(addDays(new Date(), -42))
-  const backFloor = earliestAlloc && earliestAlloc < sixWeekFloor ? earliestAlloc : sixWeekFloor
-  const canGoBack = !historic || anchorMonday > backFloor
-  const shift = (deltaWeeks) => setAnchorMonday(m => {
-    let next = mondayOf(addDays(m, deltaWeeks * 7))
-    if (historic && deltaWeeks < 0 && next < backFloor) next = backFloor
-    return next
-  })
+  // Historic mode can scroll back with no limit (default opens 2 weeks before today).
+  const canGoBack = true
+  const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
   // selection helpers (day view only)
   const toggleCell = (key, date) => {
@@ -442,7 +421,7 @@ export default function PlanningPage() {
 
       <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>
         {view === 'day'
-          ? 'Click a day to select it (click again to deselect); drag across days to select a range, then “Allocate labour”. Turn on “Historic” to see and edit past days (last 2 weeks). Edit Start / Contracted Completion directly in the row.'
+          ? 'Click a day to select it (click again to deselect); drag across days to select a range, then “Allocate labour”. Turn on “Historic” to see past days - it opens 2 weeks back and you can scroll back as far as you like to view previously programmed / actual works. Edit Start / Contracted Completion directly in the row.'
           : 'Week view is read-only. Each column is a week; part-weeks are filled proportionally (x/5 working days). Switch to Day view to allocate labour.'}
       </div>
 
