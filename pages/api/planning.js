@@ -142,7 +142,16 @@ export default async function handler(req, res) {
         for (const [d, cell] of Object.entries(days)) moved[shiftISO(d)] = cell
         alloc[key] = moved
         await saveAlloc(alloc)
-        return res.json({ ok: true, shifted: Object.keys(moved).length, offset })
+        // Detect clashes the move created: for each operative on each moved day, check
+        // against OTHER projects using the same rule (double-book only if both halves).
+        const clashes = []
+        for (const [d, cell] of Object.entries(moved)) {
+          for (const e of cellEntries(cell)) {
+            const r = wouldClash(alloc, key, d, e.opId, e.half || 'full')
+            if (r.clash) clashes.push({ opId: e.opId, date: d, otherKey: r.pk, half: e.half || 'full' })
+          }
+        }
+        return res.json({ ok: true, shifted: Object.keys(moved).length, offset, clashes })
       }
 
       if (action === 'assign') {

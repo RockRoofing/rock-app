@@ -1,34 +1,28 @@
-DEPLOY NOTES - Planning gantt: Planned / Actual start column (Phase 1)
-=====================================================================
+DEPLOY NOTES - Planning: Planned/Actual start + clash detection on shift
+========================================================================
 
-** This is PHASE 1 of the Project Cash Flow work - the planning gantt change only.
-   The Commercial Cash Flow page (Phase 2) will be built on top of this next. **
+** Supersedes "Planning_planned_start" - same two files, now with clash detection.
+   Still Phase 1 (planning gantt) before the Commercial Cash Flow page. **
 
 TWO files, both EDITS - just replace them.
-  pages/api/planning.js                              (new 'shift-start' action)
-  pages/operations/project-management/planning.js    (Planned / Actual column)
+  pages/api/planning.js
+  pages/operations/project-management/planning.js
 
-WHAT'S NEW (Operations > Project Management > Planning)
-  A new "Planned / Actual" column sits BEFORE the Start column.
+INCLUDES (from before)
+  - "Planned / Actual" column before Start; auto-populated from the first on-site bar;
+    blue when future, green once started; blank until the first bar is added.
+  - Editing it shifts the WHOLE project's gantt by the same offset. One project only.
 
-  - Start (unchanged) = the CONTRACTED start date.
-  - Planned / Actual = the first on-site day in the gantt (earliest allocated bar).
-    It auto-populates from the gantt, so it can never drift from the real plan.
-      * Blank ("add bars") until the project has its first allocation.
-      * Shows BLUE while it's in the future (planned).
-      * Shows GREEN once it's on/before today (i.e. actually started).
-  - Editing the Planned / Actual date SHIFTS THE WHOLE PROJECT'S GANTT so the first
-    bar lands on the new date - every allocation for that project moves by the same
-    number of days. Only that one project moves. (Shifts silently, as agreed.)
+NEW - LABOUR CLASH DETECTION ON SHIFT
+  Moving a project can land its operatives on days they're already booked on OTHER
+  projects. The move is still APPLIED (as agreed), then a red banner appears at the
+  top of the page listing every clash:
+        <Operative name> on <date> - also on <other project>
+  using the same rule as normal allocation (a same-day double-booking is only OK if
+  both are half-days). Dismiss the banner with the x once you've reallocated the
+  clashed days.
 
-WHY IT MATTERS
-  This makes the plan's timing a single source of truth: move the planned start and
-  the whole sequence follows. The upcoming Commercial Cash Flow page will read this,
-  so cash timing will move automatically with the planned start - Commercial won't
-  need to re-do anything when Operations reschedule.
-
-NOTE: it moves the allocation bars by re-dating them. Marking days Actual is still
-what confirms them; a started project's date naturally becomes the actual start as
-days pass.
+  This means you can reschedule freely and immediately see exactly which labour needs
+  sorting, rather than creating silent double-bookings.
 
 BUILD: next build -> Compiled successfully.

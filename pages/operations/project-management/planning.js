@@ -54,6 +54,7 @@ export default function PlanningPage() {
   const [filters, setFilters] = useState({ project: '', installer: '', from: '', to: '' })
   // selection: { key, dates:Set<iso> }  — active drag project row
   const [sel, setSel] = useState(null)
+  const [shiftClashes, setShiftClashes] = useState(null)   // { projectName, list:[{opId,date,otherKey}] } after a start shift
   const [clipboard, setClipboard] = useState(null)   // { cells:[{offset,status,unnamed,entries}] }
   const [pasting, setPasting] = useState(false)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
@@ -362,6 +363,26 @@ export default function PlanningPage() {
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 4, height: 14, background: '#15803d', display: 'inline-block' }} /> today</span>
       </div>
 
+      {shiftClashes && (() => {
+        const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+        const projName = (k) => { const pr = (data?.projects || []).find(x => x.key === k); return pr ? `${pr.projectNo ? pr.projectNo + ' - ' : ''}${pr.name}` : k }
+        const fmt = (d) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${String(y).slice(2)}` }
+        return (
+          <div style={{ border: '1px solid #fecaca', background: '#fef2f2', borderRadius: 10, padding: '12px 16px', marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ fontWeight: 700, color: '#b91c1c', fontSize: 13 }}>Moving {shiftClashes.projectName} created {shiftClashes.list.length} labour clash{shiftClashes.list.length === 1 ? '' : 'es'} with other projects:</div>
+              <button onClick={() => setShiftClashes(null)} style={{ background: 'none', border: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>&times;</button>
+            </div>
+            <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12.5, color: '#7f1d1d', columns: shiftClashes.list.length > 6 ? 2 : 1 }}>
+              {shiftClashes.list.map((c, i) => (
+                <li key={i} style={{ marginBottom: 2 }}><strong>{opName(c.opId)}</strong> on {fmt(c.date)} - also on {projName(c.otherKey)}</li>
+              ))}
+            </ul>
+            <div style={{ fontSize: 11, color: '#9a4a4a', marginTop: 6 }}>The move has been applied. Resolve these by reallocating labour on the clashed days.</div>
+          </div>
+        )
+      })()}
+
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{ minWidth: NAME_W + DATE_W * 3 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
@@ -405,7 +426,7 @@ export default function PlanningPage() {
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
             {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp} rams={rams[p.key] || {}}
-              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} ops={ops} onClashes={setShiftClashes} />)}
 
             <SectionLabel>WATER INGRESS</SectionLabel>
             <WaterIngressRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setWiDay(dk)} />
@@ -413,7 +434,7 @@ export default function PlanningPage() {
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
             {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
-              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} />)}
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} ops={ops} onClashes={setShiftClashes} />)}
 
           </div>
         </div>
@@ -434,7 +455,7 @@ export default function PlanningPage() {
   )
 }
 
-function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta }) {
+function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta, ops = [], onClashes }) {
   const meta = data.meta[p.key] || {}
   const _today = new Date(); const todayCellKey = iso(_today)
   const [start, setStart] = useState(meta.startDate || '')
@@ -501,8 +522,16 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
   // the new date (all allocations move by the same offset). Blank/no bars = no-op.
   async function shiftStart(newStart) {
     if (!newStart) return
-    await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'shift-start', key: p.key, newStart }) }).catch(() => {})
+    let res = null
+    try {
+      res = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'shift-start', key: p.key, newStart }) }).then(r => r.json())
+    } catch {}
     onSaveMeta && onSaveMeta()
+    if (res && Array.isArray(res.clashes) && res.clashes.length && onClashes) {
+      onClashes({ projectName: `${p.projectNo ? p.projectNo + ' - ' : ''}${p.name}`, list: res.clashes })
+    } else if (onClashes) {
+      onClashes(null)
+    }
   }
 
   const selDates = (sel && sel.key === p.key) ? sel.dates : null
