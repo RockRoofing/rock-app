@@ -1,37 +1,26 @@
-DEPLOY NOTES - FIX: deleted invoices lingering in the app (stale sync)
-=====================================================================
+DEPLOY NOTES - Sync buttons on Business Financials pages
+========================================================
 
-ONE file, an EDIT - just replace it.
-  pages/api/sync-invoices.js
+FOUR files, all EDITS - just replace them.
+  components/BizNav.js                          (new shared SyncButton component)
+  pages/business-financials/invoices.js         (Invoices Owed - sync invoices)
+  pages/business-financials/retentions-due.js   (Retentions - sync invoices)
+  pages/business-financials/budgets.js          (Budgets - sync P&L figures)
 
-THE PROBLEM (confirmed with your data)
-  INV-1721 "TEST" (Ł1,200) showed in the app but had been DELETED in Xero. Re-syncing
-  didn't clear it. Root cause: when merging freshly-synced invoices with previously
-  stored ones, the old code kept every stored line whose date was before the sync
-  window OR had no date at all:
-        existing.filter(l => !l.date || l.date < winStr)
-  A deleted invoice is simply absent from Xero's response, so it was never overwritten;
-  and because the stale line had a missing or odd date, the "!l.date" clause kept it
-  alive on every single sync - forever.
+WHAT'S NEW
+  A gold "Sync from Xero" button on each page, which pulls fresh data and reloads:
 
-THE FIX
-  1. Old lines are now kept ONLY if they are genuinely dated AND before the sync window.
-     Anything inside the window (or undated) is taken fresh from Xero each run, so a
-     deleted/voided invoice disappears on the next sync.
-  2. Every project that already has stored invoice lines is reconciled even if it has
-     no fresh invoices this run - so a project whose only invoice was deleted still gets
-     cleaned up (previously it was skipped entirely).
+  - Invoices Owed  -> "Sync invoices from Xero" (POST /api/sync-invoices). Same sync
+    as the bookkeeping page; shows matched/unassigned counts when done.
+  - Retentions Due -> "Sync from Xero" (POST /api/sync-invoices). Retention figures
+    come from invoices (account 612), so this refreshes them.
+  - Budgets        -> "Sync figures from Xero" (POST /api/sync-benchmark). Refreshes
+    the P&L benchmark that drives the actuals/predicted spend.
 
-AFTER DEPLOY
-  Run the invoice sync once. INV-1721 (and any other deleted invoices) will drop out.
-  The app's outstanding total should then reconcile to Xero.
+VAT PAGE
+  No change needed - the VAT Refund page already has "Refresh estimate from Xero".
 
-STILL OUTSTANDING (separate, minor)
-  Xero also had a -Ł4.00 overpayment (Oak Construction, INV-1613) that the app doesn't
-  show. That's an overpayment/credit, not an invoice - a separate item. Flag if you
-  want overpayments netted in too.
-
-Pairs with the earlier "Cashflow invoices match" package (cash flow reading the same
-project-invoice source). Deploy both, then sync.
+Each button shows "Syncing..." while working and a short result message after.
+Default sync window is 6 months (same as the bookkeeping page).
 
 BUILD: next build -> Compiled successfully.

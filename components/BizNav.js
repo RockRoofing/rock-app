@@ -1,4 +1,5 @@
 import { useRouter } from 'next/router'
+import { useState } from 'react'
 
 export const GOLD = '#ca8a04'
 export const INK = '#1a1a19'
@@ -53,5 +54,38 @@ export function Card({ title, sub, children, wide }) {
       {sub && <div style={{ fontSize: 12, color: '#999', marginBottom: 10 }}>{sub}</div>}
       {children}
     </div>
+  )
+}
+
+// Reusable "Sync from Xero" button for Business Financials pages. Posts to `endpoint`
+// with { months } and calls onDone() after a successful sync so the page can reload.
+export function SyncButton({ endpoint, label = 'Sync from Xero', months = 6, onDone, buildMsg }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  async function run() {
+    setBusy(true); setMsg('')
+    try {
+      const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ months }) })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok && (d.ok || d.success)) {
+        setMsg(buildMsg ? buildMsg(d) : 'Synced.')
+        if (onDone) await onDone(d)
+        setTimeout(() => setMsg(''), 4000)
+      } else {
+        setMsg(d.error || 'Sync failed.')
+      }
+    } catch (e) {
+      setMsg('Sync failed.')
+    }
+    setBusy(false)
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+      <button onClick={run} disabled={busy}
+        style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        {busy ? 'Syncing...' : label}
+      </button>
+      {msg && <span style={{ fontSize: 12, color: '#6b6b6b' }}>{msg}</span>}
+    </span>
   )
 }

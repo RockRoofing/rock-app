@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card } from '../../components/BizNav'
+import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card, SyncButton } from '../../components/BizNav'
 
 const monthKey = (s) => (s || '').slice(0, 7)
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -225,7 +225,11 @@ export default function InvoicesOwed() {
         <div style={{ padding: '24px 16px', maxWidth: '100%', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
             <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Invoices Owed <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(sales invoices)</span></h1>
-            <div style={{ fontSize: 11, color: '#aaa' }}>Same source as the Outstanding Invoices page</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <SyncButton endpoint="/api/sync-invoices" label="Sync invoices from Xero" onDone={loadAll}
+                buildMsg={(d) => d.invoicesFetched != null ? `${d.invoicesMatched || 0} matched, ${d.invoicesUnassigned || 0} unassigned (of ${d.invoicesFetched}).` : 'Synced.'} />
+              <div style={{ fontSize: 11, color: '#aaa' }}>Same source as the Outstanding Invoices page</div>
+            </div>
           </div>
 
           {/* Filters */}

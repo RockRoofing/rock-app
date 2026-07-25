@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card } from '../../components/BizNav'
+import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card, SyncButton } from '../../components/BizNav'
 
 const monthKey = (s) => (s || '').slice(0, 7)
 const pad = (n) => String(n).padStart(2, '0')
@@ -170,7 +170,11 @@ export default function RetentionsDue() {
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Retentions Due</h1>
             <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>When outstanding retention is due to land, from the Retention Tracker.</div>
           </div>
-          <a href="/retention" style={{ fontSize: 13, color: GOLD, textDecoration: 'none', fontWeight: 600 }}>Open Retention Tracker &rarr;</a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <SyncButton endpoint="/api/sync-invoices" label="Sync from Xero" onDone={load}
+              buildMsg={(d) => d.invoicesFetched != null ? `Synced ${d.invoicesFetched} invoices.` : 'Synced.'} />
+            <a href="/retention" style={{ fontSize: 13, color: GOLD, textDecoration: 'none', fontWeight: 600 }}>Open Retention Tracker &rarr;</a>
+          </div>
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : (

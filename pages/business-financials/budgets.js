@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, Component } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { BizNav, INK, GOLD, gbp } from '../../components/BizNav'
+import { BizNav, INK, GOLD, gbp, SyncButton } from '../../components/BizNav'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 // Error boundary so a bad data shape shows the actual error on-screen instead of the
@@ -402,6 +402,8 @@ function Budgets() {
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <SyncButton endpoint="/api/sync-benchmark" label="Sync figures from Xero" onDone={load}
+                buildMsg={(d) => d.monthsPulled != null ? `Pulled ${d.monthsPulled} months.` : 'Synced.'} />
               <label style={{ fontSize: 12, color: '#888' }}>Financial year</label>
               <select value={fyEnd} onChange={e => setFyEnd(Number(e.target.value))}
                 style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13, background: '#fff' }}>
