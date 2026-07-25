@@ -55,6 +55,18 @@ export default function CashSchedule() {
 
   const accounts = data?.overheadAccounts || []
   const budgets = data?.budgets || {}
+  const predictedByCodeMonth = data?.predictedByCodeMonth || {}
+  const currentFyMonths = data?.currentFyMonths || []
+  // The upcoming month we time against = current calendar month (first FY month that
+  // is not before "now"). Amounts now vary per month, so we show this month's figure.
+  const nowKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })()
+  const upcomingMonth = currentFyMonths.find(mo => mo >= nowKey) || currentFyMonths[currentFyMonths.length - 1] || nowKey
+  // Predicted spend for a code in the upcoming month (falls back to flat budget).
+  const predictedFor = (code) => {
+    const pm = predictedByCodeMonth[code]
+    if (pm && pm[upcomingMonth] != null) return Number(pm[upcomingMonth]) || 0
+    return Number(budgets[code] || 0)
+  }
   const hidden = new Set(data?.hiddenRows || [])
   const visible = accounts.filter(a => !hidden.has(a.code))
 
@@ -74,7 +86,7 @@ export default function CashSchedule() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
           <div>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Cash Schedule</h1>
-            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Set when each overhead&apos;s monthly budget lands, so the 13-week cash flow times it correctly. Nothing is scheduled by default - configure each line you want in the forecast.</div>
+            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Set when each overhead&apos;s monthly spend lands, so the 13-week cash flow times it correctly. The amount comes automatically from each month&apos;s predicted spend on the Budgets page (it varies month to month) - the &quot;Predicted / mo&quot; column shows the current month&apos;s figure. Nothing is scheduled by default - configure each line you want in the forecast.</div>
           </div>
           <a href="/business-financials/budgets" style={{ fontSize: 13, color: GOLD, textDecoration: 'none', fontWeight: 600 }}>Set the monthly amounts in Budgets &rarr;</a>
         </div>
@@ -90,7 +102,7 @@ export default function CashSchedule() {
                 <thead>
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left' }}>Overhead</th>
-                    <th style={th}>Monthly budget</th>
+                    <th style={th}>Predicted / mo</th>
                     <th style={{ ...th, textAlign: 'left' }}>Timing</th>
                     <th style={{ ...th, textAlign: 'left', minWidth: 260 }}>Detail</th>
                   </tr>
@@ -99,7 +111,7 @@ export default function CashSchedule() {
                   {visible.length === 0 && <tr><td colSpan={4} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No overhead accounts. Sync Xero and check Account Categorisation.</td></tr>}
                   {visible.map(a => {
                     const sc = schedule[a.code] || defaultSched()
-                    const budget = Number(budgets[a.code] || 0)
+                    const budget = predictedFor(a.code)
                     return (
                       <tr key={a.code} style={{ borderBottom: '1px solid #f2f0ec', verticalAlign: 'top' }}>
                         <td style={{ ...td, textAlign: 'left' }}>

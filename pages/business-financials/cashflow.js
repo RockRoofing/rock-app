@@ -13,7 +13,7 @@ const clampDay = (y, m, day) => Math.min(day, daysInMonth(y, m))
 
 // Build every scheduled overhead cash event across a date window [start,end].
 // Returns [{ date:'YYYY-MM-DD', amount, code }]. Applies carry-forwards.
-function overheadEvents(schedule, budgets, start, end) {
+function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
   const events = []
   // Distinct months spanned by the window (plus a month either side for safety).
   const months = []
@@ -21,10 +21,16 @@ function overheadEvents(schedule, budgets, start, end) {
   const last = new Date(end.getFullYear(), end.getMonth(), 1)
   while (cur <= last) { months.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1) }
 
+  // The amount to schedule for a code in a given month: prefer the per-month predicted
+  // spend (from the Budgets page), fall back to the flat monthly budget.
+  const amountFor = (code, mk) => {
+    const pm = predictedByCodeMonth && predictedByCodeMonth[code]
+    if (pm && pm[mk] != null) return Number(pm[mk]) || 0
+    return Number(budgets[code] || 0)
+  }
+
   for (const [code, sc] of Object.entries(schedule || {})) {
     if (!sc || !sc.mode) continue
-    const monthlyBudget = Number(budgets[code] || 0)
-    if (!monthlyBudget && sc.mode !== 'multiday') continue
 
     // Net carry adjustments per month for this code: subtract from 'from', add to 'to'.
     const carryAdj = {}
@@ -39,6 +45,8 @@ function overheadEvents(schedule, budgets, start, end) {
       const y = mDate.getFullYear(), m = mDate.getMonth()
       const mk = `${y}-${pad(m + 1)}`
       const adj = carryAdj[mk] || 0
+      const monthlyBudget = amountFor(code, mk)
+      if (!monthlyBudget && sc.mode !== 'multiday' && !adj) continue
 
       if (sc.mode === 'oneday') {
         const amount = monthlyBudget + adj
@@ -159,7 +167,7 @@ export default function CashFlow() {
     const start = mondayOf(new Date())
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
-    const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end)
+    const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
     const retEvents = retentionEvents(data.retentionEntries)
 
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
@@ -397,7 +405,10 @@ export default function CashFlow() {
               return (
                 <div style={{ marginTop: 22 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Bills to pay</div>
-                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. Tick &quot;CIS 20%&quot; on labour bills - the bill still pays its full (already net-of-CIS) amount to the subcontractor, and an extra 20% CIS goes to HMRC on the 22nd of the following month. {bills.length} bills, {gbp(totalBills)} total.</div>
+                  <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. CIS labour bills (account 321) auto-tick - untick any gross-status subcontractors. {bills.length} bills, {gbp(totalBills)} total.</div>
+                  <div style={{ fontSize: 11, color: autoCount ? '#0f766e' : '#b45309', marginBottom: 8, background: autoCount ? '#f0fdfa' : '#fffbeb', border: '1px solid ' + (autoCount ? '#99f6e4' : '#fde68a'), borderRadius: 6, padding: '6px 10px' }}>
+                    CIS auto-detect: {autoCount} bill(s) on account 321.{!anyLineCodes ? ' No line account codes came through from Xero - re-sync Bills to Pay to pick them up (the detection is applied when bills are fetched).' : ` Account codes seen across bills: ${codeSet.join(', ') || 'none'}.`}
+                  </div>
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, maxHeight: 340, overflow: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>

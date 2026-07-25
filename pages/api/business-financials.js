@@ -22,6 +22,60 @@ const CATEGORY_OF = (code, config) => {
   return 'materials'
 }
 
+// Per-code, per-month PREDICTED spend for the current financial year. Mirrors the
+// Budgets page logic so the Cash Schedule / Cash Flow use the same month-by-month
+// figure. codes = array of code strings; actualsByCode = { code: { 'YYYY-MM': amt } };
+// availableMonths = months with benchmark data; budgets/forecastMethods/forecastOverrides
+// are the saved configs.
+function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides) {
+  const availableSet = new Set(availableMonths)
+  const d = new Date()
+  const nowKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  const fyOfMonth = (mo) => { const [y, m] = mo.split('-').map(Number); return m === 12 ? y + 1 : y }
+  const curFyEnd = fyOfMonth(nowKey)
+  const fyMonthList = (endYear) => { const out = [`${endYear - 1}-12`]; for (let m = 1; m <= 11; m++) out.push(`${endYear}-${String(m).padStart(2, '0')}`); return out }
+  const curFyMonths = fyMonthList(curFyEnd)
+  const isCompleteMo = (mo) => mo < nowKey && availableSet.has(mo)
+  const actualOfCode = (code, mo) => {
+    const m = actualsByCode[code] || {}
+    if (mo in m) return m[mo]
+    return availableSet.has(mo) ? 0 : null
+  }
+  const baseForecastOf = (code) => {
+    const raw = forecastMethods[code] || 1
+    const m = actualsByCode[code] || {}
+    if (raw === 'budget') { const b = budgets[code]; if (b !== '' && b != null) return Number(b) }
+    const method = Number(raw)
+    if (method === 4) {
+      const prev = fyMonthList(curFyEnd - 1).filter(mo => availableSet.has(mo)).map(mo => actualOfCode(code, mo)).filter(v => v != null)
+      return prev.length ? prev.reduce((s, v) => s + v, 0) / prev.length : null
+    }
+    if (method === 3) {
+      const completed = curFyMonths.filter(isCompleteMo).sort()
+      return completed.length ? actualOfCode(code, completed[completed.length - 1]) : null
+    }
+    if (method === 2) {
+      const completed = Object.keys(m).filter(isCompleteMo).sort().slice(-3)
+      return completed.length ? completed.reduce((s, k) => s + m[k], 0) / completed.length : null
+    }
+    const fyC = curFyMonths.filter(isCompleteMo).map(k => (k in m ? m[k] : 0))
+    return fyC.length ? fyC.reduce((s, v) => s + v, 0) / fyC.length : null
+  }
+  const effBudgetOf = (code) => { const v = budgets[code]; if (v !== '' && v != null) return Number(v); return baseForecastOf(code) }
+  const out = {}
+  for (const code of codes) {
+    out[code] = {}
+    for (const mo of curFyMonths) {
+      if (isCompleteMo(mo)) { out[code][mo] = actualOfCode(code, mo); continue }
+      const ov = forecastOverrides[code]?.[mo]
+      if (ov != null && ov !== '') { out[code][mo] = Number(ov); continue }
+      const base = baseForecastOf(code)
+      out[code][mo] = base != null ? base : (effBudgetOf(code) || 0)
+    }
+  }
+  return { predicted: out, currentFyMonths: curFyMonths }
+}
+
 // GET  /api/business-financials            -> summary from the P&L benchmark + cached bank data
 // POST /api/business-financials { syncBank:true } -> refresh the Bank Summary (money in/out) per month
 export default async function handler(req, res) {
@@ -136,10 +190,18 @@ export default async function handler(req, res) {
     // benchmark AND is not in the future.
     const availableMonths = Object.keys(bm).sort()
 
+    // Per-code, per-month PREDICTED spend for the CURRENT financial year (mirrors the
+    // Budgets page so the Cash Schedule can use each month's predicted figure).
+    const { predicted: predictedByCodeMonth, currentFyMonths: curFyMonths } = computePredictedByCodeMonth(
+      overheadAccounts.map(a => a.code), actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides
+    )
+
     return res.json({
       overheadAccounts,
       actualsByCode,
       availableMonths,
+      predictedByCodeMonth,
+      currentFyMonths: curFyMonths,
       budgets,
       forecastMethods,
       forecastOverrides,
@@ -392,7 +454,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -405,6 +467,8 @@ export default async function handler(req, res) {
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
       redis.get('config:bill-payment-dates').then(v => v || {}).catch(() => ({})),
       redis.get('config:bill-cis-flags').then(v => v || {}).catch(() => ({})),
+      redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),
+      redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),
     ])
 
     // Invoice-finance availability calculated from the Invoice Finance page config:
@@ -444,8 +508,29 @@ export default async function handler(req, res) {
     const bills = (billsStore.items || []).map(b => {
       const manual = billCisFlags[b.id]   // true / false (explicit) / undefined
       const cis = (manual === undefined || manual === null) ? !!b.cisAuto : !!manual
-      return { ...b, payDate: billPayDates[b.id] || '', cis, cisAuto: !!b.cisAuto }
+      return { ...b, payDate: billPayDates[b.id] || '', cis, cisAuto: !!b.cisAuto, lineCodes: b.lineCodes || [] }
     })
+
+    // Per-month predicted overhead spend (same as Budgets page) so the forecast times
+    // each overhead using that month's predicted figure, not one flat budget.
+    const ohActualsByCode = {}
+    const ohCodes = new Set(Object.keys(ohBudgets || {}))
+    for (const mo of Object.keys(bm)) {
+      for (const code of Object.keys(bm[mo].byCode || {})) {
+        if (CATEGORY_OF(code, catConfig) === 'overheads') ohCodes.add(String(code))
+      }
+    }
+    for (const code of ohCodes) {
+      ohActualsByCode[code] = {}
+      for (const mo of Object.keys(bm)) {
+        const v = (bm[mo].byCode || {})[code]
+        if (v != null) ohActualsByCode[code][mo] = Math.abs(v)
+      }
+    }
+    const availMonths = Object.keys(bm).sort()
+    const { predicted: predictedByCodeMonth } = computePredictedByCodeMonth(
+      [...ohCodes], ohActualsByCode, availMonths, ohBudgets, ohForecastMethods, ohForecastOverrides
+    )
 
     return res.json({
       cashAtBank: openingCash,
@@ -460,6 +545,7 @@ export default async function handler(req, res) {
       avgOverheadMonthly,
       history,
       ohBudgets,
+      predictedByCodeMonth,
       cashflowSchedule,
       vatFiled,
       vatEstimateMonths: vatEstimate.months || {},

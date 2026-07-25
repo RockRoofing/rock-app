@@ -1,22 +1,31 @@
-DEPLOY NOTES - Budgets: last-FY average, last-full-month fix, clear-budget x
-===========================================================================
+DEPLOY NOTES - Cash Schedule uses per-month predicted spend from Budgets
+========================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/business-financials/budgets.js
+THREE files, all EDITS - just replace them.
+  pages/api/business-financials.js         (returns predicted per-month spend)
+  pages/business-financials/cash-schedule.js  (uses predicted, not flat budget)
+  pages/business-financials/cashflow.js    (forecast times each month's predicted figure)
 
-THREE CHANGES
--------------
-1. NEW forecast option: "Avg last financial year"
-   Averages the code's actuals across the whole PREVIOUS financial year (completed
-   months). Needs last FY to be synced in the P&L benchmark; if there's no prior-year
-   data for a code it just shows the placeholder.
+WHAT CHANGED
+------------
+Previously the Cash Schedule used one flat "Monthly budget" per overhead, applied
+identically to every month. Now the amount comes automatically from the Budgets
+page's PREDICTED monthly spend, which is individual to each month (it respects each
+row's forecast method, per-month overrides, and actuals for completed months).
 
-2. "Last full month" now uses the LAST COMPLETED MONTH even if it was 0.
-   Previously it skipped months with no cost entry and jumped to an earlier month.
-   Now a completed month with zero cost is correctly treated as 0.
+  - Cash Schedule: the column is now "Predicted / mo" and shows the CURRENT month's
+    predicted figure for each overhead. Timing settings (spread evenly / one day /
+    specific days / carry) are unchanged.
 
-3. Clear (x) on a manual Budget / Mo.
-   When you've typed a manual budget figure, a small red x appears next to it. Click
-   it to clear the manual value and revert that row's budget to the forecast figure.
+  - 13-week Cash Flow: each overhead is now timed using THAT month's predicted spend,
+    so a line that's forecast higher next month lands higher next month, etc. No more
+    single flat figure across all months.
+
+NOTES
+  - "Specific days" (fixed Ł amounts per date) are absolute and unaffected - they
+    still land exactly as entered.
+  - If a row shows a figure you don't expect, check its forecast method / overrides
+    on the Budgets page - that's now the single source of truth for the amount.
+  - Make sure the P&L benchmark is synced so predicted figures are accurate.
 
 BUILD: next build -> Compiled successfully.
