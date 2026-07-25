@@ -127,6 +127,7 @@ export default async function handler(req, res) {
       if (forecastOverrides !== undefined) await redis.set('config:overhead-forecast-overrides', forecastOverrides || {})
       if (hiddenRows !== undefined) await redis.set('config:overhead-hidden-rows', hiddenRows || [])
       if (req.body && req.body.cashflowSchedule !== undefined) await redis.set('config:overhead-cashflow-schedule', req.body.cashflowSchedule || {})
+      if (req.body && req.body.cashCommitments !== undefined) await redis.set('config:cash-commitments', req.body.cashCommitments || [])
       if (req.body && req.body.card3moCodes !== undefined) await redis.set('config:overhead-3mo-card-codes', req.body.card3moCodes || [])
       // Lock in a full-year forecast snapshot (kept as a dated history).
       if (lockForecast) {
@@ -153,6 +154,7 @@ export default async function handler(req, res) {
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
     const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
+    const cashCommitments = await redis.get('config:cash-commitments').then(v => v || []).catch(() => ([]))
     const chartNames = {}
     for (const a of (Array.isArray(chart) ? chart : [])) chartNames[String(a.code)] = a.name
 
@@ -209,7 +211,7 @@ export default async function handler(req, res) {
       forecastLocks,
       card3moCodes,
       cashflowSchedule,
-      benchmarkUpdatedAt: benchmark.updatedAt || null,
+      cashCommitments,
     })
   }
 
@@ -454,7 +456,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -469,6 +471,7 @@ export default async function handler(req, res) {
       redis.get('config:bill-cis-flags').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-forecast-methods').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-forecast-overrides').then(v => v || {}).catch(() => ({})),
+      redis.get('config:cash-commitments').then(v => v || []).catch(() => ([])),
     ])
 
     // Invoice-finance availability calculated from the Invoice Finance page config:
@@ -546,6 +549,7 @@ export default async function handler(req, res) {
       history,
       ohBudgets,
       predictedByCodeMonth,
+      cashCommitments,
       cashflowSchedule,
       vatFiled,
       vatEstimateMonths: vatEstimate.months || {},

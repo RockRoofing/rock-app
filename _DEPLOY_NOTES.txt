@@ -1,31 +1,37 @@
-DEPLOY NOTES - Cash Schedule uses per-month predicted spend from Budgets
-========================================================================
+DEPLOY NOTES - Cash flow: overhead VAT toggle + vehicle/commitment payments
+===========================================================================
 
 THREE files, all EDITS - just replace them.
-  pages/api/business-financials.js         (returns predicted per-month spend)
-  pages/business-financials/cash-schedule.js  (uses predicted, not flat budget)
-  pages/business-financials/cashflow.js    (forecast times each month's predicted figure)
+  pages/api/business-financials.js
+  pages/business-financials/cash-schedule.js
+  pages/business-financials/cashflow.js
 
-WHAT CHANGED
-------------
-Previously the Cash Schedule used one flat "Monthly budget" per overhead, applied
-identically to every month. Now the amount comes automatically from the Budgets
-page's PREDICTED monthly spend, which is individual to each month (it respects each
-row's forecast method, per-month overrides, and actuals for completed months).
+BACKGROUND (the gap you spotted)
+--------------------------------
+The P&L overhead figures are NET of VAT, and balance-sheet payments (like vehicle
+finance principal) never hit the P&L at all. So the forecast could understate real
+cash out. Two fixes:
 
-  - Cash Schedule: the column is now "Predicted / mo" and shows the CURRENT month's
-    predicted figure for each overhead. Timing settings (spread evenly / one day /
-    specific days / carry) are unchanged.
+1) "+VAT" TICK BOX PER OVERHEAD (Cash Schedule)
+   Not all overheads carry VAT (wages, insurance don't; fuel, rent, subs do). Tick
+   "+VAT" on the lines that do, and the forecast grosses that line up by 20% for the
+   cash-out timing. The input VAT still nets off at the VAT return (VAT Refund page),
+   so this only affects WHEN the cash moves, not the net total - no double count.
+   The "Predicted / mo" column shows the inc-VAT figure when ticked (with the net
+   underneath).
 
-  - 13-week Cash Flow: each overhead is now timed using THAT month's predicted spend,
-    so a line that's forecast higher next month lands higher next month, etc. No more
-    single flat figure across all months.
+2) RECURRING CASH COMMITMENTS (Cash Schedule, new section)
+   For vehicle finance / HP and similar: payments that leave the bank but aren't in
+   the P&L (only depreciation + interest are). Add each one (description, amount/mo,
+   day of month, optional start/end month). They flow into the 13-week forecast on
+   the day you set, shown in a new "Vehicles / commitments" column.
 
-NOTES
-  - "Specific days" (fixed Ł amounts per date) are absolute and unaffected - they
-    still land exactly as entered.
-  - If a row shows a figure you don't expect, check its forecast method / overrides
-    on the Budgets page - that's now the single source of truth for the amount.
-  - Make sure the P&L benchmark is synced so predicted figures are accurate.
+WHERE TO GO
+   Cash Schedule page: tick +VAT on the relevant overheads; add your vehicles under
+   "Recurring cash commitments"; Save. The 13-week Cash Flow updates automatically.
+
+NOTE: "Specific days" overhead schedules use the exact Ł amounts you enter, so the
++VAT gross-up applies to "spread evenly" and "one day" modes; for specific-days,
+enter the gross figures directly if needed.
 
 BUILD: next build -> Compiled successfully.

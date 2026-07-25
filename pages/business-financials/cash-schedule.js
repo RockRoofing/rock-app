@@ -20,6 +20,7 @@ export default function CashSchedule() {
   const [saving, setSaving] = useState(false)
   const [data, setData] = useState(null)
   const [schedule, setSchedule] = useState({})   // { code: {mode, day, days:[{day,amount}], carry:[{from,to,amount}]} }
+  const [commitments, setCommitments] = useState([])  // [{id,name,amount,day,start,end}]
   const [dirty, setDirty] = useState(false)
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export default function CashSchedule() {
       const d = await fetch('/api/business-financials?view=budgets-overheads').then(r => r.json())
       setData(d)
       setSchedule(d.cashflowSchedule || {})
+      setCommitments(d.cashCommitments || [])
     } catch (e) { console.error(e) }
     setLoading(false)
   }
@@ -46,11 +48,24 @@ export default function CashSchedule() {
     try {
       await fetch('/api/business-financials?view=budgets-overheads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cashflowSchedule: schedule }),
+        body: JSON.stringify({ cashflowSchedule: schedule, cashCommitments: commitments }),
       })
       setDirty(false)
     } catch (e) { console.error(e) }
     setSaving(false)
+  }
+
+  function addCommitment() {
+    setCommitments(prev => [...prev, { id: 'c' + Date.now(), name: '', amount: '', day: 1, start: '', end: '' }])
+    setDirty(true)
+  }
+  function updateCommitment(id, patch) {
+    setCommitments(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c))
+    setDirty(true)
+  }
+  function removeCommitment(id) {
+    setCommitments(prev => prev.filter(c => c.id !== id))
+    setDirty(true)
   }
 
   const accounts = data?.overheadAccounts || []
@@ -103,12 +118,13 @@ export default function CashSchedule() {
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
                     <th style={{ ...th, textAlign: 'left' }}>Overhead</th>
                     <th style={th}>Predicted / mo</th>
+                    <th style={{ ...th, textAlign: 'center' }} title="Tick if this overhead carries 20% VAT - the cash-out is grossed up by 20% (input VAT nets off at the VAT return)">+VAT</th>
                     <th style={{ ...th, textAlign: 'left' }}>Timing</th>
                     <th style={{ ...th, textAlign: 'left', minWidth: 260 }}>Detail</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {visible.length === 0 && <tr><td colSpan={4} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No overhead accounts. Sync Xero and check Account Categorisation.</td></tr>}
+                  {visible.length === 0 && <tr><td colSpan={5} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 24 }}>No overhead accounts. Sync Xero and check Account Categorisation.</td></tr>}
                   {visible.map(a => {
                     const sc = schedule[a.code] || defaultSched()
                     const budget = predictedFor(a.code)
@@ -118,7 +134,10 @@ export default function CashSchedule() {
                           <div style={{ fontWeight: 600, color: INK }}>{a.name || a.code}</div>
                           <div style={{ fontSize: 11, color: '#aaa' }}>Code {a.code}</div>
                         </td>
-                        <td style={{ ...td }}>{budget ? gbp(budget) : <span style={{ color: '#c9a227' }}>not set</span>}</td>
+                        <td style={{ ...td }}>{budget ? gbp(sc.vat ? budget * 1.2 : budget) : <span style={{ color: '#c9a227' }}>not set</span>}{budget && sc.vat ? <div style={{ fontSize: 10, color: '#888' }}>inc VAT ({gbp(budget)} net)</div> : null}</td>
+                        <td style={{ ...td, textAlign: 'center' }}>
+                          <input type="checkbox" checked={!!sc.vat} onChange={e => setCode(a.code, { vat: e.target.checked })} title="Add 20% VAT to the cash-out timing" />
+                        </td>
                         <td style={{ ...td, textAlign: 'left' }}>
                           <select value={sc.mode || ''} onChange={e => setCode(a.code, { mode: e.target.value })} style={inp}>
                             <option value="">- not in forecast -</option>
@@ -149,6 +168,42 @@ export default function CashSchedule() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Recurring cash commitments (vehicle finance / HP etc - not in the P&L) */}
+            <div style={{ marginTop: 26 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Recurring cash commitments</div>
+              <div style={{ color: '#8a857c', fontSize: 13, margin: '4px 0 10px' }}>Regular payments that leave the bank but are NOT in the P&amp;L overheads - e.g. vehicle finance / HP, where only depreciation and interest hit the P&amp;L but the full payment is real cash out. These are added to the 13-week forecast on the day you set each month.</div>
+              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'visible' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Description</th>
+                      <th style={th}>Amount / mo</th>
+                      <th style={th}>Day</th>
+                      <th style={th}>Start (opt)</th>
+                      <th style={th}>End (opt)</th>
+                      <th style={th}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {commitments.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#bbb', padding: 18 }}>No commitments yet. Add vehicle finance or other regular payments below.</td></tr>}
+                    {commitments.map(c => (
+                      <tr key={c.id} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                        <td style={{ ...td, textAlign: 'left' }}><input value={c.name} placeholder="e.g. Ford Transit HP" onChange={e => updateCommitment(c.id, { name: e.target.value })} style={{ ...inp, width: 220 }} /></td>
+                        <td style={td}><span style={{ color: '#999' }}>&pound;</span> <input type="number" value={c.amount} onChange={e => updateCommitment(c.id, { amount: e.target.value })} style={{ ...inp, width: 100 }} /></td>
+                        <td style={td}><input type="number" min={1} max={31} value={c.day} onChange={e => updateCommitment(c.id, { day: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} style={{ ...inp, width: 56 }} /></td>
+                        <td style={td}><input type="month" value={c.start || ''} onChange={e => updateCommitment(c.id, { start: e.target.value })} style={{ ...inp, width: 130 }} /></td>
+                        <td style={td}><input type="month" value={c.end || ''} onChange={e => updateCommitment(c.id, { end: e.target.value })} style={{ ...inp, width: 130 }} /></td>
+                        <td style={td}><button onClick={() => removeCommitment(c.id)} style={rmBtn}>&times;</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ padding: '10px 14px' }}>
+                  <button onClick={addCommitment} style={{ background: '#fff', border: '1px dashed #c9a227', color: '#8a6d1b', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>+ Add commitment</button>
+                </div>
+              </div>
             </div>
           </>
         )}

@@ -22,11 +22,14 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
   while (cur <= last) { months.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1) }
 
   // The amount to schedule for a code in a given month: prefer the per-month predicted
-  // spend (from the Budgets page), fall back to the flat monthly budget.
-  const amountFor = (code, mk) => {
+  // spend (from the Budgets page), fall back to the flat monthly budget. If the code is
+  // VAT-flagged, gross it up by 20% for the cash-out timing (input VAT nets off later
+  // at the VAT return, so this only affects WHEN the cash moves, not the net total).
+  const amountFor = (code, mk, sc) => {
     const pm = predictedByCodeMonth && predictedByCodeMonth[code]
-    if (pm && pm[mk] != null) return Number(pm[mk]) || 0
-    return Number(budgets[code] || 0)
+    let base = (pm && pm[mk] != null) ? (Number(pm[mk]) || 0) : Number(budgets[code] || 0)
+    if (sc && sc.vat) base = base * 1.20
+    return base
   }
 
   for (const [code, sc] of Object.entries(schedule || {})) {
@@ -45,7 +48,7 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
       const y = mDate.getFullYear(), m = mDate.getMonth()
       const mk = `${y}-${pad(m + 1)}`
       const adj = carryAdj[mk] || 0
-      const monthlyBudget = amountFor(code, mk)
+      const monthlyBudget = amountFor(code, mk, sc)
       if (!monthlyBudget && sc.mode !== 'multiday' && !adj) continue
 
       if (sc.mode === 'oneday') {
@@ -75,6 +78,29 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
         const per = mondays.length ? total / mondays.length : total
         for (const md of mondays) events.push({ date: isoDay(md), amount: per, code })
       }
+    }
+  }
+  return events.filter(e => e.date >= isoDay(start) && e.date <= isoDay(end))
+}
+
+// Recurring cash commitments (e.g. vehicle finance / HP) that aren't in the P&L.
+// Each: { id, name, amount, day (1-31), start?: 'YYYY-MM', end?: 'YYYY-MM' }.
+function commitmentEvents(commitments, start, end) {
+  const events = []
+  const months = []
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1)
+  const last = new Date(end.getFullYear(), end.getMonth(), 1)
+  while (cur <= last) { months.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1) }
+  for (const c of (commitments || [])) {
+    const amount = Number(c.amount || 0)
+    if (!amount) continue
+    for (const mDate of months) {
+      const y = mDate.getFullYear(), m = mDate.getMonth()
+      const mk = `${y}-${pad(m + 1)}`
+      if (c.start && mk < c.start) continue
+      if (c.end && mk > c.end) continue
+      const day = clampDay(y, m, Number(c.day || 1))
+      events.push({ date: `${mk}-${pad(day)}`, amount, name: c.name || 'Commitment' })
     }
   }
   return events.filter(e => e.date >= isoDay(start) && e.date <= isoDay(end))
@@ -168,6 +194,7 @@ export default function CashFlow() {
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
+    const commEvents = commitmentEvents(data.cashCommitments, start, end)
     const retEvents = retentionEvents(data.retentionEntries)
 
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
@@ -234,17 +261,18 @@ export default function CashFlow() {
       const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
+      const commOut = commEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inWk(c.date)).reduce((a, c) => a + c.amount, 0)
 
       const moneyIn = invoicesIn + retIn + vatInPos
-      const moneyOut = billsOut + ohOut + vatOut + cisOut
+      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut
       const net = moneyIn - moneyOut
       running += net
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
-        bills: Math.round(billsOut), overheads: Math.round(ohOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -371,6 +399,7 @@ export default function CashFlow() {
                     <th style={th}>VAT in</th>
                     <th style={th}>Bills out</th>
                     <th style={th}>Overheads out</th>
+                    <th style={th}>Vehicles / commitments</th>
                     <th style={th}>VAT out</th>
                     <th style={th}>CIS to HMRC</th>
                     <th style={th}>Net</th>
@@ -386,6 +415,7 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}>{r.vatIn ? gbp(r.vatIn) : '-'}</td>
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc' }}>{r.overheads ? gbp(-r.overheads) : '-'}</td>
+                      <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
