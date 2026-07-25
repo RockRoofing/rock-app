@@ -1,17 +1,38 @@
-DEPLOY NOTES - Invoice Finance: orange import button + sync button
-==================================================================
+DEPLOY NOTES - Invoice Finance rebuilt around APPLICATIONS (not invoices)
+========================================================================
 
 TWO files, both EDITS - just replace them.
-  components/BizNav.js                          (provides SyncButton - safe to re-copy)
-  pages/business-financials/invoice-finance.js  (orange import + sync button)
+  pages/api/business-financials.js              (new project/application funding model)
+  pages/business-financials/invoice-finance.js  (rebuilt page)
 
-CHANGES
-  1. The "Import Bibby limit list (CSV)" button is now orange/gold (matching the
-     other action buttons), white text.
-  2. A "Sync invoices from Xero" button added to the page header - pulls fresh sales
-     invoices (same /api/sync-invoices) and reloads the debtor list.
+WHY
+  Bibby fund against your APPLICATIONS, not invoices. The page now works from the
+  application "This cert (net)" figure - which is already NET OF RETENTION and
+  inherently INCLUDES materials on site. So the separate materials and retention
+  inputs are gone (they were double-handling what's already in the application).
 
-BizNav.js is included because the sync button uses the shared SyncButton component;
-re-copying it is harmless if you already deployed it.
+HOW IT WORKS NOW
+  - Grouped by CUSTOMER (insured limit is per customer), with PROJECTS listed under
+    each, and APPLICATIONS expandable under each project (click a project row).
+  - Funding basis per project = sum of "This cert (net)" for UNPAID applications only
+    (usually the latest, but earlier unpaid ones too if not yet paid).
+  - Advance = advance-rate% (60) of the customer's total fundable, capped at their
+    insured limit; total capped at the facility maximum; minus drawn = availability.
+
+PAID STATUS (auto + manual)
+  Applications have no paid flag, so each is auto-matched to its invoice by the
+  "App N" number in the invoice reference, and that invoice's paid/outstanding status
+  is used. Where it CAN'T be matched, the app is flagged "! unmatched" and treated as
+  UNPAID (included in funding) so nothing is silently dropped. Each app has a
+  Paid/Unpaid toggle that overrides the auto value and is saved.
+
+SETTINGS
+  Advance rate %, Facility cap, Currently drawn. Insured limit per customer (type or
+  import the Bibby CSV). The Cash Flow "invoice finance available" figure still uses
+  the older invoice-based estimate - tell me if you want it switched to this
+  application-based number too (recommended, for consistency).
+
+NOTE: needs projects to have applications and a recent dashboard sync. Set the
+Facility cap to your real figure.
 
 BUILD: next build -> Compiled successfully.

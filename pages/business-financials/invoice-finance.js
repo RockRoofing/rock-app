@@ -1,22 +1,25 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { BizNav, INK, GOLD, gbp, Card, SyncButton } from '../../components/BizNav'
+import { BizNav, INK, GOLD, gbp, SyncButton } from '../../components/BizNav'
 
-const pad = (n) => String(n).padStart(2, '0')
 const norm = (s) => String(s || '').toLowerCase()
   .replace(/&/g, 'and')
   .replace(/\b(ltd|limited|plc|llp|uk|co|company|the)\b/g, '')
   .replace(/[^a-z0-9]/g, '')
   .trim()
-const daysBetween = (a, b) => Math.floor((b - a) / 86400000)
+const monthLabel = (mk) => {
+  if (!mk) return '-'
+  const [y, m] = String(mk).split('-').map(Number)
+  const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${names[(m || 1) - 1]} ${String(y).slice(2)}`
+}
 
-// Parse a Bibby "Limit List" CSV. Header has two preamble rows + blank line, then the
-// real header starting with "Buyer Name". We take Buyer Name + Approved Amount, summing
-// duplicates. Returns { [debtorName]: approvedAmount }.
+// Parse a Bibby "Limit List" CSV: two-row preamble + blank, then a header starting
+// with "Buyer Name". Reads Buyer Name + Approved Amount, summing duplicate buyers.
 function parseBibbyCsv(text) {
   const lines = text.split(/\r?\n/)
-  let headerIdx = lines.findIndex(l => /^"?buyer name"?,/i.test(l))
+  const headerIdx = lines.findIndex(l => /^"?buyer name"?,/i.test(l))
   if (headerIdx < 0) return { limits: {}, error: 'Could not find the "Buyer Name" header row.' }
   const header = splitCsvLine(lines[headerIdx]).map(h => h.trim().toLowerCase())
   const iName = header.findIndex(h => h === 'buyer name')
@@ -50,9 +53,10 @@ export default function InvoiceFinance() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, retentionPct: 10, facilityCap: 500000 })
-  const [limits, setLimits] = useState({})            // { debtorName: { insuredLimit, materials } }
-  const [excludedInvoices, setExcludedInvoices] = useState({}) // { invoiceId: true } - variations w/o instruction, final apps
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000 })
+  const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
+  const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
+  const [expanded, setExpanded] = useState({})        // { xeroId: true }
   const [saving, setSaving] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const fileRef = useRef(null)
@@ -70,77 +74,72 @@ export default function InvoiceFinance() {
     try {
       const d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
       setData(d)
-      setSettings({ advanceRate: d.settings?.advanceRate ?? 60, drawn: d.settings?.drawn ?? 0, retentionPct: d.settings?.retentionPct ?? 10, facilityCap: d.settings?.facilityCap ?? 500000 })
+      setSettings({ advanceRate: d.settings?.advanceRate ?? 60, drawn: d.settings?.drawn ?? 0, facilityCap: d.settings?.facilityCap ?? 500000 })
       setLimits(d.debtorLimits || {})
-      const ex = {}
-      Object.entries(d.debtorLimits || {}).forEach(() => {})
-      setExcludedInvoices((d.settings && d.settings.excludedInvoices) || {})
+      const po = {}
+      for (const p of (d.projects || [])) for (const a of p.applications) if (a.paidOverride != null) po[a.id] = a.paidOverride
+      setPaidOverrides(po)
     } catch {}
     setLoading(false)
   }
   useEffect(() => { if (ok) load() }, [ok])
 
-  // Group receivables by debtor.
-  const debtors = useMemo(() => {
-    if (!data?.receivables) return []
-    const now = new Date()
-    const byName = {}
-    for (const inv of data.receivables) {
-      const name = inv.contact || '(no name)'
-      if (!byName[name]) byName[name] = { name, key: norm(name), invoices: [], outstanding: 0 }
-      byName[name].invoices.push(inv)
-    }
+  // Effective paid state = manual override if set, else the auto value from the API.
+  const isPaid = (a) => (paidOverrides[a.id] != null ? paidOverrides[a.id] : a.paid)
+
+  // Group projects by customer, compute fundable (unpaid this-cert) and advance.
+  const customers = useMemo(() => {
+    if (!data?.projects) return []
     const rate = (Number(settings.advanceRate) || 0) / 100
-    const retPct = (Number(settings.retentionPct) || 0) / 100
-    return Object.values(byName).map(d => {
-      const lim = limits[d.name] || {}
+    const byCust = {}
+    for (const p of data.projects) {
+      const cust = p.customer || '(no customer)'
+      if (!byCust[cust]) byCust[cust] = { customer: cust, key: norm(cust), projects: [] }
+      // Unpaid this-cert for this project.
+      const unpaid = p.applications.filter(a => !isPaid(a))
+      const fundableProject = unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0)
+      byCust[cust].projects.push({ ...p, unpaidCount: unpaid.length, fundableProject })
+    }
+    return Object.values(byCust).map(c => {
+      const lim = limits[c.customer] || {}
       const insured = Number(lim.insuredLimit) || 0
-      const materials = Number(lim.materials) || 0   // materials-on-site value (GBP), not funded
-      // Outstanding for this debtor (excluding any invoices flagged out - e.g.
-      // variations without written instruction, final applications).
-      let outstanding = 0, excludedTotal = 0
-      for (const inv of d.invoices) {
-        if (excludedInvoices[inv.id]) { excludedTotal += inv.amountDue; continue }
-        outstanding += inv.amountDue
-      }
-      const grossOutstanding = d.invoices.reduce((s, i) => s + i.amountDue, 0)
-      // Retention holdback: the last X% of the contract isn't funded. Approximated as
-      // X% of the eligible outstanding.
-      const retention = Math.max(0, outstanding * retPct)
-      // Fundable base = outstanding, minus materials on site, minus retention holdback.
-      const fundableBase = Math.max(0, outstanding - materials - retention)
-      const rawAdvance = fundableBase * rate
-      // Only fund where there's an insured limit, capped at that limit.
+      const fundable = c.projects.reduce((s, p) => s + p.fundableProject, 0)
+      const rawAdvance = fundable * rate
       const hasLimit = insured > 0
       const advance = hasLimit ? Math.min(rawAdvance, insured) : 0
-      return {
-        ...d, insured, materials, outstanding: grossOutstanding, eligibleOutstanding: outstanding,
-        retention, fundableBase, excludedTotal, rawAdvance, advance, hasLimit,
-        cappedByLimit: hasLimit && rawAdvance > insured,
-      }
-    }).sort((a, b) => b.advance - a.advance || b.outstanding - a.outstanding)
-  }, [data, limits, settings.advanceRate, settings.retentionPct, excludedInvoices])
+      return { ...c, insured, hasLimit, fundable, rawAdvance, advance, cappedByLimit: hasLimit && rawAdvance > insured }
+    }).sort((a, b) => b.advance - a.advance || b.fundable - a.fundable)
+  }, [data, limits, settings.advanceRate, paidOverrides])
 
   const totals = useMemo(() => {
-    const totalOutstanding = debtors.reduce((s, d) => s + d.outstanding, 0)
-    const grossAdvance = debtors.reduce((s, d) => s + d.advance, 0)
-    // Facility cap: total funded is capped at the maximum facility value.
+    const fundable = customers.reduce((s, c) => s + c.fundable, 0)
+    const grossAdvance = customers.reduce((s, c) => s + c.advance, 0)
     const cap = Number(settings.facilityCap) || 0
     const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
     const cappedByFacility = cap > 0 && grossAdvance > cap
     const drawn = Number(settings.drawn) || 0
     const availability = totalAdvance - drawn
-    const noLimit = debtors.filter(d => !d.hasLimit && d.outstanding > 0)
-    return { totalOutstanding, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability, noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, d) => s + d.outstanding, 0) }
-  }, [debtors, settings.drawn, settings.facilityCap])
+    const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability,
+      noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
+  }, [customers, settings.drawn, settings.facilityCap])
 
   async function saveAll() {
     setSaving(true)
     try {
-      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'invoice-finance', action: 'save-settings', settings: { ...settings, excludedInvoices } }) })
+      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'invoice-finance', action: 'save-settings', settings }) })
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'invoice-finance', action: 'save-limits', debtorLimits: limits }) })
     } catch {}
     setSaving(false)
+  }
+
+  function setPaid(appId, paid) {
+    setPaidOverrides(prev => ({ ...prev, [appId]: paid }))
+    fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'invoice-finance', action: 'save-app-paid', appId, paid }) }).catch(() => {})
+  }
+
+  function setLimit(name, value) {
+    setLimits(prev => ({ ...prev, [name]: { ...(prev[name] || {}), insuredLimit: value } }))
   }
 
   function onFile(e) {
@@ -150,27 +149,22 @@ export default function InvoiceFinance() {
     reader.onload = () => {
       const { limits: parsed, error } = parseBibbyCsv(String(reader.result))
       if (error) { setImportMsg('Import failed: ' + error); return }
-      // Match parsed Bibby buyer names to Xero debtor names by normalised key.
-      const xeroNames = (data?.receivables || []).map(i => i.contact).filter(Boolean)
-      const xeroByKey = {}
-      for (const n of xeroNames) xeroByKey[norm(n)] = n
+      const custNames = (data?.projects || []).map(p => p.customer).filter(Boolean)
+      const byKey = {}
+      for (const n of custNames) byKey[norm(n)] = n
       let matched = 0, unmatched = 0
       const next = { ...limits }
       const unmatchedNames = []
       for (const [bibbyName, amount] of Object.entries(parsed)) {
-        const xn = xeroByKey[norm(bibbyName)]
-        if (xn) { next[xn] = { ...(next[xn] || {}), insuredLimit: amount }; matched++ }
+        const cn = byKey[norm(bibbyName)]
+        if (cn) { next[cn] = { ...(next[cn] || {}), insuredLimit: amount }; matched++ }
         else { next[bibbyName] = { ...(next[bibbyName] || {}), insuredLimit: amount }; unmatched++; unmatchedNames.push(bibbyName) }
       }
       setLimits(next)
-      setImportMsg(`Imported ${Object.keys(parsed).length} limits. ${matched} matched a Xero debtor, ${unmatched} did not (stored under the Bibby name)${unmatchedNames.length ? ': ' + unmatchedNames.slice(0, 6).join(', ') + (unmatchedNames.length > 6 ? '...' : '') : ''}. Review, then Save.`)
+      setImportMsg(`Imported ${Object.keys(parsed).length} limits. ${matched} matched a customer, ${unmatched} did not${unmatchedNames.length ? ': ' + unmatchedNames.slice(0, 6).join(', ') + (unmatchedNames.length > 6 ? '...' : '') : ''}. Review, then Save.`)
     }
     reader.readAsText(file)
     if (fileRef.current) fileRef.current.value = ''
-  }
-
-  function setLimit(name, field, value) {
-    setLimits(prev => ({ ...prev, [name]: { ...(prev[name] || {}), [field]: value } }))
   }
 
   if (!ok) return null
@@ -183,18 +177,18 @@ export default function InvoiceFinance() {
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 280 }}>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Invoice Finance (Bibby) availability</h1>
-            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Estimates cash available from the Bibby facility. Per debtor: fundable = outstanding &minus; materials on site &minus; {settings.retentionPct}% retention held back; advance = {settings.advanceRate}% of fundable, capped at the insured (approved) limit. Debtors with no insured limit are excluded. Variations without written instruction / final applications can be excluded per invoice. Total funding is capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
+            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Bibby fund against your APPLICATIONS, not invoices. Funding basis per project = the &quot;This cert (net)&quot; of each UNPAID application (already net of retention, and inclusive of materials on site). Advance = {settings.advanceRate}% of that, capped at the customer&apos;s insured limit, with the total capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
           </div>
           <SyncButton endpoint="/api/sync-invoices" label="Sync invoices from Xero" onDone={load}
-            buildMsg={(d) => d.invoicesFetched != null ? `${d.invoicesMatched || 0} matched, ${d.invoicesUnassigned || 0} unassigned (of ${d.invoicesFetched}).` : 'Synced.'} />
+            buildMsg={(d) => 'Synced - paid status refreshed.'} />
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
             {/* Top figures */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-              <Box label="Outstanding sales ledger" value={gbp(totals.totalOutstanding)} />
-              <Box label={`Advance @ ${settings.advanceRate}%`} value={gbp(totals.grossAdvance)} color="#0f766e" sub="after materials, retention & insured limits" />
+              <Box label="Fundable (unpaid this-cert)" value={gbp(totals.fundable)} sub="net of retention, incl. materials" />
+              <Box label={`Advance @ ${settings.advanceRate}%`} value={gbp(totals.grossAdvance)} color="#0f766e" sub="capped at insured limits" />
               <Box label="Facility cap" value={gbp(totals.cap)} sub={totals.cappedByFacility ? 'reached - funding capped' : 'headroom available'} color={totals.cappedByFacility ? '#dc2626' : '#888'} />
               <Box label="Currently drawn" value={gbp(totals.drawn)} color="#b45309" />
               <Box label="Availability now" value={gbp(totals.availability)} color={totals.availability < 0 ? '#dc2626' : '#0f766e'} strong sub="funded (capped) minus drawn" />
@@ -202,15 +196,14 @@ export default function InvoiceFinance() {
 
             {totals.noLimitCount > 0 && (
               <div style={{ fontSize: 12.5, color: '#b45309', marginBottom: 14, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>
-                {totals.noLimitCount} debtor(s) with outstanding invoices have no insured limit set ({gbp(totals.noLimitValue)} of ledger not advanced). Set their limit below or import the Bibby list.
+                {totals.noLimitCount} customer(s) with fundable applications have no insured limit set ({gbp(totals.noLimitValue)} not funded). Set their limit below or import the Bibby list.
               </div>
             )}
 
             {/* Controls */}
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div><div style={lbl}>Advance rate %</div><input type="number" value={settings.advanceRate} onChange={e => setSettings(s => ({ ...s, advanceRate: e.target.value }))} style={{ ...inp, width: 90 }} /></div>
-              <div><div style={lbl}>Retention held back %</div><input type="number" value={settings.retentionPct} onChange={e => setSettings(s => ({ ...s, retentionPct: e.target.value }))} style={{ ...inp, width: 90 }} title="Last X% of the contract not funded" /></div>
-              <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} title="Maximum total funded facility, e.g. 60% of 500k = 300k" /></div></div>
+              <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} /></div></div>
               <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
@@ -220,66 +213,104 @@ export default function InvoiceFinance() {
               {importMsg && <div style={{ fontSize: 11.5, color: '#555', flexBasis: '100%' }}>{importMsg}</div>}
             </div>
 
-            {/* Debtor table */}
+            {/* Customer -> projects -> applications */}
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, overflow: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee' }}>
-                    <th style={{ ...th, textAlign: 'left' }}>Debtor</th>
-                    <th style={th}>Outstanding</th>
+                    <th style={{ ...th, textAlign: 'left' }}>Customer / project</th>
                     <th style={th}>Insured limit</th>
-                    <th style={th}>Materials on site (&pound;)</th>
-                    <th style={th}>Retention held</th>
-                    <th style={th}>Fundable</th>
+                    <th style={th}>Fundable (unpaid this-cert)</th>
                     <th style={th}>Raw advance</th>
                     <th style={th}>Eligible advance</th>
                     <th style={{ ...th, textAlign: 'left' }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {debtors.map((d) => (
-                    <tr key={d.name} style={{ borderBottom: '1px solid #f2f0ec', background: !d.hasLimit && d.outstanding > 0 ? '#fffdf5' : 'transparent' }}>
-                      <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{d.name}<div style={{ fontSize: 10.5, color: '#aaa', fontWeight: 400 }}>{d.invoices.length} invoice{d.invoices.length !== 1 ? 's' : ''}</div></td>
-                      <td style={td}>{gbp(d.outstanding)}</td>
-                      <td style={{ ...td, padding: '4px 8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
-                          <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
-                          <input type="number" value={(limits[d.name]?.insuredLimit) ?? ''} placeholder="0"
-                            onChange={e => setLimit(d.name, 'insuredLimit', e.target.value)}
-                            style={{ width: 100, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
-                        </div>
-                      </td>
-                      <td style={{ ...td, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
-                          <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
-                          <input type="number" value={(limits[d.name]?.materials) ?? ''} placeholder="0"
-                            onChange={e => setLimit(d.name, 'materials', e.target.value)}
-                            style={{ width: 90, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
-                        </div>
-                      </td>
-                      <td style={{ ...td, color: '#999' }}>{gbp(d.retention)}</td>
-                      <td style={{ ...td, color: '#555' }}>{gbp(d.fundableBase)}</td>
-                      <td style={{ ...td, color: '#999' }}>{gbp(d.rawAdvance)}</td>
-                      <td style={{ ...td, fontWeight: 700, color: d.advance > 0 ? '#0f766e' : '#ccc' }}>{gbp(d.advance)}</td>
-                      <td style={{ ...td, textAlign: 'left', fontSize: 11.5 }}>
-                        {!d.hasLimit ? <span style={{ color: '#b45309' }}>No insured limit</span>
-                          : d.fundableBase <= 0 ? <span style={{ color: '#999' }}>Nothing fundable</span>
-                          : d.cappedByLimit ? <span style={{ color: '#2563eb' }}>Capped at insured limit</span>
-                          : <span style={{ color: '#16a34a' }}>Full advance</span>}
-                      </td>
-                    </tr>
+                  {customers.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No applications found. Make sure projects have submitted applications and are synced.</td></tr>}
+                  {customers.map((c) => (
+                    <CustomerBlock key={c.customer} c={c} expanded={expanded} setExpanded={setExpanded}
+                      limits={limits} setLimit={setLimit} isPaid={isPaid} setPaid={setPaid} />
                   ))}
-                  {debtors.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding sales invoices. Sync Invoices Owed first.</td></tr>}
                 </tbody>
               </table>
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              Rules applied: materials on site (enter the &pound; value per debtor) and the last {settings.retentionPct}% of the contract are not funded; only debtors with an insured limit are funded, capped at that limit; total funding is capped at the facility maximum. Variations are only fundable with written instruction - exclude any not yet instructed. Insured limit = Bibby &quot;Approved Amount&quot; (import via CSV or type). Availability = funded (after the cap) minus what you&apos;ve currently drawn.
+              Only UNPAID applications count toward funding. Paid status is auto-matched to invoices by &quot;App N&quot; in the invoice reference; where it can&apos;t be matched it&apos;s flagged and treated as unpaid - use the paid toggle to correct. &quot;This cert (net)&quot; comes from each project&apos;s application table (already after retention). Insured limit = Bibby &quot;Approved Amount&quot; per customer (import via CSV or type). Availability = funded (after the facility cap) minus what you&apos;ve currently drawn.
             </div>
           </>
         )}
       </div>
+    </>
+  )
+}
+
+function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, setPaid }) {
+  return (
+    <>
+      <tr style={{ borderBottom: '1px solid #eee', background: !c.hasLimit && c.fundable > 0 ? '#fffdf5' : '#fcfbf9' }}>
+        <td style={{ ...td, textAlign: 'left', fontWeight: 700 }}>{c.customer}</td>
+        <td style={{ ...td, padding: '4px 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
+            <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
+            <input type="number" value={(limits[c.customer]?.insuredLimit) ?? ''} placeholder="0"
+              onChange={e => setLimit(c.customer, e.target.value)}
+              style={{ width: 100, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
+          </div>
+        </td>
+        <td style={{ ...td, fontWeight: 600 }}>{gbp(c.fundable)}</td>
+        <td style={{ ...td, color: '#999' }}>{gbp(c.rawAdvance)}</td>
+        <td style={{ ...td, fontWeight: 700, color: c.advance > 0 ? '#0f766e' : '#ccc' }}>{gbp(c.advance)}</td>
+        <td style={{ ...td, textAlign: 'left', fontSize: 11.5 }}>
+          {!c.hasLimit ? <span style={{ color: '#b45309' }}>No insured limit</span>
+            : c.cappedByLimit ? <span style={{ color: '#2563eb' }}>Capped at limit</span>
+            : c.fundable <= 0 ? <span style={{ color: '#999' }}>Nothing unpaid</span>
+            : <span style={{ color: '#16a34a' }}>Full advance</span>}
+        </td>
+      </tr>
+      {c.projects.map((p) => {
+        const isOpen = !!expanded[p.xeroId]
+        return (
+          <tr key={p.xeroId} style={{ borderBottom: '1px solid #f4f2ee' }}>
+            <td colSpan={6} style={{ padding: 0 }}>
+              <div
+                onClick={() => setExpanded(prev => ({ ...prev, [p.xeroId]: !prev[p.xeroId] }))}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px 7px 28px', cursor: 'pointer', background: '#fff' }}>
+                <span style={{ color: '#333' }}>{isOpen ? '\u25BC' : '\u25B6'} {p.name || '(unnamed project)'} <span style={{ color: '#aaa', fontSize: 11 }}>({p.unpaidCount} unpaid)</span></span>
+                <span style={{ fontWeight: 600, color: p.fundableProject > 0 ? INK : '#bbb' }}>{gbp(p.fundableProject)}</span>
+              </div>
+              {isOpen && (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fbfaf7' }}>
+                  <tbody>
+                    {p.applications.map((a) => {
+                      const paid = isPaid(a)
+                      return (
+                        <tr key={a.id} style={{ borderTop: '1px solid #f0eee9' }}>
+                          <td style={{ padding: '6px 12px 6px 44px', textAlign: 'left', width: '40%' }}>
+                            App {a.appNumber ?? '-'} <span style={{ color: '#aaa' }}>{monthLabel(a.monthKey)}</span>
+                            {!a.matched && <span title="Could not auto-match to an invoice - treated as unpaid" style={{ marginLeft: 6, fontSize: 10, color: '#b45309' }}>&#9888; unmatched</span>}
+                            {a.matched && <span style={{ marginLeft: 6, fontSize: 10, color: '#aaa' }}>{a.matchedInvoice}</span>}
+                          </td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', color: '#666' }}>This cert (net)</td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', fontWeight: 600, width: 120 }}>{gbp(a.thisCertNet)}</td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', width: 140 }}>
+                            <button onClick={() => setPaid(a.id, !paid)}
+                              title={paid ? 'Marked paid - excluded from funding' : 'Unpaid - included in funding'}
+                              style={{ border: '1px solid ' + (paid ? '#86efac' : '#fed7aa'), background: paid ? '#dcfce7' : '#fff7ed', color: paid ? '#16a34a' : '#ea580c', borderRadius: 12, padding: '3px 10px', fontSize: 10.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                              {paid ? '\u2713 Paid' : 'Unpaid'}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </td>
+          </tr>
+        )
+      })}
     </>
   )
 }

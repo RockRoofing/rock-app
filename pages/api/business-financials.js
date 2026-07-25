@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getTokens, saveTokens } from '../../lib/db'
+import { getTokens, saveTokens, getProject } from '../../lib/db'
+import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances } from '../../lib/xero'
 
 async function getRedis() {
@@ -402,53 +403,93 @@ export default async function handler(req, res) {
   }
 
   if (view === 'invoice-finance') {
-    const [recStore, ifConfig, ifLimits, dashCache] = await Promise.all([
-      redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),
+    const [ifConfig, ifLimits, dashCache, appPaidOverrides] = await Promise.all([
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
       redis.get('dashboard:cache').then(v => v || null).catch(() => null),
+      redis.get('config:if-app-paid').then(v => v || {}).catch(() => ({})),  // { appId: true/false }
     ])
-    // Build from the SAME project sales-invoice source as Invoices Owed (dashboard
-    // project invoice lines) so it's sales-only and reconciles with the rest of the app.
-    // Fall back to bank:outstanding-receivables (ACCREC) if the dashboard cache is empty.
-    let receivables
-    if (dashCache && Array.isArray(dashCache)) {
-      const rows = []
-      for (const p of dashCache) {
-        for (const inv of (p._invoiceLines || [])) {
-          const total = inv.total || 0
-          const paid = inv.amountPaid || 0
-          const due = inv.amountDue != null ? inv.amountDue : (total - paid)
-          if (!(due > 0.005)) continue
-          rows.push({
-            id: inv.invoiceID || inv.invoiceNumber || '',
-            number: inv.invoiceNumber || '',
-            invoiceNumber: inv.invoiceNumber || '',
-            contact: inv.contact || p.customer || '',
-            date: inv.date || '',
-            dueDate: inv.dueDate || '',
-            total,
-            amountDue: due,
-            reference: inv.reference || '',
-            projectName: p.name || '',
-          })
-        }
-      }
-      receivables = rows
-    } else {
-      receivables = recStore.items || []
+
+    // Parse an "App N" number out of an invoice reference/description.
+    const appNumFromRef = (s) => {
+      const m = String(s || '').match(/\bApp(?:lication)?\.?\s*(?:no\.?\s*)?(\d+)/i)
+      return m ? parseInt(m[1], 10) : null
     }
+
+    const projects = []
+    const dash = Array.isArray(dashCache) ? dashCache : []
+    for (const p of dash) {
+      if (!p || !p.xeroId) continue
+      let full = {}
+      try { full = (await getProject(p.xeroId)) || {} } catch { full = {} }
+      const apps = Array.isArray(full.applications) ? full.applications.slice() : []
+      if (!apps.length) continue
+      backfillAppNumbers(apps)
+      const sorted = apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
+      const prevGrossFor = (app) => {
+        let prev = null
+        for (const a of sorted) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
+        if (!prev) return 0
+        return app.prevCertGross != null ? app.prevCertGross : computeApplicationSummary(prev, 0).grossCurrent
+      }
+      // Invoice lines for this project (for paid-status matching).
+      const invLines = (p._invoiceLines || [])
+      const appRows = sorted
+        .filter(a => a.status && a.status !== 'draft')   // only real (submitted/sent) applications
+        .map(app => {
+          const summary = computeApplicationSummary(app, prevGrossFor(app))
+          const thisCertNet = summary?.thisCert?.total || 0
+          const appNo = app.appNumber || app.seq || null
+          // Auto-match to an invoice by "App N" in ref/number.
+          let matchInv = null
+          if (appNo != null) {
+            matchInv = invLines.find(l => appNumFromRef(l.reference) === appNo || appNumFromRef(l.invoiceNumber) === appNo) || null
+          }
+          const autoPaid = matchInv ? ((matchInv.amountDue || 0) <= 0.005) : null   // null = unmatched
+          const override = appPaidOverrides[app.id]
+          const paid = override != null ? !!override : (autoPaid === true)
+          return {
+            id: app.id,
+            appNumber: appNo,
+            monthKey: app.monthKey || '',
+            status: app.status || '',
+            thisCertNet,
+            matched: !!matchInv,
+            matchedInvoice: matchInv ? (matchInv.invoiceNumber || matchInv.reference || '') : '',
+            autoPaid,
+            paidOverride: override != null ? !!override : null,
+            paid,
+          }
+        })
+      if (!appRows.length) continue
+      projects.push({
+        xeroId: p.xeroId,
+        name: p.name || '',
+        customer: p.customer || '',
+        applications: appRows,
+      })
+    }
+
     return res.json({
-      receivables,
-      receivablesUpdatedAt: recStore.updatedAt || null,
+      projects,
       settings: {
         advanceRate: ifConfig.advanceRate != null ? ifConfig.advanceRate : 60,
         drawn: ifConfig.drawn != null ? ifConfig.drawn : 0,
-        retentionPct: ifConfig.retentionPct != null ? ifConfig.retentionPct : 10,
         facilityCap: ifConfig.facilityCap != null ? ifConfig.facilityCap : 500000,
       },
-      debtorLimits: ifLimits,        // { [debtorName]: { insuredLimit, materials } }
+      debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
     })
+  }
+
+  if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-app-paid') {
+    try {
+      const { appId, paid } = req.body || {}
+      if (!appId) return res.status(400).json({ ok: false, error: 'missing appId' })
+      const map = await redis.get('config:if-app-paid').then(v => v || {}).catch(() => ({}))
+      if (paid === null) delete map[appId]; else map[appId] = !!paid
+      await redis.set('config:if-app-paid', map)
+      return res.json({ ok: true })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 
   if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-settings') {
