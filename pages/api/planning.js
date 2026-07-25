@@ -111,6 +111,40 @@ export default async function handler(req, res) {
         return res.json({ ok: true, meta: meta[key] })
       }
 
+      // Shift a project's whole gantt so its earliest allocated day lands on newStart.
+      // All of that project's allocations move by the same day offset. One project only.
+      if (action === 'shift-start') {
+        const { key, newStart } = body
+        if (!key || !newStart) return res.status(400).json({ error: 'Missing key/newStart' })
+        const alloc = await getAlloc()
+        const days = alloc[key] || {}
+        const dates = Object.keys(days).filter(d => {
+          const cell = days[d]
+          const entries = Array.isArray(cell) ? cell : (cell && Array.isArray(cell.entries) ? cell.entries : [])
+          return entries.length > 0
+        }).sort()
+        if (!dates.length) {
+          // No bars yet - nothing to shift; just remember the planned start.
+          const meta = await getMeta()
+          meta[key] = { ...(meta[key] || {}), plannedStart: newStart }
+          await saveMeta(meta)
+          return res.json({ ok: true, shifted: 0 })
+        }
+        const earliest = dates[0]
+        const MS = 86400000
+        const offset = Math.round((new Date(newStart + 'T00:00:00') - new Date(earliest + 'T00:00:00')) / MS)
+        if (offset === 0) return res.json({ ok: true, shifted: 0 })
+        const shiftISO = (d) => {
+          const nd = new Date(d + 'T00:00:00'); nd.setDate(nd.getDate() + offset)
+          return `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}-${String(nd.getDate()).padStart(2, '0')}`
+        }
+        const moved = {}
+        for (const [d, cell] of Object.entries(days)) moved[shiftISO(d)] = cell
+        alloc[key] = moved
+        await saveAlloc(alloc)
+        return res.json({ ok: true, shifted: Object.keys(moved).length, offset })
+      }
+
       if (action === 'assign') {
         const { key, date, opId } = body
         const half = body.half || 'full'

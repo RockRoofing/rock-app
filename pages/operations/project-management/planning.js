@@ -364,11 +364,12 @@ export default function PlanningPage() {
 
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
         <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: NAME_W + DATE_W * 2 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
+          <div style={{ minWidth: NAME_W + DATE_W * 3 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
 
             {/* Week/date header */}
             <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
               <Frozen w={NAME_W} left={0} style={{ fontWeight: 700, background: '#faf9f7' }}>Project</Frozen>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Planned / Actual</PlainCell>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Start</PlainCell>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
               {view === 'day'
@@ -385,6 +386,7 @@ export default function PlanningPage() {
             {view === 'day' && (
               <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff' }}>
                 <Frozen w={NAME_W} left={0} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</Frozen>
+                <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
                 {days.map((d, i) => {
@@ -441,6 +443,15 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
 
   const startD = parseISO(start), complD = parseISO(compl)
   const missing = !start || !compl
+  // Planned / Actual start = the earliest day this project has any allocation (first
+  // on-site bar). Derived, so it can't drift from the real gantt. Blank if no bars yet.
+  const projDays = data.allocations[p.key] || {}
+  let plannedStart = ''
+  {
+    const dated = Object.keys(projDays).filter(dk => cellData(projDays[dk]).count > 0).sort()
+    if (dated.length) plannedStart = dated[0]
+  }
+  const startedActual = plannedStart && plannedStart <= todayCellKey
   let lastAlloc = null
   let projectHasLabour = false
   let projectHasNamedLabour = false
@@ -486,6 +497,14 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
     onSaveMeta && onSaveMeta()
   }
 
+  // Editing Planned/Actual shifts the whole project's gantt so its first bar lands on
+  // the new date (all allocations move by the same offset). Blank/no bars = no-op.
+  async function shiftStart(newStart) {
+    if (!newStart) return
+    await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'shift-start', key: p.key, newStart }) }).catch(() => {})
+    onSaveMeta && onSaveMeta()
+  }
+
   const selDates = (sel && sel.key === p.key) ? sel.dates : null
 
   return (
@@ -503,6 +522,13 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
         {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
       </Frozen>
       {/* inline date editors */}
+      <PlainCell w={DATE_W} style={{ background: !plannedStart ? '#fff' : (startedActual ? '#f0fdf4' : '#f7fbff') }}>
+        {plannedStart
+          ? <input type="date" value={plannedStart} onChange={e => shiftStart(e.target.value)}
+              title={startedActual ? 'Actual start (first on-site day, now in the past)' : 'Planned start (first on-site day) - changing this shifts the whole gantt'}
+              style={{ ...dateInput, color: startedActual ? '#166534' : '#1d4ed8', fontWeight: 600 }} />
+          : <span style={{ fontSize: 10.5, color: '#bbb' }}>add bars</span>}
+      </PlainCell>
       <PlainCell w={DATE_W} style={{ background: !start ? '#fff8f8' : '#fff' }}>
         <input type="date" value={start} onChange={e => { setStart(e.target.value); saveMeta(e.target.value, compl) }} style={dateInput} />
       </PlainCell>
@@ -594,6 +620,7 @@ function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
         </div>
         <div style={{ fontSize: 10, color: '#7799aa' }}>Reactive visits — job name & address per allocation</div>
       </Frozen>
+      <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
       {view === 'day'

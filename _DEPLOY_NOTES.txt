@@ -1,38 +1,34 @@
-DEPLOY NOTES - Invoice Finance rebuilt around APPLICATIONS (not invoices)
-========================================================================
+DEPLOY NOTES - Planning gantt: Planned / Actual start column (Phase 1)
+=====================================================================
+
+** This is PHASE 1 of the Project Cash Flow work - the planning gantt change only.
+   The Commercial Cash Flow page (Phase 2) will be built on top of this next. **
 
 TWO files, both EDITS - just replace them.
-  pages/api/business-financials.js              (new project/application funding model)
-  pages/business-financials/invoice-finance.js  (rebuilt page)
+  pages/api/planning.js                              (new 'shift-start' action)
+  pages/operations/project-management/planning.js    (Planned / Actual column)
 
-WHY
-  Bibby fund against your APPLICATIONS, not invoices. The page now works from the
-  application "This cert (net)" figure - which is already NET OF RETENTION and
-  inherently INCLUDES materials on site. So the separate materials and retention
-  inputs are gone (they were double-handling what's already in the application).
+WHAT'S NEW (Operations > Project Management > Planning)
+  A new "Planned / Actual" column sits BEFORE the Start column.
 
-HOW IT WORKS NOW
-  - Grouped by CUSTOMER (insured limit is per customer), with PROJECTS listed under
-    each, and APPLICATIONS expandable under each project (click a project row).
-  - Funding basis per project = sum of "This cert (net)" for UNPAID applications only
-    (usually the latest, but earlier unpaid ones too if not yet paid).
-  - Advance = advance-rate% (60) of the customer's total fundable, capped at their
-    insured limit; total capped at the facility maximum; minus drawn = availability.
+  - Start (unchanged) = the CONTRACTED start date.
+  - Planned / Actual = the first on-site day in the gantt (earliest allocated bar).
+    It auto-populates from the gantt, so it can never drift from the real plan.
+      * Blank ("add bars") until the project has its first allocation.
+      * Shows BLUE while it's in the future (planned).
+      * Shows GREEN once it's on/before today (i.e. actually started).
+  - Editing the Planned / Actual date SHIFTS THE WHOLE PROJECT'S GANTT so the first
+    bar lands on the new date - every allocation for that project moves by the same
+    number of days. Only that one project moves. (Shifts silently, as agreed.)
 
-PAID STATUS (auto + manual)
-  Applications have no paid flag, so each is auto-matched to its invoice by the
-  "App N" number in the invoice reference, and that invoice's paid/outstanding status
-  is used. Where it CAN'T be matched, the app is flagged "! unmatched" and treated as
-  UNPAID (included in funding) so nothing is silently dropped. Each app has a
-  Paid/Unpaid toggle that overrides the auto value and is saved.
+WHY IT MATTERS
+  This makes the plan's timing a single source of truth: move the planned start and
+  the whole sequence follows. The upcoming Commercial Cash Flow page will read this,
+  so cash timing will move automatically with the planned start - Commercial won't
+  need to re-do anything when Operations reschedule.
 
-SETTINGS
-  Advance rate %, Facility cap, Currently drawn. Insured limit per customer (type or
-  import the Bibby CSV). The Cash Flow "invoice finance available" figure still uses
-  the older invoice-based estimate - tell me if you want it switched to this
-  application-based number too (recommended, for consistency).
-
-NOTE: needs projects to have applications and a recent dashboard sync. Set the
-Facility cap to your real figure.
+NOTE: it moves the allocation bars by re-dating them. Marking days Actual is still
+what confirms them; a started project's date naturally becomes the actual start as
+days pass.
 
 BUILD: next build -> Compiled successfully.
