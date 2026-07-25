@@ -11,6 +11,7 @@ const LINKS = [
   { href: '/applications', label: 'Applications' },
   { href: '/application-calendar', label: 'Application Calendar' },
   { href: '/wip', label: 'WIP' },
+  { href: '/project-cashflow', label: 'Cash Flow' },
   { href: '/commercial-scorecard', label: 'Commercial Scorecard' },
 ]
 

@@ -1,0 +1,244 @@
+import { useState, useEffect, useMemo, useRef } from 'react'
+import Head from 'next/head'
+import CommercialNav from '../components/CommercialNav'
+
+// ── Layout constants (mirror the planning gantt) ──
+const NAME_W = 280, DATE_W = 92, CELL_W = 34, ROW_H = 42
+const INK = '#1a1a19'
+
+const pad = (n) => String(n).padStart(2, '0')
+const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const wd = (x.getDay() + 6) % 7; return addDays(x, -wd) }
+const parseISO = (s) => { if (!s) return null; const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d) }
+const fmtDMY = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`
+const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6
+const sameDay = (a, b) => a && b && iso(a) === iso(b)
+
+// Normalise an allocation cell to a headcount (bars are derived from whether a
+// day has any labour allocated - we only need presence, not who).
+function cellCount(cell) {
+  if (!cell) return 0
+  const entries = Array.isArray(cell) ? cell : (cell && Array.isArray(cell.entries) ? cell.entries : [])
+  const unnamed = (cell && !Array.isArray(cell) && Number(cell.unnamed)) || 0
+  return entries.length + unnamed
+}
+
+export default function ProjectCashflow() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [view, setView] = useState('day')            // 'day' | 'week'
+  const [anchorMonday, setAnchorMonday] = useState(mondayOf(new Date()))
+  const [historic, setHistoric] = useState(false)
+  const [sel, setSel] = useState(null)               // { key, dates:Set<iso> }
+  const dragging = useRef(false)
+  const dragKey = useRef(null)
+
+  useEffect(() => {
+    fetch('/api/planning').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const up = () => { dragging.current = false; dragKey.current = null }
+    window.addEventListener('mouseup', up)
+    return () => window.removeEventListener('mouseup', up)
+  }, [])
+
+  const RANGE_WEEKS = 156
+  const days = useMemo(() => {
+    const start = anchorMonday
+    const end = addDays(anchorMonday, RANGE_WEEKS * 7 - 1)
+    const out = []
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) out.push(new Date(d))
+    return out
+  }, [anchorMonday])
+
+  const weekGroups = useMemo(() => {
+    const groups = []
+    for (let i = 0; i < days.length; i += 7) groups.push(days.slice(i, i + 7))
+    return groups
+  }, [days])
+
+  const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
+
+  if (loading || !data) {
+    return (
+      <>
+        <Head><title>Rock Roofing — Cash Flow</title></Head>
+        <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
+          <CommercialNav active="/project-cashflow" />
+          <div style={{ padding: 40, color: '#888' }}>Loading planner…</div>
+        </div>
+      </>
+    )
+  }
+
+  const live = (data.projects || []).filter(p => p.type === 'live')
+  const negotiated = (data.projects || []).filter(p => p.type === 'negotiated')
+  const todayKey = iso(new Date())
+
+  const countOnDay = (p, dateKey) => cellCount((data.allocations[p.key] || {})[dateKey])
+
+  // ── Selection (drag across cells on a single project row) ──
+  function cellDown(key, d) {
+    dragging.current = true; dragKey.current = key
+    const k = iso(d)
+    setSel(prev => {
+      // Clicking the same single selected cell toggles it off.
+      if (prev && prev.key === key && prev.dates.size === 1 && prev.dates.has(k)) return null
+      return { key, dates: new Set([k]) }
+    })
+  }
+  function cellEnter(key, d) {
+    if (!dragging.current || dragKey.current !== key) return
+    const k = iso(d)
+    setSel(prev => {
+      if (!prev || prev.key !== key) return { key, dates: new Set([k]) }
+      const next = new Set(prev.dates); next.add(k)
+      return { key, dates: next }
+    })
+  }
+  const selRange = useMemo(() => {
+    if (!sel || !sel.dates.size) return null
+    const arr = [...sel.dates].sort()
+    return { from: arr[0], to: arr[arr.length - 1], count: arr.length }
+  }, [sel])
+
+  const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
+
+  return (
+    <>
+      <Head><title>Rock Roofing — Cash Flow</title></Head>
+      <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
+        <CommercialNav active="/project-cashflow" />
+        <div style={{ padding: 20, maxWidth: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Project Cash Flow <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· forecast</span></h1>
+              <div style={{ fontSize: 12.5, color: '#8a857c', marginTop: 4, maxWidth: 760 }}>
+                Mirrors the Operations planning programme (dates and sequence). Bars are greyed and blank here - select a period on any project row (drag across the cells, with or without bars) to build a hypothetical application for that period. Selections here never change the real programme or applications.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <button onClick={() => setView(v => v === 'day' ? 'week' : 'day')} style={ghostBtn}>{view === 'day' ? 'Week view' : 'Day view'}</button>
+              <button onClick={() => setHistoric(h => { const next = !h; setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0))); return next })}
+                style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
+                {historic ? '✓ Historic' : 'Historic'}
+              </button>
+              <button onClick={() => shift(historic ? -1 : -12)} style={ghostBtn} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
+              <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
+              <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
+            </div>
+          </div>
+
+          {/* Selection info bar (fixed overlay so it never shifts the gantt) */}
+          {selRange && (
+            <div style={{ position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, display: 'flex', alignItems: 'center', gap: 14, background: '#111827', color: '#fff', borderRadius: 10, padding: '10px 16px', boxShadow: '0 6px 20px rgba(0,0,0,0.25)' }}>
+              <span style={{ fontSize: 13 }}><strong>{projName(sel.key)}</strong> — {fmtDMY(parseISO(selRange.from))} to {fmtDMY(parseISO(selRange.to))} ({selRange.count} day{selRange.count === 1 ? '' : 's'})</span>
+              <button style={{ background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                title="The hypothetical application document will open here (next phase)"
+                onClick={() => alert('The hypothetical application for this period will open here in the next phase.')}>Build application →</button>
+              <button onClick={() => setSel(null)} style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', fontSize: 16 }}>×</button>
+            </div>
+          )}
+
+          <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <div style={{ minWidth: NAME_W + DATE_W * 2 + days.length * CELL_W }}>
+                {/* header */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
+                  <Frozen w={NAME_W}>Project</Frozen>
+                  <PlainCell w={DATE_W}>Planned / Actual</PlainCell>
+                  <PlainCell w={DATE_W}>Contract Compl.</PlainCell>
+                  {view === 'day'
+                    ? weekGroups.map((g, i) => <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>)
+                    : weekGroups.map((g, i) => <div key={i} style={{ width: 46, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>)}
+                </div>
+
+                {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
+                {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={data.meta[p.key] || {}}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} />)}
+
+                {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
+                {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={data.meta[p.key] || {}}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} neg />)}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, color: '#aaa', marginTop: 10 }}>
+            Bars are greyed and intentionally blank - financial detail is added via the hypothetical application per selected period (coming next). This page reads the live planning programme, so if Operations move a project the sequence here moves with it.
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, neg }) {
+  const complD = parseISO(meta.completionDate || '')
+  // Planned/Actual = earliest allocated day (mirrors the planning gantt).
+  const projDays = data.allocations[p.key] || {}
+  let plannedStart = ''
+  { const dated = Object.keys(projDays).filter(dk => countOnDay(p, dk) > 0).sort(); if (dated.length) plannedStart = dated[0] }
+  const selDates = sel && sel.key === p.key ? sel.dates : null
+
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
+      <Frozen w={NAME_W} style={{ background: neg ? '#fbfaf8' : '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: neg ? '#8a6d1a' : INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>
+          {p.projectNo ? `${p.projectNo} — ` : ''}{p.name}
+        </div>
+        {p.location && <div style={{ fontSize: 10, color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: NAME_W - 16 }}>{p.location}</div>}
+      </Frozen>
+      <PlainCell w={DATE_W} style={{ fontSize: 11, color: plannedStart ? (plannedStart <= todayKey ? '#166534' : '#1d4ed8') : '#bbb', fontWeight: 600 }}>
+        {plannedStart ? fmtDMY(parseISO(plannedStart)) : '—'}
+      </PlainCell>
+      <PlainCell w={DATE_W} style={{ fontSize: 11, color: '#555' }}>{meta.completionDate ? fmtDMY(parseISO(meta.completionDate)) : '—'}</PlainCell>
+
+      {view === 'day'
+        ? days.map((d, i) => {
+          const we = isWeekend(d); const key = iso(d)
+          const hasBar = countOnDay(p, key) > 0
+          const isCompl = complD && sameDay(d, complD)
+          const selected = selDates && selDates.has(key)
+          const isToday = key === todayKey
+          return (
+            <div key={i}
+              onMouseDown={(e) => { e.preventDefault(); onCellDown(p.key, d) }}
+              onMouseEnter={() => onCellEnter(p.key, d)}
+              title={`${fmtDMY(d)}${hasBar ? ' · on site (planned)' : ''}`}
+              style={{
+                width: CELL_W, cursor: 'pointer', userSelect: 'none',
+                background: selected ? '#fde68a' : (hasBar ? '#d4d4d4' : (we ? '#f3f1ec' : '#fff')),
+                borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                boxShadow: [isCompl ? 'inset -2px 0 0 0 #dc2626' : '', isToday ? 'inset -2px 0 0 0 #15803d' : ''].filter(Boolean).join(', ') || undefined,
+              }} />
+          )
+        })
+        : weekGroups.map((g, i) => {
+          const anyBar = g.some(d => countOnDay(p, iso(d)) > 0)
+          const anySel = selDates && g.some(d => selDates.has(iso(d)))
+          return (
+            <div key={i}
+              onMouseDown={(e) => { e.preventDefault(); onCellDown(p.key, g[0]) }}
+              onMouseEnter={() => onCellEnter(p.key, g[0])}
+              title={`W/C ${fmtDMY(g[0])}`}
+              style={{ width: 46, cursor: 'pointer', userSelect: 'none', borderLeft: '1px solid #eee',
+                background: anySel ? '#fde68a' : (anyBar ? '#d4d4d4' : '#fff') }} />
+          )
+        })}
+    </div>
+  )
+}
+
+function Frozen({ w, children, style }) {
+  return <div style={{ width: w, minWidth: w, position: 'sticky', left: 0, zIndex: 2, borderRight: '1px solid #eee', padding: '6px 10px', boxSizing: 'border-box', background: '#fff', ...style }}>{children}</div>
+}
+function PlainCell({ w, children, style }) {
+  return <div style={{ width: w, minWidth: w, borderRight: '1px solid #f0f0f0', padding: '6px 8px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', ...style }}>{children}</div>
+}
+function SectionLabel({ children }) {
+  return <div style={{ padding: '6px 12px', fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, color: '#9a958c', background: '#f7f6f3', borderBottom: '1px solid #eee', position: 'sticky', left: 0 }}>{children}</div>
+}
+const ghostBtn = { background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '7px 12px', fontSize: 12.5, cursor: 'pointer', color: '#555' }

@@ -1,27 +1,35 @@
-DEPLOY NOTES - Planning: clean label for orphaned old operative codes
-====================================================================
+DEPLOY NOTES - Commercial Cash Flow page: mirrored gantt shell (Phase 2a)
+=========================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/operations/project-management/planning.js
+** ONE NEW FILE + ONE EDIT. **
 
-WHAT THIS IS
-  Some historic allocations show a code like "op_1783759524922_qi9" instead of a
-  name. Cause: those allocations were made under the OLD operative id scheme (op_...)
-  before operatives moved to Site App Users (usr_...). The allocation only stores the
-  id, not a name, and the old roster is gone - so there is no data left that says
-  which current person that old code was. The link is unrecoverable.
+NEW FILE - add via GitHub "Add file" (a zip can't create it):
+  pages/project-cashflow.js
 
-WHAT THIS CHANGE DOES
-  - Current & future allocations: unaffected, show names correctly (already did).
-  - Old orphaned codes: now display as "Unknown (removed)" instead of the raw
-    op_... code, so historic rows read cleanly.
+EDIT (replace):
+  components/CommercialNav.js   (new "Cash Flow" tab, between WIP and Scorecard)
 
-WHAT IT DOESN'T DO
-  It does NOT recover the old names (impossible - the data isn't stored). If you'd
-  rather these orphaned historic entries were REMOVED entirely instead of relabelled,
-  say so and I'll do a safe one-time cleanup of op_ entries in the allocations.
+WHAT THIS IS (first slice of the Project Cash Flow feature)
+  A new Commercial > Cash Flow tab that MIRRORS the Operations planning programme:
+    - Same projects (live + negotiated), same dates/sequence, day & week views,
+      Historic toggle, Today / back / forward nav - all reading the live planning
+      data, so if Operations move a project this moves with it.
+    - Gantt bars are GREYED and BLANK (no numbers) - just showing when work is
+      planned, per your spec.
+    - "Planned / Actual" and "Contract Compl." columns shown (read-only mirror).
 
-NOTE: only affects display of old op_ ids; anything that resolves to a real Site App
-User is untouched.
+  PERIOD SELECTION: click/drag across the cells on ANY project row - with or without
+  bars - to select a period. A bar at the top shows the project + date range with a
+  "Build application ->" button. That button is a placeholder for now (it just
+  confirms the period); the hypothetical application document is the NEXT phase.
+
+  Nothing here writes to the programme or to applications - it's read-only + local
+  selection only.
+
+NEXT PHASES (not in this package)
+  2b - contracted rates for negotiated projects
+  2c - the hypothetical application pop-out (full mirror; revenue + labour; materials
+       as %/figure toward budget on a delivery day; cumulative; never saved to real
+       applications) + a View button per period.
 
 BUILD: next build -> Compiled successfully.
