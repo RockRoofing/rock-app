@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { BizNav, INK, GOLD, gbp, Card } from '../../components/BizNav'
+import { BizNav, INK, GOLD, gbp, Card, SyncButton } from '../../components/BizNav'
 
 const pad = (n) => String(n).padStart(2, '0')
 const norm = (s) => String(s || '').toLowerCase()
@@ -180,9 +180,13 @@ export default function InvoiceFinance() {
       <Head><title>Invoice Finance - Rock Roofing</title></Head>
       <BizNav />
       <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
-        <div style={{ marginBottom: 16 }}>
-          <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Invoice Finance (Bibby) availability</h1>
-          <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Estimates cash available from the Bibby facility. Per debtor: fundable = outstanding &minus; materials on site &minus; {settings.retentionPct}% retention held back; advance = {settings.advanceRate}% of fundable, capped at the insured (approved) limit. Debtors with no insured limit are excluded. Variations without written instruction / final applications can be excluded per invoice. Total funding is capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Invoice Finance (Bibby) availability</h1>
+            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Estimates cash available from the Bibby facility. Per debtor: fundable = outstanding &minus; materials on site &minus; {settings.retentionPct}% retention held back; advance = {settings.advanceRate}% of fundable, capped at the insured (approved) limit. Debtors with no insured limit are excluded. Variations without written instruction / final applications can be excluded per invoice. Total funding is capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
+          </div>
+          <SyncButton endpoint="/api/sync-invoices" label="Sync invoices from Xero" onDone={load}
+            buildMsg={(d) => d.invoicesFetched != null ? `${d.invoicesMatched || 0} matched, ${d.invoicesUnassigned || 0} unassigned (of ${d.invoicesFetched}).` : 'Synced.'} />
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
@@ -210,7 +214,7 @@ export default function InvoiceFinance() {
               <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
-                <label htmlFor="bibbyfile" style={{ background: '#fff', border: '1px solid #ccc', borderRadius: 8, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer', color: '#333' }}>Import Bibby limit list (CSV)</label>
+                <label htmlFor="bibbyfile" style={{ background: GOLD, border: '1px solid ' + GOLD, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer', color: '#fff', fontWeight: 600 }}>Import Bibby limit list (CSV)</label>
               </div>
               <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
               {importMsg && <div style={{ fontSize: 11.5, color: '#555', flexBasis: '100%' }}>{importMsg}</div>}
