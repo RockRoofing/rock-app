@@ -133,9 +133,10 @@ export default async function handler(req, res) {
       projects.push({ projectNo, data: project, status: status || 'active', createdAt: now, updatedAt: now })
     }
     await saveOpsProjects(projects)
-    // A newly-created active project → notify "all projects" Site App users
-    // (notifyNewProject dedupes so re-saves/IHM edits won't re-send).
-    if ((status || 'active') === 'active' && idx < 0) {
+    // A newly-created project (active OR draft) → notify "all projects" Site App users.
+    // Creating the pre-contract (handover) minutes IS the creation of the project, so
+    // drafts count. notifyNewProject dedupes so re-saves/IHM edits won't re-send.
+    if (((status || 'active') === 'active' || (status || 'active') === 'draft') && idx < 0) {
       try { const { notifyNewProject } = await import('../../lib/ramsNotify'); notifyNewProject({ projectNo }) } catch {}
     }
     return res.json({ ok: true, projectNo, status: status || 'active' })

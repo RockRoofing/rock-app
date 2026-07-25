@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     }
 
     for (const p of (ops || [])) {
-      if ((p.status || 'active') !== 'active') continue
+      if (((p.status || 'active') !== 'active' && (p.status || 'active') !== 'draft')) continue
       const projectNo = p.projectNo
       const projectName = p.data?.projectName || p.projectNo
       const cm = p.data?.contractsManager || ''

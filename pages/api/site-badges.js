@@ -33,7 +33,7 @@ export default async function handler(req, res) {
       : rawAccess ? String(rawAccess).split(',').map(s => s.trim()).filter(Boolean)
       : []
 
-    const projects = (await getOpsProjects()).filter(p => (p.status || 'active') === 'active')
+    const projects = (await getOpsProjects()).filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft'))
     const allowed = (no) =>
       access === 'all' || (Array.isArray(access) && access.map(String).includes(String(no)))
     const myProjects = projects.filter(p => allowed(p.projectNo))

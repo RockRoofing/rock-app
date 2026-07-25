@@ -24,7 +24,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       const ops = await getOpsProjects()
-      const active = (ops || []).filter(p => (p.status || 'active') === 'active')
+      const active = (ops || []).filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft'))
       const manual = (await get(KEY)) || {}
 
       const STAGE_RANK = { cm: 0, director: 1, 'site-manager': 2, operatives: 3, complete: 4 }

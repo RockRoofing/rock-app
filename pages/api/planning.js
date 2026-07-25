@@ -60,7 +60,7 @@ async function buildProjects() {
   // Live projects (Ops active)
   const ops = await getOpsProjects()
   const live = (ops || [])
-    .filter(p => (p.status || 'active') === 'active')
+    .filter(p => { const s = p.status || 'active'; return s === 'active' || s === 'draft' })
     .map(p => ({
       key: `L:${p.projectNo}`, type: 'live', projectNo: p.projectNo,
       name: p.data?.projectName || p.projectNo,

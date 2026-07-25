@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       // List all RAMS awaiting Director approval across active projects.
       if (req.query.pending === 'director') {
         const { getOpsProjects, getProjectFiles } = await import('../../lib/db')
-        const projects = (await getOpsProjects()).filter(p => (p.status || 'active') === 'active')
+        const projects = (await getOpsProjects()).filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft'))
         const items = []
         for (const p of projects) {
           const appr = await getRamsApprovals(p.projectNo)

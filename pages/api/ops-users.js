@@ -84,7 +84,7 @@ function canonicalCompany(users, typedRaw) {
 // Given a user's previous and new records, return the ACTIVE project numbers the
 // user can now access but couldn't before. 'all' means every active project.
 function expandedAccess(prev, after, projects) {
-  const activeNos = projects.filter(p => (p.status || 'active') === 'active').map(p => p.projectNo)
+  const activeNos = projects.filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft')).map(p => p.projectNo)
   const toSet = (pa) => pa === 'all' || pa == null ? 'all' : (Array.isArray(pa) ? pa.map(String) : [])
   const before = toSet(prev?.projectAccess)
   const now = toSet(after?.projectAccess)
@@ -242,7 +242,7 @@ export default async function handler(req, res) {
     // Tell the new user which projects they can access + any RAMS ready to sign.
     try {
       const nos = newUser.projectAccess === 'all'
-        ? projects.filter(p => (p.status || 'active') === 'active').map(p => p.projectNo)
+        ? projects.filter(p => ((p.status || 'active') === 'active' || (p.status || 'active') === 'draft')).map(p => p.projectNo)
         : (Array.isArray(newUser.projectAccess) ? newUser.projectAccess : [])
       if (nos.length && newUser.email) {
         const { notifyUserAddedToProjects } = await import('../../lib/ramsNotify')
