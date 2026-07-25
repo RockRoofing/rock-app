@@ -1,19 +1,26 @@
-DEPLOY NOTES - FIX: Cash Flow page client-side exception
-========================================================
+DEPLOY NOTES - Contracted Rates for negotiated projects (Phase 2b)
+==================================================================
 
-ONE file, an EDIT - replace the pages/project-cashflow.js you added.
-  pages/project-cashflow.js
+TWO files, both EDITS - just replace them.
+  pages/contracted-rates.js       (picker now includes negotiated projects)
+  pages/api/contracted-rates.js   (stores negotiated rates separately)
 
-WHAT WAS WRONG
-  The page crashed with "a client-side exception has occurred". Cause: a React hook
-  (a useMemo) was declared AFTER the early "if (loading) return" - so once the planner
-  data loaded, React ran more hooks than on the first render (Rules of Hooks
-  violation) and threw. Also added defensive guards on data.allocations / data.meta.
+WHAT'S NEW
+  The Contracted Rates page previously only listed LIVE projects. It now also lists
+  NEGOTIATED projects (Pipedrive "Negotiating" deals), shown with a "NEG" tag in the
+  picker. You can upload / build / lock contracted rates for them exactly like live
+  projects.
 
-FIX
-  Moved all hooks above the loading return; guarded the data accesses. No behaviour
-  change - same mirrored greyed gantt + period selection.
+WHERE THEY'RE STORED
+  Live projects keep storing rates inside the project record (unchanged). Negotiated
+  projects have no project record, so their rates are stored under a separate key
+  (crates:negotiated:<dealId>). Everything else - upload/parse, edit, lock, delete,
+  totals - works identically. The "Open project" link is hidden for negotiated ones
+  (they have no project page); a small "Negotiated project" tag shows instead.
 
-Deploy this over the version you added and the page will load.
+WHY
+  This is the foundation for the Commercial Cash Flow hypothetical application (next
+  phase), which builds the application FROM contracted rates - so negotiated projects
+  need rates too.
 
 BUILD: next build -> Compiled successfully.

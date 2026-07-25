@@ -32,13 +32,19 @@ export default function ContractedRatesPage() {
 
   useEffect(() => { (async () => {
     try {
-      const [d, m] = await Promise.all([
+      const [d, m, pl] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
+        fetch('/api/planning').then(r => r.json()).catch(() => ({})),
       ])
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '' }))
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
-      setProjects(ps)
+      // Negotiated projects (Pipedrive deals) - their id is the "N:<dealId>" key and
+      // their rates are stored separately server-side.
+      const negs = (pl.projects || []).filter(p => p.type === 'negotiated')
+        .map(p => ({ xeroId: p.key, jobNo: 'NEG', name: p.name || 'Negotiated deal', neg: true }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      setProjects([...ps, ...negs])
       if (m && m.user) setMe(m.user)
       // Deep-link: ?projectId=… pre-selects a project (e.g. "Set up" from the
       // Applications upcoming table) so the costing doc can be uploaded straight away.
@@ -559,7 +565,8 @@ export default function ContractedRatesPage() {
               {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
             </select>
             )}
-            {selProject && <Link href={`/project/${projectId}`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open project →</Link>}
+            {selProject && !selProject.neg && <Link href={`/project/${projectId}`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open project →</Link>}
+            {selProject && selProject.neg && <span style={{ fontSize: 11.5, color: '#8a6d1a', background: '#fdf6e3', border: '1px solid #f0e2b0', borderRadius: 6, padding: '3px 8px' }}>Negotiated project</span>}
           </div>
 
           {!projectId ? (

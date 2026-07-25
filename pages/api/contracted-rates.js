@@ -1,6 +1,32 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, saveProject } from '../../lib/db'
 
+// Negotiated projects (Pipedrive deals, id like "N:123") aren't in getProject, so
+// their contracted rates live in a dedicated Redis key. We wrap them in the same
+// shape { contractedRates, variations } the rest of this handler expects, so live and
+// negotiated projects share one code path.
+const isNegotiated = (id) => typeof id === 'string' && id.startsWith('N:')
+async function negRedis() {
+  const { Redis } = await import('@upstash/redis')
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  return new Redis({ url, token })
+}
+async function getNegProject(id) {
+  const r = await negRedis(); if (!r) return {}
+  const dealId = id.slice(2)
+  return (await r.get(`crates:negotiated:${dealId}`)) || {}
+}
+async function saveNegProject(id, project) {
+  const r = await negRedis(); if (!r) return
+  const dealId = id.slice(2)
+  await r.set(`crates:negotiated:${dealId}`, project)
+}
+// Route get/save to the right store based on the project id.
+const loadProject = async (id) => isNegotiated(id) ? (await getNegProject(id)) : ((await getProject(id)) || {})
+const persistProject = async (id, project) => isNegotiated(id) ? saveNegProject(id, project) : saveProject(id, project)
+
 // Drop the dashboard snapshot so Project Financials (Budget Tracker + EOM) rebuild
 // from fresh project data. Called after CR-lock updates the project's budgets — the
 // dashboard caches for 4h, so without this the tables show stale numbers.
@@ -44,7 +70,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
-    const project = (await getProject(projectId)) || {}
+    const project = await loadProject(projectId)
     return res.json({ contractedRates: project.contractedRates || null, variations: project.variations || [] })
   }
 
@@ -88,7 +114,7 @@ export default async function handler(req, res) {
     }
 
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
-    const project = (await getProject(projectId)) || {}
+    const project = await loadProject(projectId)
 
     // Save the (possibly edited) rate set + lock state.
     if (action === 'save') {
@@ -108,7 +134,7 @@ export default async function handler(req, res) {
       // When the rates are locked, the CR totals become the source of truth for the
       // project's contract value + labour/materials budgets (overwrites manual).
       if (project.contractedRates.locked) populateBudgetsFromCR(project)
-      await saveProject(projectId, project)
+      await persistProject(projectId, project)
       if (project.contractedRates.locked) await clearDashboardCache()
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
@@ -119,7 +145,7 @@ export default async function handler(req, res) {
       project.contractedRates.locked = !!req.body.locked
       project.contractedRates.savedAt = Date.now()
       if (project.contractedRates.locked) populateBudgetsFromCR(project)
-      await saveProject(projectId, project)
+      await persistProject(projectId, project)
       if (project.contractedRates.locked) await clearDashboardCache()
       return res.json({ ok: true, contractedRates: project.contractedRates })
     }
@@ -127,7 +153,7 @@ export default async function handler(req, res) {
     // Delete the whole set so a fresh file can be uploaded.
     if (action === 'delete') {
       delete project.contractedRates
-      await saveProject(projectId, project)
+      await persistProject(projectId, project)
       return res.json({ ok: true })
     }
 
@@ -147,7 +173,7 @@ export default async function handler(req, res) {
         profit: v.profit || '0',
       })
       project.variations = vars
-      await saveProject(projectId, project)
+      await persistProject(projectId, project)
       return res.json({ ok: true, variations: vars })
     }
 
