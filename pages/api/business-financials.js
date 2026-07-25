@@ -402,20 +402,52 @@ export default async function handler(req, res) {
   }
 
   if (view === 'invoice-finance') {
-    const [recStore, ifConfig, ifLimits] = await Promise.all([
+    const [recStore, ifConfig, ifLimits, dashCache] = await Promise.all([
       redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
+      redis.get('dashboard:cache').then(v => v || null).catch(() => null),
     ])
+    // Build from the SAME project sales-invoice source as Invoices Owed (dashboard
+    // project invoice lines) so it's sales-only and reconciles with the rest of the app.
+    // Fall back to bank:outstanding-receivables (ACCREC) if the dashboard cache is empty.
+    let receivables
+    if (dashCache && Array.isArray(dashCache)) {
+      const rows = []
+      for (const p of dashCache) {
+        for (const inv of (p._invoiceLines || [])) {
+          const total = inv.total || 0
+          const paid = inv.amountPaid || 0
+          const due = inv.amountDue != null ? inv.amountDue : (total - paid)
+          if (!(due > 0.005)) continue
+          rows.push({
+            id: inv.invoiceID || inv.invoiceNumber || '',
+            number: inv.invoiceNumber || '',
+            invoiceNumber: inv.invoiceNumber || '',
+            contact: inv.contact || p.customer || '',
+            date: inv.date || '',
+            dueDate: inv.dueDate || '',
+            total,
+            amountDue: due,
+            reference: inv.reference || '',
+            projectName: p.name || '',
+          })
+        }
+      }
+      receivables = rows
+    } else {
+      receivables = recStore.items || []
+    }
     return res.json({
-      receivables: recStore.items || [],
+      receivables,
       receivablesUpdatedAt: recStore.updatedAt || null,
       settings: {
         advanceRate: ifConfig.advanceRate != null ? ifConfig.advanceRate : 60,
         drawn: ifConfig.drawn != null ? ifConfig.drawn : 0,
-        excludeMaterials: !!ifConfig.excludeMaterials,
+        retentionPct: ifConfig.retentionPct != null ? ifConfig.retentionPct : 10,
+        facilityCap: ifConfig.facilityCap != null ? ifConfig.facilityCap : 500000,
       },
-      debtorLimits: ifLimits,        // { [debtorName]: { insuredLimit, materialsOnSite } }
+      debtorLimits: ifLimits,        // { [debtorName]: { insuredLimit, materials } }
     })
   }
 
@@ -425,7 +457,8 @@ export default async function handler(req, res) {
       const cfg = {
         advanceRate: Number(s.advanceRate) || 0,
         drawn: Number(s.drawn) || 0,
-        excludeMaterials: !!s.excludeMaterials,
+        retentionPct: Number(s.retentionPct) || 0,
+        facilityCap: Number(s.facilityCap) || 0,
       }
       await redis.set('config:if-settings', cfg)
       return res.json({ ok: true, settings: cfg })
@@ -441,9 +474,10 @@ export default async function handler(req, res) {
   }
 
   if (view === 'cashflow') {
-    const [billsStore, recStore] = await Promise.all([
+    const [billsStore, recStore, dashCache] = await Promise.all([
       redis.get('bank:outstanding-bills').then(v => v || { items: [] }).catch(() => ({ items: [] })),
       redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),
+      redis.get('dashboard:cache').then(v => v || null).catch(() => null),
     ])
     // Current cash at bank = latest month's closing balance from the bank summary.
     const bankMonths = bank.months || {}
@@ -474,24 +508,38 @@ export default async function handler(req, res) {
       redis.get('config:cash-commitments').then(v => v || []).catch(() => ([])),
     ])
 
-    // Invoice-finance availability calculated from the Invoice Finance page config:
-    // per debtor, min(rate% x outstanding, insured limit), summed, minus drawn.
+    // Invoice-finance availability, matching the Invoice Finance page rules:
+    // per debtor, fundable = outstanding - materials - retention%, advance = min(rate% x
+    // fundable, insured limit); total capped at the facility cap; minus drawn.
     let ifAvailability = null
     try {
       const rate = (Number(ifSettings.advanceRate ?? 60) || 0) / 100
+      const retPct = (Number(ifSettings.retentionPct ?? 10) || 0) / 100
+      const cap = Number(ifSettings.facilityCap ?? 500000) || 0
       const drawn = Number(ifSettings.drawn) || 0
+      // Use the same sales-invoice source as the page (project invoice lines).
       const byName = {}
-      for (const inv of (recStore.items || [])) {
+      const src = (dashCache && Array.isArray(dashCache))
+        ? dashCache.flatMap(p => (p._invoiceLines || []).map(inv => ({
+            contact: inv.contact || p.customer || '',
+            amountDue: inv.amountDue != null ? inv.amountDue : ((inv.total || 0) - (inv.amountPaid || 0)),
+          }))).filter(i => i.amountDue > 0.005)
+        : (recStore.items || [])
+      for (const inv of src) {
         const n = inv.contact || '(no name)'
         byName[n] = (byName[n] || 0) + (inv.amountDue || 0)
       }
-      let totalAdvance = 0
+      let grossAdvance = 0
       for (const [name, outstanding] of Object.entries(byName)) {
         const lim = ifLimits[name] || {}
         const insured = Number(lim.insuredLimit) || 0
-        if (insured <= 0 || lim.materialsOnSite) continue
-        totalAdvance += Math.min(outstanding * rate, insured)
+        if (insured <= 0) continue
+        const materials = Number(lim.materials) || 0
+        const retention = Math.max(0, outstanding * retPct)
+        const fundable = Math.max(0, outstanding - materials - retention)
+        grossAdvance += Math.min(fundable * rate, insured)
       }
+      const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
       ifAvailability = { totalAdvance: Math.round(totalAdvance), drawn, availability: Math.round(totalAdvance - drawn) }
     } catch { ifAvailability = null }
 
@@ -500,11 +548,43 @@ export default async function handler(req, res) {
     const liveBankTotal = balancesStore && balancesStore.ok ? (balancesStore.bankTotal || 0) : null
     const openingCash = liveBankTotal != null ? liveBankTotal : cashAtBank
 
-    // Attach the expected payment date (from Invoices Owed) to each receivable.
-    const receivables = (recStore.items || []).map(i => {
-      const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
-      return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
-    })
+    // Build receivables from the SAME source as the Invoices Owed page - the dashboard
+    // project invoice lines (project-linked outstanding invoices) - so the two pages
+    // reconcile. Falls back to bank:outstanding-receivables only if the dashboard cache
+    // is empty. Only outstanding (amountDue > 0) lines are kept.
+    let receivables
+    if (dashCache && Array.isArray(dashCache)) {
+      const rows = []
+      for (const p of dashCache) {
+        for (const inv of (p._invoiceLines || [])) {
+          const total = inv.total || 0
+          const paid = inv.amountPaid || 0
+          const due = inv.amountDue != null ? inv.amountDue : (total - paid)
+          if (!(due > 0.005)) continue
+          const number = inv.invoiceNumber || ''
+          const meta = invoiceMeta[number] || null
+          rows.push({
+            id: inv.invoiceID || number,
+            number,
+            invoiceNumber: number,
+            contact: inv.contact || p.customer || '',
+            date: inv.date || '',
+            dueDate: inv.dueDate || '',
+            total,
+            amountDue: due,
+            reference: inv.reference || '',
+            expectedDate: (meta && meta.expectedDate) || '',
+          })
+        }
+      }
+      receivables = rows
+    } else {
+      // Fallback: all outstanding receivables (previous behaviour).
+      receivables = (recStore.items || []).map(i => {
+        const meta = invoiceMeta[i.invoiceNumber] || invoiceMeta[i.number] || null
+        return { ...i, expectedDate: (meta && meta.expectedDate) || '' }
+      })
+    }
 
     // Attach planned payment date + CIS status. CIS auto-defaults to bills on account
     // 321 (cisAuto from the sync); a manual flag in config overrides it either way.

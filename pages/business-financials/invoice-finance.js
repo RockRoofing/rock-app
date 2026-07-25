@@ -50,9 +50,9 @@ export default function InvoiceFinance() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, excludeMaterials: false })
-  const [limits, setLimits] = useState({})            // { debtorName: { insuredLimit, materialsOnSite } }
-  const [excludedInvoices, setExcludedInvoices] = useState({}) // { invoiceId: true } - final applications etc
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, retentionPct: 10, facilityCap: 500000 })
+  const [limits, setLimits] = useState({})            // { debtorName: { insuredLimit, materials } }
+  const [excludedInvoices, setExcludedInvoices] = useState({}) // { invoiceId: true } - variations w/o instruction, final apps
   const [saving, setSaving] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const fileRef = useRef(null)
@@ -70,7 +70,7 @@ export default function InvoiceFinance() {
     try {
       const d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
       setData(d)
-      setSettings({ advanceRate: d.settings?.advanceRate ?? 60, drawn: d.settings?.drawn ?? 0, excludeMaterials: !!d.settings?.excludeMaterials })
+      setSettings({ advanceRate: d.settings?.advanceRate ?? 60, drawn: d.settings?.drawn ?? 0, retentionPct: d.settings?.retentionPct ?? 10, facilityCap: d.settings?.facilityCap ?? 500000 })
       setLimits(d.debtorLimits || {})
       const ex = {}
       Object.entries(d.debtorLimits || {}).forEach(() => {})
@@ -91,37 +91,48 @@ export default function InvoiceFinance() {
       byName[name].invoices.push(inv)
     }
     const rate = (Number(settings.advanceRate) || 0) / 100
+    const retPct = (Number(settings.retentionPct) || 0) / 100
     return Object.values(byName).map(d => {
       const lim = limits[d.name] || {}
       const insured = Number(lim.insuredLimit) || 0
-      const materialsOnSite = !!lim.materialsOnSite
-      // Eligible outstanding = all invoices for this debtor, minus any invoice flagged
-      // excluded (e.g. final application). Materials handled by the per-debtor flag.
-      let eligibleOutstanding = 0, excludedTotal = 0
+      const materials = Number(lim.materials) || 0   // materials-on-site value (GBP), not funded
+      // Outstanding for this debtor (excluding any invoices flagged out - e.g.
+      // variations without written instruction, final applications).
+      let outstanding = 0, excludedTotal = 0
       for (const inv of d.invoices) {
         if (excludedInvoices[inv.id]) { excludedTotal += inv.amountDue; continue }
-        eligibleOutstanding += inv.amountDue
+        outstanding += inv.amountDue
       }
-      const outstanding = d.invoices.reduce((s, i) => s + i.amountDue, 0)
-      const rawAdvance = materialsOnSite ? 0 : eligibleOutstanding * rate
-      const cappedAdvance = insured > 0 ? Math.min(rawAdvance, insured) : 0
+      const grossOutstanding = d.invoices.reduce((s, i) => s + i.amountDue, 0)
+      // Retention holdback: the last X% of the contract isn't funded. Approximated as
+      // X% of the eligible outstanding.
+      const retention = Math.max(0, outstanding * retPct)
+      // Fundable base = outstanding, minus materials on site, minus retention holdback.
+      const fundableBase = Math.max(0, outstanding - materials - retention)
+      const rawAdvance = fundableBase * rate
+      // Only fund where there's an insured limit, capped at that limit.
       const hasLimit = insured > 0
+      const advance = hasLimit ? Math.min(rawAdvance, insured) : 0
       return {
-        ...d, insured, materialsOnSite, outstanding, eligibleOutstanding, excludedTotal,
-        rawAdvance, advance: cappedAdvance, hasLimit,
+        ...d, insured, materials, outstanding: grossOutstanding, eligibleOutstanding: outstanding,
+        retention, fundableBase, excludedTotal, rawAdvance, advance, hasLimit,
         cappedByLimit: hasLimit && rawAdvance > insured,
       }
     }).sort((a, b) => b.advance - a.advance || b.outstanding - a.outstanding)
-  }, [data, limits, settings.advanceRate, excludedInvoices])
+  }, [data, limits, settings.advanceRate, settings.retentionPct, excludedInvoices])
 
   const totals = useMemo(() => {
     const totalOutstanding = debtors.reduce((s, d) => s + d.outstanding, 0)
-    const totalAdvance = debtors.reduce((s, d) => s + d.advance, 0)
+    const grossAdvance = debtors.reduce((s, d) => s + d.advance, 0)
+    // Facility cap: total funded is capped at the maximum facility value.
+    const cap = Number(settings.facilityCap) || 0
+    const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
+    const cappedByFacility = cap > 0 && grossAdvance > cap
     const drawn = Number(settings.drawn) || 0
     const availability = totalAdvance - drawn
     const noLimit = debtors.filter(d => !d.hasLimit && d.outstanding > 0)
-    return { totalOutstanding, totalAdvance, drawn, availability, noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, d) => s + d.outstanding, 0) }
-  }, [debtors, settings.drawn])
+    return { totalOutstanding, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability, noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, d) => s + d.outstanding, 0) }
+  }, [debtors, settings.drawn, settings.facilityCap])
 
   async function saveAll() {
     setSaving(true)
@@ -171,7 +182,7 @@ export default function InvoiceFinance() {
       <div style={{ maxWidth: '100%', padding: '24px 32px 80px' }}>
         <div style={{ marginBottom: 16 }}>
           <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Invoice Finance (Bibby) availability</h1>
-          <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Estimates cash available from the facility: {settings.advanceRate}% of each debtor&apos;s outstanding invoices, capped at their insured (approved) limit. Debtors with no limit are excluded. Final applications can be excluded per invoice.</div>
+          <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Estimates cash available from the Bibby facility. Per debtor: fundable = outstanding &minus; materials on site &minus; {settings.retentionPct}% retention held back; advance = {settings.advanceRate}% of fundable, capped at the insured (approved) limit. Debtors with no insured limit are excluded. Variations without written instruction / final applications can be excluded per invoice. Total funding is capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
@@ -179,9 +190,10 @@ export default function InvoiceFinance() {
             {/* Top figures */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
               <Box label="Outstanding sales ledger" value={gbp(totals.totalOutstanding)} />
-              <Box label={`Eligible advance @ ${settings.advanceRate}%`} value={gbp(totals.totalAdvance)} color="#0f766e" sub="capped at insured limits" />
+              <Box label={`Advance @ ${settings.advanceRate}%`} value={gbp(totals.grossAdvance)} color="#0f766e" sub="after materials, retention & insured limits" />
+              <Box label="Facility cap" value={gbp(totals.cap)} sub={totals.cappedByFacility ? 'reached - funding capped' : 'headroom available'} color={totals.cappedByFacility ? '#dc2626' : '#888'} />
               <Box label="Currently drawn" value={gbp(totals.drawn)} color="#b45309" />
-              <Box label="Availability now" value={gbp(totals.availability)} color={totals.availability < 0 ? '#dc2626' : '#0f766e'} strong sub="advance minus drawn" />
+              <Box label="Availability now" value={gbp(totals.availability)} color={totals.availability < 0 ? '#dc2626' : '#0f766e'} strong sub="funded (capped) minus drawn" />
             </div>
 
             {totals.noLimitCount > 0 && (
@@ -193,6 +205,8 @@ export default function InvoiceFinance() {
             {/* Controls */}
             <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div><div style={lbl}>Advance rate %</div><input type="number" value={settings.advanceRate} onChange={e => setSettings(s => ({ ...s, advanceRate: e.target.value }))} style={{ ...inp, width: 90 }} /></div>
+              <div><div style={lbl}>Retention held back %</div><input type="number" value={settings.retentionPct} onChange={e => setSettings(s => ({ ...s, retentionPct: e.target.value }))} style={{ ...inp, width: 90 }} title="Last X% of the contract not funded" /></div>
+              <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} title="Maximum total funded facility, e.g. 60% of 500k = 300k" /></div></div>
               <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
@@ -210,7 +224,9 @@ export default function InvoiceFinance() {
                     <th style={{ ...th, textAlign: 'left' }}>Debtor</th>
                     <th style={th}>Outstanding</th>
                     <th style={th}>Insured limit</th>
-                    <th style={th}>Materials only</th>
+                    <th style={th}>Materials on site (&pound;)</th>
+                    <th style={th}>Retention held</th>
+                    <th style={th}>Fundable</th>
                     <th style={th}>Raw advance</th>
                     <th style={th}>Eligible advance</th>
                     <th style={{ ...th, textAlign: 'left' }}>Status</th>
@@ -230,25 +246,32 @@ export default function InvoiceFinance() {
                         </div>
                       </td>
                       <td style={{ ...td, textAlign: 'center' }}>
-                        <input type="checkbox" checked={!!limits[d.name]?.materialsOnSite} onChange={e => setLimit(d.name, 'materialsOnSite', e.target.checked)} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
+                          <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
+                          <input type="number" value={(limits[d.name]?.materials) ?? ''} placeholder="0"
+                            onChange={e => setLimit(d.name, 'materials', e.target.value)}
+                            style={{ width: 90, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
+                        </div>
                       </td>
+                      <td style={{ ...td, color: '#999' }}>{gbp(d.retention)}</td>
+                      <td style={{ ...td, color: '#555' }}>{gbp(d.fundableBase)}</td>
                       <td style={{ ...td, color: '#999' }}>{gbp(d.rawAdvance)}</td>
                       <td style={{ ...td, fontWeight: 700, color: d.advance > 0 ? '#0f766e' : '#ccc' }}>{gbp(d.advance)}</td>
                       <td style={{ ...td, textAlign: 'left', fontSize: 11.5 }}>
                         {!d.hasLimit ? <span style={{ color: '#b45309' }}>No insured limit</span>
-                          : d.materialsOnSite ? <span style={{ color: '#999' }}>Materials only - not advanced</span>
+                          : d.fundableBase <= 0 ? <span style={{ color: '#999' }}>Nothing fundable</span>
                           : d.cappedByLimit ? <span style={{ color: '#2563eb' }}>Capped at insured limit</span>
                           : <span style={{ color: '#16a34a' }}>Full advance</span>}
                       </td>
                     </tr>
                   ))}
-                  {debtors.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding receivables. Sync Invoices Owed first.</td></tr>}
+                  {debtors.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding sales invoices. Sync Invoices Owed first.</td></tr>}
                 </tbody>
               </table>
             </div>
 
             <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
-              v1 simplifications: disallowed / overdue amounts are handled manually (set a lower insured limit or tick materials-only). Bibby does not advance the final application on a project - exclude those by lowering the debtor&apos;s outstanding via the finance side, or tell me and I&apos;ll add per-invoice exclusion. Insured limit = Bibby &quot;Approved Amount&quot;. Availability = eligible advance minus what you&apos;ve currently drawn.
+              Rules applied: materials on site (enter the &pound; value per debtor) and the last {settings.retentionPct}% of the contract are not funded; only debtors with an insured limit are funded, capped at that limit; total funding is capped at the facility maximum. Variations are only fundable with written instruction - exclude any not yet instructed. Insured limit = Bibby &quot;Approved Amount&quot; (import via CSV or type). Availability = funded (after the cap) minus what you&apos;ve currently drawn.
             </div>
           </>
         )}

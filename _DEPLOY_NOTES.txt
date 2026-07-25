@@ -1,26 +1,40 @@
-DEPLOY NOTES - Sync buttons on Business Financials pages
-========================================================
+DEPLOY NOTES - Invoice Finance: reorder, sales-only, new funding rules
+======================================================================
 
-FOUR files, all EDITS - just replace them.
-  components/BizNav.js                          (new shared SyncButton component)
-  pages/business-financials/invoices.js         (Invoices Owed - sync invoices)
-  pages/business-financials/retentions-due.js   (Retentions - sync invoices)
-  pages/business-financials/budgets.js          (Budgets - sync P&L figures)
+** NOTE: this BizNav.js also contains the Sync buttons from the previous package,
+   so if you haven't deployed that yet, this covers it. **
 
-WHAT'S NEW
-  A gold "Sync from Xero" button on each page, which pulls fresh data and reloads:
+THREE files, all EDITS - just replace them.
+  components/BizNav.js                          (Invoice Finance moved before Cash Flow)
+  pages/api/business-financials.js              (sales-only source + new rules; cashflow aligned)
+  pages/business-financials/invoice-finance.js  (materials Ł input + parameters)
 
-  - Invoices Owed  -> "Sync invoices from Xero" (POST /api/sync-invoices). Same sync
-    as the bookkeeping page; shows matched/unassigned counts when done.
-  - Retentions Due -> "Sync from Xero" (POST /api/sync-invoices). Retention figures
-    come from invoices (account 612), so this refreshes them.
-  - Budgets        -> "Sync figures from Xero" (POST /api/sync-benchmark). Refreshes
-    the P&L benchmark that drives the actuals/predicted spend.
+CHANGES
+-------
+1. NAV ORDER: Invoice Finance now sits BEFORE Cash Flow.
 
-VAT PAGE
-  No change needed - the VAT Refund page already has "Refresh estimate from Xero".
+2. SALES INVOICES ONLY: the page now uses the same project sales-invoice source as
+   Invoices Owed (dashboard project invoice lines), so cost/supplier invoices no
+   longer appear. Re-sync invoices if needed.
 
-Each button shows "Syncing..." while working and a short result message after.
-Default sync window is 6 months (same as the bookkeeping page).
+3. MATERIALS is now a Ł INPUT (not a tick box) - enter the materials-on-site value
+   per debtor and it's deducted before funding.
+
+4. FUNDING RULES now implemented, per your parameters:
+     fundable = outstanding - materials on site - retention held back (%)
+     advance  = advance-rate% (60) of fundable, capped at the debtor's insured limit
+     only debtors WITH an insured limit are funded
+     total funding capped at the FACILITY CAP (default Ł500,000 - set this to your
+       actual cap; note if the cap is "60% of 500k" then enter 300,000)
+     variations only fundable with written instruction -> exclude un-instructed ones
+       per invoice (per-invoice exclude retained)
+
+   New controls: Retention held back %, Facility cap. New table columns: Materials
+   on site (Ł), Retention held, Fundable. The Cash Flow "invoice finance available"
+   figure uses the exact same rules so the two agree.
+
+PLEASE CHECK: set the Facility cap correctly. Your note said "60% of Ł500k?" - if the
+Ł500k is the facility limit then leave cap = 500000; if the FUNDED cap is 60% of
+Ł500k, set cap = 300000. Tell me which and I can hard-wire a label.
 
 BUILD: next build -> Compiled successfully.

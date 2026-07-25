@@ -18,8 +18,8 @@ const TABS = [
   ['VAT Refund', '/business-financials/vat-refund'],
   ['Budgets', '/business-financials/budgets'],
   ['Cash Schedule', '/business-financials/cash-schedule'],
-  ['Cash Flow', '/business-financials/cashflow'],
   ['Invoice Finance', '/business-financials/invoice-finance'],
+  ['Cash Flow', '/business-financials/cashflow'],
 ]
 
 export function BizNav() {
