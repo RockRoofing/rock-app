@@ -212,11 +212,25 @@ export default async function handler(req, res) {
       byProject.get(key).push(inv)
       if (pid) matchedInv++; else unassignedInv++
     }
+    // Seed empty buckets for any project that already has stored invoice lines, so a
+    // project whose ONLY invoice was deleted still gets reconciled (its stale in-window
+    // line is dropped) rather than being skipped because it has no fresh invoices.
+    try {
+      const keys = new Set([...byProject.keys()])
+      for (const cp of cats) { const id = cp.trackingOptionId; if (id) keys.add(id) }
+      keys.add('__UNASSIGNED__')
+      for (const k of keys) if (!byProject.has(k)) byProject.set(k, [])
+    } catch {}
 
-    // Store per project — exact-mirror within window (keep older invoices).
+    // Store per project — exact-mirror within window. We must DROP invoices that Xero
+    // no longer returns (deleted/voided), so stale lines don't live forever. Previously
+    // any line with date < winStr OR no date was blindly kept; an undated stale line
+    // (e.g. a deleted test invoice) then survived every sync. Now we keep an old line
+    // ONLY if it is genuinely dated AND before the window. Everything in-window or
+    // undated is taken fresh from Xero this run, so deleted invoices disappear.
     for (const [pid, invoices] of byProject.entries()) {
       const existing = (await redis.get(`invoiced:lines:${pid}`).catch(() => null)) || []
-      const outside = existing.filter(l => !l.date || l.date < winStr)
+      const outside = existing.filter(l => l.date && l.date < winStr)
       const merged = [...outside, ...invoices]
       const tot = merged.reduce((s, l) => s + (l.total || 0), 0)
       const paid = merged.reduce((s, l) => s + (l.amountPaid || 0), 0)
