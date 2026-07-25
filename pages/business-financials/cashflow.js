@@ -58,11 +58,13 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
         events.push({ date: `${mk}-${pad(day)}`, amount, code })
       } else if (sc.mode === 'multiday') {
         // Specific-day splits; carry adjustment is applied pro-rata across the splits.
+        // Gross up each split by 20% when the code is VAT-flagged (matches the +VAT tick).
+        const vatMult = sc.vat ? 1.20 : 1
         const splits = (sc.days || []).filter(d => Number(d.amount) || d.amount === 0)
         const base = splits.reduce((s, d) => s + (Number(d.amount) || 0), 0)
         for (const d of splits) {
           const share = base ? (Number(d.amount) || 0) / base : 1 / (splits.length || 1)
-          const amount = (Number(d.amount) || 0) + adj * share
+          const amount = (Number(d.amount) || 0) * vatMult + adj * share
           if (Math.abs(amount) < 0.005) continue
           const day = clampDay(y, m, Number(d.day || 28))
           events.push({ date: `${mk}-${pad(day)}`, amount, code })
@@ -130,6 +132,7 @@ export default function CashFlow() {
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
+  const [openOhWk, setOpenOhWk] = useState(null)          // which week's overhead breakdown is expanded
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -261,6 +264,14 @@ export default function CashFlow() {
       const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
+      // Per-week overhead breakdown by code (for the click-to-expand detail).
+      const ohDetailMap = {}
+      for (const x of ohEvents.filter(x => inWk(x.date))) {
+        ohDetailMap[x.code] = (ohDetailMap[x.code] || 0) + x.amount
+      }
+      const ohDetail = Object.entries(ohDetailMap)
+        .map(([code, amount]) => ({ code, name: (data.overheadNames || {})[code] || code, amount: Math.round(amount) }))
+        .sort((a, b) => b.amount - a.amount)
       const commOut = commEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inWk(c.date)).reduce((a, c) => a + c.amount, 0)
 
@@ -272,7 +283,7 @@ export default function CashFlow() {
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
-        bills: Math.round(billsOut), overheads: Math.round(ohOut), commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -414,7 +425,11 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}>{r.vatIn ? gbp(r.vatIn) : '-'}</td>
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
-                      <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc' }}>{r.overheads ? gbp(-r.overheads) : '-'}</td>
+                      <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc', cursor: r.overheads ? 'pointer' : 'default', textDecoration: r.overheads ? 'underline dotted' : 'none' }}
+                        onClick={() => r.overheads && setOpenOhWk(openOhWk === i ? null : i)}
+                        title={r.overheads ? 'Click to see the breakdown' : ''}>
+                        {r.overheads ? gbp(-r.overheads) : '-'}{r.overheads ? <span style={{ fontSize: 9, color: '#999' }}>{openOhWk === i ? ' \u25B2' : ' \u25BC'}</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
@@ -422,6 +437,25 @@ export default function CashFlow() {
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
                   ))}
+                  {openOhWk != null && forecast[openOhWk] && (
+                    <tr style={{ background: '#fbfaf7' }}>
+                      <td colSpan={11} style={{ padding: '10px 16px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6 }}>Overheads in {forecast[openOhWk].wk} - {gbp(-forecast[openOhWk].overheads)}</div>
+                        <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
+                          <tbody>
+                            {(forecast[openOhWk].ohDetail || []).map((d, j) => (
+                              <tr key={j}>
+                                <td style={{ padding: '3px 16px 3px 0', color: '#999', fontVariantNumeric: 'tabular-nums' }}>{d.code}</td>
+                                <td style={{ padding: '3px 24px 3px 0' }}>{d.name}</td>
+                                <td style={{ padding: '3px 0', textAlign: 'right', color: '#dc2626', fontWeight: 600 }}>{gbp(-d.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#aaa', marginTop: 6 }}>Amounts include VAT where the overhead is +VAT ticked on the Cash Schedule.</div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
                   {(() => {

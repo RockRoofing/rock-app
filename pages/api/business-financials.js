@@ -534,6 +534,12 @@ export default async function handler(req, res) {
     const { predicted: predictedByCodeMonth } = computePredictedByCodeMonth(
       [...ohCodes], ohActualsByCode, availMonths, ohBudgets, ohForecastMethods, ohForecastOverrides
     )
+    // Overhead code -> name (for the weekly overhead breakdown on the Cash Flow page).
+    const cfChart = await redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([]))
+    const cfChartNames = {}
+    for (const a of (Array.isArray(cfChart) ? cfChart : [])) cfChartNames[String(a.code)] = a.name
+    const overheadNames = {}
+    for (const code of ohCodes) overheadNames[code] = (catConfig[code] && catConfig[code].name) || cfChartNames[code] || code
 
     return res.json({
       cashAtBank: openingCash,
@@ -549,6 +555,7 @@ export default async function handler(req, res) {
       history,
       ohBudgets,
       predictedByCodeMonth,
+      overheadNames,
       cashCommitments,
       cashflowSchedule,
       vatFiled,

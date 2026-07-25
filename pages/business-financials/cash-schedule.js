@@ -167,10 +167,26 @@ export default function CashSchedule() {
                     )
                   })}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    // Total only lines that are actually in the forecast (have a timing mode).
+                    const scheduled = visible.filter(a => (schedule[a.code] || {}).mode)
+                    const net = scheduled.reduce((s, a) => s + predictedFor(a.code), 0)
+                    const incVat = scheduled.reduce((s, a) => { const b = predictedFor(a.code); const sc = schedule[a.code] || {}; return s + (sc.vat ? b * 1.2 : b) }, 0)
+                    const vatPart = incVat - net
+                    return (
+                      <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
+                        <td style={{ ...td, textAlign: 'left' }}>Total in forecast ({scheduled.length})</td>
+                        <td style={{ ...td }}>{gbp(incVat)}<div style={{ fontSize: 10, color: '#888', fontWeight: 400 }}>{gbp(net)} net + {gbp(vatPart)} VAT</div></td>
+                        <td style={td}></td>
+                        <td style={td}></td>
+                        <td style={td}></td>
+                      </tr>
+                    )
+                  })()}
+                </tfoot>
               </table>
             </div>
-
-            {/* Recurring cash commitments (vehicle finance / HP etc - not in the P&L) */}
             <div style={{ marginTop: 26 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Recurring cash commitments</div>
               <div style={{ color: '#8a857c', fontSize: 13, margin: '4px 0 10px' }}>Regular payments that leave the bank but are NOT in the P&amp;L overheads - e.g. vehicle finance / HP, where only depreciation and interest hit the P&amp;L but the full payment is real cash out. These are added to the 13-week forecast on the day you set each month.</div>

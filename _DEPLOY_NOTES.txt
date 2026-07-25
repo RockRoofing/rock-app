@@ -1,31 +1,27 @@
-DEPLOY NOTES - Cash Flow: column totals + bills totals (includes the crash fix)
-===============================================================================
+DEPLOY NOTES - VAT on specific-days + overhead breakdown + schedule totals
+==========================================================================
 
-** Use THIS instead of "Cashflow_fix" - it contains that fix PLUS the totals. **
-ONE file, an EDIT.
-  pages/business-financials/cashflow.js
+THREE files, all EDITS - just replace them.
+  pages/api/business-financials.js         (overhead names for the breakdown)
+  pages/business-financials/cash-schedule.js  (totals row: net + inc VAT)
+  pages/business-financials/cashflow.js    (specific-days VAT + click breakdown + totals)
 
-CHANGES
-1. Crash fix (from the previous package) is included - the orphaned CIS diagnostic
-   block that crashed the page is removed.
+1. SPECIFIC-DAYS NOW RESPECT +VAT
+   Previously the +VAT tick only grossed up "spread evenly" and "one day" modes.
+   Now "Specific days" splits are ALSO grossed up by 20% when the row is +VAT
+   ticked. So a VAT overhead scheduled on specific days now lands at the gross
+   (inc-VAT) amount in the forecast, matching what the "Predicted / mo" column says.
+   IMPORTANT: enter the NET figures in the specific-day boxes (the 20% is added for
+   you). If you previously typed gross figures into a +VAT specific-days line, halve
+   them back to net or untick +VAT, or it'll double up.
 
-2. Forecast table: a "13-week total" row at the bottom totals every column
-   (invoices in, retention, VAT in, bills out, overheads, vehicles, VAT out, CIS,
-   and net).
+2. CLICK-TO-EXPAND OVERHEAD BREAKDOWN (Cash Flow)
+   Click any week's "Overheads out" figure to expand a breakdown showing each
+   overhead line (code, name, amount inc VAT where applicable) that makes up that
+   week's total. Click again to collapse.
 
-3. Bills to pay table: a sticky "Total" row at the bottom showing the number of
-   bills and the total amount, plus the total CIS-to-HMRC due if any bills are
-   CIS-flagged.
-
-ABOUT THE "OVERHEADS OUT" COLUMN (your question)
-   That column is ONLY the scheduled overheads from the Cash Schedule - not all
-   outgoings. Total weekly out = Bills + Overheads + Vehicles + VAT + CIS (which is
-   what the Net column reflects). The new totals row makes the split clear.
-
-   WATCH-OUT: "Depreciation Expense" (code 416) is currently scheduled in your
-   overheads, but depreciation is a NON-CASH accounting entry - it doesn't actually
-   leave the bank. Including it overstates cash-out by ~£1,101/mo. Consider setting
-   its timing to "- not in forecast -". (Bad debts / Profit-Loss on Disposal are
-   already not set - good.)
+3. TOTALS ON THE CASH SCHEDULE
+   A totals row at the bottom of the overheads table shows the monthly total of all
+   scheduled overheads, both inc VAT and split as "net + VAT".
 
 BUILD: next build -> Compiled successfully.
