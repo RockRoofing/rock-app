@@ -235,6 +235,7 @@ function DayAllocator({ sc, budget, onChange }) {
           <input type="number" min={1} max={31} value={d.day} onChange={e => update(i, { day: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} style={{ ...inp, width: 56 }} />
           <span style={{ color: '#999' }}>&pound;</span>
           <input type="number" value={d.amount} onChange={e => update(i, { amount: e.target.value })} style={{ ...inp, width: 90 }} />
+          <input type="text" value={d.note || ''} placeholder="Comment (optional)" onChange={e => update(i, { note: e.target.value })} style={{ ...inp, width: 180 }} />
           <button onClick={() => remove(i)} style={rmBtn}>&times;</button>
         </div>
       ))}

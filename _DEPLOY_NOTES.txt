@@ -1,37 +1,15 @@
-DEPLOY NOTES - Cash flow: overhead VAT toggle + vehicle/commitment payments
-===========================================================================
+DEPLOY NOTES - Cash Schedule: comment box on specific-day splits
+================================================================
 
-THREE files, all EDITS - just replace them.
-  pages/api/business-financials.js
+ONE file, an EDIT - just replace it.
   pages/business-financials/cash-schedule.js
-  pages/business-financials/cashflow.js
 
-BACKGROUND (the gap you spotted)
---------------------------------
-The P&L overhead figures are NET of VAT, and balance-sheet payments (like vehicle
-finance principal) never hit the P&L at all. So the forecast could understate real
-cash out. Two fixes:
+WHAT'S NEW
+  When an overhead is set to "Specific days" timing, each dated split row now has a
+  "Comment (optional)" text box next to the amount. Use it to note what each payment
+  is for (e.g. "Q1 VAT", "van insurance", "director drawings").
 
-1) "+VAT" TICK BOX PER OVERHEAD (Cash Schedule)
-   Not all overheads carry VAT (wages, insurance don't; fuel, rent, subs do). Tick
-   "+VAT" on the lines that do, and the forecast grosses that line up by 20% for the
-   cash-out timing. The input VAT still nets off at the VAT return (VAT Refund page),
-   so this only affects WHEN the cash moves, not the net total - no double count.
-   The "Predicted / mo" column shows the inc-VAT figure when ticked (with the net
-   underneath).
-
-2) RECURRING CASH COMMITMENTS (Cash Schedule, new section)
-   For vehicle finance / HP and similar: payments that leave the bank but aren't in
-   the P&L (only depreciation + interest are). Add each one (description, amount/mo,
-   day of month, optional start/end month). They flow into the 13-week forecast on
-   the day you set, shown in a new "Vehicles / commitments" column.
-
-WHERE TO GO
-   Cash Schedule page: tick +VAT on the relevant overheads; add your vehicles under
-   "Recurring cash commitments"; Save. The 13-week Cash Flow updates automatically.
-
-NOTE: "Specific days" overhead schedules use the exact Ł amounts you enter, so the
-+VAT gross-up applies to "spread evenly" and "one day" modes; for specific-days,
-enter the gross figures directly if needed.
+  Comments are saved with the schedule and persist. They're purely for your
+  reference on this page - they don't affect the forecast figures.
 
 BUILD: next build -> Compiled successfully.
