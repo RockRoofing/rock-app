@@ -343,7 +343,7 @@ export default function PlanningPage() {
       </div>
 
       {shiftClashes && (() => {
-        const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+        const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : (String(id).startsWith("op_") ? "Unknown (removed)" : id) }
         const projName = (k) => { const pr = (data?.projects || []).find(x => x.key === k); return pr ? `${pr.projectNo ? pr.projectNo + ' - ' : ''}${pr.name}` : k }
         const fmt = (d) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${String(y).slice(2)}` }
         return (
@@ -665,7 +665,7 @@ function WaterIngressDayModal({ date, data, ops, comp = {}, onClose, onDone, rel
     setVisits(prev => prev.filter(v => v.id !== id))
     onDone()
   }
-  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : (String(id).startsWith("op_") ? "Unknown (removed)" : id) }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 2vw', overflowY: 'auto' }}>
@@ -1143,7 +1143,7 @@ function AllocateModal({ proj, dates, mode = 'add', data, ops, comp = {}, ramsSi
   const [opList, setOpList] = useState(ops)
   useEffect(() => { setOpList(ops) }, [ops])
 
-  const opName = (id) => { const o = opList.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : id }
+  const opName = (id) => { const o = opList.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}` : (String(id).startsWith("op_") ? "Unknown (removed)" : id) }
   const opTrades = (id) => { const o = opList.find(x => x.id === id); return (o?.trades || []).join(', ') }
   const dateObjs = dates.map(parseISO).sort((a, b) => a - b)
   // Actual is only valid when EVERY selected date is before today.

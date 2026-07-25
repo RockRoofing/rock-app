@@ -1,17 +1,27 @@
-DEPLOY NOTES - Planning: unlimited historic back-scroll
-=======================================================
+DEPLOY NOTES - Planning: clean label for orphaned old operative codes
+====================================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
-WHAT CHANGED
-  Historic mode previously stopped scrolling back at a ~6-week floor, so older
-  programmed / actual works couldn't be viewed. Now:
-    - "Historic" still OPENS 2 weeks before today (unchanged default).
-    - You can scroll BACK with no limit (the "<" back button is never disabled) to
-      view any previously programmed or actual works, however far back.
+WHAT THIS IS
+  Some historic allocations show a code like "op_1783759524922_qi9" instead of a
+  name. Cause: those allocations were made under the OLD operative id scheme (op_...)
+  before operatives moved to Site App Users (usr_...). The allocation only stores the
+  id, not a name, and the old roster is gone - so there is no data left that says
+  which current person that old code was. The link is unrecoverable.
 
-  Nothing else changes - forward horizon, editing, and the clash/planned-start
-  features are all as before.
+WHAT THIS CHANGE DOES
+  - Current & future allocations: unaffected, show names correctly (already did).
+  - Old orphaned codes: now display as "Unknown (removed)" instead of the raw
+    op_... code, so historic rows read cleanly.
+
+WHAT IT DOESN'T DO
+  It does NOT recover the old names (impossible - the data isn't stored). If you'd
+  rather these orphaned historic entries were REMOVED entirely instead of relabelled,
+  say so and I'll do a safe one-time cleanup of op_ entries in the allocations.
+
+NOTE: only affects display of old op_ ids; anything that resolves to a real Site App
+User is untouched.
 
 BUILD: next build -> Compiled successfully.
