@@ -1,15 +1,19 @@
-DEPLOY NOTES - Cash Schedule: comment box on specific-day splits
-================================================================
+DEPLOY NOTES - FIX: Cash Flow page client-side exception
+========================================================
 
 ONE file, an EDIT - just replace it.
-  pages/business-financials/cash-schedule.js
+  pages/business-financials/cashflow.js
 
-WHAT'S NEW
-  When an overhead is set to "Specific days" timing, each dated split row now has a
-  "Comment (optional)" text box next to the amount. Use it to note what each payment
-  is for (e.g. "Q1 VAT", "van insurance", "director drawings").
+WHAT WAS WRONG
+  The Cash Flow page threw "a client-side exception has occurred" on load. Cause: a
+  leftover CIS-diagnostic message block was still referencing three variables
+  (autoCount / anyLineCodes / codeSet) that had been removed. The page compiled fine
+  but crashed at render because those variables no longer existed.
 
-  Comments are saved with the schedule and persist. They're purely for your
-  reference on this page - they don't affect the forecast figures.
+FIX
+  Removed the orphaned diagnostic block. The bills table and CIS auto-tick behaviour
+  are unchanged and intact.
+
+Deploy this and the Cash Flow page will load normally again.
 
 BUILD: next build -> Compiled successfully.

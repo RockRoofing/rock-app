@@ -436,9 +436,6 @@ export default function CashFlow() {
                 <div style={{ marginTop: 22 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Bills to pay</div>
                   <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 8 }}>Adjust the planned payment date for any bill and the forecast above updates automatically. Blank payment date uses the Xero due date. CIS labour bills (account 321) auto-tick - untick any gross-status subcontractors. {bills.length} bills, {gbp(totalBills)} total.</div>
-                  <div style={{ fontSize: 11, color: autoCount ? '#0f766e' : '#b45309', marginBottom: 8, background: autoCount ? '#f0fdfa' : '#fffbeb', border: '1px solid ' + (autoCount ? '#99f6e4' : '#fde68a'), borderRadius: 6, padding: '6px 10px' }}>
-                    CIS auto-detect: {autoCount} bill(s) on account 321.{!anyLineCodes ? ' No line account codes came through from Xero - re-sync Bills to Pay to pick them up (the detection is applied when bills are fetched).' : ` Account codes seen across bills: ${codeSet.join(', ') || 'none'}.`}
-                  </div>
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, maxHeight: 340, overflow: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
