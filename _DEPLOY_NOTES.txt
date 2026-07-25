@@ -1,35 +1,19 @@
-DEPLOY NOTES - Commercial Cash Flow page: mirrored gantt shell (Phase 2a)
-=========================================================================
+DEPLOY NOTES - FIX: Cash Flow page client-side exception
+========================================================
 
-** ONE NEW FILE + ONE EDIT. **
-
-NEW FILE - add via GitHub "Add file" (a zip can't create it):
+ONE file, an EDIT - replace the pages/project-cashflow.js you added.
   pages/project-cashflow.js
 
-EDIT (replace):
-  components/CommercialNav.js   (new "Cash Flow" tab, between WIP and Scorecard)
+WHAT WAS WRONG
+  The page crashed with "a client-side exception has occurred". Cause: a React hook
+  (a useMemo) was declared AFTER the early "if (loading) return" - so once the planner
+  data loaded, React ran more hooks than on the first render (Rules of Hooks
+  violation) and threw. Also added defensive guards on data.allocations / data.meta.
 
-WHAT THIS IS (first slice of the Project Cash Flow feature)
-  A new Commercial > Cash Flow tab that MIRRORS the Operations planning programme:
-    - Same projects (live + negotiated), same dates/sequence, day & week views,
-      Historic toggle, Today / back / forward nav - all reading the live planning
-      data, so if Operations move a project this moves with it.
-    - Gantt bars are GREYED and BLANK (no numbers) - just showing when work is
-      planned, per your spec.
-    - "Planned / Actual" and "Contract Compl." columns shown (read-only mirror).
+FIX
+  Moved all hooks above the loading return; guarded the data accesses. No behaviour
+  change - same mirrored greyed gantt + period selection.
 
-  PERIOD SELECTION: click/drag across the cells on ANY project row - with or without
-  bars - to select a period. A bar at the top shows the project + date range with a
-  "Build application ->" button. That button is a placeholder for now (it just
-  confirms the period); the hypothetical application document is the NEXT phase.
-
-  Nothing here writes to the programme or to applications - it's read-only + local
-  selection only.
-
-NEXT PHASES (not in this package)
-  2b - contracted rates for negotiated projects
-  2c - the hypothetical application pop-out (full mirror; revenue + labour; materials
-       as %/figure toward budget on a delivery day; cumulative; never saved to real
-       applications) + a View button per period.
+Deploy this over the version you added and the page will load.
 
 BUILD: next build -> Compiled successfully.

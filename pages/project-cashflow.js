@@ -59,6 +59,12 @@ export default function ProjectCashflow() {
     return groups
   }, [days])
 
+  const selRange = useMemo(() => {
+    if (!sel || !sel.dates.size) return null
+    const arr = [...sel.dates].sort()
+    return { from: arr[0], to: arr[arr.length - 1], count: arr.length }
+  }, [sel])
+
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
   if (loading || !data) {
@@ -75,9 +81,11 @@ export default function ProjectCashflow() {
 
   const live = (data.projects || []).filter(p => p.type === 'live')
   const negotiated = (data.projects || []).filter(p => p.type === 'negotiated')
+  const allocations = data.allocations || {}
+  const metaAll = data.meta || {}
   const todayKey = iso(new Date())
 
-  const countOnDay = (p, dateKey) => cellCount((data.allocations[p.key] || {})[dateKey])
+  const countOnDay = (p, dateKey) => cellCount((allocations[p.key] || {})[dateKey])
 
   // ── Selection (drag across cells on a single project row) ──
   function cellDown(key, d) {
@@ -98,12 +106,6 @@ export default function ProjectCashflow() {
       return { key, dates: next }
     })
   }
-  const selRange = useMemo(() => {
-    if (!sel || !sel.dates.size) return null
-    const arr = [...sel.dates].sort()
-    return { from: arr[0], to: arr[arr.length - 1], count: arr.length }
-  }, [sel])
-
   const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
 
   return (
@@ -156,11 +158,11 @@ export default function ProjectCashflow() {
                 </div>
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
-                {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={data.meta[p.key] || {}}
+                {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
                   countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
-                {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={data.meta[p.key] || {}}
+                {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
                   countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} neg />)}
               </div>
             </div>
@@ -178,7 +180,7 @@ export default function ProjectCashflow() {
 function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, neg }) {
   const complD = parseISO(meta.completionDate || '')
   // Planned/Actual = earliest allocated day (mirrors the planning gantt).
-  const projDays = data.allocations[p.key] || {}
+  const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
   { const dated = Object.keys(projDays).filter(dk => countOnDay(p, dk) > 0).sort(); if (dated.length) plannedStart = dated[0] }
   const selDates = sel && sel.key === p.key ? sel.dates : null
