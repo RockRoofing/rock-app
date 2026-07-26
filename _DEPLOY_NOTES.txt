@@ -1,31 +1,20 @@
-DEPLOY NOTES - Cash Flow forecasts: colours, values on gantt, multi-materials
-=============================================================================
+DEPLOY NOTES - Cash Flow: View button + adjustable period on forecasts
+======================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/api/project-cashflow.js    (adds "all forecasts" fetch for gantt colouring)
+ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
 CHANGES
-1. Renamed "Hypothetical" -> "Forecasted" throughout.
+1. VIEW BUTTON on each forecast band: every coloured application band on the gantt
+   now has a small "View" button (top-right). Click it to open that specific
+   forecasted application to view or edit it.
 
-2. MULTI-DAY SELECTION now fills the whole span between the first and last cell you
-   drag across (so you can grab an entire application period in one drag).
-
-3. MATERIALS are now MULTIPLE LINE ITEMS. Each line has:
-     - Add by: % of budget OR £ figure
-     - Value
-     - Comment (e.g. supplier name)
-     - its own Delivery day (cash out)
-   Add as many as you need (one per supplier / delivery). Total shown at the foot.
-
-4. FORECASTS SHOWN ON THE GANTT as coloured bands across their period:
-     - App 1 red, App 2 blue, App 3 green, App 4 amber, App 5 purple, then repeat.
-     - A colour KEY is shown at the top.
-     - Each band shows Revenue, Labour and Materials for that period.
-     - The materials DELIVERY DAY is drawn as a DARKER cell within the band.
-   (Week view tints the weeks a forecast covers in its colour.)
-
-Forecasts remain forecast-only (stored separately, never written to real
-applications).
+2. ADJUSTABLE PERIOD: the forecast modal's period (from / to dates) is now editable
+   at the top - change them and the band moves/resizes on the gantt when you save.
+   - Opening via "View" loads that application's own values and period and saves back
+     IN PLACE ("Update forecast").
+   - Building from a fresh selection still creates a NEW forecast as before.
+   Cumulative maths correctly uses the application dated immediately before the
+   period, and excludes the one you're editing.
 
 BUILD: next build -> Compiled successfully.

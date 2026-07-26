@@ -134,6 +134,13 @@ export default function ProjectCashflow() {
   }
   const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
 
+  // Open a saved forecast for viewing/editing.
+  function openForecast(projectKey, fc) {
+    const p = (data.projects || []).find(x => x.key === projectKey)
+    const xeroId = p && p.projectNo ? (xeroMap[String(p.projectNo)] || '') : ''
+    setModal({ projectKey, projectName: projName(projectKey), xeroId, from: fc.from, to: fc.to, editId: fc.id })
+  }
+
   return (
     <>
       <Head><title>Rock Roofing — Cash Flow</title></Head>
@@ -201,11 +208,11 @@ export default function ProjectCashflow() {
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} onView={openForecast} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
                 {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} neg />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} onView={openForecast} neg />)}
               </div>
             </div>
           </div>
@@ -221,7 +228,7 @@ export default function ProjectCashflow() {
   )
 }
 
-function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], neg }) {
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], onView, neg }) {
   const complD = parseISO(meta.completionDate || '')
   const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
@@ -289,6 +296,8 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
                   </div>
                   {matIn && <div title={`Materials delivered ${fmtDMY(parseISO(fc.matDeliverDay))} · ${gbpK(fc.materialsThisPeriod)}`}
                     style={{ position: 'absolute', top: 0, bottom: 0, left: matLeft - left, width: CELL_W, background: darken(col), borderRadius: 3 }} />}
+                  <button onClick={() => onView && onView(p.key, fc)} title="View / edit this forecast application"
+                    style={{ position: 'absolute', top: 1, right: 1, pointerEvents: 'auto', background: 'rgba(255,255,255,0.92)', color: '#111', border: 'none', borderRadius: 3, fontSize: 8.5, fontWeight: 700, padding: '1px 4px', cursor: 'pointer', lineHeight: 1.3 }}>View</button>
                 </div>
               )
             })}
@@ -336,16 +345,18 @@ function gbpK(n) { const v = n || 0; return Math.abs(v) >= 1000 ? `£${(v / 1000
 function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
 function HypAppModal({ modal, onClose, onSaved }) {
-  const { projectKey, projectName, xeroId, from, to } = modal
+  const { projectKey, projectName, xeroId, editId } = modal
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [seed, setSeed] = useState([])            // contract works seeded from rates
   const [rates, setRates] = useState(null)
-  const [hypApps, setHypApps] = useState([])      // previously saved hyp apps (cumulative)
+  const [hypApps, setHypApps] = useState([])      // previously saved forecast apps
   const [rows, setRows] = useState([])            // this period's contract works (with pctComplete)
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
-  const [matItems, setMatItems] = useState([])    // [{ id, mode:'pct'|'figure', value, comment, deliverDay }]
+  const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
+  const [from, setFrom] = useState(modal.from || '')   // editable period
+  const [to, setTo] = useState(modal.to || '')
   const [saving, setSaving] = useState(false)
   const [showList, setShowList] = useState(false)
 
@@ -357,29 +368,40 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setSeed(d.seedContractWorks || [])
         setRates(d.contractedRates || null)
         setHypApps(d.hypApps || [])
-        // Start this period from the most recent prior hyp app's % complete (cumulative),
-        // else from a fresh seed at 0%.
-        const prev = (d.hypApps || []).slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop()
         const base = (d.seedContractWorks || []).map(r => ({ ...r }))
-        if (prev && Array.isArray(prev.contractWorks)) {
-          const byId = new Map(prev.contractWorks.filter(r => r.kind === 'item').map(r => [r.id, r]))
+        const editing = editId ? (d.hypApps || []).find(a => a.id === editId) : null
+        if (editing) {
+          // VIEW / EDIT an existing forecast: load its own values + period.
+          const byId = new Map((editing.contractWorks || []).filter(r => r.kind === 'item').map(r => [r.id, r]))
           for (const r of base) { if (r.kind === 'item') { const p = byId.get(r.id); if (p) r.pctComplete = p.pctComplete || 0 } }
-          setMcdPct(prev.mcdPct || 0); setRetPct(prev.retentionPct != null ? prev.retentionPct : 5)
+          setMcdPct(editing.mcdPct || 0); setRetPct(editing.retentionPct != null ? editing.retentionPct : 5)
+          setMatItems((editing.matItems || []).map(m => ({ ...m })))
+          setFrom(editing.from || ''); setTo(editing.to || '')
+        } else {
+          // NEW forecast: start from the most recent prior app's % complete (cumulative).
+          const prev = (d.hypApps || []).slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop()
+          if (prev && Array.isArray(prev.contractWorks)) {
+            const byId = new Map(prev.contractWorks.filter(r => r.kind === 'item').map(r => [r.id, r]))
+            for (const r of base) { if (r.kind === 'item') { const p = byId.get(r.id); if (p) r.pctComplete = p.pctComplete || 0 } }
+            setMcdPct(prev.mcdPct || 0); setRetPct(prev.retentionPct != null ? prev.retentionPct : 5)
+          }
         }
         setRows(base)
         setLoading(false)
       }).catch(() => { setErr('Could not load.'); setLoading(false) })
-  }, [projectKey, xeroId])
+  }, [projectKey, xeroId, editId])
 
-  // Previous cumulative gross (sum of prior hyp apps' this-period gross) so the
-  // certificate "this cert" reflects only the newly-added work this period.
+  // Previous cumulative gross so "this cert" reflects only the newly-added work this
+  // period. When editing, the "previous" app is the latest one dated BEFORE this
+  // period's start (excluding the app being edited itself).
   const prevGross = useMemo(() => {
-    // Cumulative gross to date from the latest prior app equals its own grossCurrent.
-    const prev = hypApps.slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop()
+    const others = hypApps.filter(a => a.id !== editId)
+    const priors = others.filter(a => !from || (a.to || '') < from).sort((a, b) => (a.to || '').localeCompare(b.to || ''))
+    const prev = priors.length ? priors[priors.length - 1] : (from ? null : others.slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop())
     if (!prev) return 0
     const s = computeApplicationSummary({ contractWorks: prev.contractWorks || [], variations: [], materials: prev.materials || [], mcdPct: prev.mcdPct || 0, retentionPct: prev.retentionPct != null ? prev.retentionPct : 5 }, 0)
     return s.grossCurrent
-  }, [hypApps])
+  }, [hypApps, editId, from])
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -422,9 +444,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }
 
   async function save() {
+    if (!from || !to) { alert('Set the period (from and to dates) for this forecast.'); return }
     setSaving(true)
     const app = {
-      id: `hyp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+      id: editId || `hyp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       from, to,
       contractWorks: rows,
       materials: materialsForCalc,
@@ -435,9 +458,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
       revenueThisPeriod: sum.thisCert.total,
       labourThisPeriod,
       materialsThisPeriod,
-      createdAt: Date.now(),
+      createdAt: (editId && (hypApps.find(a => a.id === editId)?.createdAt)) || Date.now(),
+      updatedAt: Date.now(),
     }
-    const next = [...hypApps, app]
+    const next = editId ? hypApps.map(a => a.id === editId ? app : a) : [...hypApps, app]
     try {
       await fetch('/api/project-cashflow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save-hyp', projectKey, hypApps: next }) })
       setHypApps(next)
@@ -463,8 +487,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 1000, width: '100%', boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid #eee' }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Forecasted application <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· forecast only</span></div>
-            <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>{projectName} — period {fmtD(from)} to {fmtD(to)}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Forecasted application <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· {editId ? 'edit' : 'new'} · forecast only</span></div>
+            <div style={{ fontSize: 12.5, color: '#666', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span>{projectName} — period</span>
+              <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={{ ...inpS, padding: '4px 6px', fontSize: 12 }} />
+              <span>to</span>
+              <input type="date" value={to} onChange={e => setTo(e.target.value)} style={{ ...inpS, padding: '4px 6px', fontSize: 12 }} />
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button onClick={() => setShowList(s => !s)} style={ghostBtn}>{showList ? 'Hide' : 'View'} forecasts ({hypApps.length})</button>
@@ -594,7 +623,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   <div><div style={lblS}>MCD %</div><input type="number" value={mcdPct} onChange={e => setMcdPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
                   <div><div style={lblS}>Retention %</div><input type="number" value={retPct} onChange={e => setRetPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
                 </div>
-                <button onClick={save} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save forecasted application'}</button>
+                <button onClick={save} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : (editId ? 'Update forecast' : 'Save forecasted application')}</button>
               </div>
             </div>
           )}
