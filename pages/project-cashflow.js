@@ -44,6 +44,7 @@ export default function ProjectCashflow() {
   const [modal, setModal] = useState(null)           // { projectKey, projectName, xeroId, from, to }
   const [hypCounts, setHypCounts] = useState({})     // projectKey -> number of saved hyp apps
   const [allForecasts, setAllForecasts] = useState({}) // projectKey -> forecast apps[] (gantt bands)
+  const [retention, setRetention] = useState([])       // retention tracker entries
   const dragging = useRef(false)
   const dragKey = useRef(null)
   const dragAnchor = useRef(null)   // first cell iso of the current drag
@@ -56,6 +57,7 @@ export default function ProjectCashflow() {
       setXeroMap(m)
     }).catch(() => {})
     loadAllForecasts()
+    fetch('/api/retention').then(r => r.json()).then(d => setRetention(d.entries || [])).catch(() => {})
   }, [])
 
   function loadAllForecasts() {
@@ -134,6 +136,36 @@ export default function ProjectCashflow() {
   }
   const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
 
+  // Per-day cash movement across all saved forecasts.
+  //   IN  = sales (salesDate)
+  //   OUT = labour instalments (labourSchedule[].date) + materials lines (payDate)
+  const cashByDay = useMemo(() => {
+    const map = {}   // iso -> { in, out }
+    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { in: 0, out: 0 }; map[d][k] += amt }
+    for (const list of Object.values(allForecasts || {})) {
+      for (const fc of (list || [])) {
+        if (fc.salesDate) add(fc.salesDate, 'in', fc.revenueThisPeriod || 0)
+        for (const s of (fc.labourSchedule || [])) add(s.date, 'out', s.amount || 0)
+        // Back-compat: older forecasts saved a single labourDate.
+        if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'out', fc.labourThisPeriod || 0)
+        for (const m of (fc.matItems || [])) add(m.payDate, 'out', m.amount || 0)
+      }
+    }
+    // Retention releases (cash IN) from the retention tracker's dates, but amount based
+    // on the total anticipated final account (finalAccount, else projectValue) x
+    // retention%, split 50/50 across the two release dates. Taken ONLY from the tracker
+    // so it can't duplicate. Skip releases already marked received.
+    for (const e of (retention || [])) {
+      const fa = parseFloat(e.finalAccount || e.projectValue || 0) || 0
+      const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
+      const totalRet = fa * pct
+      if (totalRet <= 0) continue
+      if (e.release1Date && !e.release1Received) add(e.release1Date, 'in', totalRet / 2)
+      if (e.release2Date && !e.release2Received) add(e.release2Date, 'in', totalRet / 2)
+    }
+    return map
+  }, [allForecasts, retention])
+
   // Open a saved forecast for viewing/editing.
   function openForecast(projectKey, fc) {
     const p = (data.projects || []).find(x => x.key === projectKey)
@@ -205,6 +237,28 @@ export default function ProjectCashflow() {
                     ? weekGroups.map((g, i) => <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>)
                     : weekGroups.map((g, i) => <div key={i} style={{ width: 46, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>)}
                 </div>
+
+                {/* Daily cash totals (only shown in day view; values only where cash moves) */}
+                {view === 'day' && (
+                  <>
+                    <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#f4faf6' }}>
+                      <Frozen w={NAME_W} style={{ background: '#f4faf6', fontSize: 10.5, fontWeight: 700, color: '#0f766e' }}>Total in / day</Frozen>
+                      <PlainCell w={DATE_W} style={{ background: '#f4faf6' }} />
+                      <PlainCell w={DATE_W} style={{ background: '#f4faf6' }} />
+                      {days.map((d, i) => { const c = cashByDay[iso(d)]; return (
+                        <div key={i} title={c && c.in ? `In ${gbp(c.in)} on ${fmtDMY(d)}` : ''} style={{ width: CELL_W, borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'), fontSize: 8, fontWeight: 700, color: '#0f766e', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{c && c.in ? gbpK(c.in) : ''}</div>
+                      )})}
+                    </div>
+                    <div style={{ display: 'flex', borderBottom: '2px solid #e6e3dc', background: '#fdf5f5' }}>
+                      <Frozen w={NAME_W} style={{ background: '#fdf5f5', fontSize: 10.5, fontWeight: 700, color: '#b91c1c' }}>Total out / day</Frozen>
+                      <PlainCell w={DATE_W} style={{ background: '#fdf5f5' }} />
+                      <PlainCell w={DATE_W} style={{ background: '#fdf5f5' }} />
+                      {days.map((d, i) => { const c = cashByDay[iso(d)]; return (
+                        <div key={i} title={c && c.out ? `Out ${gbp(c.out)} on ${fmtDMY(d)}` : ''} style={{ width: CELL_W, borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'), fontSize: 8, fontWeight: 700, color: '#b91c1c', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{c && c.out ? gbpK(c.out) : ''}</div>
+                      )})}
+                    </div>
+                  </>
+                )}
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}

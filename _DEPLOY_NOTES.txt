@@ -1,27 +1,25 @@
-DEPLOY NOTES - Cash Flow: labour payment options (weekly/fortnightly/EOM)
-========================================================================
+DEPLOY NOTES - Cash Flow: daily in/out totals + retention releases
+==================================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-LABOUR PAYMENT now has three options (top of the application):
-  - Weekly       - labour split across each WEEK of the period
-  - Fortnightly  - labour split across each FORTNIGHT of the period
-  - EOM + days   - single payment, end of the period's month + X days
+1. DAILY CASH TOTALS ON THE GANTT (day view)
+   Two new rows under the date header:
+     - "Total in / day"  (green)  - sales received + retention released that day
+     - "Total out / day" (red)    - labour instalments + materials payments that day
+   Values only show on days where cash actually moves; hover shows the exact figure.
+   (Day view only - week view omits them to stay readable.)
 
-  Weekly / fortnightly:
-    * The period is divided into week (or fortnight) windows from the 1st day of the
-      period.
-    * The labour total for the period is split across those windows BY WORKING DAYS
-      (Mon-Fri) in each window.
-    * Each instalment is paid on that window's end date + X days (default 7, editable).
-  The editor shows the resulting payment dates live.
+2. RETENTION RELEASES (cash IN)
+   Retention is released on the RETENTION TRACKER's release dates (release 1 & 2),
+   so timing has a single source of truth and can't duplicate. The AMOUNT is
+   recomputed on the total ANTICIPATED FINAL ACCOUNT (finalAccount, else project
+   value) x retention %, split 50/50 across the two dates - NOT the invoiced value.
+   Releases already marked received are skipped.
 
-  Labour "this period" is now the INCREMENT over the previous application (matching how
-  revenue this-cert works), so weekly/fortnightly amounts reflect only the new labour
-  in the period. The saved forecast stores the full labour payment schedule
-  ([{date, amount}]) ready for the cash flow feed.
-
-SALES terms unchanged. MATERIALS terms unchanged (still per line).
+NOTE: cash in = sales + retention releases; cash out = labour + materials. Uses the
+payment terms/dates from each saved forecast. Build more forecasts to populate the
+totals.
 
 BUILD: next build -> Compiled successfully.
