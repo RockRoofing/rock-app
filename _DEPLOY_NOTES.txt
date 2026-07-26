@@ -1,22 +1,13 @@
-DEPLOY NOTES - Form builder: drawn signature + project-user block
-=================================================================
+DEPLOY NOTES - Form builder: "Your name (auto)" block
+=====================================================
 
-THREE files, all EDITS - just replace them.
-  pages/operations/forms-builder.js   (new field type in the builder)
-  pages/forms/fill.js                 (drawn signature + project-user picker)
-  components/SubmissionModal.js       (shows the drawn signature in submissions)
+TWO files, both EDITS - just replace them.
+  pages/operations/forms-builder.js   (new field type)
+  pages/forms/fill.js                 (auto-fills + renders it)
 
 WHAT'S NEW
-1. SIGNATURE block now lets the user physically SIGN with their finger (a draw-on
-   canvas, works with touch and mouse) AND type their name + date. In the builder it's
-   listed as "Signature (draw + name)". A "Clear" button resets the drawing. If the
-   field is required, both a typed name and a drawn signature are needed. The drawn
-   signature shows in the completed submission view.
-
-2. NEW BLOCK "Site App user (allocated to project)" - in the builder choose
-   "Site App user (allocated to project)". When filling the form it lists only the
-   Site App users allocated to the SELECTED project (users with 'all' access or that
-   project in their access list) and lets you select one or more. If no project is
-   selected yet, or none are allocated, it says so.
+  New block "Your name (auto - logged-in user)". When someone fills the form it
+  automatically shows and records the name of the Site App user who is logged in -
+  read-only, no typing needed. Add it in the form builder from the field-type list.
 
 BUILD: next build -> Compiled successfully.

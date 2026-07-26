@@ -19,6 +19,7 @@ const FIELD_TYPES = [
   { id: 'yesno', label: 'Yes / No' },
   { id: 'photos', label: 'Photos' },
   { id: 'signature', label: 'Signature (draw + name)' },
+  { id: 'yourname', label: 'Your name (auto - logged-in user)' },
   { id: 'projectusers', label: 'Site App user (allocated to project)' },
   { id: 'note', label: 'Guidance note' },
 ]

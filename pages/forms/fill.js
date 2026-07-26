@@ -91,6 +91,7 @@ export default function Fill() {
     setAnswers(a => {
       const next = { ...a }
       for (const f of form.fields) {
+        if (f.type === 'yourname' && !next[f.id]) next[f.id] = meName
         if (f.type === 'members' && /your name/i.test(f.label || '') && (next[f.id] == null || (Array.isArray(next[f.id]) && !next[f.id].length))) {
           next[f.id] = [meName]
         }
@@ -296,7 +297,7 @@ export default function Fill() {
         {form.fields
           .filter(f => !(form.id === 'pre-start-notification' && f.id === 'f_4'))
           .map(f => (
-            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} opsUsers={opsUsers} projectNo={selectedProject?.jobNo || selectedProject?.id} />
+            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} opsUsers={opsUsers} projectNo={selectedProject?.jobNo || selectedProject?.id} userName={user?.name || ''} />
           ))}
 
         {form.id === 'pre-start-notification' ? (
@@ -320,7 +321,7 @@ export default function Fill() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo }) {
+function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, userName }) {
   if (f.type === 'section') {
     return <div style={{ margin: '26px 0 4px', paddingBottom: 6, borderBottom: '2px solid #ece8df' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND }}>{f.label}</div>
@@ -363,6 +364,13 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo })
 
       {f.type === 'photos' && <PhotoField value={value} onChange={onChange} />}
       {f.type === 'signature' && <Signature value={value} onChange={onChange} />}
+
+      {f.type === 'yourname' && (
+        <div style={{ background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 12, padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: INK }}>{value || userName || '-'}</span>
+          <span style={{ fontSize: 11, color: '#9a958c' }}>(logged-in user)</span>
+        </div>
+      )}
 
       {f.type === 'members' && (
         <MembersPicker value={value} onChange={onChange}
