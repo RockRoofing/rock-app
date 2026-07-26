@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import {
-  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
+  LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
 
@@ -19,6 +19,23 @@ const TABS = [
 const gbp = (n) => `£${Math.round(n || 0).toLocaleString('en-GB')}`
 const gbpK = (n) => { const v = n || 0; return Math.abs(v) >= 1000 ? `£${Math.round(v / 1000)}k` : `£${Math.round(v)}` }
 const monthLbl = (mo) => { const [y, m] = mo.split('-'); return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }) }
+const pct1 = (v) => v == null ? '-' : `${v.toFixed(1)}%`
+// Rock Roofing FY runs 1 Dec -> 30 Nov, labelled by the ending year.
+const fyOf = (mo) => { const [y, m] = mo.split('-').map(Number); return m === 12 ? y + 1 : y }
+const nowMonthKey = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
+// Least-squares trend over a series' numeric key; returns values aligned to points.
+function trendline(points, key) {
+  const pts = points.map((p, i) => [i, p[key]]).filter(p => p[1] != null && isFinite(p[1]))
+  if (pts.length < 2) return points.map(() => null)
+  const n = pts.length
+  const sx = pts.reduce((a, p) => a + p[0], 0), sy = pts.reduce((a, p) => a + p[1], 0)
+  const sxy = pts.reduce((a, p) => a + p[0] * p[1], 0), sxx = pts.reduce((a, p) => a + p[0] * p[0], 0)
+  const denom = n * sxx - sx * sx
+  if (!denom) return points.map(() => null)
+  const slope = (n * sxy - sx * sy) / denom, intercept = (sy - slope * sx) / n
+  return points.map((p, i) => (p[key] == null ? null : Math.round((slope * i + intercept) * 100) / 100))
+}
 
 export default function BusinessFinancials() {
   const router = useRouter()
@@ -55,6 +72,31 @@ export default function BusinessFinancials() {
   if (!ok) return null
 
   const series = (data?.series || []).slice(-months)
+  const allSeries = data?.series || []
+
+  // 2-year sales series (last 24 months) with a trend line.
+  const salesSeries = allSeries.slice(-24)
+  const salesTrend = trendline(salesSeries, 'sales')
+  const sales2yr = salesSeries.map((p, i) => ({ ...p, trend: salesTrend[i] }))
+
+  // Net margin (per month) with trend, over the shown window.
+  const netTrend = trendline(series, 'netMarginPct')
+  const netSeries = series.map((p, i) => ({ ...p, netTrend: netTrend[i] }))
+  const grossTrend = trendline(series, 'grossMarginPct')
+  const grossSeries = series.map((p, i) => ({ ...p, grossTrend: grossTrend[i] }))
+
+  // Current financial year figures (completed months only) for the cards.
+  const thisFy = fyOf(nowMonthKey())
+  const nm = nowMonthKey()
+  const fyMonths = allSeries.filter(s => fyOf(s.month) === thisFy && s.month < nm)
+  const fyAgg = fyMonths.reduce((a, s) => ({ sales: a.sales + (s.sales || 0), cos: a.cos + (s.cos || 0), overheads: a.overheads + (s.overheads || 0) }), { sales: 0, cos: 0, overheads: 0 })
+  const fyGrossMargin = fyAgg.sales > 0 ? ((fyAgg.sales - fyAgg.cos) / fyAgg.sales) * 100 : null
+  const fyNetMargin = fyAgg.sales > 0 ? ((fyAgg.sales - fyAgg.cos - fyAgg.overheads) / fyAgg.sales) * 100 : null
+  const fyOverheadPct = fyAgg.sales > 0 ? (fyAgg.overheads / fyAgg.sales) * 100 : null
+  // Last full month overheads (most recent completed month).
+  const lastFull = [...allSeries].filter(s => s.month < nm).sort((a, b) => a.month.localeCompare(b.month)).pop()
+  const lastFullOverheads = lastFull ? lastFull.overheads : null
+  const lastFullLbl = lastFull ? monthLbl(lastFull.month) : ''
   const pie = data?.costPie || { labour: 0, materials: 0, overheads: 0 }
   const pieData = [
     { name: 'Labour', value: Math.round(pie.labour), color: '#2563eb' },
@@ -99,29 +141,66 @@ export default function BusinessFinancials() {
               No financial data yet. Sync the Xero figures (Bookkeeping → Sync Xero figures) to populate the P&amp;L, then use “Sync bank” here for cash in/out.
             </div>
           ) : (
+            <>
+            {/* KPI cards for the current financial year */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <Kpi label={`Gross margin - FY${thisFy}`} value={pct1(fyGrossMargin)} color="#0f766e" sub="Year to date" />
+              <Kpi label={`Net margin - FY${thisFy}`} value={pct1(fyNetMargin)} color={fyNetMargin != null && fyNetMargin < 0 ? '#dc2626' : '#16a34a'} sub="Year to date (after overheads)" />
+              <Kpi label={`Overheads % of revenue - FY${thisFy}`} value={pct1(fyOverheadPct)} color={GOLD} sub="Overhead spend / sales, YTD" />
+              <Kpi label="Monthly overheads" value={lastFullOverheads == null ? '-' : gbp(lastFullOverheads)} color={INK} sub={lastFull ? `Last full month (${lastFullLbl})` : 'No data'} />
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(430px, 1fr))', gap: 16 }}>
 
-              <Card title="Sales" sub="Invoiced sales at end of each month">
+              <Card title="Sales - 2 years" sub="Invoiced sales per month, with trend line">
                 <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                  <ComposedChart data={sales2yr} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                    <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 10 }} />
+                    <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
+                    <Tooltip formatter={(v) => gbp(v)} labelFormatter={monthLbl} />
+                    <Line type="monotone" dataKey="sales" name="Sales" stroke={GOLD} strokeWidth={2.5} dot={false} />
+                    <Line type="monotone" dataKey="trend" name="Trend" stroke="#9a3412" strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card title="Monthly sales" sub="Invoiced sales per month (bar)">
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                     <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={gbpK} tick={{ fontSize: 11 }} width={48} />
                     <Tooltip formatter={(v) => gbp(v)} labelFormatter={monthLbl} />
-                    <Line type="monotone" dataKey="sales" name="Sales" stroke={GOLD} strokeWidth={2.5} dot={false} />
-                  </LineChart>
+                    <Bar dataKey="sales" name="Sales" fill={GOLD} />
+                  </BarChart>
                 </ResponsiveContainer>
               </Card>
 
-              <Card title="Gross margin" sub="(Sales − cost of sales) ÷ sales, by month">
+              <Card title="Gross margin" sub="(Sales - cost of sales) / sales, by month, with trend">
                 <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                  <ComposedChart data={grossSeries} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
                     <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 11 }} />
                     <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} width={40} />
-                    <Tooltip formatter={(v) => v == null ? '—' : `${v}%`} labelFormatter={monthLbl} />
+                    <Tooltip formatter={(v) => v == null ? '-' : `${v}%`} labelFormatter={monthLbl} />
                     <Line type="monotone" dataKey="grossMarginPct" name="Gross margin" stroke="#0f766e" strokeWidth={2.5} dot={false} connectNulls />
-                  </LineChart>
+                    <Line type="monotone" dataKey="grossTrend" name="Trend" stroke="#0f766e" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </Card>
+
+              <Card title="Net margin" sub="After overheads: (Sales - COS - overheads) / sales, with trend">
+                <ResponsiveContainer width="100%" height={240}>
+                  <ComposedChart data={netSeries} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                    <XAxis dataKey="month" tickFormatter={monthLbl} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} width={40} />
+                    <Tooltip formatter={(v) => v == null ? '-' : `${v}%`} labelFormatter={monthLbl} />
+                    <ReferenceLine y={0} stroke="#dc2626" />
+                    <Line type="monotone" dataKey="netMarginPct" name="Net margin" stroke="#16a34a" strokeWidth={2.5} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="netTrend" name="Trend" stroke="#16a34a" strokeWidth={1.5} strokeDasharray="6 4" dot={false} connectNulls />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </Card>
 
@@ -139,7 +218,7 @@ export default function BusinessFinancials() {
                 </ResponsiveContainer>
               </Card>
 
-              <Card title="Cost of sale by category" sub="Total spend across the period">
+              <Card title="Cost of sale by category" sub="Actual labour, materials and overhead spend across the period">
                 {pieData.length === 0 ? <Empty>No cost data.</Empty> : (
                   <ResponsiveContainer width="100%" height={240}>
                     <PieChart>
@@ -152,8 +231,8 @@ export default function BusinessFinancials() {
                 )}
               </Card>
 
-              <Card title="Cash in / cash out" sub={hasBank ? 'Actual money in and out each month' : 'No bank data yet — click “Sync bank”'} wide>
-                {!hasBank ? <Empty>Click “Sync bank” above to pull actual cash movement from Xero.</Empty> : (
+              <Card title="Cash in / cash out" sub={hasBank ? 'Actual money in and out each month' : 'No bank data yet - click Sync bank'} wide>
+                {!hasBank ? <Empty>Click Sync bank above to pull actual cash movement from Xero.</Empty> : (
                   <ResponsiveContainer width="100%" height={260}>
                     <BarChart data={series} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
@@ -169,6 +248,7 @@ export default function BusinessFinancials() {
               </Card>
 
             </div>
+            </>
           )}
 
           <div style={{ fontSize: 11, color: '#aaa', marginTop: 16 }}>
@@ -177,6 +257,16 @@ export default function BusinessFinancials() {
         </div>
       </div>
     </>
+  )
+}
+
+function Kpi({ label, value, sub, color }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 18px' }}>
+      <div style={{ fontSize: 12, color: '#8a857c' }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{sub}</div>}
+    </div>
   )
 }
 

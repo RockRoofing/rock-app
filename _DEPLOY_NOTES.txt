@@ -1,16 +1,22 @@
-DEPLOY NOTES - Site App: "Back to forms" returns to the previous page
-=====================================================================
+DEPLOY NOTES - Summary page update (re-cut, current versions)
+=============================================================
 
-ONE file, an EDIT - just replace it.
-  pages/forms/fill.js
+TWO files, both EDITS - just replace them.
+  pages/business-financials.js       (the Summary page)
+  pages/api/business-financials.js   (API)
 
-WHAT WAS WRONG
-  The "Back to forms" link on a form always went to the Site App home page (/forms),
-  not the forms list the user came from.
+WHY RE-CUT
+  This is the Summary page update you hadn't deployed yet. Because you've deployed
+  everything else since, these are the CURRENT versions of both files - they include
+  the summary changes AND all the later API changes (project cash-flow forecasts,
+  12-month lumps, etc.), so deploying them will NOT revert anything.
 
-FIX
-  "Back to forms" now goes BACK to the previous page (router.back()) - so if you opened
-  the form from the forms/browse list (with a project selected) it returns you there,
-  keeping your place. Falls back to /forms if there's no history to go back to.
+WHAT'S IN IT (Summary page)
+  - KPI cards (current FY, year to date): Gross margin, Net margin, Overheads % of
+    revenue, and Monthly overheads (last full month).
+  - Sales - 2 years line chart with trend line + a monthly sales bar chart.
+  - Gross margin and Net margin line charts, each with a trend line.
+  - Cost of sale by category pie relabelled (real Labour / Materials / Overheads spend).
+  API adds netMarginPct + overheadPct to the monthly series (used by the cards/charts).
 
 BUILD: next build -> Compiled successfully.

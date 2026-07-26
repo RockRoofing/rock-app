@@ -830,6 +830,7 @@ export default async function handler(req, res) {
     const cos = abs(b.costOfSalesTotal)
     const overheads = abs(b.overheadsTotal)
     const grossMargin = sales > 0 ? (sales - cos) / sales : null
+    const netMargin = sales > 0 ? (sales - cos - overheads) / sales : null
     // Labour breakdown: direct wages (320) vs subcontract labour (321/328/334).
     const directWages = abs(byCode['320'])
     const subContract = abs(byCode['321']) + abs(byCode['328']) + abs(byCode['334'])
@@ -840,6 +841,8 @@ export default async function handler(req, res) {
       cos,
       overheads,
       grossMarginPct: grossMargin == null ? null : Math.round(grossMargin * 1000) / 10,
+      netMarginPct: netMargin == null ? null : Math.round(netMargin * 1000) / 10,
+      overheadPct: sales > 0 ? Math.round((overheads / sales) * 1000) / 10 : null,
       directWages,
       subContract,
       cashIn: bs.cashIn || 0,
