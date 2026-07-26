@@ -120,7 +120,9 @@ export default function SubmissionModal({ sub, labels, onClose, onSaved, onDownl
               ? <PhotoEditor value={Array.isArray(v) ? v : []} editing={editing} onChange={nv => setAnswers(a => ({ ...a, [k]: nv }))} />
               : editing
                 ? <EditControl k={k} v={v} />
-                : <div style={{ fontSize: 14, color: INK }}>{typeof v === 'object' ? (v?.name ? `${v.name} (${v.date || ''})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
+                : (v && typeof v === 'object' && v.image)
+                  ? <div><div style={{ fontSize: 14, color: INK, marginBottom: 6 }}>{v.name || ''}{v.date ? ` (${v.date})` : ''}</div><img src={v.image} alt="signature" style={{ maxWidth: 320, width: '100%', border: '1px solid #eee', borderRadius: 8, background: '#fff' }} /></div>
+                  : <div style={{ fontSize: 14, color: INK }}>{typeof v === 'object' ? (v?.name ? `${v.name} (${v.date || ''})` : JSON.stringify(v)) : Array.isArray(v) ? v.join(', ') : String(v)}</div>}
           </div>
         )
       })}

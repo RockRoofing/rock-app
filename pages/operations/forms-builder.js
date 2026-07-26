@@ -18,7 +18,8 @@ const FIELD_TYPES = [
   { id: 'multi', label: 'Multiple choice' },
   { id: 'yesno', label: 'Yes / No' },
   { id: 'photos', label: 'Photos' },
-  { id: 'signature', label: 'Signature' },
+  { id: 'signature', label: 'Signature (draw + name)' },
+  { id: 'projectusers', label: 'Site App user (allocated to project)' },
   { id: 'note', label: 'Guidance note' },
 ]
 const HAS_OPTIONS = ['single', 'multi']

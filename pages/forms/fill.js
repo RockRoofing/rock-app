@@ -22,6 +22,7 @@ export default function Fill() {
   const [projectId, setProjectId] = useState('')
   const [team, setTeam] = useState([])
   const [roster, setRoster] = useState([])          // operatives roster (searchable Personnel list)
+  const [opsUsers, setOpsUsers] = useState([])      // Site App users (for project-user picker)
   const [planning, setPlanning] = useState(null)    // { allocations, waterIngress }
   const prefilled = useRef(false)
 
@@ -62,6 +63,13 @@ export default function Fill() {
         try {
           const ro = await fetch('/api/operatives'); const dro = await ro.json()
           setRoster((dro.operatives || []).map(o => ({ id: o.id, name: `${o.firstName || ''} ${o.lastName || ''}`.trim(), company: o.company || '' })).filter(o => o.name))
+        } catch {}
+        try {
+          const ru = await fetch('/api/ops-users?action=list'); const du = await ru.json()
+          setOpsUsers((du.users || []).map(u => ({
+            id: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || '',
+            projectAccess: u.projectAccess,
+          })).filter(u => u.name))
         } catch {}
         try {
           const rpl = await fetch('/api/planning'); const dpl = await rpl.json()
@@ -158,7 +166,7 @@ export default function Fill() {
       if (!f.required) continue
       const v = answers[f.id]
       const empty = v == null || v === '' || (Array.isArray(v) && v.length === 0) ||
-        (f.type === 'signature' && (!v || !v.name))
+        (f.type === 'signature' && (!v || !v.name || !v.image))
       if (empty) errs[f.id] = 'Required'
     }
     setErrors(errs)
@@ -288,7 +296,7 @@ export default function Fill() {
         {form.fields
           .filter(f => !(form.id === 'pre-start-notification' && f.id === 'f_4'))
           .map(f => (
-            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} />
+            <Field key={f.id} f={f} value={answers[f.id]} onChange={v => set(f.id, v)} error={errors[f.id]} team={team} roster={roster} opsUsers={opsUsers} projectNo={selectedProject?.jobNo || selectedProject?.id} />
           ))}
 
         {form.id === 'pre-start-notification' ? (
@@ -312,7 +320,7 @@ export default function Fill() {
 }
 
 // ── Field renderer ──────────────────────────────────────────────────────────
-function Field({ f, value, onChange, error, team, roster }) {
+function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo }) {
   if (f.type === 'section') {
     return <div style={{ margin: '26px 0 4px', paddingBottom: 6, borderBottom: '2px solid #ece8df' }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: BRAND }}>{f.label}</div>
@@ -360,6 +368,17 @@ function Field({ f, value, onChange, error, team, roster }) {
         <MembersPicker value={value} onChange={onChange}
           people={(roster && roster.length ? roster.map(o => o.name) : (team || []))} />
       )}
+
+      {f.type === 'projectusers' && (() => {
+        // Site App users allocated to this project ('all' access, or projectNo listed).
+        const allocated = (opsUsers || []).filter(u => {
+          const pa = u.projectAccess
+          return pa === 'all' || (Array.isArray(pa) && pa.map(String).includes(String(projectNo)))
+        }).map(u => u.name)
+        return allocated.length
+          ? <MembersPicker value={value} onChange={onChange} people={allocated} />
+          : <div style={{ fontSize: 13, color: '#999', background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12 }}>{projectNo ? 'No Site App users are allocated to this project yet.' : 'Select a project first to choose allocated users.'}</div>
+      })()}
 
       {notify && (
         <div style={{ marginTop: 8, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#92400e', fontWeight: 600 }}>
@@ -504,18 +523,66 @@ function PhotoField({ value, onChange }) {
 function Signature({ value, onChange }) {
   const v = value || {}
   const today = new Date().toISOString().split('T')[0]
+  const canvasRef = useRef(null)
+  const drawing = useRef(false)
+  const last = useRef(null)
   useEffect(() => { if (!v.date) onChange({ ...v, date: today }) }, [])
+
+  // Restore a previously-drawn signature onto the canvas when the component mounts.
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height)
+    if (v.image) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, c.width, c.height); img.src = v.image }
+  }, [])
+
+  const pos = (e) => {
+    const c = canvasRef.current, r = c.getBoundingClientRect()
+    const t = e.touches ? e.touches[0] : e
+    return { x: (t.clientX - r.left) * (c.width / r.width), y: (t.clientY - r.top) * (c.height / r.height) }
+  }
+  const start = (e) => { e.preventDefault(); drawing.current = true; last.current = pos(e) }
+  const move = (e) => {
+    if (!drawing.current) return
+    e.preventDefault()
+    const c = canvasRef.current, ctx = c.getContext('2d'), p = pos(e)
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+    ctx.beginPath(); ctx.moveTo(last.current.x, last.current.y); ctx.lineTo(p.x, p.y); ctx.stroke()
+    last.current = p
+  }
+  const end = () => {
+    if (!drawing.current) return
+    drawing.current = false
+    const c = canvasRef.current
+    onChange({ ...v, image: c.toDataURL('image/png'), date: v.date || today })
+  }
+  const clear = () => {
+    const c = canvasRef.current, ctx = c.getContext('2d')
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height)
+    onChange({ ...v, image: '' })
+  }
+
   return (
     <div style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 12, padding: 14 }}>
       <div style={{ marginBottom: 10 }}>
         <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>Full name</div>
         <input value={v.name || ''} onChange={e => onChange({ ...v, name: e.target.value })} style={inp} placeholder="Type your full name" />
       </div>
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ fontSize: 12, color: '#999' }}>Sign below (use your finger)</div>
+          <button type="button" onClick={clear} style={{ fontSize: 12, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+        </div>
+        <canvas ref={canvasRef} width={600} height={200}
+          onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+          onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+          style={{ width: '100%', height: 160, border: '1px dashed #cfcabd', borderRadius: 10, touchAction: 'none', background: '#fff', display: 'block' }} />
+      </div>
       <div>
         <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>Date</div>
         <input type="date" value={v.date || today} onChange={e => onChange({ ...v, date: e.target.value })} style={inp} />
       </div>
-      <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>Typing your name acts as your digital signature.</div>
+      <div style={{ fontSize: 11, color: '#aaa', marginTop: 8 }}>Your typed name and drawn signature together act as your digital signature.</div>
     </div>
   )
 }
