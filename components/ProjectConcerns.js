@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, fmtDate } from './opsUI'
 import ExpandableText from './ExpandableText'
 
@@ -117,6 +117,15 @@ export default function ProjectConcerns({ projectNo, projectName }) {
   }
   function openView(m) { setOpen({ ...m }) }
 
+  async function autosaveMeeting(meeting) {
+    // Silent draft save - persists the record only, no invites, no reload/close.
+    try {
+      const resp = await fetch('/api/project-concerns', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectNo, meeting, autosave: true }) }).then(r => r.json()).catch(() => ({}))
+      return resp && resp.id ? resp.id : meeting.id
+    } catch { return meeting.id }
+  }
+
   async function saveMeeting(meeting) {
     setSaving(true)
     try {
@@ -226,6 +235,7 @@ export default function ProjectConcerns({ projectNo, projectName }) {
           saving={saving}
           onClose={() => setOpen(null)}
           onSave={saveMeeting}
+          onAutosave={autosaveMeeting}
           reloadLinks={load}
         />
       )}
@@ -234,11 +244,30 @@ export default function ProjectConcerns({ projectNo, projectName }) {
 }
 
 // ---- Large meeting modal ----
-function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRisks, saving, onClose, onSave, reloadLinks }) {
+function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRisks, saving, onClose, onSave, onAutosave, reloadLinks }) {
   const [f, setF] = useState(() => ({ ...initial, date: initial.date || todayISO() }))
   const [tasks, setTasks] = useState(allTasks)
   const [risks, setRisks] = useState(allRisks)
   const set = (patch) => setF(prev => ({ ...prev, ...patch }))
+
+  // Auto-save the meeting as you edit so nothing is lost on clicking away. Silent -
+  // persists the record only (no invites, modal stays open). Captures the new id so
+  // subsequent saves update the same record.
+  const [autoStatus, setAutoStatus] = useState('')
+  const autoTimer = useRef(null)
+  const firstAuto = useRef(true)
+  useEffect(() => {
+    if (firstAuto.current) { firstAuto.current = false; return }
+    if (!onAutosave || saving) return
+    if (autoTimer.current) clearTimeout(autoTimer.current)
+    autoTimer.current = setTimeout(async () => {
+      setAutoStatus('saving')
+      const id = await onAutosave({ ...f, projectNo, projectName })
+      if (id && !f.id) setF(prev => ({ ...prev, id }))
+      setAutoStatus('saved'); setTimeout(() => setAutoStatus(''), 2500)
+    }, 1500)
+    return () => { if (autoTimer.current) clearTimeout(autoTimer.current) }
+  }, [f])
 
   // Live task/risk records this meeting references
   const myTasks = tasks.filter(t => (f.actionTaskIds || []).includes(t.id))
@@ -456,6 +485,7 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 28, borderTop: '1px solid #eee', paddingTop: 18 }}>
             <button onClick={onClose} style={ghostBtn}>Cancel</button>
             <button onClick={submit} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Save meeting'}</button>
+            {autoStatus && <span style={{ fontSize: 12.5, color: autoStatus === 'saved' ? '#16a34a' : '#9a958c', alignSelf: 'center', marginLeft: 4 }}>{autoStatus === 'saving' ? 'Auto-saving…' : 'Auto-saved'}</span>}
           </div>
         </div>
       </div>

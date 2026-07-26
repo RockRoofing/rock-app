@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { compressImage } from '../lib/compressImage'
 import { PRESTART_SECTIONS as DEFAULT_SECTIONS } from '../lib/preStartSchema'
 import { INK, GOLD, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, inp2, fmtDateTime } from './opsUI'
@@ -80,6 +80,29 @@ export default function PreStartForm({ projectNo }) {
   function buildPayload() {
     return { ...form, customRows: extraSections }
   }
+
+  // Auto-save drafts while editing so nothing is lost on navigating away. Silent -
+  // stays in edit mode, never sends, never fires once the minutes are 'sent' (locked).
+  const [autoStatus, setAutoStatus] = useState('')
+  const autoTimer = useRef(null)
+  const firstAuto = useRef(true)
+  useEffect(() => {
+    if (firstAuto.current) { firstAuto.current = false; return }
+    if (!editing || !form || saving) return
+    if (data && data.stage === 'sent') return
+    if (autoTimer.current) clearTimeout(autoTimer.current)
+    autoTimer.current = setTimeout(async () => {
+      try {
+        setAutoStatus('saving')
+        const payload = { ...buildPayload(), stage: 'draft' }
+        const r = await fetch('/api/pre-start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, data: payload, autosave: true }) })
+        const d = await r.json().catch(() => ({}))
+        if (r.ok && d.data) setData(d.data)   // keep saved id in sync, stay in edit mode
+        setAutoStatus('saved'); setTimeout(() => setAutoStatus(''), 2500)
+      } catch { setAutoStatus('') }
+    }, 1500)
+    return () => { if (autoTimer.current) clearTimeout(autoTimer.current) }
+  }, [form, extraSections])
 
   async function saveDraft() {
     setSaving(true)
@@ -163,6 +186,7 @@ export default function PreStartForm({ projectNo }) {
             <button onClick={saveAndSend} disabled={saving || sending} style={primaryBtn}>{sending ? 'Sending…' : 'Save & send'}</button>
             {data?.stage === 'draft' && <button onClick={markSentManually} disabled={saving || sending} style={ghostBtn}>Mark as sent</button>}
             {data && <button onClick={() => setEditing(false)} style={{ ...ghostBtn, color: '#999' }}>Cancel</button>}
+            {autoStatus && <span style={{ fontSize: 12.5, color: autoStatus === 'saved' ? '#16a34a' : '#9a958c', alignSelf: 'center' }}>{autoStatus === 'saving' ? 'Auto-saving…' : 'Draft auto-saved'}</span>}
           </>}
         </div>
       </div>

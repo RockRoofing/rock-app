@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
@@ -27,7 +27,7 @@ export default function Handover() {
   const [status, setStatus] = useState('draft')
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [openSection, setOpenSection] = useState('meeting')
+  const [openSections, setOpenSections] = useState(new Set(['meeting']))
   const [err, setErr] = useState('')
   const [team, setTeam] = useState([])
   const [mfrBook, setMfrBook] = useState([])
@@ -84,11 +84,36 @@ export default function Handover() {
 
   function set(id, val) { setData(d => ({ ...d, [id]: val })); setErr('') }
 
+  // Auto-save (draft) so nothing is lost if the user clicks away. Fires a short while
+  // after edits stop, only once the project is identified (the record is keyed by
+  // project number). Never finalises - always saves as a draft in the background.
+  const [autoStatus, setAutoStatus] = useState('')   // '', 'saving', 'saved'
+  const autoTimer = useRef(null)
+  const firstAuto = useRef(true)
+  useEffect(() => {
+    if (firstAuto.current) { firstAuto.current = false; return }  // skip the initial load
+    if (loading || saving) return
+    if (!data.projectNo?.trim() || !data.projectName?.trim()) return
+    if (autoTimer.current) clearTimeout(autoTimer.current)
+    autoTimer.current = setTimeout(async () => {
+      try {
+        setAutoStatus('saving')
+        await fetch('/api/ops-projects', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project: data, status: status === 'active' ? 'active' : 'draft', autosave: true }),
+        })
+        setAutoStatus('saved')
+        setTimeout(() => setAutoStatus(''), 2500)
+      } catch { setAutoStatus('') }
+    }, 1500)
+    return () => { if (autoTimer.current) clearTimeout(autoTimer.current) }
+  }, [data])
+
   async function save(finalise) {
     setErr('')
     if (!data.projectNo?.trim() || !data.projectName?.trim()) {
       setErr('Project Name and RR Project Number are required.')
-      setOpenSection('project')
+      setOpenSections(prev => new Set(prev).add('meeting'))
       return
     }
     setSaving(true)
@@ -144,10 +169,10 @@ export default function Handover() {
       {/* Section accordion */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {IHM_SECTIONS.map(section => {
-          const isOpen = openSection === section.id
+          const isOpen = openSections.has(section.id)
           return (
             <div key={section.id} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
-              <button onClick={() => setOpenSection(isOpen ? '' : section.id)} style={{
+              <button onClick={() => setOpenSections(prev => { const n = new Set(prev); n.has(section.id) ? n.delete(section.id) : n.add(section.id); return n })} style={{
                 width: '100%', textAlign: 'left', background: isOpen ? '#fffbeb' : '#fff', border: 'none',
                 padding: '14px 18px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 fontSize: 15, fontWeight: 600, color: INK,
@@ -174,6 +199,7 @@ export default function Handover() {
         <button onClick={() => save(true)} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : 'Meeting Complete'}</button>
         <button onClick={() => save(false)} disabled={saving} style={ghostBtn}>Save as draft</button>
         <button onClick={() => router.push("/handover")} style={ghostBtn}>Cancel</button>
+        {autoStatus && <span style={{ fontSize: 12.5, color: autoStatus === 'saved' ? '#16a34a' : '#9a958c', alignSelf: 'center' }}>{autoStatus === 'saving' ? 'Auto-saving…' : 'Draft auto-saved'}</span>}
       </div>
     </Wrap>
   )

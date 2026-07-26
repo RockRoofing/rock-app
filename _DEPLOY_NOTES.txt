@@ -1,13 +1,26 @@
-DEPLOY NOTES - Form builder: "Your name (auto)" block
-=====================================================
+DEPLOY NOTES - Minutes: auto-save + multi-open sections
+=======================================================
 
-TWO files, both EDITS - just replace them.
-  pages/operations/forms-builder.js   (new field type)
-  pages/forms/fill.js                 (auto-fills + renders it)
+THREE files, all EDITS - just replace them.
+  pages/handover/form.js        (Internal Handover Minutes)
+  components/PreStartForm.js     (Pre-Start Minutes)
+  components/ProjectConcerns.js  (Project Concern meeting minutes)
 
-WHAT'S NEW
-  New block "Your name (auto - logged-in user)". When someone fills the form it
-  automatically shows and records the name of the Site App user who is logged in -
-  read-only, no typing needed. Add it in the form builder from the field-type list.
+1. AUTO-SAVE (all three)
+   While completing the minutes, the form now auto-saves a DRAFT in the background a
+   moment after you stop typing - so clicking away won't lose the work. A small
+   "Auto-saving.../Draft auto-saved" note shows by the buttons. It never sends and never
+   finalises; your Save / Complete / Save & send buttons work exactly as before.
+   - IHM auto-saves once the Project Name + RR Project Number are filled (the record is
+     keyed by project number).
+   - Pre-Start auto-saves while editing (not once the minutes are 'sent'/locked).
+   - Project Concern auto-saves the meeting as you edit; the first auto-save captures
+     the new meeting id so later saves update the same record.
+
+2. MULTI-OPEN SECTIONS (Internal Handover Minutes)
+   The IHM section accordion now lets multiple sections stay open at once. Opening one
+   no longer closes another - each section opens/closes only when you click its own
+   header. (Pre-Start and Project Concern already show all sections at once, so this
+   applies to the IHM.)
 
 BUILD: next build -> Compiled successfully.
