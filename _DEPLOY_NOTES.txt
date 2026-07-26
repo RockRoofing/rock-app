@@ -1,20 +1,25 @@
-DEPLOY NOTES - Cash Flow: View button + adjustable period on forecasts
-======================================================================
+DEPLOY NOTES - Cash Flow forecasts: payment terms
+=================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-CHANGES
-1. VIEW BUTTON on each forecast band: every coloured application band on the gantt
-   now has a small "View" button (top-right). Click it to open that specific
-   forecasted application to view or edit it.
+WHAT'S NEW - payment terms so the forecast knows WHEN cash moves:
 
-2. ADJUSTABLE PERIOD: the forecast modal's period (from / to dates) is now editable
-   at the top - change them and the band moves/resizes on the gantt when you save.
-   - Opening via "View" loads that application's own values and period and saves back
-     IN PLACE ("Update forecast").
-   - Building from a fresh selection still creates a NEW forecast as before.
-   Cumulative maths correctly uses the application dated immediately before the
-   period, and excludes the one you're editing.
+  Each term is: a BASIS + a number of days.
+    - "days"    = that many days from the reference date
+    - "EOM +"   = end of the month the reference date is in, then + that many days
+                  (the last day of the month counts as being in that month)
+
+  SALES received  - term set at the TOP of the application (from the period end).
+                    Default: EOM + 30.
+  LABOUR paid     - term set at the TOP of the application (from the period end).
+                    Default: 0 days.
+  MATERIALS paid  - term set PER LINE (per supplier), from that line's delivery day.
+                    Default: EOM + 30 from the delivery month.
+
+  Each term shows the resulting CASH DATE live as you change it. The saved forecast
+  now stores the terms and the computed cash dates (salesDate, labourDate, and a
+  payDate per material line) ready to drive the Business Financials cash flow feed.
 
 BUILD: next build -> Compiled successfully.

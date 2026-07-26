@@ -344,6 +344,25 @@ function gbp(n) { return `£${Math.round(n || 0).toLocaleString('en-GB')}` }
 function gbpK(n) { const v = n || 0; return Math.abs(v) >= 1000 ? `£${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `£${Math.round(v)}` }
 function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
+// Compute the cash date from a reference date + a payment term.
+// term = { basis: 'days' | 'eom', days: N }
+//  - 'days': refDate + N days
+//  - 'eom' : last day of refDate's month, then + N days (last day of month included)
+function paymentDate(refISO, term) {
+  if (!refISO) return ''
+  const [y, m, d] = refISO.split('-').map(Number)
+  const days = num(term && term.days)
+  let base
+  if (term && term.basis === 'eom') {
+    base = new Date(y, m, 0)               // day 0 of next month = last day of this month
+  } else {
+    base = new Date(y, m - 1, d)
+  }
+  base.setDate(base.getDate() + days)
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+}
+const termLabel = (term) => term ? (term.basis === 'eom' ? `EOM + ${num(term.days)}d` : `${num(term.days)} days`) : ''
+
 function HypAppModal({ modal, onClose, onSaved }) {
   const { projectKey, projectName, xeroId, editId } = modal
   const [loading, setLoading] = useState(true)
@@ -355,6 +374,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
   const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
+  const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30 })    // sales cash received
+  const [labourTerm, setLabourTerm] = useState({ basis: 'days', days: 0 })  // labour paid
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [saving, setSaving] = useState(false)
@@ -375,7 +396,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
           const byId = new Map((editing.contractWorks || []).filter(r => r.kind === 'item').map(r => [r.id, r]))
           for (const r of base) { if (r.kind === 'item') { const p = byId.get(r.id); if (p) r.pctComplete = p.pctComplete || 0 } }
           setMcdPct(editing.mcdPct || 0); setRetPct(editing.retentionPct != null ? editing.retentionPct : 5)
-          setMatItems((editing.matItems || []).map(m => ({ ...m })))
+          setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
+          setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
+          setLabourTerm(editing.labourTerm || { basis: 'days', days: 0 })
           setFrom(editing.from || ''); setTo(editing.to || '')
         } else {
           // NEW forecast: start from the most recent prior app's % complete (cumulative).
@@ -451,8 +474,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
       from, to,
       contractWorks: rows,
       materials: materialsForCalc,
-      matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m) })),
+      matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m), term: m.term || { basis: 'eom', days: 30 }, payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 }) })),
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
+      salesTerm, labourTerm,
+      salesDate: paymentDate(to, salesTerm),
+      labourDate: paymentDate(to, labourTerm),
       mcdPct: num(mcdPct), retentionPct: num(retPct),
       thisCertTotal: sum.thisCert.total,
       revenueThisPeriod: sum.thisCert.total,
@@ -537,6 +563,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
 
+              {/* Payment terms (sales received, labour paid) */}
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" />
+                <TermEditor label="Labour paid" term={labourTerm} setTerm={setLabourTerm} refDate={to} refLabel="period end" />
+                <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
+              </div>
+
               {/* Contract works with % complete */}
               <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 6 }}>Contract works (enter cumulative % complete)</div>
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', maxHeight: 320, marginBottom: 16 }}>
@@ -568,23 +601,26 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   and its own delivery day */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Materials on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(budget {gbp(materialsBudget)})</span></div>
-                <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to }])}
+                <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to, term: { basis: 'eom', days: 30 } }])}
                   style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
               </div>
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', marginBottom: 18 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead><tr style={{ background: '#faf9f7', color: '#999' }}>
-                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 110 }}>Add by</th>
-                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 110 }}>Value</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 100 }}>Add by</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 90 }}>Value</th>
                     <th style={{ textAlign: 'left', padding: '6px 10px' }}>Comment (e.g. supplier)</th>
-                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 150 }}>Delivery day (cash out)</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 130 }}>Delivery day</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 170 }}>Payment term</th>
                     <th style={{ textAlign: 'right', padding: '6px 10px', width: 90 }}>Amount</th>
                     <th style={{ width: 30 }}></th>
                   </tr></thead>
                   <tbody>
-                    {matItems.length === 0 && <tr><td colSpan={6} style={{ padding: '10px', textAlign: 'center', color: '#bbb' }}>No materials added. Use &quot;+ Add material&quot; for each supplier / delivery.</td></tr>}
+                    {matItems.length === 0 && <tr><td colSpan={7} style={{ padding: '10px', textAlign: 'center', color: '#bbb' }}>No materials added. Use &quot;+ Add material&quot; for each supplier / delivery.</td></tr>}
                     {matItems.map((m) => {
                       const upd = (patch) => setMatItems(l => l.map(x => x.id === m.id ? { ...x, ...patch } : x))
+                      const term = m.term || { basis: 'eom', days: 30 }
+                      const payISO = paymentDate(m.deliverDay, term)
                       return (
                         <tr key={m.id} style={{ borderTop: '1px solid #f3f2ee' }}>
                           <td style={{ padding: '5px 10px' }}>
@@ -594,13 +630,23 @@ function HypAppModal({ modal, onClose, onSaved }) {
                             </select>
                           </td>
                           <td style={{ padding: '5px 10px' }}>
-                            <input type="number" value={m.value} onChange={e => upd({ value: e.target.value })} placeholder={m.mode === 'pct' ? '%' : '£'} style={{ ...inpS, width: 90, padding: '5px 6px' }} />
+                            <input type="number" value={m.value} onChange={e => upd({ value: e.target.value })} placeholder={m.mode === 'pct' ? '%' : '£'} style={{ ...inpS, width: 80, padding: '5px 6px' }} />
                           </td>
                           <td style={{ padding: '5px 10px' }}>
                             <input type="text" value={m.comment} onChange={e => upd({ comment: e.target.value })} placeholder="Supplier / note" style={{ ...inpS, width: '100%', padding: '5px 6px' }} />
                           </td>
                           <td style={{ padding: '5px 10px' }}>
                             <input type="date" value={m.deliverDay || ''} onChange={e => upd({ deliverDay: e.target.value })} style={{ ...inpS, padding: '5px 6px' }} />
+                          </td>
+                          <td style={{ padding: '5px 10px' }}>
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <select value={term.basis} onChange={e => upd({ term: { ...term, basis: e.target.value } })} style={{ ...inpS, padding: '5px 4px', fontSize: 11 }}>
+                                <option value="eom">EOM +</option>
+                                <option value="days">days</option>
+                              </select>
+                              <input type="number" value={term.days} onChange={e => upd({ term: { ...term, days: e.target.value } })} style={{ ...inpS, width: 46, padding: '5px 4px' }} />
+                            </div>
+                            <div style={{ fontSize: 10, color: '#0f766e', marginTop: 2 }}>{payISO ? `cash ${fmtD(payISO)}` : ''}</div>
                           </td>
                           <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600, color: '#7c3aed' }}>{gbp(matLineValue(m))}</td>
                           <td style={{ padding: '5px 6px', textAlign: 'center' }}>
@@ -611,7 +657,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                     })}
                   </tbody>
                   {matItems.length > 0 && <tfoot><tr style={{ borderTop: '2px solid #eee', background: '#faf9f7', fontWeight: 700 }}>
-                    <td colSpan={4} style={{ padding: '6px 10px', textAlign: 'right' }}>Total materials this period</td>
+                    <td colSpan={5} style={{ padding: '6px 10px', textAlign: 'right' }}>Total materials this period</td>
                     <td style={{ padding: '6px 10px', textAlign: 'right', color: '#7c3aed' }}>{gbp(materialsThisPeriod)}</td><td></td>
                   </tr></tfoot>}
                 </table>
@@ -628,6 +674,24 @@ function HypAppModal({ modal, onClose, onSaved }) {
             </div>
           )}
       </div>
+    </div>
+  )
+}
+
+function TermEditor({ label, term, setTerm, refDate, refLabel }) {
+  const cash = paymentDate(refDate, term)
+  const fmtD = (s) => { if (!s) return '-'; const [y, m, d] = s.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+  return (
+    <div>
+      <div style={lblS}>{label}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+          <option value="days">days from {refLabel}</option>
+          <option value="eom">EOM + days</option>
+        </select>
+        <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
+      </div>
+      <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>cash on {fmtD(cash)}</div>
     </div>
   )
 }
