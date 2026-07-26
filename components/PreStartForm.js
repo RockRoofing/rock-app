@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { compressImage } from '../lib/compressImage'
 import { PRESTART_SECTIONS as DEFAULT_SECTIONS } from '../lib/preStartSchema'
-import { INK, GOLD, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, inp2, fmtDateTime } from './opsUI'
+import { INK, GOLD, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, inp2, fmtDateTime, AutoTextarea } from './opsUI'
 
 const teamName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || ''
 
@@ -241,7 +241,7 @@ function CustomRows({ sectionId, rows, editing, onChange }) {
                 <select value={r.resolved || ''} onChange={e => { const n = [...list]; n[i] = { ...r, resolved: e.target.value }; onChange(n) }} style={{ ...inp2, width: 130, flexShrink: 0 }}>
                   <option value="">Resolved?</option><option value="Y">Yes</option><option value="N">No</option><option value="NA">N/A</option>
                 </select>
-                <textarea value={r.comments || ''} onChange={e => { const n = [...list]; n[i] = { ...r, comments: e.target.value }; onChange(n) }} placeholder="Comments" style={{ ...inp2, flex: 1, minWidth: 240, minHeight: 60, fontFamily: 'inherit' }} />
+                <AutoTextarea value={r.comments || ''} onChange={val => { const n = [...list]; n[i] = { ...r, comments: val }; onChange(n) }} placeholder="Comments" style={{ ...inp2, flex: 1, minWidth: 240, fontFamily: 'inherit' }} />
                 <button onClick={() => onChange(list.filter((_, j) => j !== i))} style={ghostBtn}>Remove</button>
               </div>
             </div>
@@ -286,7 +286,7 @@ function FieldRow({ field, value, editing, team, supervisors = [], ihmDocs, onVi
             <select value={v.resolved || ''} onChange={e => onChange({ ...v, resolved: e.target.value })} style={{ ...inp2, width: 130, flexShrink: 0 }}>
               <option value="">Resolved?</option><option value="Y">Yes</option><option value="N">No</option><option value="NA">N/A</option>
             </select>
-            <textarea value={v.comments || ''} onChange={e => onChange({ ...v, comments: e.target.value })} placeholder="Comments — describe what was discussed" style={{ ...inp2, flex: 1, minWidth: 240, minHeight: 64, fontFamily: 'inherit' }} />
+            <AutoTextarea value={v.comments || ''} onChange={val => onChange({ ...v, comments: val })} placeholder="Comments — describe what was discussed" style={{ ...inp2, flex: 1, minWidth: 240, fontFamily: 'inherit' }} />
           </div>
         ) : <ResolvedRow resolved={v.resolved} comments={v.comments} />}
       </div>
@@ -400,7 +400,7 @@ function FieldRow({ field, value, editing, team, supervisors = [], ihmDocs, onVi
       <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>{label}</div>
       {editing ? (
         type === 'long'
-          ? <textarea value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...inp2, minHeight: 70, fontFamily: 'inherit' }} />
+          ? <AutoTextarea value={value || ''} onChange={onChange} style={{ ...inp2, fontFamily: 'inherit' }} />
           : <input type={type === 'date' ? 'date' : 'text'} value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} />
       ) : <div style={{ fontSize: 14, color: value ? INK : '#bbb', whiteSpace: 'pre-wrap' }}>{value || '—'}</div>}
     </div>

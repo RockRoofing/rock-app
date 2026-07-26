@@ -1,6 +1,49 @@
 // Small shared UI primitives used across Operations pages.
+import { useRef, useEffect, useLayoutEffect } from 'react'
 export const GOLD = '#ca8a04'
 export const INK = '#1a1a19'
+
+// Textarea that grows vertically to fit its content (no inner scrollbar), so long
+// entries stay readable instead of scrolling in a short fixed box.
+export function AutoTextarea({ value, onChange, style, minRows = 2, ...rest }) {
+  const ref = useRef(null)
+  const resize = () => { const el = ref.current; if (!el) return; el.style.height = 'auto'; el.style.height = Math.max(el.scrollHeight, minRows * 22) + 'px' }
+  useLayoutEffect(() => { resize() }, [value])
+  useEffect(() => { resize() }, [])
+  return (
+    <textarea ref={ref} value={value || ''} onChange={e => { onChange(e.target.value); resize() }} rows={minRows}
+      style={{ ...style, overflow: 'hidden', resize: 'none' }} {...rest} />
+  )
+}
+
+// Rich-text editor supporting bold / italic / underline. Stores HTML. Grows with
+// content. Backwards compatible: if it receives plain text it just shows it.
+export function RichText({ value, onChange, style }) {
+  const ref = useRef(null)
+  // Only write into the DOM when the incoming value differs, so the caret isn't reset
+  // on every keystroke.
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    if (el.innerHTML !== (value || '')) el.innerHTML = value || ''
+  }, [value])
+  const cmd = (c) => { document.execCommand(c, false, null); if (ref.current) onChange(ref.current.innerHTML) }
+  const btn = (label, c, extra) => (
+    <button type="button" onMouseDown={e => { e.preventDefault(); cmd(c) }}
+      style={{ minWidth: 30, padding: '4px 8px', border: '1px solid #e0e0e0', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, ...extra }}>{label}</button>
+  )
+  return (
+    <div style={{ border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 6, padding: 6, borderBottom: '1px solid #eee', background: '#fafafa' }}>
+        {btn('B', 'bold', { fontWeight: 800 })}
+        {btn('I', 'italic', { fontStyle: 'italic' })}
+        {btn('U', 'underline', { textDecoration: 'underline' })}
+      </div>
+      <div ref={ref} contentEditable suppressContentEditableWarning
+        onInput={e => onChange(e.currentTarget.innerHTML)}
+        style={{ minHeight: 90, padding: '10px 12px', fontSize: 14, lineHeight: 1.5, outline: 'none', ...style }} />
+    </div>
+  )
+}
 
 export const fmtDateTime = ts => ts
   ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' })

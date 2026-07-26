@@ -402,7 +402,12 @@ function HandoverReadOnly({ projectNo }) {
       {row('Address', data.projectAddress)}
       {row('Customer', data.customerCompany)}
       {row('Contract Value', data.contractValue)}
-      {row('Scope of Works', data.scopeOfWorks)}
+      {data.scopeOfWorks ? (
+        <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+          <div style={{ width: 220, color: '#888', fontSize: 13, flexShrink: 0 }}>Scope of Works</div>
+          <div style={{ fontSize: 14, color: INK, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: data.scopeOfWorks }} />
+        </div>
+      ) : null}
       {Array.isArray(data.scopeFiles) && data.scopeFiles.length > 0 && (
         <div style={{ marginTop: 18 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>Handover documents</div>

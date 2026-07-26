@@ -1,26 +1,21 @@
-DEPLOY NOTES - Minutes: auto-save + multi-open sections
-=======================================================
+DEPLOY NOTES - Minutes: rich-text Scope + auto-growing text boxes
+=================================================================
 
-THREE files, all EDITS - just replace them.
-  pages/handover/form.js        (Internal Handover Minutes)
-  components/PreStartForm.js     (Pre-Start Minutes)
-  components/ProjectConcerns.js  (Project Concern meeting minutes)
+FIVE files, all EDITS - just replace them.
+  components/opsUI.js              (new AutoTextarea + RichText components)
+  pages/handover/form.js          (IHM: Scope rich text + auto-grow boxes)
+  pages/operations/projects.js    (renders the Scope rich text read-only)
+  components/PreStartForm.js       (auto-grow boxes)
+  components/ProjectConcerns.js    (auto-grow boxes)
 
-1. AUTO-SAVE (all three)
-   While completing the minutes, the form now auto-saves a DRAFT in the background a
-   moment after you stop typing - so clicking away won't lose the work. A small
-   "Auto-saving.../Draft auto-saved" note shows by the buttons. It never sends and never
-   finalises; your Save / Complete / Save & send buttons work exactly as before.
-   - IHM auto-saves once the Project Name + RR Project Number are filled (the record is
-     keyed by project number).
-   - Pre-Start auto-saves while editing (not once the minutes are 'sent'/locked).
-   - Project Concern auto-saves the meeting as you edit; the first auto-save captures
-     the new meeting id so later saves update the same record.
+1. SCOPE OF WORKS - RICH TEXT (Internal Handover Minutes)
+   The "Scope of works" box now has Bold / Italic / Underline buttons. Formatting is
+   saved and shown (formatted) on the project's Handover view. Existing plain-text
+   scopes still display fine.
 
-2. MULTI-OPEN SECTIONS (Internal Handover Minutes)
-   The IHM section accordion now lets multiple sections stay open at once. Opening one
-   no longer closes another - each section opens/closes only when you click its own
-   header. (Pre-Start and Project Concern already show all sections at once, so this
-   applies to the IHM.)
+2. AUTO-GROWING TEXT BOXES (IHM, Pre-Start, Project Concern)
+   Multi-line entry boxes now GROW DOWNWARDS as you type, so long text wraps and stays
+   readable instead of scrolling sideways in a short fixed box. Applied to the long-
+   text / comments / description / mitigation boxes across all three minutes forms.
 
 BUILD: next build -> Compiled successfully.

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, fmtDate } from './opsUI'
+import { INK, GOLD, th, td, Loading, EmptyCard, primaryBtn, ghostBtn, linkBtn, fmtDate, AutoTextarea } from './opsUI'
 import ExpandableText from './ExpandableText'
 
 const ISSUE_OPTIONS = [
@@ -396,9 +396,9 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
 
           {/* Description + mitigation */}
           <L>Describe the current and / or potential issue/s</L>
-          <textarea value={f.description || ''} onChange={e => set({ description: e.target.value })} style={{ ...input, minHeight: 90, resize: 'vertical' }} />
+          <AutoTextarea value={f.description || ''} onChange={val => set({ description: val })} minRows={4} style={input} />
           <L>How do we plan to mitigate or remove the risk?</L>
-          <textarea value={f.mitigation || ''} onChange={e => set({ mitigation: e.target.value })} style={{ ...input, minHeight: 90, resize: 'vertical' }} />
+          <AutoTextarea value={f.mitigation || ''} onChange={val => set({ mitigation: val })} minRows={4} style={input} />
 
           {/* Meeting Actions -> Live Tasks */}
           <L>Meeting Actions</L>

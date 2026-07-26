@@ -3,7 +3,7 @@ import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import PreContractNav from '../../components/PreContractNav'
-import { INK, GOLD, Lbl, inp2, primaryBtn, ghostBtn, Loading } from '../../components/opsUI'
+import { INK, GOLD, Lbl, inp2, primaryBtn, ghostBtn, Loading, AutoTextarea, RichText } from '../../components/opsUI'
 import { IHM_SECTIONS as IHM_DEFAULT, CONTACT_ROLES, emptyRoofType } from '../../lib/ihmSchema'
 
 const tmName = (m) => [m.firstName, m.lastName].filter(Boolean).join(' ') || m.name || ''
@@ -240,8 +240,10 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
     <div style={{ margin: '14px 0' }}>
       <Lbl>{f.label}{f.required && <span style={{ color: '#dc2626' }}> *</span>}</Lbl>
       {f.help && <div style={{ fontSize: 12, color: '#aaa', marginTop: -4, marginBottom: 4 }}>{f.help}</div>}
-      {f.type === 'long'
-        ? <textarea value={value || ''} onChange={e => onChange(e.target.value)} rows={2} style={{ ...inp2, resize: 'vertical' }} />
+      {f.id === 'scopeOfWorks'
+        ? <RichText value={value || ''} onChange={onChange} />
+        : f.type === 'long'
+        ? <AutoTextarea value={value || ''} onChange={onChange} style={inp2} />
         : f.type === 'date'
         ? <input type="date" value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} />
         : f.type === 'yesno'
