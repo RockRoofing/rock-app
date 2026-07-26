@@ -273,7 +273,7 @@ export default function Fill() {
   return (
     <Shell user={user} onLogout={() => { sessionStorage.removeItem('ops_operative'); router.push('/forms') }}>
       <div style={{ maxWidth: 620, margin: '0 auto' }}>
-        <button onClick={() => router.push('/forms')} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back to forms</button>
+        <button onClick={() => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/forms') }} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 14, cursor: 'pointer', padding: 0 }}>‹ Back to forms</button>
         <h1 style={{ fontSize: 21, color: INK, margin: '10px 0 16px' }}>{form.title}</h1>
 
         {/* Built-in first question: which project is this form for? */}

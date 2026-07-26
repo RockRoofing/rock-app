@@ -1,21 +1,16 @@
-DEPLOY NOTES - Minutes: rich-text Scope + auto-growing text boxes
-=================================================================
+DEPLOY NOTES - Site App: "Back to forms" returns to the previous page
+=====================================================================
 
-FIVE files, all EDITS - just replace them.
-  components/opsUI.js              (new AutoTextarea + RichText components)
-  pages/handover/form.js          (IHM: Scope rich text + auto-grow boxes)
-  pages/operations/projects.js    (renders the Scope rich text read-only)
-  components/PreStartForm.js       (auto-grow boxes)
-  components/ProjectConcerns.js    (auto-grow boxes)
+ONE file, an EDIT - just replace it.
+  pages/forms/fill.js
 
-1. SCOPE OF WORKS - RICH TEXT (Internal Handover Minutes)
-   The "Scope of works" box now has Bold / Italic / Underline buttons. Formatting is
-   saved and shown (formatted) on the project's Handover view. Existing plain-text
-   scopes still display fine.
+WHAT WAS WRONG
+  The "Back to forms" link on a form always went to the Site App home page (/forms),
+  not the forms list the user came from.
 
-2. AUTO-GROWING TEXT BOXES (IHM, Pre-Start, Project Concern)
-   Multi-line entry boxes now GROW DOWNWARDS as you type, so long text wraps and stays
-   readable instead of scrolling sideways in a short fixed box. Applied to the long-
-   text / comments / description / mitigation boxes across all three minutes forms.
+FIX
+  "Back to forms" now goes BACK to the previous page (router.back()) - so if you opened
+  the form from the forms/browse list (with a project selected) it returns you there,
+  keeping your place. Falls back to /forms if there's no history to go back to.
 
 BUILD: next build -> Compiled successfully.
