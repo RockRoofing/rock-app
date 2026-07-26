@@ -1,34 +1,22 @@
-DEPLOY NOTES - 12-Month Cash Flow (Phase B)
-===========================================
+DEPLOY NOTES - Site Issues: fix malformed resolution date
+=========================================================
 
-TWO NEW FILES + TWO EDITS.
+ONE file, an EDIT - just replace it.
+  pages/operations/project-management/issues.js
 
-NEW FILES - add via GitHub "Add file":
-  lib/cashflowEvents.js                    (shared cash-flow event helpers)
-  pages/business-financials/monthly.js     (the 12-month page)
+WHAT WAS WRONG
+  The Required Resolution Date could show a corrupted year like "22/02/222026". This
+  happens when typing into a native date field's year segment lets extra digits pile up
+  (222026), which the browser then stores as-is.
 
-EDITS (replace):
-  components/BizNav.js                      (adds the "12-Month" tab)
-  pages/api/business-financials.js         (serves + saves manual lumps)
-
-WHAT'S NEW
-  A new "12-Month" tab in Business Financials. Monthly forecast across the next 12
-  calendar months, using the SAME sources as the 13-week view but in MONTHLY buckets:
-    IN : invoices owed, retention releases, VAT refunds, project-cash-flow forecast
-         sales, manual lumps (in)
-    OUT: bills, overheads, commitments, VAT payments, CIS to HMRC, project-cash-flow
-         forecast costs, manual lumps (out)
-  Net + running closing balance per month, a chart, and a 12-month totals row.
-
-  GAP-FILL OVERLAP: same as the 13-week view - a project's forecast sales/costs are
-  suppressed in any MONTH where a real invoice/bill for that project exists, so the
-  forecast only fills the gaps.
-
-  MANUAL LUMPS: add revenue / labour / materials / other for future work you don't yet
-  have a project or invoice for. Each lump: In/Out, category, month, amount, comment.
-  Saved automatically (config:cashflow-lumps) and folded into the month it's assigned.
-
-NOTE: relies on Phase A being deployed (project tracking on bills + projForecasts in
-the API). Re-sync bills so the cost-side overlap matches, same as Phase A.
+FIX
+  - Date entry is now sanitised: only a valid YYYY-MM-DD with a plausible year
+    (2000-2100) is saved; anything malformed is dropped (field clears) so a bad year
+    can't be stored.
+  - min/max are set on the date inputs as a browser-level guard.
+  - Existing malformed values are no longer displayed as the corrupted "222026" - the
+    field shows blank so it can be re-entered cleanly.
+  Applies to both Required Resolution Date and Resolved Date, in the list and the
+  edit/create forms.
 
 BUILD: next build -> Compiled successfully.

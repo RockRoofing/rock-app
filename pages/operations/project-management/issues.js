@@ -6,6 +6,16 @@ import { useRouter } from 'next/router'
 
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const parseLocal = (d) => { if (!d) return null; const [y, m, day] = String(d).split('-').map(Number); return new Date(y, (m || 1) - 1, day || 1) }
+// Guard against malformed years from manual typing into native date inputs (e.g.
+// "222026"). Accept only YYYY-MM-DD with a plausible 4-digit year; else drop it.
+const sanitizeDate = (v) => {
+  if (!v) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v))
+  if (!m) return ''
+  const y = Number(m[1])
+  if (y < 2000 || y > 2100) return ''
+  return v
+}
 const fmtLocal = (d) => { const dt = parseLocal(d); return dt ? dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }
 const fmtTs = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const clamp = (s, n = 60) => { if (!s) return '—'; const t = String(s); return t.length > n ? t.slice(0, n) + '…' : t }
@@ -190,11 +200,11 @@ export default function IssuesPage() {
                     <td style={{ ...td, cursor: 'pointer' }} onClick={() => setCell({ title: 'Issue', text: i.issueName })}>{clamp(i.issueName, 40)}</td>
                     <td style={td}>{[...(i.issueTypes || []), ...(i.issueOther ? [`Other: ${i.issueOther}`] : [])].join(', ') || '—'}</td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                      <input type="date" value={i.requiredDate || ''} onChange={e => patchIssue(i.id, { requiredDate: e.target.value })} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
+                      <input type="date" value={sanitizeDate(i.requiredDate) || ''} onChange={e => patchIssue(i.id, { requiredDate: sanitizeDate(e.target.value) })} min="2000-01-01" max="2100-12-31" style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
                       {i.requiredDate && !i.resolvedDate && parseLocal(i.requiredDate) < new Date(new Date().toDateString()) && <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>⚠ Overdue</div>}
                     </td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                      <input type="date" value={i.resolvedDate || ''} onChange={e => patchIssue(i.id, { resolvedDate: e.target.value })} style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
+                      <input type="date" value={sanitizeDate(i.resolvedDate) || ''} onChange={e => patchIssue(i.id, { resolvedDate: sanitizeDate(e.target.value) })} min="2000-01-01" max="2100-12-31" style={{ padding: '5px 7px', borderRadius: 6, border: '1px solid #e0e0e0', fontSize: 12 }} />
                       {resolved && <div style={{ fontSize: 11, color: '#16a34a', marginTop: 2 }}>Resolved</div>}
                     </td>
                     <td style={{ ...td, cursor: 'pointer', maxWidth: 200 }} onClick={() => setCell({ title: 'Internal Comments', text: i.comments, editId: i.id })}>{clamp(i.comments, 50)}</td>
@@ -287,10 +297,10 @@ function EditModal({ initial, onClose, onSaved, onSend }) {
       <textarea value={f.comments || ''} onChange={e => set({ comments: e.target.value })} style={{ ...input, minHeight: 70, resize: 'vertical' }} placeholder="Internal comments" />
 
       <L>Required Resolution Date</L>
-      <input type="date" value={f.requiredDate || ''} onChange={e => set({ requiredDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
+      <input type="date" value={sanitizeDate(f.requiredDate) || ''} onChange={e => set({ requiredDate: sanitizeDate(e.target.value) })} min="2000-01-01" max="2100-12-31" style={{ ...input, maxWidth: 200 }} />
 
       <L>Resolved Date</L>
-      <input type="date" value={f.resolvedDate || ''} onChange={e => set({ resolvedDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
+      <input type="date" value={sanitizeDate(f.resolvedDate) || ''} onChange={e => set({ resolvedDate: sanitizeDate(e.target.value) })} min="2000-01-01" max="2100-12-31" style={{ ...input, maxWidth: 200 }} />
       {f.resolvedDate && <div style={{ fontSize: 12, color: '#16a34a', marginTop: 4 }}>This issue is marked resolved.</div>}
 
       {(f.photos || []).length > 0 && <>
@@ -467,7 +477,7 @@ function CreateModal({ projects, createdBy, onClose, onSaved }) {
       <textarea value={f.description} onChange={e => set({ description: e.target.value })} style={{ ...input, minHeight: 90, resize: 'vertical' }} placeholder="Describe the issue" />
 
       <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, margin: '16px 0 6px' }}>Required Resolution Date</div>
-      <input type="date" value={f.requiredDate} onChange={e => set({ requiredDate: e.target.value })} style={{ ...input, maxWidth: 200 }} />
+      <input type="date" value={sanitizeDate(f.requiredDate)} onChange={e => set({ requiredDate: sanitizeDate(e.target.value) })} min="2000-01-01" max="2100-12-31" style={{ ...input, maxWidth: 200 }} />
 
       <L>Photos</L>
       <label style={{ display: 'inline-block', padding: '10px 16px', border: '2px dashed #d9d5cc', borderRadius: 10, cursor: 'pointer', color: '#666', fontSize: 13 }}>
