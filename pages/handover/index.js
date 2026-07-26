@@ -14,9 +14,10 @@ export default function HandoverList() {
     setLoading(false)
   })() }, [])
 
-  // Newest first by created date. The API already sorts by updatedAt, but we
-  // want created order for this table — sort defensively here too.
-  const rows = [...projects].sort((a, b) => (b.createdAt || b.updatedAt || 0) - (a.createdAt || a.updatedAt || 0))
+  // Sort by project number, highest first. Numbers are compared numerically (so 100
+  // sits above 99); non-numeric parts fall back to a string compare.
+  const projNum = (p) => { const m = String(p.projectNo || '').match(/\d+/); return m ? parseInt(m[0], 10) : -1 }
+  const rows = [...projects].sort((a, b) => projNum(b) - projNum(a) || String(b.projectNo || '').localeCompare(String(a.projectNo || ''), undefined, { numeric: true }))
 
   async function del(no, name) {
     if (!confirm(`Delete the handover for ${no}${name ? ' — ' + name : ''}? This removes the project.`)) return
