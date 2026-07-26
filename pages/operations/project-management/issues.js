@@ -436,7 +436,7 @@ function CreateModal({ projects, createdBy, onClose, onSaved }) {
     if (!f.issueTypes.length) return setErr('Select at least one issue type.')
     if (f.issueTypes.includes('Other') && !f.issueOther.trim()) return setErr('Describe the other issue type.')
     if (!f.description.trim()) return setErr('Description is required.')
-    if (!f.photos.length) return setErr('Attach at least one photo.')
+    // Photos are optional when creating an issue.
     setSaving(true)
     try {
       const issue = { ...f, createdBy: createdBy || 'Portal user', issueOther: f.issueTypes.includes('Other') ? f.issueOther.trim() : '' }

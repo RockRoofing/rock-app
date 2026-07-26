@@ -1,20 +1,16 @@
-DEPLOY NOTES - Variations: don't repeat the project number in the name column
-=============================================================================
+DEPLOY NOTES - Issues: photos no longer mandatory
+==================================================
 
-ONE file, an EDIT - just replace it.
-  pages/variations.js
+TWO files, both EDITS - just replace them.
+  pages/forms/issue.js                              (Site App - raise an issue)
+  pages/operations/project-management/issues.js     (Project Management - create issue)
 
-CHANGE (display only - nothing else touched)
-  The "Project Name" column no longer repeats the project number that's already shown
-  in the "Project No" column. If a project's name starts with its job number (e.g.
-  "J203 - Hollis Croft"), the name column now shows just "Hollis Croft". Names that
-  don't include the number are shown unchanged.
-
-  The PROJECT FILTER dropdown still shows "J203 - Hollis Croft" (number kept) so the
-  list stays ordered by number and projects remain easy to find.
-
-  This is purely how the name is displayed in that one cell - the stored data, the Xero
-  name, the filters, the edit modal and every other page are untouched, so nothing that
-  links to this sheet is affected.
+CHANGE
+  Creating an issue no longer requires a photo, in BOTH places:
+   - Site App "Raise an issue": the "Attach at least one photo" validation is removed
+     and the Photos label now reads "Photos (optional)".
+   - Project Management "New issue": the "Attach at least one photo" validation is
+     removed.
+  You can still add photos - they're just no longer required to submit.
 
 BUILD: next build -> Compiled successfully.

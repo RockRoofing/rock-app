@@ -48,7 +48,7 @@ export default function RaiseIssue() {
     if (!types.length) e.types = 'Select at least one'
     if (types.includes('Other') && !otherText.trim()) e.other = 'Describe the other issue type'
     if (!description.trim()) e.description = 'Required'
-    if (!photos.length) e.photos = 'Attach at least one photo'
+    // Photos are optional when raising an issue.
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -146,7 +146,7 @@ export default function RaiseIssue() {
         <div style={label}>Required resolution date <span style={{ fontWeight: 400, color: '#999', fontSize: 12 }}>(optional)</span></div>
         <input type="date" value={requiredDate} onChange={e => setRequiredDate(e.target.value)} style={input} />
 
-        <div style={label}>Photos{star}</div>
+        <div style={label}>Photos <span style={{ color: '#999', fontWeight: 400 }}>(optional)</span></div>
         <PhotoField value={photos} onChange={setPhotos} />
         {errors.photos && <div style={errStyle}>{errors.photos}</div>}
 
