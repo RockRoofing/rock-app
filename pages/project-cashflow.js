@@ -91,6 +91,30 @@ export default function ProjectCashflow() {
     return { from: arr[0], to: arr[arr.length - 1], count: arr.length }
   }, [sel])
 
+  // Per-day cash movement across all saved forecasts (in = sales + retention released;
+  // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
+  const cashByDay = useMemo(() => {
+    const map = {}
+    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { in: 0, out: 0 }; map[d][k] += amt }
+    for (const list of Object.values(allForecasts || {})) {
+      for (const fc of (list || [])) {
+        if (fc.salesDate) add(fc.salesDate, 'in', fc.revenueThisPeriod || 0)
+        for (const s of (fc.labourSchedule || [])) add(s.date, 'out', s.amount || 0)
+        if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'out', fc.labourThisPeriod || 0)
+        for (const m of (fc.matItems || [])) add(m.payDate, 'out', m.amount || 0)
+      }
+    }
+    for (const e of (retention || [])) {
+      const fa = parseFloat(e.finalAccount || e.projectValue || 0) || 0
+      const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
+      const totalRet = fa * pct
+      if (totalRet <= 0) continue
+      if (e.release1Date && !e.release1Received) add(e.release1Date, 'in', totalRet / 2)
+      if (e.release2Date && !e.release2Received) add(e.release2Date, 'in', totalRet / 2)
+    }
+    return map
+  }, [allForecasts, retention])
+
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
   if (loading || !data) {
@@ -135,36 +159,6 @@ export default function ProjectCashflow() {
     setSel({ key, dates })
   }
   const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
-
-  // Per-day cash movement across all saved forecasts.
-  //   IN  = sales (salesDate)
-  //   OUT = labour instalments (labourSchedule[].date) + materials lines (payDate)
-  const cashByDay = useMemo(() => {
-    const map = {}   // iso -> { in, out }
-    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { in: 0, out: 0 }; map[d][k] += amt }
-    for (const list of Object.values(allForecasts || {})) {
-      for (const fc of (list || [])) {
-        if (fc.salesDate) add(fc.salesDate, 'in', fc.revenueThisPeriod || 0)
-        for (const s of (fc.labourSchedule || [])) add(s.date, 'out', s.amount || 0)
-        // Back-compat: older forecasts saved a single labourDate.
-        if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'out', fc.labourThisPeriod || 0)
-        for (const m of (fc.matItems || [])) add(m.payDate, 'out', m.amount || 0)
-      }
-    }
-    // Retention releases (cash IN) from the retention tracker's dates, but amount based
-    // on the total anticipated final account (finalAccount, else projectValue) x
-    // retention%, split 50/50 across the two release dates. Taken ONLY from the tracker
-    // so it can't duplicate. Skip releases already marked received.
-    for (const e of (retention || [])) {
-      const fa = parseFloat(e.finalAccount || e.projectValue || 0) || 0
-      const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
-      const totalRet = fa * pct
-      if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) add(e.release1Date, 'in', totalRet / 2)
-      if (e.release2Date && !e.release2Received) add(e.release2Date, 'in', totalRet / 2)
-    }
-    return map
-  }, [allForecasts, retention])
 
   // Open a saved forecast for viewing/editing.
   function openForecast(projectKey, fc) {

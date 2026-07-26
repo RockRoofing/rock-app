@@ -1,25 +1,18 @@
-DEPLOY NOTES - Cash Flow: daily in/out totals + retention releases
-==================================================================
+DEPLOY NOTES - FIX: Cash Flow client-side exception
+===================================================
 
-ONE file, an EDIT - just replace it.
+ONE file, an EDIT - replace it.
   pages/project-cashflow.js
 
-1. DAILY CASH TOTALS ON THE GANTT (day view)
-   Two new rows under the date header:
-     - "Total in / day"  (green)  - sales received + retention released that day
-     - "Total out / day" (red)    - labour instalments + materials payments that day
-   Values only show on days where cash actually moves; hover shows the exact figure.
-   (Day view only - week view omits them to stay readable.)
+WHAT WAS WRONG
+  The daily-totals change added a useMemo (cashByDay) AFTER the "if (loading) return",
+  so once the data loaded React ran an extra hook (rules-of-hooks violation) and the
+  page threw a client-side exception.
 
-2. RETENTION RELEASES (cash IN)
-   Retention is released on the RETENTION TRACKER's release dates (release 1 & 2),
-   so timing has a single source of truth and can't duplicate. The AMOUNT is
-   recomputed on the total ANTICIPATED FINAL ACCOUNT (finalAccount, else project
-   value) x retention %, split 50/50 across the two dates - NOT the invoiced value.
-   Releases already marked received are skipped.
+FIX
+  Moved cashByDay above the loading return with the other hooks. No behaviour change -
+  daily in/out totals and retention releases work as intended.
 
-NOTE: cash in = sales + retention releases; cash out = labour + materials. Uses the
-payment terms/dates from each saved forecast. Build more forecasts to populate the
-totals.
+Deploy this over the previous "Cashflow daily totals" version.
 
 BUILD: next build -> Compiled successfully.
