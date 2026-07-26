@@ -1,22 +1,32 @@
-DEPLOY NOTES - Site App: "Back to forms" really returns to the forms list
-=========================================================================
+DEPLOY NOTES - Planner CSCS/WAH gating fix (Site App users as source of truth)
+==============================================================================
 
-THREE files, all EDITS - just replace them.
-  pages/forms/index.js    (forms list is now a real URL state)
-  pages/forms/fill.js     (Back to forms goes to the list)
-  pages/forms/browse.js   (tags forms opened from the CM browse list)
+TWO files, both EDITS - just replace them.
+  pages/api/hs-matrix.js               (people + competency now keyed to Site App users)
+  pages/api/cron/hs-expiry-email.js    (expiry email names from Site App users)
 
-WHY THE FIRST FIX DIDN'T WORK
-  On the Site App the forms LIST isn't a separate page - it's a "mode" inside the
-  /forms home screen. So going back just reloaded /forms, which always opens on the
-  HOME menu, not the list. router.back() couldn't help because there was no separate
-  list URL to return to.
+THE BUG
+  The Planner blocked operatives from being added even when their CSCS / Working at
+  Height were in date. Cause: an ID mismatch. The planner's operatives come from Site
+  App Users, but the H&S Training Matrix stored certificates under the OLD operatives-
+  roster IDs. So the competency lookup found nothing and reported "no CSCS/WAH" for
+  everyone.
 
 FIX
-  - The home screen now records the current view in the URL (/forms?mode=forms for the
-    forms list, ?mode=drawings, ?mode=rams). Returning to that URL restores the list
-    instead of the home menu.
-  - "Back to forms" on a form now goes to the forms list:
-      * opened from the operative forms list -> /forms?mode=forms
-      * opened from the CM browse list       -> /forms/browse
-  BUILD: next build -> Compiled successfully.
+  Site App Users are now the single source of truth for people across the H&S portal:
+   - The H&S Training Matrix builds its operative rows from Site App Users (ids now
+     match the planner and /api/operatives). Office/portal users still appear too.
+   - Existing certificates saved under the old roster IDs are BRIDGED by name onto the
+     matching Site App User, so historic CSCS/WAH/etc still show and still count for
+     planning - no re-entry needed.
+   - The competency map (planner gating) and the supervisor dropdown now key off Site
+     App User ids.
+   - The monthly H&S expiry email resolves names from Site App Users too.
+
+AFTER DEPLOY
+  Operatives with in-date CSCS + Working at Height can be added to the planner again.
+  If any historic cert doesn't appear for someone, it means their old roster name
+  didn't exactly match their Site App User name - just re-enter that cert on the matrix
+  (it'll then save under the correct id).
+
+BUILD: next build -> Compiled successfully.

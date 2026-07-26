@@ -1,4 +1,4 @@
-import { get, set, getPortalUsers } from '../../lib/db'
+import { get, set, getPortalUsers, getOpsUsers } from '../../lib/db'
 
 // H&S Training Matrix.
 // Store:
@@ -46,68 +46,101 @@ async function ensureColumns() {
 }
 
 async function buildPeople() {
-  const [roster, portal] = await Promise.all([
-    get('ops:operatives-roster').then(v => v || []),
+  const [users, portal] = await Promise.all([
+    getOpsUsers(),
     getPortalUsers(),
   ])
   const people = []
-  for (const o of roster) people.push({
-    id: `op:${o.id}`, name: `${o.firstName || ''} ${o.lastName || ''}`.trim(),
-    company: o.company || '', trade: (o.trades || []).join(', '), phone: o.phone || '', email: o.email || '',
-  })
+  // Site App Users are the source of truth for operatives across the H&S portal.
+  for (const u of (users || [])) {
+    if (u.active === false) continue
+    const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || ''
+    if (!name) continue
+    people.push({
+      id: `op:${u.id}`, name,
+      company: u.company || '', trade: Array.isArray(u.trades) ? u.trades.join(', ') : '',
+      phone: u.phone || '', email: u.email || '',
+    })
+  }
   for (const u of (portal || [])) {
     const name = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || ''
     if (!name) continue
     people.push({ id: `pu:${u.id}`, name, company: 'Rock Roofing (office)', trade: '', phone: u.phone || '', email: u.email || '' })
   }
-  // de-dupe by lowercased name (roster wins)
+  // de-dupe by lowercased name (Site App user wins over portal)
   const seen = new Set(); const out = []
   for (const p of people) { const k = p.name.toLowerCase(); if (seen.has(k)) continue; seen.add(k); out.push(p) }
   out.sort((a, b) => a.name.localeCompare(b.name))
   return out
 }
 
+// Existing cert data was stored under legacy roster ids (op:<rosterId>). Site App
+// user ids differ, so build a bridge: legacy personId -> new personId, matched by
+// name, so historic certificates still appear (and count for planning) without
+// re-entry. Returns a data object re-keyed to the new (Site App) ids, preferring any
+// data already stored under the new id.
+async function bridgedData(people) {
+  const [data, oldRoster] = await Promise.all([
+    get(DATA_KEY).then(v => v || {}),
+    get('ops:operatives-roster').then(v => v || []),
+  ])
+  const nameToNewId = {}
+  for (const p of people) nameToNewId[p.name.toLowerCase()] = p.id
+  const oldIdToName = {}
+  for (const o of oldRoster) oldIdToName[`op:${o.id}`] = `${o.firstName || ''} ${o.lastName || ''}`.trim().toLowerCase()
+  const out = {}
+  for (const [pid, cols] of Object.entries(data)) {
+    // Keep entries already on a current person id as-is.
+    if (people.some(p => p.id === pid)) { out[pid] = { ...(out[pid] || {}), ...cols }; continue }
+    // Otherwise try to remap a legacy roster id to the matching Site App user by name.
+    const nm = oldIdToName[pid]
+    const newId = nm && nameToNewId[nm]
+    if (newId) out[newId] = { ...(out[newId] || {}), ...cols }
+    else out[pid] = cols   // no match (e.g. portal pu: ids) - leave untouched
+  }
+  return out
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
-      // Competency map for Planning gating: keyed by operative id (roster id, no 'op:' prefix).
+      // Competency map for Planning gating: keyed by operative id (Site App user id).
       if (req.query.competency === '1') {
-        const [columns, data] = await Promise.all([ensureColumns(), get(DATA_KEY).then(v => v || {})])
+        const [columns, people] = await Promise.all([ensureColumns(), buildPeople()])
+        const data = await bridgedData(people)
         const now = new Date(); now.setHours(0, 0, 0, 0)
         const valid = (cell) => cell && (cell.noExpiry || (cell.date && parseISO(cell.date) >= now))
-        // find column ids by label (case-insensitive contains)
         const colIdsFor = (matchers) => columns.filter(c => matchers.some(m => (c.label || '').toLowerCase().includes(m))).map(c => c.id)
         const supCols = colIdsFor(['internal supervisor', 'sssts', 'smsts', 'iosh managing safely'])
         const cscsCols = colIdsFor(['cscs'])
-        // WAH: column label must START with "working at height" (avoids e.g. "Ladder Safety (part of Working at heights)")
         const wahCols = columns.filter(c => (c.label || '').toLowerCase().trim().startsWith('working at height')).map(c => c.id)
         const out = {}
         for (const [pid, cols] of Object.entries(data)) {
           if (!pid.startsWith('op:')) continue
-          const opId = pid.slice(3)
+          const opId = pid.slice(3)   // Site App user id (matches /api/operatives + planner)
           const has = (ids) => ids.some(id => valid(cols[id]))
           out[opId] = { isSupervisor: has(supCols), hasCSCS: has(cscsCols), hasWAH: has(wahCols) }
         }
         return res.json({ competency: out })
       }
-      // Named supervisor list for dropdowns: roster operatives holding a supervisor ticket in date.
+      // Named supervisor list for dropdowns: operatives holding a supervisor ticket in date.
       if (req.query.supervisors === '1') {
-        const [columns, data, roster] = await Promise.all([
-          ensureColumns(), get(DATA_KEY).then(v => v || {}),
-          get('ops:operatives-roster').then(v => v || []),
-        ])
+        const [columns, people] = await Promise.all([ensureColumns(), buildPeople()])
+        const data = await bridgedData(people)
         const now = new Date(); now.setHours(0, 0, 0, 0)
         const valid = (cell) => cell && (cell.noExpiry || (cell.date && parseISO(cell.date) >= now))
         const supCols = columns.filter(c => ['internal supervisor', 'sssts', 'smsts', 'iosh managing safely'].some(m => (c.label || '').toLowerCase().includes(m))).map(c => c.id)
         const supervisors = []
-        for (const o of roster) {
-          const cols = data[`op:${o.id}`] || {}
-          if (supCols.some(id => valid(cols[id]))) supervisors.push({ id: o.id, name: `${o.firstName || ''} ${o.lastName || ''}`.trim(), email: o.email || '', phone: o.phone || '' })
+        for (const p of people) {
+          if (!p.id.startsWith('op:')) continue
+          const cols = data[p.id] || {}
+          if (supCols.some(id => valid(cols[id]))) supervisors.push({ id: p.id.slice(3), name: p.name, email: p.email || '', phone: p.phone || '' })
         }
         supervisors.sort((a, b) => a.name.localeCompare(b.name))
         return res.json({ supervisors })
       }
-      const [columns, data, people] = await Promise.all([ensureColumns(), get(DATA_KEY).then(v => v || {}), buildPeople()])
+      const [columns, people] = await Promise.all([ensureColumns(), buildPeople()])
+      const data = await bridgedData(people)
       return res.json({ columns, data, people })
     }
 

@@ -1,4 +1,4 @@
-import { get, getTeamMembers } from '../../../lib/db'
+import { get, getTeamMembers, getOpsUsers } from '../../../lib/db'
 import { runFormsWeeklyNotify } from './forms-weekly-notify'
 import { runDeliveriesNotify } from './deliveries-notify'
 import { runRamsReminders } from '../../../lib/ramsNotify'
@@ -14,12 +14,16 @@ const parseISO = (s) => { if (!s) return null; const [y, m, d] = String(s).split
 const fmt = (d) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
 async function buildPeople() {
-  const [roster, portal] = await Promise.all([
+  const [users, roster, portal] = await Promise.all([
+    getOpsUsers(),
     get('ops:operatives-roster').then(v => v || []),
     get('portal:users').then(v => v || []),
   ])
   const people = {}
-  for (const o of roster) people[`op:${o.id}`] = `${o.firstName || ''} ${o.lastName || ''}`.trim()
+  // Site App users are the source of truth (ids match the H&S matrix data now).
+  for (const u of (users || [])) { const n = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || ''; if (n) people[`op:${u.id}`] = n }
+  // Keep legacy roster ids resolvable for any not-yet-migrated data.
+  for (const o of roster) { const id = `op:${o.id}`; if (!people[id]) people[id] = `${o.firstName || ''} ${o.lastName || ''}`.trim() }
   for (const u of portal) { const n = [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || ''; if (n) people[`pu:${u.id}`] = n }
   return people
 }
