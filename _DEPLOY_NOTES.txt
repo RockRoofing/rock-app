@@ -1,32 +1,20 @@
-DEPLOY NOTES - Planner CSCS/WAH gating fix (Site App users as source of truth)
-==============================================================================
+DEPLOY NOTES - Variations: don't repeat the project number in the name column
+=============================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/api/hs-matrix.js               (people + competency now keyed to Site App users)
-  pages/api/cron/hs-expiry-email.js    (expiry email names from Site App users)
+ONE file, an EDIT - just replace it.
+  pages/variations.js
 
-THE BUG
-  The Planner blocked operatives from being added even when their CSCS / Working at
-  Height were in date. Cause: an ID mismatch. The planner's operatives come from Site
-  App Users, but the H&S Training Matrix stored certificates under the OLD operatives-
-  roster IDs. So the competency lookup found nothing and reported "no CSCS/WAH" for
-  everyone.
+CHANGE (display only - nothing else touched)
+  The "Project Name" column no longer repeats the project number that's already shown
+  in the "Project No" column. If a project's name starts with its job number (e.g.
+  "J203 - Hollis Croft"), the name column now shows just "Hollis Croft". Names that
+  don't include the number are shown unchanged.
 
-FIX
-  Site App Users are now the single source of truth for people across the H&S portal:
-   - The H&S Training Matrix builds its operative rows from Site App Users (ids now
-     match the planner and /api/operatives). Office/portal users still appear too.
-   - Existing certificates saved under the old roster IDs are BRIDGED by name onto the
-     matching Site App User, so historic CSCS/WAH/etc still show and still count for
-     planning - no re-entry needed.
-   - The competency map (planner gating) and the supervisor dropdown now key off Site
-     App User ids.
-   - The monthly H&S expiry email resolves names from Site App Users too.
+  The PROJECT FILTER dropdown still shows "J203 - Hollis Croft" (number kept) so the
+  list stays ordered by number and projects remain easy to find.
 
-AFTER DEPLOY
-  Operatives with in-date CSCS + Working at Height can be added to the planner again.
-  If any historic cert doesn't appear for someone, it means their old roster name
-  didn't exactly match their Site App User name - just re-enter that cert on the matrix
-  (it'll then save under the correct id).
+  This is purely how the name is displayed in that one cell - the stored data, the Xero
+  name, the filters, the edit modal and every other page are untouched, so nothing that
+  links to this sheet is affected.
 
 BUILD: next build -> Compiled successfully.

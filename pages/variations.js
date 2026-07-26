@@ -6,6 +6,19 @@ import { useRouter } from 'next/router'
 const fmt = (n) => n == null || n === '' || isNaN(n) ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(parseFloat(n))
 const fmtN = (n) => n == null || n === '' ? 0 : parseFloat(n) || 0
 
+// Display-only: remove a redundant leading job-number from a project name so the
+// "Project Name" column doesn't repeat the number already shown in "Project No".
+// Tolerant of separators ("J203 - Name", "J203: Name", "J203 Name") and of names
+// that don't include the number (returns them unchanged). Data is never modified.
+function stripJobNo(name, jobNo) {
+  if (!name) return name || '—'
+  const jn = String(jobNo || '').trim()
+  if (!jn || jn === '—') return name
+  const esc = jn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const stripped = String(name).replace(new RegExp(`^\\s*${esc}\\s*[-–—:.]?\\s*`, 'i'), '')
+  return stripped.trim() || name
+}
+
 function nextVarNumber(variations) {
   const nums = (variations || [])
     .map(v => v.varNumber || '')
@@ -474,7 +487,7 @@ export default function VariationTracker() {
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
                           <Link href={`/project/${r.projectId}`} style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{r.jobNo}</Link>
                         </td>
-                        <td style={{ ...tdS, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.projectName}</td>
+                        <td style={{ ...tdS, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stripJobNo(r.projectName, r.jobNo)}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>{r.customer}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>{r.estimator}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>{r.cm}</td>
