@@ -1,11 +1,39 @@
-DEPLOY NOTES - Handover Minutes list sorted by project number
-=============================================================
+DEPLOY NOTES - Commercial Cash Flow: hypothetical application pop-out (Phase 2c)
+===============================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/handover/index.js
+ONE NEW FILE + ONE EDIT.
 
-CHANGE
-  The Internal Handover Minutes list now sorts by PROJECT NUMBER, highest at the top
-  (numeric, so 100 sits above 99), instead of by created date.
+NEW FILE - add via GitHub "Add file":
+  pages/api/project-cashflow.js
+
+EDIT (replace):
+  pages/project-cashflow.js
+
+WHAT'S NEW
+  Selecting a period on a project row and clicking "Build application ->" now opens a
+  HYPOTHETICAL APPLICATION for that project/period:
+    - Full mirror of the real application: contract works seeded from the project's
+      CONTRACTED RATES, with a cumulative "% complete" per line, and the certificate
+      maths (MCD, retention, this-cert) via the same engine as real applications.
+    - REVENUE (this-cert total) and LABOUR (from the rate labour column x % complete)
+      are shown per period.
+    - MATERIALS are added separately: a % of the materials budget OR a £ figure, with
+      a DELIVERY DAY (materials hit cash on that single day, not spread).
+    - CUMULATIVE: each new period starts from the most recent saved hypothetical
+      application (carries % complete forward), so this-cert reflects only new work.
+    - VIEW: the "View forecasts" button lists all saved hypothetical applications for
+      the project (revenue / labour / materials / delivery day) and lets you delete.
+
+  IMPORTANT: these are FORECAST ONLY. They are stored under a separate key
+  (cashflow:hyp-apps:<projectKey>) and are NEVER written to the real applications.
+
+RATES SOURCE
+  - Negotiated projects: uses the negotiated contracted rates (Phase 2b).
+  - Live/draft projects: uses the project's contracted rates from Xero. If a project
+    has no rates yet, the modal says so - upload & lock them on Contracted Rates first
+    (add the project in Xero so it appears there).
+
+NEXT (later): feed these hypothetical applications into the Business Financials cash
+flow.
 
 BUILD: next build -> Compiled successfully.
