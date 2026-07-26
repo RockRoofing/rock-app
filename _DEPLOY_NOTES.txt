@@ -1,21 +1,24 @@
-DEPLOY NOTES - Cash Flow: Total in/out per week + frozen totals rows
-====================================================================
+DEPLOY NOTES - Add Cash Flow tab to the remaining Commercial pages
+==================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/project-cashflow.js
+SIX files, all EDITS - just replace them.
+  pages/commercial.js            (this is the "Project Financials" tab page)
+  pages/outstanding-invoices.js
+  pages/retention.js
+  pages/variations.js
+  pages/application-calendar.js
+  pages/commercial-scorecard.js
 
-CHANGES
-1. TOTAL IN / TOTAL OUT rows added:
-     - "Total IN / week"  = Sales in + Retention in   (green, bold)
-     - "Total OUT / week" = Labour out + Materials out (red, bold)
-   Shown per column alongside the individual stream rows, in both day and week views.
+WHAT WAS WRONG
+  Only Contracted Rates, Applications and WIP used the shared nav component, so adding
+  the Cash Flow tab there didn't affect the other pages - each of those hardcodes its
+  own tab row. The Cash Flow link was missing on them.
 
-2. FROZEN ROWS: the header and all the totals rows (Sales in, Retention in, Total IN,
-   Labour out, Materials out, Total OUT) now STICK to the top and stay visible when you
-   scroll down through the project list. The Project + date columns remain frozen on
-   the left, so the totals grid is always in view.
+FIX
+  Added the "Cash Flow" tab (-> /project-cashflow) to each of these pages' nav rows,
+  between WIP and Commercial Scorecard, matching the others.
 
-The gantt now scrolls vertically within the panel (height fits the window) so the
-frozen rows have something to stick against.
+NOTE: pages/project-financials.js is a different (per-project) page with no commercial
+tab bar, so it needs no change.
 
 BUILD: next build -> Compiled successfully.
