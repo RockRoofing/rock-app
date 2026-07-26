@@ -1,24 +1,16 @@
-DEPLOY NOTES - Add Cash Flow tab to the remaining Commercial pages
-==================================================================
+DEPLOY NOTES - Cash Flow: delete forecasted applications
+========================================================
 
-SIX files, all EDITS - just replace them.
-  pages/commercial.js            (this is the "Project Financials" tab page)
-  pages/outstanding-invoices.js
-  pages/retention.js
-  pages/variations.js
-  pages/application-calendar.js
-  pages/commercial-scorecard.js
+ONE file, an EDIT - just replace it.
+  pages/project-cashflow.js
 
-WHAT WAS WRONG
-  Only Contracted Rates, Applications and WIP used the shared nav component, so adding
-  the Cash Flow tab there didn't affect the other pages - each of those hardcodes its
-  own tab row. The Cash Flow link was missing on them.
-
-FIX
-  Added the "Cash Flow" tab (-> /project-cashflow) to each of these pages' nav rows,
-  between WIP and Commercial Scorecard, matching the others.
-
-NOTE: pages/project-financials.js is a different (per-project) page with no commercial
-tab bar, so it needs no change.
+CHANGE
+  You can now delete a forecasted application easily:
+   - Click "View" on a forecast band (or open one), then use the new red
+     "Delete this forecast" button in the modal header. It removes the forecast and
+     closes the modal.
+   - The existing per-row "Delete" in the "View forecasts" list still works too.
+  Either way the gantt bands and daily/weekly totals refresh immediately.
+  A confirmation prompt guards against accidental deletion.
 
 BUILD: next build -> Compiled successfully.

@@ -686,12 +686,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
     onClose()
   }
 
-  async function deleteHyp(id) {
-    if (!confirm('Delete this forecasted application?')) return
+  async function deleteHyp(id, closeAfter) {
+    if (!confirm('Delete this forecasted application? This cannot be undone.')) return
     try {
       const d = await fetch('/api/project-cashflow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-hyp', projectKey, id }) }).then(r => r.json())
       setHypApps(d.hypApps || [])
       if (onSaved) onSaved(projectKey, (d.hypApps || []).length)
+      if (closeAfter) onClose()
     } catch {}
   }
 
@@ -711,6 +712,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {editId && <button onClick={() => deleteHyp(editId, true)} style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Delete this forecast</button>}
             <button onClick={() => setShowList(s => !s)} style={ghostBtn}>{showList ? 'Hide' : 'View'} forecasts ({hypApps.length})</button>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>×</button>
           </div>
