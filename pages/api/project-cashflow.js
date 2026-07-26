@@ -47,7 +47,25 @@ export default async function handler(req, res) {
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
   if (req.method === 'GET') {
-    const { projectKey, xeroId } = req.query
+    const { projectKey, xeroId, all } = req.query
+    // all=1 -> return every project's saved forecasts (for colouring the gantt).
+    if (all) {
+      const keys = []
+      try {
+        let cursor = 0
+        do {
+          const [next, batch] = await redis.scan(cursor, { match: 'cashflow:hyp-apps:*', count: 200 })
+          cursor = Number(next)
+          for (const k of (batch || [])) keys.push(k)
+        } while (cursor)
+      } catch {}
+      const out = {}
+      for (const k of keys) {
+        const pk = k.replace('cashflow:hyp-apps:', '')
+        try { out[pk] = (await redis.get(k)) || [] } catch { out[pk] = [] }
+      }
+      return res.json({ all: out })
+    }
     if (!projectKey) return res.status(400).json({ error: 'projectKey required' })
     const [rates, hyp] = await Promise.all([
       loadRates(redis, projectKey, xeroId),

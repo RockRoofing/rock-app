@@ -1,39 +1,31 @@
-DEPLOY NOTES - Commercial Cash Flow: hypothetical application pop-out (Phase 2c)
-===============================================================================
+DEPLOY NOTES - Cash Flow forecasts: colours, values on gantt, multi-materials
+=============================================================================
 
-ONE NEW FILE + ONE EDIT.
-
-NEW FILE - add via GitHub "Add file":
-  pages/api/project-cashflow.js
-
-EDIT (replace):
+TWO files, both EDITS - just replace them.
+  pages/api/project-cashflow.js    (adds "all forecasts" fetch for gantt colouring)
   pages/project-cashflow.js
 
-WHAT'S NEW
-  Selecting a period on a project row and clicking "Build application ->" now opens a
-  HYPOTHETICAL APPLICATION for that project/period:
-    - Full mirror of the real application: contract works seeded from the project's
-      CONTRACTED RATES, with a cumulative "% complete" per line, and the certificate
-      maths (MCD, retention, this-cert) via the same engine as real applications.
-    - REVENUE (this-cert total) and LABOUR (from the rate labour column x % complete)
-      are shown per period.
-    - MATERIALS are added separately: a % of the materials budget OR a £ figure, with
-      a DELIVERY DAY (materials hit cash on that single day, not spread).
-    - CUMULATIVE: each new period starts from the most recent saved hypothetical
-      application (carries % complete forward), so this-cert reflects only new work.
-    - VIEW: the "View forecasts" button lists all saved hypothetical applications for
-      the project (revenue / labour / materials / delivery day) and lets you delete.
+CHANGES
+1. Renamed "Hypothetical" -> "Forecasted" throughout.
 
-  IMPORTANT: these are FORECAST ONLY. They are stored under a separate key
-  (cashflow:hyp-apps:<projectKey>) and are NEVER written to the real applications.
+2. MULTI-DAY SELECTION now fills the whole span between the first and last cell you
+   drag across (so you can grab an entire application period in one drag).
 
-RATES SOURCE
-  - Negotiated projects: uses the negotiated contracted rates (Phase 2b).
-  - Live/draft projects: uses the project's contracted rates from Xero. If a project
-    has no rates yet, the modal says so - upload & lock them on Contracted Rates first
-    (add the project in Xero so it appears there).
+3. MATERIALS are now MULTIPLE LINE ITEMS. Each line has:
+     - Add by: % of budget OR £ figure
+     - Value
+     - Comment (e.g. supplier name)
+     - its own Delivery day (cash out)
+   Add as many as you need (one per supplier / delivery). Total shown at the foot.
 
-NEXT (later): feed these hypothetical applications into the Business Financials cash
-flow.
+4. FORECASTS SHOWN ON THE GANTT as coloured bands across their period:
+     - App 1 red, App 2 blue, App 3 green, App 4 amber, App 5 purple, then repeat.
+     - A colour KEY is shown at the top.
+     - Each band shows Revenue, Labour and Materials for that period.
+     - The materials DELIVERY DAY is drawn as a DARKER cell within the band.
+   (Week view tints the weeks a forecast covers in its colour.)
+
+Forecasts remain forecast-only (stored separately, never written to real
+applications).
 
 BUILD: next build -> Compiled successfully.

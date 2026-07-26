@@ -6,6 +6,14 @@ import { computeApplicationSummary } from '../lib/applications'
 // ── Layout constants (mirror the planning gantt) ──
 const NAME_W = 280, DATE_W = 92, CELL_W = 34, ROW_H = 42
 const INK = '#1a1a19'
+// Forecast application colours - cycle through 5 (app 1..5 then repeat).
+const APP_COLOURS = ['#dc2626', '#2563eb', '#16a34a', '#d97706', '#7c3aed']
+const appColour = (i) => APP_COLOURS[i % APP_COLOURS.length]
+const darken = (hex) => {
+  const n = parseInt(hex.slice(1), 16)
+  const r = Math.max(0, ((n >> 16) & 255) - 55), g = Math.max(0, ((n >> 8) & 255) - 55), b = Math.max(0, (n & 255) - 55)
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`
+}
 
 const pad = (n) => String(n).padStart(2, '0')
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -35,8 +43,10 @@ export default function ProjectCashflow() {
   const [xeroMap, setXeroMap] = useState({})         // projectNo -> xeroId (for live rates)
   const [modal, setModal] = useState(null)           // { projectKey, projectName, xeroId, from, to }
   const [hypCounts, setHypCounts] = useState({})     // projectKey -> number of saved hyp apps
+  const [allForecasts, setAllForecasts] = useState({}) // projectKey -> forecast apps[] (gantt bands)
   const dragging = useRef(false)
   const dragKey = useRef(null)
+  const dragAnchor = useRef(null)   // first cell iso of the current drag
 
   useEffect(() => {
     fetch('/api/planning').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
@@ -45,10 +55,15 @@ export default function ProjectCashflow() {
       for (const p of (d.projects || [])) if (p.jobNo) m[String(p.jobNo)] = String(p.xeroId)
       setXeroMap(m)
     }).catch(() => {})
+    loadAllForecasts()
   }, [])
 
+  function loadAllForecasts() {
+    fetch('/api/project-cashflow?all=1').then(r => r.json()).then(d => setAllForecasts(d.all || {})).catch(() => {})
+  }
+
   useEffect(() => {
-    const up = () => { dragging.current = false; dragKey.current = null }
+    const up = () => { dragging.current = false; dragKey.current = null; dragAnchor.current = null }
     window.addEventListener('mouseup', up)
     return () => window.removeEventListener('mouseup', up)
   }, [])
@@ -96,24 +111,26 @@ export default function ProjectCashflow() {
 
   const countOnDay = (p, dateKey) => cellCount((allocations[p.key] || {})[dateKey])
 
-  // ── Selection (drag across cells on a single project row) ──
+  // ── Selection (drag across cells on a single project row; fills the whole span) ──
   function cellDown(key, d) {
     dragging.current = true; dragKey.current = key
     const k = iso(d)
+    dragAnchor.current = k
     setSel(prev => {
       // Clicking the same single selected cell toggles it off.
-      if (prev && prev.key === key && prev.dates.size === 1 && prev.dates.has(k)) return null
+      if (prev && prev.key === key && prev.dates.size === 1 && prev.dates.has(k)) { dragAnchor.current = null; return null }
       return { key, dates: new Set([k]) }
     })
   }
   function cellEnter(key, d) {
-    if (!dragging.current || dragKey.current !== key) return
+    if (!dragging.current || dragKey.current !== key || !dragAnchor.current) return
     const k = iso(d)
-    setSel(prev => {
-      if (!prev || prev.key !== key) return { key, dates: new Set([k]) }
-      const next = new Set(prev.dates); next.add(k)
-      return { key, dates: next }
-    })
+    // Fill every day between the anchor and the current cell (inclusive).
+    const a = dragAnchor.current
+    const lo = a < k ? a : k, hi = a < k ? k : a
+    const dates = new Set()
+    for (let dd = new Date(parseISO(lo)); dd <= parseISO(hi); dd = addDays(dd, 1)) dates.add(iso(dd))
+    setSel({ key, dates })
   }
   const projName = (k) => { const p = (data.projects || []).find(x => x.key === k); return p ? `${p.projectNo ? p.projectNo + ' — ' : ''}${p.name}` : k }
 
@@ -127,7 +144,7 @@ export default function ProjectCashflow() {
             <div>
               <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Project Cash Flow <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· forecast</span></h1>
               <div style={{ fontSize: 12.5, color: '#8a857c', marginTop: 4, maxWidth: 760 }}>
-                Mirrors the Operations planning programme (dates and sequence). Bars are greyed and blank here - select a period on any project row (drag across the cells, with or without bars) to build a hypothetical application for that period. Selections here never change the real programme or applications.
+                Mirrors the Operations planning programme (dates and sequence). Bars are greyed and blank here - select a period on any project row (drag across the cells, with or without bars) to build a forecasted application for that period. Selections here never change the real programme or applications.
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -142,12 +159,24 @@ export default function ProjectCashflow() {
             </div>
           </div>
 
+          {/* Forecast colour key */}
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10, fontSize: 11.5, color: '#666' }}>
+            <span style={{ fontWeight: 700, color: '#888' }}>Forecast key:</span>
+            {APP_COLOURS.map((c, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 16, height: 12, background: c, borderRadius: 2, display: 'inline-block' }} /> App {i + 1}
+              </span>
+            ))}
+            <span style={{ color: '#999' }}>(cycles every 5)</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 16, height: 12, background: darken('#2563eb'), borderRadius: 2, display: 'inline-block' }} /> darker = materials delivery day</span>
+          </div>
+
           {/* Selection info bar (fixed overlay so it never shifts the gantt) */}
           {selRange && (
             <div style={{ position: 'fixed', top: 64, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, display: 'flex', alignItems: 'center', gap: 14, background: '#111827', color: '#fff', borderRadius: 10, padding: '10px 16px', boxShadow: '0 6px 20px rgba(0,0,0,0.25)' }}>
               <span style={{ fontSize: 13 }}><strong>{projName(sel.key)}</strong> — {fmtDMY(parseISO(selRange.from))} to {fmtDMY(parseISO(selRange.to))} ({selRange.count} day{selRange.count === 1 ? '' : 's'})</span>
               <button style={{ background: '#ca8a04', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
-                title="Build a hypothetical application for this period"
+                title="Build a forecasted application for this period"
                 onClick={() => {
                   const p = (data.projects || []).find(x => x.key === sel.key)
                   const xeroId = p && p.projectNo ? (xeroMap[String(p.projectNo)] || '') : ''
@@ -172,33 +201,38 @@ export default function ProjectCashflow() {
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
                 {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} neg />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} neg />)}
               </div>
             </div>
           </div>
 
           <div style={{ fontSize: 11, color: '#aaa', marginTop: 10 }}>
-            Bars are greyed and intentionally blank - financial detail is added via the hypothetical application per selected period. This page reads the live planning programme, so if Operations move a project the sequence here moves with it. Hypothetical applications are forecast-only and never written to the real applications.
+            Bars are greyed and intentionally blank - financial detail is added via the forecasted application per selected period. This page reads the live planning programme, so if Operations move a project the sequence here moves with it. Forecasted applications are forecast-only and never written to the real applications.
           </div>
         </div>
 
-        {modal && <HypAppModal modal={modal} onClose={() => setModal(null)} onSaved={(key, count) => setHypCounts(c => ({ ...c, [key]: count }))} />}
+        {modal && <HypAppModal modal={modal} onClose={() => setModal(null)} onSaved={(key, count) => { setHypCounts(c => ({ ...c, [key]: count })); loadAllForecasts() }} />}
       </div>
     </>
   )
 }
 
-function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, neg }) {
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], neg }) {
   const complD = parseISO(meta.completionDate || '')
-  // Planned/Actual = earliest allocated day (mirrors the planning gantt).
   const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
   { const dated = Object.keys(projDays).filter(dk => countOnDay(p, dk) > 0).sort(); if (dated.length) plannedStart = dated[0] }
   const selDates = sel && sel.key === p.key ? sel.dates : null
+
+  // Sort forecasts by period so colours read App 1,2,3... in order.
+  const sortedFc = forecasts.slice().sort((a, b) => (a.from || '').localeCompare(b.from || ''))
+  const firstDayKey = days.length ? iso(days[0]) : ''
+  const lastDayKey = days.length ? iso(days[days.length - 1]) : ''
+  const dayIndex = (k) => { const d = parseISO(k); const f = parseISO(firstDayKey); return Math.round((d - f) / 86400000) }
 
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
@@ -214,35 +248,65 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
       <PlainCell w={DATE_W} style={{ fontSize: 11, color: '#555' }}>{meta.completionDate ? fmtDMY(parseISO(meta.completionDate)) : '—'}</PlainCell>
 
       {view === 'day'
-        ? days.map((d, i) => {
-          const we = isWeekend(d); const key = iso(d)
-          const hasBar = countOnDay(p, key) > 0
-          const isCompl = complD && sameDay(d, complD)
-          const selected = selDates && selDates.has(key)
-          const isToday = key === todayKey
-          return (
-            <div key={i}
-              onMouseDown={(e) => { e.preventDefault(); onCellDown(p.key, d) }}
-              onMouseEnter={() => onCellEnter(p.key, d)}
-              title={`${fmtDMY(d)}${hasBar ? ' · on site (planned)' : ''}`}
-              style={{
-                width: CELL_W, cursor: 'pointer', userSelect: 'none',
-                background: selected ? '#fde68a' : (hasBar ? '#d4d4d4' : (we ? '#f3f1ec' : '#fff')),
-                borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
-                boxShadow: [isCompl ? 'inset -2px 0 0 0 #dc2626' : '', isToday ? 'inset -2px 0 0 0 #15803d' : ''].filter(Boolean).join(', ') || undefined,
-              }} />
-          )
-        })
+        ? (
+          <div style={{ position: 'relative', display: 'flex' }}>
+            {days.map((d, i) => {
+              const we = isWeekend(d); const key = iso(d)
+              const hasBar = countOnDay(p, key) > 0
+              const isCompl = complD && sameDay(d, complD)
+              const selected = selDates && selDates.has(key)
+              const isToday = key === todayKey
+              return (
+                <div key={i}
+                  onMouseDown={(e) => { e.preventDefault(); onCellDown(p.key, d) }}
+                  onMouseEnter={() => onCellEnter(p.key, d)}
+                  title={`${fmtDMY(d)}${hasBar ? ' · on site (planned)' : ''}`}
+                  style={{
+                    width: CELL_W, cursor: 'pointer', userSelect: 'none',
+                    background: selected ? '#fde68a' : (hasBar ? '#d4d4d4' : (we ? '#f3f1ec' : '#fff')),
+                    borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                    boxShadow: [isCompl ? 'inset -2px 0 0 0 #dc2626' : '', isToday ? 'inset -2px 0 0 0 #15803d' : ''].filter(Boolean).join(', ') || undefined,
+                  }} />
+              )
+            })}
+            {/* Forecast bands overlaid across their period */}
+            {sortedFc.map((fc, idx) => {
+              if (!fc.from || !fc.to) return null
+              if (fc.to < firstDayKey || fc.from > lastDayKey) return null   // off-screen
+              const s = Math.max(0, dayIndex(fc.from < firstDayKey ? firstDayKey : fc.from))
+              const e = Math.min(days.length - 1, dayIndex(fc.to > lastDayKey ? lastDayKey : fc.to))
+              if (e < s) return null
+              const col = appColour(idx)
+              const left = s * CELL_W, width = (e - s + 1) * CELL_W
+              const matIn = fc.matDeliverDay && fc.matDeliverDay >= firstDayKey && fc.matDeliverDay <= lastDayKey
+              const matLeft = matIn ? dayIndex(fc.matDeliverDay) * CELL_W : 0
+              return (
+                <div key={fc.id} style={{ position: 'absolute', top: 3, bottom: 3, left, width, pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: col, opacity: 0.82, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                    <span style={{ color: '#fff', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.3)', padding: '0 4px' }}>
+                      App {idx + 1} · Rev {gbpK(fc.revenueThisPeriod)} · Lab {gbpK(fc.labourThisPeriod)}{fc.materialsThisPeriod ? ` · Mat ${gbpK(fc.materialsThisPeriod)}` : ''}
+                    </span>
+                  </div>
+                  {matIn && <div title={`Materials delivered ${fmtDMY(parseISO(fc.matDeliverDay))} · ${gbpK(fc.materialsThisPeriod)}`}
+                    style={{ position: 'absolute', top: 0, bottom: 0, left: matLeft - left, width: CELL_W, background: darken(col), borderRadius: 3 }} />}
+                </div>
+              )
+            })}
+          </div>
+        )
         : weekGroups.map((g, i) => {
           const anyBar = g.some(d => countOnDay(p, iso(d)) > 0)
           const anySel = selDates && g.some(d => selDates.has(iso(d)))
+          const wkStart = iso(g[0]), wkEnd = iso(g[g.length - 1])
+          const fcHere = sortedFc.findIndex(fc => fc.from && fc.to && !(fc.to < wkStart || fc.from > wkEnd))
+          const col = fcHere >= 0 ? appColour(fcHere) : null
           return (
             <div key={i}
               onMouseDown={(e) => { e.preventDefault(); onCellDown(p.key, g[0]) }}
               onMouseEnter={() => onCellEnter(p.key, g[0])}
               title={`W/C ${fmtDMY(g[0])}`}
               style={{ width: 46, cursor: 'pointer', userSelect: 'none', borderLeft: '1px solid #eee',
-                background: anySel ? '#fde68a' : (anyBar ? '#d4d4d4' : '#fff') }} />
+                background: anySel ? '#fde68a' : (col ? col : (anyBar ? '#d4d4d4' : '#fff')), opacity: col ? 0.82 : 1 }} />
           )
         })}
     </div>
@@ -260,14 +324,15 @@ function SectionLabel({ children }) {
 }
 const ghostBtn = { background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '7px 12px', fontSize: 12.5, cursor: 'pointer', color: '#555' }
 
-// ── Hypothetical application modal ──
+// ── Forecasted application modal ──
 // Full mirror of the real application (contract works + variations + certificate
 // block via computeApplicationSummary), but forecast-only. Revenue + labour are
 // driven by % complete per line. Materials are added separately (a % or figure toward
 // the materials budget) and land on a single delivery day. Cumulative: each period
-// starts from the previous saved hypothetical application. Never written to the real
+// starts from the previous saved forecasted application. Never written to the real
 // applications store.
 function gbp(n) { return `£${Math.round(n || 0).toLocaleString('en-GB')}` }
+function gbpK(n) { const v = n || 0; return Math.abs(v) >= 1000 ? `£${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `£${Math.round(v)}` }
 function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
 function HypAppModal({ modal, onClose, onSaved }) {
@@ -280,9 +345,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [rows, setRows] = useState([])            // this period's contract works (with pctComplete)
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
-  const [matMode, setMatMode] = useState('pct')   // 'pct' | 'figure'
-  const [matValue, setMatValue] = useState('')    // % or £ toward materials budget
-  const [matDeliverDay, setMatDeliverDay] = useState(to)
+  const [matItems, setMatItems] = useState([])    // [{ id, mode:'pct'|'figure', value, comment, deliverDay }]
   const [saving, setSaving] = useState(false)
   const [showList, setShowList] = useState(false)
 
@@ -325,17 +388,15 @@ function HypAppModal({ modal, onClose, onSaved }) {
       .reduce((s, x) => s + num(x.matRate) * num(x.qty), 0)
   }, [rates])
 
-  // Materials value applied this period (from % or figure toward budget).
-  const materialsThisPeriod = useMemo(() => {
-    if (matMode === 'pct') return materialsBudget * (num(matValue) / 100)
-    return num(matValue)
-  }, [matMode, matValue, materialsBudget])
+  // Value of a single material line (from % of budget or a £ figure).
+  const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
+  const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
-  // Build a materials array for computeApplicationSummary (single synthetic line at
-  // 100% so it counts fully in this cert; delivery timing handled separately).
+  // Build a materials array for computeApplicationSummary (each line at 100% so it
+  // counts fully in this cert; delivery timing is per-line and handled separately).
   const materialsForCalc = useMemo(() => (
-    materialsThisPeriod > 0 ? [{ id: 'hypmat', kind: 'item', total: materialsThisPeriod, pctComplete: 100 }] : []
-  ), [materialsThisPeriod])
+    matItems.filter(m => matLineValue(m) > 0).map(m => ({ id: m.id, kind: 'item', total: matLineValue(m), pctComplete: 100 }))
+  ), [matItems, materialsBudget])
 
   const workApp = { contractWorks: rows, variations: [], materials: materialsForCalc, mcdPct: num(mcdPct), retentionPct: num(retPct) }
   const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, materialsForCalc, mcdPct, retPct, prevGross])
@@ -367,7 +428,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
       from, to,
       contractWorks: rows,
       materials: materialsForCalc,
-      matMode, matValue: num(matValue), matDeliverDay,
+      matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m) })),
+      matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
       mcdPct: num(mcdPct), retentionPct: num(retPct),
       thisCertTotal: sum.thisCert.total,
       revenueThisPeriod: sum.thisCert.total,
@@ -386,7 +448,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }
 
   async function deleteHyp(id) {
-    if (!confirm('Delete this hypothetical application?')) return
+    if (!confirm('Delete this forecasted application?')) return
     try {
       const d = await fetch('/api/project-cashflow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-hyp', projectKey, id }) }).then(r => r.json())
       setHypApps(d.hypApps || [])
@@ -401,7 +463,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 1000, width: '100%', boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid #eee' }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Hypothetical application <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· forecast only</span></div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Forecasted application <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>· forecast only</span></div>
             <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>{projectName} — period {fmtD(from)} to {fmtD(to)}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -416,7 +478,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
             <div style={{ padding: 20 }}>
               {showList && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 8 }}>Saved hypothetical applications for this project</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 8 }}>Saved forecasted applications for this project</div>
                   {hypApps.length === 0 ? <div style={{ fontSize: 12, color: '#aaa' }}>None yet.</div> : (
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead><tr style={{ color: '#999', textAlign: 'right' }}>
@@ -442,7 +504,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                 <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong />
                 <MiniBox label="Labour this period" value={gbp(labourThisPeriod)} color="#b45309" />
-                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matDeliverDay ? `delivered ${fmtD(matDeliverDay)}` : ''} />
+                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} />
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
 
@@ -473,25 +535,57 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 </table>
               </div>
 
-              {/* Materials */}
-              <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 6 }}>Materials on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(budget {gbp(materialsBudget)})</span></div>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 18, background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12 }}>
-                <div>
-                  <div style={lblS}>Add by</div>
-                  <select value={matMode} onChange={e => setMatMode(e.target.value)} style={inpS}>
-                    <option value="pct">% of budget</option>
-                    <option value="figure">£ figure</option>
-                  </select>
-                </div>
-                <div>
-                  <div style={lblS}>{matMode === 'pct' ? 'Percent' : 'Amount (£)'}</div>
-                  <input type="number" value={matValue} onChange={e => setMatValue(e.target.value)} placeholder={matMode === 'pct' ? '%' : '£'} style={{ ...inpS, width: 110 }} />
-                </div>
-                <div>
-                  <div style={lblS}>Delivery day (cash out)</div>
-                  <input type="date" value={matDeliverDay} onChange={e => setMatDeliverDay(e.target.value)} style={inpS} />
-                </div>
-                <div style={{ fontSize: 12.5, color: '#7c3aed', fontWeight: 600 }}>= {gbp(materialsThisPeriod)}</div>
+              {/* Materials - multiple line items, each with a comment (e.g. supplier)
+                  and its own delivery day */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Materials on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(budget {gbp(materialsBudget)})</span></div>
+                <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to }])}
+                  style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
+              </div>
+              <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', marginBottom: 18 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead><tr style={{ background: '#faf9f7', color: '#999' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 110 }}>Add by</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 110 }}>Value</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px' }}>Comment (e.g. supplier)</th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', width: 150 }}>Delivery day (cash out)</th>
+                    <th style={{ textAlign: 'right', padding: '6px 10px', width: 90 }}>Amount</th>
+                    <th style={{ width: 30 }}></th>
+                  </tr></thead>
+                  <tbody>
+                    {matItems.length === 0 && <tr><td colSpan={6} style={{ padding: '10px', textAlign: 'center', color: '#bbb' }}>No materials added. Use &quot;+ Add material&quot; for each supplier / delivery.</td></tr>}
+                    {matItems.map((m) => {
+                      const upd = (patch) => setMatItems(l => l.map(x => x.id === m.id ? { ...x, ...patch } : x))
+                      return (
+                        <tr key={m.id} style={{ borderTop: '1px solid #f3f2ee' }}>
+                          <td style={{ padding: '5px 10px' }}>
+                            <select value={m.mode} onChange={e => upd({ mode: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+                              <option value="figure">£ figure</option>
+                              <option value="pct">% of budget</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: '5px 10px' }}>
+                            <input type="number" value={m.value} onChange={e => upd({ value: e.target.value })} placeholder={m.mode === 'pct' ? '%' : '£'} style={{ ...inpS, width: 90, padding: '5px 6px' }} />
+                          </td>
+                          <td style={{ padding: '5px 10px' }}>
+                            <input type="text" value={m.comment} onChange={e => upd({ comment: e.target.value })} placeholder="Supplier / note" style={{ ...inpS, width: '100%', padding: '5px 6px' }} />
+                          </td>
+                          <td style={{ padding: '5px 10px' }}>
+                            <input type="date" value={m.deliverDay || ''} onChange={e => upd({ deliverDay: e.target.value })} style={{ ...inpS, padding: '5px 6px' }} />
+                          </td>
+                          <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600, color: '#7c3aed' }}>{gbp(matLineValue(m))}</td>
+                          <td style={{ padding: '5px 6px', textAlign: 'center' }}>
+                            <button onClick={() => setMatItems(l => l.filter(x => x.id !== m.id))} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 }} title="Remove">×</button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  {matItems.length > 0 && <tfoot><tr style={{ borderTop: '2px solid #eee', background: '#faf9f7', fontWeight: 700 }}>
+                    <td colSpan={4} style={{ padding: '6px 10px', textAlign: 'right' }}>Total materials this period</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', color: '#7c3aed' }}>{gbp(materialsThisPeriod)}</td><td></td>
+                  </tr></tfoot>}
+                </table>
               </div>
 
               {/* Cert settings + save */}
@@ -500,7 +594,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   <div><div style={lblS}>MCD %</div><input type="number" value={mcdPct} onChange={e => setMcdPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
                   <div><div style={lblS}>Retention %</div><input type="number" value={retPct} onChange={e => setRetPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
                 </div>
-                <button onClick={save} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save hypothetical application'}</button>
+                <button onClick={save} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save forecasted application'}</button>
               </div>
             </div>
           )}
