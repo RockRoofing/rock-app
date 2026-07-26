@@ -5,6 +5,7 @@ import { ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
 import { BizNav, INK, GOLD, gbp, gbpK, Card } from '../../components/BizNav'
 
 const pad = (n) => String(n).padStart(2, '0')
+const normName = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/\b(ltd|limited|plc|llp|uk|co|company|the)\b/g, '').replace(/[^a-z0-9]/g, '').trim()
 const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const wd = (x.getDay() + 6) % 7; return new Date(x.getTime() - wd * 86400000) }
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
@@ -275,8 +276,28 @@ export default function CashFlow() {
       const commOut = commEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       const cisOut = cisPayments.filter(c => inWk(c.date)).reduce((a, c) => a + c.amount, 0)
 
-      const moneyIn = invoicesIn + retIn + vatInPos
-      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut
+      // Project cash flow forecast for this week, with GAP-FILL overlap: a project's
+      // forecast SALES are suppressed in any week it has a real invoice; its forecast
+      // COSTS (labour + materials) are suppressed in any week it has a real bill. This
+      // means as actuals arrive the forecast drops off, leaving only future periods.
+      const projNosWithInvoiceThisWk = new Set((data.receivables || [])
+        .filter(i => inWk(i.expectedDate || i.dueDate || '') && i.projectNo).map(i => String(i.projectNo)))
+      const projNamesWithBillThisWk = new Set((data.bills || [])
+        .filter(b => inWk((billOverrides[b.id] || b.payDate || b.dueDate) || '') && b.project).map(b => normName(b.project)))
+      let fcSalesIn = 0, fcCostOut = 0
+      for (const fc of (data.projForecasts || [])) {
+        const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
+        const hasBill = fc.projectName && projNamesWithBillThisWk.has(normName(fc.projectName))
+        if (!hasInvoice) fcSalesIn += (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        if (!hasBill) {
+          fcCostOut += (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+          fcCostOut += (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        }
+      }
+      const projNet = fcSalesIn - fcCostOut
+
+      const moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
+      const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut
       const net = moneyIn - moneyOut
       running += net
       rows.push({
@@ -284,6 +305,7 @@ export default function CashFlow() {
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
+        projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -413,6 +435,7 @@ export default function CashFlow() {
                     <th style={th}>Vehicles / commitments</th>
                     <th style={th}>VAT out</th>
                     <th style={th}>CIS to HMRC</th>
+                    <th style={th} title="Net of the Commercial project cash flow forecasts (sales in minus labour + materials out), only where no real invoice/bill exists yet for that project that week.">Project forecast</th>
                     <th style={th}>Net</th>
                     <th style={th}>Closing cash</th>
                   </tr>
@@ -433,13 +456,14 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
+                      <td style={{ ...td, color: r.projNet ? (r.projNet < 0 ? '#dc2626' : '#0f766e') : '#ccc' }} title={r.projSalesIn || r.projCostOut ? `Forecast in ${gbp(r.projSalesIn)} / out ${gbp(r.projCostOut)}` : ''}>{r.projNet ? gbp(r.projNet) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
                   ))}
                   {openOhWk != null && forecast[openOhWk] && (
                     <tr style={{ background: '#fbfaf7' }}>
-                      <td colSpan={11} style={{ padding: '10px 16px' }}>
+                      <td colSpan={12} style={{ padding: '10px 16px' }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6 }}>Overheads in {forecast[openOhWk].wk} - {gbp(-forecast[openOhWk].overheads)}</div>
                         <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                           <tbody>
@@ -463,6 +487,7 @@ export default function CashFlow() {
                     const tIn = sum('invoicesIn'), tRet = sum('retIn'), tVatIn = sum('vatIn')
                     const tBills = sum('bills'), tOh = sum('overheads'), tComm = sum('commitments')
                     const tVatOut = sum('vatOut'), tCis = sum('cisOut'), tNet = sum('net')
+                    const tProj = sum('projNet')
                     return (
                       <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
                         <td style={{ ...td, textAlign: 'left' }}>13-week total</td>
@@ -474,6 +499,7 @@ export default function CashFlow() {
                         <td style={{ ...td, color: '#dc2626' }}>{tComm ? gbp(-tComm) : '-'}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{tVatOut ? gbp(-tVatOut) : '-'}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{tCis ? gbp(-tCis) : '-'}</td>
+                        <td style={{ ...td, color: tProj < 0 ? '#dc2626' : '#0f766e' }}>{tProj ? gbp(tProj) : '-'}</td>
                         <td style={{ ...td, color: tNet < 0 ? '#dc2626' : '#16a34a' }}>{gbp(tNet)}</td>
                         <td style={{ ...td }}></td>
                       </tr>

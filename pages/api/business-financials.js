@@ -615,6 +615,8 @@ export default async function handler(req, res) {
             amountDue: due,
             reference: inv.reference || '',
             expectedDate: (meta && meta.expectedDate) || '',
+            projectName: p.name || '',
+            projectNo: p.jobNo || '',
           })
         }
       }
@@ -662,6 +664,41 @@ export default async function handler(req, res) {
     const overheadNames = {}
     for (const code of ohCodes) overheadNames[code] = (catConfig[code] && catConfig[code].name) || cfChartNames[code] || code
 
+    // Project cash flow forecasts (from the Commercial Cash Flow page). Scanned from
+    // cashflow:hyp-apps:*, flattened to dated cash movements, each tagged with its
+    // project so the weekly forecast can suppress it where a REAL invoice/bill exists.
+    const projForecasts = []
+    try {
+      let cursor = 0
+      const keys = []
+      do {
+        const [next, batch] = await redis.scan(cursor, { match: 'cashflow:hyp-apps:*', count: 200 })
+        cursor = Number(next)
+        for (const k of (batch || [])) keys.push(k)
+      } while (cursor)
+      // Map planning project key -> a display/project name for matching to invoices/bills.
+      const dashByNo = {}
+      for (const p of (Array.isArray(dashCache) ? dashCache : [])) { if (p.jobNo) dashByNo[String(p.jobNo)] = p.name || '' }
+      for (const k of keys) {
+        const pk = k.replace('cashflow:hyp-apps:', '')
+        // pk is "L:<projectNo>" (live/draft) or "N:<dealId>" (negotiated).
+        const projectNo = pk.startsWith('L:') ? pk.slice(2) : ''
+        const projectName = projectNo ? (dashByNo[projectNo] || '') : ''
+        const list = (await redis.get(k).catch(() => ([]))) || []
+        for (const fc of list) {
+          projForecasts.push({
+            projectKey: pk,
+            projectNo,
+            projectName,
+            salesSchedule: fc.salesSchedule || (fc.salesDate ? [{ date: fc.salesDate, amount: fc.revenueThisPeriod || 0 }] : []),
+            labourSchedule: fc.labourSchedule || [],
+            matItems: (fc.matItems || []).map(m => ({ date: m.payDate, amount: m.amount || 0 })),
+            from: fc.from, to: fc.to,
+          })
+        }
+      }
+    } catch {}
+
     return res.json({
       cashAtBank: openingCash,
       cashAtBankLegacy: cashAtBank,
@@ -672,6 +709,7 @@ export default async function handler(req, res) {
       billPayDates,
       billCisFlags,
       receivables,
+      projForecasts,
       avgOverheadMonthly,
       history,
       ohBudgets,

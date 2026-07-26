@@ -1,15 +1,31 @@
-DEPLOY NOTES - Forecasted application: remaining budget shown
-============================================================
+DEPLOY NOTES - 13-week cash flow: project forecast column (Phase A)
+==================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/project-cashflow.js
+** Phase A of 2. Phase B (the 12-month monthly forecast + manual lumps) comes next. **
 
-CHANGE
-  Under the "this period" boxes, each now shows what's REMAINING in light grey:
-    - Revenue this period   -> "<x> remaining"  (sales contract total minus gross to date)
-    - Labour this period    -> "<x> remaining"  (labour budget minus labour to date)
-    - Materials this period -> "<x> remaining"  (materials budget minus materials used
-                               across all forecasts including this one)
-  Budgets come from the project's contracted rates (above the line).
+THREE files, all EDITS - just replace them.
+  lib/xero.js                             (bills now capture their project tracking)
+  pages/api/business-financials.js        (serves project forecasts + overlap data)
+  pages/business-financials/cashflow.js   (new "Project forecast" column)
+
+WHAT'S NEW
+  The 13-week cash flow now has a "Project forecast" column driven by the Commercial
+  Project Cash Flow forecasts. Per week it shows the NET of forecast sales in minus
+  forecast labour + materials out, and it's folded into Net and Closing cash and the
+  13-week totals.
+
+  GAP-FILL OVERLAP (no double-counting):
+   - A project's forecast SALES are suppressed in any week where that project already
+     has a REAL invoice (from Invoices Owed).
+   - A project's forecast COSTS (labour + materials) are suppressed in any week where
+     that project already has a REAL bill.
+  So as real invoices/bills come in, the forecast for that project drops off those
+  weeks automatically, leaving only the still-forecast periods.
+
+IMPORTANT - RE-SYNC BILLS
+  Bills now capture their Xero project (from the line-item tracking). You must run a
+  Bills sync once after deploying so existing bills pick up their project - until then
+  the cost-side overlap can't match and forecast costs won't be suppressed by bills.
+  (Sales side works immediately.)
 
 BUILD: next build -> Compiled successfully.
