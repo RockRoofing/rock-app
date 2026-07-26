@@ -222,40 +222,44 @@ export default function ProjectCashflow() {
           )}
 
           <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-            <div style={{ overflowX: 'auto' }}>
+            <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 230px)' }}>
               <div style={{ minWidth: NAME_W + DATE_W * 2 + days.length * CELL_W }}>
-                {/* header */}
-                <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
-                  <Frozen w={NAME_W}>Project</Frozen>
-                  <PlainCell w={DATE_W}>Planned / Actual</PlainCell>
-                  <PlainCell w={DATE_W}>Contract Compl.</PlainCell>
+                {/* header (sticky top row) */}
+                <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7', position: 'sticky', top: 0, zIndex: 5 }}>
+                  <Frozen w={NAME_W} style={{ background: '#faf9f7', zIndex: 6 }}>Project</Frozen>
+                  <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Planned / Actual</PlainCell>
+                  <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
                   {view === 'day'
                     ? weekGroups.map((g, i) => <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>)
                     : weekGroups.map((g, i) => <div key={i} style={{ width: 46, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>)}
                 </div>
 
-                {/* Cash totals by stream, per column (works in day + week view) */}
+                {/* Cash totals by stream, per column (works in day + week view). Rows are
+                    sticky under the header so they stay visible when scrolling down. */}
                 {(() => {
                   const cols = view === 'day' ? days.map(d => [d]) : weekGroups
                   const colSum = (colDays, stream) => colDays.reduce((s, d) => s + ((cashByDay[iso(d)] || {})[stream] || 0), 0)
-                  const colW = view === 'day' ? CELL_W : 46
+                  const colSumMany = (colDays, streams) => streams.reduce((t, st) => t + colSum(colDays, st), 0)
                   const brdr = (colDays) => (view === 'day' ? (colDays[0].getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5') : '1px solid #eee')
-                  const TotalRow = ({ label, stream, colour, bg, bold }) => (
-                    <div style={{ display: 'flex', borderBottom: bold ? '2px solid #e6e3dc' : '1px solid #eee', background: bg, position: 'sticky', zIndex: 3 }}>
-                      <Frozen w={NAME_W} style={{ background: bg, fontSize: 10, fontWeight: 700, color: colour }}>{label}</Frozen>
+                  const HEADER_H = 30, ROW_H2 = 22
+                  const TotalRow = ({ label, streams, colour, bg, top, bold, big }) => (
+                    <div style={{ display: 'flex', borderBottom: bold ? '2px solid #d9d5cc' : '1px solid #eee', background: bg, position: 'sticky', top, zIndex: 4, height: ROW_H2 }}>
+                      <Frozen w={NAME_W} style={{ background: bg, fontSize: big ? 11 : 10, fontWeight: 700, color: colour, zIndex: 6 }}>{label}</Frozen>
                       <PlainCell w={DATE_W} style={{ background: bg }} />
                       <PlainCell w={DATE_W} style={{ background: bg }} />
-                      {cols.map((colDays, i) => { const v = colSum(colDays, stream); return (
-                        <div key={i} title={v ? `${label}: ${gbp(v)}` : ''} style={{ width: view === 'day' ? CELL_W : 46, borderLeft: brdr(colDays), fontSize: 8, fontWeight: 700, color: colour, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{v ? gbpK(v) : ''}</div>
+                      {cols.map((colDays, i) => { const v = colSumMany(colDays, streams); return (
+                        <div key={i} title={v ? `${label}: ${gbp(v)}` : ''} style={{ width: view === 'day' ? CELL_W : 46, borderLeft: brdr(colDays), fontSize: big ? 8.5 : 8, fontWeight: 700, color: colour, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{v ? gbpK(v) : ''}</div>
                       )})}
                     </div>
                   )
                   return (
                     <>
-                      <TotalRow label="Sales in" stream="salesIn" colour="#0f766e" bg="#f4faf6" />
-                      <TotalRow label="Retention in" stream="retIn" colour="#15803d" bg="#f4faf6" />
-                      <TotalRow label="Labour out" stream="labourOut" colour="#b45309" bg="#fdf7f2" />
-                      <TotalRow label="Materials out" stream="matOut" colour="#7c3aed" bg="#faf7fd" bold />
+                      <TotalRow label="Sales in" streams={['salesIn']} colour="#0f766e" bg="#f4faf6" top={HEADER_H} />
+                      <TotalRow label="Retention in" streams={['retIn']} colour="#15803d" bg="#f4faf6" top={HEADER_H + ROW_H2} />
+                      <TotalRow label="Total IN / week" streams={['salesIn', 'retIn']} colour="#0f766e" bg="#e9f7ef" top={HEADER_H + ROW_H2 * 2} big bold />
+                      <TotalRow label="Labour out" streams={['labourOut']} colour="#b45309" bg="#fdf7f2" top={HEADER_H + ROW_H2 * 3} />
+                      <TotalRow label="Materials out" streams={['matOut']} colour="#7c3aed" bg="#faf7fd" top={HEADER_H + ROW_H2 * 4} />
+                      <TotalRow label="Total OUT / week" streams={['labourOut', 'matOut']} colour="#b91c1c" bg="#fdecec" top={HEADER_H + ROW_H2 * 5} big bold />
                     </>
                   )
                 })()}

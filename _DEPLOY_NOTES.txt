@@ -1,26 +1,21 @@
-DEPLOY NOTES - Cash Flow: revenue fix, monthly spread, split totals
-===================================================================
+DEPLOY NOTES - Cash Flow: Total in/out per week + frozen totals rows
+====================================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-1. NUMBER FIX (revenue double-count)
-   Materials were being ADDED to revenue as well as the contract works that already
-   contain them - so revenue/gross were overstated (e.g. showing ~465k). Materials are
-   now CASH-TIMING ONLY and do NOT add to revenue. Revenue = contract works this-cert.
-   Re-open existing forecasts and Update to recalculate them.
+CHANGES
+1. TOTAL IN / TOTAL OUT rows added:
+     - "Total IN / week"  = Sales in + Retention in   (green, bold)
+     - "Total OUT / week" = Labour out + Materials out (red, bold)
+   Shown per column alongside the individual stream rows, in both day and week views.
 
-2. MONTHLY SPREAD (sales + labour)
-   When a period spans more than one CALENDAR month, a "Spread across the period's N
-   calendar months" table appears. Enter what % of SALES and LABOUR falls in each
-   month (defaults to an even split; each row should total 100%). The number of months
-   is taken from the calendar months the period actually touches - so a period that
-   runs 1 Feb -> 10 May offers Feb, Mar, Apr, May (4 months) even if it's ~3 months
-   long. The payment term then sets the cash date from each month end (e.g. 40% in
-   April, sales term EOM+35 -> that 40% lands end of April + 35 days).
+2. FROZEN ROWS: the header and all the totals rows (Sales in, Retention in, Total IN,
+   Labour out, Materials out, Total OUT) now STICK to the top and stay visible when you
+   scroll down through the project list. The Project + date columns remain frozen on
+   the left, so the totals grid is always in view.
 
-3. TOTALS ROWS - now split by stream, each per column (day OR week view):
-   Sales in, Retention in, Labour out, Materials out. They stick to the top when you
-   scroll, and the Project + date columns stay frozen on the left.
+The gantt now scrolls vertically within the panel (height fits the window) so the
+frozen rows have something to stick against.
 
 BUILD: next build -> Compiled successfully.
