@@ -95,13 +95,15 @@ export default function ProjectCashflow() {
   // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
   const cashByDay = useMemo(() => {
     const map = {}
-    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { in: 0, out: 0 }; map[d][k] += amt }
+    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { salesIn: 0, retIn: 0, labourOut: 0, matOut: 0 }; map[d][k] += amt }
     for (const list of Object.values(allForecasts || {})) {
       for (const fc of (list || [])) {
-        if (fc.salesDate) add(fc.salesDate, 'in', fc.revenueThisPeriod || 0)
-        for (const s of (fc.labourSchedule || [])) add(s.date, 'out', s.amount || 0)
-        if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'out', fc.labourThisPeriod || 0)
-        for (const m of (fc.matItems || [])) add(m.payDate, 'out', m.amount || 0)
+        if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
+          for (const s of fc.salesSchedule) add(s.date, 'salesIn', s.amount || 0)
+        } else if (fc.salesDate) add(fc.salesDate, 'salesIn', fc.revenueThisPeriod || 0)
+        for (const s of (fc.labourSchedule || [])) add(s.date, 'labourOut', s.amount || 0)
+        if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'labourOut', fc.labourThisPeriod || 0)
+        for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
       }
     }
     for (const e of (retention || [])) {
@@ -109,8 +111,8 @@ export default function ProjectCashflow() {
       const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
       const totalRet = fa * pct
       if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) add(e.release1Date, 'in', totalRet / 2)
-      if (e.release2Date && !e.release2Received) add(e.release2Date, 'in', totalRet / 2)
+      if (e.release1Date && !e.release1Received) add(e.release1Date, 'retIn', totalRet / 2)
+      if (e.release2Date && !e.release2Received) add(e.release2Date, 'retIn', totalRet / 2)
     }
     return map
   }, [allForecasts, retention])
@@ -232,27 +234,31 @@ export default function ProjectCashflow() {
                     : weekGroups.map((g, i) => <div key={i} style={{ width: 46, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>)}
                 </div>
 
-                {/* Daily cash totals (only shown in day view; values only where cash moves) */}
-                {view === 'day' && (
-                  <>
-                    <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#f4faf6' }}>
-                      <Frozen w={NAME_W} style={{ background: '#f4faf6', fontSize: 10.5, fontWeight: 700, color: '#0f766e' }}>Total in / day</Frozen>
-                      <PlainCell w={DATE_W} style={{ background: '#f4faf6' }} />
-                      <PlainCell w={DATE_W} style={{ background: '#f4faf6' }} />
-                      {days.map((d, i) => { const c = cashByDay[iso(d)]; return (
-                        <div key={i} title={c && c.in ? `In ${gbp(c.in)} on ${fmtDMY(d)}` : ''} style={{ width: CELL_W, borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'), fontSize: 8, fontWeight: 700, color: '#0f766e', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{c && c.in ? gbpK(c.in) : ''}</div>
+                {/* Cash totals by stream, per column (works in day + week view) */}
+                {(() => {
+                  const cols = view === 'day' ? days.map(d => [d]) : weekGroups
+                  const colSum = (colDays, stream) => colDays.reduce((s, d) => s + ((cashByDay[iso(d)] || {})[stream] || 0), 0)
+                  const colW = view === 'day' ? CELL_W : 46
+                  const brdr = (colDays) => (view === 'day' ? (colDays[0].getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5') : '1px solid #eee')
+                  const TotalRow = ({ label, stream, colour, bg, bold }) => (
+                    <div style={{ display: 'flex', borderBottom: bold ? '2px solid #e6e3dc' : '1px solid #eee', background: bg, position: 'sticky', zIndex: 3 }}>
+                      <Frozen w={NAME_W} style={{ background: bg, fontSize: 10, fontWeight: 700, color: colour }}>{label}</Frozen>
+                      <PlainCell w={DATE_W} style={{ background: bg }} />
+                      <PlainCell w={DATE_W} style={{ background: bg }} />
+                      {cols.map((colDays, i) => { const v = colSum(colDays, stream); return (
+                        <div key={i} title={v ? `${label}: ${gbp(v)}` : ''} style={{ width: view === 'day' ? CELL_W : 46, borderLeft: brdr(colDays), fontSize: 8, fontWeight: 700, color: colour, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{v ? gbpK(v) : ''}</div>
                       )})}
                     </div>
-                    <div style={{ display: 'flex', borderBottom: '2px solid #e6e3dc', background: '#fdf5f5' }}>
-                      <Frozen w={NAME_W} style={{ background: '#fdf5f5', fontSize: 10.5, fontWeight: 700, color: '#b91c1c' }}>Total out / day</Frozen>
-                      <PlainCell w={DATE_W} style={{ background: '#fdf5f5' }} />
-                      <PlainCell w={DATE_W} style={{ background: '#fdf5f5' }} />
-                      {days.map((d, i) => { const c = cashByDay[iso(d)]; return (
-                        <div key={i} title={c && c.out ? `Out ${gbp(c.out)} on ${fmtDMY(d)}` : ''} style={{ width: CELL_W, borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'), fontSize: 8, fontWeight: 700, color: '#b91c1c', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', lineHeight: 1 }}>{c && c.out ? gbpK(c.out) : ''}</div>
-                      )})}
-                    </div>
-                  </>
-                )}
+                  )
+                  return (
+                    <>
+                      <TotalRow label="Sales in" stream="salesIn" colour="#0f766e" bg="#f4faf6" />
+                      <TotalRow label="Retention in" stream="retIn" colour="#15803d" bg="#f4faf6" />
+                      <TotalRow label="Labour out" stream="labourOut" colour="#b45309" bg="#fdf7f2" />
+                      <TotalRow label="Materials out" stream="matOut" colour="#7c3aed" bg="#faf7fd" bold />
+                    </>
+                  )
+                })()}
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
@@ -411,6 +417,23 @@ function paymentDate(refISO, term) {
 }
 const termLabel = (term) => term ? (term.basis === 'eom' ? `EOM + ${num(term.days)}d` : `${num(term.days)} days`) : ''
 
+// Calendar months a period spans, as ['YYYY-MM', ...] (inclusive of both ends).
+function monthsInPeriod(fromISO, toISO) {
+  if (!fromISO || !toISO) return []
+  const [fy, fm] = fromISO.split('-').map(Number)
+  const [ty, tm] = toISO.split('-').map(Number)
+  const out = []
+  let y = fy, m = fm
+  while (y < ty || (y === ty && m <= tm)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`)
+    m++; if (m > 12) { m = 1; y++ }
+  }
+  return out
+}
+const monthShort = (mk) => { const [y, m] = mk.split('-').map(Number); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} ${String(y).slice(2)}` }
+// Even default split (%) across n months, remainder on the last.
+function evenSplit(n) { if (n <= 0) return []; const base = Math.floor(100 / n); const arr = Array(n).fill(base); arr[n - 1] += 100 - base * n; return arr }
+
 // Count Mon-Fri working days between two ISO dates (inclusive).
 function workingDaysBetween(fromISO, toISO) {
   if (!fromISO || !toISO) return 0
@@ -466,6 +489,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
+  const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
+  const [labourSpread, setLabourSpread] = useState({}) // { 'YYYY-MM': pct }
   const [saving, setSaving] = useState(false)
   const [showList, setShowList] = useState(false)
 
@@ -487,6 +512,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
+          if (editing.salesSpread) setSalesSpread(editing.salesSpread)
+          if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
         } else {
           // NEW forecast: start from the most recent prior app's % complete (cumulative).
@@ -510,7 +537,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
     const priors = others.filter(a => !from || (a.to || '') < from).sort((a, b) => (a.to || '').localeCompare(b.to || ''))
     const prev = priors.length ? priors[priors.length - 1] : (from ? null : others.slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop())
     if (!prev) return 0
-    const s = computeApplicationSummary({ contractWorks: prev.contractWorks || [], variations: [], materials: prev.materials || [], mcdPct: prev.mcdPct || 0, retentionPct: prev.retentionPct != null ? prev.retentionPct : 5 }, 0)
+    const s = computeApplicationSummary({ contractWorks: prev.contractWorks || [], variations: [], materials: [], mcdPct: prev.mcdPct || 0, retentionPct: prev.retentionPct != null ? prev.retentionPct : 5 }, 0)
     return s.grossCurrent
   }, [hypApps, editId, from])
 
@@ -525,14 +552,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
   const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
-  // Build a materials array for computeApplicationSummary (each line at 100% so it
-  // counts fully in this cert; delivery timing is per-line and handled separately).
-  const materialsForCalc = useMemo(() => (
-    matItems.filter(m => matLineValue(m) > 0).map(m => ({ id: m.id, kind: 'item', total: matLineValue(m), pctComplete: 100 }))
-  ), [matItems, materialsBudget])
-
-  const workApp = { contractWorks: rows, variations: [], materials: materialsForCalc, mcdPct: num(mcdPct), retentionPct: num(retPct) }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, materialsForCalc, mcdPct, retPct, prevGross])
+  // Materials are CASH-TIMING ONLY - they do NOT add to revenue. So the certificate
+  // maths uses contract works (+ variations) only; materials are scheduled as cash out
+  // separately via each line's pay date.
+  const workApp = { contractWorks: rows, variations: [], materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, mcdPct, retPct, prevGross])
 
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
@@ -567,8 +591,54 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
   const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
 
-  // Labour cash schedule for this period (weekly / fortnightly / EOM).
-  const labSchedule = useMemo(() => labourSchedule(from, to, labourThisPeriod, labourTerm), [from, to, labourThisPeriod, labourTerm])
+  // Calendar months this period spans, and keep the sales/labour spreads in step.
+  const periodMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
+  useEffect(() => {
+    if (!periodMonths.length) return
+    const fix = (spread) => {
+      const cur = periodMonths.every(m => spread[m] != null) && Object.keys(spread).length === periodMonths.length
+      if (cur) return spread
+      const even = evenSplit(periodMonths.length)
+      const next = {}; periodMonths.forEach((m, i) => { next[m] = spread[m] != null ? spread[m] : even[i] })
+      // If months were added/removed, re-even only when totals look wrong.
+      const tot = periodMonths.reduce((s, m) => s + num(next[m]), 0)
+      if (Object.keys(spread).length !== periodMonths.length || tot === 0) periodMonths.forEach((m, i) => { next[m] = even[i] })
+      return next
+    }
+    setSalesSpread(s => fix(s))
+    setLabourSpread(s => fix(s))
+  }, [periodMonths.join(',')])
+
+  // Sales cash schedule: each spread month's portion received on month-end + sales days.
+  const salesSchedule = useMemo(() => {
+    const rev = sum.thisCert.total || 0
+    if (!(rev > 0) || !periodMonths.length) return []
+    const days = num(salesTerm.days)
+    return periodMonths.map(mk => {
+      const pct = num(salesSpread[mk]) / 100
+      const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
+      return { month: mk, date, amount: rev * pct }
+    }).filter(s => s.amount > 0.5)
+  }, [sum, periodMonths, salesSpread, salesTerm])
+
+  // Labour cash schedule: each spread month's portion, timed by the labour term.
+  const labSchedule = useMemo(() => {
+    if (!(labourThisPeriod > 0) || !periodMonths.length) return []
+    const out = []
+    for (const mk of periodMonths) {
+      const pct = num(labourSpread[mk]) / 100
+      const monthAmt = labourThisPeriod * pct
+      if (monthAmt <= 0.5) continue
+      const [y, m] = mk.split('-').map(Number)
+      const mStart = `${mk}-01`, mEnd = isoOf(new Date(y, m, 0))
+      if (labourTerm.basis === 'eom') {
+        out.push({ date: paymentDate(mStart, { basis: 'eom', days: num(labourTerm.days) }), amount: monthAmt, window: mk })
+      } else {
+        for (const s of labourSchedule(mStart, mEnd, monthAmt, labourTerm)) out.push(s)
+      }
+    }
+    return out
+  }, [labourThisPeriod, periodMonths, labourSpread, labourTerm])
 
   const setPct = (id, v) => {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
@@ -586,11 +656,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
       id: editId || `hyp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       from, to,
       contractWorks: rows,
-      materials: materialsForCalc,
+      materials: [],
       matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m), term: m.term || { basis: 'eom', days: 30 }, payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 }) })),
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
       salesTerm, labourTerm,
-      salesDate: paymentDate(to, salesTerm),
+      salesSpread, labourSpread,
+      salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month })),
+      salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
       labourSchedule: labSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount) })),
       mcdPct: num(mcdPct), retentionPct: num(retPct),
       thisCertTotal: sum.thisCert.total,
@@ -682,6 +754,25 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
               </div>
+
+              {/* Monthly spread of sales + labour across the calendar months the period covers */}
+              {periodMonths.length > 1 && (
+                <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} calendar months</div>
+                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of sales and labour falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.</div>
+                  <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead><tr style={{ color: '#999' }}>
+                      <th style={{ textAlign: 'left', padding: '3px 10px' }}></th>
+                      {periodMonths.map(mk => <th key={mk} style={{ padding: '3px 10px', minWidth: 70 }}>{monthShort(mk)}</th>)}
+                      <th style={{ padding: '3px 10px' }}>Total</th>
+                    </tr></thead>
+                    <tbody>
+                      <SpreadRow label="Sales %" months={periodMonths} spread={salesSpread} setSpread={setSalesSpread} />
+                      <SpreadRow label="Labour %" months={periodMonths} spread={labourSpread} setSpread={setLabourSpread} />
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               {/* Contract works with % complete */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -798,6 +889,23 @@ function HypAppModal({ modal, onClose, onSaved }) {
           )}
       </div>
     </div>
+  )
+}
+
+function SpreadRow({ label, months, spread, setSpread }) {
+  const total = months.reduce((s, m) => s + num(spread[m]), 0)
+  const off = Math.abs(total - 100) > 0.5
+  return (
+    <tr style={{ borderTop: '1px solid #eee' }}>
+      <td style={{ padding: '4px 10px', fontWeight: 600, color: '#555' }}>{label}</td>
+      {months.map(mk => (
+        <td key={mk} style={{ padding: '4px 10px' }}>
+          <input type="number" value={spread[mk] ?? ''} onChange={e => setSpread(s => ({ ...s, [mk]: e.target.value === '' ? 0 : parseFloat(e.target.value) }))}
+            style={{ width: 56, textAlign: 'right', border: '1px solid #ddd', borderRadius: 6, padding: '3px 6px', fontSize: 12 }} />
+        </td>
+      ))}
+      <td style={{ padding: '4px 10px', fontWeight: 700, color: off ? '#dc2626' : '#16a34a' }}>{Math.round(total)}%</td>
+    </tr>
   )
 }
 

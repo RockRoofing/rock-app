@@ -1,14 +1,26 @@
-DEPLOY NOTES - Forecast application: 100% ticks
-===============================================
+DEPLOY NOTES - Cash Flow: revenue fix, monthly spread, split totals
+===================================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-CHANGE
-  In the forecasted application, the contract works table now has:
-    - A per-line "100%" tick - tick to set that line to 100% complete (untick -> 0%).
-    - An "All lines 100%" tick above the table - sets every works line to 100% at once
-      (untick -> 0%). It shows ticked when all lines are already at 100%.
-  The % complete box still works for anything in between.
+1. NUMBER FIX (revenue double-count)
+   Materials were being ADDED to revenue as well as the contract works that already
+   contain them - so revenue/gross were overstated (e.g. showing ~465k). Materials are
+   now CASH-TIMING ONLY and do NOT add to revenue. Revenue = contract works this-cert.
+   Re-open existing forecasts and Update to recalculate them.
+
+2. MONTHLY SPREAD (sales + labour)
+   When a period spans more than one CALENDAR month, a "Spread across the period's N
+   calendar months" table appears. Enter what % of SALES and LABOUR falls in each
+   month (defaults to an even split; each row should total 100%). The number of months
+   is taken from the calendar months the period actually touches - so a period that
+   runs 1 Feb -> 10 May offers Feb, Mar, Apr, May (4 months) even if it's ~3 months
+   long. The payment term then sets the cash date from each month end (e.g. 40% in
+   April, sales term EOM+35 -> that 40% lands end of April + 35 days).
+
+3. TOTALS ROWS - now split by stream, each per column (day OR week view):
+   Sales in, Retention in, Labour out, Materials out. They stick to the top when you
+   scroll, and the Project + date columns stay frozen on the left.
 
 BUILD: next build -> Compiled successfully.
