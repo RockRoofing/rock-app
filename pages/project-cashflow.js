@@ -363,6 +363,46 @@ function paymentDate(refISO, term) {
 }
 const termLabel = (term) => term ? (term.basis === 'eom' ? `EOM + ${num(term.days)}d` : `${num(term.days)} days`) : ''
 
+// Count Mon-Fri working days between two ISO dates (inclusive).
+function workingDaysBetween(fromISO, toISO) {
+  if (!fromISO || !toISO) return 0
+  let n = 0
+  for (let d = new Date(fromISO + 'T00:00:00'); d <= new Date(toISO + 'T00:00:00'); d.setDate(d.getDate() + 1)) {
+    const wd = d.getDay(); if (wd !== 0 && wd !== 6) n++
+  }
+  return n
+}
+const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+// Labour payment schedule -> [{ date, amount, window }].
+//  - 'eom'                 : single payment on EOM(period end) + days.
+//  - 'weekly'/'fortnightly': split the labour total across each week/fortnight window
+//    of the period BY WORKING DAYS; each instalment pays on that window's end + days.
+function labourSchedule(fromISO, toISO, total, term) {
+  const t = term || { basis: 'weekly', days: 7 }
+  if (!fromISO || !toISO || !(total > 0)) return []
+  if (t.basis === 'eom') return [{ date: paymentDate(toISO, { basis: 'eom', days: num(t.days) }), amount: total, window: `${fromISO}..${toISO}` }]
+  const step = t.basis === 'fortnightly' ? 14 : 7
+  const start = new Date(fromISO + 'T00:00:00')
+  const end = new Date(toISO + 'T00:00:00')
+  const totalWD = workingDaysBetween(fromISO, toISO) || 1
+  const out = []
+  let ws = new Date(start)
+  while (ws <= end) {
+    let we = new Date(ws); we.setDate(we.getDate() + step - 1)
+    if (we > end) we = new Date(end)
+    const wsISO = isoOf(ws), weISO = isoOf(we)
+    const wd = workingDaysBetween(wsISO, weISO)
+    if (wd > 0) {
+      const amount = total * (wd / totalWD)
+      const payISO = paymentDate(weISO, { basis: 'days', days: num(t.days) })  // window end + days
+      out.push({ date: payISO, amount, window: `${wsISO}..${weISO}` })
+    }
+    ws.setDate(ws.getDate() + step)
+  }
+  return out
+}
+
 function HypAppModal({ modal, onClose, onSaved }) {
   const { projectKey, projectName, xeroId, editId } = modal
   const [loading, setLoading] = useState(true)
@@ -375,7 +415,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [retPct, setRetPct] = useState(5)
   const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
   const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30 })    // sales cash received
-  const [labourTerm, setLabourTerm] = useState({ basis: 'days', days: 0 })  // labour paid
+  const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [saving, setSaving] = useState(false)
@@ -398,7 +438,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setMcdPct(editing.mcdPct || 0); setRetPct(editing.retentionPct != null ? editing.retentionPct : 5)
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
-          setLabourTerm(editing.labourTerm || { basis: 'days', days: 0 })
+          setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setFrom(editing.from || ''); setTo(editing.to || '')
         } else {
           // NEW forecast: start from the most recent prior app's % complete (cumulative).
@@ -447,19 +487,40 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, materialsForCalc, mcdPct, retPct, prevGross])
 
   // Revenue + labour split for the works this period (value-to-date on works lines).
-  const labourThisPeriod = useMemo(() => {
+  // Labour value to date on the current rows (labRate x qty x pct).
+  const labourToDate = useMemo(() => {
     const items = (rates && Array.isArray(rates.items)) ? rates.items : []
     const byId = new Map(items.map(x => [x.id, x]))
-    // For each works row, labour value to date = labRate * qty * pct.
     let lab = 0
     for (const r of rows) {
       if (r.kind !== 'item') continue
-      const src = byId.get(r.id)
-      if (!src) continue
+      const src = byId.get(r.id); if (!src) continue
       lab += num(src.labRate) * num(src.qty) * (num(r.pctComplete) / 100)
     }
     return lab
   }, [rows, rates])
+
+  // Labour value to date on the PREVIOUS app (so labour this period is the increment).
+  const prevLabourToDate = useMemo(() => {
+    const others = hypApps.filter(a => a.id !== editId)
+    const priors = others.filter(a => !from || (a.to || '') < from).sort((a, b) => (a.to || '').localeCompare(b.to || ''))
+    const prev = priors.length ? priors[priors.length - 1] : null
+    if (!prev) return 0
+    const items = (rates && Array.isArray(rates.items)) ? rates.items : []
+    const byId = new Map(items.map(x => [x.id, x]))
+    let lab = 0
+    for (const r of (prev.contractWorks || [])) {
+      if (r.kind !== 'item') continue
+      const src = byId.get(r.id); if (!src) continue
+      lab += num(src.labRate) * num(src.qty) * (num(r.pctComplete) / 100)
+    }
+    return lab
+  }, [hypApps, editId, from, rates])
+
+  const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
+
+  // Labour cash schedule for this period (weekly / fortnightly / EOM).
+  const labSchedule = useMemo(() => labourSchedule(from, to, labourThisPeriod, labourTerm), [from, to, labourThisPeriod, labourTerm])
 
   const setPct = (id, v) => {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
@@ -478,7 +539,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
       salesTerm, labourTerm,
       salesDate: paymentDate(to, salesTerm),
-      labourDate: paymentDate(to, labourTerm),
+      labourSchedule: labSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount) })),
       mcdPct: num(mcdPct), retentionPct: num(retPct),
       thisCertTotal: sum.thisCert.total,
       revenueThisPeriod: sum.thisCert.total,
@@ -566,7 +627,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {/* Payment terms (sales received, labour paid) */}
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                 <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" />
-                <TermEditor label="Labour paid" term={labourTerm} setTerm={setLabourTerm} refDate={to} refLabel="period end" />
+                <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
               </div>
 
@@ -674,6 +735,32 @@ function HypAppModal({ modal, onClose, onSaved }) {
             </div>
           )}
       </div>
+    </div>
+  )
+}
+
+function LabourTermEditor({ term, setTerm, schedule }) {
+  const fmtD = (s) => { if (!s) return '-'; const [y, m, d] = s.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+  const isInstalment = term.basis === 'weekly' || term.basis === 'fortnightly'
+  return (
+    <div>
+      <div style={lblS}>Labour paid</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+          <option value="weekly">Weekly</option>
+          <option value="fortnightly">Fortnightly</option>
+          <option value="eom">EOM + days</option>
+        </select>
+        <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 56, padding: '5px 6px' }} title={isInstalment ? 'Days after each week/fortnight end' : 'Days after end of month'} />
+        <span style={{ fontSize: 10.5, color: '#999' }}>{isInstalment ? 'days after each period end' : 'days after EOM'}</span>
+      </div>
+      {schedule && schedule.length > 0 && (
+        <div style={{ fontSize: 10.5, color: '#b45309', marginTop: 3, maxWidth: 340 }}>
+          {schedule.length === 1
+            ? `cash on ${fmtD(schedule[0].date)}`
+            : `${schedule.length} payments: ${schedule.slice(0, 3).map(s => fmtD(s.date)).join(', ')}${schedule.length > 3 ? '…' : ''}`}
+        </div>
+      )}
     </div>
   )
 }

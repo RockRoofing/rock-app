@@ -1,25 +1,27 @@
-DEPLOY NOTES - Cash Flow forecasts: payment terms
-=================================================
+DEPLOY NOTES - Cash Flow: labour payment options (weekly/fortnightly/EOM)
+========================================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-WHAT'S NEW - payment terms so the forecast knows WHEN cash moves:
+LABOUR PAYMENT now has three options (top of the application):
+  - Weekly       - labour split across each WEEK of the period
+  - Fortnightly  - labour split across each FORTNIGHT of the period
+  - EOM + days   - single payment, end of the period's month + X days
 
-  Each term is: a BASIS + a number of days.
-    - "days"    = that many days from the reference date
-    - "EOM +"   = end of the month the reference date is in, then + that many days
-                  (the last day of the month counts as being in that month)
+  Weekly / fortnightly:
+    * The period is divided into week (or fortnight) windows from the 1st day of the
+      period.
+    * The labour total for the period is split across those windows BY WORKING DAYS
+      (Mon-Fri) in each window.
+    * Each instalment is paid on that window's end date + X days (default 7, editable).
+  The editor shows the resulting payment dates live.
 
-  SALES received  - term set at the TOP of the application (from the period end).
-                    Default: EOM + 30.
-  LABOUR paid     - term set at the TOP of the application (from the period end).
-                    Default: 0 days.
-  MATERIALS paid  - term set PER LINE (per supplier), from that line's delivery day.
-                    Default: EOM + 30 from the delivery month.
+  Labour "this period" is now the INCREMENT over the previous application (matching how
+  revenue this-cert works), so weekly/fortnightly amounts reflect only the new labour
+  in the period. The saved forecast stores the full labour payment schedule
+  ([{date, amount}]) ready for the cash flow feed.
 
-  Each term shows the resulting CASH DATE live as you change it. The saved forecast
-  now stores the terms and the computed cash dates (salesDate, labourDate, and a
-  payDate per material line) ready to drive the Business Financials cash flow feed.
+SALES terms unchanged. MATERIALS terms unchanged (still per line).
 
 BUILD: next build -> Compiled successfully.
