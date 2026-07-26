@@ -1,22 +1,22 @@
-DEPLOY NOTES - Summary page update (re-cut, current versions)
-=============================================================
+DEPLOY NOTES - Site App: "Back to forms" really returns to the forms list
+=========================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/business-financials.js       (the Summary page)
-  pages/api/business-financials.js   (API)
+THREE files, all EDITS - just replace them.
+  pages/forms/index.js    (forms list is now a real URL state)
+  pages/forms/fill.js     (Back to forms goes to the list)
+  pages/forms/browse.js   (tags forms opened from the CM browse list)
 
-WHY RE-CUT
-  This is the Summary page update you hadn't deployed yet. Because you've deployed
-  everything else since, these are the CURRENT versions of both files - they include
-  the summary changes AND all the later API changes (project cash-flow forecasts,
-  12-month lumps, etc.), so deploying them will NOT revert anything.
+WHY THE FIRST FIX DIDN'T WORK
+  On the Site App the forms LIST isn't a separate page - it's a "mode" inside the
+  /forms home screen. So going back just reloaded /forms, which always opens on the
+  HOME menu, not the list. router.back() couldn't help because there was no separate
+  list URL to return to.
 
-WHAT'S IN IT (Summary page)
-  - KPI cards (current FY, year to date): Gross margin, Net margin, Overheads % of
-    revenue, and Monthly overheads (last full month).
-  - Sales - 2 years line chart with trend line + a monthly sales bar chart.
-  - Gross margin and Net margin line charts, each with a trend line.
-  - Cost of sale by category pie relabelled (real Labour / Materials / Overheads spend).
-  API adds netMarginPct + overheadPct to the monthly series (used by the cards/charts).
-
-BUILD: next build -> Compiled successfully.
+FIX
+  - The home screen now records the current view in the URL (/forms?mode=forms for the
+    forms list, ?mode=drawings, ?mode=rams). Returning to that URL restores the list
+    instead of the home menu.
+  - "Back to forms" on a form now goes to the forms list:
+      * opened from the operative forms list -> /forms?mode=forms
+      * opened from the CM browse list       -> /forms/browse
+  BUILD: next build -> Compiled successfully.

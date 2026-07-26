@@ -172,6 +172,18 @@ export default function FormsHome() {
 function FormsHomeMenu({ user }) {
   const router = useRouter()
   const [mode, setMode] = useState('menu')  // menu | forms | details
+  // Keep the current view in the URL so returning to /forms?mode=forms (e.g. Back to
+  // forms from a form) restores the forms list rather than the home menu.
+  useEffect(() => {
+    const q = router.query.mode
+    if (q && q !== mode) setMode(String(q))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.query.mode])
+  const goMode = (m) => {
+    setMode(m)
+    const url = m === 'menu' ? '/forms' : `/forms?mode=${m}`
+    router.push(url, undefined, { shallow: true })
+  }
   const [myProjectCount, setMyProjectCount] = useState(0)
   const [myProjectNos, setMyProjectNos] = useState(new Set())
   const [issueActionCount, setIssueActionCount] = useState(0)
@@ -240,25 +252,25 @@ function FormsHomeMenu({ user }) {
   // CM sections are gated by the Site App access level ONLY. Name-matching still
   // decides which projects are "theirs", but does not grant CM access.
   const isCM = user?.accessLevel === 'contracts-manager'
-  if (mode === 'forms') return <FormsList user={user} onBack={() => setMode('menu')} />
-  if (mode === 'drawings') return <ProjectDetailsView only="drawings" onBack={() => setMode('menu')} />
-  if (mode === 'rams') return <ProjectDetailsView only="rams" onBack={() => setMode('menu')} />
+  if (mode === 'forms') return <FormsList user={user} onBack={() => goMode('menu')} />
+  if (mode === 'drawings') return <ProjectDetailsView only="drawings" onBack={() => goMode('menu')} />
+  if (mode === 'rams') return <ProjectDetailsView only="rams" onBack={() => goMode('menu')} />
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h2 style={{ fontSize: 20, color: INK, margin: '8px 0 4px' }}>Hi {(user.name || '').split(' ')[0] || 'there'} 👋</h2>
       <p style={{ color: '#777', fontSize: 14, margin: '0 0 20px' }}>What would you like to do?{isCM && <span style={{ marginLeft: 8, background: '#eef2ff', color: '#3730a3', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Contracts Manager</span>}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <button onClick={() => setMode('forms')} style={homeCard}>
+        <button onClick={() => goMode('forms')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📝</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Complete a Form</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Site diaries, checklists, reports</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
-        <button onClick={() => setMode('drawings')} style={homeCard}>
+        <button onClick={() => goMode('drawings')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📁</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>Drawings</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Drawings for your project</div></div>
           <div style={{ color: BRAND, fontSize: 24 }}>›</div>
         </button>
-        <button onClick={() => setMode('rams')} style={homeCard}>
+        <button onClick={() => goMode('rams')} style={homeCard}>
           <div style={{ fontSize: 30 }}>📑</div>
           <div style={{ flex: 1 }}><div style={{ fontSize: 17, fontWeight: 700, color: INK }}>RAMS</div><div style={{ fontSize: 13, color: '#888', marginTop: 2 }}>Sign your project RAMS</div></div>
           {ramsBadge > 0 && <span style={homeBadge('#dc2626')}>{ramsBadge}</span>}

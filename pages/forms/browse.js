@@ -98,7 +98,7 @@ export default function Browse() {
             <List>
               {forms.map(f => (
                 <Row key={f.id}
-                  onClick={() => router.push(`/forms/fill?form=${f.id}&project=${project.id}&pname=${encodeURIComponent((project.jobNo ? project.jobNo + ' — ' : '') + project.name)}`)}
+                  onClick={() => router.push(`/forms/fill?form=${f.id}&project=${project.id}&pname=${encodeURIComponent((project.jobNo ? project.jobNo + ' — ' : '') + project.name)}&from=browse`)}
                   title={f.title} sub={f.short} />
               ))}
             </List>
