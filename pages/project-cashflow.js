@@ -574,6 +574,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
     setRows(list => list.map(r => r.id === id ? { ...r, pctComplete: n } : r))
   }
+  // Whether every item line is already at 100% (for the header tick state).
+  const itemRows = rows.filter(r => r.kind === 'item')
+  const allHundred = itemRows.length > 0 && itemRows.every(r => num(r.pctComplete) >= 100)
+  const setAllPct = (pct) => setRows(list => list.map(r => r.kind === 'item' ? { ...r, pctComplete: pct } : r))
 
   async function save() {
     if (!from || !to) { alert('Set the period (from and to dates) for this forecast.'); return }
@@ -680,22 +684,32 @@ function HypAppModal({ modal, onClose, onSaved }) {
               </div>
 
               {/* Contract works with % complete */}
-              <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 6 }}>Contract works (enter cumulative % complete)</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Contract works (enter cumulative % complete)</div>
+                <label style={{ fontSize: 12, color: '#0f766e', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600 }}>
+                  <input type="checkbox" checked={allHundred} onChange={e => setAllPct(e.target.checked ? 100 : 0)} />
+                  All lines 100%
+                </label>
+              </div>
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', maxHeight: 320, marginBottom: 16 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead><tr style={{ background: '#faf9f7', color: '#999' }}>
                     <th style={{ textAlign: 'left', padding: '6px 10px' }}>Description</th>
                     <th style={{ textAlign: 'right', padding: '6px 10px' }}>Total</th>
+                    <th style={{ textAlign: 'center', padding: '6px 10px' }}>100%</th>
                     <th style={{ textAlign: 'right', padding: '6px 10px' }}>% complete</th>
                     <th style={{ textAlign: 'right', padding: '6px 10px' }}>Value to date</th>
                   </tr></thead>
                   <tbody>
                     {rows.map(r => r.kind === 'heading'
-                      ? <tr key={r.id}><td colSpan={4} style={{ padding: '6px 10px', fontWeight: 700, background: '#fcfbf9', color: r.red ? '#b91c1c' : INK }}>{r.description}</td></tr>
+                      ? <tr key={r.id}><td colSpan={5} style={{ padding: '6px 10px', fontWeight: 700, background: '#fcfbf9', color: r.red ? '#b91c1c' : INK }}>{r.description}</td></tr>
                       : (
                         <tr key={r.id} style={{ borderTop: '1px solid #f3f2ee' }}>
                           <td style={{ padding: '5px 10px' }}>{r.description}</td>
                           <td style={{ padding: '5px 10px', textAlign: 'right' }}>{r.total ? gbp(r.total) : ''}</td>
+                          <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                            <input type="checkbox" checked={num(r.pctComplete) >= 100} onChange={e => setPct(r.id, e.target.checked ? 100 : 0)} title="Mark this line 100%" />
+                          </td>
                           <td style={{ padding: '5px 10px', textAlign: 'right' }}>
                             <input type="number" value={r.pctComplete ?? 0} onChange={e => setPct(r.id, e.target.value)} style={{ width: 60, textAlign: 'right', border: '1px solid #ddd', borderRadius: 6, padding: '3px 6px', fontSize: 12 }} />
                           </td>

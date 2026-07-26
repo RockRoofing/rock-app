@@ -1,18 +1,14 @@
-DEPLOY NOTES - FIX: Cash Flow client-side exception
-===================================================
+DEPLOY NOTES - Forecast application: 100% ticks
+===============================================
 
-ONE file, an EDIT - replace it.
+ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
-WHAT WAS WRONG
-  The daily-totals change added a useMemo (cashByDay) AFTER the "if (loading) return",
-  so once the data loaded React ran an extra hook (rules-of-hooks violation) and the
-  page threw a client-side exception.
-
-FIX
-  Moved cashByDay above the loading return with the other hooks. No behaviour change -
-  daily in/out totals and retention releases work as intended.
-
-Deploy this over the previous "Cashflow daily totals" version.
+CHANGE
+  In the forecasted application, the contract works table now has:
+    - A per-line "100%" tick - tick to set that line to 100% complete (untick -> 0%).
+    - An "All lines 100%" tick above the table - sets every works line to 100% at once
+      (untick -> 0%). It shows ticked when all lines are already at 100%.
+  The % complete box still works for anything in between.
 
 BUILD: next build -> Compiled successfully.
