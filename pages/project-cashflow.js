@@ -556,6 +556,25 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
   const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
+  // Above-the-line budgets from rates: labour (labRate x qty) and sales (contract total).
+  const labourBudget = useMemo(() => {
+    const items = (rates && Array.isArray(rates.items)) ? rates.items : []
+    return items.filter(x => x.section === 'above' && !x.struck && x.kind !== 'heading')
+      .reduce((s, x) => s + num(x.labRate) * num(x.qty), 0)
+  }, [rates])
+  const salesBudget = useMemo(() => {
+    const items = (rates && Array.isArray(rates.items)) ? rates.items : []
+    return items.filter(x => x.section === 'above' && !x.struck && x.kind !== 'heading')
+      .reduce((s, x) => s + (x.total != null ? num(x.total) : num(x.rate) * num(x.qty)), 0)
+  }, [rates])
+
+  // Materials used across every OTHER saved forecast (to date), for the remaining figure.
+  const materialsUsedPrior = useMemo(() => {
+    let used = 0
+    for (const a of hypApps) { if (a.id === editId) continue; used += num(a.materialsThisPeriod) }
+    return used
+  }, [hypApps, editId])
+
   // Materials are CASH-TIMING ONLY - they do NOT add to revenue. So the certificate
   // maths uses contract works (+ variations) only; materials are scheduled as cash out
   // separately via each line's pay date.
@@ -748,9 +767,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Summary boxes */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-                <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong />
-                <MiniBox label="Labour this period" value={gbp(labourThisPeriod)} color="#b45309" />
-                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} />
+                <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong sub2={`${gbp(Math.max(0, salesBudget - sum.grossCurrent))} remaining`} />
+                <MiniBox label="Labour this period" value={gbp(labourThisPeriod)} color="#b45309" sub2={`${gbp(Math.max(0, labourBudget - labourToDate))} remaining`} />
+                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudget - materialsUsedPrior - materialsThisPeriod))} remaining`} />
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
 
@@ -959,12 +978,13 @@ function TermEditor({ label, term, setTerm, refDate, refLabel }) {
   )
 }
 
-function MiniBox({ label, value, sub, color, strong }) {
+function MiniBox({ label, value, sub, sub2, color, strong }) {
   return (
     <div style={{ background: strong ? '#f7faf9' : '#fff', border: strong ? '1.5px solid #0f766e' : '1px solid #e6e3dc', borderRadius: 10, padding: '10px 16px', minWidth: 150 }}>
       <div style={{ fontSize: 11, color: '#888' }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: color || INK }}>{value}</div>
       {sub && <div style={{ fontSize: 10.5, color: '#9a958c' }}>{sub}</div>}
+      {sub2 && <div style={{ fontSize: 10.5, color: '#c4c0b8' }}>{sub2}</div>}
     </div>
   )
 }

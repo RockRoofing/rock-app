@@ -1,16 +1,15 @@
-DEPLOY NOTES - Cash Flow: delete forecasted applications
-========================================================
+DEPLOY NOTES - Forecasted application: remaining budget shown
+============================================================
 
 ONE file, an EDIT - just replace it.
   pages/project-cashflow.js
 
 CHANGE
-  You can now delete a forecasted application easily:
-   - Click "View" on a forecast band (or open one), then use the new red
-     "Delete this forecast" button in the modal header. It removes the forecast and
-     closes the modal.
-   - The existing per-row "Delete" in the "View forecasts" list still works too.
-  Either way the gantt bands and daily/weekly totals refresh immediately.
-  A confirmation prompt guards against accidental deletion.
+  Under the "this period" boxes, each now shows what's REMAINING in light grey:
+    - Revenue this period   -> "<x> remaining"  (sales contract total minus gross to date)
+    - Labour this period    -> "<x> remaining"  (labour budget minus labour to date)
+    - Materials this period -> "<x> remaining"  (materials budget minus materials used
+                               across all forecasts including this one)
+  Budgets come from the project's contracted rates (above the line).
 
 BUILD: next build -> Compiled successfully.
