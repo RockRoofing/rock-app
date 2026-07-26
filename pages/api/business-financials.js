@@ -710,6 +710,7 @@ export default async function handler(req, res) {
       billCisFlags,
       receivables,
       projForecasts,
+      cashflowLumps: (await redis.get('config:cashflow-lumps').then(v => v || []).catch(() => ([]))),
       avgOverheadMonthly,
       history,
       ohBudgets,
@@ -723,6 +724,15 @@ export default async function handler(req, res) {
       billsUpdatedAt: billsStore.updatedAt || null,
       receivablesUpdatedAt: recStore.updatedAt || null,
     })
+  }
+
+  // Manual cash-flow "lumps" for future/unknown projects (12-month forecast).
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-lumps') {
+    try {
+      const lumps = Array.isArray((req.body || {}).lumps) ? req.body.lumps : []
+      await redis.set('config:cashflow-lumps', lumps)
+      return res.json({ ok: true, lumps })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 
   // Refresh live bank + credit-card balances from Xero (Balance Sheet).

@@ -1,31 +1,34 @@
-DEPLOY NOTES - 13-week cash flow: project forecast column (Phase A)
-==================================================================
+DEPLOY NOTES - 12-Month Cash Flow (Phase B)
+===========================================
 
-** Phase A of 2. Phase B (the 12-month monthly forecast + manual lumps) comes next. **
+TWO NEW FILES + TWO EDITS.
 
-THREE files, all EDITS - just replace them.
-  lib/xero.js                             (bills now capture their project tracking)
-  pages/api/business-financials.js        (serves project forecasts + overlap data)
-  pages/business-financials/cashflow.js   (new "Project forecast" column)
+NEW FILES - add via GitHub "Add file":
+  lib/cashflowEvents.js                    (shared cash-flow event helpers)
+  pages/business-financials/monthly.js     (the 12-month page)
+
+EDITS (replace):
+  components/BizNav.js                      (adds the "12-Month" tab)
+  pages/api/business-financials.js         (serves + saves manual lumps)
 
 WHAT'S NEW
-  The 13-week cash flow now has a "Project forecast" column driven by the Commercial
-  Project Cash Flow forecasts. Per week it shows the NET of forecast sales in minus
-  forecast labour + materials out, and it's folded into Net and Closing cash and the
-  13-week totals.
+  A new "12-Month" tab in Business Financials. Monthly forecast across the next 12
+  calendar months, using the SAME sources as the 13-week view but in MONTHLY buckets:
+    IN : invoices owed, retention releases, VAT refunds, project-cash-flow forecast
+         sales, manual lumps (in)
+    OUT: bills, overheads, commitments, VAT payments, CIS to HMRC, project-cash-flow
+         forecast costs, manual lumps (out)
+  Net + running closing balance per month, a chart, and a 12-month totals row.
 
-  GAP-FILL OVERLAP (no double-counting):
-   - A project's forecast SALES are suppressed in any week where that project already
-     has a REAL invoice (from Invoices Owed).
-   - A project's forecast COSTS (labour + materials) are suppressed in any week where
-     that project already has a REAL bill.
-  So as real invoices/bills come in, the forecast for that project drops off those
-  weeks automatically, leaving only the still-forecast periods.
+  GAP-FILL OVERLAP: same as the 13-week view - a project's forecast sales/costs are
+  suppressed in any MONTH where a real invoice/bill for that project exists, so the
+  forecast only fills the gaps.
 
-IMPORTANT - RE-SYNC BILLS
-  Bills now capture their Xero project (from the line-item tracking). You must run a
-  Bills sync once after deploying so existing bills pick up their project - until then
-  the cost-side overlap can't match and forecast costs won't be suppressed by bills.
-  (Sales side works immediately.)
+  MANUAL LUMPS: add revenue / labour / materials / other for future work you don't yet
+  have a project or invoice for. Each lump: In/Out, category, month, amount, comment.
+  Saved automatically (config:cashflow-lumps) and folded into the month it's assigned.
+
+NOTE: relies on Phase A being deployed (project tracking on bills + projForecasts in
+the API). Re-sync bills so the cost-side overlap matches, same as Phase A.
 
 BUILD: next build -> Compiled successfully.
