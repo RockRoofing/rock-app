@@ -1,35 +1,27 @@
-DEPLOY NOTES - H&S Incidents & Accidents section (rename) + how to seed the forms
-=================================================================================
+DEPLOY NOTES - Add missing default forms (button) so H&S forms appear
+=====================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/forms/index.js   (section header renamed)
+TWO files, both EDITS - just replace them.
+  pages/operations/forms-builder.js  (new "Add missing default forms" button)
+  pages/api/forms.js                 (minor defensive copy of the seed array)
 
-GOOD NEWS - THE FORMS ALREADY EXIST
-  The two forms you sent (ACCIDENT BOOK: H&S Incident Record, and Near Miss Report
-  Form) are ALREADY built into the app's seed set (lib/formDefsExtra.js), translated
-  into the app's own form format, with all the same sections, fields and mandatory
-  flags. A third related one (H&S Accident and Incident Report and Lessons Learnt) is
-  there too. They are tagged so they appear in a dedicated H&S section that is visible
-  to BOTH Operatives and Contracts Managers, and they show in the Form Builder as
-  editable templates.
+WHY THE H&S FORMS AREN'T SHOWING
+  Built-in "standard template" forms only auto-load when the forms store is EMPTY.
+  Your app already had forms saved before the two H&S forms were added to the code, so
+  they never got inserted into your live data - that's why they're missing from both
+  the Form Builder and the Site App.
 
-WHAT THIS PACKAGE CHANGES
-  Only the section heading in the Site App forms list is renamed from
-  "H&S Incidence Reporting" to "H&S Incidents & Accidents" (your wording).
+FIX - ONE CLICK
+  Form Builder now has an "Add missing default forms" button (top right, next to
+  "Reset to latest defaults"). Click it once after deploying. It ADDS any built-in
+  standard forms that aren't already in your list - including:
+     - ACCIDENT BOOK: H&S Incident Record
+     - Near Miss Report Form
+     - H&S Accident and Incident Report and Lessons Learnt
+  It does NOT overwrite or remove any form you've created or edited (unlike "Reset to
+  latest defaults", which replaces everything). It tells you which forms it added.
 
-IMPORTANT - MAKING THE FORMS APPEAR IF THEY AREN'T ALREADY
-  Seed forms only auto-load when the forms store is completely empty. Since the app
-  already has forms saved, if these H&S forms are not already showing you need to run a
-  ONE-OFF additive seed (it adds only missing forms, does NOT touch or overwrite any
-  form you've edited):
-
-    Send a POST to /api/forms with body:  { "action": "seed-missing" }
-
-  Easiest way: open the site while logged in, then in the browser console run:
-    fetch('/api/forms',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'seed-missing'})}).then(r=>r.json()).then(console.log)
-  The response lists which form ids were "added". Refresh the Forms list to see them.
-
-  (If they already appear in your Forms list / Form Builder, no action needed.)
+  After clicking, the H&S forms appear in the Form Builder AND in the Site App under
+  the "H&S Incidents & Accidents" section for both Operatives and Contracts Managers.
 
 BUILD: next build -> Compiled successfully.

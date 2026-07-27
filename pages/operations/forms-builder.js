@@ -48,6 +48,16 @@ export default function FormsBuilder() {
       if (r.ok) load()
     } catch {}
   }
+  async function seedMissing() {
+    try {
+      const r = await fetch('/api/forms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'seed-missing' }) })
+      const d = await r.json()
+      if (r.ok) {
+        alert((d.added && d.added.length) ? `Added ${d.added.length} standard form(s): ${d.added.join(', ')}` : 'No missing standard forms - everything is already here.')
+        load()
+      } else alert(d.error || 'Could not add default forms.')
+    } catch { alert('Could not add default forms.') }
+  }
   function editForm(f) {
     setEditing(JSON.parse(JSON.stringify(f)))  // deep copy so cancel is safe
   }
@@ -76,6 +86,7 @@ export default function FormsBuilder() {
     <OperationsShell active="/operations/forms-builder" title="Form Builder" allow={['management', 'admin']}>
       <PageHeading title="Form Builder" sub="Create and edit the forms operatives fill in the Forms App"
         action={<div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={seedMissing} style={ghostBtn}>Add missing default forms</button>
           <button onClick={reseed} style={ghostBtn}>Reset to latest defaults</button>
           <button onClick={newForm} style={primaryBtn}>+ New form</button>
         </div>} />

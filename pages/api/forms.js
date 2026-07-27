@@ -9,8 +9,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     let forms = await getForms()
     if (!forms || !forms.length) {
-      forms = SEED_FORMS
-      // Persist the seed so the builder can edit them going forward.
+      forms = [...SEED_FORMS]
       try { await saveForms(forms) } catch {}
     }
     const { id } = req.query
