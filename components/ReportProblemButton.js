@@ -12,6 +12,7 @@ export default function ReportProblemButton() {
   const [userEmail, setUserEmail] = useState('')
   const [page, setPage] = useState('')
   const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState('medium')
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
@@ -21,7 +22,7 @@ export default function ReportProblemButton() {
   }, [])
 
   useEffect(() => {
-    const h = () => { setPage(router.asPath || ''); setDescription(''); setDone(false); setErr(''); setOpen(true) }
+    const h = () => { setPage(router.asPath || ''); setDescription(''); setPriority('medium'); setDone(false); setErr(''); setOpen(true) }
     window.addEventListener('open-report-problem', h)
     return () => window.removeEventListener('open-report-problem', h)
   }, [router.asPath])
@@ -35,7 +36,7 @@ export default function ReportProblemButton() {
     try {
       const r = await fetch('/api/report-problem', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName, userEmail, platform: 'Portal', page: page || router.asPath, description }),
+        body: JSON.stringify({ userName, userEmail, platform: 'Portal', page: page || router.asPath, description, priority }),
       })
       let d = {}; try { d = await r.json() } catch {}
       if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
@@ -61,6 +62,15 @@ export default function ReportProblemButton() {
             <Field label="Your name"><input value={userName} onChange={e => setUserName(e.target.value)} style={inp} placeholder="Your name" /></Field>
             <Field label="Where"><input value="Portal" readOnly style={{ ...inp, background: '#f7f6f3', color: '#888' }} /></Field>
             <Field label="Page where the issue happened"><input value={page} onChange={e => setPage(e.target.value)} style={inp} placeholder="e.g. Operations › Live Tasks" /></Field>
+            <Field label="Priority">
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['low', 'Low', '#16a34a'], ['medium', 'Medium', '#d97706'], ['high', 'High', '#dc2626']].map(([val, lbl, col]) => (
+                  <button key={val} type="button" onClick={() => setPriority(val)}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                      border: `2px solid ${priority === val ? col : '#e0e0e0'}`, background: priority === val ? col : '#fff', color: priority === val ? '#fff' : '#666' }}>{lbl}</button>
+                ))}
+              </div>
+            </Field>
             <Field label="Describe the improvement / problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...inp, resize: 'vertical' }} placeholder="What would you like improved, or what went wrong?" /></Field>
             {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
             <button onClick={submit} disabled={sending} style={{ ...btnPrimary, opacity: sending ? 0.6 : 1 }}>{sending ? 'Sending…' : 'Send'}</button>

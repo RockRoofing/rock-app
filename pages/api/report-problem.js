@@ -37,8 +37,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const { userName, userEmail, platform, page, description } = req.body || {}
+    const { userName, userEmail, platform, page, description, priority } = req.body || {}
     if (!description || !description.trim()) return res.status(400).json({ error: 'Please describe the improvement.' })
+    const prio = ['low', 'medium', 'high'].includes(priority) ? priority : 'medium'
 
     const report = {
       id: `prob_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
@@ -47,6 +48,7 @@ export default async function handler(req, res) {
       platform: platform || 'Portal',
       page: (page || '').trim(),
       description: description.trim(),
+      priority: prio,
       comments: '',
       createdAt: Date.now(),
       status: 'open',

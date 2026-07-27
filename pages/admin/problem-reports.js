@@ -113,7 +113,14 @@ export default function AppImprovementsPage() {
                         {' · '}<span style={{ background: r.platform === 'Site App' ? '#eef2ff' : '#f0fdf4', color: r.platform === 'Site App' ? '#3730a3' : '#166534', borderRadius: 12, padding: '1px 8px', fontSize: 11, fontWeight: 600 }}>{r.platform}</span>
                         {' · '}{fmt(r.createdAt)}
                       </div>
-                      <span style={{ color: stColor, fontWeight: 700, fontSize: 12.5 }}>{stLabel}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {(() => { const p = r.priority || 'medium'; const m = { low: ['Low', '#16a34a', '#dcfce7'], medium: ['Medium', '#b45309', '#fef3c7'], high: ['High', '#dc2626', '#fee2e2'] }[p] || ['Medium', '#b45309', '#fef3c7']; return (
+                          <span title={`${m[0]} priority`} style={{ background: m[2], color: m[1], borderRadius: 12, padding: '2px 10px', fontSize: 11.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 4, background: m[1], display: 'inline-block' }} />{m[0]}
+                          </span>
+                        ) })()}
+                        <span style={{ color: stColor, fontWeight: 700, fontSize: 12.5 }}>{stLabel}</span>
+                      </div>
                     </div>
                     {r.page && <div style={{ fontSize: 12.5, color: '#999', marginTop: 6 }}>Page: {r.page}</div>}
                     <div style={{ fontSize: 14, color: '#1a1a19', marginTop: 8, whiteSpace: 'pre-wrap' }}>{r.description}</div>

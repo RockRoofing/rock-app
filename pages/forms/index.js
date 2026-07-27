@@ -329,6 +329,7 @@ function SiteAppReportProblem({ user }) {
   const [open, setOpen] = useState(false)
   const [page, setPage] = useState('')
   const [description, setDescription] = useState('')
+  const [priority, setPriority] = useState('medium')
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
@@ -339,7 +340,7 @@ function SiteAppReportProblem({ user }) {
     try {
       const r = await fetch('/api/report-problem', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName: user?.name || '', userEmail: user?.email || '', platform: 'Site App', page, description }),
+        body: JSON.stringify({ userName: user?.name || '', userEmail: user?.email || '', platform: 'Site App', page, description, priority }),
       })
       let d = {}; try { d = await r.json() } catch {}
       if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
@@ -349,7 +350,7 @@ function SiteAppReportProblem({ user }) {
 
   return (
     <div style={{ marginTop: 28, textAlign: 'center' }}>
-      <button onClick={() => { setPage(''); setDescription(''); setDone(false); setErr(''); setOpen(true) }}
+      <button onClick={() => { setPage(''); setDescription(''); setPriority('medium'); setDone(false); setErr(''); setOpen(true) }}
         style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
         ⚠ Report app improvement
       </button>
@@ -372,6 +373,15 @@ function SiteAppReportProblem({ user }) {
                 <RpField label="Your name"><input value={user?.name || ''} readOnly style={{ ...rpInp, background: '#f7f6f3', color: '#888' }} /></RpField>
                 <RpField label="Where"><input value="Site App" readOnly style={{ ...rpInp, background: '#f7f6f3', color: '#888' }} /></RpField>
                 <RpField label="Page where the issue happened"><input value={page} onChange={e => setPage(e.target.value)} style={rpInp} placeholder="e.g. Deliveries" /></RpField>
+                <RpField label="Priority">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[['low', 'Low', '#16a34a'], ['medium', 'Medium', '#d97706'], ['high', 'High', '#dc2626']].map(([val, lbl, col]) => (
+                      <button key={val} type="button" onClick={() => setPriority(val)}
+                        style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                          border: `2px solid ${priority === val ? col : '#e0e0e0'}`, background: priority === val ? col : '#fff', color: priority === val ? '#fff' : '#666' }}>{lbl}</button>
+                    ))}
+                  </div>
+                </RpField>
                 <RpField label="Describe the problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...rpInp, resize: 'vertical' }} placeholder="What went wrong?" /></RpField>
                 {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
                 <button onClick={submit} disabled={sending} style={bigBtn(sending)}>{sending ? 'Sending…' : 'Send report'}</button>

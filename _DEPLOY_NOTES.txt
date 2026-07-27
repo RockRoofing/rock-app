@@ -1,16 +1,23 @@
-DEPLOY NOTES - Issues: photos no longer mandatory
-==================================================
+DEPLOY NOTES - Site App Improvements: priority rating (Low/Medium/High)
+=======================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/forms/issue.js                              (Site App - raise an issue)
-  pages/operations/project-management/issues.js     (Project Management - create issue)
+FOUR files, all EDITS - just replace them.
+  components/ReportProblemButton.js    (Portal "Report app improvement" modal)
+  pages/forms/index.js                 (Site App "Report app improvement" modal)
+  pages/api/report-problem.js          (stores the priority)
+  pages/admin/problem-reports.js       (the log - shows the flag)
 
-CHANGE
-  Creating an issue no longer requires a photo, in BOTH places:
-   - Site App "Raise an issue": the "Attach at least one photo" validation is removed
-     and the Photos label now reads "Photos (optional)".
-   - Project Management "New issue": the "Attach at least one photo" validation is
-     removed.
-  You can still add photos - they're just no longer required to submit.
+WHAT'S NEW
+  When reporting a Site App improvement (from the Portal or the Site App), the user now
+  picks a PRIORITY: Low / Medium / High (defaults to Medium). Buttons are colour-coded
+  green / amber / red.
+
+  On the Site App Improvement log (Admin -> Site App Improvements), each entry now shows
+  a coloured priority flag next to its status:
+    green  = Low
+    amber  = Medium
+    red    = High
+
+  Existing reports with no priority saved show as Medium (amber).
 
 BUILD: next build -> Compiled successfully.
