@@ -1,25 +1,26 @@
-DEPLOY NOTES - Project Concern invites: always UK time
-======================================================
+DEPLOY NOTES - Site App: stop doubling the project number
+=========================================================
 
 TWO files, both EDITS - just replace them.
-  pages/api/concern-invite.js     (calendar invite now pinned to UK time)
-  components/ProjectConcerns.js    ("UK time" label + help text)
+  lib/cmSiteApp.js          (shared project picker + header - used by Schedule of
+                             Works and the CM Site App screens)
+  pages/forms/deliveries.js (Deliveries project list + header)
 
-THE PROBLEM
-  Calendar invites used "floating" time with no timezone, so each attendee's calendar
-  read the time in THEIR OWN timezone. Staff outside the UK saw the wrong time.
+THE ISSUE
+  On first entering Schedule of Works and Deliveries, the project number showed twice -
+  once in the "Project No" and again inside the project name (Xero names are stored
+  like "J203 - Hollis Croft").
 
-FIX
-  The invite now sends the meeting time as UK time (Europe/London) with a proper
-  timezone definition (handles GMT/BST automatically). Every attendee - anywhere in the
-  world - now sees the meeting converted correctly to their local time from the UK time
-  you chose.
+FIX (display only)
+  A shared projectLabel() helper now shows the number once, then the name with any
+  redundant leading number stripped (e.g. "J203 — Hollis Croft" instead of
+  "J203 — J203 - Hollis Croft"). Names without the number are shown unchanged.
 
-  The concern page now shows a "UK time" label next to the time field and notes that
-  attendees elsewhere will see it in their local time.
+  This is purely how the label is displayed. The underlying projectNo / projectName /
+  key values used for selecting a project, filtering, and every linked item are NOT
+  changed - so nothing in the Site App or any linked area is affected.
 
-NOTE: this affects NEW/updated invites sent after deploy. Any invites already sent
-before this will keep their old (floating) time until the meeting date/time is changed
-and a new invite goes out.
+  Because the shared picker is also used by the CM Site App screens (variations,
+  pre-start, applications, etc.), those get the same tidy-up automatically.
 
 BUILD: next build -> Compiled successfully.

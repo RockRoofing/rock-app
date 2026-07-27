@@ -3,6 +3,7 @@ import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import { Shell, bigBtn } from './index'
 import { AttachmentViewer, downloadFile } from '../../components/RowAttachments'
+import { projectLabel } from '../../lib/cmSiteApp'
 
 const INK = '#1a1a19'
 const BRAND = '#ca8a04'
@@ -102,7 +103,7 @@ export default function DeliveriesView() {
                       style={{ display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', background: '#fff', border: '1px solid #e3e0d9', borderRadius: 14, padding: '16px', cursor: 'pointer', width: '100%' }}>
                       <div style={{ fontSize: 22 }}>📦</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{p.projectNo}{p.projectName && p.projectName !== p.projectNo ? ` — ${p.projectName}` : ''}</div>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: INK }}>{projectLabel(p.projectNo, p.projectName)}</div>
                       </div>
                       {scheduledByProject[p.key] > 0 && <span style={{ background: '#dc2626', color: '#fff', borderRadius: 20, minWidth: 24, height: 24, padding: '0 7px', fontSize: 13, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{scheduledByProject[p.key]}</span>}
                       <div style={{ color: BRAND, fontSize: 20 }}>›</div>
@@ -115,7 +116,7 @@ export default function DeliveriesView() {
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0 12px' }}>
               <button onClick={() => setProjectNo('')} style={{ background: '#f2f2f0', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer', color: '#555' }}>‹ Projects</button>
-              <div style={{ fontWeight: 700, color: INK, fontSize: 15 }}>{selProject?.projectNo}{selProject?.projectName && selProject.projectName !== selProject.projectNo ? ` — ${selProject.projectName}` : ''}</div>
+              <div style={{ fontWeight: 700, color: INK, fontSize: 15 }}>{projectLabel(selProject?.projectNo, selProject?.projectName)}</div>
             </div>
 
             {/* Scheduled / Delivered filter (default Scheduled) */}
