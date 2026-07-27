@@ -61,6 +61,22 @@ const departments = [
     ),
   },
   {
+    key: 'design',
+    label: 'Design',
+    description: 'Drawings, RFIs, technical submissions, O&Ms & warranties',
+    href: '/design',
+    color: '#7c3aed',
+    lightColor: '#f5f3ff',
+    borderColor: '#ddd6fe',
+    icon: (
+      <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <path d="M8 30 L20 8 L32 30 Z" stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round" fill="none"/>
+        <line x1="13" y1="30" x2="27" y2="30" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+        <circle cx="20" cy="24" r="2.5" stroke="#7c3aed" strokeWidth="1.6" fill="none"/>
+      </svg>
+    ),
+  },
+  {
     key: 'lessons-learnt',
     label: 'Lessons Learnt',
     description: 'Shared learnings and continuous improvement',

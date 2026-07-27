@@ -1,32 +1,26 @@
-DEPLOY NOTES - Force the H&S incident forms to always be present
-===============================================================
+DEPLOY NOTES - Design Portal PHASE 1: Designer role + Design area
+================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/api/forms.js
+Part 1 of a phased build of the Design Portal.
 
-WHY THEY WEREN'T APPEARING
-  The H&S forms live in the code correctly, but they were never inserted into your live
-  saved forms (seeding only ran when the form store was first created, before these
-  forms existed). The manual "Add missing default forms" button relied on being clicked
-  after the deploy landed, which is easy to miss.
+FILES
+  EDIT: lib/roles.js            (new "designer" role + "design" area access)
+  EDIT: pages/index.js          (new Design card on the portal home)
+  EDIT: pages/admin.js          (helper text mentions Designer)
+  NEW : pages/design/index.js   (Design portal landing page)  <-- ADD via GitHub
 
-FIX - AUTOMATIC, NO BUTTON NEEDED
-  The forms API now ALWAYS ensures the three mandatory H&S incident/accident forms are
-  present whenever the forms list loads:
-     - ACCIDENT BOOK: H&S Incident Record
-     - Near Miss Report Form
-     - H&S Accident and Incident Report and Lessons Learnt
-  If any are missing from your live set, they are added automatically. This is scoped
-  to ONLY these H&S compliance forms, so it never touches or resurrects any other form
-  you have created, edited or deleted.
+WHAT THIS DOES
+  - Adds a new permission level "Designer" (selectable in Admin > Users; it appears in
+    the role dropdown automatically).
+  - Designer can access ONLY the Design area - nothing else. Standard Post-Contract
+    (plus Management and Admin) also get access to Design, as requested.
+  - New "Design" card on the portal home, shown only to those roles.
+  - New /design landing page listing the portal's pages. Each page is a placeholder
+    ("SOON") for now - the pages themselves are built in later phases. Internal-only
+    tools (Tech Sub Builder, Leak Test Cert Builder) are hidden from non-internal users.
 
-AFTER DEPLOY
-  Just open the Form Builder (or the Site App Forms list) once - the H&S forms will be
-  there. They appear in the Site App under "H&S Incidents & Accidents" for both
-  Operatives and Contracts Managers.
-
-  IMPORTANT: this works together with the earlier section-rename file
-  (HS_incidents_section.zip / pages/forms/index.js). If you haven't deployed that one
-  yet, deploy it too so the Site App section shows and is labelled correctly.
+WHAT'S NOT IN THIS PHASE (coming next)
+  Permissions matrix, external customer users, then each Design page in turn (RFIs,
+  drawings + markup, tech sub builder/view, calculations, leak tests, warranties, O&Ms).
 
 BUILD: next build -> Compiled successfully.
