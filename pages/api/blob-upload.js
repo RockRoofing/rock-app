@@ -23,7 +23,7 @@ export default async function handler(req, res) {
           'application/octet-stream',
           'text/plain', 'text/csv',
         ],
-        maximumSizeInBytes: 50 * 1024 * 1024, // 50MB
+        maximumSizeInBytes: 200 * 1024 * 1024, // 200MB (large Tech Subs / drawing sets)
         addRandomSuffix: true,
       }),
       onUploadCompleted: async () => {},

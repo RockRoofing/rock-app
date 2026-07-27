@@ -12,14 +12,14 @@ const PURPLE = '#7c3aed'
 const PAGES = [
   { key: 'rfis', label: "RFIs", href: '/design/rfis', desc: 'Track Requests for Information', soon: true },
   { key: 'tech-sub-builder', label: 'Tech Sub Builder', href: '/design/tech-sub-builder', desc: 'Build technical submissions from the document library', internalOnly: true, soon: true },
-  { key: 'tech-sub', label: 'Tech Sub', href: '/design/tech-sub', desc: 'View the latest technical submission', soon: true },
+  { key: 'tech-sub', label: 'Tech Sub', href: '/design/tech-sub', desc: 'View the latest technical submission' },
   { key: 'contract-drawings', label: 'Contract Drawings', href: '/design/contract-drawings', desc: 'Architect contract drawings', soon: true },
   { key: 'rock-drawings', label: 'Rock Drawings', href: '/design/rock-drawings', desc: 'Our own drawings, markup & comments', soon: true },
-  { key: 'calculations', label: 'Calculations', href: '/design/calculations', desc: 'Wind load, U-value, pull-out tests, moisture maps & reports', soon: true },
+  { key: 'calculations', label: 'Calculations', href: '/design/calculations', desc: 'Wind load, U-value, pull-out tests, moisture maps & reports' },
   { key: 'leak-test-builder', label: 'Leak Test Cert Builder', href: '/design/leak-test-builder', desc: 'Build leak test certificates', internalOnly: true, soon: true },
-  { key: 'leak-test-certs', label: 'Leak Test Certs', href: '/design/leak-test-certs', desc: 'View & download leak test certificates', soon: true },
-  { key: 'warranties', label: 'Warranties', href: '/design/warranties', desc: 'Manufacturer warranty documents', soon: true },
-  { key: 'oms', label: "O&Ms", href: '/design/oms', desc: 'Operation & Maintenance manuals', soon: true },
+  { key: 'leak-test-certs', label: 'Leak Test Certs', href: '/design/leak-test-certs', desc: 'View & download leak test certificates' },
+  { key: 'warranties', label: 'Warranties', href: '/design/warranties', desc: 'Manufacturer warranty documents' },
+  { key: 'oms', label: "O&Ms", href: '/design/oms', desc: 'Operation & Maintenance manuals' },
 ]
 
 export default function DesignHome() {

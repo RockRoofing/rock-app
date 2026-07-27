@@ -1,33 +1,35 @@
-DEPLOY NOTES - Design Portal PHASE 3: External customer users
-=============================================================
+DEPLOY NOTES - Design Portal PHASE 4: shell + 5 document pages
+==============================================================
 
-NEW FILES - add these via GitHub "Add file":
-  lib/designUsers.js                    (external user store + helpers)
-  pages/api/design-customers.js         (admin API for external users)
-  pages/admin/design-customers.js       (admin UI: manage customers)
+NEW FILES - add via GitHub "Add file":
+  lib/designShell.js                   (shared auth/project-picker/sub-nav)
+  components/DesignDocsPage.js          (reusable document page)
+  pages/api/design-files.js            (document store API, project-scoped, view-only)
+  pages/design/warranties.js
+  pages/design/oms.js
+  pages/design/calculations.js
+  pages/design/tech-sub.js
+  pages/design/leak-test-certs.js
 
 EDITS - replace:
-  pages/api/portal-auth.js   (login + me + password reset now handle external users)
-  pages/admin.js             (new "Design Customers" tab in the admin nav)
-  pages/index.js             (external users are sent straight to /design)
-  pages/design/index.js      (external users are allowed into the Design portal)
+  pages/api/blob-upload.js   (raise max upload to 200MB for large Tech Subs)
+  pages/design/index.js      (these 5 pages now live; others still "SOON")
 
 WHAT THIS DOES
-  - Adds EXTERNAL customer / design-team logins, kept in a SEPARATE store from internal
-    users so they can never inherit any internal role or area.
-  - Admin > Design Customers: add a customer with name, email, company, phone, set which
-    PROJECTS they can access (tick list - multiple allowed), active toggle. Creating one
-    gives a temporary password to share; they're forced to set their own on first login.
-  - Reset password / edit / delete per customer.
-  - HARD RULE ENFORCED: external users must be scoped to specific projects. There is no
-    "all projects" option, and the API rejects any attempt to save one with no projects
-    or with an "all"/"*" value - now and in future.
-  - External users log in on the SAME login page (email + password). On login they are
-    taken straight to the Design portal and cannot reach any internal area.
+  Five working Design pages, all sharing one shell (purple sub-nav + project picker):
+    - Warranties, O&Ms, Calculations, Leak Test Certs: upload / list / view / download.
+    - Tech Sub: viewer of the current submission at the top, table of versions below.
+      Uploading a NEW Tech Sub automatically marks the previous one as "Revised"; you
+      can also "Make current" an older one.
+  Files upload directly to storage (handles very large docs).
 
-WHAT'S NOT YET WIRED (comes with the Design pages in later phases)
-  The per-project scoping and "view/comment/approve/download only" behaviour is enforced
-  on each Design PAGE as it's built (RFIs, drawings, etc.). This phase establishes the
-  identity, login and admin; the pages consume it next.
+  ACCESS RULES (enforced server-side in design-files API):
+    - Internal (Designer / Post-Contract / Management / Admin): upload, view, download,
+      delete.
+    - External customers: VIEW & DOWNLOAD ONLY, and ONLY for the projects they are
+      scoped to. Any request for a project they aren't assigned is rejected.
+
+  Each page has a project picker showing only the projects the user may access
+  (all projects for internal; scoped list for customers).
 
 BUILD: next build -> Compiled successfully.
