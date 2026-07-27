@@ -1,33 +1,53 @@
-DEPLOY NOTES - Design Portal PHASE 5: RFIs
-==========================================
+DEPLOY NOTES - Design Portal: Rock Drawings + Markup + Contract Drawings
+=======================================================================
 
-NEW FILE - add via GitHub "Add file":
-  pages/api/design-rfis.js
+** IMPORTANT - NEW DEPENDENCY **
+  package.json now includes "pdfjs-dist" (used to read drawing title blocks). You MUST
+  deploy the updated package.json so Vercel installs it. If you add the pages but NOT
+  package.json, the build will fail. Replace package.json first.
 
-EDIT (replace the placeholder):
-  pages/design/[project]/rfis.js
+NEW FILES - add via GitHub "Add file":
+  pages/api/design-drawings.js         (drawings store: grid, status, markup, comments)
+  pages/api/design-titleblock.js       (reads title-block info from a PDF)
+  components/DrawingMarkup.js           (the on-drawing markup editor)
+  components/DesignDrawingsPage.js      (shared Rock + Contract drawings page)
 
-WHAT THIS DOES - the full RFI feature (bones), inside a project's Design workspace:
-  - Table of RFIs with: RFI number (auto-assigned RFI-001, 002...), Issued date (auto
-    when created), Description (expands vertically as you type), Required-by date with a
-    TRAFFIC LIGHT (orange = due within 5 days, red = overdue, nothing when fine or
-    resolved - no green, as requested), Customer responsible (dropdown of the external
-    customer users assigned to THIS project), Status (Open / Resolved), comment count.
-  - + Add RFI: description, required date, responsible customer, attach files.
-  - Click a row to open the RFI: full details, attachments, mark resolved / re-open,
-    edit, delete, and a COMMENT THREAD.
-  - Comments: rich text (Bold / Italic / Underline) and @mentions (type @ to pick a
-    person - internal Design users or the project's customer users). Every comment
-    records who wrote it and the date/time. Customer comments are tagged "Customer".
+EDITS - replace:
+  package.json                              (adds pdfjs-dist - see above)
+  pages/design/[project]/rock-drawings.js   (was placeholder)
+  pages/design/[project]/contract-drawings.js (was placeholder)
 
-ACCESS (enforced server-side):
-  - Internal (Designer / Post-Contract / Management / Admin): full - create, edit,
-    resolve, delete, comment.
-  - External customers: VIEW + COMMENT only, and only on their assigned projects. They
-    cannot create/edit/resolve/delete.
+WHAT THIS DOES
 
-NOTE: this is the working "bones" - deploy, try it, then tell me what to refine.
-The @mention currently inserts a styled name token in the comment; wiring mentions to
-notifications (email/alerts) is a later refinement if you want it.
+ROCK DRAWINGS (grid, like the Ops drawings layout)
+  - Thumbnail cards; drawing STATUS shown below the thumbnail.
+  - Status defaults to "In Review"; can be moved to "Approved" or "Construction Issue"
+    (dropdown on the card, or inside the drawing).
+  - Upload drawings (internal only). Customers cannot upload.
+  - Click a drawing -> opens the drawing with a COMMENTS section below.
+  - Both Rock and the customer can comment (rich text + @mentions, author + time
+    recorded, customer comments tagged).
+  - ON-DRAWING MARKUP: arrows, boxes, circles, lines, freehand, and text call-outs.
+    Each has a changeable COLOUR, OPACITY and line THICKNESS. Undo, delete a selected
+    shape, and Save markup. Both Rock and the customer can mark up.
+
+CONTRACT DRAWINGS (table)
+  - Upload PDF drawings; the app reads the TITLE BLOCK and fills in Architect,
+    Reference, Project, Revision, Status and Date automatically where it can.
+  - "Edit info" lets you check/correct any field (title blocks vary between architects,
+    so treat the auto-read values as a best-effort starting point).
+  - Click a drawing to open, comment and (for image drawings) mark up.
+
+ACCESS (server-enforced)
+  - Internal: upload, status, edit info, delete, comment, markup.
+  - Customers: view, download, comment and markup only - no upload/delete, scoped to
+    their projects.
+
+HONEST NOTES (bones - refine after you walk it)
+  - Markup draws on IMAGE drawings (PNG/JPG). PDF/DWG drawings open in a tab to view;
+    on-PDF markup is a later refinement.
+  - Title-block auto-read is best-effort and will need tuning once you try it on your
+    real architects' drawings - that's expected; the Edit info fields are the safety net.
+  - Tech Sub Builder, Leak Test Cert Builder and O&M auto-assembly remain "coming soon".
 
 BUILD: next build -> Compiled successfully.
