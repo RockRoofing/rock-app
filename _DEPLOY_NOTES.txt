@@ -1,21 +1,25 @@
-DEPLOY NOTES - Flaggable items: no "office will call" wording
-=============================================================
+DEPLOY NOTES - Project Concern invites: always UK time
+======================================================
 
 TWO files, both EDITS - just replace them.
-  pages/forms/fill.js               (form completion)
-  pages/operations/forms-builder.js (form builder)
+  pages/api/concern-invite.js     (calendar invite now pinned to UK time)
+  components/ProjectConcerns.js    ("UK time" label + help text)
 
-CHANGES
-1. When filling a form and selecting a flaggable answer, the amber
-   "This will notify the office to call you" message is REMOVED. The onus stays on the
-   operative to call their Contracts Manager - we don't tell them the office will call.
-2. The submit button no longer says "Submit & notify office" - it now just says
-   "Submit form".
-3. In the FORM BUILDER, the flaggable-answer setting is reworded from "Notify office
-   when this answer is chosen" to "Flag on the Forms page when this answer is chosen",
-   and the field summary tag changed from "notifies office" to "flags on Forms page".
+THE PROBLEM
+  Calendar invites used "floating" time with no timezone, so each attendee's calendar
+  read the time in THEIR OWN timezone. Staff outside the UK saw the wrong time.
 
-  (The flag itself still works exactly as before - flagged answers still show as a
-   flag on the Ops Forms page and in the submission detail.)
+FIX
+  The invite now sends the meeting time as UK time (Europe/London) with a proper
+  timezone definition (handles GMT/BST automatically). Every attendee - anywhere in the
+  world - now sees the meeting converted correctly to their local time from the UK time
+  you chose.
+
+  The concern page now shows a "UK time" label next to the time field and notes that
+  attendees elsewhere will see it in their local time.
+
+NOTE: this affects NEW/updated invites sent after deploy. Any invites already sent
+before this will keep their old (floating) time until the meeting date/time is changed
+and a new invite goes out.
 
 BUILD: next build -> Compiled successfully.

@@ -472,10 +472,11 @@ function MeetingModal({ initial, users, projectNo, projectName, allTasks, allRis
           {f.anotherMeeting === 'yes' && (
             <div style={{ marginTop: 12 }}>
               <L>Date & time of next meeting</L>
-              <div style={grey}>Saving with a date & time automatically sends a calendar invite to the meeting attendees (listing the risks, mitigations and actions). Changing the date/time later sends an updated invite; attendees can then edit it in their own calendar.</div>
+              <div style={grey}>Saving with a date & time automatically sends a calendar invite to the meeting attendees (listing the risks, mitigations and actions). The time is always UK time (Europe/London) - attendees in other timezones will see it converted to their local time. Changing the date/time later sends an updated invite; attendees can then edit it in their own calendar.</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <input type="date" value={f.nextMeetingDate || ''} onChange={e => set({ nextMeetingDate: e.target.value })} style={{ ...input, maxWidth: 180 }} />
                 <input type="time" value={f.nextMeetingTime || '09:00'} onChange={e => set({ nextMeetingTime: e.target.value })} style={{ ...input, maxWidth: 130 }} />
+                <span style={{ fontSize: 12.5, color: '#888', fontWeight: 600 }}>UK time</span>
                 {f.nextMeetingDate && <button onClick={() => set({ nextMeetingDate: '' })} style={linkBtn}>Clear</button>}
               </div>
             </div>

@@ -11,7 +11,8 @@ import { get, set, getPortalUsers, getLiveTasks } from '../../lib/db'
 const keyFor = (p) => `ops:concerns:${p}`
 const pad = (n) => String(n).padStart(2, '0')
 
-// Build an ICS datetime (local floating time is simplest & avoids TZ headaches):
+// Build an ICS local datetime value (no Z). Combined with TZID=Europe/London on
+// DTSTART/DTEND, the time is always treated as UK time for every attendee.
 function icsDateTime(dateStr, timeStr) {
   const [y, m, d] = (dateStr || '').split('-').map(Number)
   const [hh, mm] = (timeStr || '09:00').split(':').map(Number)
@@ -25,6 +26,31 @@ function addMinutes(dateStr, timeStr, mins) {
   return `${dt.getFullYear()}${pad(dt.getMonth() + 1)}${pad(dt.getDate())}T${pad(dt.getHours())}${pad(dt.getMinutes())}00`
 }
 const esc = (s) => (s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+
+// Europe/London timezone definition so meeting times are always interpreted as UK
+// time for every attendee (operations are UK-based, but staff are worldwide). This
+// covers GMT (winter) and BST (summer) with the correct EU/UK DST switch rules, so
+// each recipient's calendar converts UK wall-clock time to their own local time.
+const LONDON_VTIMEZONE = [
+  'BEGIN:VTIMEZONE',
+  'TZID:Europe/London',
+  'X-LIC-LOCATION:Europe/London',
+  'BEGIN:DAYLIGHT',
+  'TZOFFSETFROM:+0000',
+  'TZOFFSETTO:+0100',
+  'TZNAME:BST',
+  'DTSTART:19700329T010000',
+  'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+  'END:DAYLIGHT',
+  'BEGIN:STANDARD',
+  'TZOFFSETFROM:+0100',
+  'TZOFFSETTO:+0000',
+  'TZNAME:GMT',
+  'DTSTART:19701025T020000',
+  'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU',
+  'END:STANDARD',
+  'END:VTIMEZONE',
+]
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
@@ -110,9 +136,11 @@ export default async function handler(req, res) {
 
   const ics = [
     'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Rock Roofing//Portal//EN',
-    `METHOD:${method}`, 'BEGIN:VEVENT',
+    `METHOD:${method}`,
+    ...LONDON_VTIMEZONE,
+    'BEGIN:VEVENT',
     `UID:${uid}`, `SEQUENCE:${sequence}`, `DTSTAMP:${stamp}`,
-    `DTSTART:${dtStart}`, `DTEND:${dtEnd}`,
+    `DTSTART;TZID=Europe/London:${dtStart}`, `DTEND;TZID=Europe/London:${dtEnd}`,
     `SUMMARY:${esc(`Project Concern — ${m.projectName || projectNo}`)}`,
     `DESCRIPTION:${esc(description)}`,
     `ORGANIZER;CN=Rock Roofing:mailto:${ORGANISER}`,
