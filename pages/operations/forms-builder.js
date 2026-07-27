@@ -176,7 +176,7 @@ function Editor({ form, setForm, onSave, onCancel, saving }) {
                 <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>
                   {FIELD_TYPES.find(t => t.id === f.type)?.label || f.type}
                   {HAS_OPTIONS.includes(f.type) && f.options ? ` · ${f.options.length} options` : ''}
-                  {f.notifyOn ? ' · notifies office' : ''}
+                  {f.notifyOn ? ' · flags on Forms page' : ''}
                 </div>
               </div>
               <button onClick={() => setFieldModal({ index: i, field: JSON.parse(JSON.stringify(f)) })} style={linkBtn}>Edit</button>
@@ -241,7 +241,7 @@ function FieldEditor({ init, index, onSave, onClose }) {
         <>
           <Lbl>Options (one per line)</Lbl>
           <textarea value={optsText} onChange={e => setOptsText(e.target.value)} rows={5} style={{ ...inp2, resize: 'vertical' }} placeholder={'Yes\nNo'} />
-          <Lbl>Notify office when this answer is chosen (optional)</Lbl>
+          <Lbl>Flag on the Forms page when this answer is chosen (optional)</Lbl>
           <select value={f.notifyOn || ''} onChange={e => set({ notifyOn: e.target.value || undefined })} style={inp2}>
             <option value="">Never</option>
             {optsText.split('\n').map(s => s.trim()).filter(Boolean).map(o => <option key={o} value={o}>{o}</option>)}

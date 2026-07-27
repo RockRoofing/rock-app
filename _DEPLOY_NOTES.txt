@@ -1,17 +1,21 @@
-DEPLOY NOTES - App Improvements: priority required + priority filter
-====================================================================
+DEPLOY NOTES - Flaggable items: no "office will call" wording
+=============================================================
 
-THREE files, all EDITS - just replace them.
-  components/ReportProblemButton.js   (Portal report modal)
-  pages/forms/index.js                (Site App report modal)
-  pages/admin/problem-reports.js      (admin log - new priority filter)
+TWO files, both EDITS - just replace them.
+  pages/forms/fill.js               (form completion)
+  pages/operations/forms-builder.js (form builder)
 
 CHANGES
-1. Priority now starts with NOTHING selected (no default). The user MUST pick
-   Low / Medium / High before the report can be submitted - if they don't, they get
-   "Please select a priority." Applies to both the Portal and Site App report modals.
+1. When filling a form and selecting a flaggable answer, the amber
+   "This will notify the office to call you" message is REMOVED. The onus stays on the
+   operative to call their Contracts Manager - we don't tell them the office will call.
+2. The submit button no longer says "Submit & notify office" - it now just says
+   "Submit form".
+3. In the FORM BUILDER, the flaggable-answer setting is reworded from "Notify office
+   when this answer is chosen" to "Flag on the Forms page when this answer is chosen",
+   and the field summary tag changed from "notifies office" to "flags on Forms page".
 
-2. The App Improvements admin page now has a PRIORITY filter (All / High / Medium /
-   Low) alongside the existing User and Status filters. Reset clears it too.
+  (The flag itself still works exactly as before - flagged answers still show as a
+   flag on the Ops Forms page and in the submission detail.)
 
 BUILD: next build -> Compiled successfully.

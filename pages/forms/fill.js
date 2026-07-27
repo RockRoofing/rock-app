@@ -318,7 +318,7 @@ export default function Fill() {
           </>
         ) : (
           <button onClick={submit} disabled={submitting} style={{ ...bigBtn(submitting), marginTop: 20 }}>
-            {submitting ? 'Submitting…' : 'Submit & notify office'}
+            {submitting ? 'Submitting…' : 'Submit form'}
           </button>
         )}
         <div style={{ height: 40 }} />
@@ -338,7 +338,6 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, u
     return <div style={{ background: '#f2efe8', borderRadius: 10, padding: 12, fontSize: 13, color: '#666', margin: '8px 0' }}>{f.label}</div>
   }
 
-  const notify = f.notifyOn && value === f.notifyOn
   return (
     <div id={'f_' + f.id} style={{ margin: '16px 0' }}>
       <label style={{ display: 'block', fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>
@@ -395,11 +394,6 @@ function Field({ f, value, onChange, error, team, roster, opsUsers, projectNo, u
           : <div style={{ fontSize: 13, color: '#999', background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12 }}>{projectNo ? 'No Site App users are allocated to this project yet.' : 'Select a project first to choose allocated users.'}</div>
       })()}
 
-      {notify && (
-        <div style={{ marginTop: 8, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 10, padding: '10px 12px', fontSize: 13, color: '#92400e', fontWeight: 600 }}>
-          ⚠️ This will notify the office to call you.
-        </div>
-      )}
       {error && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 6 }}>{error}</div>}
     </div>
   )
