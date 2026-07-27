@@ -1,25 +1,17 @@
-DEPLOY NOTES - Form completion message + remove "office notified" wording
-=========================================================================
+DEPLOY NOTES - App Improvements: priority required + priority filter
+====================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/forms/fill.js    (form completion screen)
-  pages/forms/issue.js   (issue raised screen)
+THREE files, all EDITS - just replace them.
+  components/ReportProblemButton.js   (Portal report modal)
+  pages/forms/index.js                (Site App report modal)
+  pages/admin/problem-reports.js      (admin log - new priority filter)
 
 CHANGES
-1. After submitting a form, the confirmation now reads:
-     "Thank you for submitting the <Form Name> form for <Project Name>. Please ensure
-      you call your Rock Roofing Contracts Manager if there is anything that needs to
-      be resolved urgently."
-   (Pre-Start Notifications keep their existing "now send to the customer" prompt.)
+1. Priority now starts with NOTHING selected (no default). The user MUST pick
+   Low / Medium / High before the report can be submitted - if they don't, they get
+   "Please select a priority." Applies to both the Portal and Site App report modals.
 
-2. Removed "the office has been notified" wording from completion screens:
-   - The old "<form> sent to the office." line is replaced by the message above.
-   - The Site Issue "Issue raised" screen no longer says "The office has been
-     notified" - it now thanks the user and points them to their Contracts Manager for
-     anything urgent.
-
-  Note: the in-form amber warning on "call me back" type answers ("This will notify the
-  office to call you") is a pre-submit action warning, not a completion notification, so
-  it is intentionally left as-is.
+2. The App Improvements admin page now has a PRIORITY filter (All / High / Medium /
+   Low) alongside the existing User and Status filters. Reset clears it too.
 
 BUILD: next build -> Compiled successfully.

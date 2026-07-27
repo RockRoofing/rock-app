@@ -329,13 +329,14 @@ function SiteAppReportProblem({ user }) {
   const [open, setOpen] = useState(false)
   const [page, setPage] = useState('')
   const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('medium')
+  const [priority, setPriority] = useState('')
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
 
   async function submit() {
     if (!description.trim()) { setErr('Please describe the problem.'); return }
+    if (!priority) { setErr('Please select a priority.'); return }
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/report-problem', {
@@ -350,7 +351,7 @@ function SiteAppReportProblem({ user }) {
 
   return (
     <div style={{ marginTop: 28, textAlign: 'center' }}>
-      <button onClick={() => { setPage(''); setDescription(''); setPriority('medium'); setDone(false); setErr(''); setOpen(true) }}
+      <button onClick={() => { setPage(''); setDescription(''); setPriority(''); setDone(false); setErr(''); setOpen(true) }}
         style={{ background: 'none', border: 'none', color: '#9a3412', fontSize: 13, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>
         ⚠ Report app improvement
       </button>

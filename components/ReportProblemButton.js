@@ -12,7 +12,7 @@ export default function ReportProblemButton() {
   const [userEmail, setUserEmail] = useState('')
   const [page, setPage] = useState('')
   const [description, setDescription] = useState('')
-  const [priority, setPriority] = useState('medium')
+  const [priority, setPriority] = useState('')
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
@@ -22,7 +22,7 @@ export default function ReportProblemButton() {
   }, [])
 
   useEffect(() => {
-    const h = () => { setPage(router.asPath || ''); setDescription(''); setPriority('medium'); setDone(false); setErr(''); setOpen(true) }
+    const h = () => { setPage(router.asPath || ''); setDescription(''); setPriority(''); setDone(false); setErr(''); setOpen(true) }
     window.addEventListener('open-report-problem', h)
     return () => window.removeEventListener('open-report-problem', h)
   }, [router.asPath])
@@ -32,6 +32,7 @@ export default function ReportProblemButton() {
 
   async function submit() {
     if (!description.trim()) { setErr('Please describe the improvement.'); return }
+    if (!priority) { setErr('Please select a priority.'); return }
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/report-problem', {

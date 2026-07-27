@@ -11,6 +11,7 @@ export default function AppImprovementsPage() {
   const [loading, setLoading] = useState(true)
   const [fUser, setFUser] = useState('')
   const [fStatus, setFStatus] = useState('open')
+  const [fPriority, setFPriority] = useState('all')
   const [drafts, setDrafts] = useState({})   // id -> comment text being edited
   const [busy, setBusy] = useState('')
 
@@ -65,6 +66,7 @@ export default function AppImprovementsPage() {
   const rows = reports
     .filter(r => !fUser || r.userName === fUser)
     .filter(r => fStatus === 'all' ? true : (r.status || 'open') === fStatus)
+    .filter(r => fPriority === 'all' ? true : (r.priority || 'medium') === fPriority)
 
   return (
     <AdminShell active="/admin/problem-reports" allow={['management', 'admin']}>
@@ -89,7 +91,16 @@ export default function AppImprovementsPage() {
               <option value="all">All</option>
             </select>
           </div>
-          {(fUser || fStatus !== 'open') && <button onClick={() => { setFUser(''); setFStatus('open') }} style={ghost}>Reset</button>}
+          <div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>Priority</div>
+            <select value={fPriority} onChange={e => setFPriority(e.target.value)} style={sel}>
+              <option value="all">All priorities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          {(fUser || fStatus !== 'open' || fPriority !== 'all') && <button onClick={() => { setFUser(''); setFStatus('open'); setFPriority('all') }} style={ghost}>Reset</button>}
           <div style={{ flex: 1 }} />
           <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{rows.length} improvement{rows.length === 1 ? '' : 's'}</div>
         </div>
