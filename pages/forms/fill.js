@@ -249,7 +249,14 @@ export default function Fill() {
         <div style={{ maxWidth: 480, margin: '0 auto', textAlign: 'center', paddingTop: 32 }}>
           <div style={{ fontSize: 56 }}>✅</div>
           <h2 style={{ color: INK, margin: '12px 0 6px' }}>Submitted</h2>
-          <p style={{ color: '#777', fontSize: 15 }}>{isPsn ? `${form.title} saved. Now send it to the customer.` : `${form.title} sent to the office.`}</p>
+          {isPsn ? (
+            <p style={{ color: '#777', fontSize: 15 }}>{form.title} saved. Now send it to the customer.</p>
+          ) : (
+            <p style={{ color: '#555', fontSize: 15, lineHeight: 1.5 }}>
+              Thank you for submitting the {form.title} form{selectedProject ? ` for ${selectedProject.name || selectedProject.projectName || ''}` : ''}.
+              {' '}Please ensure you call your Rock Roofing Contracts Manager if there is anything that needs to be resolved urgently.
+            </p>
+          )}
           {flags.length > 0 && (
             <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 12, padding: 16, margin: '16px 0', textAlign: 'left' }}>
               <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 6 }}>⚠️ Action needed — call your manager now</div>

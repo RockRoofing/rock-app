@@ -1,23 +1,25 @@
-DEPLOY NOTES - Site App Improvements: priority rating (Low/Medium/High)
-=======================================================================
+DEPLOY NOTES - Form completion message + remove "office notified" wording
+=========================================================================
 
-FOUR files, all EDITS - just replace them.
-  components/ReportProblemButton.js    (Portal "Report app improvement" modal)
-  pages/forms/index.js                 (Site App "Report app improvement" modal)
-  pages/api/report-problem.js          (stores the priority)
-  pages/admin/problem-reports.js       (the log - shows the flag)
+TWO files, both EDITS - just replace them.
+  pages/forms/fill.js    (form completion screen)
+  pages/forms/issue.js   (issue raised screen)
 
-WHAT'S NEW
-  When reporting a Site App improvement (from the Portal or the Site App), the user now
-  picks a PRIORITY: Low / Medium / High (defaults to Medium). Buttons are colour-coded
-  green / amber / red.
+CHANGES
+1. After submitting a form, the confirmation now reads:
+     "Thank you for submitting the <Form Name> form for <Project Name>. Please ensure
+      you call your Rock Roofing Contracts Manager if there is anything that needs to
+      be resolved urgently."
+   (Pre-Start Notifications keep their existing "now send to the customer" prompt.)
 
-  On the Site App Improvement log (Admin -> Site App Improvements), each entry now shows
-  a coloured priority flag next to its status:
-    green  = Low
-    amber  = Medium
-    red    = High
+2. Removed "the office has been notified" wording from completion screens:
+   - The old "<form> sent to the office." line is replaced by the message above.
+   - The Site Issue "Issue raised" screen no longer says "The office has been
+     notified" - it now thanks the user and points them to their Contracts Manager for
+     anything urgent.
 
-  Existing reports with no priority saved show as Medium (amber).
+  Note: the in-form amber warning on "call me back" type answers ("This will notify the
+  office to call you") is a pre-submit action warning, not a completion notification, so
+  it is intentionally left as-is.
 
 BUILD: next build -> Compiled successfully.

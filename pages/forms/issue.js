@@ -82,7 +82,7 @@ export default function RaiseIssue() {
       <div style={{ textAlign: 'center', padding: '48px 16px' }}>
         <div style={{ fontSize: 54 }}>✅</div>
         <h2 style={{ color: INK, margin: '12px 0 4px' }}>Issue raised</h2>
-        <p style={{ color: '#777', fontSize: 14 }}>The office has been notified.</p>
+        <p style={{ color: '#777', fontSize: 14, lineHeight: 1.5 }}>Thank you for raising this issue. Please call your Rock Roofing Contracts Manager if it needs to be resolved urgently.</p>
         <button onClick={() => router.push('/forms')} style={{ ...bigBtn(false), marginTop: 20 }}>Back to home</button>
       </div>
     </Shell>
