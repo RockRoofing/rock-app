@@ -1319,7 +1319,7 @@ function FormsList({ user, onBack }) {
           {general.map(Card)}
 
           {hs.length > 0 && <>
-            {SectionHead('H&S Incidence Reporting')}
+            {SectionHead('H&S Incidents & Accidents')}
             {hs.map(Card)}
           </>}
 

@@ -1,21 +1,35 @@
-DEPLOY NOTES - IHM: guidance to keep the project number out of the name
-======================================================================
+DEPLOY NOTES - H&S Incidents & Accidents section (rename) + how to seed the forms
+=================================================================================
 
 ONE file, an EDIT - just replace it.
-  lib/ihmSchema.js
+  pages/forms/index.js   (section header renamed)
 
-CHANGE
-  The Internal Handover Minutes "Project Name" field now shows guidance under it:
-  "Enter the project name only - do NOT include the RR Project Number (it is captured
-   in the field below). Adding the number here makes it show twice across the app."
+GOOD NEWS - THE FORMS ALREADY EXIST
+  The two forms you sent (ACCIDENT BOOK: H&S Incident Record, and Near Miss Report
+  Form) are ALREADY built into the app's seed set (lib/formDefsExtra.js), translated
+  into the app's own form format, with all the same sections, fields and mandatory
+  flags. A third related one (H&S Accident and Incident Report and Lessons Learnt) is
+  there too. They are tagged so they appear in a dedicated H&S section that is visible
+  to BOTH Operatives and Contracts Managers, and they show in the Form Builder as
+  editable templates.
 
-WHY
-  Ops/IHM-driven screens (Issues, Deliveries, Procurement, Risks, RAMS, reports) show
-  the project as "<number> - <name>". If the number is typed into the IHM name too, it
-  appears twice. Keeping it out of the name at source fixes all of those screens at once
-  - no per-screen changes needed, nothing else touched.
+WHAT THIS PACKAGE CHANGES
+  Only the section heading in the Site App forms list is renamed from
+  "H&S Incidence Reporting" to "H&S Incidents & Accidents" (your wording).
 
-  (This does not alter any existing data. Projects already saved with the number in the
-  name will still show it until that IHM name is edited.)
+IMPORTANT - MAKING THE FORMS APPEAR IF THEY AREN'T ALREADY
+  Seed forms only auto-load when the forms store is completely empty. Since the app
+  already has forms saved, if these H&S forms are not already showing you need to run a
+  ONE-OFF additive seed (it adds only missing forms, does NOT touch or overwrite any
+  form you've edited):
+
+    Send a POST to /api/forms with body:  { "action": "seed-missing" }
+
+  Easiest way: open the site while logged in, then in the browser console run:
+    fetch('/api/forms',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'seed-missing'})}).then(r=>r.json()).then(console.log)
+  The response lists which form ids were "added". Refresh the Forms list to see them.
+
+  (If they already appear in your Forms list / Form Builder, no action needed.)
 
 BUILD: next build -> Compiled successfully.
