@@ -1,4 +1,5 @@
 import { getPortalUsers, savePortalUsers } from '../../lib/db'
+import { getExternalUsers, saveExternalUsers, findExternalByEmail, verifyExternalPassword, stripExternal } from '../../lib/designUsers'
 import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { ROLES, normRole } from '../../lib/roles'
 
@@ -91,6 +92,16 @@ export default async function handler(req, res) {
     if (action === 'me') {
       const u = currentUser(req)
       if (u && u.id) {
+        // External customer/design-team user: enrich from the external store so the
+        // client gets their scoped project list and external flag.
+        if (u.role === 'external') {
+          try {
+            const ext = await getExternalUsers()
+            const full = ext.find(x => x.id === u.id)
+            if (full) return res.json({ user: { ...u, ...stripExternal(full) } })
+          } catch {}
+          return res.json({ user: { ...u, external: true, role: 'external' } })
+        }
         // Enrich token claims (id/email/role/name) with the full stored record
         // so callers get phone, firstName, etc. (needed for email signatures).
         try {
@@ -126,12 +137,19 @@ export default async function handler(req, res) {
       const email = String(body.email || '').toLowerCase().trim()
       const users = await getPortalUsers()
       const user = users.find(u => u.email === email && u.active !== false)
-      if (!user || !verifyPassword(body.password, user.passwordHash)) {
-        return res.status(401).json({ ok: false, error: 'Incorrect email or password.' })
+      if (user && verifyPassword(body.password, user.passwordHash)) {
+        const token = createSessionToken(user)
+        setSessionCookie(res, token)
+        return res.json({ ok: true, user: strip(user), mustResetPassword: !!user.mustResetPassword })
       }
-      const token = createSessionToken(user)
-      setSessionCookie(res, token)
-      return res.json({ ok: true, user: strip(user), mustResetPassword: !!user.mustResetPassword })
+      // Not an internal user - try external customer/design-team users.
+      const ext = await findExternalByEmail(email)
+      if (ext && verifyExternalPassword(ext, body.password)) {
+        const token = createSessionToken({ id: ext.id, email: ext.email, role: 'external', name: ext.name })
+        setSessionCookie(res, token)
+        return res.json({ ok: true, user: stripExternal(ext), mustResetPassword: !!ext.mustResetPassword })
+      }
+      return res.status(401).json({ ok: false, error: 'Incorrect email or password.' })
     }
 
     if (action === 'logout') {
@@ -146,6 +164,17 @@ export default async function handler(req, res) {
       const targetId = body.id || me.id
       if (targetId !== me.id && me.role !== 'admin') return res.status(403).json({ error: 'Not allowed' })
       if (!body.password || body.password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' })
+      // External customer/design-team user changing their own password.
+      if (me.role === 'external' && targetId === me.id) {
+        const ext = await getExternalUsers()
+        const i = ext.findIndex(u => u.id === targetId)
+        if (i < 0) return res.status(404).json({ error: 'User not found' })
+        ext[i].passwordHash = hashPassword(body.password)
+        ext[i].mustResetPassword = false
+        await saveExternalUsers(ext)
+        setSessionCookie(res, createSessionToken({ id: ext[i].id, email: ext[i].email, role: 'external', name: ext[i].name }))
+        return res.json({ ok: true })
+      }
       const users = await getPortalUsers()
       const idx = users.findIndex(u => u.id === targetId)
       if (idx < 0) return res.status(404).json({ error: 'User not found' })

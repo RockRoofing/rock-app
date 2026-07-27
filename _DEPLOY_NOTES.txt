@@ -1,20 +1,33 @@
-DEPLOY NOTES - Design Portal PHASE 2: Permissions matrix + horizontal home cards
-================================================================================
+DEPLOY NOTES - Design Portal PHASE 3: External customer users
+=============================================================
 
-TWO files, both EDITS - just replace them.
-  pages/admin.js    (new Permissions matrix section)
-  pages/index.js    (portal home cards now flow horizontally)
+NEW FILES - add these via GitHub "Add file":
+  lib/designUsers.js                    (external user store + helpers)
+  pages/api/design-customers.js         (admin API for external users)
+  pages/admin/design-customers.js       (admin UI: manage customers)
+
+EDITS - replace:
+  pages/api/portal-auth.js   (login + me + password reset now handle external users)
+  pages/admin.js             (new "Design Customers" tab in the admin nav)
+  pages/index.js             (external users are sent straight to /design)
+  pages/design/index.js      (external users are allowed into the Design portal)
 
 WHAT THIS DOES
-1. PERMISSIONS MATRIX (Admin > Portal Users, below the user list)
-   A read-only grid: rows = portal areas (Pre-Contract, Commercial, Operations,
-   Design, Lessons Learnt, HR, Bookkeeping, Management, Admin, Business Financials),
-   columns = access levels (Pre-Contract, Post-Contract, Accounts, Designer,
-   Management, Admin). A green tick shows which level can access each area. This makes
-   the new Designer access (Design only) visible at a glance.
+  - Adds EXTERNAL customer / design-team logins, kept in a SEPARATE store from internal
+    users so they can never inherit any internal role or area.
+  - Admin > Design Customers: add a customer with name, email, company, phone, set which
+    PROJECTS they can access (tick list - multiple allowed), active toggle. Creating one
+    gives a temporary password to share; they're forced to set their own on first login.
+  - Reset password / edit / delete per customer.
+  - HARD RULE ENFORCED: external users must be scoped to specific projects. There is no
+    "all projects" option, and the API rejects any attempt to save one with no projects
+    or with an "all"/"*" value - now and in future.
+  - External users log in on the SAME login page (email + password). On login they are
+    taken straight to the Design portal and cannot reach any internal area.
 
-2. HOME CARDS HORIZONTAL
-   The portal home department cards now lay out horizontally across the page (a
-   responsive row that wraps), instead of the old narrow 2-wide column.
+WHAT'S NOT YET WIRED (comes with the Design pages in later phases)
+  The per-project scoping and "view/comment/approve/download only" behaviour is enforced
+  on each Design PAGE as it's built (RFIs, drawings, etc.). This phase establishes the
+  identity, login and admin; the pages consume it next.
 
 BUILD: next build -> Compiled successfully.

@@ -166,6 +166,8 @@ export default function Portal() {
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
       if (!d.user) { router.replace('/login'); return }
+      // External customer/design-team users only have the Design portal.
+      if (d.user.role === 'external' || d.user.external) { router.replace('/design'); return }
       setUser(d.user)
     }).catch(() => router.replace('/login'))
   }, [])

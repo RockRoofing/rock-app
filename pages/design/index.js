@@ -31,7 +31,8 @@ export default function DesignHome() {
     try {
       const me = await fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null)
       if (!me || !me.user) { router.replace('/login'); return }
-      if (!canAccessArea(me.user.role, 'design')) { router.replace('/'); return }
+      const isExternal = me.user.role === 'external' || me.user.external
+      if (!isExternal && !canAccessArea(me.user.role, 'design')) { router.replace('/'); return }
       setUser(me.user)
       setReady(true)
     } catch { router.replace('/') }
