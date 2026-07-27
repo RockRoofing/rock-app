@@ -1,26 +1,21 @@
-DEPLOY NOTES - Site App: stop doubling the project number
-=========================================================
+DEPLOY NOTES - IHM: guidance to keep the project number out of the name
+======================================================================
 
-TWO files, both EDITS - just replace them.
-  lib/cmSiteApp.js          (shared project picker + header - used by Schedule of
-                             Works and the CM Site App screens)
-  pages/forms/deliveries.js (Deliveries project list + header)
+ONE file, an EDIT - just replace it.
+  lib/ihmSchema.js
 
-THE ISSUE
-  On first entering Schedule of Works and Deliveries, the project number showed twice -
-  once in the "Project No" and again inside the project name (Xero names are stored
-  like "J203 - Hollis Croft").
+CHANGE
+  The Internal Handover Minutes "Project Name" field now shows guidance under it:
+  "Enter the project name only - do NOT include the RR Project Number (it is captured
+   in the field below). Adding the number here makes it show twice across the app."
 
-FIX (display only)
-  A shared projectLabel() helper now shows the number once, then the name with any
-  redundant leading number stripped (e.g. "J203 — Hollis Croft" instead of
-  "J203 — J203 - Hollis Croft"). Names without the number are shown unchanged.
+WHY
+  Ops/IHM-driven screens (Issues, Deliveries, Procurement, Risks, RAMS, reports) show
+  the project as "<number> - <name>". If the number is typed into the IHM name too, it
+  appears twice. Keeping it out of the name at source fixes all of those screens at once
+  - no per-screen changes needed, nothing else touched.
 
-  This is purely how the label is displayed. The underlying projectNo / projectName /
-  key values used for selecting a project, filtering, and every linked item are NOT
-  changed - so nothing in the Site App or any linked area is affected.
-
-  Because the shared picker is also used by the CM Site App screens (variations,
-  pre-start, applications, etc.), those get the same tidy-up automatically.
+  (This does not alter any existing data. Projects already saved with the number in the
+  name will still show it until that IHM name is edited.)
 
 BUILD: next build -> Compiled successfully.
