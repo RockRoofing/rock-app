@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 
-import { ROLES, ROLE_LABEL as roleLabel, normRole } from '../lib/roles'
+import { ROLES, ROLE_LABEL as roleLabel, normRole, AREA_ACCESS } from '../lib/roles'
+
+// Friendly labels for the permission-matrix rows (areas).
+const AREA_LABEL = {
+  'pre-contract': 'Pre-Contract',
+  'commercial': 'Commercial',
+  'operations': 'Operations',
+  'design': 'Design',
+  'lessons-learnt': 'Lessons Learnt',
+  'hr': 'HR',
+  'bookkeeping': 'Bookkeeping',
+  'management': 'Management',
+  'admin': 'Admin',
+  'business-financials': 'Business Financials',
+}
 // Fixed job roles (descriptive) — matches the old Team Members list plus the
 // roles the IHM/Pre-Start dropdowns need.
 const JOB_ROLES = ['Operative', 'Contracts Manager', 'Operations Manager', 'Estimator', 'Quantity Surveyor', 'Design Manager', 'Site Supervisor', 'Sales Manager', 'Director', 'Other']
@@ -121,6 +135,40 @@ export default function AdminPage() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* Permissions matrix: which roles can access which areas */}
+        <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 24px 40px' }}>
+          <h2 style={{ margin: '8px 0 4px', fontSize: 18, color: '#1a1a19' }}>Permissions matrix</h2>
+          <div style={{ color: '#999', fontSize: 13, marginBottom: 12 }}>Which access level can reach each portal area. A tick means that role can open the area.</div>
+          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#faf9f7' }}>
+                  <th style={{ ...th, minWidth: 160 }}>Area</th>
+                  {ROLES.map(r => <th key={r} style={{ ...th, textAlign: 'center', whiteSpace: 'nowrap' }}>{roleLabel[r]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(AREA_ACCESS).map(area => (
+                  <tr key={area} style={{ borderTop: '1px solid #f0f0f0' }}>
+                    <td style={{ ...td, fontWeight: 600 }}>{AREA_LABEL[area] || area}</td>
+                    {ROLES.map(r => {
+                      const allowed = AREA_ACCESS[area].includes(r)
+                      return (
+                        <td key={r} style={{ ...td, textAlign: 'center' }}>
+                          {allowed
+                            ? <span style={{ color: '#16a34a', fontWeight: 800 }} title="Access">✓</span>
+                            : <span style={{ color: '#e2e0da' }} title="No access">·</span>}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ color: '#bbb', fontSize: 12, marginTop: 8 }}>Access levels are set per user above. This grid reflects the fixed area rules for each level.</div>
         </div>
 
         {form && (

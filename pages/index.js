@@ -238,9 +238,9 @@ export default function Portal() {
           {/* Department tiles */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, 300px)',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
             gap: 20,
-            maxWidth: 640,
+            maxWidth: 1120,
             width: '100%',
           }}>
             {visible.map(dept => {

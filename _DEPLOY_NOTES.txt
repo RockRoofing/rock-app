@@ -1,26 +1,20 @@
-DEPLOY NOTES - Design Portal PHASE 1: Designer role + Design area
-================================================================
+DEPLOY NOTES - Design Portal PHASE 2: Permissions matrix + horizontal home cards
+================================================================================
 
-Part 1 of a phased build of the Design Portal.
-
-FILES
-  EDIT: lib/roles.js            (new "designer" role + "design" area access)
-  EDIT: pages/index.js          (new Design card on the portal home)
-  EDIT: pages/admin.js          (helper text mentions Designer)
-  NEW : pages/design/index.js   (Design portal landing page)  <-- ADD via GitHub
+TWO files, both EDITS - just replace them.
+  pages/admin.js    (new Permissions matrix section)
+  pages/index.js    (portal home cards now flow horizontally)
 
 WHAT THIS DOES
-  - Adds a new permission level "Designer" (selectable in Admin > Users; it appears in
-    the role dropdown automatically).
-  - Designer can access ONLY the Design area - nothing else. Standard Post-Contract
-    (plus Management and Admin) also get access to Design, as requested.
-  - New "Design" card on the portal home, shown only to those roles.
-  - New /design landing page listing the portal's pages. Each page is a placeholder
-    ("SOON") for now - the pages themselves are built in later phases. Internal-only
-    tools (Tech Sub Builder, Leak Test Cert Builder) are hidden from non-internal users.
+1. PERMISSIONS MATRIX (Admin > Portal Users, below the user list)
+   A read-only grid: rows = portal areas (Pre-Contract, Commercial, Operations,
+   Design, Lessons Learnt, HR, Bookkeeping, Management, Admin, Business Financials),
+   columns = access levels (Pre-Contract, Post-Contract, Accounts, Designer,
+   Management, Admin). A green tick shows which level can access each area. This makes
+   the new Designer access (Design only) visible at a glance.
 
-WHAT'S NOT IN THIS PHASE (coming next)
-  Permissions matrix, external customer users, then each Design page in turn (RFIs,
-  drawings + markup, tech sub builder/view, calculations, leak tests, warranties, O&Ms).
+2. HOME CARDS HORIZONTAL
+   The portal home department cards now lay out horizontally across the page (a
+   responsive row that wraps), instead of the old narrow 2-wide column.
 
 BUILD: next build -> Compiled successfully.
