@@ -1,27 +1,32 @@
-DEPLOY NOTES - Add missing default forms (button) so H&S forms appear
-=====================================================================
+DEPLOY NOTES - Force the H&S incident forms to always be present
+===============================================================
 
-TWO files, both EDITS - just replace them.
-  pages/operations/forms-builder.js  (new "Add missing default forms" button)
-  pages/api/forms.js                 (minor defensive copy of the seed array)
+ONE file, an EDIT - just replace it.
+  pages/api/forms.js
 
-WHY THE H&S FORMS AREN'T SHOWING
-  Built-in "standard template" forms only auto-load when the forms store is EMPTY.
-  Your app already had forms saved before the two H&S forms were added to the code, so
-  they never got inserted into your live data - that's why they're missing from both
-  the Form Builder and the Site App.
+WHY THEY WEREN'T APPEARING
+  The H&S forms live in the code correctly, but they were never inserted into your live
+  saved forms (seeding only ran when the form store was first created, before these
+  forms existed). The manual "Add missing default forms" button relied on being clicked
+  after the deploy landed, which is easy to miss.
 
-FIX - ONE CLICK
-  Form Builder now has an "Add missing default forms" button (top right, next to
-  "Reset to latest defaults"). Click it once after deploying. It ADDS any built-in
-  standard forms that aren't already in your list - including:
+FIX - AUTOMATIC, NO BUTTON NEEDED
+  The forms API now ALWAYS ensures the three mandatory H&S incident/accident forms are
+  present whenever the forms list loads:
      - ACCIDENT BOOK: H&S Incident Record
      - Near Miss Report Form
      - H&S Accident and Incident Report and Lessons Learnt
-  It does NOT overwrite or remove any form you've created or edited (unlike "Reset to
-  latest defaults", which replaces everything). It tells you which forms it added.
+  If any are missing from your live set, they are added automatically. This is scoped
+  to ONLY these H&S compliance forms, so it never touches or resurrects any other form
+  you have created, edited or deleted.
 
-  After clicking, the H&S forms appear in the Form Builder AND in the Site App under
-  the "H&S Incidents & Accidents" section for both Operatives and Contracts Managers.
+AFTER DEPLOY
+  Just open the Form Builder (or the Site App Forms list) once - the H&S forms will be
+  there. They appear in the Site App under "H&S Incidents & Accidents" for both
+  Operatives and Contracts Managers.
+
+  IMPORTANT: this works together with the earlier section-rename file
+  (HS_incidents_section.zip / pages/forms/index.js). If you haven't deployed that one
+  yet, deploy it too so the Site App section shows and is labelled correctly.
 
 BUILD: next build -> Compiled successfully.

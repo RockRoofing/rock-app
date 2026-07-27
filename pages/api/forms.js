@@ -11,6 +11,16 @@ export default async function handler(req, res) {
     if (!forms || !forms.length) {
       forms = [...SEED_FORMS]
       try { await saveForms(forms) } catch {}
+    } else {
+      // Always ensure the mandatory H&S incident/accident forms exist. These are
+      // compliance forms that must never be missing, so if any are absent from the
+      // live set we add them automatically (does not touch other/edited forms).
+      const have = new Set(forms.map(f => f.id))
+      const mandatory = SEED_FORMS.filter(f => f.group === 'hs-incidence' && !have.has(f.id))
+      if (mandatory.length) {
+        forms = [...forms, ...mandatory]
+        try { await saveForms(forms) } catch {}
+      }
     }
     const { id } = req.query
     if (id) {
