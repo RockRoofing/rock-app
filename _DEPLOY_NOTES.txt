@@ -1,17 +1,33 @@
-DEPLOY NOTES - Portal card colours + Design pages full width
-============================================================
+DEPLOY NOTES - Design Portal PHASE 5: RFIs
+==========================================
 
-FOUR files, all EDITS - just replace them.
-  pages/index.js                (distinct card colours)
-  components/DesignDocsPage.js   (full-width Design doc pages)
-  components/DesignSoon.js        (full-width placeholder pages)
-  pages/design/index.js          (full-width project card list)
+NEW FILE - add via GitHub "Add file":
+  pages/api/design-rfis.js
 
-CHANGES
-1. Portal home cards - all now distinct colours. HR, Design and Bookkeeping were all
-   purple; now: Design stays purple, HR is pink, Bookkeeping is orange. Every card is a
-   different colour.
-2. All Design portal pages now use the full page width (wider content area) instead of
-   the previous narrow column.
+EDIT (replace the placeholder):
+  pages/design/[project]/rfis.js
+
+WHAT THIS DOES - the full RFI feature (bones), inside a project's Design workspace:
+  - Table of RFIs with: RFI number (auto-assigned RFI-001, 002...), Issued date (auto
+    when created), Description (expands vertically as you type), Required-by date with a
+    TRAFFIC LIGHT (orange = due within 5 days, red = overdue, nothing when fine or
+    resolved - no green, as requested), Customer responsible (dropdown of the external
+    customer users assigned to THIS project), Status (Open / Resolved), comment count.
+  - + Add RFI: description, required date, responsible customer, attach files.
+  - Click a row to open the RFI: full details, attachments, mark resolved / re-open,
+    edit, delete, and a COMMENT THREAD.
+  - Comments: rich text (Bold / Italic / Underline) and @mentions (type @ to pick a
+    person - internal Design users or the project's customer users). Every comment
+    records who wrote it and the date/time. Customer comments are tagged "Customer".
+
+ACCESS (enforced server-side):
+  - Internal (Designer / Post-Contract / Management / Admin): full - create, edit,
+    resolve, delete, comment.
+  - External customers: VIEW + COMMENT only, and only on their assigned projects. They
+    cannot create/edit/resolve/delete.
+
+NOTE: this is the working "bones" - deploy, try it, then tell me what to refine.
+The @mention currently inserts a styled name token in the comment; wiring mentions to
+notifications (email/alerts) is a later refinement if you want it.
 
 BUILD: next build -> Compiled successfully.
