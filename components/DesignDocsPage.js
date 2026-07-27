@@ -70,7 +70,7 @@ export default function DesignDocsPage({ pageKey, category, title, intro, accept
     <>
       <Head><title>{title} - Design</title></Head>
       <DesignNav active={pageKey} projectNo={projectNo} projectName={auth.project?.name} isInternal={auth.isInternal} />
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '22px 20px 60px' }}>
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '22px 28px 60px' }}>
         <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>{title}</h1>
         {intro && <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>{intro}</p>}
 

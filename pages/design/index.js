@@ -30,7 +30,7 @@ export default function DesignHome() {
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>Design</span>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 60px' }}>
+      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 28px 60px' }}>
         <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 26 }}>Design Portal</h1>
         <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Select a project to open its drawings, RFIs, submissions, certificates and documents.</p>
 

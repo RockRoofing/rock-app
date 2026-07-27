@@ -113,13 +113,13 @@ const departments = [
     label: 'HR',
     description: 'Coming soon',
     href: null,
-    color: '#7c3aed',
-    lightColor: '#f5f3ff',
-    borderColor: '#ddd6fe',
+    color: '#db2777',
+    lightColor: '#fdf2f8',
+    borderColor: '#fbcfe8',
     icon: (
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <circle cx="20" cy="14" r="6" stroke="#7c3aed" strokeWidth="2" fill="none"/>
-        <path d="M8 33c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" fill="none"/>
+        <circle cx="20" cy="14" r="6" stroke="#db2777" strokeWidth="2" fill="none"/>
+        <path d="M8 33c0-6.627 5.373-12 12-12s12 5.373 12 12" stroke="#db2777" strokeWidth="2" strokeLinecap="round" fill="none"/>
       </svg>
     ),
   },
@@ -128,15 +128,15 @@ const departments = [
     label: 'Bookkeeping',
     description: 'Reconcile Xero vs the app — untagged bills, invoices & wages',
     href: '/bookkeeping',
-    color: '#7c3aed',
-    lightColor: '#f5f3ff',
-    borderColor: '#ddd6fe',
+    color: '#ea580c',
+    lightColor: '#fff7ed',
+    borderColor: '#fed7aa',
     icon: (
       <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-        <rect x="7" y="6" width="26" height="28" rx="3" stroke="#7c3aed" strokeWidth="2" fill="none"/>
-        <line x1="13" y1="13" x2="27" y2="13" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
-        <line x1="13" y1="19" x2="27" y2="19" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
-        <line x1="13" y1="25" x2="21" y2="25" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+        <rect x="7" y="6" width="26" height="28" rx="3" stroke="#ea580c" strokeWidth="2" fill="none"/>
+        <line x1="13" y1="13" x2="27" y2="13" stroke="#ea580c" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="13" y1="19" x2="27" y2="19" stroke="#ea580c" strokeWidth="2" strokeLinecap="round"/>
+        <line x1="13" y1="25" x2="21" y2="25" stroke="#ea580c" strokeWidth="2" strokeLinecap="round"/>
       </svg>
     ),
   },
