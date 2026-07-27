@@ -1,73 +1,61 @@
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/router'
+import { useState } from 'react'
 import Head from 'next/head'
-import Link from 'next/link'
-import { canAccessArea, normRole } from '../../lib/roles'
-
-const INK = '#1a1a19'
-const PURPLE = '#7c3aed'
-
-// Design portal pages. `internalOnly` = hidden from external customer users and the
-// designer-facing "builder" tools; `soon` = placeholder until its phase is built.
-const PAGES = [
-  { key: 'rfis', label: "RFIs", href: '/design/rfis', desc: 'Track Requests for Information', soon: true },
-  { key: 'tech-sub-builder', label: 'Tech Sub Builder', href: '/design/tech-sub-builder', desc: 'Build technical submissions from the document library', internalOnly: true, soon: true },
-  { key: 'tech-sub', label: 'Tech Sub', href: '/design/tech-sub', desc: 'View the latest technical submission' },
-  { key: 'contract-drawings', label: 'Contract Drawings', href: '/design/contract-drawings', desc: 'Architect contract drawings', soon: true },
-  { key: 'rock-drawings', label: 'Rock Drawings', href: '/design/rock-drawings', desc: 'Our own drawings, markup & comments', soon: true },
-  { key: 'calculations', label: 'Calculations', href: '/design/calculations', desc: 'Wind load, U-value, pull-out tests, moisture maps & reports' },
-  { key: 'leak-test-builder', label: 'Leak Test Cert Builder', href: '/design/leak-test-builder', desc: 'Build leak test certificates', internalOnly: true, soon: true },
-  { key: 'leak-test-certs', label: 'Leak Test Certs', href: '/design/leak-test-certs', desc: 'View & download leak test certificates' },
-  { key: 'warranties', label: 'Warranties', href: '/design/warranties', desc: 'Manufacturer warranty documents' },
-  { key: 'oms', label: "O&Ms", href: '/design/oms', desc: 'Operation & Maintenance manuals' },
-]
+import { useRouter } from 'next/router'
+import { useDesignAuth, designHref, PURPLE, INK } from '../../lib/designShell'
 
 export default function DesignHome() {
   const router = useRouter()
-  const [user, setUser] = useState(null)
-  const [ready, setReady] = useState(false)
+  const auth = useDesignAuth()
+  const [q, setQ] = useState('')
 
-  useEffect(() => { (async () => {
-    try {
-      const me = await fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null)
-      if (!me || !me.user) { router.replace('/login'); return }
-      const isExternal = me.user.role === 'external' || me.user.external
-      if (!isExternal && !canAccessArea(me.user.role, 'design')) { router.replace('/'); return }
-      setUser(me.user)
-      setReady(true)
-    } catch { router.replace('/') }
-  })() }, [])
+  if (!auth.ready) return null
 
-  if (!ready) return null
-  const isInternal = ['designer', 'post-contract', 'management', 'admin'].includes(normRole(user.role))
-  const pages = PAGES.filter(p => !p.internalOnly || isInternal)
+  const term = q.trim().toLowerCase()
+  const projects = !term ? auth.projects : auth.projects.filter(p =>
+    String(p.projectNo).toLowerCase().includes(term) ||
+    (p.name || '').toLowerCase().includes(term) ||
+    (p.customer || '').toLowerCase().includes(term) ||
+    (p.location || '').toLowerCase().includes(term)
+  )
+  // First page each project opens on.
+  const openProject = (no) => router.push(designHref(no, 'rfis'))
 
   return (
     <>
-      <Head><title>Design Portal — Rock Roofing</title></Head>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 20px 60px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-          <Link href="/" style={{ color: '#888', fontSize: 14, textDecoration: 'none' }}>‹ Portal</Link>
-        </div>
-        <h1 style={{ margin: '4px 0 2px', color: INK, fontSize: 28 }}>Design Portal</h1>
-        <p style={{ color: '#8a857c', fontSize: 14, marginTop: 4 }}>Drawings, RFIs, technical submissions, calculations, certificates, O&amp;Ms and warranties.</p>
+      <Head><title>Design Portal - Rock Roofing</title></Head>
+      <div style={{ background: '#1a1a19', padding: '0 20px', display: 'flex', alignItems: 'center', height: 52 }}>
+        <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 30, width: 30, borderRadius: 4, marginRight: 8 }} />
+        <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>&lt;- Portal</a>
+        <span style={{ color: '#3a3a38', padding: '0 2px' }}>|</span>
+        <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>Design</span>
+      </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginTop: 24 }}>
-          {pages.map(p => (
-            <Link key={p.key} href={p.soon ? '#' : p.href}
-              onClick={e => { if (p.soon) e.preventDefault() }}
-              style={{ textDecoration: 'none', cursor: p.soon ? 'default' : 'pointer' }}>
-              <div style={{ background: '#fff', border: '1px solid #ece9f5', borderLeft: `3px solid ${PURPLE}`, borderRadius: 12, padding: '16px 18px', opacity: p.soon ? 0.6 : 1, height: '100%' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{p.label}</div>
-                  {p.soon && <span style={{ fontSize: 10.5, color: PURPLE, background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 20, padding: '2px 8px', fontWeight: 700 }}>SOON</span>}
-                  {p.internalOnly && !p.soon && <span style={{ fontSize: 10.5, color: '#666', background: '#f3f4f6', borderRadius: 20, padding: '2px 8px', fontWeight: 700 }}>INTERNAL</span>}
-                </div>
-                <div style={{ fontSize: 13, color: '#8a857c', marginTop: 4 }}>{p.desc}</div>
-              </div>
-            </Link>
-          ))}
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 20px 60px' }}>
+        <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 26 }}>Design Portal</h1>
+        <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Select a project to open its drawings, RFIs, submissions, certificates and documents.</p>
+
+        <div style={{ margin: '18px 0 20px' }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search projects by number, name, customer or location..."
+            style={{ width: '100%', maxWidth: 520, boxSizing: 'border-box', padding: '11px 14px', border: '1px solid #ddd', borderRadius: 10, fontSize: 14.5 }} />
+          <div style={{ fontSize: 12.5, color: '#aaa', marginTop: 6 }}>{projects.length} project{projects.length === 1 ? '' : 's'}{term ? ' matching' : ''}</div>
         </div>
+
+        {projects.length === 0 ? (
+          <div style={{ color: '#aaa', fontSize: 14, padding: 40, textAlign: 'center', background: '#faf9fd', borderRadius: 12 }}>
+            {auth.projects.length === 0 ? 'No projects available.' : 'No projects match your search.'}
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
+            {projects.map(p => (
+              <button key={p.projectNo} onClick={() => openProject(p.projectNo)}
+                style={{ textAlign: 'left', background: '#fff', border: '1px solid #ece9f5', borderLeft: `3px solid ${PURPLE}`, borderRadius: 12, padding: '16px 18px', cursor: 'pointer' }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{p.projectNo}</div>
+                <div style={{ fontSize: 13.5, color: '#555', marginTop: 3 }}>{p.name || '-'}</div>
+                {(p.customer || p.location) && <div style={{ fontSize: 12.5, color: '#8a857c', marginTop: 6 }}>{[p.customer, p.location].filter(Boolean).join(' - ')}</div>}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )

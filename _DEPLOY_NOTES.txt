@@ -1,35 +1,47 @@
-DEPLOY NOTES - Design Portal PHASE 4: shell + 5 document pages
-==============================================================
+DEPLOY NOTES - Design Portal: project-first layout (searchable cards + Ops-style nav)
+=====================================================================================
 
-NEW FILES - add via GitHub "Add file":
-  lib/designShell.js                   (shared auth/project-picker/sub-nav)
-  components/DesignDocsPage.js          (reusable document page)
-  pages/api/design-files.js            (document store API, project-scoped, view-only)
+This RESTRUCTURES the Design portal to match the rest of the app: land on a searchable
+list of project cards; click a project to open its workspace with the standard black
+main nav + sub-nav (like the Ops pages).
+
+** DELETE THESE OLD FILES in GitHub (they've moved under [project]) **
   pages/design/warranties.js
   pages/design/oms.js
   pages/design/calculations.js
   pages/design/tech-sub.js
   pages/design/leak-test-certs.js
+  (If you leave them, they'll just be unused/broken links - but best to delete.)
+
+NEW FILES - add via GitHub "Add file":
+  components/DesignSoon.js
+  pages/design/[project]/rfis.js
+  pages/design/[project]/tech-sub-builder.js
+  pages/design/[project]/tech-sub.js
+  pages/design/[project]/contract-drawings.js
+  pages/design/[project]/rock-drawings.js
+  pages/design/[project]/calculations.js
+  pages/design/[project]/leak-test-builder.js
+  pages/design/[project]/leak-test-certs.js
+  pages/design/[project]/warranties.js
+  pages/design/[project]/oms.js
+  NOTE: the folder name must be exactly  [project]  (with square brackets).
 
 EDITS - replace:
-  pages/api/blob-upload.js   (raise max upload to 200MB for large Tech Subs)
-  pages/design/index.js      (these 5 pages now live; others still "SOON")
+  lib/designShell.js            (project-first routing + Ops-style nav)
+  components/DesignDocsPage.js   (reads project from the route)
+  pages/design/index.js         (now the searchable project card list)
 
-WHAT THIS DOES
-  Five working Design pages, all sharing one shell (purple sub-nav + project picker):
-    - Warranties, O&Ms, Calculations, Leak Test Certs: upload / list / view / download.
-    - Tech Sub: viewer of the current submission at the top, table of versions below.
-      Uploading a NEW Tech Sub automatically marks the previous one as "Revised"; you
-      can also "Make current" an older one.
-  Files upload directly to storage (handles very large docs).
-
-  ACCESS RULES (enforced server-side in design-files API):
-    - Internal (Designer / Post-Contract / Management / Admin): upload, view, download,
-      delete.
-    - External customers: VIEW & DOWNLOAD ONLY, and ONLY for the projects they are
-      scoped to. Any request for a project they aren't assigned is rejected.
-
-  Each page has a project picker showing only the projects the user may access
-  (all projects for internal; scoped list for customers).
+WHAT CHANGED
+  - /design is now a searchable grid of PROJECT CARDS. Typing in the search box filters
+    the cards live (by number, name, customer or location). External customers only see
+    their assigned projects.
+  - Clicking a project opens /design/<project>/rfis with the two-tier nav:
+      black main bar (logo, "<- Design", the project, Report improvement) and a
+      sub-nav of the Design pages (RFIs, Tech Sub, Contract Drawings, Rock Drawings,
+      Calculations, Leak Test Certs, Warranties, O&Ms, plus internal-only builders).
+  - The 5 document pages (Warranties, O&Ms, Calculations, Tech Sub, Leak Test Certs)
+    work as before, now inside the project workspace. The other tabs show a tidy
+    "coming soon" until their phase is built.
 
 BUILD: next build -> Compiled successfully.
