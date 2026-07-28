@@ -1609,10 +1609,10 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
             TBC
           </label>
         </div>
-        <label style={labelStyle}>Retention comments</label>
+        <label style={labelStyle}>Insert retention release date comments</label>
         <textarea value={form.retentionComments || ''} onChange={f('retentionComments')} rows={5}
           style={{ ...inputStyle, minHeight: 96, resize: 'vertical', fontFamily: 'inherit' }}
-          placeholder="Notes about retention — e.g. confirmations, chase history, agreed release terms…" />
+          placeholder="Comments about the retention release dates - e.g. confirmations, chase history, agreed release terms..." />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Project Details</div>

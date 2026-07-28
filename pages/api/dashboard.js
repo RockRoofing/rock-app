@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention') {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV2 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention') {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -228,6 +228,13 @@ export default async function handler(req, res) {
       if (rs === 'complete') stage = 'CLOSED'
       else if (rs === 'defects') stage = 'DEFECTS'
 
+      const resolvedPeople = resolveProjectPeople({
+        jobNo: cp.jobNo,
+        opsProjects,
+        users: portalUsers,
+        override: settings.peopleOverride || {},
+      })
+
       return {
         xeroId: id,
         trackingOptionId: id,
@@ -243,12 +250,7 @@ export default async function handler(req, res) {
         qsEmail: settings.qsEmail || '',
         customerEmail: settings.customerEmail || '',
         customerContact: settings.customerContact || '',
-        people: resolveProjectPeople({
-          jobNo: cp.jobNo,
-          opsProjects,
-          users: portalUsers,
-          override: settings.peopleOverride || {},
-        }),
+        people: resolvedPeople,
         highRisk: settings.highRiskCustomer === true,
         pcDate: settings.pcDate || '',
         defectsDate: settings.defectsDate || '',
@@ -289,7 +291,14 @@ export default async function handler(req, res) {
         retentionPct: parseFloat(settings.retentionPct || 0),
         hasContractedRates: !!(settings.contractedRates && Array.isArray(settings.contractedRates.items) && settings.contractedRates.items.length > 0),
         // Edit-details completeness (for the "project details not complete" banner).
-        detailsMissing: missingProjectFields({ ...settings, retentionPct: (parseFloat(settings.retentionPct || 0) || retPct) || '' }),
+        // Use the effective retention (settings, else derived) but PRESERVE a real 0.
+        detailsMissing: missingProjectFields({
+          ...settings,
+          retentionPct: (settings.retentionPct != null && settings.retentionPct !== '' && !isNaN(parseFloat(settings.retentionPct)))
+            ? parseFloat(settings.retentionPct)
+            : (retPct != null && !isNaN(retPct) ? retPct : ''),
+        }, resolvedPeople),
+        completeV2: true,
         pcDateTBC: !!settings.pcDateTBC,
         defectsDateTBC: !!settings.defectsDateTBC,
         comment,

@@ -91,7 +91,9 @@ export default async function handler(req, res) {
     if (body.action === 'markup') {
       if (!acc.canMarkup) return res.status(403).json({ error: 'Not allowed' })
       const i = idxOf(body.id); if (i < 0) return res.status(404).json({ error: 'Not found' })
-      drawings[i].markup = Array.isArray(body.markup) ? body.markup : []
+      // markup is either a flat array (image drawings) or a {page: shapes[]} map (PDFs).
+      const mk = body.markup
+      drawings[i].markup = (Array.isArray(mk) || (mk && typeof mk === 'object')) ? mk : []
       await set(dkey(set, no), drawings)
       return res.json({ ok: true, drawing: drawings[i] })
     }

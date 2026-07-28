@@ -1,53 +1,33 @@
-DEPLOY NOTES - Design Portal: Rock Drawings + Markup + Contract Drawings
-=======================================================================
+DEPLOY NOTES - Project details completeness (full): 0% retention, contacts, comments
+====================================================================================
 
-** IMPORTANT - NEW DEPENDENCY **
-  package.json now includes "pdfjs-dist" (used to read drawing title blocks). You MUST
-  deploy the updated package.json so Vercel installs it. If you add the pages but NOT
-  package.json, the build will fail. Replace package.json first.
+FOUR files, all EDITS - just replace them.
+  lib/projectComplete.js       (completeness rules)
+  pages/api/dashboard.js       (passes resolved team/contacts + fixes retention 0)
+  pages/project/[id].js        (retention comments box relabelled)
+  pages/retention.js           (tooltip wording matched)
 
-NEW FILES - add via GitHub "Add file":
-  pages/api/design-drawings.js         (drawings store: grid, status, markup, comments)
-  pages/api/design-titleblock.js       (reads title-block info from a PDF)
-  components/DrawingMarkup.js           (the on-drawing markup editor)
-  components/DesignDrawingsPage.js      (shared Rock + Contract drawings page)
+This REPLACES the earlier "retention zero" package - deploy these instead (superset).
 
-EDITS - replace:
-  package.json                              (adds pdfjs-dist - see above)
-  pages/design/[project]/rock-drawings.js   (was placeholder)
-  pages/design/[project]/contract-drawings.js (was placeholder)
+WHAT A PROJECT NOW NEEDS TO COUNT AS COMPLETE (banner clears when all present):
+  - Application day, Valuation day, Payment day
+  - Contract value, Labour budget, Materials budget   (0 is accepted as a real value)
+  - Retention %   (0% is accepted - no longer wrongly flagged)
+  - Retention release date comments   (NEW - required)
+  - PC date (or TBC), Defects date (or TBC)
+  - ALL Rock Roofing team roles: Contracts Manager, Operations Manager, Quantity
+    Surveyor, Estimator   (resolved from the IHM or an override)
+  - At least ONE customer contact (with a name)
 
-WHAT THIS DOES
+KEY FIXES
+  1. 0% retention no longer flags "incomplete" - it's a valid answer. (Same fix applied
+     so a genuine 0 in the financial boxes isn't treated as blank.)
+  2. Rock team + customer contact now count toward completeness, as requested.
+  3. "Retention comments" box renamed to "Insert retention release date comments".
 
-ROCK DRAWINGS (grid, like the Ops drawings layout)
-  - Thumbnail cards; drawing STATUS shown below the thumbnail.
-  - Status defaults to "In Review"; can be moved to "Approved" or "Construction Issue"
-    (dropdown on the card, or inside the drawing).
-  - Upload drawings (internal only). Customers cannot upload.
-  - Click a drawing -> opens the drawing with a COMMENTS section below.
-  - Both Rock and the customer can comment (rich text + @mentions, author + time
-    recorded, customer comments tagged).
-  - ON-DRAWING MARKUP: arrows, boxes, circles, lines, freehand, and text call-outs.
-    Each has a changeable COLOUR, OPACITY and line THICKNESS. Undo, delete a selected
-    shape, and Save markup. Both Rock and the customer can mark up.
-
-CONTRACT DRAWINGS (table)
-  - Upload PDF drawings; the app reads the TITLE BLOCK and fills in Architect,
-    Reference, Project, Revision, Status and Date automatically where it can.
-  - "Edit info" lets you check/correct any field (title blocks vary between architects,
-    so treat the auto-read values as a best-effort starting point).
-  - Click a drawing to open, comment and (for image drawings) mark up.
-
-ACCESS (server-enforced)
-  - Internal: upload, status, edit info, delete, comment, markup.
-  - Customers: view, download, comment and markup only - no upload/delete, scoped to
-    their projects.
-
-HONEST NOTES (bones - refine after you walk it)
-  - Markup draws on IMAGE drawings (PNG/JPG). PDF/DWG drawings open in a tab to view;
-    on-PDF markup is a later refinement.
-  - Title-block auto-read is best-effort and will need tuning once you try it on your
-    real architects' drawings - that's expected; the Edit info fields are the safety net.
-  - Tech Sub Builder, Leak Test Cert Builder and O&M auto-assembly remain "coming soon".
+NOTE: the banner recomputes on next dashboard build (a cache marker forces this). After
+deploy it may take one refresh/sync to update. Some existing projects will now correctly
+show incomplete where a team role, customer contact or retention comment is missing -
+that's intended.
 
 BUILD: next build -> Compiled successfully.

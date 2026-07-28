@@ -8,6 +8,7 @@ import DrawingMarkup from './DrawingMarkup'
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 const fmtDateTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
 const isImage = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.name || '')
+const isDwg = (f) => /\.dwg$/i.test(f.name || '') && !(f.contentType || '').includes('pdf')
 
 const STATUS = {
   'in-review': { label: 'In Review', c: '#b45309', bg: '#fef3c7' },
@@ -191,11 +192,10 @@ function ContractTable({ drawings, canEdit, loading, onOpen, onEditMeta, onDelet
 
 // ---- Drawing modal: viewer + markup + comments ----
 function DrawingModal({ drawing, set, people, canEdit, canMarkup, onClose, onMarkup, onComment, onStatus, onDelete }) {
-  const [tab, setTab] = useState('view')
-  const markable = isImage(drawing)   // markup works on image drawings; PDFs open in a tab
+  const dwg = isDwg(drawing)   // .dwg files can't be rendered in-browser; download only
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, overflowY: 'auto', padding: '3vh 16px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 1000, maxWidth: '96vw', margin: '0 auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 1100, maxWidth: '96vw', margin: '0 auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 18, color: INK }}>{drawing.name}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>
@@ -212,14 +212,14 @@ function DrawingModal({ drawing, set, people, canEdit, canMarkup, onClose, onMar
           </div>
         )}
 
-        {markable ? (
-          <DrawingMarkup imageUrl={drawing.url} initial={drawing.markup || []} canEdit={canMarkup} onSave={m => onMarkup(drawing.id, m)} />
-        ) : (
+        {dwg ? (
           <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 16, textAlign: 'center', background: '#faf9fd' }}>
-            <div style={{ color: '#666', fontSize: 14, marginBottom: 10 }}>This drawing is a PDF/DWG. Open it to view full screen.</div>
-            <a href={`/api/download?url=${encodeURIComponent(drawing.url)}&name=${encodeURIComponent(drawing.name)}&inline=1`} target="_blank" rel="noreferrer" style={btnPrimary}>Open drawing</a>
-            <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>On-drawing markup is available for image drawings (PNG/JPG). PDF markup can be added in a later refinement.</div>
+            <div style={{ color: '#666', fontSize: 14, marginBottom: 10 }}>This is a .dwg CAD file, which can't be shown in the browser. Download it to open in CAD.</div>
+            <a href={`/api/download?url=${encodeURIComponent(drawing.url)}&name=${encodeURIComponent(drawing.name)}`} style={btnPrimary}>Download drawing</a>
+            <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>Tip: upload a PDF of the drawing to view and mark it up here.</div>
           </div>
+        ) : (
+          <DrawingMarkup imageUrl={drawing.url} contentType={drawing.contentType} initial={drawing.markup} canEdit={canMarkup} onSave={m => onMarkup(drawing.id, m)} />
         )}
 
         <div style={{ borderTop: '1px solid #eee', margin: '16px 0 10px' }} />

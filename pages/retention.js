@@ -524,7 +524,7 @@ export default function RetentionPage() {
                         ['Total Due', 'right', 'Final Account + VAT. The full amount due including VAT.', null],
                         ['Total Paid', 'right', 'Total received from the customer (including VAT). From Xero / the imported CSV.', 'paid'],
                         ['Total Remaining (Check)', 'right', 'Total Due − Total Paid.', null],
-                        ['Comments', 'left', 'Synced with the Retention comments box in Project Details.', null],
+                        ['Comments', 'left', 'Synced with the retention release date comments box in Project Details.', null],
                         ['', 'left', '', null],
                       ].map(([h, align, tip, key]) => (
                         <th key={(h || 'actions') + (key || '')} title={tip || undefined}
