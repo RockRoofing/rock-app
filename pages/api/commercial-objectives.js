@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { cadence, objId, month, value } = req.body || {}
     if (!['weekly', 'monthly'].includes(cadence)) return res.status(400).json({ error: 'Bad cadence' })
-    if (!objId || !/^\d{4}-\d{2}$/.test(month || '')) return res.status(400).json({ error: 'Bad objective/month' })
+    if (!objId || !/^\d{4}-\d{2}(-\d{2})?$/.test(month || '')) return res.status(400).json({ error: 'Bad objective/period' })
     const data = (await get(KEY)) || { weekly: {}, monthly: {} }
     if (!data[cadence]) data[cadence] = {}
     const cellKey = `${objId}|${month}`

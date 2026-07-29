@@ -13,7 +13,7 @@ const LINKS = [
   { href: '/wip', label: 'WIP' },
   { href: '/project-cashflow', label: 'Cash Flow' },
   { href: '/commercial-scorecard', label: 'Commercial Scorecard' },
-  { href: '/commercial-objectives', label: 'Objectives' },
+  { href: '/commercial-objectives', label: 'Tasks' },
 ]
 
 export default function CommercialNav({ active, right = null }) {

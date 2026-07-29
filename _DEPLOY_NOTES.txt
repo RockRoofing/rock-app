@@ -1,33 +1,28 @@
-DEPLOY NOTES - Commercial Objectives page + remove Retentions Invoiced card
-===========================================================================
+DEPLOY NOTES - Commercial Tasks page rework (part 1 of 2)
+========================================================
 
-NEW FILES - add via GitHub "Add file":
-  pages/api/commercial-objectives.js   (stores the Yes/No grid)
-  pages/commercial-objectives.js        (the Objectives page)
+THREE files, all EDITS - just replace them.
+  pages/commercial-objectives.js       (page reworked + renamed to "Commercial Tasks")
+  pages/api/commercial-objectives.js    (accepts weekly date-keyed columns)
+  components/CommercialNav.js           (tab renamed "Objectives" -> "Tasks")
 
-EDITS - replace:
-  components/CommercialNav.js     (new "Objectives" tab)
-  pages/commercial-scorecard.js   (Retentions Invoiced card removed)
+CHANGES
+- Page title is now "Commercial Tasks"; the nav tab is "Tasks".
+- WEEKLY table: columns are now each WEEK'S THURSDAY date (not month/year). Default view
+  shows 12 weeks back -> 7 weeks forward with NO scroll. Subtitle added:
+  "All weekly commercial tasks to be completed by latest Close of Play Thursday."
+- MONTHLY table: 12 months back -> 7 months forward, no scroll. Subtitle added:
+  "All Monthly Commercial Tasks to be completed no later than the 15th of every month."
+- FILTER: each table has its own From/To filter. Filtering to a longer span than the
+  default turns ON horizontal scroll; the default view has no scroll.
+- COMPLETION % BOX per table: shows the % completed counting from today's period ONWARDS
+  only (the tool wasn't running before today, so past periods are Not Applicable).
+  Yes = 1; No or blank = 0.
+- NEW weekly task added: "Have all project reports been completed for all projects we
+  were on site this week?"
 
-WHAT THIS DOES
-
-COMMERCIAL OBJECTIVES (new tab in the Commercial nav: "Objectives")
-  Two tables - Weekly Commercial Tasks and Monthly Commercial Tasks. Objectives run
-  down the left, MONTHS run across the top (12 months back -> 12 months forward, 25
-  columns), oldest first, current month highlighted.
-  - The only value in a cell is Yes / No. Click a cell to cycle: blank -> Yes -> No ->
-    blank. Each entry records who set it and when (hover a cell to see).
-  - Date filter (From / To month) narrows the visible months so you can look back over
-    old data to confirm tasks were done over time. Reset clears the filter.
-  - Weekly table objectives (5) and Monthly table objectives (6) are exactly as you
-    specified.
-
-SCORECARD
-  The "Retentions Invoiced" card has been removed from the Commercial Scorecard.
-
-NOTE ON "WEEKLY" TABLE: the columns are MONTHS (as you specified the layout - months
-across the top for both tables). So a Weekly-table cell means "kept up through that
-month". If you'd rather the weekly table show one column PER WEEK instead, tell me and
-I'll switch that table to weekly columns.
+STILL TO COME (part 2): the Commercial Scorecard additions - Weekly Tasks % achieved,
+Monthly Tasks % achieved (with changeable targets + line graphs), and the "No. of Weekly
+Project Reports completed vs required" metric. Building next.
 
 BUILD: next build -> Compiled successfully.

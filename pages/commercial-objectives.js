@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
-import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 
 const WEEKLY = [
@@ -9,6 +8,7 @@ const WEEKLY = [
   { id: 'w3', text: 'Have the Project Details been fully completed?' },
   { id: 'w4', text: 'Has the Variation tracker been fully updated? (new variations added, correctly marked instructed / not instructed, correct amounts)' },
   { id: 'w5', text: 'Have the project financials been checked for accuracy? (budgets & spends accurate? correct cost allocations? missing costs? any projects strangely under/over performing?)' },
+  { id: 'w6', text: 'Have all project reports been completed for all projects we were on site this week?' },
 ]
 const MONTHLY = [
   { id: 'm1', text: 'Has the retention tracker been updated and is it accurate? (correct numbers? correct stages?)' },
@@ -19,73 +19,108 @@ const MONTHLY = [
   { id: 'm6', text: 'Has the WIP been completed?' },
 ]
 
-const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+// ---- date helpers ----
+const pad = (n) => String(n).padStart(2, '0')
+const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
 const monthLabel = (key) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en-GB', { month: 'short', year: '2-digit' }) }
+// Thursday of the week containing d.
+function thursdayOf(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const day = x.getDay()                 // 0 Sun..6 Sat; Thursday = 4
+  x.setDate(x.getDate() + (4 - day))
+  return x
+}
+const weekKey = (d) => iso(thursdayOf(d))   // key each week by its Thursday's date
+const weekLabel = (key) => { const [y, m, dd] = key.split('-').map(Number); return new Date(y, m - 1, dd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) }
 
-// 12 months back -> 12 months forward (25 columns), oldest first.
-function buildMonths() {
+// Weeks: 12 back -> 7 forward (Thursdays), oldest first.
+function buildWeeks(back = 12, fwd = 7) {
+  const out = []
+  const t0 = thursdayOf(new Date())
+  for (let i = -back; i <= fwd; i++) { const d = new Date(t0); d.setDate(t0.getDate() + i * 7); out.push(iso(d)) }
+  return out
+}
+// Months: 12 back -> 7 forward, oldest first.
+function buildMonths(back = 12, fwd = 7) {
   const out = []
   const base = new Date(); base.setDate(1)
-  for (let i = -12; i <= 12; i++) { const d = new Date(base.getFullYear(), base.getMonth() + i, 1); out.push(monthKey(d)) }
+  for (let i = -back; i <= fwd; i++) { const d = new Date(base.getFullYear(), base.getMonth() + i, 1); out.push(monthKey(d)) }
   return out
 }
 
-export default function CommercialObjectives() {
-  const allMonths = useMemo(buildMonths, [])
+export default function CommercialTasks() {
+  const defaultWeeks = useMemo(() => buildWeeks(12, 7), [])
+  const defaultMonths = useMemo(() => buildMonths(12, 7), [])
   const [data, setData] = useState({ weekly: {}, monthly: {} })
   const [loading, setLoading] = useState(true)
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  // Separate filters for each table.
+  const [wFrom, setWFrom] = useState(''); const [wTo, setWTo] = useState('')
+  const [mFrom, setMFrom] = useState(''); const [mTo, setMTo] = useState('')
 
   useEffect(() => { (async () => {
     try { const d = await fetch('/api/commercial-objectives').then(r => r.json()); if (d.data) setData(d.data) } catch {}
     setLoading(false)
   })() }, [])
 
-  const months = allMonths.filter(m => (!from || m >= from) && (!to || m <= to))
+  // Weeks shown: default range, or filtered (by Thursday-week of the chosen dates).
+  const weeks = useMemo(() => {
+    if (!wFrom && !wTo) return defaultWeeks
+    const from = wFrom ? weekKey(new Date(wFrom)) : null
+    const to = wTo ? weekKey(new Date(wTo)) : null
+    // build a wide range then clip
+    const wide = buildWeeks(120, 120)
+    return wide.filter(k => (!from || k >= from) && (!to || k <= to))
+  }, [wFrom, wTo, defaultWeeks])
 
-  async function setCell(cadence, objId, month, current) {
-    // Cycle: blank -> yes -> no -> blank
+  const months = useMemo(() => {
+    if (!mFrom && !mTo) return defaultMonths
+    const wide = buildMonths(180, 180)
+    return wide.filter(k => (!mFrom || k >= mFrom) && (!mTo || k <= mTo))
+  }, [mFrom, mTo, defaultMonths])
+
+  const wFiltered = !!(wFrom || wTo)
+  const mFiltered = !!(mFrom || mTo)
+
+  async function setCell(cadence, objId, colKey, current) {
     const next = current === 'yes' ? 'no' : current === 'no' ? '' : 'yes'
-    // optimistic
     setData(d => {
       const copy = { ...d, [cadence]: { ...(d[cadence] || {}) } }
-      const k = `${objId}|${month}`
+      const k = `${objId}|${colKey}`
       if (next) copy[cadence][k] = { v: next }; else delete copy[cadence][k]
       return copy
     })
-    try {
-      await fetch('/api/commercial-objectives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cadence, objId, month, value: next }) })
-    } catch {}
+    try { await fetch('/api/commercial-objectives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cadence, objId, month: colKey, value: next }) }) } catch {}
   }
 
   return (
     <>
-      <Head><title>Rock Roofing — Commercial Objectives</title></Head>
+      <Head><title>Rock Roofing — Commercial Tasks</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/commercial-objectives" />
         <div style={{ padding: 24, maxWidth: 1600, margin: '0 auto' }}>
-          <h1 style={{ margin: '0 0 2px', fontSize: 24, color: '#1a1a2e' }}>Commercial Objectives</h1>
-          <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Weekly and monthly tasks for the Commercial team. Click a cell to cycle Yes / No / blank.</p>
-
-          <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', margin: '16px 0 20px', flexWrap: 'wrap' }}>
-            <div>
-              <div style={lbl}>From month</div>
-              <input type="month" value={from} onChange={e => setFrom(e.target.value)} style={inp} />
-            </div>
-            <div>
-              <div style={lbl}>To month</div>
-              <input type="month" value={to} onChange={e => setTo(e.target.value)} style={inp} />
-            </div>
-            {(from || to) && <button onClick={() => { setFrom(''); setTo('') }} style={ghost}>Reset dates</button>}
-            <span style={{ fontSize: 12.5, color: '#aaa' }}>{months.length} month{months.length === 1 ? '' : 's'} shown</span>
-          </div>
+          <h1 style={{ margin: '0 0 2px', fontSize: 24, color: '#1a1a2e' }}>Commercial Tasks</h1>
+          <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Click a cell to cycle Yes / No / blank. Completion % counts today's period onwards (Yes = 1; No or blank = 0).</p>
 
           {loading ? <div style={{ color: '#999', padding: 20 }}>Loading…</div> : (
             <>
-              <ObjTable title="Weekly Commercial Tasks" cadence="weekly" objectives={WEEKLY} months={months} data={data.weekly || {}} onCell={setCell} />
-              <div style={{ height: 28 }} />
-              <ObjTable title="Monthly Commercial Tasks" cadence="monthly" objectives={MONTHLY} months={months} data={data.monthly || {}} onCell={setCell} />
+              <TaskTable
+                title="Weekly Commercial Tasks"
+                subtitle="All weekly commercial tasks to be completed by latest Close of Play Thursday."
+                cadence="weekly" objectives={WEEKLY} cols={weeks} colLabel={weekLabel} colType="week"
+                data={data.weekly || {}} onCell={setCell} scroll={wFiltered}
+                from={wFrom} to={wTo} setFrom={setWFrom} setTo={setWTo} filtered={wFiltered}
+                todayKey={weekKey(new Date())}
+              />
+              <div style={{ height: 30 }} />
+              <TaskTable
+                title="Monthly Commercial Tasks"
+                subtitle="All Monthly Commercial Tasks to be completed no later than the 15th of every month."
+                cadence="monthly" objectives={MONTHLY} cols={months} colLabel={monthLabel} colType="month"
+                data={data.monthly || {}} onCell={setCell} scroll={mFiltered}
+                from={mFrom} to={mTo} setFrom={setMFrom} setTo={setMTo} filtered={mFiltered}
+                todayKey={monthKey(new Date())}
+              />
             </>
           )}
         </div>
@@ -94,34 +129,68 @@ export default function CommercialObjectives() {
   )
 }
 
-function ObjTable({ title, cadence, objectives, months, data, onCell }) {
-  const nowKey = monthKey(new Date())
+// Completion %: today's column onwards only (blank/No = 0, Yes = 1). Backwards N/A.
+function completionPct(objectives, cols, data, todayKey) {
+  const fwdCols = cols.filter(c => c >= todayKey)
+  const total = objectives.length * fwdCols.length
+  if (total === 0) return null
+  let done = 0
+  for (const obj of objectives) for (const c of fwdCols) if (data[`${obj.id}|${c}`]?.v === 'yes') done++
+  return Math.round((done / total) * 100)
+}
+
+function TaskTable({ title, subtitle, cadence, objectives, cols, colLabel, colType, data, onCell, scroll, from, to, setFrom, setTo, filtered, todayKey }) {
+  const pct = completionPct(objectives, cols, data, todayKey)
+  const inputType = colType === 'week' ? 'date' : 'month'
   return (
     <div>
-      <h2 style={{ margin: '0 0 10px', fontSize: 17, color: '#1a1a2e' }}>{title}</h2>
-      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 8 }}>
+        <div>
+          <h2 style={{ margin: '0 0 2px', fontSize: 17, color: '#1a1a2e' }}>{title}</h2>
+          <div style={{ fontSize: 12.5, color: '#8a857c' }}>{subtitle}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '6px 14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 10.5, color: '#8a857c', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Completed (today on)</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: pct == null ? '#bbb' : pct === 100 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }}>{pct == null ? '—' : pct + '%'}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+            <div>
+              <div style={lbl}>From</div>
+              <input type={inputType} value={from} onChange={e => setFrom(e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={lbl}>To</div>
+              <input type={inputType} value={to} onChange={e => setTo(e.target.value)} style={inp} />
+            </div>
+            {filtered && <button onClick={() => { setFrom(''); setTo('') }} style={ghost}>Reset</button>}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflowX: scroll ? 'auto' : 'visible' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%', tableLayout: scroll ? 'auto' : 'fixed' }}>
           <thead>
             <tr style={{ background: '#faf9f7' }}>
-              <th style={{ ...th, position: 'sticky', left: 0, background: '#faf9f7', minWidth: 320, zIndex: 2 }}>Objective</th>
-              {months.map(m => (
-                <th key={m} style={{ ...th, textAlign: 'center', minWidth: 62, background: m === nowKey ? '#eef2ff' : '#faf9f7' }}>{monthLabel(m)}</th>
+              <th style={{ ...th, position: 'sticky', left: 0, background: '#faf9f7', minWidth: 300, width: scroll ? 300 : undefined, zIndex: 2 }}>Objective</th>
+              {cols.map(c => (
+                <th key={c} style={{ ...th, textAlign: 'center', minWidth: scroll ? 58 : undefined, background: c === todayKey ? '#eef2ff' : '#faf9f7' }}>{colLabel(c)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {objectives.map(obj => (
               <tr key={obj.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                <td style={{ ...td, position: 'sticky', left: 0, background: '#fff', fontWeight: 500, color: '#1a1a2e', zIndex: 1, boxShadow: '1px 0 0 #eee' }}>{obj.text}</td>
-                {months.map(m => {
-                  const cell = data[`${obj.id}|${m}`]
+                <td style={{ ...td, position: 'sticky', left: 0, background: '#fff', fontWeight: 500, color: '#1a1a2e', zIndex: 1, boxShadow: '1px 0 0 #eee', fontSize: 12 }}>{obj.text}</td>
+                {cols.map(c => {
+                  const cell = data[`${obj.id}|${c}`]
                   const v = cell?.v || ''
-                  const bg = v === 'yes' ? '#dcfce7' : v === 'no' ? '#fee2e2' : (m === nowKey ? '#f5f8ff' : '#fff')
+                  const bg = v === 'yes' ? '#dcfce7' : v === 'no' ? '#fee2e2' : (c === todayKey ? '#f5f8ff' : '#fff')
                   const fg = v === 'yes' ? '#16a34a' : v === 'no' ? '#dc2626' : '#ccc'
                   return (
-                    <td key={m} style={{ ...td, textAlign: 'center', padding: 0 }}>
-                      <button onClick={() => onCell(cadence, obj.id, m, v)}
-                        title={cell?.by ? `${v.toUpperCase()} — ${cell.by}${cell.at ? ' · ' + new Date(cell.at).toLocaleDateString('en-GB') : ''}` : 'Click to set'}
+                    <td key={c} style={{ ...td, textAlign: 'center', padding: 0 }}>
+                      <button onClick={() => onCell(cadence, obj.id, c, v)}
+                        title={cell?.by ? `${v.toUpperCase()} — ${cell.by}` : 'Click to set'}
                         style={{ width: '100%', height: 34, border: 'none', background: bg, color: fg, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
                         {v === 'yes' ? 'Yes' : v === 'no' ? 'No' : '—'}
                       </button>
@@ -139,6 +208,6 @@ function ObjTable({ title, cadence, objectives, months, data, onCell }) {
 
 const th = { textAlign: 'left', padding: '9px 10px', fontSize: 11.5, color: '#8a857c', fontWeight: 600, whiteSpace: 'nowrap', borderBottom: '1px solid #eee' }
 const td = { padding: '8px 10px', verticalAlign: 'middle' }
-const lbl = { fontSize: 12, color: '#8a857c', marginBottom: 4, fontWeight: 600 }
-const inp = { padding: '8px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 13.5 }
-const ghost = { background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }
+const lbl = { fontSize: 11, color: '#8a857c', marginBottom: 3, fontWeight: 600 }
+const inp = { padding: '6px 9px', border: '1px solid #ddd', borderRadius: 8, fontSize: 12.5 }
+const ghost = { background: 'none', border: '1px solid #ddd', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }
