@@ -1,18 +1,34 @@
-DEPLOY NOTES - Commercial Tasks: range, column width, % fix
-===========================================================
+DEPLOY NOTES - Commercial Scorecard: Tasks % + Weekly Project Reports (part 2 of 2)
+==================================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/commercial-objectives.js
+NEW FILE - add via GitHub "Add file":
+  pages/api/commercial-scorecard-extra.js   (computes the new metrics)
 
-CHANGES
-1. DEFAULT RANGE now 6 periods back -> 3 forward (weeks and months), no scroll.
-   Filtering to a wider span still turns on scroll.
-2. OBJECTIVE COLUMN is wider (420px) and each question is clamped to a max of 3 lines
-   for legibility (full text on hover).
-3. COMPLETED % FIX. It was wrongly counting future periods. It now counts ONLY:
-   - from 30 Jul 2026 (when tracking began) or 6 months ago, whichever is later,
-   - up to and including the current period,
-   - never future periods / days that haven't happened yet.
-   Box relabelled "Completed (last 6 months)". Yes = 1; No or blank = 0.
+EDIT - replace:
+  pages/commercial-scorecard.js             (three new cards)
+
+THREE NEW SCORECARD CARDS (numbers pull straight from the Commercial Tasks page):
+
+1. WEEKLY COMMERCIAL TASKS - % of the weekly tasks marked Yes, per week. Line graph of
+   the % achieved each week. Target changeable (default 100% each week).
+
+2. MONTHLY COMMERCIAL TASKS - % of the monthly tasks marked Yes, per month. Line graph
+   per month. Target changeable (default 100% each month).
+
+3. No. of WEEKLY PROJECT REPORTS - completed vs REQUIRED each week.
+   - Required = every project that has at least one day marked "actual" in the Project
+     Management Planning tool that week (Mon-Sun).
+   - Completed = of those, how many have at least one COMPLETED project report dated in
+     that week. More than one report for a project still counts once (max 100%/project -
+     never 200%).
+   - Shown as a % with a line graph; the card sub-line shows the latest week's
+     completed/required count. Target changeable (default 100%).
+
+NOTES
+- All three only count from 30 Jul 2026 (tracking start) up to the current period -
+  future periods aren't counted.
+- Targets are stored as fractions (like the existing GP Margin target): to set 100%,
+  enter 1; for 90%, enter 0.9. The card displays it as a %.
+- "Retentions Invoiced" card was already removed in the previous scorecard package.
 
 BUILD: next build -> Compiled successfully.

@@ -146,6 +146,9 @@ const DEFAULT_TARGETS = {
   paylessNotices: 0,
   avgPaymentDays: 0,
   retentionInvoiced: 1,
+  weeklyTasks: 1,        // 100% of weekly tasks each week
+  monthlyTasks: 1,       // 100% of monthly tasks each month
+  weeklyReports: 1,      // 100% of required weekly project reports
 }
 
 const LAST_12_MONTHS = (() => {
@@ -175,6 +178,7 @@ export default function CommercialScorecard() {
   const [xeroGM, setXeroGM] = useState(null)
   const [xeroGMLoading, setXeroGMLoading] = useState(true)
   const [retentionInvoiced, setRetentionInvoiced] = useState({})
+  const [extra, setExtra] = useState(null)   // task % + weekly reports
   const [targets, setTargets] = useState(DEFAULT_TARGETS)
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(null)
@@ -200,7 +204,15 @@ export default function CommercialScorecard() {
 
   const displayMonths = getMonthsBetween(dateFrom.substring(0, 7), dateTo.substring(0, 7))
 
-  useEffect(() => { loadAll(); loadXeroGM() }, [])
+  useEffect(() => { loadAll(); loadXeroGM(); loadExtra() }, [])
+
+  async function loadExtra() {
+    try {
+      const r = await fetch('/api/commercial-scorecard-extra?weeks=12&months=12')
+      const d = await r.json()
+      if (r.ok) setExtra(d)
+    } catch {}
+  }
 
   async function loadXeroGM() {
     setXeroGMLoading(true)
@@ -253,6 +265,17 @@ export default function CommercialScorecard() {
     setRetentionInvoiced(data.data || {})
     setSavingRetention(null)
   }
+
+  // ---- Extra metrics: task % + weekly project reports (from /commercial-scorecard-extra)
+  const weeklyTaskTrend = (extra?.weeklyTask || []).map(w => ({ month: w.key.slice(5), value: w.pct / 100 }))
+  const monthlyTaskTrend = (extra?.monthlyTask || []).map(m => {
+    const [y, mm] = m.key.split('-'); return { month: new Date(+y, +mm - 1, 1).toLocaleString('en-GB', { month: 'short' }), value: m.pct / 100 }
+  })
+  const weeklyReportsTrend = (extra?.weeklyReports || []).filter(w => w.pct != null).map(w => ({ month: w.key.slice(5), value: w.pct / 100 }))
+  const weeklyTaskLatest = weeklyTaskTrend.length ? weeklyTaskTrend[weeklyTaskTrend.length - 1].value : null
+  const monthlyTaskLatest = monthlyTaskTrend.length ? monthlyTaskTrend[monthlyTaskTrend.length - 1].value : null
+  const latestReports = (extra?.weeklyReports || []).filter(w => w.required > 0).slice(-1)[0]
+  const weeklyReportsLatest = latestReports ? latestReports.pct / 100 : null
 
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
   const CARD_HEIGHT = 210
@@ -647,6 +670,42 @@ export default function CommercialScorecard() {
                         : (metrics?.paylessTotal ? ' None fall in the last 12 months (older, or a date issue).' : '')}
                     </div>
                   ),
+                })}
+
+                {/* Weekly Commercial Tasks % achieved */}
+                {renderCard({
+                  key: 'weeklyTasks',
+                  label: 'Weekly Commercial Tasks',
+                  sub: '% of weekly tasks completed - target 100% each week',
+                  value: weeklyTaskLatest,
+                  format: pct,
+                  target: targets.weeklyTasks != null ? targets.weeklyTasks : 1,
+                  targetKey: 'weeklyTasks',
+                  trendData: weeklyTaskTrend,
+                })}
+
+                {/* Monthly Commercial Tasks % achieved */}
+                {renderCard({
+                  key: 'monthlyTasks',
+                  label: 'Monthly Commercial Tasks',
+                  sub: '% of monthly tasks completed - target 100% each month',
+                  value: monthlyTaskLatest,
+                  format: pct,
+                  target: targets.monthlyTasks != null ? targets.monthlyTasks : 1,
+                  targetKey: 'monthlyTasks',
+                  trendData: monthlyTaskTrend,
+                })}
+
+                {/* No. of Weekly Project Reports completed vs required */}
+                {renderCard({
+                  key: 'weeklyReports',
+                  label: 'No. of Weekly Project Reports',
+                  sub: latestReports ? `Latest week: ${latestReports.completed}/${latestReports.required} projects on site reported` : 'Reports completed vs projects on site each week',
+                  value: weeklyReportsLatest,
+                  format: pct,
+                  target: targets.weeklyReports != null ? targets.weeklyReports : 1,
+                  targetKey: 'weeklyReports',
+                  trendData: weeklyReportsTrend,
                 })}
 
                 {/* 4. Average Days Beyond Terms (paid vs due date) */}
