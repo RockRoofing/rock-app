@@ -13,9 +13,9 @@ const GROUPS = {
   scorecards: {
     label: 'Scorecards',
     subs: [
-      { href: '/commercial-scorecard', label: 'Commercial Scorecard' },
       { href: '/weekly-tasks', label: 'Weekly Tasks' },
       { href: '/monthly-tasks', label: 'Monthly Tasks' },
+      { href: '/commercial-scorecard', label: 'Commercial Scorecard' },
     ],
   },
 }
@@ -78,18 +78,19 @@ export default function CommercialNav({ active, right = null }) {
         </div>
       </div>
 
-      {/* Sub-nav row (only for grouped pages) */}
+      {/* Sub-nav row (only for grouped pages) - matches the Ops sub-nav style */}
       {activeGroup && (
-        <div style={{ background: '#2a2a28', padding: '0 24px', borderTop: '1px solid #000' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 42 }}>
-            {GROUPS[activeGroup].subs.map(s => (
+        <div style={{ background: '#fff', borderBottom: '1px solid #ececec', padding: '0 24px', display: 'flex', gap: 4, overflowX: 'auto', height: 46, alignItems: 'center' }}>
+          {GROUPS[activeGroup].subs.map(s => {
+            const on = active === s.href
+            return (
               <Link key={s.href} href={s.href} style={{
                 fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap',
-                color: active === s.href ? '#fff' : '#9a958c', fontWeight: active === s.href ? 700 : 400,
-                borderBottom: active === s.href ? '2px solid #ca8a04' : '2px solid transparent',
+                color: on ? '#1a1a19' : '#888', fontWeight: on ? 600 : 400,
+                borderBottom: on ? '2px solid #ca8a04' : '2px solid transparent', marginBottom: -1,
               }}>{s.label}</Link>
-            ))}
-          </div>
+            )
+          })}
         </div>
       )}
     </div>

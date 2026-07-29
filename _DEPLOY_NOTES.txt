@@ -1,33 +1,14 @@
-DEPLOY NOTES - Commercial nav groups (Applications, Scorecards) + split task pages
-==================================================================================
+DEPLOY NOTES - Commercial sub-nav: reorder + Ops styling
+========================================================
 
-NEW FILES - add via GitHub "Add file":
-  components/CommercialTaskTable.js     (shared weekly/monthly task table, full width)
-  pages/weekly-tasks.js                 (Weekly Tasks page)
-  pages/monthly-tasks.js                (Monthly Tasks page)
+ONE file, an EDIT - just replace it.
+  components/CommercialNav.js
 
-EDITS - replace:
-  components/CommercialNav.js           (two-tier nav with groups + sub-navs)
-  pages/commercial-objectives.js        (now redirects to /weekly-tasks)
-  pages/commercial-scorecard.js         (uses shared nav)
-  pages/application-calendar.js         (uses shared nav)
-
-WHAT THIS DOES
-  The commercial nav now has two GROUP headers, each with a sub-nav row that appears
-  when you're inside the group:
-    - "Applications"  -> Applications for Payment | Application Calendar
-    - "Scorecards"    -> Commercial Scorecard | Weekly Tasks | Monthly Tasks
-  All other pages stay as normal single items in the main nav.
-
-  The old combined Tasks page is split into TWO full-width pages: Weekly Tasks and
-  Monthly Tasks (each shows its own table). The task tables are now full screen with a
-  much wider Task column, and the "Objective" column header is renamed to "Task".
-  The old /commercial-objectives URL now redirects to /weekly-tasks.
-
-NOTE: the other commercial pages (Project Financials, Outstanding Invoices, Retention,
-Variations, Contracted Rates, WIP, Cash Flow) still carry their own older nav bars, so
-they show the group destinations as plain links (which still work). If you'd like, I can
-migrate those to the shared two-tier nav too so the sub-navs show consistently
-everywhere - say the word and I'll do that as a follow-up.
+CHANGES
+1. Scorecards sub-nav order is now: Weekly Tasks | Monthly Tasks | Commercial Scorecard
+   (Commercial Scorecard moved to the end).
+2. Both sub-navs (Scorecards and Applications) now match the Operations sub-nav style:
+   white bar with a grey bottom border, grey tab text, and the active tab in dark text
+   with a gold underline (same as the Ops second-row tabs).
 
 BUILD: next build -> Compiled successfully.
