@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import CommercialNav from '../components/CommercialNav'
 import SyncBar from '../components/SyncBar'
 
 const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
@@ -372,44 +373,11 @@ export default function RetentionPage() {
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         {!embed && (
-        <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0 }}>
-              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-              <Link href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/commercial" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Project Financials</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/outstanding-invoices" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Outstanding Invoices</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Retention</span>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/contracted-rates" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Contracted Rates</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/applications" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Applications</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/wip" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>WIP</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/project-cashflow" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Cash Flow</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
-              <Link href="/commercial-objectives" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Tasks</Link>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
-              <SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />
-              <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
-                style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
-                + Add Manual Entry
-              </button>
-            </div>
-          </div>
-        </div>
+        <CommercialNav active="/retention" right={<>
+          <SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />
+          <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
+            style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>+ Add Manual Entry</button>
+        </>} />
         )}
 
         <div style={{ padding: 24 }}>

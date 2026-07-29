@@ -1,14 +1,28 @@
-DEPLOY NOTES - Commercial sub-nav: reorder + Ops styling
-========================================================
+DEPLOY NOTES - Migrate remaining commercial pages to shared nav + live-only rates banner
+========================================================================================
 
-ONE file, an EDIT - just replace it.
-  components/CommercialNav.js
+SIX files, all EDITS - just replace them.
+  pages/commercial.js            (now uses shared two-tier nav)
+  pages/outstanding-invoices.js  (now uses shared nav)
+  pages/retention.js             (now uses shared nav)
+  pages/variations.js            (now uses shared nav)
+  pages/contracted-rates.js      (rates banner now live-projects only)
+  pages/api/dashboard.js         (exposes each project's retention status)
 
 CHANGES
-1. Scorecards sub-nav order is now: Weekly Tasks | Monthly Tasks | Commercial Scorecard
-   (Commercial Scorecard moved to the end).
-2. Both sub-navs (Scorecards and Applications) now match the Operations sub-nav style:
-   white bar with a grey bottom border, grey tab text, and the active tab in dark text
-   with a gold underline (same as the Ops second-row tabs).
+1. NAV CONSISTENCY. Project Financials, Outstanding Invoices, Retention and Variations
+   were still showing their old single-row nav. They now use the shared commercial nav,
+   so the "Applications" and "Scorecards" group headers + sub-navs appear consistently on
+   every commercial page (same white/gold Ops-style sub-nav). Each page's own buttons
+   (Sync bars, Add Manual Entry, Add Variation, Budget Tracker/EOM toggle) are preserved
+   on the right of the nav.
+
+2. CONTRACTED RATES BANNER now only lists LIVE projects. A project counts as "not
+   locked" only if it is marked Live in the Retention tracker (defects/complete projects
+   are excluded). Message reads "All live projects have contracted rates locked" when
+   done.
+
+NOTE: the live-status comes from the dashboard cache (marker bumped), so the banner
+updates after deploy + one refresh/sync.
 
 BUILD: next build -> Compiled successfully.

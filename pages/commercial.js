@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
+import CommercialNav from '../components/CommercialNav'
 import SyncBar from '../components/SyncBar'
 import HideProjectsDropdown from '../components/HideProjectsDropdown'
 import { computeProjectWip } from '../lib/wipCalc'
@@ -411,58 +412,28 @@ export default function Dashboard() {
           <SyncBar show={['invoices', 'wages', 'bills']} months={12} onDone={() => loadDashboard(true)} />
         </div>
         ) : (
-        <div style={{ background: '#1a1a19', padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />
-              <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>← Portal</a>
-              <span style={{ color: '#444' }}>|</span>
-              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Project Financials</span>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/outstanding-invoices" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Outstanding Invoices</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/retention" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Retention</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/variations" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Variations</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/contracted-rates" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Contracted Rates</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/applications" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Applications</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/application-calendar" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Application Calendar</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/wip" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>WIP</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/project-cashflow" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Cash Flow</Link>
-              <span style={{ color: '#444' }}>|</span>
-              <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
-              <Link href="/commercial-objectives" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Tasks</Link>
-            </div>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
-              {eomMode && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: '#aaa', fontSize: 12 }}>Month:</span>
-                  <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-                    style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #444', background: '#2a2a3e', color: '#fff', fontSize: 12 }}>
-                    {monthOptions.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2a2a3e', borderRadius: 8, padding: '4px 12px' }}>
-                <span style={{ color: eomMode ? '#888' : '#fff', fontSize: 12 }}>Budget Tracker</span>
-                <div onClick={() => setEomMode(!eomMode)}
-                  style={{ width: 36, height: 20, background: eomMode ? '#e63946' : '#444', borderRadius: 10, cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
-                  <div style={{ width: 16, height: 16, background: '#fff', borderRadius: 8, position: 'absolute', top: 2, left: eomMode ? 18 : 2, transition: 'left 0.2s' }} />
-                </div>
-                <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
+        <CommercialNav active="/commercial" right={
+          <>
+            {eomMode && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: '#aaa', fontSize: 12 }}>Month:</span>
+                <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
+                  style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #444', background: '#2a2a3e', color: '#fff', fontSize: 12 }}>
+                  {monthOptions.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                </select>
               </div>
-
-              <SyncBar show={['invoices', 'wages', 'bills']} months={12} onDone={() => loadDashboard(true)} />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2a2a3e', borderRadius: 8, padding: '4px 12px' }}>
+              <span style={{ color: eomMode ? '#888' : '#fff', fontSize: 12 }}>Budget Tracker</span>
+              <div onClick={() => setEomMode(!eomMode)}
+                style={{ width: 36, height: 20, background: eomMode ? '#e63946' : '#444', borderRadius: 10, cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+                <div style={{ width: 16, height: 16, background: '#fff', borderRadius: 8, position: 'absolute', top: 2, left: eomMode ? 18 : 2, transition: 'left 0.2s' }} />
+              </div>
+              <span style={{ color: eomMode ? '#fff' : '#888', fontSize: 12 }}>EOM Report</span>
             </div>
-          </div>
-        </div>
+            <SyncBar show={['invoices', 'wages', 'bills']} months={12} onDone={() => loadDashboard(true)} />
+          </>
+        } />
         )}
 
         <div style={{ padding: '24px' }}>

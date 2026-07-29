@@ -37,7 +37,7 @@ export default function ContractedRatesPage() {
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
         fetch('/api/planning').then(r => r.json()).catch(() => ({})),
       ])
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates }))
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates, retStatus: p.retStatus || 'live' }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       // Negotiated projects (Pipedrive deals) - their id is the "N:<dealId>" key and
       // their rates are stored separately server-side.
@@ -559,17 +559,17 @@ export default function ContractedRatesPage() {
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
           {/* Projects without contracted rates locked */}
           {(() => {
-            const unlocked = projects.filter(p => !p.neg && !p.locked)
+            const unlocked = projects.filter(p => !p.neg && !p.locked && (p.retStatus || 'live') === 'live')
             if (unlocked.length === 0) {
               return (
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-                  ✓ All projects have contracted rates locked
+                  ✓ All live projects have contracted rates locked
                 </div>
               )
             }
             return (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
-                <div style={{ fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 6 }}>⚠ Contracted rates not locked ({unlocked.length}):</div>
+                <div style={{ fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 6 }}>⚠ Contracted rates not locked ({unlocked.length} live project{unlocked.length === 1 ? '' : 's'}):</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {unlocked.map(p => (
                     <button key={p.xeroId} onClick={() => pickProject(p.xeroId)}
