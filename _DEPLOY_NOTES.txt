@@ -1,33 +1,28 @@
-DEPLOY NOTES - Project details completeness (full): 0% retention, contacts, comments
-====================================================================================
+DEPLOY NOTES - Project details: schedule flexibility + "what's left" banner
+===========================================================================
 
-FOUR files, all EDITS - just replace them.
-  lib/projectComplete.js       (completeness rules)
-  pages/api/dashboard.js       (passes resolved team/contacts + fixes retention 0)
-  pages/project/[id].js        (retention comments box relabelled)
-  pages/retention.js           (tooltip wording matched)
+TWO files, both EDITS - just replace them.
+  lib/projectComplete.js       (schedule completeness logic)
+  pages/project/[id].js        ("still to complete" banner at top of Edit)
 
-This REPLACES the earlier "retention zero" package - deploy these instead (superset).
+DEPLOY ALONGSIDE the previous package (Project_complete_contacts.zip) if you haven't
+already - this builds on it. If pkg "Project_complete_contacts" is already live, these
+two files are all you need.
 
-WHAT A PROJECT NOW NEEDS TO COUNT AS COMPLETE (banner clears when all present):
-  - Application day, Valuation day, Payment day
-  - Contract value, Labour budget, Materials budget   (0 is accepted as a real value)
-  - Retention %   (0% is accepted - no longer wrongly flagged)
-  - Retention release date comments   (NEW - required)
-  - PC date (or TBC), Defects date (or TBC)
-  - ALL Rock Roofing team roles: Contracts Manager, Operations Manager, Quantity
-    Surveyor, Estimator   (resolved from the IHM or an override)
-  - At least ONE customer contact (with a name)
+CHANGES
 
-KEY FIXES
-  1. 0% retention no longer flags "incomplete" - it's a valid answer. (Same fix applied
-     so a genuine 0 in the financial boxes isn't treated as blank.)
-  2. Rock team + customer contact now count toward completeness, as requested.
-  3. "Retention comments" box renamed to "Insert retention release date comments".
+1. PAYMENT SCHEDULE - two valid ways to complete it:
+   - The fixed "Application / Valuation / Payment day of month" boxes, OR
+   - The manual monthly date table.
+   If the manual table has ANY month filled in, the fixed day-of-month boxes are NOT
+   required. If the manual table is empty, the three day boxes ARE required (as before).
 
-NOTE: the banner recomputes on next dashboard build (a cache marker forces this). After
-deploy it may take one refresh/sync to update. Some existing projects will now correctly
-show incomplete where a team role, customer contact or retention comment is missing -
-that's intended.
+   IMPORTANT: for any month row where you enter a date, that row must have ALL THREE
+   dates (Application, Valuation, Payment). A half-filled month shows as incomplete,
+   naming the month(s) e.g. "Complete all monthly dates for: Mar 2026, Apr 2026".
+
+2. "STILL TO COMPLETE" BANNER at the top of Edit Project Details. It lists exactly
+   what's outstanding for the project to count as complete, and updates live as you
+   fill fields in. When everything's done it turns green: "Project details complete".
 
 BUILD: next build -> Compiled successfully.

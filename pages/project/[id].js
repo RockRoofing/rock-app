@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import Link from 'next/link'
 import { computeProjectWip } from '../../lib/wipCalc'
+import { missingProjectFields } from '../../lib/projectComplete'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
@@ -1461,8 +1462,37 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const retOverridden = hasOv('retentionPct')
   const retFromIhm = !retOverridden && people?.retentionPct != null
 
+  // Live "what's left to complete" - mirrors the banner shown on Financials/Retention,
+  // computed from the values currently in the form so it updates as you edit.
+  const livePeople = {
+    team: {
+      contractsManager: { name: teamValue('contractsManager') },
+      operationsManager: { name: teamValue('operationsManager') },
+      quantitySurveyor: { name: teamValue('quantitySurveyor') },
+      estimator: { name: teamValue('estimator') },
+    },
+    customerContacts: contacts || [],
+  }
+  const liveSettings = {
+    ...form,
+    retentionPct: (retFraction == null || retFraction === '') ? '' : retFraction,
+  }
+  const missing = missingProjectFields(liveSettings, livePeople)
+
   return (
     <div style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 8 }}>
+      {missing.length === 0 ? (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+          ✓ Project details complete
+        </div>
+      ) : (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 6 }}>⚠ Still to complete ({missing.length}):</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#92400e', fontSize: 12.5, lineHeight: 1.6 }}>
+            {missing.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+      )}
       <div style={sectionStyle}>
         <div style={headingStyle}>Financial</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 8 }}>
