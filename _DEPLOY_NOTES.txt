@@ -1,18 +1,23 @@
-DEPLOY NOTES - Project completeness: retention comments + variations not mandatory
-==================================================================================
+DEPLOY NOTES - Contracted Rates: "not locked" banner
+====================================================
 
 TWO files, both EDITS - just replace them.
-  lib/projectComplete.js       (retention comments no longer required)
-  pages/api/dashboard.js       (cache marker bumped so the banner recomputes)
+  pages/contracted-rates.js    (new banner)
+  pages/api/dashboard.js       (exposes each project's lock status)
 
 CHANGES
-1. "Insert retention release date comments" is now OPTIONAL. It no longer appears in the
-   "still to complete" list and does not stop a project counting as complete.
-2. Variations were never part of the completeness check, so adding variations is (and
-   was) not mandatory - confirmed, nothing needed to change there.
+  The Contracted Rates page now shows a banner at the top (same style as the project
+  details banner) listing every live project whose contracted rates are NOT locked.
+  - Each project is a clickable link that jumps straight to it on the page.
+  - Projects with rates uploaded but not locked show normally; projects with no rates
+    yet are marked "(none)".
+  - When every project is locked, it turns green: "All projects have contracted rates
+    locked".
+  - Locking/unlocking a project updates the banner immediately (no reload needed).
 
-The banner recomputes on the next dashboard build (cache marker bumped), so projects
-that were only flagged for a missing retention comment will clear after deploy +
-one refresh/sync.
+  (Negotiated/Pipedrive deals are not included in the banner - only live projects.)
+
+NOTE: the lock status comes from the dashboard cache, which is refreshed by a cache
+marker bump, so it updates after deploy + one refresh/sync.
 
 BUILD: next build -> Compiled successfully.

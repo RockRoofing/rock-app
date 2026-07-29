@@ -37,12 +37,12 @@ export default function ContractedRatesPage() {
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
         fetch('/api/planning').then(r => r.json()).catch(() => ({})),
       ])
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false }))
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       // Negotiated projects (Pipedrive deals) - their id is the "N:<dealId>" key and
       // their rates are stored separately server-side.
       const negs = (pl.projects || []).filter(p => p.type === 'negotiated')
-        .map(p => ({ xeroId: p.key, jobNo: 'NEG', name: p.name || 'Negotiated deal', neg: true }))
+        .map(p => ({ xeroId: p.key, jobNo: 'NEG', name: p.name || 'Negotiated deal', neg: true, locked: false, hasRates: false }))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
       setProjects([...ps, ...negs])
       if (m && m.user) setMe(m.user)
@@ -359,6 +359,8 @@ export default function ContractedRatesPage() {
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Failed.'); setSaving(false); return }
       applyCr(d.contractedRates)
+      // Keep the banner in sync without a full reload.
+      setProjects(ps => ps.map(p => p.xeroId === projectId ? { ...p, locked: !!next, hasRates: true } : p))
       setMsg(next ? 'Contracted rates locked.' : 'Unlocked for editing.')
     } catch { setMsg('Failed.') }
     setSaving(false)
@@ -555,6 +557,32 @@ export default function ContractedRatesPage() {
         <CommercialNav active="/contracted-rates" />
 
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
+          {/* Projects without contracted rates locked */}
+          {(() => {
+            const unlocked = projects.filter(p => !p.neg && !p.locked)
+            if (unlocked.length === 0) {
+              return (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+                  ✓ All projects have contracted rates locked
+                </div>
+              )
+            }
+            return (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 6 }}>⚠ Contracted rates not locked ({unlocked.length}):</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {unlocked.map(p => (
+                    <button key={p.xeroId} onClick={() => pickProject(p.xeroId)}
+                      title={p.hasRates ? 'Rates uploaded but not locked' : 'No contracted rates yet'}
+                      style={{ fontSize: 12, color: '#92400e', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}>
+                      {[p.jobNo, p.name].filter(Boolean).join(' — ')}{p.hasRates ? '' : ' (none)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
+
           {/* Project picker */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Project</label>
