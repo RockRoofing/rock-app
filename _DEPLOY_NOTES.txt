@@ -1,28 +1,21 @@
-DEPLOY NOTES - Commercial Tasks page rework (part 1 of 2)
-========================================================
+DEPLOY NOTES - Add "Tasks" tab to the commercial nav on all pages
+================================================================
 
-THREE files, all EDITS - just replace them.
-  pages/commercial-objectives.js       (page reworked + renamed to "Commercial Tasks")
-  pages/api/commercial-objectives.js    (accepts weekly date-keyed columns)
-  components/CommercialNav.js           (tab renamed "Objectives" -> "Tasks")
+SIX files, all EDITS - just replace them.
+  pages/commercial-scorecard.js
+  pages/application-calendar.js
+  pages/variations.js
+  pages/retention.js
+  pages/outstanding-invoices.js
+  pages/commercial.js
 
-CHANGES
-- Page title is now "Commercial Tasks"; the nav tab is "Tasks".
-- WEEKLY table: columns are now each WEEK'S THURSDAY date (not month/year). Default view
-  shows 12 weeks back -> 7 weeks forward with NO scroll. Subtitle added:
-  "All weekly commercial tasks to be completed by latest Close of Play Thursday."
-- MONTHLY table: 12 months back -> 7 months forward, no scroll. Subtitle added:
-  "All Monthly Commercial Tasks to be completed no later than the 15th of every month."
-- FILTER: each table has its own From/To filter. Filtering to a longer span than the
-  default turns ON horizontal scroll; the default view has no scroll.
-- COMPLETION % BOX per table: shows the % completed counting from today's period ONWARDS
-  only (the tool wasn't running before today, so past periods are Not Applicable).
-  Yes = 1; No or blank = 0.
-- NEW weekly task added: "Have all project reports been completed for all projects we
-  were on site this week?"
+WHY
+  These six pages each have their own copy of the commercial top-nav (they don't use the
+  shared nav component), so the new "Tasks" tab wasn't showing on them.
 
-STILL TO COME (part 2): the Commercial Scorecard additions - Weekly Tasks % achieved,
-Monthly Tasks % achieved (with changeable targets + line graphs), and the "No. of Weekly
-Project Reports completed vs required" metric. Building next.
+CHANGE
+  Added the "Tasks" link (-> /commercial-objectives) to the nav on each of these pages,
+  after "Commercial Scorecard", matching the existing style. Tasks is now reachable from
+  every commercial page.
 
 BUILD: next build -> Compiled successfully.

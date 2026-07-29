@@ -495,6 +495,7 @@ export default function CommercialScorecard() {
           <Link href="/project-cashflow" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Cash Flow</Link>
           <span style={{ color: '#444' }}>|</span>
           <span style={{ color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28' }}>Commercial Scorecard</span>
+          <Link href="/commercial-objectives" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Tasks</Link>
           <div style={{ flex: 1 }} />
           <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
             style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>

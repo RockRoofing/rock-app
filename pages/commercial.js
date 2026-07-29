@@ -436,6 +436,7 @@ export default function Dashboard() {
               <Link href="/project-cashflow" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Cash Flow</Link>
               <span style={{ color: '#444' }}>|</span>
               <Link href="/commercial-scorecard" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Commercial Scorecard</Link>
+              <Link href="/commercial-objectives" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6 }}>Tasks</Link>
             </div>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
