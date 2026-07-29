@@ -1,21 +1,18 @@
-DEPLOY NOTES - Add "Tasks" tab to the commercial nav on all pages
-================================================================
+DEPLOY NOTES - Commercial Tasks: range, column width, % fix
+===========================================================
 
-SIX files, all EDITS - just replace them.
-  pages/commercial-scorecard.js
-  pages/application-calendar.js
-  pages/variations.js
-  pages/retention.js
-  pages/outstanding-invoices.js
-  pages/commercial.js
+ONE file, an EDIT - just replace it.
+  pages/commercial-objectives.js
 
-WHY
-  These six pages each have their own copy of the commercial top-nav (they don't use the
-  shared nav component), so the new "Tasks" tab wasn't showing on them.
-
-CHANGE
-  Added the "Tasks" link (-> /commercial-objectives) to the nav on each of these pages,
-  after "Commercial Scorecard", matching the existing style. Tasks is now reachable from
-  every commercial page.
+CHANGES
+1. DEFAULT RANGE now 6 periods back -> 3 forward (weeks and months), no scroll.
+   Filtering to a wider span still turns on scroll.
+2. OBJECTIVE COLUMN is wider (420px) and each question is clamped to a max of 3 lines
+   for legibility (full text on hover).
+3. COMPLETED % FIX. It was wrongly counting future periods. It now counts ONLY:
+   - from 30 Jul 2026 (when tracking began) or 6 months ago, whichever is later,
+   - up to and including the current period,
+   - never future periods / days that haven't happened yet.
+   Box relabelled "Completed (last 6 months)". Yes = 1; No or blank = 0.
 
 BUILD: next build -> Compiled successfully.

@@ -50,8 +50,8 @@ function buildMonths(back = 12, fwd = 7) {
 }
 
 export default function CommercialTasks() {
-  const defaultWeeks = useMemo(() => buildWeeks(12, 7), [])
-  const defaultMonths = useMemo(() => buildMonths(12, 7), [])
+  const defaultWeeks = useMemo(() => buildWeeks(6, 3), [])
+  const defaultMonths = useMemo(() => buildMonths(6, 3), [])
   const [data, setData] = useState({ weekly: {}, monthly: {} })
   const [loading, setLoading] = useState(true)
   // Separate filters for each table.
@@ -100,7 +100,7 @@ export default function CommercialTasks() {
         <CommercialNav active="/commercial-objectives" />
         <div style={{ padding: 24, maxWidth: 1600, margin: '0 auto' }}>
           <h1 style={{ margin: '0 0 2px', fontSize: 24, color: '#1a1a2e' }}>Commercial Tasks</h1>
-          <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Click a cell to cycle Yes / No / blank. Completion % counts today's period onwards (Yes = 1; No or blank = 0).</p>
+          <p style={{ color: '#8a857c', fontSize: 14, marginTop: 2 }}>Click a cell to cycle Yes / No / blank. Completion % covers the last 6 months up to today (from 30 Jul 2026, when tracking began). Future periods and days that haven't happened yet are not counted.</p>
 
           {loading ? <div style={{ color: '#999', padding: 20 }}>Loading…</div> : (
             <>
@@ -129,18 +129,41 @@ export default function CommercialTasks() {
   )
 }
 
-// Completion %: today's column onwards only (blank/No = 0, Yes = 1). Backwards N/A.
-function completionPct(objectives, cols, data, todayKey) {
-  const fwdCols = cols.filter(c => c >= todayKey)
-  const total = objectives.length * fwdCols.length
+// The tool started on 30 Jul 2026 - nothing before this counts. Completion % looks at
+// completed periods from the later of (30 Jul 2026 / 6 months ago) UP TO today only -
+// future periods are NOT counted (they haven't happened yet).
+const START_KEY = '2026-07-30'          // first day the tool was live
+const START_WEEK = weekKey(new Date(2026, 6, 30))   // Thursday of that week
+const START_MONTH = '2026-07'
+
+function completionPct(cadence, objectives, data) {
+  const today = new Date()
+  let periods = []
+  if (cadence === 'weekly') {
+    const todayWk = weekKey(today)
+    const sixAgo = new Date(today); sixAgo.setMonth(sixAgo.getMonth() - 6)
+    let start = weekKey(sixAgo)
+    if (start < START_WEEK) start = START_WEEK
+    // all Thursdays from start up to and including this week
+    const all = buildWeeks(120, 0)   // plenty back, none forward
+    periods = all.filter(k => k >= start && k <= todayWk)
+  } else {
+    const todayMo = monthKey(today)
+    const sixAgo = new Date(today); sixAgo.setMonth(sixAgo.getMonth() - 6)
+    let start = monthKey(sixAgo)
+    if (start < START_MONTH) start = START_MONTH
+    const all = buildMonths(120, 0)
+    periods = all.filter(k => k >= start && k <= todayMo)
+  }
+  const total = objectives.length * periods.length
   if (total === 0) return null
   let done = 0
-  for (const obj of objectives) for (const c of fwdCols) if (data[`${obj.id}|${c}`]?.v === 'yes') done++
+  for (const obj of objectives) for (const c of periods) if (data[`${obj.id}|${c}`]?.v === 'yes') done++
   return Math.round((done / total) * 100)
 }
 
 function TaskTable({ title, subtitle, cadence, objectives, cols, colLabel, colType, data, onCell, scroll, from, to, setFrom, setTo, filtered, todayKey }) {
-  const pct = completionPct(objectives, cols, data, todayKey)
+  const pct = completionPct(cadence, objectives, data)
   const inputType = colType === 'week' ? 'date' : 'month'
   return (
     <div>
@@ -151,7 +174,7 @@ function TaskTable({ title, subtitle, cadence, objectives, cols, colLabel, colTy
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '6px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 10.5, color: '#8a857c', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Completed (today on)</div>
+            <div style={{ fontSize: 10.5, color: '#8a857c', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.4 }}>Completed (last 6 months)</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: pct == null ? '#bbb' : pct === 100 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626' }}>{pct == null ? '—' : pct + '%'}</div>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
@@ -172,7 +195,7 @@ function TaskTable({ title, subtitle, cadence, objectives, cols, colLabel, colTy
         <table style={{ borderCollapse: 'collapse', fontSize: 12.5, width: '100%', tableLayout: scroll ? 'auto' : 'fixed' }}>
           <thead>
             <tr style={{ background: '#faf9f7' }}>
-              <th style={{ ...th, position: 'sticky', left: 0, background: '#faf9f7', minWidth: 300, width: scroll ? 300 : undefined, zIndex: 2 }}>Objective</th>
+              <th style={{ ...th, position: 'sticky', left: 0, background: '#faf9f7', minWidth: 420, width: scroll ? 420 : undefined, zIndex: 2 }}>Objective</th>
               {cols.map(c => (
                 <th key={c} style={{ ...th, textAlign: 'center', minWidth: scroll ? 58 : undefined, background: c === todayKey ? '#eef2ff' : '#faf9f7' }}>{colLabel(c)}</th>
               ))}
@@ -181,7 +204,9 @@ function TaskTable({ title, subtitle, cadence, objectives, cols, colLabel, colTy
           <tbody>
             {objectives.map(obj => (
               <tr key={obj.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                <td style={{ ...td, position: 'sticky', left: 0, background: '#fff', fontWeight: 500, color: '#1a1a2e', zIndex: 1, boxShadow: '1px 0 0 #eee', fontSize: 12 }}>{obj.text}</td>
+                <td style={{ ...td, position: 'sticky', left: 0, background: '#fff', fontWeight: 500, color: '#1a1a2e', zIndex: 1, boxShadow: '1px 0 0 #eee', minWidth: 420, maxWidth: 420 }} title={obj.text}>
+                  <div style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 12.5, lineHeight: 1.35 }}>{obj.text}</div>
+                </td>
                 {cols.map(c => {
                   const cell = data[`${obj.id}|${c}`]
                   const v = cell?.v || ''
