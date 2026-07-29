@@ -1465,6 +1465,10 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   // Live "what's left to complete" - mirrors the banner shown on Financials/Retention,
   // computed from the values currently in the form so it updates as you edit.
   const livePeople = {
+    projectAddress: addressDisplay,
+    orderRef: orderRefDisplay,
+    customerCompany: custCompanyDisplay,
+    customerAddress: custAddressDisplay,
     team: {
       contractsManager: { name: teamValue('contractsManager') },
       operationsManager: { name: teamValue('operationsManager') },

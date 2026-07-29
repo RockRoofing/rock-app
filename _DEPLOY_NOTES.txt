@@ -1,28 +1,30 @@
-DEPLOY NOTES - Migrate remaining commercial pages to shared nav + live-only rates banner
-========================================================================================
+DEPLOY NOTES - Hidden projects excluded from rates banner + 4 new mandatory detail fields
+=========================================================================================
 
-SIX files, all EDITS - just replace them.
-  pages/commercial.js            (now uses shared two-tier nav)
-  pages/outstanding-invoices.js  (now uses shared nav)
-  pages/retention.js             (now uses shared nav)
-  pages/variations.js            (now uses shared nav)
-  pages/contracted-rates.js      (rates banner now live-projects only)
-  pages/api/dashboard.js         (exposes each project's retention status)
+FOUR files, all EDITS - just replace them.
+  pages/contracted-rates.js    (hidden projects excluded from banner)
+  lib/projectComplete.js       (4 new required fields)
+  pages/project/[id].js        (live banner includes the 4 fields)
+  pages/api/dashboard.js       (recompute marker bump)
 
 CHANGES
-1. NAV CONSISTENCY. Project Financials, Outstanding Invoices, Retention and Variations
-   were still showing their old single-row nav. They now use the shared commercial nav,
-   so the "Applications" and "Scorecards" group headers + sub-navs appear consistently on
-   every commercial page (same white/gold Ops-style sub-nav). Each page's own buttons
-   (Sync bars, Add Manual Entry, Add Variation, Budget Tracker/EOM toggle) are preserved
-   on the right of the nav.
+1. HIDDEN PROJECTS. Any project manually hidden on the Project Financials page no longer
+   appears in the "contracted rates not locked" banner on the Contracted Rates page.
+   (Combined with the earlier change, the banner now only shows LIVE, non-hidden
+   projects.)
 
-2. CONTRACTED RATES BANNER now only lists LIVE projects. A project counts as "not
-   locked" only if it is marked Live in the Retention tracker (defects/complete projects
-   are excluded). Message reads "All live projects have contracted rates locked" when
-   done.
+2. FOUR NEW MANDATORY FIELDS for a project to count as "details complete" (shown in the
+   banners on Project Financials and Retention, and in the live banner at the top of
+   Edit Project Details):
+     - Site address
+     - Order reference
+     - Company name
+     - Company address
+   These read the resolved value (IHM value, or your override), so a project is complete
+   if the detail exists either from the IHM or entered here.
 
-NOTE: the live-status comes from the dashboard cache (marker bumped), so the banner
-updates after deploy + one refresh/sync.
+NOTE: banners recompute on the next dashboard build (marker bumped), so they update
+after deploy + one refresh/sync. Some existing projects will now show incomplete until
+these four details are present - that's intended.
 
 BUILD: next build -> Compiled successfully.

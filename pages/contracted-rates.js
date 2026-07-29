@@ -32,12 +32,14 @@ export default function ContractedRatesPage() {
 
   useEffect(() => { (async () => {
     try {
-      const [d, m, pl] = await Promise.all([
+      const [d, m, pl, hp] = await Promise.all([
         fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => null),
         fetch('/api/planning').then(r => r.json()).catch(() => ({})),
+        fetch('/api/hidden-projects').then(r => r.json()).catch(() => ({})),
       ])
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates, retStatus: p.retStatus || 'live' }))
+      const hiddenSet = new Set((hp?.hidden || []).map(String))
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates, retStatus: p.retStatus || 'live', hidden: hiddenSet.has(String(p.xeroId)) }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       // Negotiated projects (Pipedrive deals) - their id is the "N:<dealId>" key and
       // their rates are stored separately server-side.
@@ -559,7 +561,7 @@ export default function ContractedRatesPage() {
         <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
           {/* Projects without contracted rates locked */}
           {(() => {
-            const unlocked = projects.filter(p => !p.neg && !p.locked && (p.retStatus || 'live') === 'live')
+            const unlocked = projects.filter(p => !p.neg && !p.locked && !p.hidden && (p.retStatus || 'live') === 'live')
             if (unlocked.length === 0) {
               return (
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#166534', fontWeight: 600 }}>
