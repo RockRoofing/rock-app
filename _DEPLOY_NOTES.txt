@@ -1,28 +1,18 @@
-DEPLOY NOTES - Project details: schedule flexibility + "what's left" banner
-===========================================================================
+DEPLOY NOTES - Project completeness: retention comments + variations not mandatory
+==================================================================================
 
 TWO files, both EDITS - just replace them.
-  lib/projectComplete.js       (schedule completeness logic)
-  pages/project/[id].js        ("still to complete" banner at top of Edit)
-
-DEPLOY ALONGSIDE the previous package (Project_complete_contacts.zip) if you haven't
-already - this builds on it. If pkg "Project_complete_contacts" is already live, these
-two files are all you need.
+  lib/projectComplete.js       (retention comments no longer required)
+  pages/api/dashboard.js       (cache marker bumped so the banner recomputes)
 
 CHANGES
+1. "Insert retention release date comments" is now OPTIONAL. It no longer appears in the
+   "still to complete" list and does not stop a project counting as complete.
+2. Variations were never part of the completeness check, so adding variations is (and
+   was) not mandatory - confirmed, nothing needed to change there.
 
-1. PAYMENT SCHEDULE - two valid ways to complete it:
-   - The fixed "Application / Valuation / Payment day of month" boxes, OR
-   - The manual monthly date table.
-   If the manual table has ANY month filled in, the fixed day-of-month boxes are NOT
-   required. If the manual table is empty, the three day boxes ARE required (as before).
-
-   IMPORTANT: for any month row where you enter a date, that row must have ALL THREE
-   dates (Application, Valuation, Payment). A half-filled month shows as incomplete,
-   naming the month(s) e.g. "Complete all monthly dates for: Mar 2026, Apr 2026".
-
-2. "STILL TO COMPLETE" BANNER at the top of Edit Project Details. It lists exactly
-   what's outstanding for the project to count as complete, and updates live as you
-   fill fields in. When everything's done it turns green: "Project details complete".
+The banner recomputes on the next dashboard build (cache marker bumped), so projects
+that were only flagged for a missing retention comment will clear after deploy +
+one refresh/sync.
 
 BUILD: next build -> Compiled successfully.
