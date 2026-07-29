@@ -1,34 +1,33 @@
-DEPLOY NOTES - Commercial Scorecard: Tasks % + Weekly Project Reports (part 2 of 2)
+DEPLOY NOTES - Commercial nav groups (Applications, Scorecards) + split task pages
 ==================================================================================
 
-NEW FILE - add via GitHub "Add file":
-  pages/api/commercial-scorecard-extra.js   (computes the new metrics)
+NEW FILES - add via GitHub "Add file":
+  components/CommercialTaskTable.js     (shared weekly/monthly task table, full width)
+  pages/weekly-tasks.js                 (Weekly Tasks page)
+  pages/monthly-tasks.js                (Monthly Tasks page)
 
-EDIT - replace:
-  pages/commercial-scorecard.js             (three new cards)
+EDITS - replace:
+  components/CommercialNav.js           (two-tier nav with groups + sub-navs)
+  pages/commercial-objectives.js        (now redirects to /weekly-tasks)
+  pages/commercial-scorecard.js         (uses shared nav)
+  pages/application-calendar.js         (uses shared nav)
 
-THREE NEW SCORECARD CARDS (numbers pull straight from the Commercial Tasks page):
+WHAT THIS DOES
+  The commercial nav now has two GROUP headers, each with a sub-nav row that appears
+  when you're inside the group:
+    - "Applications"  -> Applications for Payment | Application Calendar
+    - "Scorecards"    -> Commercial Scorecard | Weekly Tasks | Monthly Tasks
+  All other pages stay as normal single items in the main nav.
 
-1. WEEKLY COMMERCIAL TASKS - % of the weekly tasks marked Yes, per week. Line graph of
-   the % achieved each week. Target changeable (default 100% each week).
+  The old combined Tasks page is split into TWO full-width pages: Weekly Tasks and
+  Monthly Tasks (each shows its own table). The task tables are now full screen with a
+  much wider Task column, and the "Objective" column header is renamed to "Task".
+  The old /commercial-objectives URL now redirects to /weekly-tasks.
 
-2. MONTHLY COMMERCIAL TASKS - % of the monthly tasks marked Yes, per month. Line graph
-   per month. Target changeable (default 100% each month).
-
-3. No. of WEEKLY PROJECT REPORTS - completed vs REQUIRED each week.
-   - Required = every project that has at least one day marked "actual" in the Project
-     Management Planning tool that week (Mon-Sun).
-   - Completed = of those, how many have at least one COMPLETED project report dated in
-     that week. More than one report for a project still counts once (max 100%/project -
-     never 200%).
-   - Shown as a % with a line graph; the card sub-line shows the latest week's
-     completed/required count. Target changeable (default 100%).
-
-NOTES
-- All three only count from 30 Jul 2026 (tracking start) up to the current period -
-  future periods aren't counted.
-- Targets are stored as fractions (like the existing GP Margin target): to set 100%,
-  enter 1; for 90%, enter 0.9. The card displays it as a %.
-- "Retentions Invoiced" card was already removed in the previous scorecard package.
+NOTE: the other commercial pages (Project Financials, Outstanding Invoices, Retention,
+Variations, Contracted Rates, WIP, Cash Flow) still carry their own older nav bars, so
+they show the group destinations as plain links (which still work). If you'd like, I can
+migrate those to the shared two-tier nav too so the sub-navs show consistently
+everywhere - say the word and I'll do that as a follow-up.
 
 BUILD: next build -> Compiled successfully.
