@@ -648,18 +648,6 @@ export default function CommercialScorecard() {
                   ),
                 })}
 
-                {/* 3. Retentions Invoiced */}
-                {renderCard({
-                  key: 'retentionInvoiced',
-                  label: 'Retentions Invoiced',
-                  sub: '% of last 6 months ticked - click a month to toggle',
-                  value: retentionPct6mo,
-                  format: pct,
-                  target: targets.retentionInvoiced != null ? targets.retentionInvoiced : 1,
-                  targetKey: 'retentionInvoiced',
-                  extra: retentionTable,
-                })}
-
                 {/* 4. Average Days Beyond Terms (paid vs due date) */}
                 {renderCard({
                   key: 'avgPaymentDays',

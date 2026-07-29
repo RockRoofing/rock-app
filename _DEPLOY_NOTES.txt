@@ -1,23 +1,33 @@
-DEPLOY NOTES - Contracted Rates: "not locked" banner
-====================================================
+DEPLOY NOTES - Commercial Objectives page + remove Retentions Invoiced card
+===========================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/contracted-rates.js    (new banner)
-  pages/api/dashboard.js       (exposes each project's lock status)
+NEW FILES - add via GitHub "Add file":
+  pages/api/commercial-objectives.js   (stores the Yes/No grid)
+  pages/commercial-objectives.js        (the Objectives page)
 
-CHANGES
-  The Contracted Rates page now shows a banner at the top (same style as the project
-  details banner) listing every live project whose contracted rates are NOT locked.
-  - Each project is a clickable link that jumps straight to it on the page.
-  - Projects with rates uploaded but not locked show normally; projects with no rates
-    yet are marked "(none)".
-  - When every project is locked, it turns green: "All projects have contracted rates
-    locked".
-  - Locking/unlocking a project updates the banner immediately (no reload needed).
+EDITS - replace:
+  components/CommercialNav.js     (new "Objectives" tab)
+  pages/commercial-scorecard.js   (Retentions Invoiced card removed)
 
-  (Negotiated/Pipedrive deals are not included in the banner - only live projects.)
+WHAT THIS DOES
 
-NOTE: the lock status comes from the dashboard cache, which is refreshed by a cache
-marker bump, so it updates after deploy + one refresh/sync.
+COMMERCIAL OBJECTIVES (new tab in the Commercial nav: "Objectives")
+  Two tables - Weekly Commercial Tasks and Monthly Commercial Tasks. Objectives run
+  down the left, MONTHS run across the top (12 months back -> 12 months forward, 25
+  columns), oldest first, current month highlighted.
+  - The only value in a cell is Yes / No. Click a cell to cycle: blank -> Yes -> No ->
+    blank. Each entry records who set it and when (hover a cell to see).
+  - Date filter (From / To month) narrows the visible months so you can look back over
+    old data to confirm tasks were done over time. Reset clears the filter.
+  - Weekly table objectives (5) and Monthly table objectives (6) are exactly as you
+    specified.
+
+SCORECARD
+  The "Retentions Invoiced" card has been removed from the Commercial Scorecard.
+
+NOTE ON "WEEKLY" TABLE: the columns are MONTHS (as you specified the layout - months
+across the top for both tables). So a Weekly-table cell means "kept up through that
+month". If you'd rather the weekly table show one column PER WEEK instead, tell me and
+I'll switch that table to weekly columns.
 
 BUILD: next build -> Compiled successfully.
