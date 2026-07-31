@@ -452,6 +452,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
   const [mats, setMats] = useState(() => (app.materials || []).map(m => ({ ...m })))
   const [dirty, setDirty] = useState(false)
+  const [appNoEdit, setAppNoEdit] = useState(() => String(app.appNumber || appNumber || ''))
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [showAddMat, setShowAddMat] = useState(false)
@@ -601,7 +602,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
     try {
       const d = await fetch('/api/applications', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save', projectId, allowSubmittedEdit: unlocked, application: { ...app, contractWorks: rows, variationData, materials: mats, prevCertGross: isFirstApp ? 0 : (prevCertEntered ? prevCertValue : null) } }),
+        body: JSON.stringify({ action: 'save', projectId, allowSubmittedEdit: unlocked, application: { ...app, appNumber: appNoEdit === '' ? app.appNumber : (parseInt(appNoEdit, 10) || app.appNumber), contractWorks: rows, variationData, materials: mats, prevCertGross: isFirstApp ? 0 : (prevCertEntered ? prevCertValue : null) } }),
       }).then(r => r.json())
       if (!d.ok) { setMsg(d.error || 'Save failed.'); setSaving(false); return }
       onSaved(d.application); setDirty(false)
@@ -613,6 +614,15 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
     setSaving(false)
   }
 
+  // Auto-save drafts as you work (debounced). Sent apps only auto-save while unlocked
+  // for editing. Never auto-submits - sending stays a manual action.
+  useEffect(() => {
+    if (!dirty || locked) return
+    const t = setTimeout(() => { save(false) }, 1500)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, rows, variationData, mats, appNoEdit, prevCertGross])
+
   const th = { padding: '9px 10px', textAlign: 'left', fontWeight: 700, color: '#6b7280', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }
   const thR = { ...th, textAlign: 'right' }
   const td = { padding: '7px 10px', fontSize: 12.5, verticalAlign: 'middle' }
@@ -622,7 +632,14 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 13, cursor: 'pointer' }}>‹ All applications</button>
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>Application {appNumber} — {app.monthLabel || monthLabel(app.monthKey)}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+          <span>Application</span>
+          <input type="text" inputMode="numeric" disabled={locked} value={appNoEdit}
+            onChange={e => { setAppNoEdit(e.target.value); setDirty(true) }}
+            title="Application number (auto-assigned; edit to override)"
+            style={{ width: 46, padding: '3px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 15, fontWeight: 700, textAlign: 'center' }} />
+          <span>&mdash; {app.monthLabel || monthLabel(app.monthKey)}</span>
+        </div>
         <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: isSent ? '#dcfce7' : '#fef9c3', color: isSent ? '#16a34a' : '#a16207' }}>{isSent ? (unlocked ? 'Sent — editing' : 'Sent') : 'Draft'}</span>
         <div style={{ flex: 1 }} />
         {isSent && !unlocked && <button onClick={() => { if (confirm('Are you sure you want to edit an application that has already been issued to the customer?\n\nEditing will move it back to draft — you will need to send it (or mark it as sent) again. Its application number stays the same.')) setUnlocked(true) }} style={{ background: '#fff', border: '1px solid #fca5a5', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Edit application</button>}
@@ -704,7 +721,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={tdR}>
                       {!measurable ? '' : locked ? `${r.pctComplete || 0}%` : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                          <input type="number" min="0" max="100" value={r.pctComplete ?? 0} onChange={e => setPct(r.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                          <input type="text" inputMode="decimal" value={r.pctComplete ? r.pctComplete : ''} onChange={e => setPct(r.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
                           <button title="Mark 100% complete" onClick={() => setPct(r.id, 100)} style={{ background: (r.pctComplete === 100) ? '#16a34a' : '#f0f2f5', color: (r.pctComplete === 100) ? '#fff' : '#16a34a', border: '1px solid ' + ((r.pctComplete === 100) ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                         </div>
                       )}
@@ -760,7 +777,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={tdR}>
                       {!instructed ? <span style={{ color: '#cbd5e1' }}>—</span> : locked ? `${v.pctComplete || 0}%` : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                          <input type="number" min="0" max="100" value={v.pctComplete ?? 0} onChange={e => setVarPct(v.key, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                          <input type="text" inputMode="decimal" value={v.pctComplete ? v.pctComplete : ''} onChange={e => setVarPct(v.key, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
                           <button title="100%" onClick={() => setVarPct(v.key, 100)} style={{ background: v.pctComplete === 100 ? '#16a34a' : '#f0f2f5', color: v.pctComplete === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (v.pctComplete === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                         </div>
                       )}
@@ -857,7 +874,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
                     <td style={tdR}>{locked ? `${pct}%` : (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                        <input type="number" min="0" max="100" value={pct} onChange={e => setMatPct(m.id, e.target.value)} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                        <input type="text" inputMode="decimal" value={pct ? pct : ''} onChange={e => setMatPct(m.id, e.target.value)} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
                         <button title="100%" onClick={() => setMatPct(m.id, 100)} style={{ background: pct === 100 ? '#16a34a' : '#f0f2f5', color: pct === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (pct === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                       </div>
                     )}</td>

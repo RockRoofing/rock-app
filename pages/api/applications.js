@@ -191,6 +191,7 @@ export default async function handler(req, res) {
       const app = {
         id: `app_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         seq,
+        appNumber: (apps.reduce((mx, a) => Math.max(mx, a.appNumber || 0), 0) || 0) + 1,
         monthKey: monthKey || '',
         monthLabel: monthLabel || '',
         status: 'draft',

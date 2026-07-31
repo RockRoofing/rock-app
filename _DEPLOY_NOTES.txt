@@ -1,30 +1,26 @@
-DEPLOY NOTES - Hidden projects excluded from rates banner + 4 new mandatory detail fields
-=========================================================================================
+DEPLOY NOTES - Applications: auto-number, editable number, blank % boxes, auto-save
+==================================================================================
 
-FOUR files, all EDITS - just replace them.
-  pages/contracted-rates.js    (hidden projects excluded from banner)
-  lib/projectComplete.js       (4 new required fields)
-  pages/project/[id].js        (live banner includes the 4 fields)
-  pages/api/dashboard.js       (recompute marker bump)
+TWO files, both EDITS - just replace them.
+  pages/applications.js        (editor: number field, blank % boxes, auto-save)
+  pages/api/applications.js    (assign number at create)
 
 CHANGES
-1. HIDDEN PROJECTS. Any project manually hidden on the Project Financials page no longer
-   appears in the "contracted rates not locked" banner on the Contracted Rates page.
-   (Combined with the earlier change, the banner now only shows LIVE, non-hidden
-   projects.)
+1. AUTO-NUMBERED regardless of status. Every application gets a number the moment it's
+   created (App 1, App 2, ...), including drafts - not just when sent.
 
-2. FOUR NEW MANDATORY FIELDS for a project to count as "details complete" (shown in the
-   banners on Project Financials and Retention, and in the live banner at the top of
-   Edit Project Details):
-     - Site address
-     - Order reference
-     - Company name
-     - Company address
-   These read the resolved value (IHM value, or your override), so a project is complete
-   if the detail exists either from the IHM or entered here.
+2. EDITABLE number. The application number in the editor header is now an editable box,
+   so you can override the auto number. Your override saves and sticks (draft or sent).
 
-NOTE: banners recompute on the next dashboard build (marker bumped), so they update
-after deploy + one refresh/sync. Some existing projects will now show incomplete until
-these four details are present - that's intended.
+3. % COMPLETE / % CLAIMED boxes (Contract Works, Variations, Materials on site):
+   - The 0 is gone - an empty box is now completely blank.
+   - The up/down spinner arrows are removed.
+   (A blank box still calculates as 0%. Materials still default to 100% when first
+   added, as before - clear the box to make it blank/0.)
+
+4. NO MORE LOST NUMBERS ON SEND + AUTO-SAVE. The application now auto-saves as you work
+   (a moment after you stop typing), so your figures and the way everything is calculated
+   persist. Marking as sent / sending no longer wipes the numbers - the saved values are
+   frozen as-is, and the application number carries through from draft to sent unchanged.
 
 BUILD: next build -> Compiled successfully.
