@@ -1,26 +1,37 @@
-DEPLOY NOTES - Applications: auto-number, editable number, blank % boxes, auto-save
-==================================================================================
+DEPLOY NOTES - Contracted Rates upload: stop dropping line items + show what's skipped
+======================================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/applications.js        (editor: number field, blank % boxes, auto-save)
-  pages/api/applications.js    (assign number at create)
+THREE files, all EDITS - just replace them.
+  lib/contractRatesParser.js       (parsing fixes)
+  pages/contracted-rates.js         (highlights + "not imported" notice)
+  pages/api/contracted-rates.js     (passes the skipped-rows report through)
 
-CHANGES
-1. AUTO-NUMBERED regardless of status. Every application gets a number the moment it's
-   created (App 1, App 2, ...), including drafts - not just when sent.
+WHY LINES WERE GOING MISSING (found three silent causes)
+  The importer only kept a row if column A (Schedule ID) had a value, and it dropped
+  everything else with no warning. Three things fell through:
+   1. BLANK / MERGED Schedule ID cells. If the ID cell is blank - or merged across
+      several rows (Excel stores the value only on the first row of a merge, leaving the
+      rest blank) - those lines were dropped even though they were real items. This is
+      the most likely cause of "random" missing lines.
+   2. A real item whose DESCRIPTION contained the words "below the line" was mistaken for
+      the "BELOW THE LINE ITEMS" divider - it got skipped AND wrongly flipped everything
+      after it into the optional section.
+   3. The divider / summary matching was too loose.
 
-2. EDITABLE number. The application number in the editor header is now an editable box,
-   so you can override the auto number. Your override saves and sticks (draft or sent).
+WHAT'S FIXED
+  - A row is now imported if it has a Schedule ID OR it has no ID but clearly is an item
+    (a description plus a qty / rate / total / material or labour rate). So blank-code and
+    merged-cell lines come in instead of vanishing.
+  - Lines that came in WITHOUT a Schedule ID are flagged so you can spot them and add the
+    code if needed.
+  - The "below the line" divider is only treated as a divider when the row is just that
+    label (no item data) - real items mentioning the phrase are kept.
+  - Repeated Schedule IDs still import as separate lines (they always did - confirmed).
 
-3. % COMPLETE / % CLAIMED boxes (Contract Works, Variations, Materials on site):
-   - The 0 is gone - an empty box is now completely blank.
-   - The up/down spinner arrows are removed.
-   (A blank box still calculates as 0%. Materials still default to 100% when first
-   added, as before - clear the box to make it blank/0.)
-
-4. NO MORE LOST NUMBERS ON SEND + AUTO-SAVE. The application now auto-saves as you work
-   (a moment after you stop typing), so your figures and the way everything is calculated
-   persist. Marking as sent / sending no longer wipes the numbers - the saved values are
-   frozen as-is, and the application number carries through from draft to sent unchanged.
+NEW: VISIBILITY. After an upload you now get:
+  - a note of how many lines came in without a code, and
+  - a yellow "N rows were not imported" panel listing each skipped row (row number,
+    description, reason) - so if anything is ever left out, you can SEE it rather than
+    having to spot it by eye.
 
 BUILD: next build -> Compiled successfully.

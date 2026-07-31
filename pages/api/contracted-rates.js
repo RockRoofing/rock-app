@@ -110,7 +110,7 @@ export default async function handler(req, res) {
       const parsed = parseTakeOffRows(rows)
       if (parsed.error) return res.status(400).json({ error: parsed.error })
       const totals = computeRateTotals(parsed.items)
-      return res.json({ ok: true, items: parsed.items, totals, sheetName, fileName: fileName || '' })
+      return res.json({ ok: true, items: parsed.items, skipped: parsed.skipped || [], totals, sheetName, fileName: fileName || '' })
     }
 
     if (!projectId) return res.status(400).json({ error: 'projectId required' })

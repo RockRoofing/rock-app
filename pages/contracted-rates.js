@@ -21,6 +21,7 @@ export default function ContractedRatesPage() {
   const [showNet, setShowNet] = useState(false)          // view toggle: show rates net of discount
   const [fileName, setFileName] = useState('')
   const [sourceTotal, setSourceTotal] = useState(null)
+  const [skippedRows, setSkippedRows] = useState([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -134,9 +135,14 @@ export default function ContractedRatesPage() {
       setItems(d.items.map(x => ({ ...x })))
       setFileName(d.fileName || file.name)
       setSourceTotal(d.totals?.aboveTotal ?? null)
+      setSkippedRows(Array.isArray(d.skipped) ? d.skipped : [])
       setLocked(false)
       setDirty(true)
-      setMsg(`Parsed ${d.items.filter(x => x.kind === 'item').length} rate lines from "${d.sheetName}". Review, then Save.`)
+      const noCode = d.items.filter(x => x.kind === 'item' && x.codeMissing).length
+      const noteBits = []
+      if (noCode) noteBits.push(`${noCode} line${noCode === 1 ? '' : 's'} came in without a Schedule ID (highlighted - add the code if needed)`)
+      if ((d.skipped || []).length) noteBits.push(`${d.skipped.length} row${d.skipped.length === 1 ? '' : 's'} were not imported - see the notice below`)
+      setMsg(`Parsed ${d.items.filter(x => x.kind === 'item').length} rate lines from "${d.sheetName}".${noteBits.length ? ' ' + noteBits.join('. ') + '.' : ''} Review, then Save.`)
     } catch (err) { setMsg('Upload failed: ' + (err?.message || err)) }
     setUploading(false)
   }
@@ -629,6 +635,17 @@ export default function ContractedRatesPage() {
               </div>
 
               {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') || msg.includes('Could not') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
+              {skippedRows.length > 0 && !locked && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12.5, color: '#92400e', fontWeight: 700, marginBottom: 6 }}>⚠ {skippedRows.length} row{skippedRows.length === 1 ? '' : 's'} in the file were not imported:</div>
+                  <div style={{ maxHeight: 140, overflowY: 'auto' }}>
+                    {skippedRows.map((s, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#92400e' }}>Row {s.row}: {s.description || '(no description)'} — {s.reason}</div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#a16207', marginTop: 6 }}>If any of these should be included, add them manually with the + button, or adjust the file and re-upload.</div>
+                </div>
+              )}
 
               {hasRates && (
                 <>
