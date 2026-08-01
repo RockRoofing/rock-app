@@ -6,7 +6,11 @@ import { runNotifications } from '../../../lib/notifications'
 export default async function handler(req, res) {
   try {
     const force = req.query.force === '1'
-    const out = await runNotifications({ force })
+    // Evaluate "today" in UK local time (the cron ticks in UTC).
+    const p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+    const g = (t) => p.find(x => x.type === t)?.value
+    const today = new Date(Number(g('year')), Number(g('month')) - 1, Number(g('day')))
+    const out = await runNotifications({ force, today })
     res.json(out)
   } catch (e) {
     res.status(500).json({ ok: false, error: e?.message || 'failed' })

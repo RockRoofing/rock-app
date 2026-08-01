@@ -1,20 +1,31 @@
-DEPLOY NOTES - Bookkeeping weekly tasks: Thursday
-=================================================
+DEPLOY NOTES - Fix scheduled send time (UTC vs UK time)
+=======================================================
 
 TWO files, both EDITS - just replace them.
-  pages/bookkeeping-weekly-tasks.js   (weekly columns now Thursday)
-  lib/notifications.js                 (bookkeeping notification anchor -> Thursday)
+  lib/outstandingInvoicesReport.js     (weekly report schedule gate fixed)
+  pages/api/cron/notifications.js       (notifications evaluated in UK time)
 
-CHANGE
-  The Weekly Bookkeeping Tasks now run to a THURSDAY (was Friday) - columns are each
-  week's Thursday date, and the subtitle reads "...by the end of play each Thursday."
-  Tracking start set to 30 Jul 2026 (the Thursday of that week). The notification
-  scheduler's bookkeeping week anchor is moved to Thursday too, so any bookkeeping
-  weekly notifications reference the correct week.
+WHY THE AUTO-SEND DIDN'T FIRE
+  The cron ticks hourly in UTC, but the schedule was being compared against UK local
+  time with an exact-hour match. During British Summer Time UK is UTC+1, so the hours
+  never lined up - e.g. the cron's "11:00" tick is really 12:00 UK, so an 11:00 UK
+  schedule was always missed. It also used a fragile way to read UK time.
 
-NOTE: any weekly bookkeeping Yes/No already ticked was stored under a Friday key and will
-show blank under the new Thursday columns (the data isn't lost, just under old keys).
-As this was only just set up there is likely little/no data to re-enter. Monthly tasks
-are unaffected.
+FIX
+  - UK day + hour are now read reliably (Intl parts), and the weekly report fires when
+    it's the right UK day and the UK hour is AT OR AFTER the target hour (then a
+    once-per-day guard prevents repeats). So the correct hour is no longer missed by the
+    UTC/BST offset, and a slightly late cron tick still catches the day.
+  - The notifications cron now also evaluates "today" in UK time (correct day near
+    midnight).
+
+AFTER DEPLOY
+  Set the weekly report schedule to the UK day + hour you want on the Outstanding
+  Invoices page. It will send on the next cron tick at/after that hour on that day.
+  (Manual "Send now" was already working - this only affects the automatic schedule.)
+
+  Note: because it now fires "at or after" the target hour, if you set a time that has
+  already passed TODAY on the chosen day, it will send on the very next cron tick (top of
+  the next hour) rather than waiting a week.
 
 BUILD: next build -> Compiled successfully.
