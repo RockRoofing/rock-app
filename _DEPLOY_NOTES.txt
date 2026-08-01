@@ -1,38 +1,20 @@
-DEPLOY NOTES - Outstanding Invoices weekly report: diagnose why emails aren't arriving
-======================================================================================
+DEPLOY NOTES - Bookkeeping weekly tasks: Thursday
+=================================================
 
 TWO files, both EDITS - just replace them.
-  lib/outstandingInvoicesReport.js   (clearer failures + surfaces Resend's error)
-  pages/outstanding-invoices.js       (shows the reason + the "from" address)
+  pages/bookkeeping-weekly-tasks.js   (weekly columns now Thursday)
+  lib/notifications.js                 (bookkeeping notification anchor -> Thursday)
 
-WHY THIS HELPS
-  The weekly report IS set up (an hourly cron sends it on the configured day/hour to your
-  recipient list, falling back to post-contract/management/admin portal users). When it
-  silently doesn't arrive, it was hard to see why. Now:
-   - If RESEND_API_KEY is missing -> it says so.
-   - If there are no recipients -> it says so.
-   - If Resend rejects the send (e.g. the "from" domain isn't verified) -> it now shows
-     Resend's actual error and the "from" address it used.
+CHANGE
+  The Weekly Bookkeeping Tasks now run to a THURSDAY (was Friday) - columns are each
+  week's Thursday date, and the subtitle reads "...by the end of play each Thursday."
+  Tracking start set to 30 Jul 2026 (the Thursday of that week). The notification
+  scheduler's bookkeeping week anchor is moved to Thursday too, so any bookkeeping
+  weekly notifications reference the correct week.
 
-HOW TO FIND YOUR PROBLEM (no code needed)
-  On the Outstanding Invoices page, click "Send now". Read the message:
-   - "...from Rock Roofing <onboarding@resend.dev>" and nothing arrives to your team:
-     the default test sender only delivers to the Resend account owner. Set a real,
-     VERIFIED from address (see below).
-   - A message mentioning the domain is not verified / 403: your "from" address
-     (e.g. notifications@rockroofing.co.uk) uses a domain that ISN'T verified in Resend.
-     Fix: in Resend, add + verify the rockroofing.co.uk domain (add the DNS records they
-     give you). Until then, emails from notifications@ that domain will NOT send.
-   - "No recipients...": add emails to the weekly recipient list on the page (or give the
-     relevant portal users an email address).
-
-THE "FROM" ADDRESS
-  The report sends from the FORMS_FROM_EMAIL environment variable (falling back to the
-  Resend test address). To send from notifications@rockroofing.co.uk:
-    1. Verify rockroofing.co.uk in Resend (DNS records).
-    2. Set FORMS_FROM_EMAIL = "Rock Roofing <notifications@rockroofing.co.uk>" in Vercel
-       env vars, and redeploy.
-  (The new Email Notification builder uses NOTIFY_FROM_EMAIL, falling back to
-  FORMS_FROM_EMAIL - so verifying the domain fixes both.)
+NOTE: any weekly bookkeeping Yes/No already ticked was stored under a Friday key and will
+show blank under the new Thursday columns (the data isn't lost, just under old keys).
+As this was only just set up there is likely little/no data to re-enter. Monthly tasks
+are unaffected.
 
 BUILD: next build -> Compiled successfully.
