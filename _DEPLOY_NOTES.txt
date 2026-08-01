@@ -1,26 +1,33 @@
-DEPLOY NOTES - Lessons Learnt Part 2: meeting actions -> Operations live tasks
-=============================================================================
+DEPLOY NOTES - Lessons Learnt: structured lessons, no AI, clear table
+=====================================================================
 
-THREE files, all EDITS - just replace them.
-  lib/lessonsSeed.js               (historical actions flagged so they NEVER push)
-  pages/api/lessons-learnt.js       (pushes new actions to live tasks + user list)
-  pages/lessons-learnt.js           (person responsible is now a portal-user picker)
+TWO files, both EDITS - just replace them.
+  pages/lessons-learnt.js       (structured lessons UI + Clear table button)
+  pages/api/lessons-learnt.js    (structured rows, AI removed, clear-lessons action)
 
-WHAT THIS DOES
-  When you click "Meeting complete" on a NEW meeting, its Meeting Actions are added to
-  the Operations Live Project Tasks list:
-    - grouped under "Lessons Learnt" (not tied to a real project),
-    - the Person responsible (a portal user) becomes the task's Responsible/assignee,
-    - a note records which Lessons Learnt meeting it came from.
-  Each action is marked with a green "task" tick once sent, and won't be sent twice.
+WHAT CHANGED
+1. Lessons Learnt is now STRUCTURED (going forward). In a meeting's minutes, the Lessons
+   Learnt section is a list of rows, each with:
+     - Lessons Learnt item (short name)
+     - Lessons Learnt (the detail / context)
+     - Who it's for (tick the departments yourself)
+   Add as many as you like. On "Meeting complete" they populate the Lessons Learnt table.
 
-  PERSON RESPONSIBLE is now a dropdown of portal users (was free text). Pick the user
-  who owns each action.
+2. The TABLE now has columns: Month | Lessons Learnt item | Lessons Learnt | Who it's for.
+   You can still search, filter by department, tweak departments (click chips), add a
+   manual lesson, or delete one.
 
-ONLY NEW ACTIONS - as requested:
-  The 20 seeded historical meetings are already Complete and their 30 actions are flagged
-  as already-pushed, so NONE of the old actions go into live tasks - not now, and not
-  even if a historical meeting were reopened and re-completed. Only actions on meetings
-  you complete from here on will create tasks.
+3. THE AI LAYER IS REMOVED. You categorise every lesson yourself. (ANTHROPIC_API_KEY is
+   no longer used by this page - you can leave it set or remove it, your call.)
+
+4. Only applies GOING FORWARD. The 20 seeded historical meetings keep their original
+   free-text lessons notes, shown read-only under "Recorded notes (historical)" inside
+   each old meeting - they are NOT converted and do NOT populate the new table.
+
+CLEARING THE OLD TABLE (do this once after deploy):
+   The 132 old auto-generated rows are still in storage. On the Lessons table tab there is
+   now a red "Clear table" button - click it once to wipe them. (This clears the table
+   only; the minutes are untouched.) After that, the table fills only from meetings you
+   complete going forward, plus anything you add manually.
 
 BUILD: next build -> Compiled successfully.

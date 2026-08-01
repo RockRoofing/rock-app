@@ -9,7 +9,6 @@ const SECTIONS = [
   { key: 'kpi', label: 'General performance / KPIs', hint: 'Main KPI data points vs targets (Dori)' },
   { key: 'upcoming', label: 'Up and coming news', hint: 'James / Carl / Nathan' },
   { key: 'focus', label: 'Big focus for next month', hint: 'James / Carl / Nathan' },
-  { key: 'lessons', label: 'Lessons Learnt', hint: 'What has gone well? What hasnt gone well? (one per line - these feed the table)' },
 ]
 
 export default function LessonsLearnt() {
@@ -42,7 +41,7 @@ function LessonsTable() {
   const [filter, setFilter] = useState('')
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState({ text: '', depts: [] })
+  const [draft, setDraft] = useState({ item: '', detail: '', depts: [] })
 
   useEffect(() => { load() }, [])
   async function load() {
@@ -51,9 +50,9 @@ function LessonsTable() {
     setLoading(false)
   }
   async function addLesson() {
-    if (!draft.text.trim()) return
-    const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add-lesson', text: draft.text, depts: draft.depts }) })
-    if (r.ok) { setDraft({ text: '', depts: [] }); setAdding(false); load() }
+    if (!draft.item.trim() && !draft.detail.trim()) return
+    const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add-lesson', item: draft.item, detail: draft.detail, depts: draft.depts }) })
+    if (r.ok) { setDraft({ item: '', detail: '', depts: [] }); setAdding(false); load() }
   }
   async function updateDepts(id, depts) {
     await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update-lesson', id, depts }) })
@@ -67,25 +66,33 @@ function LessonsTable() {
 
   const shown = lessons.filter(l =>
     (!filter || (l.depts || []).includes(filter)) &&
-    (!q || l.text.toLowerCase().includes(q.toLowerCase()) || (l.monthLabel || '').toLowerCase().includes(q.toLowerCase())))
+    (!q || (l.item || '').toLowerCase().includes(q.toLowerCase()) || (l.detail || '').toLowerCase().includes(q.toLowerCase()) || (l.monthLabel || '').toLowerCase().includes(q.toLowerCase())))
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <div>
           <h1 style={{ margin: '0 0 2px', fontSize: 22, color: '#1a1a2e' }}>Lessons Learnt</h1>
-          <div style={{ fontSize: 13, color: '#8a857c' }}>Auto-collected from the monthly minutes and categorised by department. Search or filter below.</div>
+          <div style={{ fontSize: 13, color: '#8a857c' }}>Collected from the monthly minutes. Each lesson has an item, the detail, and the department(s) it is for. Search or filter below.</div>
         </div>
-        <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={async () => { if (confirm('Clear ALL lessons from the table? This cannot be undone. (Minutes are not affected.)')) { await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear-lessons' }) }); load() } }} style={{ ...ghost, color: '#dc2626', borderColor: '#f3c0c0' }}>Clear table</button>
+          <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>
+        </div>
       </div>
 
       {adding && (
         <div style={{ background: '#fff', border: '1px solid #ece9f5', borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <textarea value={draft.text} onChange={e => setDraft(d => ({ ...d, text: e.target.value }))} rows={2} placeholder="The lesson..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0' }}>
+          <Lbl>Lessons Learnt item</Lbl>
+          <input value={draft.item} onChange={e => setDraft(d => ({ ...d, item: e.target.value }))} placeholder="Short name for the lesson" style={inp} />
+          <div style={{ height: 8 }} />
+          <Lbl>Lessons Learnt (detail)</Lbl>
+          <textarea value={draft.detail} onChange={e => setDraft(d => ({ ...d, detail: e.target.value }))} rows={3} placeholder="What happened, the context, and what we learnt..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+          <div style={{ height: 8 }} />
+          <Lbl>Who is this for?</Lbl>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 10px' }}>
             {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} on={draft.depts.includes(d)} onClick={() => setDraft(x => ({ ...x, depts: x.depts.includes(d) ? x.depts.filter(y => y !== d) : [...x.depts, d] }))} />)}
           </div>
-          <div style={{ fontSize: 11.5, color: '#aaa', marginBottom: 8 }}>Leave departments blank to let the AI categorise it.</div>
           <button onClick={addLesson} style={primary}>Add</button>
         </div>
       )}
@@ -100,19 +107,21 @@ function LessonsTable() {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
-        {loading ? <div style={{ padding: 24, color: '#999' }}>Loading...</div> : shown.length === 0 ? <div style={{ padding: 24, color: '#aaa' }}>No lessons match.</div> : (
+        {loading ? <div style={{ padding: 24, color: '#999' }}>Loading...</div> : shown.length === 0 ? <div style={{ padding: 24, color: '#aaa' }}>No lessons yet. They appear here when a meeting is marked complete, or add one manually above.</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
             <thead><tr style={{ background: '#faf9f7' }}>
-              <th style={{ ...th, width: 120 }}>Month</th>
-              <th style={th}>Lesson</th>
-              <th style={{ ...th, width: 260 }}>Departments</th>
+              <th style={{ ...th, width: 110 }}>Month</th>
+              <th style={{ ...th, width: 220 }}>Lessons Learnt item</th>
+              <th style={th}>Lessons Learnt</th>
+              <th style={{ ...th, width: 250 }}>Who it's for</th>
               <th style={{ ...th, width: 40 }}></th>
             </tr></thead>
             <tbody>
               {shown.map(l => (
                 <tr key={l.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                   <td style={{ ...td, color: '#8a857c', whiteSpace: 'nowrap' }}>{l.monthLabel}</td>
-                  <td style={td}>{l.text}</td>
+                  <td style={{ ...td, fontWeight: 600, color: '#1a1a2e' }}>{l.item || <span style={{ color: '#bbb', fontWeight: 400 }}>-</span>}</td>
+                  <td style={td}>{l.detail}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(l.depts || []).includes(d)} onClick={() => updateDepts(l.id, (l.depts || []).includes(d) ? l.depts.filter(x => x !== d) : [...(l.depts || []), d])} />)}
@@ -187,7 +196,7 @@ function MinutesArea() {
 }
 
 function MinutesEditor({ initial, users = [], onClose }) {
-  const [m, setM] = useState(() => ({ ...initial, sections: { ...(initial.sections || {}) }, actions: (initial.actions || []).map(a => ({ ...a })) }))
+  const [m, setM] = useState(() => ({ ...initial, sections: { ...(initial.sections || {}) }, lessonRows: (initial.lessonRows || []).map(r => ({ ...r })), actions: (initial.actions || []).map(a => ({ ...a })) }))
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -229,6 +238,11 @@ function MinutesEditor({ initial, users = [], onClose }) {
   const addAction = () => { setM(x => ({ ...x, actions: [...x.actions, { id: `act_${Date.now()}`, action: '', person: '', pushed: false }] })); dirtyRef.current = true }
   const removeAction = (i) => { setM(x => ({ ...x, actions: x.actions.filter((_, j) => j !== i) })); dirtyRef.current = true }
 
+  const setLesson = (i, patch) => { setM(x => ({ ...x, lessonRows: x.lessonRows.map((r, j) => j === i ? { ...r, ...patch } : r) })); dirtyRef.current = true }
+  const addLessonRow = () => { setM(x => ({ ...x, lessonRows: [...(x.lessonRows || []), { id: `lr_${Date.now()}`, item: '', detail: '', depts: [] }] })); dirtyRef.current = true }
+  const removeLessonRow = (i) => { setM(x => ({ ...x, lessonRows: x.lessonRows.filter((_, j) => j !== i) })); dirtyRef.current = true }
+  const toggleLessonDept = (i, d) => { setM(x => ({ ...x, lessonRows: x.lessonRows.map((r, j) => j === i ? { ...r, depts: (r.depts || []).includes(d) ? r.depts.filter(y => y !== d) : [...(r.depts || []), d] } : r) })); dirtyRef.current = true }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
@@ -256,10 +270,52 @@ function MinutesEditor({ initial, users = [], onClose }) {
         <div key={s.key} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>{s.label}</div>
           <div style={{ fontSize: 11.5, color: '#aaa', marginBottom: 8 }}>{s.hint}</div>
-          <textarea disabled={locked} value={m.sections[s.key] || ''} onChange={e => setSection(s.key, e.target.value)} rows={s.key === 'lessons' ? 6 : 4}
+          <textarea disabled={locked} value={m.sections[s.key] || ''} onChange={e => setSection(s.key, e.target.value)} rows={4}
             style={{ ...inp, resize: 'vertical', fontFamily: 'inherit', background: locked ? '#faf9f7' : '#fff' }} />
         </div>
       ))}
+
+      {/* Lessons Learnt - structured rows (item + detail + who it's for). These feed the table. */}
+      <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>Lessons Learnt</div>
+            <div style={{ fontSize: 11.5, color: '#aaa' }}>Add each lesson as an item + detail, and pick who it's for. These populate the Lessons Learnt table when the meeting is completed.</div>
+          </div>
+          {!locked && <button onClick={addLessonRow} style={ghost}>+ Add lesson</button>}
+        </div>
+
+        {/* Historical free-text (old seeded minutes only) */}
+        {m.sections.lessons && (
+          <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 8, padding: '8px 12px', margin: '8px 0', whiteSpace: 'pre-wrap', fontSize: 12.5, color: '#666' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>Recorded notes (historical)</div>
+            {m.sections.lessons}
+          </div>
+        )}
+
+        {(m.lessonRows || []).length === 0 && <div style={{ color: '#bbb', fontSize: 13, marginTop: 8 }}>No lessons added.</div>}
+        {(m.lessonRows || []).map((r, i) => (
+          <div key={r.id || i} style={{ border: '1px solid #eee', borderRadius: 10, padding: 12, marginTop: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <div style={{ flex: '1 1 220px' }}>
+                <Lbl>Lessons Learnt item</Lbl>
+                <input disabled={locked} value={r.item || ''} onChange={e => setLesson(i, { item: e.target.value })} placeholder="Short name" style={inp} />
+              </div>
+              <div style={{ flex: '2 1 320px' }}>
+                <Lbl>Lessons Learnt</Lbl>
+                <textarea disabled={locked} value={r.detail || ''} onChange={e => setLesson(i, { detail: e.target.value })} rows={2} placeholder="The detail / context / what we learnt..." style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+              </div>
+              {!locked && <button onClick={() => removeLessonRow(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, marginTop: 22 }}>&times;</button>}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Lbl>Who is this for?</Lbl>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(r.depts || []).includes(d)} onClick={() => !locked && toggleLessonDept(i, d)} />)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
