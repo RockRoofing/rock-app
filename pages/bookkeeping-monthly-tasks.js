@@ -6,6 +6,7 @@ const MONTHLY = [
   { id: 'bm2', text: 'Post all required prepayment journals.' },
   { id: 'bm3', text: 'Post inventory journals and reconcile inventory balances where applicable.' },
   { id: 'bm4', text: 'Complete bank balance reconciliations for all bank accounts.' },
+  { id: 'bm13', text: 'Notify the Commercial Team that the WIP can now be completed.' },
   { id: 'bm5', text: 'Obtain the WIP schedule from Nathan and post the required WIP journals.' },
   { id: 'bm6', text: "Update all Apps by uploading the month's invoices and ensuring they are processed correctly." },
   { id: 'bm7', text: 'Review and reconcile retention balances with the relevant Apps/contracts.' },

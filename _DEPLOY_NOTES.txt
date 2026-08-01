@@ -1,11 +1,18 @@
-DEPLOY NOTES - Remove "Clear table" from Lessons Learnt table
-=============================================================
+DEPLOY NOTES - Bookkeeping monthly tasks: notify Commercial re WIP
+=================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/lessons-learnt.js
+TWO files, both EDITS - just replace them.
+  pages/bookkeeping-monthly-tasks.js   (new task added)
+  lib/notifications.js                  (new task included in completeness check)
 
 CHANGE
-  The red "Clear table" button has been removed from the Lessons table tab. Individual
-  and multi-select delete (admin only) remain. Nothing else changes.
+  A new monthly bookkeeping task is inserted straight after "Complete bank balance
+  reconciliations for all bank accounts":
+     "Notify the Commercial Team that the WIP can now be completed."
+  It sits just before the "Obtain the WIP schedule from Nathan..." task.
+
+  It is given a new internal id (bm13) rather than renumbering the tasks after it, so
+  none of your existing Yes/No marks for the later tasks are affected. It also counts
+  towards the "monthly bookkeeping tasks complete" check used by email notifications.
 
 BUILD: next build -> Compiled successfully.
