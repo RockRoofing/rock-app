@@ -135,6 +135,7 @@ function LessonsTable() {
               <th style={{ ...th, width: 110 }}>Month</th>
               <th style={{ ...th, width: 220 }}>Lessons Learnt item</th>
               <th style={th}>Lessons Learnt</th>
+              <th style={{ ...th, width: 140 }}>Responsible</th>
               <th style={{ ...th, width: 250 }}>Who it's for</th>
               {isAdmin && <th style={{ ...th, width: 40 }}></th>}
             </tr></thead>
@@ -145,6 +146,7 @@ function LessonsTable() {
                   <td style={{ ...td, color: '#8a857c', whiteSpace: 'nowrap' }}>{l.monthLabel}</td>
                   <td style={{ ...td, fontWeight: 600, color: '#1a1a2e' }}>{l.item || <span style={{ color: '#bbb', fontWeight: 400 }}>-</span>}</td>
                   <td style={td}>{l.detail}</td>
+                  <td style={{ ...td, color: '#555', whiteSpace: 'nowrap' }}>{l.responsibleName || <span style={{ color: '#bbb' }}>-</span>}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                       {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(l.depts || []).includes(d)} onClick={() => canEdit && updateDepts(l.id, (l.depts || []).includes(d) ? l.depts.filter(x => x !== d) : [...(l.depts || []), d])} />)}
@@ -224,6 +226,7 @@ function MinutesEditor({ initial, users = [], canEdit = false, onClose }) {
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [problems, setProblems] = useState([])
   const dirtyRef = useRef(false)
   // "locked" = fields are read-only. A meeting is locked when it's complete, OR when the
   // viewer can't edit at all. Editors can reopen a complete meeting to edit it again.
@@ -260,12 +263,34 @@ function MinutesEditor({ initial, users = [], canEdit = false, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [m, locked])
 
+  function validate() {
+    const problems = []
+    ;(m.lessonRows || []).forEach((r, i) => {
+      const n = i + 1
+      const hasAny = (r.item || '').trim() || (r.detail || '').trim() || (r.responsible || '') || (r.depts || []).length
+      if (!hasAny) return
+      if (!(r.item || '').trim()) problems.push(`Lesson ${n}: missing the Lessons Learnt item`)
+      if (!(r.detail || '').trim()) problems.push(`Lesson ${n}: missing the Lessons Learnt detail`)
+      if (!(r.responsible || '')) problems.push(`Lesson ${n}: no person responsible`)
+      if (!(r.depts || []).length) problems.push(`Lesson ${n}: not categorised (pick who it's for)`)
+    })
+    ;(m.actions || []).forEach((a, i) => {
+      if (!(a.action || '').trim()) return
+      if (!(a.person || '')) problems.push(`Action ${i + 1}: no person responsible`)
+    })
+    return problems
+  }
+
   async function complete() {
+    const problems = validate()
+    if (problems.length) { setProblems(problems); setMsg(''); return }
+    setProblems([])
     if (!confirm('Mark this meeting complete? This locks the minutes and adds the lessons to the table.')) return
     await save({ ...m })
     const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', id: m.id || `${m.year}-${String(m.month).padStart(2, '0')}` }) })
     const d = await r.json()
-    if (r.ok) { setM(x => ({ ...x, status: 'complete', actions: (x.actions || []).map(a => a.action ? { ...a, pushed: true } : a) })); setMsg(`Meeting complete. ${d.lessonsAdded} lesson(s) added to the table${d.actionsPushed ? `, ${d.actionsPushed} action(s) sent to live tasks` : ''}.`) }
+    if (r.ok) { setProblems([]); setM(x => ({ ...x, status: 'complete', actions: (x.actions || []).map(a => a.action ? { ...a, pushed: true } : a) })); setMsg(`Meeting complete. ${d.lessonsAdded} lesson(s) added to the table${d.actionsPushed ? `, ${d.actionsPushed} action(s) sent to live tasks` : ''}.`) }
+    else if (d.error === 'incomplete') { setProblems(d.problems || ['Some required fields are missing.']) }
     else setMsg(d.error || 'Could not complete.')
   }
 
@@ -295,6 +320,15 @@ function MinutesEditor({ initial, users = [], canEdit = false, onClose }) {
       </div>
 
       {msg && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>{msg}</div>}
+
+      {problems.length > 0 && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>This meeting can't be marked complete yet. Please fix the following:</div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#b91c1c', fontSize: 13 }}>
+            {problems.map((p, i) => <li key={i} style={{ marginBottom: 2 }}>{p}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14, maxWidth: 560 }}>
         <div><Lbl>Month</Lbl><select disabled={locked} value={m.month} onChange={e => setField('month', parseInt(e.target.value))} style={inp}>{MONTHNAMES.slice(1).map((n, i) => <option key={i} value={i + 1}>{n}</option>)}</select></div>
@@ -343,10 +377,20 @@ function MinutesEditor({ initial, users = [], canEdit = false, onClose }) {
               </div>
               {!locked && <button onClick={() => removeLessonRow(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, marginTop: 22 }}>&times;</button>}
             </div>
-            <div style={{ marginTop: 8 }}>
-              <Lbl>Who is this for?</Lbl>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(r.depts || []).includes(d)} onClick={() => !locked && toggleLessonDept(i, d)} />)}
+            <div style={{ marginTop: 8, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '1 1 260px' }}>
+                <Lbl>Who is this for?</Lbl>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(r.depts || []).includes(d)} onClick={() => !locked && toggleLessonDept(i, d)} />)}
+                </div>
+              </div>
+              <div style={{ flex: '0 1 220px' }}>
+                <Lbl>Person responsible</Lbl>
+                <select disabled={locked} value={r.responsible || ''} onChange={e => setLesson(i, { responsible: e.target.value, responsibleName: users.find(u => u.id === e.target.value)?.name || '' })} style={inp}>
+                  <option value="">Select...</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  {r.responsible && !users.some(u => u.id === r.responsible) && <option value={r.responsible}>{r.responsibleName || r.responsible}</option>}
+                </select>
               </div>
             </div>
           </div>

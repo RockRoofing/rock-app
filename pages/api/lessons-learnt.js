@@ -109,6 +109,11 @@ export default async function handler(req, res) {
       const idx = list.findIndex(x => x.id === body.id)
       if (idx < 0) return res.status(404).json({ error: 'Not found' })
       const rec = list[idx]
+
+      // Validate before completing (also enforced client-side, this is the safety net).
+      const problems = validateForComplete(rec)
+      if (problems.length) return res.status(422).json({ error: 'incomplete', problems })
+
       rec.status = 'complete'
       list[idx] = rec
       await set(MIN_KEY, list)
@@ -128,6 +133,7 @@ export default async function handler(req, res) {
           rowId: row.id || '', source: rec.id,
           monthLabel: `${MONTHNAMES[rec.month]} ${rec.year}`, year: rec.year, month: rec.month,
           item: row.item || '', detail: row.detail || '',
+          responsible: row.responsible || '', responsibleName: row.responsibleName || '',
           depts: Array.isArray(row.depts) ? row.depts.filter(d => DEPTS.includes(d)) : [],
         })
         added++
@@ -199,6 +205,28 @@ export default async function handler(req, res) {
   }
 
   res.status(405).end()
+}
+
+// Validation for marking a meeting complete. Returns a list of human-readable problems
+// (empty = OK). Each lesson row needs item + detail + a responsible person + >=1 dept;
+// each meeting action needs a person responsible.
+function validateForComplete(rec) {
+  const problems = []
+  const rows = rec.lessonRows || []
+  rows.forEach((r, i) => {
+    const n = i + 1
+    const hasAny = (r.item || '').trim() || (r.detail || '').trim() || (r.responsible || '') || (r.depts || []).length
+    if (!hasAny) return // completely empty row is ignored (treated as not added)
+    if (!(r.item || '').trim()) problems.push(`Lesson ${n}: missing the Lessons Learnt item`)
+    if (!(r.detail || '').trim()) problems.push(`Lesson ${n}: missing the Lessons Learnt detail`)
+    if (!(r.responsible || '')) problems.push(`Lesson ${n}: no person responsible`)
+    if (!(r.depts || []).length) problems.push(`Lesson ${n}: not categorised (pick who it's for)`)
+  })
+  ;(rec.actions || []).forEach((a, i) => {
+    if (!(a.action || '').trim()) return
+    if (!(a.person || '')) problems.push(`Action ${i + 1} ("${(a.action || '').slice(0, 30)}"): no person responsible`)
+  })
+  return problems
 }
 
 function sortByDate(a, b) { return (b.year - a.year) || (b.month - a.month) }

@@ -1,24 +1,28 @@
-DEPLOY NOTES - Lessons Learnt: reopen minutes, edit = management/admin, newest-first
-====================================================================================
+DEPLOY NOTES - Lessons Learnt: completion validation + lesson responsible
+=========================================================================
 
 TWO files, both EDITS - just replace them.
-  pages/lessons-learnt.js       (reopen button, view-only for non-editors)
-  pages/api/lessons-learnt.js    (server enforces edit permission + reopen + sort)
+  pages/lessons-learnt.js       (responsible field + completion validation warning)
+  pages/api/lessons-learnt.js    (server-side validation + carries responsible)
 
-CHANGES
-1. REOPEN / EDIT COMPLETED MINUTES. A completed meeting now has a "Reopen to edit"
-   button. It flips the meeting back to draft so you can edit it, then "Meeting complete"
-   locks it again (and tops up the lessons table + actions without duplicating).
+WHAT CHANGED
+- Each LESSON now also has a "Person responsible" (a portal user) alongside item,
+  detail and the department tags. It shows as a new "Responsible" column in the table.
 
-2. EDITING IS NOW MANAGEMENT + ADMIN ONLY. Everyone else with Lessons Learnt access can
-   VIEW ONLY - no adding/editing lessons, no editing minutes, no new meetings, no reopen.
-   This is enforced on the SERVER (every write is checked), not just hidden in the UI.
-   (Deleting from the table remains ADMIN-only, as before.)
+- A meeting CANNOT BE MARKED COMPLETE unless, for every lesson that has been started:
+    * the Lessons Learnt item is filled in,
+    * the Lessons Learnt detail is filled in,
+    * a person responsible is chosen, and
+    * at least one department is ticked (categorised);
+  and every meeting action that has text must have a person responsible.
 
-3. TABLE SORTED NEWEST FIRST. Most recent month at the top. Manually-added lessons sort
-   by when they were added.
+- If you click "Meeting complete" with anything missing, a red warning box lists exactly
+  what needs completing (e.g. "Lesson 2: no person responsible", "Action 1: no person
+  responsible") and completion is blocked until it's fixed. This is enforced on the
+  server too, not just the screen.
 
-NOTE ON VIEW ACCESS: who can OPEN the Lessons Learnt page is unchanged (pre-contract /
-post-contract / management / admin). This change only controls who can EDIT vs view.
+- DRAFTS STILL AUTOSAVE as you work - the validation only blocks COMPLETION, so you never
+  lose half-finished notes. Completely blank lesson rows are ignored (they don't block
+  you); only rows you've started need finishing.
 
 BUILD: next build -> Compiled successfully.
