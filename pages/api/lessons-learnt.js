@@ -31,6 +31,9 @@ function readCookie(req, name) {
   return m ? decodeURIComponent(m.split('=').slice(1).join('=')) : null
 }
 function sessionUser(req) { return verifySessionToken(readCookie(req, SESSION_COOKIE)) }
+// Editing the Lessons Learnt page (minutes + table) is limited to management + admin.
+// Everyone else with lessons-learnt access can view only.
+function canEdit(role) { return hasRole(role, ['management', 'admin']) }
 
 async function ensureSeed() {
   const seeded = await get(SEED_KEY)
@@ -51,17 +54,32 @@ export default async function handler(req, res) {
     const view = String(req.query.view || 'all')
     const out = {}
     if (view === 'minutes' || view === 'all') out.minutes = ((await get(MIN_KEY)) || []).sort(sortByDate)
-    if (view === 'lessons' || view === 'all') out.lessons = ((await get(LES_KEY)) || []).sort((a, b) => sortByDate(b, a))
+    if (view === 'lessons' || view === 'all') out.lessons = ((await get(LES_KEY)) || []).slice().sort(lessonNewestFirst)
     out.depts = DEPTS
     // Portal users for the "person responsible" picker on meeting actions.
     const portal = (await getPortalUsers()) || []
     out.users = portal.filter(p => p.active !== false).map(p => ({ id: p.id, name: p.name || [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email, email: p.email || '' }))
     out.isAdmin = hasRole(u.role, ['admin'])
+    out.canEdit = canEdit(u.role)
     return res.json(out)
   }
 
   if (req.method === 'POST') {
     const body = req.body || {}
+
+    // All write actions require management/admin. Deletes/clears additionally require
+    // admin (checked in their own handlers below).
+    if (!canEdit(u.role)) return res.status(403).json({ error: 'You do not have permission to edit Lessons Learnt' })
+
+    // Reopen a completed meeting for editing (flips back to draft).
+    if (body.action === 'reopen') {
+      const list = (await get(MIN_KEY)) || []
+      const idx = list.findIndex(x => x.id === body.id)
+      if (idx < 0) return res.status(404).json({ error: 'Not found' })
+      list[idx].status = 'draft'
+      await set(MIN_KEY, list)
+      return res.json({ ok: true, minutes: list[idx] })
+    }
 
     if (body.action === 'save-minutes') {
       const m = body.minutes || {}
@@ -70,9 +88,6 @@ export default async function handler(req, res) {
       const list = (await get(MIN_KEY)) || []
       const idx = list.findIndex(x => x.id === id)
       const existing = idx >= 0 ? list[idx] : null
-      if (existing && existing.status === 'complete' && m.status !== 'complete' && !body.reopen) {
-        return res.status(409).json({ error: 'Meeting already complete' })
-      }
       const rec = {
         id, year: m.year, month: m.month,
         title: m.title || existing?.title || '',
@@ -187,3 +202,13 @@ export default async function handler(req, res) {
 }
 
 function sortByDate(a, b) { return (b.year - a.year) || (b.month - a.month) }
+// Newest first for the table. Uses meeting year/month; manual rows (year 0) fall back to
+// the timestamp embedded in their id so recent manual adds sort to the top too.
+function tsFromId(id) { const m = /_(\d{10,})/.exec(String(id || '')); return m ? Number(m[1]) : 0 }
+function lessonNewestFirst(a, b) {
+  const ay = a.year || 0, by = b.year || 0
+  if (ay !== by) return by - ay
+  const am = a.month || 0, bm = b.month || 0
+  if (am !== bm) return bm - am
+  return tsFromId(b.id) - tsFromId(a.id)
+}

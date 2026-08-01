@@ -43,12 +43,13 @@ function LessonsTable() {
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState({ item: '', detail: '', depts: [] })
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canEdit, setCanEdit] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/lessons-learnt?view=lessons').then(r => r.json()); setLessons(d.lessons || []); setIsAdmin(!!d.isAdmin) } catch {}
+    try { const d = await fetch('/api/lessons-learnt?view=lessons').then(r => r.json()); setLessons(d.lessons || []); setIsAdmin(!!d.isAdmin); setCanEdit(!!d.canEdit) } catch {}
     setSelected(new Set())
     setLoading(false)
   }
@@ -89,7 +90,7 @@ function LessonsTable() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {isAdmin && <button onClick={async () => { if (confirm('Clear ALL lessons from the table? This cannot be undone. (Minutes are not affected.)')) { const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear-lessons' }) }); if (r.ok) load(); else alert('Only admins can clear the table.') } }} style={{ ...ghost, color: '#dc2626', borderColor: '#f3c0c0' }}>Clear table</button>}
-          <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>
+          {canEdit && <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>}
         </div>
       </div>
 
@@ -146,7 +147,7 @@ function LessonsTable() {
                   <td style={td}>{l.detail}</td>
                   <td style={td}>
                     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(l.depts || []).includes(d)} onClick={() => updateDepts(l.id, (l.depts || []).includes(d) ? l.depts.filter(x => x !== d) : [...(l.depts || []), d])} />)}
+                      {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(l.depts || []).includes(d)} onClick={() => canEdit && updateDepts(l.id, (l.depts || []).includes(d) ? l.depts.filter(x => x !== d) : [...(l.depts || []), d])} />)}
                     </div>
                   </td>
                   {isAdmin && <td style={{ ...td, textAlign: 'right' }}><button onClick={() => del(l.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>&times;</button></td>}
@@ -163,13 +164,14 @@ function LessonsTable() {
 function MinutesArea() {
   const [minutes, setMinutes] = useState([])
   const [users, setUsers] = useState([])
+  const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState(null)
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/lessons-learnt?view=minutes').then(r => r.json()); setMinutes(d.minutes || []); setUsers(d.users || []) } catch {}
+    try { const d = await fetch('/api/lessons-learnt?view=minutes').then(r => r.json()); setMinutes(d.minutes || []); setUsers(d.users || []); setCanEdit(!!d.canEdit) } catch {}
     setLoading(false)
   }
 
@@ -178,16 +180,16 @@ function MinutesArea() {
     setOpenId({ id: '', year: now.getFullYear(), month: now.getMonth() + 1, title: '', meetingDate: '', status: 'draft', sections: {}, actions: [] })
   }
 
-  if (openId !== null) return <MinutesEditor initial={openId} users={users} onClose={() => { setOpenId(null); load() }} />
+  if (openId !== null) return <MinutesEditor initial={openId} users={users} canEdit={canEdit} onClose={() => { setOpenId(null); load() }} />
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
         <div>
           <h1 style={{ margin: '0 0 2px', fontSize: 22, color: '#1a1a2e' }}>Monthly minutes</h1>
-          <div style={{ fontSize: 13, color: '#8a857c' }}>One set of minutes per month. Drafts auto-save; mark complete after the meeting to lock and feed the lessons table.</div>
+          <div style={{ fontSize: 13, color: '#8a857c' }}>One set of minutes per month. Drafts auto-save; mark complete after the meeting to lock and feed the lessons table.{!canEdit ? ' (View only.)' : ''}</div>
         </div>
-        <button onClick={newMeeting} style={primary}>+ New meeting</button>
+        {canEdit && <button onClick={newMeeting} style={primary}>+ New meeting</button>}
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
@@ -217,13 +219,24 @@ function MinutesArea() {
   )
 }
 
-function MinutesEditor({ initial, users = [], onClose }) {
+function MinutesEditor({ initial, users = [], canEdit = false, onClose }) {
   const [m, setM] = useState(() => ({ ...initial, sections: { ...(initial.sections || {}) }, lessonRows: (initial.lessonRows || []).map(r => ({ ...r })), actions: (initial.actions || []).map(a => ({ ...a })) }))
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const dirtyRef = useRef(false)
-  const locked = m.status === 'complete'
+  // "locked" = fields are read-only. A meeting is locked when it's complete, OR when the
+  // viewer can't edit at all. Editors can reopen a complete meeting to edit it again.
+  const isComplete = m.status === 'complete'
+  const locked = isComplete || !canEdit
+
+  async function reopen() {
+    if (!confirm('Reopen this meeting for editing? It will go back to draft until you mark it complete again.')) return
+    const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reopen', id: m.id || `${m.year}-${String(m.month).padStart(2, '0')}` }) })
+    const d = await r.json()
+    if (r.ok) { setM(x => ({ ...x, status: 'draft' })); setMsg('Meeting reopened - you can edit it now.') }
+    else setMsg(d.error || 'Could not reopen.')
+  }
 
   const setSection = (key, val) => { setM(x => ({ ...x, sections: { ...x.sections, [key]: val } })); dirtyRef.current = true }
   const setField = (key, val) => { setM(x => ({ ...x, [key]: val })); dirtyRef.current = true }
@@ -270,13 +283,14 @@ function MinutesEditor({ initial, users = [], onClose }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={onClose} style={ghost}>&larr; Back</button>
-          <h1 style={{ margin: 0, fontSize: 20, color: '#1a1a2e' }}>{MONTHNAMES[m.month]} {m.year}{locked ? '' : ' (draft)'}</h1>
+          <h1 style={{ margin: 0, fontSize: 20, color: '#1a1a2e' }}>{MONTHNAMES[m.month]} {m.year}{isComplete ? '' : (canEdit ? ' (draft)' : '')}</h1>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {!locked && <span style={{ fontSize: 12, color: '#aaa' }}>{saving ? 'Saving...' : savedAt ? `Saved ${savedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>}
-          {locked
-            ? <span style={{ background: '#dcfce7', color: '#16a34a', borderRadius: 20, padding: '4px 14px', fontSize: 12.5, fontWeight: 700 }}>Complete</span>
-            : <button onClick={complete} style={{ ...primary, background: '#16a34a' }}>Meeting complete</button>}
+          {isComplete && <span style={{ background: '#dcfce7', color: '#16a34a', borderRadius: 20, padding: '4px 14px', fontSize: 12.5, fontWeight: 700 }}>Complete</span>}
+          {isComplete && canEdit && <button onClick={reopen} style={ghost}>Reopen to edit</button>}
+          {!isComplete && canEdit && <button onClick={complete} style={{ ...primary, background: '#16a34a' }}>Meeting complete</button>}
+          {!canEdit && !isComplete && <span style={{ background: '#f1f1f1', color: '#888', borderRadius: 20, padding: '4px 14px', fontSize: 12.5, fontWeight: 700 }}>View only</span>}
         </div>
       </div>
 

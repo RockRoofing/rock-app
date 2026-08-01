@@ -1,20 +1,24 @@
-DEPLOY NOTES - Lessons table: admin-only delete + multi-select
-==============================================================
+DEPLOY NOTES - Lessons Learnt: reopen minutes, edit = management/admin, newest-first
+====================================================================================
 
 TWO files, both EDITS - just replace them.
-  pages/lessons-learnt.js       (admin-gated delete UI + tick boxes / select all)
-  pages/api/lessons-learnt.js    (server enforces admin on delete/clear + bulk delete)
+  pages/lessons-learnt.js       (reopen button, view-only for non-editors)
+  pages/api/lessons-learnt.js    (server enforces edit permission + reopen + sort)
 
-WHAT CHANGED (Lessons table tab only)
-- DELETE IS NOW ADMIN-ONLY. Only portal users with the "admin" role see the delete
-  controls, and the server rejects any delete/clear from non-admins (so it's properly
-  enforced, not just hidden).
-- MULTI-SELECT DELETE. Admins get a tick box on each row plus a "select all" tick box in
-  the header. Selecting rows shows a red bar: "N selected -> Delete selected". You can
-  also clear the selection.
-- The single-row "x" delete and the "Clear table" button are also admin-only now.
+CHANGES
+1. REOPEN / EDIT COMPLETED MINUTES. A completed meeting now has a "Reopen to edit"
+   button. It flips the meeting back to draft so you can edit it, then "Meeting complete"
+   locks it again (and tops up the lessons table + actions without duplicating).
 
-Non-admins can still view, search, filter, add lessons, and edit department tags - they
-just can't delete.
+2. EDITING IS NOW MANAGEMENT + ADMIN ONLY. Everyone else with Lessons Learnt access can
+   VIEW ONLY - no adding/editing lessons, no editing minutes, no new meetings, no reopen.
+   This is enforced on the SERVER (every write is checked), not just hidden in the UI.
+   (Deleting from the table remains ADMIN-only, as before.)
+
+3. TABLE SORTED NEWEST FIRST. Most recent month at the top. Manually-added lessons sort
+   by when they were added.
+
+NOTE ON VIEW ACCESS: who can OPEN the Lessons Learnt page is unchanged (pre-contract /
+post-contract / management / admin). This change only controls who can EDIT vs view.
 
 BUILD: next build -> Compiled successfully.
