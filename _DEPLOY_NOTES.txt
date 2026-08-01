@@ -1,44 +1,26 @@
-DEPLOY NOTES - Monthly Lessons Learnt page (Part 1 of 2)
-========================================================
+DEPLOY NOTES - Lessons Learnt Part 2: meeting actions -> Operations live tasks
+=============================================================================
 
-NEW FILES - add via GitHub "Add file":
-  lib/lessonsSeed.js               (seed: 20 months of minutes + 132 lessons from the sheet)
-  pages/api/lessons-learnt.js       (minutes + AI lessons table API)
-
-EDIT - replace:
-  pages/lessons-learnt.js           (was the "coming soon" stub)
+THREE files, all EDITS - just replace them.
+  lib/lessonsSeed.js               (historical actions flagged so they NEVER push)
+  pages/api/lessons-learnt.js       (pushes new actions to live tasks + user list)
+  pages/lessons-learnt.js           (person responsible is now a portal-user picker)
 
 WHAT THIS DOES
-  The Lessons Learnt portal page now has two tabs:
+  When you click "Meeting complete" on a NEW meeting, its Meeting Actions are added to
+  the Operations Live Project Tasks list:
+    - grouped under "Lessons Learnt" (not tied to a real project),
+    - the Person responsible (a portal user) becomes the task's Responsible/assignee,
+    - a note records which Lessons Learnt meeting it came from.
+  Each action is marked with a green "task" tick once sent, and won't be sent twice.
 
-  1. LESSONS TABLE - every lesson auto-collected from the minutes, each tagged with one
-     or more departments (Estimating / Commercial / Operations / Accounting / Sales).
-     Search by text and filter by department. You can tweak a lesson's departments
-     (click the chips), add a manual lesson, or delete one. New/blank-department lessons
-     are auto-categorised by the AI layer (see AI note below).
+  PERSON RESPONSIBLE is now a dropdown of portal users (was free text). Pick the user
+  who owns each action.
 
-  2. MONTHLY MINUTES - a month-by-month table (month + meeting date + status). Open any
-     month to edit the minutes. All sections from your spreadsheet are here: Wins,
-     General performance / KPIs, Up and coming news, Big focus, Lessons Learnt, and
-     Meeting actions (action + person responsible). Drafts AUTOSAVE as you type. Click
-     "Meeting complete" to lock the minutes and push that month's Lessons Learnt lines
-     into the table (auto-categorised).
-
-  SEEDED HISTORY: on first load it seeds 20 months of your past minutes (Sept 2024 ->
-  June 2026, all marked Complete) and 132 categorised lessons into the table. Where a
-  month had separate Office + Operatives tabs, they've been merged into one set of
-  minutes using the latest format. Meeting dates were not in the sheet - set them per
-  month when you like.
-
-AI LAYER
-  Department categorisation uses the Anthropic API when ANTHROPIC_API_KEY is set in your
-  Vercel env vars, with a keyword-based fallback if it isn't (so it always works). The
-  132 seeded lessons were categorised by the keyword rules; you can refine any of them by
-  clicking the department chips. New lessons added going forward will use the AI.
-  -> To enable the AI: add ANTHROPIC_API_KEY to Vercel env vars. Optional but recommended.
-
-STILL TO COME (Part 2): "Meeting complete" will also push the Meeting Actions into the
-Operations live tasks list (grouped under Lessons Learnt, owner = a portal user). For now
-the actions are captured on the minutes; the Operations push is the next update.
+ONLY NEW ACTIONS - as requested:
+  The 20 seeded historical meetings are already Complete and their 30 actions are flagged
+  as already-pushed, so NONE of the old actions go into live tasks - not now, and not
+  even if a historical meeting were reopened and re-completed. Only actions on meetings
+  you complete from here on will create tasks.
 
 BUILD: next build -> Compiled successfully.

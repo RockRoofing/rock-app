@@ -1,4 +1,4 @@
-import { get, set } from '../../lib/db'
+import { get, set, getLiveTasks, saveLiveTasks, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea } from '../../lib/roles'
 import { SEED_MINUTES, SEED_LESSONS } from '../../lib/lessonsSeed'
@@ -83,6 +83,9 @@ export default async function handler(req, res) {
     if (view === 'minutes' || view === 'all') out.minutes = ((await get(MIN_KEY)) || []).sort(sortByDate)
     if (view === 'lessons' || view === 'all') out.lessons = ((await get(LES_KEY)) || []).sort((a, b) => sortByDate(b, a))
     out.depts = DEPTS
+    // Portal users for the "person responsible" picker on meeting actions.
+    const portal = (await getPortalUsers()) || []
+    out.users = portal.filter(p => p.active !== false).map(p => ({ id: p.id, name: p.name || [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email, email: p.email || '' }))
     return res.json(out)
   }
 
@@ -136,7 +139,43 @@ export default async function handler(req, res) {
         added++
       }
       await set(LES_KEY, lessons)
-      return res.json({ ok: true, minutes: rec, lessonsAdded: added, actions: rec.actions || [] })
+
+      // Push MEETING ACTIONS into the Operations live tasks list - grouped under
+      // "Lessons Learnt" (not a real project). Only NEW actions (pushed !== true) are
+      // sent, so seeded/historical actions are never pushed and re-completing won't
+      // duplicate. Person responsible is carried as the assignee.
+      let pushed = 0
+      if (Array.isArray(rec.actions) && rec.actions.length) {
+        const liveTasks = await getLiveTasks()
+        const existingIds = new Set(liveTasks.map(t => t.id))
+        for (const a of rec.actions) {
+          if (!a || !a.action || a.pushed === true) continue
+          const taskId = `lltask_${rec.id}_${a.id || Math.random().toString(36).slice(2, 6)}`
+          if (!existingIds.has(taskId)) {
+            liveTasks.push({
+              id: taskId,
+              sourceLessons: rec.id,
+              projectNo: '',
+              projectName: 'Lessons Learnt',
+              description: a.action,
+              assignee: a.personName || a.person || '',
+              assigneeId: a.person || '',
+              closeOutDate: '',
+              closed: false,
+              comments: `From Lessons Learnt meeting: ${rec.title || rec.id}`,
+              attachments: [],
+              createdAt: Date.now(),
+            })
+          }
+          a.pushed = true
+          pushed++
+        }
+        await saveLiveTasks(liveTasks)
+        // persist the pushed flags back onto the meeting
+        list[idx] = rec
+        await set(MIN_KEY, list)
+      }
+      return res.json({ ok: true, minutes: rec, lessonsAdded: added, actionsPushed: pushed })
     }
 
     if (body.action === 'add-lesson') {

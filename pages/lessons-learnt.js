@@ -131,13 +131,14 @@ function LessonsTable() {
 
 function MinutesArea() {
   const [minutes, setMinutes] = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [openId, setOpenId] = useState(null)
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/lessons-learnt?view=minutes').then(r => r.json()); setMinutes(d.minutes || []) } catch {}
+    try { const d = await fetch('/api/lessons-learnt?view=minutes').then(r => r.json()); setMinutes(d.minutes || []); setUsers(d.users || []) } catch {}
     setLoading(false)
   }
 
@@ -146,7 +147,7 @@ function MinutesArea() {
     setOpenId({ id: '', year: now.getFullYear(), month: now.getMonth() + 1, title: '', meetingDate: '', status: 'draft', sections: {}, actions: [] })
   }
 
-  if (openId !== null) return <MinutesEditor initial={openId} onClose={() => { setOpenId(null); load() }} />
+  if (openId !== null) return <MinutesEditor initial={openId} users={users} onClose={() => { setOpenId(null); load() }} />
 
   return (
     <div>
@@ -185,7 +186,7 @@ function MinutesArea() {
   )
 }
 
-function MinutesEditor({ initial, onClose }) {
+function MinutesEditor({ initial, users = [], onClose }) {
   const [m, setM] = useState(() => ({ ...initial, sections: { ...(initial.sections || {}) }, actions: (initial.actions || []).map(a => ({ ...a })) }))
   const [savedAt, setSavedAt] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -220,7 +221,7 @@ function MinutesEditor({ initial, onClose }) {
     await save({ ...m })
     const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'complete', id: m.id || `${m.year}-${String(m.month).padStart(2, '0')}` }) })
     const d = await r.json()
-    if (r.ok) { setM(x => ({ ...x, status: 'complete' })); setMsg(`Meeting complete. ${d.lessonsAdded} lesson(s) added to the table.`) }
+    if (r.ok) { setM(x => ({ ...x, status: 'complete', actions: (x.actions || []).map(a => a.action ? { ...a, pushed: true } : a) })); setMsg(`Meeting complete. ${d.lessonsAdded} lesson(s) added to the table${d.actionsPushed ? `, ${d.actionsPushed} action(s) sent to live tasks` : ''}.`) }
     else setMsg(d.error || 'Could not complete.')
   }
 
@@ -263,14 +264,20 @@ function MinutesEditor({ initial, onClose }) {
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <div><div style={{ fontWeight: 700, fontSize: 14, color: '#1a1a2e' }}>Meeting actions</div>
-            <div style={{ fontSize: 11.5, color: '#aaa' }}>Action + person responsible. (Pushing these into Operations live tasks is coming in the next update.)</div></div>
+            <div style={{ fontSize: 11.5, color: '#aaa' }}>Action + person responsible (a portal user). On "Meeting complete" these are added to the Operations live tasks list under "Lessons Learnt".</div></div>
           {!locked && <button onClick={addAction} style={ghost}>+ Add action</button>}
         </div>
         {(m.actions || []).length === 0 && <div style={{ color: '#bbb', fontSize: 13 }}>No actions.</div>}
         {(m.actions || []).map((a, i) => (
           <div key={a.id || i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
             <input disabled={locked} value={a.action} onChange={e => setAction(i, { action: e.target.value })} placeholder="Action" style={{ ...inp, flex: 2 }} />
-            <input disabled={locked} value={a.person} onChange={e => setAction(i, { person: e.target.value })} placeholder="Person responsible" style={{ ...inp, flex: 1 }} />
+            <select disabled={locked} value={a.person || ''} onChange={e => setAction(i, { person: e.target.value, personName: users.find(u => u.id === e.target.value)?.name || '' })} style={{ ...inp, flex: 1 }}>
+              <option value="">Person responsible...</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {/* keep any legacy free-text person that isn't a portal user */}
+              {a.person && !users.some(u => u.id === a.person) && <option value={a.person}>{a.personName || a.person}</option>}
+            </select>
+            {a.pushed && <span title="Added to live tasks" style={{ fontSize: 11, color: '#16a34a', fontWeight: 700, whiteSpace: 'nowrap' }}>&#10003; task</span>}
             {!locked && <button onClick={() => removeAction(i)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16 }}>&times;</button>}
           </div>
         ))}
