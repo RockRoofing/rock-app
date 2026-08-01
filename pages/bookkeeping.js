@@ -318,7 +318,7 @@ export default function BookkeepingPage() {
         />
       )}
 
-      <div style={{ maxWidth: 1240, margin: '24px auto', padding: '0 24px' }}>
+      <div style={{ margin: '24px auto', padding: '0 24px' }}>
         <p style={{ color: '#666', fontSize: 14, margin: '0 0 20px' }}>
           Reconcile the app against Xero. Each tab shows both <strong>categorised</strong> items (attributed to a project) and <strong>uncategorised</strong> ones (no project tag in Xero). Costs are split by the account categorisation set in Admin.
         </p>

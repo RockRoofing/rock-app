@@ -1,27 +1,12 @@
-DEPLOY NOTES - Bookkeeping Weekly & Monthly Tasks
-=================================================
+DEPLOY NOTES - Bookkeeping page full width
+==========================================
 
-NEW FILES - add via GitHub "Add file":
-  pages/api/bookkeeping-tasks.js         (stores the Yes/No grid - separate from Commercial)
-  components/TaskGrid.js                  (shared weekly/monthly grid, reusable)
-  components/BookkeepingNav.js            (Bookkeeping nav with sub-tabs)
-  pages/bookkeeping-weekly-tasks.js       (Weekly Bookkeeping Tasks)
-  pages/bookkeeping-monthly-tasks.js      (Monthly Bookkeeping Tasks)
+ONE file, an EDIT - just replace it.
+  pages/bookkeeping.js
 
-EDIT - replace:
-  pages/bookkeeping.js                    (adds the sub-nav tabs row)
-
-WHAT THIS DOES
-  Mirrors the Commercial weekly/monthly tasks, on the Bookkeeping page, with the
-  bookkeeping task lists you supplied (6 weekly, 12 monthly).
-  - A new sub-nav appears on the Bookkeeping page: Bookkeeping | Weekly Tasks | Monthly
-    Tasks (white/gold Ops style).
-  - Each task page: tasks down the left, periods across the top (weeks by Thursday date /
-    months), 6 back + 3 forward by default (no scroll), From/To filter (scrolls when a
-    wider range is chosen), Yes/No cells (click to cycle Yes -> No -> blank), and a
-    "Completed (last 6 months)" box counting from today back to 30 Jul 2026.
-  - Stored SEPARATELY from the Commercial tasks (own Redis key) so the two don't mix.
-
-  Access follows the Bookkeeping area (accounts / management / admin).
+CHANGE
+  The main Bookkeeping page content was capped at 1240px wide; it now uses the full
+  width of the screen (like the task pages). The Weekly/Monthly Bookkeeping Task pages
+  were already full width.
 
 BUILD: next build -> Compiled successfully.
