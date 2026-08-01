@@ -42,11 +42,14 @@ function LessonsTable() {
   const [q, setQ] = useState('')
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState({ item: '', detail: '', depts: [] })
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
 
   useEffect(() => { load() }, [])
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/lessons-learnt?view=lessons').then(r => r.json()); setLessons(d.lessons || []) } catch {}
+    try { const d = await fetch('/api/lessons-learnt?view=lessons').then(r => r.json()); setLessons(d.lessons || []); setIsAdmin(!!d.isAdmin) } catch {}
+    setSelected(new Set())
     setLoading(false)
   }
   async function addLesson() {
@@ -60,9 +63,18 @@ function LessonsTable() {
   }
   async function del(id) {
     if (!confirm('Delete this lesson?')) return
-    await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-lesson', id }) })
-    setLessons(ls => ls.filter(l => l.id !== id))
+    const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-lesson', id }) })
+    if (r.ok) setLessons(ls => ls.filter(l => l.id !== id)); else alert('Only admins can delete lessons.')
   }
+  async function delSelected() {
+    if (!selected.size) return
+    if (!confirm(`Delete ${selected.size} selected lesson(s)?`)) return
+    const ids = [...selected]
+    const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-lessons', ids }) })
+    if (r.ok) { setLessons(ls => ls.filter(l => !selected.has(l.id))); setSelected(new Set()) } else alert('Only admins can delete lessons.')
+  }
+  const toggleSel = (id) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleSelAll = (rows) => setSelected(s => { const allSel = rows.length > 0 && rows.every(r => s.has(r.id)); return allSel ? new Set() : new Set(rows.map(r => r.id)) })
 
   const shown = lessons.filter(l =>
     (!filter || (l.depts || []).includes(filter)) &&
@@ -76,7 +88,7 @@ function LessonsTable() {
           <div style={{ fontSize: 13, color: '#8a857c' }}>Collected from the monthly minutes. Each lesson has an item, the detail, and the department(s) it is for. Search or filter below.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={async () => { if (confirm('Clear ALL lessons from the table? This cannot be undone. (Minutes are not affected.)')) { await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear-lessons' }) }); load() } }} style={{ ...ghost, color: '#dc2626', borderColor: '#f3c0c0' }}>Clear table</button>
+          {isAdmin && <button onClick={async () => { if (confirm('Clear ALL lessons from the table? This cannot be undone. (Minutes are not affected.)')) { const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear-lessons' }) }); if (r.ok) load(); else alert('Only admins can clear the table.') } }} style={{ ...ghost, color: '#dc2626', borderColor: '#f3c0c0' }}>Clear table</button>}
           <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>
         </div>
       </div>
@@ -106,19 +118,29 @@ function LessonsTable() {
         <span style={{ fontSize: 12, color: '#aaa', marginLeft: 'auto' }}>{shown.length} lesson{shown.length === 1 ? '' : 's'}</span>
       </div>
 
+      {isAdmin && selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 14px', marginBottom: 10 }}>
+          <span style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>{selected.size} selected</span>
+          <button onClick={delSelected} style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Delete selected</button>
+          <button onClick={() => setSelected(new Set())} style={ghost}>Clear selection</button>
+        </div>
+      )}
+
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden' }}>
         {loading ? <div style={{ padding: 24, color: '#999' }}>Loading...</div> : shown.length === 0 ? <div style={{ padding: 24, color: '#aaa' }}>No lessons yet. They appear here when a meeting is marked complete, or add one manually above.</div> : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
             <thead><tr style={{ background: '#faf9f7' }}>
+              {isAdmin && <th style={{ ...th, width: 34, textAlign: 'center' }}><input type="checkbox" title="Select all" checked={shown.length > 0 && shown.every(r => selected.has(r.id))} onChange={() => toggleSelAll(shown)} /></th>}
               <th style={{ ...th, width: 110 }}>Month</th>
               <th style={{ ...th, width: 220 }}>Lessons Learnt item</th>
               <th style={th}>Lessons Learnt</th>
               <th style={{ ...th, width: 250 }}>Who it's for</th>
-              <th style={{ ...th, width: 40 }}></th>
+              {isAdmin && <th style={{ ...th, width: 40 }}></th>}
             </tr></thead>
             <tbody>
               {shown.map(l => (
-                <tr key={l.id} style={{ borderTop: '1px solid #f0f0f0' }}>
+                <tr key={l.id} style={{ borderTop: '1px solid #f0f0f0', background: selected.has(l.id) ? '#fff7f7' : '#fff' }}>
+                  {isAdmin && <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={selected.has(l.id)} onChange={() => toggleSel(l.id)} /></td>}
                   <td style={{ ...td, color: '#8a857c', whiteSpace: 'nowrap' }}>{l.monthLabel}</td>
                   <td style={{ ...td, fontWeight: 600, color: '#1a1a2e' }}>{l.item || <span style={{ color: '#bbb', fontWeight: 400 }}>-</span>}</td>
                   <td style={td}>{l.detail}</td>
@@ -127,7 +149,7 @@ function LessonsTable() {
                       {Object.keys(DEPT_LABEL).map(d => <DeptChip key={d} d={d} small on={(l.depts || []).includes(d)} onClick={() => updateDepts(l.id, (l.depts || []).includes(d) ? l.depts.filter(x => x !== d) : [...(l.depts || []), d])} />)}
                     </div>
                   </td>
-                  <td style={{ ...td, textAlign: 'right' }}><button onClick={() => del(l.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>&times;</button></td>
+                  {isAdmin && <td style={{ ...td, textAlign: 'right' }}><button onClick={() => del(l.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15 }}>&times;</button></td>}
                 </tr>
               ))}
             </tbody>

@@ -1,33 +1,20 @@
-DEPLOY NOTES - Lessons Learnt: structured lessons, no AI, clear table
-=====================================================================
+DEPLOY NOTES - Lessons table: admin-only delete + multi-select
+==============================================================
 
 TWO files, both EDITS - just replace them.
-  pages/lessons-learnt.js       (structured lessons UI + Clear table button)
-  pages/api/lessons-learnt.js    (structured rows, AI removed, clear-lessons action)
+  pages/lessons-learnt.js       (admin-gated delete UI + tick boxes / select all)
+  pages/api/lessons-learnt.js    (server enforces admin on delete/clear + bulk delete)
 
-WHAT CHANGED
-1. Lessons Learnt is now STRUCTURED (going forward). In a meeting's minutes, the Lessons
-   Learnt section is a list of rows, each with:
-     - Lessons Learnt item (short name)
-     - Lessons Learnt (the detail / context)
-     - Who it's for (tick the departments yourself)
-   Add as many as you like. On "Meeting complete" they populate the Lessons Learnt table.
+WHAT CHANGED (Lessons table tab only)
+- DELETE IS NOW ADMIN-ONLY. Only portal users with the "admin" role see the delete
+  controls, and the server rejects any delete/clear from non-admins (so it's properly
+  enforced, not just hidden).
+- MULTI-SELECT DELETE. Admins get a tick box on each row plus a "select all" tick box in
+  the header. Selecting rows shows a red bar: "N selected -> Delete selected". You can
+  also clear the selection.
+- The single-row "x" delete and the "Clear table" button are also admin-only now.
 
-2. The TABLE now has columns: Month | Lessons Learnt item | Lessons Learnt | Who it's for.
-   You can still search, filter by department, tweak departments (click chips), add a
-   manual lesson, or delete one.
-
-3. THE AI LAYER IS REMOVED. You categorise every lesson yourself. (ANTHROPIC_API_KEY is
-   no longer used by this page - you can leave it set or remove it, your call.)
-
-4. Only applies GOING FORWARD. The 20 seeded historical meetings keep their original
-   free-text lessons notes, shown read-only under "Recorded notes (historical)" inside
-   each old meeting - they are NOT converted and do NOT populate the new table.
-
-CLEARING THE OLD TABLE (do this once after deploy):
-   The 132 old auto-generated rows are still in storage. On the Lessons table tab there is
-   now a red "Clear table" button - click it once to wipe them. (This clears the table
-   only; the minutes are untouched.) After that, the table fills only from meetings you
-   complete going forward, plus anything you add manually.
+Non-admins can still view, search, filter, add lessons, and edit department tags - they
+just can't delete.
 
 BUILD: next build -> Compiled successfully.

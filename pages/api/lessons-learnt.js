@@ -1,6 +1,6 @@
 import { get, set, getLiveTasks, saveLiveTasks, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
-import { canAccessArea } from '../../lib/roles'
+import { canAccessArea, hasRole } from '../../lib/roles'
 import { SEED_MINUTES } from '../../lib/lessonsSeed'
 
 // Monthly Lessons Learnt: minutes + a manually-categorised lessons table.
@@ -56,6 +56,7 @@ export default async function handler(req, res) {
     // Portal users for the "person responsible" picker on meeting actions.
     const portal = (await getPortalUsers()) || []
     out.users = portal.filter(p => p.active !== false).map(p => ({ id: p.id, name: p.name || [p.firstName, p.lastName].filter(Boolean).join(' ') || p.email, email: p.email || '' }))
+    out.isAdmin = hasRole(u.role, ['admin'])
     return res.json(out)
   }
 
@@ -166,12 +167,15 @@ export default async function handler(req, res) {
       await set(LES_KEY, lessons)
       return res.json({ ok: true, lesson: lessons[li] })
     }
-    if (body.action === 'delete-lesson') {
-      const lessons = ((await get(LES_KEY)) || []).filter(l => l.id !== body.id)
+    if (body.action === 'delete-lesson' || body.action === 'delete-lessons') {
+      if (!hasRole(u.role, ['admin'])) return res.status(403).json({ error: 'Only admins can delete lessons' })
+      const ids = new Set(body.action === 'delete-lessons' ? (Array.isArray(body.ids) ? body.ids : []) : [body.id])
+      const lessons = ((await get(LES_KEY)) || []).filter(l => !ids.has(l.id))
       await set(LES_KEY, lessons)
       return res.json({ ok: true })
     }
     if (body.action === 'clear-lessons') {
+      if (!hasRole(u.role, ['admin'])) return res.status(403).json({ error: 'Only admins can clear the table' })
       await set(LES_KEY, [])
       return res.json({ ok: true, cleared: true })
     }
