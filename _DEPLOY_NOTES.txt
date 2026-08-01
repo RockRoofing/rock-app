@@ -1,21 +1,73 @@
-DEPLOY NOTES - Bookkeeping tasks: Friday weeks + 15th-of-month deadlines
-=======================================================================
+DEPLOY NOTES - Email Notification builder (Commercial + Bookkeeping tasks)
+=========================================================================
 
-THREE files, all EDITS - just replace them.
-  components/TaskGrid.js                 (week anchor day + start date now configurable)
-  pages/bookkeeping-weekly-tasks.js      (Friday, first date 31 Jul 2026)
-  pages/bookkeeping-monthly-tasks.js     (15th of month, first date 15 Aug 2026)
+NEW FILES - add via GitHub "Add file":
+  lib/notifications.js                 (core: store, task-completion check, scheduler)
+  pages/api/notifications.js            (admin CRUD + test send)
+  pages/api/cron/notifications.js       (daily cron that fires due notifications)
+  pages/admin/notifications.js          (the Notification Builder UI)
 
-CHANGES
-- WEEKLY bookkeeping tasks: columns are now each week's FRIDAY (was Thursday). Tracking
-  starts 31 Jul 2026 (a Friday). Subtitle: "All weekly bookkeeping tasks to be completed
-  by the end of play each Friday."
-- MONTHLY bookkeeping tasks: deadline is the 15th of each month; tracking starts from
-  August 2026 (first deadline 15 Aug 2026). Subtitle: "All monthly bookkeeping tasks to
-  be completed no later than the 15th of each month."
+EDITS - replace:
+  pages/admin.js                        (new "Email Notifications" tile in Admin)
+  vercel.json                           (adds the notifications cron - see below)
 
-NOTE: the shared TaskGrid now takes an optional week-anchor day and start date. The
-COMMERCIAL weekly/monthly task pages are unaffected - they keep Thursday weeks and their
-existing start date (defaults unchanged).
+** vercel.json - IMPORTANT **
+  Adds one cron: /api/cron/notifications at 07:00 daily. You're on Vercel Pro, so this
+  is fine alongside the existing crons. Deploy vercel.json for the automation to run.
+
+WHAT THIS IS
+  A Notification Builder in the Admin centre (like the form/template builder). You create
+  and edit email notifications there - dates, recipients, and email content are all
+  editable. Two functions are supported: Commercial and Bookkeeping.
+
+EACH NOTIFICATION HAS
+  - Name, on/off toggle.
+  - Function (Commercial / Bookkeeping) and Cadence (Weekly / Monthly).
+  - Due day: weekly = a day of the week; monthly = a day of the month.
+  - Send offset: 0 = on the due day; 1 = the day after; 2 = two days after ... (used for
+    the "still not complete" follow-ups).
+  - When to send: "Always" (a plain reminder on the due day) OR "Only if the tasks are
+    NOT all marked Yes" (checks the relevant Weekly/Monthly task grid for that period).
+  - Recipients: tick portal users AND/OR type in any other email addresses.
+  - Email subject + body (free text).
+  - "Send test" button (send to yourself or to the real recipients) to preview.
+
+HOW SENDING WORKS
+  The cron runs daily and, for each enabled notification, fires only on its due day (+
+  offset). "Only if not complete" notifications send only when that period's tasks aren't
+  all Yes. Each notification only sends once per period (no duplicates).
+
+TO SET UP WHAT YOU ASKED FOR, create these (Admin > Email Notifications > New):
+
+  COMMERCIAL - Weekly reminder
+    Function Commercial, Weekly, Due day Thursday, offset 0, When "Always".
+    Body: "This is a weekly reminder that the Weekly Commercial Tasks need completing by
+    close of play today."
+
+  COMMERCIAL - Weekly not-complete (Friday)
+    Commercial, Weekly, Due day Thursday, offset 1, When "Only if not complete".
+    Body: "The Weekly Commercial Tasks have not been marked complete. Please ensure the
+    weekly tasks are completed ASAP."
+
+  COMMERCIAL - Monthly reminder
+    Commercial, Monthly, Due day of month = your tracker date, offset 0, "Always".
+    Body: "This is a reminder that you need to complete the Monthly Commercial Tasks by
+    the end of today."
+
+  COMMERCIAL - Monthly not-complete
+    Commercial, Monthly, same due day, offset 1, "Only if not complete".
+    Body: "The Monthly Commercial Tasks have not been marked complete. Please ensure the
+    monthly tasks are completed ASAP."
+  COMMERCIAL - Monthly still-not-complete (+2)
+    As above but offset 3 (i.e. 2 days after the first follow-up), "Only if not complete".
+
+  BOOKKEEPING - the same four/five, with Function = Bookkeeping, weekly Due day = Friday,
+  monthly Due day of month = 15, and the wording swapped to "Bookkeeping".
+
+(Optional: say the word and I can pre-seed all these ready-made so you only add
+recipients - I left them for you to create so nothing emails anyone unexpectedly.)
+
+ENV: uses RESEND_API_KEY (already set). Optional NOTIFY_FROM_EMAIL to set the From
+address (falls back to your existing forms From).
 
 BUILD: next build -> Compiled successfully.
