@@ -951,7 +951,7 @@ function WeeklyReportModal({ onClose }) {
       await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-recipients', recipients: list }) })
       const r = await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send-report-now' }) })
       const d = await r.json()
-      setMsg(d.ok ? `Sent to ${(d.sentTo || []).length} recipient(s).` : (d.note || d.error || 'Could not send.'))
+      setMsg(d.ok ? `Sent to ${(d.sentTo || []).length} recipient(s) from ${d.from || 'default'}.` : (d.reason || d.note || d.error || `Could not send${d.status ? ' (status ' + d.status + ')' : ''}${d.from ? ' — from ' + d.from : ''}.`))
     } catch (e) { setMsg('Could not send.') }
     setSending(false)
   }
