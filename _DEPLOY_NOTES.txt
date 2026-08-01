@@ -1,28 +1,11 @@
-DEPLOY NOTES - Lessons Learnt: completion validation + lesson responsible
-=========================================================================
+DEPLOY NOTES - Remove "Clear table" from Lessons Learnt table
+=============================================================
 
-TWO files, both EDITS - just replace them.
-  pages/lessons-learnt.js       (responsible field + completion validation warning)
-  pages/api/lessons-learnt.js    (server-side validation + carries responsible)
+ONE file, an EDIT - just replace it.
+  pages/lessons-learnt.js
 
-WHAT CHANGED
-- Each LESSON now also has a "Person responsible" (a portal user) alongside item,
-  detail and the department tags. It shows as a new "Responsible" column in the table.
-
-- A meeting CANNOT BE MARKED COMPLETE unless, for every lesson that has been started:
-    * the Lessons Learnt item is filled in,
-    * the Lessons Learnt detail is filled in,
-    * a person responsible is chosen, and
-    * at least one department is ticked (categorised);
-  and every meeting action that has text must have a person responsible.
-
-- If you click "Meeting complete" with anything missing, a red warning box lists exactly
-  what needs completing (e.g. "Lesson 2: no person responsible", "Action 1: no person
-  responsible") and completion is blocked until it's fixed. This is enforced on the
-  server too, not just the screen.
-
-- DRAFTS STILL AUTOSAVE as you work - the validation only blocks COMPLETION, so you never
-  lose half-finished notes. Completely blank lesson rows are ignored (they don't block
-  you); only rows you've started need finishing.
+CHANGE
+  The red "Clear table" button has been removed from the Lessons table tab. Individual
+  and multi-select delete (admin only) remain. Nothing else changes.
 
 BUILD: next build -> Compiled successfully.

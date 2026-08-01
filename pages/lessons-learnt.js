@@ -89,7 +89,6 @@ function LessonsTable() {
           <div style={{ fontSize: 13, color: '#8a857c' }}>Collected from the monthly minutes. Each lesson has an item, the detail, and the department(s) it is for. Search or filter below.</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {isAdmin && <button onClick={async () => { if (confirm('Clear ALL lessons from the table? This cannot be undone. (Minutes are not affected.)')) { const r = await fetch('/api/lessons-learnt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'clear-lessons' }) }); if (r.ok) load(); else alert('Only admins can clear the table.') } }} style={{ ...ghost, color: '#dc2626', borderColor: '#f3c0c0' }}>Clear table</button>}
           {canEdit && <button onClick={() => setAdding(a => !a)} style={primary}>{adding ? 'Cancel' : '+ Add lesson'}</button>}
         </div>
       </div>
