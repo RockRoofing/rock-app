@@ -12,7 +12,8 @@ const WEEKLY = [
 
 export default function BookkeepingWeeklyTasks() {
   return <TaskGrid cadence="weekly" tasks={WEEKLY} apiPath="/api/bookkeeping-tasks"
+    weekAnchor={5} startDate={new Date(2026, 6, 31)}
     title="Weekly Bookkeeping Tasks"
-    subtitle="All weekly bookkeeping tasks to be completed by the end of each week."
+    subtitle="All weekly bookkeeping tasks to be completed by the end of play each Friday."
     nav={<BookkeepingNav active="/bookkeeping-weekly-tasks" />} />
 }

@@ -1,12 +1,21 @@
-DEPLOY NOTES - Bookkeeping page full width
-==========================================
+DEPLOY NOTES - Bookkeeping tasks: Friday weeks + 15th-of-month deadlines
+=======================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/bookkeeping.js
+THREE files, all EDITS - just replace them.
+  components/TaskGrid.js                 (week anchor day + start date now configurable)
+  pages/bookkeeping-weekly-tasks.js      (Friday, first date 31 Jul 2026)
+  pages/bookkeeping-monthly-tasks.js     (15th of month, first date 15 Aug 2026)
 
-CHANGE
-  The main Bookkeeping page content was capped at 1240px wide; it now uses the full
-  width of the screen (like the task pages). The Weekly/Monthly Bookkeeping Task pages
-  were already full width.
+CHANGES
+- WEEKLY bookkeeping tasks: columns are now each week's FRIDAY (was Thursday). Tracking
+  starts 31 Jul 2026 (a Friday). Subtitle: "All weekly bookkeeping tasks to be completed
+  by the end of play each Friday."
+- MONTHLY bookkeeping tasks: deadline is the 15th of each month; tracking starts from
+  August 2026 (first deadline 15 Aug 2026). Subtitle: "All monthly bookkeeping tasks to
+  be completed no later than the 15th of each month."
+
+NOTE: the shared TaskGrid now takes an optional week-anchor day and start date. The
+COMMERCIAL weekly/monthly task pages are unaffected - they keep Thursday weeks and their
+existing start date (defaults unchanged).
 
 BUILD: next build -> Compiled successfully.

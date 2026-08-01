@@ -18,7 +18,8 @@ const MONTHLY = [
 
 export default function BookkeepingMonthlyTasks() {
   return <TaskGrid cadence="monthly" tasks={MONTHLY} apiPath="/api/bookkeeping-tasks"
+    startDate={new Date(2026, 7, 15)}
     title="Monthly Bookkeeping Tasks"
-    subtitle="All monthly bookkeeping tasks to be completed within the monthly close."
+    subtitle="All monthly bookkeeping tasks to be completed no later than the 15th of each month."
     nav={<BookkeepingNav active="/bookkeeping-monthly-tasks" />} />
 }

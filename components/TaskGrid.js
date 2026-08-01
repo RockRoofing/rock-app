@@ -14,23 +14,23 @@ const pad = (n) => String(n).padStart(2, '0')
 const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
 const monthLabel = (key) => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleString('en-GB', { month: 'short', year: '2-digit' }) }
-function thursdayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + (4 - x.getDay())); return x }
-const weekKey = (d) => iso(thursdayOf(d))
+function anchorOf(d, anchor) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + ((anchor - x.getDay() + 7) % 7)); return x }
+const weekKey = (d, anchor) => iso(anchorOf(d, anchor))
 const weekLabel = (key) => { const [y, m, dd] = key.split('-').map(Number); return new Date(y, m - 1, dd).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) }
 
-function buildWeeks(back, fwd) { const out = []; const t0 = thursdayOf(new Date()); for (let i = -back; i <= fwd; i++) { const d = new Date(t0); d.setDate(t0.getDate() + i * 7); out.push(iso(d)) } return out }
+function buildWeeks(back, fwd, anchor) { const out = []; const t0 = anchorOf(new Date(), anchor); for (let i = -back; i <= fwd; i++) { const d = new Date(t0); d.setDate(t0.getDate() + i * 7); out.push(iso(d)) } return out }
 function buildMonths(back, fwd) { const out = []; const b = new Date(); b.setDate(1); for (let i = -back; i <= fwd; i++) { const d = new Date(b.getFullYear(), b.getMonth() + i, 1); out.push(monthKey(d)) } return out }
 
-function completionPct(cadence, tasks, data, startDate) {
+function completionPct(cadence, tasks, data, startDate, weekAnchor) {
   const today = new Date()
-  const startWeek = weekKey(startDate)
+  const startWeek = weekKey(startDate, weekAnchor)
   const startMonth = monthKey(startDate)
   let periods = []
   if (cadence === 'weekly') {
-    const todayWk = weekKey(today)
+    const todayWk = weekKey(today, weekAnchor)
     const sixAgo = new Date(today); sixAgo.setMonth(sixAgo.getMonth() - 6)
-    let start = weekKey(sixAgo); if (start < startWeek) start = startWeek
-    periods = buildWeeks(120, 0).filter(k => k >= start && k <= todayWk)
+    let start = weekKey(sixAgo, weekAnchor); if (start < startWeek) start = startWeek
+    periods = buildWeeks(120, 0, weekAnchor).filter(k => k >= start && k <= todayWk)
   } else {
     const todayMo = monthKey(today)
     const sixAgo = new Date(today); sixAgo.setMonth(sixAgo.getMonth() - 6)
@@ -44,12 +44,12 @@ function completionPct(cadence, tasks, data, startDate) {
   return Math.round((done / total) * 100)
 }
 
-export default function TaskGrid({ cadence, tasks, apiPath, title, subtitle, nav, startDate = new Date(2026, 6, 30) }) {
+export default function TaskGrid({ cadence, tasks, apiPath, title, subtitle, nav, startDate = new Date(2026, 6, 30), weekAnchor = 4 }) {
   const colType = cadence === 'weekly' ? 'week' : 'month'
   const colLabel = cadence === 'weekly' ? weekLabel : monthLabel
-  const todayKey = cadence === 'weekly' ? weekKey(new Date()) : monthKey(new Date())
+  const todayKey = cadence === 'weekly' ? weekKey(new Date(), weekAnchor) : monthKey(new Date())
 
-  const defaultCols = useMemo(() => cadence === 'weekly' ? buildWeeks(6, 3) : buildMonths(6, 3), [cadence])
+  const defaultCols = useMemo(() => cadence === 'weekly' ? buildWeeks(6, 3, weekAnchor) : buildMonths(6, 3), [cadence, weekAnchor])
   const [data, setData] = useState({ weekly: {}, monthly: {} })
   const [loading, setLoading] = useState(true)
   const [from, setFrom] = useState(''); const [to, setTo] = useState('')
@@ -62,15 +62,15 @@ export default function TaskGrid({ cadence, tasks, apiPath, title, subtitle, nav
   const cols = useMemo(() => {
     if (!from && !to) return defaultCols
     if (cadence === 'weekly') {
-      const f = from ? weekKey(new Date(from)) : null, t = to ? weekKey(new Date(to)) : null
-      return buildWeeks(200, 200).filter(k => (!f || k >= f) && (!t || k <= t))
+      const f = from ? weekKey(new Date(from), weekAnchor) : null, t = to ? weekKey(new Date(to), weekAnchor) : null
+      return buildWeeks(200, 200, weekAnchor).filter(k => (!f || k >= f) && (!t || k <= t))
     }
     return buildMonths(240, 240).filter(k => (!from || k >= from) && (!to || k <= to))
-  }, [from, to, defaultCols, cadence])
+  }, [from, to, defaultCols, cadence, weekAnchor])
 
   const filtered = !!(from || to)
   const cell = data[cadence] || {}
-  const pct = completionPct(cadence, tasks, cell, startDate)
+  const pct = completionPct(cadence, tasks, cell, startDate, weekAnchor)
 
   async function setCell(objId, colKey, current) {
     const next = current === 'yes' ? 'no' : current === 'no' ? '' : 'yes'
