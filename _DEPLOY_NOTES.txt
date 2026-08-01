@@ -1,31 +1,44 @@
-DEPLOY NOTES - Fix scheduled send time (UTC vs UK time)
-=======================================================
+DEPLOY NOTES - Monthly Lessons Learnt page (Part 1 of 2)
+========================================================
 
-TWO files, both EDITS - just replace them.
-  lib/outstandingInvoicesReport.js     (weekly report schedule gate fixed)
-  pages/api/cron/notifications.js       (notifications evaluated in UK time)
+NEW FILES - add via GitHub "Add file":
+  lib/lessonsSeed.js               (seed: 20 months of minutes + 132 lessons from the sheet)
+  pages/api/lessons-learnt.js       (minutes + AI lessons table API)
 
-WHY THE AUTO-SEND DIDN'T FIRE
-  The cron ticks hourly in UTC, but the schedule was being compared against UK local
-  time with an exact-hour match. During British Summer Time UK is UTC+1, so the hours
-  never lined up - e.g. the cron's "11:00" tick is really 12:00 UK, so an 11:00 UK
-  schedule was always missed. It also used a fragile way to read UK time.
+EDIT - replace:
+  pages/lessons-learnt.js           (was the "coming soon" stub)
 
-FIX
-  - UK day + hour are now read reliably (Intl parts), and the weekly report fires when
-    it's the right UK day and the UK hour is AT OR AFTER the target hour (then a
-    once-per-day guard prevents repeats). So the correct hour is no longer missed by the
-    UTC/BST offset, and a slightly late cron tick still catches the day.
-  - The notifications cron now also evaluates "today" in UK time (correct day near
-    midnight).
+WHAT THIS DOES
+  The Lessons Learnt portal page now has two tabs:
 
-AFTER DEPLOY
-  Set the weekly report schedule to the UK day + hour you want on the Outstanding
-  Invoices page. It will send on the next cron tick at/after that hour on that day.
-  (Manual "Send now" was already working - this only affects the automatic schedule.)
+  1. LESSONS TABLE - every lesson auto-collected from the minutes, each tagged with one
+     or more departments (Estimating / Commercial / Operations / Accounting / Sales).
+     Search by text and filter by department. You can tweak a lesson's departments
+     (click the chips), add a manual lesson, or delete one. New/blank-department lessons
+     are auto-categorised by the AI layer (see AI note below).
 
-  Note: because it now fires "at or after" the target hour, if you set a time that has
-  already passed TODAY on the chosen day, it will send on the very next cron tick (top of
-  the next hour) rather than waiting a week.
+  2. MONTHLY MINUTES - a month-by-month table (month + meeting date + status). Open any
+     month to edit the minutes. All sections from your spreadsheet are here: Wins,
+     General performance / KPIs, Up and coming news, Big focus, Lessons Learnt, and
+     Meeting actions (action + person responsible). Drafts AUTOSAVE as you type. Click
+     "Meeting complete" to lock the minutes and push that month's Lessons Learnt lines
+     into the table (auto-categorised).
+
+  SEEDED HISTORY: on first load it seeds 20 months of your past minutes (Sept 2024 ->
+  June 2026, all marked Complete) and 132 categorised lessons into the table. Where a
+  month had separate Office + Operatives tabs, they've been merged into one set of
+  minutes using the latest format. Meeting dates were not in the sheet - set them per
+  month when you like.
+
+AI LAYER
+  Department categorisation uses the Anthropic API when ANTHROPIC_API_KEY is set in your
+  Vercel env vars, with a keyword-based fallback if it isn't (so it always works). The
+  132 seeded lessons were categorised by the keyword rules; you can refine any of them by
+  clicking the department chips. New lessons added going forward will use the AI.
+  -> To enable the AI: add ANTHROPIC_API_KEY to Vercel env vars. Optional but recommended.
+
+STILL TO COME (Part 2): "Meeting complete" will also push the Meeting Actions into the
+Operations live tasks list (grouped under Lessons Learnt, owner = a portal user). For now
+the actions are captured on the minutes; the Operations push is the next update.
 
 BUILD: next build -> Compiled successfully.
