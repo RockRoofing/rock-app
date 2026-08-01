@@ -297,6 +297,20 @@ export default function BookkeepingPage() {
         </div>
       </div>
 
+      {/* Sub-nav tabs (Ops style) */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #ececec', padding: '0 24px', display: 'flex', gap: 4, height: 46, alignItems: 'center', position: 'sticky', top: 56, zIndex: 19 }}>
+        {[['/bookkeeping', 'Bookkeeping'], ['/bookkeeping-weekly-tasks', 'Weekly Tasks'], ['/bookkeeping-monthly-tasks', 'Monthly Tasks']].map(([href, label]) => {
+          const on = href === '/bookkeeping'
+          return (
+            <Link key={href} href={href} style={{
+              fontSize: 13, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap',
+              color: on ? '#1a1a19' : '#888', fontWeight: on ? 600 : 400,
+              borderBottom: on ? '2px solid #ca8a04' : '2px solid transparent', marginBottom: -1,
+            }}>{label}</Link>
+          )
+        })}
+      </div>
+
       {showBillsUpload && (
         <BillsUploadModal
           onClose={() => setShowBillsUpload(false)}

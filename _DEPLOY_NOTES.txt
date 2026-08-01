@@ -1,37 +1,27 @@
-DEPLOY NOTES - Contracted Rates upload: stop dropping line items + show what's skipped
-======================================================================================
+DEPLOY NOTES - Bookkeeping Weekly & Monthly Tasks
+=================================================
 
-THREE files, all EDITS - just replace them.
-  lib/contractRatesParser.js       (parsing fixes)
-  pages/contracted-rates.js         (highlights + "not imported" notice)
-  pages/api/contracted-rates.js     (passes the skipped-rows report through)
+NEW FILES - add via GitHub "Add file":
+  pages/api/bookkeeping-tasks.js         (stores the Yes/No grid - separate from Commercial)
+  components/TaskGrid.js                  (shared weekly/monthly grid, reusable)
+  components/BookkeepingNav.js            (Bookkeeping nav with sub-tabs)
+  pages/bookkeeping-weekly-tasks.js       (Weekly Bookkeeping Tasks)
+  pages/bookkeeping-monthly-tasks.js      (Monthly Bookkeeping Tasks)
 
-WHY LINES WERE GOING MISSING (found three silent causes)
-  The importer only kept a row if column A (Schedule ID) had a value, and it dropped
-  everything else with no warning. Three things fell through:
-   1. BLANK / MERGED Schedule ID cells. If the ID cell is blank - or merged across
-      several rows (Excel stores the value only on the first row of a merge, leaving the
-      rest blank) - those lines were dropped even though they were real items. This is
-      the most likely cause of "random" missing lines.
-   2. A real item whose DESCRIPTION contained the words "below the line" was mistaken for
-      the "BELOW THE LINE ITEMS" divider - it got skipped AND wrongly flipped everything
-      after it into the optional section.
-   3. The divider / summary matching was too loose.
+EDIT - replace:
+  pages/bookkeeping.js                    (adds the sub-nav tabs row)
 
-WHAT'S FIXED
-  - A row is now imported if it has a Schedule ID OR it has no ID but clearly is an item
-    (a description plus a qty / rate / total / material or labour rate). So blank-code and
-    merged-cell lines come in instead of vanishing.
-  - Lines that came in WITHOUT a Schedule ID are flagged so you can spot them and add the
-    code if needed.
-  - The "below the line" divider is only treated as a divider when the row is just that
-    label (no item data) - real items mentioning the phrase are kept.
-  - Repeated Schedule IDs still import as separate lines (they always did - confirmed).
+WHAT THIS DOES
+  Mirrors the Commercial weekly/monthly tasks, on the Bookkeeping page, with the
+  bookkeeping task lists you supplied (6 weekly, 12 monthly).
+  - A new sub-nav appears on the Bookkeeping page: Bookkeeping | Weekly Tasks | Monthly
+    Tasks (white/gold Ops style).
+  - Each task page: tasks down the left, periods across the top (weeks by Thursday date /
+    months), 6 back + 3 forward by default (no scroll), From/To filter (scrolls when a
+    wider range is chosen), Yes/No cells (click to cycle Yes -> No -> blank), and a
+    "Completed (last 6 months)" box counting from today back to 30 Jul 2026.
+  - Stored SEPARATELY from the Commercial tasks (own Redis key) so the two don't mix.
 
-NEW: VISIBILITY. After an upload you now get:
-  - a note of how many lines came in without a code, and
-  - a yellow "N rows were not imported" panel listing each skipped row (row number,
-    description, reason) - so if anything is ever left out, you can SEE it rather than
-    having to spot it by eye.
+  Access follows the Bookkeeping area (accounts / management / admin).
 
 BUILD: next build -> Compiled successfully.
