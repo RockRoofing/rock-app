@@ -1,13 +1,13 @@
-DEPLOY NOTES - Planner: shrink header labels so they fit their cells
-====================================================================
+DEPLOY NOTES - Planner: replace "Oldest" with "Back 4 weeks"
+===========================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
 CHANGE
-  The column header labels (Planned / Actual, Start, Contract Compl., No. of Visits) were
-  spilling over their cells. They are now smaller, centred and tightly spaced so they sit
-  neatly inside each column. The sticky header height was nudged slightly to fit the
-  two-line labels. Nothing else changes.
+  The "<< Oldest" button has been replaced with "<< Back 4 weeks". Each press turns
+  Historic on (so past weeks show) and moves the planner 4 more weeks into the past. Keep
+  pressing to keep going back. The single < arrow (1 week) and "Today" button are
+  unchanged.
 
 BUILD: next build -> Compiled successfully.

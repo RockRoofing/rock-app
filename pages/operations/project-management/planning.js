@@ -186,26 +186,10 @@ export default function PlanningPage() {
   const canGoBack = true
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
-  // Earliest date anywhere in the data (allocations + water ingress) - lets Historic jump
-  // straight to the oldest programmed day rather than clicking back one week at a time.
-  const earliestDataKey = (() => {
-    let min = null
-    for (const proj of Object.values(data.allocations || {})) {
-      for (const dk of Object.keys(proj || {})) {
-        if (cellData(proj[dk]).count > 0 && (!min || dk < min)) min = dk
-      }
-    }
-    for (const dk of Object.keys(data.waterIngress || {})) {
-      const wiDay = data.waterIngress[dk]
-      const has = Array.isArray(wiDay) ? wiDay.length > 0 : (wiDay && Object.keys(wiDay).length > 0)
-      if (has && (!min || dk < min)) min = dk
-    }
-    return min
-  })()
-  const goOldest = () => {
-    if (!earliestDataKey) return
+  // Jump 4 weeks further into the past each press (turns Historic on so past weeks show).
+  const goBack4 = () => {
     setHistoric(true)
-    setAnchorMonday(mondayOf(parseISO(earliestDataKey)))
+    setAnchorMonday(m => mondayOf(addDays(m, -28)))
   }
 
   // selection helpers (day view only)
@@ -333,12 +317,12 @@ export default function PlanningPage() {
               const next = !h
               setAnchorMonday(mondayOf(addDays(new Date(), next ? -14 : 0)))
               return next
-            })} title="Show past weeks (opens 2 weeks ago; use the back arrow or the Oldest button to reach the earliest programmed date)"
+            })} title="Show past weeks (opens 2 weeks ago; use the back arrows to go further into the past)"
             style={{ ...ghostBtn, background: historic ? '#fffbeb' : '#f2f2f0', color: historic ? '#92400e' : '#555', fontWeight: historic ? 700 : 400 }}>
             {historic ? '✓ Historic' : 'Historic'}
           </button>
           <button onClick={() => shift(historic ? -1 : -12)} disabled={historic && !canGoBack} style={{ ...ghostBtn, opacity: (historic && !canGoBack) ? 0.4 : 1 }} title={historic ? 'Back one week' : 'Back 12 weeks'}>‹</button>
-          <button onClick={goOldest} disabled={!earliestDataKey} style={{ ...ghostBtn, opacity: earliestDataKey ? 1 : 0.4 }} title={earliestDataKey ? `Jump to the oldest programmed week (w/c ${fmtDMY(mondayOf(parseISO(earliestDataKey)))})` : 'No historic data'}>&laquo; Oldest</button>
+          <button onClick={goBack4} style={ghostBtn} title="Go back 4 weeks (each press moves 4 more weeks into the past)">&laquo; Back 4 weeks</button>
           <button onClick={() => { setHistoric(false); setAnchorMonday(mondayOf(new Date())) }} style={ghostBtn}>Today</button>
           <button onClick={() => shift(historic ? 1 : 12)} style={ghostBtn} title={historic ? 'Forward one week' : 'Forward 12 weeks'}>›</button>
         </div>
