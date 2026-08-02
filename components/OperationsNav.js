@@ -11,6 +11,7 @@ export const NAV = [
     ],
   },
   { key: 'projects', label: 'Projects', href: '/operations/projects' },
+  { key: 'process', label: 'Project Process', href: '/operations/project-process' },
   {
     key: 'pm', label: 'Project Management', href: '/operations/project-management/srat',
     children: [
