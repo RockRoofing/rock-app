@@ -1,18 +1,13 @@
-DEPLOY NOTES - Planner: freeze date header + totals row when scrolling down
-===========================================================================
+DEPLOY NOTES - Planner: shrink header labels so they fit their cells
+====================================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
-WHAT CHANGED
-  The date/week header row and the "Total installers" row now STICK to the top of the
-  planner as you scroll down through the projects. Previously, scrolling to the lower
-  projects hid the dates so you couldn't tell which day you were allocating to - now they
-  stay pinned at the top.
-
-  - The planner table now scrolls inside its own box (capped to the window height) with
-    both the top header rows frozen. The left-hand columns (Project / Start / etc.) remain
-    frozen when scrolling sideways, exactly as before - so the top-left corner stays put
-    in both directions.
+CHANGE
+  The column header labels (Planned / Actual, Start, Contract Compl., No. of Visits) were
+  spilling over their cells. They are now smaller, centred and tightly spaced so they sit
+  neatly inside each column. The sticky header height was nudged slightly to fit the
+  two-line labels. Nothing else changes.
 
 BUILD: next build -> Compiled successfully.

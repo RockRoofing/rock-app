@@ -417,12 +417,12 @@ export default function PlanningPage() {
           <div style={{ minWidth: NAME_W + DATE_W * 3 + VISITS_W + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
 
             {/* Week/date header - sticky to the top of the scroll box */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7', position: 'sticky', top: 0, zIndex: 30, height: 26 }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7', position: 'sticky', top: 0, zIndex: 30, height: 32 }}>
               <Frozen w={NAME_W} left={0} style={{ fontWeight: 700, background: '#faf9f7' }}>Project</Frozen>
-              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Planned / Actual</PlainCell>
-              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Start</PlainCell>
-              <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
-              <PlainCell w={VISITS_W} style={{ background: '#faf9f7' }} title="Number of separate site visits (actual days on site, counting a new visit after 2+ working days away)">No. of Visits</PlainCell>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7', fontSize: 10, lineHeight: 1.1, color: '#555', fontWeight: 600, padding: '3px 4px', justifyContent: 'center', textAlign: 'center' }}>Planned / Actual</PlainCell>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7', fontSize: 10, lineHeight: 1.1, color: '#555', fontWeight: 600, padding: '3px 4px', justifyContent: 'center', textAlign: 'center' }}>Start</PlainCell>
+              <PlainCell w={DATE_W} style={{ background: '#faf9f7', fontSize: 10, lineHeight: 1.1, color: '#555', fontWeight: 600, padding: '3px 4px', justifyContent: 'center', textAlign: 'center' }}>Contract Compl.</PlainCell>
+              <PlainCell w={VISITS_W} style={{ background: '#faf9f7', fontSize: 10, lineHeight: 1.1, color: '#555', fontWeight: 600, padding: '3px 4px', justifyContent: 'center', textAlign: 'center' }} title="Number of separate site visits (actual days on site, counting a new visit after 2+ working days away)">No. of Visits</PlainCell>
               {view === 'day'
                 ? weekGroups.map((g, i) => (
                   <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>
@@ -435,7 +435,7 @@ export default function PlanningPage() {
 
             {/* Totals + day letters (day view only) - sticky just below the date header */}
             {view === 'day' && (
-              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff', position: 'sticky', top: 26, zIndex: 29 }}>
+              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff', position: 'sticky', top: 32, zIndex: 29 }}>
                 <Frozen w={NAME_W} left={0} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</Frozen>
                 <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
