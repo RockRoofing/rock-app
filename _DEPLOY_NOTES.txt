@@ -1,40 +1,23 @@
-DEPLOY NOTES - FIX: cron jobs were blocked by middleware (401) - weekly report + notifications
-=============================================================================================
+DEPLOY NOTES - Project Planner: "No. of Visits" column
+======================================================
 
 ONE file, an EDIT - just replace it.
-  middleware.js
+  pages/operations/project-management/planning.js
 
-THE ACTUAL PROBLEM (found from the Vercel cron log)
-  The weekly-report cron WAS running every hour, but the request was being rejected by the
-  app's middleware with 401 Unauthorized - before it ever reached the send code (the log
-  showed "No outgoing requests"). On the main portal domain the middleware required a
-  logged-in session for everything except a short allow-list, and /api/cron was NOT on
-  that list. Vercel's cron caller has no login session, so every run was blocked. That is
-  why "Last sent" was always "never".
+WHAT'S NEW
+  A "No. of Visits" column has been added to the project planner, immediately AFTER the
+  "Contract Compl." column. It counts automatically for each project.
 
-  This also affected /api/cron/notifications (the email notification builder) - same block.
-  So the notification emails would not have been sending either.
+HOW A VISIT IS COUNTED
+  - Only days marked ACTUAL with someone on site count (planned / provisional days are
+    ignored - so the count reflects what really happened).
+  - Visit #1 = the first programmed (actual) day on site.
+  - A NEW visit is counted each time the project leaves site for 2 OR MORE WORKING DAYS
+    and then returns. Normal weekends are ignored (Fri then back Mon = same visit, not a
+    new one). A gap of 2+ working days (e.g. on Monday, off Tue+Wed, back Thursday) counts
+    as a new visit.
+  - Shows "-" until there are actual on-site days.
 
-THE FIX
-  Middleware now lets /api/cron/* through without a portal login. These endpoints are
-  instead protected by an optional CRON_SECRET:
-    - If you set an env var CRON_SECRET, Vercel automatically sends it as
-      "Authorization: Bearer <CRON_SECRET>" on scheduled runs, and the middleware requires
-      it. (You can also test in a browser with ?key=<CRON_SECRET>.)
-    - If CRON_SECRET is NOT set, cron routes are simply allowed through so the jobs work.
-
-AFTER DEPLOY
-  1. Deploy this file.
-  2. The hourly weekly-report cron and the daily notifications cron will now actually run.
-     The weekly report will send on its scheduled day (currently SATURDAY 12:00 UK - change
-     it on the Outstanding Invoices page if you want a weekday).
-  3. OPTIONAL hardening: add a Vercel env var CRON_SECRET (any long random string), then
-     redeploy. Vercel passes it to crons automatically; the middleware will then reject any
-     cron call that doesn't present it.
-  4. To confirm now: the "Test schedule now" button will still show "not the scheduled day"
-     until Saturday - that's expected. To prove sending end to end immediately, temporarily
-     set the schedule to today + an hour that has already passed, wait for the next top of
-     the hour, and check it arrives (or set CRON_SECRET and hit
-     /api/cron/weekly-report?key=<secret>&force=1 in the browser).
+  It updates automatically as you confirm days as Actual on the gantt - nothing to enter.
 
 BUILD: next build -> Compiled successfully.

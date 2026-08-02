@@ -14,6 +14,7 @@ const sameDay = (a, b) => a && b && iso(a) === iso(b)
 const isWeekend = (d) => d.getDay() === 0 || d.getDay() === 6
 
 const NAME_W = 280, DATE_W = 92, CELL_W = 34, WEEKCELL_W = 46, ROW_H = 42
+const VISITS_W = 78
 
 // Allocation colours
 const C_ACTUAL = '#15803d'      // dark green
@@ -34,6 +35,32 @@ function cellData(cell) {
   const unnamed = Number(cell.unnamed) || 0
   return { status: cell.status || 'confirmed', unnamed, entries, count: named + unnamed }
 }
+// Count the number of separate site VISITS for a project from its actual, on-site days.
+// A "visit" is a period on site. A new visit is counted when the project leaves site for
+// 2 or more WORKING days (weekends ignored) and then returns. Only days marked 'actual'
+// with someone on site count - planned/provisional days do not. Visit #1 is the first
+// programmed (actual) day on site.
+function workingDaysBetween(a, b) {
+  // Number of working days strictly between date a and date b (exclusive of both).
+  let n = 0
+  let d = addDays(a, 1)
+  while (d < b) { if (!isWeekend(d)) n++; d = addDays(d, 1) }
+  return n
+}
+function countVisits(projDays) {
+  if (!projDays) return 0
+  const onSite = Object.keys(projDays)
+    .filter(dk => { const cd = cellData(projDays[dk]); return cd.count > 0 && cd.status === 'actual' })
+    .sort()
+  if (!onSite.length) return 0
+  let visits = 1 // the first programmed (actual) day starts visit 1
+  for (let i = 1; i < onSite.length; i++) {
+    const prev = parseISO(onSite[i - 1]), cur = parseISO(onSite[i])
+    if (workingDaysBetween(prev, cur) >= 2) visits++
+  }
+  return visits
+}
+
 // Cell background + number colour by status/unnamed. Unnamed present -> orange.
 function cellColours(cd) {
   if (cd.unnamed > 0) return { bg: C_UNNAMED_BG, edge: C_UNNAMED, num: '#9a3412' }
@@ -372,6 +399,7 @@ export default function PlanningPage() {
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Planned / Actual</PlainCell>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Start</PlainCell>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Contract Compl.</PlainCell>
+              <PlainCell w={VISITS_W} style={{ background: '#faf9f7' }} title="Number of separate site visits (actual days on site, counting a new visit after 2+ working days away)">No. of Visits</PlainCell>
               {view === 'day'
                 ? weekGroups.map((g, i) => (
                   <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>
@@ -389,6 +417,7 @@ export default function PlanningPage() {
                 <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
+                <PlainCell w={VISITS_W}></PlainCell>
                 {days.map((d, i) => {
                   const we = isWeekend(d); const t = dayTotal(d)
                   return (
@@ -446,6 +475,7 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
   // Planned / Actual start = the earliest day this project has any allocation (first
   // on-site bar). Derived, so it can't drift from the real gantt. Blank if no bars yet.
   const projDays = data.allocations[p.key] || {}
+  const visitCount = countVisits(projDays)
   let plannedStart = ''
   {
     const dated = Object.keys(projDays).filter(dk => cellData(projDays[dk]).count > 0).sort()
@@ -543,6 +573,9 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
       <PlainCell w={DATE_W} style={{ background: !compl ? '#fff8f8' : '#fff' }}>
         <input type="date" value={compl} onChange={e => { setCompl(e.target.value); saveMeta(start, e.target.value) }} style={{ ...dateInput, color: overrun ? '#dc2626' : undefined, fontWeight: overrun ? 700 : undefined }} />
       </PlainCell>
+      <PlainCell w={VISITS_W} style={{ justifyContent: 'center' }} title="Number of separate site visits (actual on-site days; a new visit is counted after 2+ working days away from site)">
+        <span style={{ fontSize: 14, fontWeight: 700, color: visitCount ? '#0f766e' : '#ccc' }}>{visitCount || '-'}</span>
+      </PlainCell>
 
       {view === 'day'
         ? days.map((d, i) => {
@@ -631,6 +664,7 @@ function WaterIngressRow({ days, weekGroups, view, data, onOpenDay }) {
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
       <PlainCell w={DATE_W} style={{ background: '#f2f8fc' }} />
+      <PlainCell w={VISITS_W} style={{ background: '#f2f8fc' }} />
       {view === 'day'
         ? days.map((d, i) => {
           const dk = iso(d); const n = headcount(dk); const vc = visitCount(dk); const we = isWeekend(d)
