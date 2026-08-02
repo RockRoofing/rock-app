@@ -1,21 +1,18 @@
-DEPLOY NOTES - Planner: scroll back to the oldest date (Historic)
-================================================================
+DEPLOY NOTES - Planner: freeze date header + totals row when scrolling down
+===========================================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
-WHAT'S NEW
-  In Historic mode you can now jump straight to the OLDEST programmed date instead of
-  clicking back one week at a time.
+WHAT CHANGED
+  The date/week header row and the "Total installers" row now STICK to the top of the
+  planner as you scroll down through the projects. Previously, scrolling to the lower
+  projects hid the dates so you couldn't tell which day you were allocating to - now they
+  stay pinned at the top.
 
-  - A new "<< Oldest" button sits next to the back arrow. Click it and the planner turns
-    Historic on (if it isn't already) and jumps to the week containing the earliest
-    programmed day found anywhere in the data (labour allocations or water-ingress). Its
-    tooltip shows which week that is.
-  - From there you can still use the < / > arrows to move week by week, or "Today" to jump
-    back to the current week.
-  - If there is no historic data at all, the button is greyed out.
-
-  (The back arrow already had no limit - this just gets you to the very start in one click.)
+  - The planner table now scrolls inside its own box (capped to the window height) with
+    both the top header rows frozen. The left-hand columns (Project / Start / etc.) remain
+    frozen when scrolling sideways, exactly as before - so the top-left corner stays put
+    in both directions.
 
 BUILD: next build -> Compiled successfully.

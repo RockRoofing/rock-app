@@ -412,12 +412,12 @@ export default function PlanningPage() {
         )
       })()}
 
-      <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <div style={{ minWidth: NAME_W + DATE_W * 3 + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
+      <div style={{ border: '1px solid #ececec', borderRadius: 12, background: '#fff' }}>
+        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 220px)', borderRadius: 12 }}>
+          <div style={{ minWidth: NAME_W + DATE_W * 3 + VISITS_W + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
 
-            {/* Week/date header */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7' }}>
+            {/* Week/date header - sticky to the top of the scroll box */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #eee', background: '#faf9f7', position: 'sticky', top: 0, zIndex: 30, height: 26 }}>
               <Frozen w={NAME_W} left={0} style={{ fontWeight: 700, background: '#faf9f7' }}>Project</Frozen>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Planned / Actual</PlainCell>
               <PlainCell w={DATE_W} style={{ background: '#faf9f7' }}>Start</PlainCell>
@@ -433,9 +433,9 @@ export default function PlanningPage() {
               }
             </div>
 
-            {/* Totals + day letters (day view only) */}
+            {/* Totals + day letters (day view only) - sticky just below the date header */}
             {view === 'day' && (
-              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff' }}>
+              <div style={{ display: 'flex', borderBottom: '2px solid #e6e2d8', background: '#fff', position: 'sticky', top: 26, zIndex: 29 }}>
                 <Frozen w={NAME_W} left={0} style={{ fontSize: 10.5, color: '#999' }}>Total installers →</Frozen>
                 <PlainCell w={DATE_W}></PlainCell>
                 <PlainCell w={DATE_W}></PlainCell>
