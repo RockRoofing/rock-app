@@ -351,7 +351,7 @@ function RiskLogField({ value, onChange, team }) {
 }
 
 function ProcurementField({ value, onChange, team, projectNo, projectName }) {
-  function addRow() { onChange([...value, { package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', orderPlaced: false, supplierContact: '', comments: '' }]) }
+  function addRow() { onChange([...value, { package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', budgetTotal: '', budgetComments: '', buyingTotal: '', buyingComments: '', orderPlaced: false, supplierContact: '', comments: '' }]) }
   function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
   function remove(i) { onChange(value.filter((_, j) => j !== i)) }
   return (
@@ -382,6 +382,12 @@ function ProcurementField({ value, onChange, team, projectNo, projectName }) {
             <label style={{ fontSize: 12, color: '#555', display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'end' }}><input type="checkbox" checked={!!p.orderPlaced} onChange={e => update(i, 'orderPlaced', e.target.checked)} /> Order placed</label>
           </div>
           <input value={p.supplierContact || ''} onChange={e => update(i, 'supplierContact', e.target.value)} placeholder="Supplier contact details" style={{ ...inpSm, marginBottom: 8 }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            <label style={{ fontSize: 11, color: '#888' }}>Budget Total (£)<input value={p.budgetTotal ?? ''} onChange={e => update(i, 'budgetTotal', e.target.value)} inputMode="decimal" style={inpSm} /></label>
+            <label style={{ fontSize: 11, color: '#888' }}>Buying Total (£)<input value={p.buyingTotal ?? ''} onChange={e => update(i, 'buyingTotal', e.target.value)} inputMode="decimal" style={inpSm} /></label>
+          </div>
+          <textarea value={p.budgetComments || ''} onChange={e => update(i, 'budgetComments', e.target.value)} placeholder="Budget comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginBottom: 8 }} />
+          <textarea value={p.buyingComments || ''} onChange={e => update(i, 'buyingComments', e.target.value)} placeholder="Buying comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginBottom: 8 }} />
           <textarea value={p.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical' }} />
         </div>
       ))}

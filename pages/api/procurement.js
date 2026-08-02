@@ -40,6 +40,11 @@ export default async function handler(req, res) {
           orderBy: it.orderBy || '',
           leadInWeeks: it.leadInWeeks || '',
           requiredOnSite: it.requiredOnSite || '',
+          // Procurement savings (merged in from the old Procurement Savings doc)
+          budgetTotal: it.budgetTotal ?? '',
+          budgetComments: it.budgetComments || '',
+          buyingTotal: it.buyingTotal ?? '',
+          buyingComments: it.buyingComments || '',
           orderPlaced: !!it.orderPlaced,
           supplierContact: it.supplierContact || '',
           comments: it.comments || '',

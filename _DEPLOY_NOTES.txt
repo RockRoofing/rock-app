@@ -1,19 +1,37 @@
-DEPLOY NOTES - Project Process: fix stale card (ticks / chat not showing until refresh)
-=======================================================================================
+DEPLOY NOTES - Merge Procurement Savings into the Procurement Schedule
+=====================================================================
+(This REPLACES the earlier "Procurement_savings_merged" package - use THIS one. The only
+ difference is the Total Savings formula direction, see point 1.)
 
-ONE file, an EDIT - just replace it.
-  pages/operations/project-process.js
+FIVE files, all EDITS (no new files). Just replace each one.
 
-THE BUG
-  When you reopened a card, it sometimes showed the OLD state - ticked items appeared
-  unticked and chat messages were missing - until you did a full page refresh. The data
-  was saving correctly all along; the card just wasn't re-syncing with the latest data
-  when reopened.
+  pages/api/procurement.js                              (IHM -> schedule sync fields)
+  pages/operations/project-management/procurement.js    (schedule columns + gating)
+  pages/handover/form.js                                (IHM procurement item fields)
+  pages/operations/projects.js                          (removes Procurement Savings tab)
+  components/PreContractNav.js                          (removes Procurement Savings nav)
 
-THE FIX
-  The card now re-syncs with the latest saved data whenever its contents change (not only
-  when you open a different card). Ticking an item also refreshes the board immediately, so
-  the checklist, chat and traffic light always reflect what's actually saved - no refresh
-  needed.
+WHAT CHANGED
+
+1. PROCUREMENT SCHEDULE - new columns per row, added BEFORE "Order Placed?":
+     Budget Total | Budget Comments | Buying Total | Buying Comments | Total Savings
+   - Total Savings is calculated automatically = Budget Total - Buying Total, matching the
+     old Procurement Savings doc. So buying UNDER budget shows a POSITIVE saving in GREEN;
+     an overspend shows negative in RED.
+   - "Order Placed?" has been MOVED to the end of the row (just before Actions).
+   - Attachments stay at the very end (in the Actions cell), as before.
+   - A row CANNOT be marked "Order Placed = Yes" until the savings are complete
+     (Budget Total, Budget Comments, Buying Total and Buying Comments all filled in).
+     Trying to shows a prompt; a small "Savings needed" hint shows until they're filled.
+     Same rule + fields are in the Edit/Add popup.
+
+2. INTERNAL HANDOVER MINUTES (IHM) - each procurement item now also has Budget Total,
+   Budget Comments, Buying Total and Buying Comments. These copy through to the Procurement
+   Schedule automatically when the minutes are completed (same one-time sync as before -
+   after that first copy, the live Schedule is master).
+
+3. PROCUREMENT SAVINGS tabs REMOVED from the Pre-Contract navigation and from the Projects
+   per-project tabs. (The old pages still exist in the repo but are unlinked - can be
+   deleted later; harmless to leave.)
 
 BUILD: next build -> Compiled successfully.

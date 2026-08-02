@@ -8,6 +8,17 @@ import { dateCellStyle, procurementLate } from '../../../components/pmShared'
 const PAGE_SIZE = 100
 const GREEN = { background: '#ecfdf5' }
 
+// Procurement savings helpers (merged from the old Procurement Savings doc).
+const pnum = (v) => { const n = parseFloat(String(v).replace(/[^0-9.-]/g, '')); return isNaN(n) ? 0 : n }
+const phas = (v) => v !== '' && v != null
+// Total Savings = Budget Total - Buying Total, so buying under budget is a POSITIVE saving.
+const totalSavings = (r) => pnum(r.budgetTotal) - pnum(r.buyingTotal)
+const fmtMoney = (n) => (n < 0 ? '-' : '') + '£' + Math.abs(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+// Order can only be placed once the savings fields are filled in.
+function savingsComplete(r) {
+  return phas(r.budgetTotal) && phas(r.buyingTotal) && (r.budgetComments || '').trim() !== '' && (r.buyingComments || '').trim() !== ''
+}
+
 export default function Procurement() {
   const [items, setItems] = useState([])
   const [team, setTeam] = useState([])
@@ -94,7 +105,7 @@ export default function Procurement() {
     load()
   }
 
-  const emptyItem = { projectNo: '', projectName: '', package: '', supplier: '', assignee: '', designBy: '', designComplete: false, designApproved: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', orderPlaced: false, supplierContact: '', comments: '', attachments: [] }
+  const emptyItem = { projectNo: '', projectName: '', package: '', supplier: '', assignee: '', designBy: '', designComplete: false, designApproved: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', budgetTotal: '', budgetComments: '', buyingTotal: '', buyingComments: '', orderPlaced: false, supplierContact: '', comments: '', attachments: [] }
 
   const sortableCols = [
     { key: 'projectNo', label: 'Project' },
@@ -141,9 +152,14 @@ export default function Procurement() {
                 <th style={th}>Order By</th>
                 <th style={th}>Lead-in (wks)</th>
                 <th style={th}>Required On Site</th>
-                <th style={th}>Order Placed?</th>
+                <th style={th}>Budget Total</th>
+                <th style={th}>Budget Comments</th>
+                <th style={th}>Buying Total</th>
+                <th style={th}>Buying Comments</th>
+                <th style={th}>Total Savings</th>
                 <th style={th}>Supplier Contact</th>
                 <th style={th}>Comments</th>
+                <th style={th}>Order Placed?</th>
                 <th style={{ ...th, textAlign: 'right' }}>Actions</th>
               </tr></thead>
               <tbody>
@@ -194,13 +210,41 @@ export default function Procurement() {
                         </div>
                         {late && <div style={{ fontSize: 10.5, color: '#dc2626', marginTop: 3 }}>Not enough lead-in time</div>}
                       </td>
+                      {/* Budget Total */}
                       <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
-                        <select value={r.orderPlaced ? 'yes' : 'no'} onChange={e => patchItem(r.id, { orderPlaced: e.target.value === 'yes' })} style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
-                          <option value="no">No</option><option value="yes">Yes</option>
-                        </select>
+                        <input value={r.budgetTotal ?? ''} onChange={e => patchItem(r.id, { budgetTotal: e.target.value })} inputMode="decimal" placeholder="£" style={moneyInp} />
+                      </td>
+                      {/* Budget Comments */}
+                      <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.budgetComments} onSave={v => patchItem(r.id, { budgetComments: v })} label="Budget comments" width={180} /></td>
+                      {/* Buying Total */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
+                        <input value={r.buyingTotal ?? ''} onChange={e => patchItem(r.id, { buyingTotal: e.target.value })} inputMode="decimal" placeholder="£" style={moneyInp} />
+                      </td>
+                      {/* Buying Comments */}
+                      <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.buyingComments} onSave={v => patchItem(r.id, { buyingComments: v })} label="Buying comments" width={180} /></td>
+                      {/* Total Savings (Buying - Budget) */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
+                        {(phas(r.budgetTotal) || phas(r.buyingTotal))
+                          ? <span style={{ fontWeight: 600, color: totalSavings(r) < 0 ? '#dc2626' : '#166534' }}>{fmtMoney(totalSavings(r))}</span>
+                          : <span style={{ color: '#bbb' }}>—</span>}
                       </td>
                       <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.supplierContact} onSave={v => patchItem(r.id, { supplierContact: v })} label="Supplier contact details" width={180} /></td>
                       <td style={{ ...td, ...rowGreen }}><ExpandableText value={r.comments} onSave={v => patchItem(r.id, { comments: v })} label="Comments" width={200} /></td>
+                      {/* Order Placed? — cannot be set to Yes until the savings fields are complete */}
+                      <td style={{ ...td, whiteSpace: 'nowrap', ...rowGreen }}>
+                        <select value={r.orderPlaced ? 'yes' : 'no'}
+                          onChange={e => {
+                            if (e.target.value === 'yes' && !savingsComplete(r)) {
+                              alert('Complete the procurement savings first (Budget Total, Budget Comments, Buying Total and Buying Comments) before marking the order as placed.')
+                              return
+                            }
+                            patchItem(r.id, { orderPlaced: e.target.value === 'yes' })
+                          }}
+                          style={{ ...sel, minWidth: 76, padding: '5px 8px' }}>
+                          <option value="no">No</option><option value="yes">Yes</option>
+                        </select>
+                        {!r.orderPlaced && !savingsComplete(r) && <div title="Savings must be completed first" style={{ fontSize: 10, color: '#b45309', marginTop: 3 }}>Savings needed</div>}
+                      </td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap', ...rowGreen }}>
                         <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                           <RowAttachments files={r.attachments || []} onChange={files => patchItem(r.id, { attachments: files })} />
@@ -257,7 +301,24 @@ function ProcModal({ item, team, projectOptions, onClose, onSave }) {
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}><Lbl>Required on site</Lbl><input type="date" value={f.requiredOnSite || ''} onChange={e => setF({ ...f, requiredOnSite: e.target.value })} style={inp2} /></div>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end' }}><label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, paddingBottom: 10 }}><input type="checkbox" checked={!!f.orderPlaced} onChange={e => setF({ ...f, orderPlaced: e.target.checked })} /> Order placed</label></div>
+      </div>
+      {/* Procurement savings */}
+      <div style={{ borderTop: '1px solid #eee', margin: '14px 0 4px', paddingTop: 10, fontSize: 12, fontWeight: 700, color: '#555' }}>Procurement Savings</div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}><Lbl>Budget Total (£)</Lbl><input value={f.budgetTotal ?? ''} onChange={e => setF({ ...f, budgetTotal: e.target.value })} inputMode="decimal" style={inp2} /></div>
+        <div style={{ flex: 1 }}><Lbl>Buying Total (£)</Lbl><input value={f.buyingTotal ?? ''} onChange={e => setF({ ...f, buyingTotal: e.target.value })} inputMode="decimal" style={inp2} /></div>
+        <div style={{ flex: 1 }}><Lbl>Total Savings</Lbl><div style={{ ...inp2, background: '#faf9f7', display: 'flex', alignItems: 'center', fontWeight: 600, color: totalSavings(f) < 0 ? '#dc2626' : '#166534' }}>{(phas(f.budgetTotal) || phas(f.buyingTotal)) ? fmtMoney(totalSavings(f)) : '—'}</div></div>
+      </div>
+      <Lbl>Budget Comments</Lbl><textarea value={f.budgetComments || ''} onChange={e => setF({ ...f, budgetComments: e.target.value })} style={{ ...inp2, minHeight: 44 }} />
+      <Lbl>Buying Comments</Lbl><textarea value={f.buyingComments || ''} onChange={e => setF({ ...f, buyingComments: e.target.value })} style={{ ...inp2, minHeight: 44 }} />
+      <div style={{ marginTop: 12 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+          <input type="checkbox" checked={!!f.orderPlaced} onChange={e => {
+            if (e.target.checked && !savingsComplete(f)) { alert('Complete the procurement savings first (Budget Total, Budget Comments, Buying Total and Buying Comments) before marking the order as placed.'); return }
+            setF({ ...f, orderPlaced: e.target.checked })
+          }} /> Order placed
+        </label>
+        {!f.orderPlaced && !savingsComplete(f) && <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 4 }}>Order can't be placed until Budget Total, Budget Comments, Buying Total and Buying Comments are all filled in.</div>}
       </div>
       {late && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginTop: 8 }}>⚠ Not enough lead-in time — the order date needed to hit "required on site" has already passed.</div>}
       <Lbl>Supplier contact details</Lbl><textarea value={f.supplierContact || ''} onChange={e => setF({ ...f, supplierContact: e.target.value })} style={{ ...inp2, minHeight: 44 }} />
@@ -272,4 +333,5 @@ function ProcModal({ item, team, projectOptions, onClose, onSave }) {
 
 const F = ({ label, children }) => <div><div style={{ fontSize: 11, color: '#999', marginBottom: 4 }}>{label}</div>{children}</div>
 const sel = { padding: '9px 12px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, background: '#fff', minWidth: 140 }
+const moneyInp = { width: 90, padding: '6px 8px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 13, textAlign: 'right' }
 const zoomBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #e0e0e0', background: '#fff', cursor: 'pointer', fontSize: 15, color: '#555', lineHeight: 1 }
