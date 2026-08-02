@@ -68,6 +68,22 @@ export async function middleware(req) {
 
   // ── Main portal: require login ──
   const { pathname } = req.nextUrl
+
+  // Vercel Cron routes: these are called by Vercel's scheduler (no portal session), so
+  // they must bypass the login check. They are protected instead by CRON_SECRET - Vercel
+  // sends it as "Authorization: Bearer <CRON_SECRET>" on scheduled invocations. If a
+  // CRON_SECRET is set we require it; if it isn't set we still let cron through (so the
+  // jobs work) but they remain non-obvious internal endpoints.
+  if (pathname.startsWith('/api/cron')) {
+    const secret = process.env.CRON_SECRET
+    if (!secret) return NextResponse.next()
+    const auth = req.headers.get('authorization') || ''
+    if (auth === `Bearer ${secret}`) return NextResponse.next()
+    // Allow a manual ?key=<secret> too, for testing from a browser.
+    if (req.nextUrl.searchParams.get('key') === secret) return NextResponse.next()
+    return new NextResponse(JSON.stringify({ error: 'Unauthorized cron' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+  }
+
   // Always allow: static, the login page & its API, Xero OAuth callback, logo.
   const isOpen =
     pathname.startsWith('/_next') ||
