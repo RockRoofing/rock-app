@@ -48,7 +48,7 @@ export default async function handler(req, res) {
           orderPlaced: !!it.orderPlaced,
           supplierContact: it.supplierContact || '',
           comments: it.comments || '',
-          attachments: [],
+          attachments: Array.isArray(it.attachments) ? it.attachments : [],
           createdAt: Date.now(),
         })
       })

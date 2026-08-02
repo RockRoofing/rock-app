@@ -1,37 +1,30 @@
-DEPLOY NOTES - Merge Procurement Savings into the Procurement Schedule
-=====================================================================
-(This REPLACES the earlier "Procurement_savings_merged" package - use THIS one. The only
- difference is the Total Savings formula direction, see point 1.)
+DEPLOY NOTES - Procurement Savings merged into Schedule + IHM attachments
+=========================================================================
+*** This REPLACES the earlier v1 / v2 packages - deploy THIS one (it contains everything).
+    You have not deployed yet, so just use these five files. ***
 
-FIVE files, all EDITS (no new files). Just replace each one.
+FIVE files, all EDITS (no new files). Replace each one.
 
-  pages/api/procurement.js                              (IHM -> schedule sync fields)
-  pages/operations/project-management/procurement.js    (schedule columns + gating)
-  pages/handover/form.js                                (IHM procurement item fields)
+  pages/api/procurement.js                              (IHM -> schedule sync, incl attachments)
+  pages/operations/project-management/procurement.js    (schedule columns + savings + gating)
+  pages/handover/form.js                                (IHM procurement fields + attachments)
   pages/operations/projects.js                          (removes Procurement Savings tab)
   components/PreContractNav.js                          (removes Procurement Savings nav)
 
-WHAT CHANGED
-
-1. PROCUREMENT SCHEDULE - new columns per row, added BEFORE "Order Placed?":
+WHAT'S INCLUDED
+1. Procurement Schedule: new columns before "Order Placed?":
      Budget Total | Budget Comments | Buying Total | Buying Comments | Total Savings
-   - Total Savings is calculated automatically = Budget Total - Buying Total, matching the
-     old Procurement Savings doc. So buying UNDER budget shows a POSITIVE saving in GREEN;
-     an overspend shows negative in RED.
-   - "Order Placed?" has been MOVED to the end of the row (just before Actions).
-   - Attachments stay at the very end (in the Actions cell), as before.
-   - A row CANNOT be marked "Order Placed = Yes" until the savings are complete
-     (Budget Total, Budget Comments, Buying Total and Buying Comments all filled in).
-     Trying to shows a prompt; a small "Savings needed" hint shows until they're filled.
-     Same rule + fields are in the Edit/Add popup.
+   Total Savings = Budget Total - Buying Total (a saving is POSITIVE and shows GREEN;
+   an overspend is negative and shows RED). Order Placed moved to the end of the row;
+   Attachments stay at the end. Order can't be placed until the four savings fields are
+   filled in.
 
-2. INTERNAL HANDOVER MINUTES (IHM) - each procurement item now also has Budget Total,
-   Budget Comments, Buying Total and Buying Comments. These copy through to the Procurement
-   Schedule automatically when the minutes are completed (same one-time sync as before -
-   after that first copy, the live Schedule is master).
+2. Internal Handover Minutes: each procurement item has the four savings fields AND an
+   Attachments control. When the minutes are completed, the savings fields AND any
+   attachments copy through to the Procurement Schedule automatically (one-time sync;
+   afterwards the live Schedule is master). The attachment is then viewable on the
+   Schedule page's Attachments (paperclip) for that row.
 
-3. PROCUREMENT SAVINGS tabs REMOVED from the Pre-Contract navigation and from the Projects
-   per-project tabs. (The old pages still exist in the repo but are unlinked - can be
-   deleted later; harmless to leave.)
+3. Procurement Savings tabs removed from Pre-Contract nav and the Projects per-project tabs.
 
 BUILD: next build -> Compiled successfully.

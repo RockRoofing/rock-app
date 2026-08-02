@@ -3,6 +3,7 @@ import { compressImage } from '../../lib/compressImage'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import PreContractNav from '../../components/PreContractNav'
+import RowAttachments from '../../components/RowAttachments'
 import { INK, GOLD, Lbl, inp2, primaryBtn, ghostBtn, Loading, AutoTextarea, RichText } from '../../components/opsUI'
 import { IHM_SECTIONS as IHM_DEFAULT, CONTACT_ROLES, emptyRoofType } from '../../lib/ihmSchema'
 
@@ -351,7 +352,7 @@ function RiskLogField({ value, onChange, team }) {
 }
 
 function ProcurementField({ value, onChange, team, projectNo, projectName }) {
-  function addRow() { onChange([...value, { package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', budgetTotal: '', budgetComments: '', buyingTotal: '', buyingComments: '', orderPlaced: false, supplierContact: '', comments: '' }]) }
+  function addRow() { onChange([...value, { package: '', supplier: '', assignee: '', designBy: '', designComplete: false, orderBy: '', leadInWeeks: '', requiredOnSite: '', budgetTotal: '', budgetComments: '', buyingTotal: '', buyingComments: '', orderPlaced: false, supplierContact: '', comments: '', attachments: [] }]) }
   function update(i, k, v) { const n = [...value]; n[i] = { ...n[i], [k]: v }; onChange(n) }
   function remove(i) { onChange(value.filter((_, j) => j !== i)) }
   return (
@@ -389,6 +390,10 @@ function ProcurementField({ value, onChange, team, projectNo, projectName }) {
           <textarea value={p.budgetComments || ''} onChange={e => update(i, 'budgetComments', e.target.value)} placeholder="Budget comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginBottom: 8 }} />
           <textarea value={p.buyingComments || ''} onChange={e => update(i, 'buyingComments', e.target.value)} placeholder="Buying comments" rows={1} style={{ ...inpSm, resize: 'vertical', marginBottom: 8 }} />
           <textarea value={p.comments || ''} onChange={e => update(i, 'comments', e.target.value)} placeholder="Comments" rows={1} style={{ ...inpSm, resize: 'vertical' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+            <span style={{ fontSize: 11, color: '#888' }}>Attachments:</span>
+            <RowAttachments files={p.attachments || []} onChange={files => update(i, 'attachments', files)} />
+          </div>
         </div>
       ))}
       <button onClick={addRow} style={addBtn}>+ Add procurement item</button>
