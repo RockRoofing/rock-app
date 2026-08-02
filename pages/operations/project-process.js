@@ -66,6 +66,7 @@ export default function ProjectProcessPage() {
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.grey }} /> Not due yet</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.green }} /> Due today</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.red }} /> Overdue</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ color: '#16a34a', fontWeight: 700 }}>&#10003;</span> All tasks complete</span>
       </div>
 
       {adding && (
@@ -101,12 +102,14 @@ export default function ProjectProcessPage() {
                   const total = card.items.length
                   const pct = total ? Math.round((done / total) * 100) : 0
                   const light = trafficLight(card)
+                  const complete = light === 'complete'
                   return (
                     <button key={card.id} onClick={() => setOpen({ projectNo: coln.projectNo, cardId: card.id })}
-                      style={{ display: 'block', width: '100%', textAlign: 'left', background: '#fff', border: '1px solid #ececec', borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer' }}>
+                      style={{ display: 'block', width: '100%', textAlign: 'left', background: complete ? '#f0fdf4' : '#fff', border: `1px solid ${complete ? '#bbf7d0' : '#ececec'}`, borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                        <span title={light === 'red' ? 'Overdue' : light === 'green' ? 'Due today' : 'Not due yet'} style={{ width: 10, height: 10, borderRadius: '50%', background: TL[light], flex: '0 0 auto' }} />
+                        <span title={complete ? 'Complete' : light === 'red' ? 'Overdue' : light === 'green' ? 'Due today' : 'Not due yet'} style={{ width: 10, height: 10, borderRadius: '50%', background: TL[light], flex: '0 0 auto' }} />
                         <span style={{ fontWeight: 600, fontSize: 13, color: INK }}>{card.role}</span>
+                        {complete && <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: '#16a34a' }}>&#10003; Complete</span>}
                       </div>
                       <div style={{ height: 6, background: '#f0eee9', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : GOLD }} />
@@ -146,13 +149,15 @@ function fmtDMY(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); re
 //   grey  = not due yet (no date, or date is in the future)
 //   green = due today
 //   red   = overdue (date has passed and the checklist isn't all done)
-const TL = { grey: '#c9c4bc', green: '#16a34a', red: '#dc2626' }
+const TL = { grey: '#c9c4bc', green: '#16a34a', red: '#dc2626', complete: '#16a34a' }
 function trafficLight(card) {
+  // A fully-ticked card is complete (green) regardless of its date.
+  if (isAllDone(card)) return 'complete'
   const due = card.dueDate
   if (!due) return 'grey'
   const today = todayISO()
   if (due === today) return 'green'
-  if (due < today && !isAllDone(card)) return 'red'
+  if (due < today) return 'red'
   return 'grey'
 }
 
@@ -169,13 +174,27 @@ function CardModal({ projectNo, projectName, card, users, onClose, post, reload 
   const dragId = useRef(null)
   const notesTimer = useRef(null)
 
-  useEffect(() => { setItems(card.items); setNotes(card.notes || ''); setDue(card.dueDate || ''); setAssignee(card.assignee || ''); setChat(card.chat || []) }, [card.id])
+  // Re-sync local state whenever the underlying card DATA changes (not just its id) - so
+  // reopening the same card, or a background refresh, always shows the latest ticks, notes
+  // and chat. Using a content signature means this also fires when the same card is
+  // reopened after edits (its id is unchanged but its contents differ).
+  const cardSig = JSON.stringify({
+    items: (card.items || []).map(i => [i.id, i.text, i.done]),
+    notes: card.notes || '', due: card.dueDate || '', assignee: card.assignee || '',
+    chat: (card.chat || []).map(m => m.id),
+  })
+  useEffect(() => {
+    setItems(card.items || []); setNotes(card.notes || ''); setDue(card.dueDate || '')
+    setAssignee(card.assignee || ''); setChat(card.chat || [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardSig])
 
   const base = { projectNo, cardId: card.id }
 
   async function toggle(itemId) {
     setItems(its => its.map(i => i.id === itemId ? { ...i, done: !i.done } : i))
     await post({ action: 'toggle-item', ...base, itemId })
+    reload()   // refresh the board so the card's completion / traffic light updates live
   }
   async function addItem() {
     const text = newItem.trim(); if (!text) return

@@ -1,17 +1,19 @@
-DEPLOY NOTES - Project Process: Notes label + traffic-light status
-==================================================================
+DEPLOY NOTES - Project Process: fix stale card (ticks / chat not showing until refresh)
+=======================================================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-process.js
 
-CHANGES
-1. The notes box placeholder now just says "Notes..." (was "Notes for this role...").
+THE BUG
+  When you reopened a card, it sometimes showed the OLD state - ticked items appeared
+  unticked and chat messages were missing - until you did a full page refresh. The data
+  was saving correctly all along; the card just wasn't re-syncing with the latest data
+  when reopened.
 
-2. TRAFFIC LIGHT on each role card, driven by its Required completion date:
-     GREY  = not due yet (no date set, or the date is in the future)
-     GREEN = due today
-     RED   = overdue (date has passed and the checklist isn't fully ticked off)
-   A coloured dot shows next to each card's role name, and a KEY explaining the colours
-   sits under the page header.
+THE FIX
+  The card now re-syncs with the latest saved data whenever its contents change (not only
+  when you open a different card). Ticking an item also refreshes the board immediately, so
+  the checklist, chat and traffic light always reflect what's actually saved - no refresh
+  needed.
 
 BUILD: next build -> Compiled successfully.
