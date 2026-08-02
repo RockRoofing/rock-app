@@ -1,46 +1,17 @@
-DEPLOY NOTES - NEW: Project Process Kanban board
-================================================
+DEPLOY NOTES - Project Process: Notes label + traffic-light status
+==================================================================
 
-FOUR files. THREE are NEW (add via GitHub "Add file"), ONE is an EDIT.
+ONE file, an EDIT - just replace it.
+  pages/operations/project-process.js
 
-  NEW  lib/projectProcessTemplate.js
-  NEW  pages/api/project-process.js
-  NEW  pages/operations/project-process.js
-  EDIT components/OperationsNav.js   (adds the "Project Process" nav item)
+CHANGES
+1. The notes box placeholder now just says "Notes..." (was "Notes for this role...").
 
-*** IMPORTANT: the three NEW files must be created via "Add file" -> "Create new file" in
-    GitHub, at the exact paths above. The EDIT file just replaces the existing one. ***
-
-WHAT IT IS
-  A new "Project Process" tab in the Operations portal, sitting between "Projects" and
-  "Project Management". It's a Kanban board:
-   - One COLUMN per project (project name across the top).
-   - Under each project, the same set of ROLE CARDS: Commercial, Ops Manager, Contracts
-     Manager, Technical Manager, Project Close Down - each pre-filled with the standard
-     checklist you supplied.
-   - Click a card to open it. Inside:
-       * Checklist - tick items off (ticked items strike through). Reorder by dragging,
-         edit (double-click or the pencil), delete, and "Add an activity..." at the bottom.
-       * Required completion date, and Assigned to (dropdown of portal users).
-       * Notes section (auto-saves).
-       * Task chat on the right - type @ and start a name; matching portal users appear to
-         pick. Tagged names show blue + bold. On Send, each tagged user gets an EMAIL
-         saying who tagged them, which project + role card, and the message, with a button
-         linking straight to that card.
-
-  ADDING PROJECTS
-   - NEW projects are added to the board AUTOMATICALLY from now on (the first time the page
-     loads it records all current projects as a baseline and does NOT dump them in; only
-     projects created after that appear automatically).
-   - Use "+ Add project" to pull in an existing project from a dropdown whenever you want.
-   - The x on a project column removes it from the board.
-
-REQUIREMENTS / NOTES
-  - Email tagging uses the same Resend setup as the rest of the app
-    (RESEND_API_KEY + NOTIFY_FROM_EMAIL / FORMS_FROM_EMAIL already set). The link in the
-    email points to app.rockroofing.co.uk by default; if you ever use a different domain
-    set PORTAL_URL in Vercel.
-  - The board and all edits are stored in Redis (keys ops:project-process and
-    ops:project-process-seen). No existing data is touched.
+2. TRAFFIC LIGHT on each role card, driven by its Required completion date:
+     GREY  = not due yet (no date set, or the date is in the future)
+     GREEN = due today
+     RED   = overdue (date has passed and the checklist isn't fully ticked off)
+   A coloured dot shows next to each card's role name, and a KEY explaining the colours
+   sits under the page header.
 
 BUILD: next build -> Compiled successfully.

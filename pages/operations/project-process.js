@@ -61,6 +61,13 @@ export default function ProjectProcessPage() {
         <button onClick={() => setAdding(a => !a)} style={primaryBtn}>{adding ? 'Cancel' : '+ Add project'}</button>
       </div>
 
+      <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, fontSize: 12, color: '#8a857c' }}>
+        <span style={{ fontWeight: 600, color: '#666' }}>Key:</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.grey }} /> Not due yet</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.green }} /> Due today</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: TL.red }} /> Overdue</span>
+      </div>
+
       {adding && (
         <div style={{ background: '#fff', border: '1px solid #ece9f5', borderRadius: 12, padding: 14, marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, color: '#666' }}>Add an existing project:</span>
@@ -93,11 +100,14 @@ export default function ProjectProcessPage() {
                   const done = card.items.filter(i => i.done).length
                   const total = card.items.length
                   const pct = total ? Math.round((done / total) * 100) : 0
-                  const overdue = card.dueDate && !isAllDone(card) && card.dueDate < todayISO()
+                  const light = trafficLight(card)
                   return (
                     <button key={card.id} onClick={() => setOpen({ projectNo: coln.projectNo, cardId: card.id })}
                       style={{ display: 'block', width: '100%', textAlign: 'left', background: '#fff', border: '1px solid #ececec', borderRadius: 10, padding: 10, marginBottom: 8, cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: INK, marginBottom: 6 }}>{card.role}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+                        <span title={light === 'red' ? 'Overdue' : light === 'green' ? 'Due today' : 'Not due yet'} style={{ width: 10, height: 10, borderRadius: '50%', background: TL[light], flex: '0 0 auto' }} />
+                        <span style={{ fontWeight: 600, fontSize: 13, color: INK }}>{card.role}</span>
+                      </div>
                       <div style={{ height: 6, background: '#f0eee9', borderRadius: 4, overflow: 'hidden', marginBottom: 6 }}>
                         <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : GOLD }} />
                       </div>
@@ -105,7 +115,7 @@ export default function ProjectProcessPage() {
                         <span>{done}/{total} done</span>
                         <span style={{ display: 'flex', gap: 8 }}>
                           {card.assigneeName && <span title="Assigned to">{card.assigneeName.split(' ')[0]}</span>}
-                          {card.dueDate && <span style={{ color: overdue ? '#dc2626' : '#8a857c', fontWeight: overdue ? 700 : 400 }}>{fmtDMY(card.dueDate)}</span>}
+                          {card.dueDate && <span style={{ color: light === 'red' ? '#dc2626' : '#8a857c', fontWeight: light === 'red' ? 700 : 400 }}>{fmtDMY(card.dueDate)}</span>}
                           {(card.chat || []).length > 0 && <span title="Chat messages">{(card.chat || []).length} chat</span>}
                         </span>
                       </div>
@@ -131,6 +141,20 @@ export default function ProjectProcessPage() {
 function isAllDone(card) { return card.items.length > 0 && card.items.every(i => i.done) }
 function todayISO() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 function fmtDMY(iso) { if (!iso) return ''; const [y, m, d] = iso.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+
+// Traffic light for a card's required completion date:
+//   grey  = not due yet (no date, or date is in the future)
+//   green = due today
+//   red   = overdue (date has passed and the checklist isn't all done)
+const TL = { grey: '#c9c4bc', green: '#16a34a', red: '#dc2626' }
+function trafficLight(card) {
+  const due = card.dueDate
+  if (!due) return 'grey'
+  const today = todayISO()
+  if (due === today) return 'green'
+  if (due < today && !isAllDone(card)) return 'red'
+  return 'grey'
+}
 
 // ── Card detail modal ──────────────────────────────────────────────────────
 function CardModal({ projectNo, projectName, card, users, onClose, post, reload }) {
@@ -242,7 +266,7 @@ function CardModal({ projectNo, projectName, card, users, onClose, post, reload 
             </div>
 
             <Lbl>Notes</Lbl>
-            <textarea value={notes} onChange={e => saveNotes(e.target.value)} rows={4} placeholder="Notes for this role..." style={{ ...selStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+            <textarea value={notes} onChange={e => saveNotes(e.target.value)} rows={4} placeholder="Notes..." style={{ ...selStyle, resize: 'vertical', fontFamily: 'inherit' }} />
           </div>
 
           {/* Right: task chat */}
