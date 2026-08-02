@@ -1,23 +1,21 @@
-DEPLOY NOTES - Project Planner: "No. of Visits" column
-======================================================
+DEPLOY NOTES - Planner: scroll back to the oldest date (Historic)
+================================================================
 
 ONE file, an EDIT - just replace it.
   pages/operations/project-management/planning.js
 
 WHAT'S NEW
-  A "No. of Visits" column has been added to the project planner, immediately AFTER the
-  "Contract Compl." column. It counts automatically for each project.
+  In Historic mode you can now jump straight to the OLDEST programmed date instead of
+  clicking back one week at a time.
 
-HOW A VISIT IS COUNTED
-  - Only days marked ACTUAL with someone on site count (planned / provisional days are
-    ignored - so the count reflects what really happened).
-  - Visit #1 = the first programmed (actual) day on site.
-  - A NEW visit is counted each time the project leaves site for 2 OR MORE WORKING DAYS
-    and then returns. Normal weekends are ignored (Fri then back Mon = same visit, not a
-    new one). A gap of 2+ working days (e.g. on Monday, off Tue+Wed, back Thursday) counts
-    as a new visit.
-  - Shows "-" until there are actual on-site days.
+  - A new "<< Oldest" button sits next to the back arrow. Click it and the planner turns
+    Historic on (if it isn't already) and jumps to the week containing the earliest
+    programmed day found anywhere in the data (labour allocations or water-ingress). Its
+    tooltip shows which week that is.
+  - From there you can still use the < / > arrows to move week by week, or "Today" to jump
+    back to the current week.
+  - If there is no historic data at all, the button is greyed out.
 
-  It updates automatically as you confirm days as Actual on the gantt - nothing to enter.
+  (The back arrow already had no limit - this just gets you to the very start in one click.)
 
 BUILD: next build -> Compiled successfully.
