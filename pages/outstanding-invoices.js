@@ -930,6 +930,17 @@ function WeeklyReportModal({ onClose }) {
   function setDay(dayOfWeek) { setSchedule(s => ({ ...s, dayOfWeek })) }
   function setHour(hour) { setSchedule(s => ({ ...s, hour })) }
 
+  const [schedTest, setSchedTest] = useState(null)
+  async function testSchedule() {
+    setSchedTest({ loading: true })
+    try {
+      // Save the current on-screen schedule first so the test reflects what you see.
+      await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-schedule', dayOfWeek: schedule.dayOfWeek, hour: schedule.hour }) })
+      const d = await fetch('/api/outstanding-invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'test-schedule' }) }).then(r => r.json())
+      setSchedTest(d)
+    } catch { setSchedTest({ error: true }) }
+  }
+
   // Persist recipients + schedule together, confirm, then close.
   async function saveAll() {
     setSaving(true); setMsg('')
@@ -1015,6 +1026,30 @@ function WeeklyReportModal({ onClose }) {
               </div>
 
               {msg && <div style={{ fontSize: 12, color: msg.startsWith('Sent') ? '#16a34a' : '#dc2626', marginTop: 12 }}>{msg}</div>}
+
+              {/* Schedule diagnostic */}
+              <div style={{ borderTop: '1px solid #eee', marginTop: 16, paddingTop: 14 }}>
+                <button onClick={testSchedule} style={{ background: '#f5f3ff', color: '#6d28d9', border: '1px solid #ddd6fe', borderRadius: 8, padding: '7px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: 600 }}>Test schedule now</button>
+                <span style={{ fontSize: 11.5, color: '#aaa', marginLeft: 10 }}>Checks whether the automatic send would fire right now, and why.</span>
+                {schedTest && !schedTest.loading && (
+                  <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 8, padding: '10px 12px', marginTop: 10, fontSize: 12.5, color: '#444' }}>
+                    {schedTest.error ? 'Could not run the test.' : (<>
+                      <div style={{ fontWeight: 700, marginBottom: 4, color: schedTest.wouldSend ? '#16a34a' : '#b45309' }}>
+                        {schedTest.wouldSend ? 'Would send now.' : `Would NOT send now: ${schedTest.skipped || 'unknown reason'}`}
+                      </div>
+                      {schedTest.diag && (
+                        <div style={{ color: '#777', lineHeight: 1.6 }}>
+                          Now (UK): {schedTest.diag.nowUkDayName} {String(schedTest.diag.nowUkHour).padStart(2, '0')}:00 &nbsp;|&nbsp;
+                          Scheduled: {schedTest.diag.wantDayName} {String(schedTest.diag.wantHour).padStart(2, '0')}:00 &nbsp;|&nbsp;
+                          Last sent: {schedTest.diag.lastSentDate}
+                        </div>
+                      )}
+                      <div style={{ color: '#999', marginTop: 6, fontSize: 11.5 }}>Note: this uses UK time. The automatic check runs hourly - it sends on the scheduled day at or after the scheduled hour, once per day. If this says "would send" but no email arrives on schedule, the cron job may not be active in Vercel.</div>
+                    </>)}
+                  </div>
+                )}
+                {schedTest && schedTest.loading && <div style={{ fontSize: 12, color: '#999', marginTop: 8 }}>Checking…</div>}
+              </div>
 
               <div style={{ borderTop: '1px solid #eee', marginTop: 18, paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                 <button onClick={sendNow} disabled={sending || saving} style={{ background: '#fff', color: '#1a1a2e', border: '1px solid #d5d5d5', borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: (sending || saving) ? 'default' : 'pointer', opacity: (sending || saving) ? 0.6 : 1, fontWeight: 600 }}>

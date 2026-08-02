@@ -1,18 +1,38 @@
-DEPLOY NOTES - Bookkeeping monthly tasks: notify Commercial re WIP
-=================================================================
+DEPLOY NOTES - Diagnose the weekly Outstanding Invoices scheduled send
+======================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/bookkeeping-monthly-tasks.js   (new task added)
-  lib/notifications.js                  (new task included in completeness check)
+THREE files, all EDITS - just replace them.
+  lib/outstandingInvoicesReport.js     (schedule gate can now report its decision)
+  pages/api/outstanding-invoices.js     (new "test-schedule" action)
+  pages/outstanding-invoices.js         ("Test schedule now" button + readout)
 
-CHANGE
-  A new monthly bookkeeping task is inserted straight after "Complete bank balance
-  reconciliations for all bank accounts":
-     "Notify the Commercial Team that the WIP can now be completed."
-  It sits just before the "Obtain the WIP schedule from Nathan..." task.
+WHY
+  The scheduling code itself checks out (correct UK-time gate, sends on the right day at
+  or after the set hour, once per day). Since the manual "Send now" works, the automatic
+  send failing points to something operational - most likely the cron job not being
+  active, or the schedule day/hour/last-sent state. This package makes that VISIBLE.
 
-  It is given a new internal id (bm13) rather than renumbering the tasks after it, so
-  none of your existing Yes/No marks for the later tasks are affected. It also counts
-  towards the "monthly bookkeeping tasks complete" check used by email notifications.
+WHAT TO DO AFTER DEPLOY
+  1. Open the weekly report settings (where you set recipients + schedule) and click the
+     new "Test schedule now" button. It saves your current day/hour, then runs the REAL
+     scheduler and tells you:
+       - whether it WOULD send right now, and if not, exactly why
+         (e.g. "Not the scheduled day", "Too early", "Already sent today"),
+       - the current UK day/time it sees, your scheduled day/time, and the last-sent date.
+
+  2. Interpreting it:
+     - If it says "Would send now" but no automatic email ever arrives on the scheduled
+       day -> the CRON JOB isn't running. In Vercel: Settings -> Cron Jobs, confirm
+       /api/cron/weekly-report is listed and enabled. Cron jobs only register on a
+       successful deployment AFTER vercel.json contained them - if it's missing, redeploy
+       from the latest commit (or check the project is on the Pro plan with crons on).
+     - If it says "Already sent today" but nothing arrived -> the from-address/recipients
+       issue, not the schedule. Use "Send now" and read that message.
+     - If "Not the scheduled day / too early" -> it's simply not time yet; note it uses
+       UK time and the hourly cron.
+
+  You can also hit the cron directly in a browser to force a send and see the raw result:
+     https://app.rockroofing.co.uk/api/cron/weekly-report?force=1
+  (Shows JSON incl. who it sent to / any error / the diagnostic.)
 
 BUILD: next build -> Compiled successfully.

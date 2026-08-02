@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport, getWeeklySchedule, setWeeklySchedule } from '../../lib/outstandingInvoicesReport'
+import { gatherOutstandingInvoices, getWeeklyRecipients, setWeeklyRecipients, sendWeeklyOverdueReport, getWeeklySchedule, setWeeklySchedule, maybeSendScheduledReport } from '../../lib/outstandingInvoicesReport'
 import { buildOutstandingInvoicesPDF } from '../../lib/outstandingInvoicesPdf'
 import { getPortalUsers } from '../../lib/db'
 
@@ -74,6 +74,12 @@ export default async function handler(req, res) {
     if (action === 'set-schedule') {
       const schedule = await setWeeklySchedule({ dayOfWeek: req.body.dayOfWeek, hour: req.body.hour })
       return res.json({ ok: true, schedule })
+    }
+    if (action === 'test-schedule') {
+      // Runs the REAL scheduler gate in dry-run mode and reports its decision, so you can
+      // see exactly why the scheduled email would or wouldn't send right now.
+      const out = await maybeSendScheduledReport({ dryRun: true })
+      return res.json({ ok: true, ...out })
     }
     if (action === 'send-report-now') {
       const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0]
