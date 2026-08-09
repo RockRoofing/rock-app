@@ -1,29 +1,23 @@
-DEPLOY NOTES - Tech Sub: multi-page viewer, approval flow, buttons
-==================================================================
+DEPLOY NOTES - Tech Sub approval: customer-only + digital record
+================================================================
 
-THREE files, all EDITS - just replace them.
-  components/DrawingMarkup.js            (multi-page scroll + loading label)
-  pages/api/design-techsubs.js          (approval + approver notification)
-  pages/design/[project]/tech-sub.js    (approval UI, columns, buttons)
+TWO files, both EDITS - just replace them.
+  pages/api/design-techsubs.js
+  pages/design/[project]/tech-sub.js
 
 CHANGES
-1. The viewer now says "Loading technical submittal" (was "Loading drawing").
+1. SUPERSEDED tech subs can no longer be approved - the Approve button is hidden and the
+   server rejects it.
+2. Only a CUSTOMER (the assigned approver) can approve. The Approve button is no longer
+   shown to Rock Roofing team members at all, and the server blocks internal approvals.
+3. DIGITAL APPROVAL RECORD: once approved, a date/time-stamped record is shown at the
+   bottom of the tech sub in the viewer - who approved (name), their company, role, email,
+   phone, the revision, and the full date + time of approval (UK time).
 
-2. MULTI-PAGE: the whole document is now scrollable - all pages stack in a scrollable
-   window (pages render as you scroll, so even a 200-page PDF stays responsive). There's
-   also a page box + Prev/Next to jump quickly. Click a page to make it the "active" page
-   for markup (it gets a purple outline); marks are saved per page.
-
-3. APPROVAL:
-   - New "Approval" column: "To Be Approved" (orange) or "Approved" (green).
-   - When you upload a Tech Sub (or a new revision), you must first pick the CUSTOMER who
-     needs to approve it. They are emailed to review / comment / approve.
-   - An "Approve" button appears on the table row and in the viewer. The assigned customer
-     (or internal staff) can approve; once approved it shows who approved it, and the team
-     is emailed.
-   - Making a new revision resets it to "To Be Approved" and re-notifies the approver.
-
-4. Buttons: "Add revision" is now "Add New Revision", and "Open" is now a solid button so
-   it's clearly separate from the other row actions.
+NOTE ON THE RECORD FIELDS
+  Name, email, company and phone come from the customer's Design-portal account. There is
+  currently no separate "job title" field on customer accounts, so Role shows "Customer".
+  If you want a proper job-title captured, I can add that field to the customer record in
+  the Admin centre - just say so.
 
 BUILD: next build -> Compiled successfully.

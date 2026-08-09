@@ -157,25 +157,41 @@ export default async function handler(req, res) {
     return res.json({ ok: true, doc: docs[i] })
   }
 
-  // Approve a tech sub. Allowed for the assigned customer approver, and for internal staff.
+  // Approve a tech sub. ONLY the assigned customer approver may approve - never Rock
+  // Roofing staff, and not once the revision has been superseded.
   if (body.action === 'approve') {
     const i = idx(body.id)
     if (i < 0) return res.status(404).json({ error: 'Tech Sub not found' })
-    if (acc.external && docs[i].approverId && docs[i].approverId !== acc.user.id) {
-      return res.status(403).json({ error: 'Only the assigned approver can approve this Tech Sub.' })
-    }
+    if (!acc.external) return res.status(403).json({ error: 'Only the customer can approve a Tech Sub.' })
+    if (docs[i].approverId && docs[i].approverId !== acc.user.id) return res.status(403).json({ error: 'Only the assigned approver can approve this Tech Sub.' })
+    if (docs[i].superseded) return res.status(400).json({ error: 'This revision has been superseded and can no longer be approved.' })
+    if (docs[i].approvalStatus === 'approved') return res.json({ ok: true, doc: docs[i] })
+
+    // Full digital record of the approval.
+    const ext = (await getExternalUsers()).find(x => x.id === acc.user.id) || {}
+    const now = Date.now()
     docs[i].approvalStatus = 'approved'
-    docs[i].approvedAt = Date.now()
-    docs[i].approvedBy = acc.user.name || 'User'
+    docs[i].approvedAt = now
+    docs[i].approvedBy = ext.name || acc.user.name || 'Customer'
+    docs[i].approvalRecord = {
+      name: ext.name || acc.user.name || '',
+      email: ext.email || '',
+      phone: ext.phone || '',
+      company: ext.company || '',
+      role: ext.role || 'Customer',
+      userId: acc.user.id,
+      at: now,
+      atText: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', dateStyle: 'full', timeStyle: 'long' }).format(new Date(now)),
+    }
     await set(tsKey(no), docs)
-    // Let the team know it was approved.
+    // Let the internal team know it was approved.
     try {
       const people = await peopleFor(no)
       const pname = await projectDisplayName(no)
       const link = tsLink(no, docs[i].id)
       for (const p of people) {
         if (p.external || !p.email) continue
-        await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This Tech Sub has been approved by ${docs[i].approvedBy}.`, rfiLink: link, mentioned: false })
+        await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This Tech Sub has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false })
       }
     } catch (e) { /* ignore */ }
     return res.json({ ok: true, doc: docs[i] })

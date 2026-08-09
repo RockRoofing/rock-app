@@ -119,11 +119,12 @@ export default function TechSubPage() {
   const openDocObj = docs.find(d => d.id === openId)
   const personName = (id) => { const p = people.find(x => x.id === id); return p ? p.name : '' }
   const customers = people.filter(p => p.external)
-  // Who can approve a given doc: the assigned customer approver, or internal staff.
+  // Only the assigned CUSTOMER approver can approve - never Rock Roofing staff, not once
+  // superseded, and not if already approved.
   const canApprove = (d) => {
-    if (d.approvalStatus === 'approved') return false
-    if (isExternal) return d.approverId === meId
-    return canEdit
+    if (!d || d.approvalStatus === 'approved' || d.superseded) return false
+    if (!isExternal) return false
+    return d.approverId === meId
   }
 
   return (
@@ -251,6 +252,22 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
           {isViewable
             ? <DrawingMarkup key={doc.url} imageUrl={doc.url} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="technical submittal" />
             : <div style={{ padding: 24, textAlign: 'center', color: '#888', background: '#faf9fd', borderRadius: 10 }}>This file type can't be previewed - use Download to view it.</div>}
+
+          {/* Digital approval record, date/time-stamped, at the end of the tech sub */}
+          {doc.approvalStatus === 'approved' && doc.approvalRecord && (
+            <div style={{ marginTop: 16, border: '1px solid #bbf7d0', background: '#f0fdf4', borderRadius: 12, padding: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#15803d', marginBottom: 8 }}>&#10003; Approved - digital record</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 13.5, color: '#166534' }}>
+                <div><strong>Approved by:</strong> {doc.approvalRecord.name || doc.approvedBy}</div>
+                <div><strong>Company:</strong> {doc.approvalRecord.company || '-'}</div>
+                <div><strong>Role:</strong> {doc.approvalRecord.role || 'Customer'}</div>
+                <div><strong>Email:</strong> {doc.approvalRecord.email || '-'}</div>
+                <div><strong>Phone:</strong> {doc.approvalRecord.phone || '-'}</div>
+                <div><strong>Revision:</strong> Rev {doc.revision}</div>
+                <div style={{ gridColumn: '1 / -1' }}><strong>Date &amp; time:</strong> {doc.approvalRecord.atText || new Date(doc.approvalRecord.at).toLocaleString('en-GB')}</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
