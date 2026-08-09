@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
-import { useDesignProjectAuth, DesignNav, PURPLE, INK } from '../../../lib/designShell'
+import { useDesignProjectAuth, DesignNav, INK } from '../../../lib/designShell'
 import DrawingMarkup from '../../../components/DrawingMarkup'
+
+const BRAND = '#1c704f'   // Rock Roofing green (O&M accents)
 
 const fmtDateTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
 
@@ -11,6 +13,8 @@ export default function OMsPage() {
   const projectNo = router.query.project ? String(router.query.project) : ''
   const auth = useDesignProjectAuth(projectNo)
   const [manual, setManual] = useState(null)
+  const [revisions, setRevisions] = useState([])
+  const [viewingUrl, setViewingUrl] = useState('')
   const [available, setAvailable] = useState([])
   const [readiness, setReadiness] = useState(null)
   const [canEdit, setCanEdit] = useState(false)
@@ -24,7 +28,8 @@ export default function OMsPage() {
     setLoading(true); setErr('')
     try {
       const d = await fetch(`/api/design-oms?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setManual(d.manual || null); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null)
+      setManual(d.manual || null); setRevisions(d.revisions || []); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null)
+      setViewingUrl(prev => (d.manual && (!prev || !(d.revisions || []).some(r => r.url === prev))) ? d.manual.url : prev)
     } catch { setErr('Could not load') }
     setLoading(false)
   }
@@ -46,13 +51,15 @@ export default function OMsPage() {
       const r = await fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'build' }) })
       const d = await r.json()
       if (!r.ok) { setErr(d.error || 'Could not build'); setBuilding(false); return }
-      setManual(d.manual)
+      setManual(d.manual); setRevisions(d.revisions || []); setViewingUrl(d.manual.url)
     } catch { setErr('Could not build') }
     setBuilding(false)
   }
 
   if (!auth.ready) return null
   const totalDocs = available.reduce((a, s) => a + s.count, 0)
+  const viewingRev = revisions.find(r => r.url === viewingUrl) || manual
+  const dlName = `${projectNo}-OM-Manual${viewingRev && viewingRev.revision ? `-Rev${viewingRev.revision}` : ''}.pdf`
 
   return (
     <>
@@ -65,7 +72,7 @@ export default function OMsPage() {
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>A single Operation &amp; Maintenance Manual combining the Technical Submittal, Construction Issue drawings, Calculations, Leak Test Certs and Warranties.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {manual && <a href={`/api/download?url=${encodeURIComponent(manual.url)}&name=${encodeURIComponent(`${projectNo}-OM-Manual.pdf`)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>}
+            {viewingRev && <a href={`/api/download?url=${encodeURIComponent(viewingRev.url)}&name=${encodeURIComponent(dlName)}`} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6', textDecoration: 'none' }}>Download{viewingRev.revision ? ` Rev ${viewingRev.revision}` : ''}</a>}
             {canEdit && <button onClick={build} disabled={building} style={{ ...btnPrimary, opacity: building ? 0.6 : 1 }}>{building ? 'Building...' : (manual ? 'Rebuild O&M Manual' : 'Build O&M Manual')}</button>}
           </div>
         </div>
@@ -82,32 +89,47 @@ export default function OMsPage() {
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: manual ? '300px 1fr' : '1fr', gap: 18, alignItems: 'start' }}>
-              <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>What will be included</div>
-                {available.length === 0
-                  ? <div style={{ fontSize: 13, color: '#aaa' }}>Nothing yet. Add Tech Subs, Construction Issue drawings, Calculations, Leak Test Certs or Warranties, then build.</div>
-                  : available.map((s, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f4f4f4', fontSize: 13 }}>
-                      <span style={{ color: '#333' }}>{i + 1}. {s.title}</span>
-                      <span style={{ color: '#888' }}>{s.count} doc{s.count === 1 ? '' : 's'}</span>
-                    </div>
-                  ))}
-                {available.length > 0 && <div style={{ marginTop: 10, fontSize: 12, color: '#999' }}>{totalDocs} document{totalDocs === 1 ? '' : 's'} across {available.length} section{available.length === 1 ? '' : 's'}.</div>}
-                {manual && (
-                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #eee', fontSize: 12, color: '#888' }}>
-                    Last built {fmtDateTime(manual.builtAt)}{manual.builtBy ? ` by ${manual.builtBy}` : ''}.
-                    {canEdit && <div style={{ marginTop: 4 }}>Rebuild after adding or approving more documents to refresh it.</div>}
+              <div>
+                <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>What will be included</div>
+                  {available.length === 0
+                    ? <div style={{ fontSize: 13, color: '#aaa' }}>Nothing yet. Add Tech Subs, Construction Issue drawings, Calculations, Leak Test Certs or Warranties, then build.</div>
+                    : available.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #f4f4f4', fontSize: 13 }}>
+                        <span style={{ color: '#333' }}>{i + 1}. {s.title}</span>
+                        <span style={{ color: '#888' }}>{s.count} doc{s.count === 1 ? '' : 's'}</span>
+                      </div>
+                    ))}
+                  {available.length > 0 && <div style={{ marginTop: 10, fontSize: 12, color: '#999' }}>{totalDocs} document{totalDocs === 1 ? '' : 's'} across {available.length} section{available.length === 1 ? '' : 's'}.</div>}
+                </div>
+
+                {revisions.length > 0 && (
+                  <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16, marginTop: 14 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>Revisions</div>
+                    {revisions.map((r, i) => {
+                      const isCurrent = manual && r.url === manual.url
+                      const isViewing = r.url === viewingUrl
+                      return (
+                        <button key={r.url} onClick={() => setViewingUrl(r.url)} style={{ display: 'block', width: '100%', textAlign: 'left', border: `1px solid ${isViewing ? BRAND : '#eee'}`, background: isViewing ? '#f0fdf7' : '#fff', borderRadius: 8, padding: '8px 10px', marginBottom: 8, cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: INK }}>Rev {r.revision != null ? r.revision : (revisions.length - i)}</span>
+                            {isCurrent
+                              ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#15803d', background: '#dcfce7', borderRadius: 12, padding: '1px 8px' }}>CURRENT</span>
+                              : <span style={{ fontSize: 10.5, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 12, padding: '1px 8px' }}>OLD</span>}
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#888', marginTop: 3 }}>{fmtDateTime(r.builtAt)}{r.builtBy ? ` - ${r.builtBy}` : ''}</div>
+                        </button>
+                      )
+                    })}
+                    {canEdit && <div style={{ marginTop: 2, fontSize: 11.5, color: '#999' }}>Rebuilding creates a new revision and keeps the old ones here.</div>}
                   </div>
                 )}
               </div>
 
-              {manual && (
+              {viewingRev && (
                 <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 12, minHeight: 400 }}>
-                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Combined O&amp;M Manual - view only</span>
-                    <a href={`/api/download?url=${encodeURIComponent(manual.url)}&name=${encodeURIComponent(`${projectNo}-OM-Manual.pdf`)}`} style={{ color: PURPLE, fontWeight: 600, textDecoration: 'none' }}>Download PDF</a>
-                  </div>
-                  <DrawingMarkup key={manual.url} imageUrl={manual.url} contentType="application/pdf" initial={null} canEdit={false} onSave={() => {}} fileName={`${projectNo}-OM-Manual.pdf`} docLabel="manual" />
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>Combined O&amp;M Manual{viewingRev.revision ? ` - Rev ${viewingRev.revision}` : ''}{manual && viewingRev.url === manual.url ? ' (current)' : ' (old revision)'} - view only</div>
+                  <DrawingMarkup key={viewingRev.url} imageUrl={viewingRev.url} contentType="application/pdf" initial={null} canEdit={false} onSave={() => {}} fileName={dlName} docLabel="manual" />
                 </div>
               )}
             </div>
@@ -119,5 +141,5 @@ export default function OMsPage() {
   )
 }
 
-const btnPrimary = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }
+const btnPrimary = { background: BRAND, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }
 const btnGhost = { background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }

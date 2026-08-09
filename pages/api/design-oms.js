@@ -6,8 +6,10 @@ import { canAccessArea } from '../../lib/roles'
 import { buildOMManual } from '../../lib/omsPdf'
 
 // Build / retrieve the combined O&M Manual for a project.
-//   GET  ?no=<projectNo>            -> { manual: { url, builtAt, builtBy, sections } | null, canEdit }
-//   POST { projectNo, action:'build' } -> builds, stores, returns { manual }
+//   GET  ?no=<projectNo>            -> { manual, revisions, canEdit, available, readiness }
+//   POST { projectNo, action:'build' } -> builds a NEW revision, returns { manual, revisions }
+// Store: design:oms-manual:<no> = { current: <manual>, revisions: [<manual>, ...newest first] }
+// Each manual: { url, builtAt, builtBy, sections, projectName, projectNo, revision }
 const OKEY = (no) => `design:oms-manual:${no}`
 const APP_URL = process.env.APP_URL || 'https://app.rockroofing.co.uk'
 const LOGO_URL = `${APP_URL}/rock-logo.jpg`
@@ -99,16 +101,27 @@ async function projectMeta(no) {
   }
 }
 
+async function readStore(no) {
+  const raw = await get(OKEY(no))
+  if (!raw) return { current: null, revisions: [] }
+  // Migrate the old single-manual shape to the new revisions shape.
+  if (raw.url && !raw.revisions) {
+    const m = { ...raw, revision: raw.revision || 1 }
+    return { current: m, revisions: [m] }
+  }
+  return { current: raw.current || null, revisions: raw.revisions || [] }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
     if (!no) return res.status(400).json({ error: 'Missing project' })
     const acc = await resolveAccess(req, no)
     if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
-    const manual = (await get(OKEY(no))) || null
+    const store = await readStore(no)
     // Report what WOULD be included + readiness, so the page can warn and enable the button.
     const { sections, readiness } = await gatherSections(no)
-    return res.json({ manual, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness })
+    return res.json({ manual: store.current, revisions: store.revisions, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -122,19 +135,21 @@ export default async function handler(req, res) {
   if (body.action === 'build') {
     const { sections } = await gatherSections(no)
     if (!sections.length) return res.status(400).json({ error: 'Nothing to include yet - add Tech Subs, Construction Issue drawings, Calculations, Leak Test Certs or Warranties first.' })
+    const store = await readStore(no)
+    const nextRev = (store.revisions.reduce((m, r) => Math.max(m, r.revision || 0), 0) || 0) + 1
     const meta = await projectMeta(no)
     let bytes
     try {
       bytes = await buildOMManual({
         project: { projectName: meta.projectName, projectNo: meta.projectNo, projectAddress: meta.projectAddress },
-        sections, logoUrl: LOGO_URL, rockRoofing: ROCK, mainContractor: meta.mainContractor,
+        sections, logoUrl: LOGO_URL, rockRoofing: ROCK, mainContractor: meta.mainContractor, revision: nextRev,
       })
     } catch (e) {
       return res.status(500).json({ error: 'Could not build the manual: ' + (e.message || 'error') })
     }
     let url = ''
     try {
-      const safe = `${no}-OM-Manual-${Date.now()}.pdf`
+      const safe = `${no}-OM-Manual-Rev${nextRev}-${Date.now()}.pdf`
       const blob = await put(`oms/${safe}`, Buffer.from(bytes), { access: 'public', contentType: 'application/pdf', addRandomSuffix: true })
       url = blob.url
     } catch (e) {
@@ -143,10 +158,11 @@ export default async function handler(req, res) {
     const manual = {
       url, builtAt: Date.now(), builtBy: acc.user.name || 'User',
       sections: sections.map(s => ({ title: s.title, count: s.files.length })),
-      projectName: meta.projectName, projectNo: no,
+      projectName: meta.projectName, projectNo: no, revision: nextRev,
     }
-    await set(OKEY(no), manual)
-    return res.json({ ok: true, manual })
+    const revisions = [manual, ...store.revisions]   // newest first; older revisions kept
+    await set(OKEY(no), { current: manual, revisions })
+    return res.json({ ok: true, manual, revisions })
   }
 
   return res.status(400).json({ error: 'Unknown action' })

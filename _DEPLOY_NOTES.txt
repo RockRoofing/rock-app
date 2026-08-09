@@ -1,22 +1,29 @@
-DEPLOY NOTES - O&M readiness warning + Construction-Issue-only
-==============================================================
+DEPLOY NOTES - O&M refinements (brand colour, links, revisions)
+===============================================================
 
-TWO files, both EDITS - just replace them.
+THREE files, all EDITS - just replace them.
+  lib/omsPdf.js
   pages/api/design-oms.js
   pages/design/[project]/oms.js
 
 CHANGES
-1. ONLY CONSTRUCTION ISSUE items are included for BOTH Rock Drawings AND Calculations.
-   (Tech Subs, Leak Test Certs and Warranties are unchanged.) Current drawings/calcs that
-   are not yet marked Construction Issue are left out of the manual.
+1. BRAND COLOUR: the O&M manual and the O&M page now use Rock Roofing GREEN (#1c704f)
+   instead of purple (taken from the logo). (Only the O&M manual/page - the rest of the
+   design portal keeps its existing theme.)
 
-2. READINESS WARNING - shown in BOTH places:
-   - A yellow banner on the O&M page listing anything that is missing, or any drawings /
-     calculations still not marked Construction Issue (so would be left out).
-   - A confirmation popup when you click Build listing the same, ending with:
-     "Please check with your Rock Roofing Design Manager that the O&Ms are ready to be
-     compiled. Build anyway?"
-   You can still choose to build (some jobs legitimately won't have every section), but the
-   warning makes sure it's a deliberate decision.
+2. SECTION COVER SHEETS no longer print "Page X". Instead, the page number at the BOTTOM of
+   every page is now slightly BIGGER and bold (it was already there on all pages).
+
+3. CONTENTS PAGE is now CLICKABLE - clicking a section jumps to that section's page in the
+   PDF (works in the on-page viewer and any normal PDF reader).
+
+4. DOWNLOAD BUTTONS reduced to ONE - just the button at the top of the page. The extra
+   download links inside the viewer are gone. The top button downloads whichever revision
+   you're currently viewing.
+
+5. REVISIONS: rebuilding now creates a NEW revision (Rev 1, Rev 2, ...) and KEEPS the old
+   ones. A "Revisions" list appears in the left sidebar - the newest is marked CURRENT, the
+   rest OLD; click any to view it. The revision number is printed on the manual's cover page.
+   (Existing single manuals are auto-migrated to "Rev 1" the first time the page loads.)
 
 BUILD: next build -> Compiled successfully.
