@@ -17,6 +17,10 @@ export default function OMsPage() {
   const [viewingUrl, setViewingUrl] = useState('')
   const [available, setAvailable] = useState([])
   const [readiness, setReadiness] = useState(null)
+  const [customers, setCustomers] = useState([])
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyPick, setNotifyPick] = useState({})
+  const [notifying, setNotifying] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(false)
   const [building, setBuilding] = useState(false)
@@ -28,7 +32,7 @@ export default function OMsPage() {
     setLoading(true); setErr('')
     try {
       const d = await fetch(`/api/design-oms?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setManual(d.manual || null); setRevisions(d.revisions || []); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null)
+      setManual(d.manual || null); setRevisions(d.revisions || []); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null); setCustomers(d.customers || [])
       setViewingUrl(prev => (d.manual && (!prev || !(d.revisions || []).some(r => r.url === prev))) ? d.manual.url : prev)
     } catch { setErr('Could not load') }
     setLoading(false)
@@ -56,6 +60,20 @@ export default function OMsPage() {
     setBuilding(false)
   }
 
+  async function sendNotify() {
+    const ids = Object.keys(notifyPick).filter(k => notifyPick[k])
+    if (!ids.length) { setErr('Pick at least one customer.'); return }
+    setNotifying(true); setErr('')
+    try {
+      const r = await fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'notify', recipientIds: ids }) })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Could not send'); setNotifying(false); return }
+      setNotifyOpen(false); setNotifyPick({})
+      alert(`Notified ${d.sent} customer${d.sent === 1 ? '' : 's'}.${d.failed && d.failed.length ? ` Could not send to: ${d.failed.join(', ')}.` : ''}`)
+    } catch { setErr('Could not send') }
+    setNotifying(false)
+  }
+
   if (!auth.ready) return null
   const totalDocs = available.reduce((a, s) => a + s.count, 0)
   const viewingRev = revisions.find(r => r.url === viewingUrl) || manual
@@ -73,6 +91,7 @@ export default function OMsPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {viewingRev && <a href={`/api/download?url=${encodeURIComponent(viewingRev.url)}&name=${encodeURIComponent(dlName)}`} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6', textDecoration: 'none' }}>Download{viewingRev.revision ? ` Rev ${viewingRev.revision}` : ''}</a>}
+            {canEdit && manual && <button onClick={() => setNotifyOpen(true)} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6' }}>Notify Customer O&amp;Ms are ready</button>}
             {canEdit && <button onClick={build} disabled={building} style={{ ...btnPrimary, opacity: building ? 0.6 : 1 }}>{building ? 'Building...' : (manual ? 'Rebuild O&M Manual' : 'Build O&M Manual')}</button>}
           </div>
         </div>
@@ -82,7 +101,7 @@ export default function OMsPage() {
             <div style={{ fontWeight: 800, marginBottom: 6 }}>&#9888; Check before compiling</div>
             {readiness.warnings && readiness.warnings.map((w, i) => <div key={`w${i}`} style={{ marginTop: 2 }}>&bull; {w}</div>)}
             {readiness.missing && readiness.missing.length > 0 && <div style={{ marginTop: 2 }}>&bull; No documents yet for: {readiness.missing.join(', ')}</div>}
-            <div style={{ marginTop: 8, fontWeight: 600 }}>Please check with your Rock Roofing Design Manager that the O&amp;Ms are ready to be compiled. Only Construction Issue drawings and calculations are included.</div>
+            <div style={{ marginTop: 8, fontWeight: 600 }}>Please check with your Rock Roofing Design Manager that the O&amp;Ms are ready to be compiled. Only Construction Issue documents are included.</div>
           </div>
         )}
 
@@ -137,6 +156,31 @@ export default function OMsPage() {
           </>
         )}
       </div>
+
+      {notifyOpen && (
+        <div onClick={() => setNotifyOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 460, maxWidth: '92vw' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, color: INK }}>Notify Customer - O&amp;Ms are ready</h3>
+            <p style={{ fontSize: 13, color: '#8a857c', marginTop: 0 }}>Choose who to email. They'll get a link to this project's O&amp;M page to view and download the manual. You can pick more than one.</p>
+            <div style={{ maxHeight: 280, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8, padding: 8 }}>
+              {customers.length === 0 && <div style={{ fontSize: 13, color: '#aaa', padding: 8 }}>No customer users with an email on this project.</div>}
+              {customers.map(c => (
+                <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 4px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={!!notifyPick[c.id]} onChange={() => setNotifyPick(s => ({ ...s, [c.id]: !s[c.id] }))} />
+                  <span style={{ fontSize: 13.5 }}>{c.name} <span style={{ color: '#999' }}>({c.company})</span><br /><span style={{ fontSize: 11.5, color: '#aaa' }}>{c.email}</span></span>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+              <button onClick={() => setNotifyPick(customers.reduce((a, c) => (a[c.id] = true, a), {}))} style={{ background: 'none', border: 'none', color: BRAND, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Select all</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setNotifyOpen(false)} style={btnGhost}>Cancel</button>
+                <button onClick={sendNotify} disabled={notifying} style={{ ...btnPrimary, opacity: notifying ? 0.6 : 1 }}>{notifying ? 'Sending...' : 'Send notification'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

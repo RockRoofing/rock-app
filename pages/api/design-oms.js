@@ -4,6 +4,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { canAccessArea } from '../../lib/roles'
 import { buildOMManual } from '../../lib/omsPdf'
+import { sendOmReadyNotice } from '../../lib/designEmail'
 
 // Build / retrieve the combined O&M Manual for a project.
 //   GET  ?no=<projectNo>            -> { manual, revisions, canEdit, available, readiness }
@@ -89,6 +90,13 @@ async function gatherSections(no) {
   return { sections, readiness: { missing, warnings, notCiDrawings, notCiCalcs, ready: missing.length === 0 && warnings.length === 0 } }
 }
 
+async function customersFor(no) {
+  const ext = (await getExternalUsers()) || []
+  return ext.filter(e => e.active !== false && externalCanAccessProject(e, no))
+    .map(e => ({ id: e.id, name: e.name || [e.firstName, e.lastName].filter(Boolean).join(' '), email: e.email || '', company: e.company || 'Customer' }))
+    .filter(c => c.email)
+}
+
 async function projectMeta(no) {
   const ops = (await getOpsProjects()) || []
   const p = ops.find(x => String(x.projectNo) === String(no))
@@ -121,7 +129,8 @@ export default async function handler(req, res) {
     const store = await readStore(no)
     // Report what WOULD be included + readiness, so the page can warn and enable the button.
     const { sections, readiness } = await gatherSections(no)
-    return res.json({ manual: store.current, revisions: store.revisions, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness })
+    const customers = acc.canEdit ? await customersFor(no) : []
+    return res.json({ manual: store.current, revisions: store.revisions, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness, customers })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -163,6 +172,25 @@ export default async function handler(req, res) {
     const revisions = [manual, ...store.revisions]   // newest first; older revisions kept
     await set(OKEY(no), { current: manual, revisions })
     return res.json({ ok: true, manual, revisions })
+  }
+
+  if (body.action === 'notify') {
+    const store = await readStore(no)
+    if (!store.current) return res.status(400).json({ error: 'Build the O&M Manual before notifying customers.' })
+    const ids = Array.isArray(body.recipientIds) ? body.recipientIds : []
+    if (!ids.length) return res.status(400).json({ error: 'Pick at least one customer to notify.' })
+    const customers = await customersFor(no)
+    const chosen = customers.filter(c => ids.includes(c.id))
+    if (!chosen.length) return res.status(400).json({ error: 'No valid recipients.' })
+    const meta = await projectMeta(no)
+    const omLink = `${APP_URL}/design/${encodeURIComponent(no)}/oms`
+    let sent = 0
+    const failed = []
+    for (const c of chosen) {
+      const r = await sendOmReadyNotice({ to: c.email, recipientName: c.name, projectNo: no, projectName: meta.projectName, omLink, senderName: acc.user.name || '' })
+      if (r.sent) sent++; else failed.push(c.name)
+    }
+    return res.json({ ok: true, sent, failed })
   }
 
   return res.status(400).json({ error: 'Unknown action' })

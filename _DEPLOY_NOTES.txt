@@ -1,17 +1,19 @@
-DEPLOY NOTES - Status banner fix (Rock Drawings + Calculations)
-===============================================================
+DEPLOY NOTES - O&M wording + "Notify Customer" button
+=====================================================
 
-TWO files, both EDITS - just replace them.
-  pages/design/[project]/rock-drawings.js
-  pages/design/[project]/calculations.js
+THREE files, all EDITS - just replace them.
+  lib/designEmail.js                       (new O&M-ready email)
+  pages/api/design-oms.js                  (customer list + notify action)
+  pages/design/[project]/oms.js            (wording + Notify Customer button/modal)
 
-CHANGES to the status counts banner
-  - The two numbers now BALANCE: every current item is either Construction Issue or still
-    for Review / Comment, so "for Review / Comment" + "Construction Issue" = the total.
-    ("for Review / Comment" is now simply everything NOT marked Construction Issue.)
-  - Text is now the SAME SIZE as the "APPROVALS NEEDED" banner.
-  - The banner is AMBER/ORANGE (a softer warning than the red "APPROVALS NEEDED") whenever
-    any item is still for Review / Comment. Once every item is Construction Issue, it turns
-    a calm blue.
+CHANGES
+1. WORDING: the readiness warning now says "Only Construction Issue documents are included."
+   (was "Only Construction Issue drawings and calculations are included.")
+
+2. NOTIFY CUSTOMER BUTTON (Rock Roofing only, shows once a manual has been built):
+   "Notify Customer O&Ms are ready". Clicking it opens a picker of this project's customer
+   users - tick ONE OR MORE, then Send. Each gets an email saying the O&M Manual is ready,
+   with a link to this project's O&M page to view and download it. "Select all" is available.
+   (Emails use the Rock Roofing green button to match the manual.)
 
 BUILD: next build -> Compiled successfully.
