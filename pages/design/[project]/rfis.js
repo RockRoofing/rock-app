@@ -106,7 +106,7 @@ export default function RFIsPage() {
                 {rfis.map(r => {
                   const light = dueLight(r.requiredDate, r.status)
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', cursor: 'pointer' }} onClick={() => setOpenId(r.id)}>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0' }}>
                       <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.number}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtDate(r.issuedAt)}</td>
                       <td style={{ ...td, maxWidth: 380 }}><div style={{ whiteSpace: 'pre-wrap' }}>{r.description || '-'}</div></td>
@@ -205,10 +205,13 @@ function RfiEditor({ rfi, people, onClose, onSave }) {
 
 function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onEdit, onDelete, onMarkup }) {
   const light = dueLight(rfi.requiredDate, rfi.status)
-  const [viewAtt, setViewAtt] = useState(null)  // attachment being viewed/marked up
+  const atts = rfi.attachments || []
+  const [attIdx, setAttIdx] = useState(0)
+  const current = atts[attIdx]
+  const isViewable = current && ((current.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(current.url || '') || (current.contentType || '') === 'application/pdf')
   return (
-    <Modal onClose={onClose} title={rfi.number} wide>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+    <Modal onClose={onClose} title={rfi.number} full>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         {rfi.status === 'resolved' ? <Pill c="#16a34a" bg="#dcfce7">Resolved</Pill> : <Pill c="#2563eb" bg="#dbeafe">Open</Pill>}
         {light && <span style={{ background: light.bg, color: light.color, borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>{light.label}</span>}
         <div style={{ flex: 1 }} />
@@ -216,35 +219,34 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
         {canEdit && <button onClick={onEdit} style={btnGhost}>Edit</button>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13.5, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, fontSize: 13.5, marginBottom: 12 }}>
         <Info label="Issued">{fmtDate(rfi.issuedAt)}</Info>
         <Info label="Required by">{rfi.requiredDate ? fmtDate(new Date(rfi.requiredDate).getTime()) : '-'}</Info>
         <Info label="Customer responsible">{personName(rfi.responsibleUserId) || '-'}</Info>
-        <Info label="Comments">{(rfi.comments || []).length}</Info>
       </div>
       <Info label="Description"><div style={{ whiteSpace: 'pre-wrap' }}>{rfi.description || '-'}</div></Info>
 
-      {(rfi.attachments || []).length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <Lbl>Attachments</Lbl>
-          {(rfi.attachments || []).map((a, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: '1px solid #f4f4f4' }}>
-              <span style={{ flex: 1, wordBreak: 'break-word' }}>{a.name}{(a.markup && (Array.isArray(a.markup) ? a.markup.length : Object.keys(a.markup || {}).length)) ? <span style={{ marginLeft: 8, fontSize: 11, color: '#7c3aed', fontWeight: 700 }}>marked up</span> : null}</span>
-              <button onClick={() => setViewAtt(a)} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff' }}>View &amp; mark up</button>
-              <a href={`/api/download?url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name)}`} style={{ ...linkBtn, marginLeft: 0 }}>Download</a>
-            </div>
-          ))}
+      {/* Attachment markup viewer, embedded */}
+      {atts.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <Lbl>Attachment{atts.length > 1 ? 's' : ''}</Lbl>
+            {atts.length > 1 && atts.map((a, i) => (
+              <button key={i} onClick={() => setAttIdx(i)} style={{ ...btnGhost, padding: '5px 10px', background: i === attIdx ? '#7c3aed' : '#fff', color: i === attIdx ? '#fff' : '#333', border: i === attIdx ? 'none' : '1px solid #ddd', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <a href={`/api/download?url=${encodeURIComponent(current.url)}&name=${encodeURIComponent(current.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
+          </div>
+          {isViewable
+            ? <DrawingMarkup key={current.url} imageUrl={current.url} contentType={current.contentType} initial={current.markup} canEdit onSave={(markup) => onMarkup(rfi.id, current.url, markup)} fileName={current.name} />
+            : <div style={{ padding: 24, textAlign: 'center', color: '#888', background: '#faf9fd', borderRadius: 10 }}>This file type can't be previewed - use Download to view it.</div>}
         </div>
       )}
 
-      {viewAtt && (
-        <AttachmentViewer att={viewAtt} onClose={() => setViewAtt(null)}
-          onSave={(markup) => onMarkup(rfi.id, viewAtt.url, markup)} />
-      )}
-
-      <div style={{ borderTop: '1px solid #eee', margin: '16px 0 10px' }} />
-      <Lbl>Comments</Lbl>
-      <div style={{ maxHeight: 300, overflowY: 'auto', margin: '8px 0' }}>
+      {/* Comments below the image/PDF */}
+      <div style={{ borderTop: '1px solid #eee', margin: '18px 0 10px' }} />
+      <Lbl>Comments ({(rfi.comments || []).length})</Lbl>
+      <div style={{ margin: '8px 0' }}>
         {(rfi.comments || []).length === 0 && <div style={{ color: '#aaa', fontSize: 13, padding: '6px 0' }}>No comments yet.</div>}
         {(rfi.comments || []).map(c => (
           <div key={c.id} style={{ padding: '8px 0', borderBottom: '1px solid #f4f4f4' }}>
@@ -260,28 +262,6 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
       <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
       {canEdit && <div style={{ textAlign: 'right', marginTop: 12 }}><button onClick={onDelete} style={{ ...linkBtn, color: '#dc2626', marginLeft: 0 }}>Delete RFI</button></div>}
     </Modal>
-  )
-}
-
-// Full-screen viewer for an RFI attachment: view PDF/image, mark it up (arrows, lines,
-// circles, boxes, freehand, highlighter, text; colour/thickness), download.
-function AttachmentViewer({ att, onClose, onSave }) {
-  const isViewable = (att.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(att.url || '') || (att.contentType || '') === 'application/pdf'
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, overflowY: 'auto', padding: '3vh 12px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 18, width: 1000, maxWidth: '96vw' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h3 style={{ margin: 0, fontSize: 16, color: INK, wordBreak: 'break-word' }}>{att.name}</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>
-        </div>
-        {isViewable
-          ? <DrawingMarkup imageUrl={att.url} contentType={att.contentType} initial={att.markup} canEdit onSave={onSave} fileName={att.name} />
-          : <div style={{ padding: 30, textAlign: 'center', color: '#888' }}>
-              This file type can't be previewed here.
-              <div style={{ marginTop: 12 }}><a href={`/api/download?url=${encodeURIComponent(att.url)}&name=${encodeURIComponent(att.name)}`} style={{ ...btnPrimary, textDecoration: 'none' }}>Download {att.name}</a></div>
-            </div>}
-      </div>
-    </div>
   )
 }
 
@@ -340,15 +320,18 @@ function ToolBtn({ onClick, style, children }) {
   return <button type="button" onMouseDown={e => { e.preventDefault(); onClick() }} style={{ minWidth: 30, padding: '4px 8px', border: '1px solid #e0e0e0', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 13, ...style }}>{children}</button>
 }
 
-function Modal({ title, children, onClose, wide }) {
+function Modal({ title, children, onClose, wide, full }) {
+  const inner = full
+    ? { width: '96vw', height: '96vh', maxWidth: '96vw', display: 'flex', flexDirection: 'column' }
+    : { width: wide ? 720 : 560, maxWidth: '95vw' }
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '4vh 16px' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: wide ? 720 : 560, maxWidth: '95vw' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: full ? 'center' : 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: full ? 'hidden' : 'auto', padding: full ? '2vh 2vw' : '4vh 16px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: full ? 18 : 24, ...inner }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flex: '0 0 auto' }}>
           <h2 style={{ margin: 0, fontSize: 19, color: INK }}>{title}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>
         </div>
-        {children}
+        {full ? <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>{children}</div> : children}
       </div>
     </div>
   )

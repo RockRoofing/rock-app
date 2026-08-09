@@ -1,27 +1,26 @@
-DEPLOY NOTES - Markup: select, move, reshape and restyle any mark
-=================================================================
+DEPLOY NOTES - RFI markup + viewer refinements
+==============================================
 
-ONE file, an EDIT - just replace it.
-  components/DrawingMarkup.js
+TWO files, both EDITS - just replace them.
+  components/DrawingMarkup.js            (markup behaviour)
+  pages/design/[project]/rfis.js        (RFI viewer layout + open behaviour)
 
-WHAT'S NEW (applies to RFI attachment markup AND the Design Drawings markup, on images
-and PDFs)
-  Every mark you add is now fully editable with the Select tool:
-   - Click a mark to SELECT it (works when several marks overlap - click the one you want).
-   - Drag its body to MOVE it anywhere.
-   - Drag the round HANDLES to reshape:
-       * Arrows / lines: drag either end to stretch, shrink or re-point it.
-       * Boxes / circles: drag a corner handle to resize.
-       * Text boxes: drag the corner handle to resize the box; drag the body to move it.
-   - Restyle the selected mark on the fly: change its COLOUR (colour swatches), thickness,
-     and (for text) size / bold / underline.
-   - Double-click a text box to edit its words again.
-   - "Delete selected" removes the selected mark; "Undo" removes the last one added.
-  Remember to press "Save markup" to store your changes.
+MARKUP CHANGES (apply to RFI attachments AND Design Drawings)
+  - DELETE KEY: with a mark selected, press Delete or Backspace to remove it.
+  - AUTO-RETURN TO SELECT: after you draw a mark (arrow, line, box, text, etc.) the tool
+    switches back to Select automatically, so tapping the screen again won't keep adding
+    more marks. Pick the tool again for the next mark.
+  - AUTOSAVE: markup now saves automatically shortly after each change (a small
+    "Saving.../Saved" indicator shows). The manual Save button is gone.
+  - CLEAR ALL: new "Clear all markups" button wipes the current page's marks (asks first).
+  - EASIER TO SELECT: hit areas are much larger - thin lines/arrows have a wide invisible
+    grab band, and the inside of boxes/circles is now grabbable, not just the outline.
 
-NOTES
-  - Thin lines/arrows have an invisible wider "grab" band so they're easy to select.
-  - Clicking empty space clears the selection.
-  - Existing saved markups keep working and are now editable too.
+RFI VIEWER CHANGES
+  - Opening an RFI now fills almost the whole screen. The PDF/JPEG markup viewer is shown
+    INSIDE the pop-out, with the comments underneath it. If there are several attachments,
+    buttons at the top switch between them.
+  - The RFI only opens via the "Open" button now - clicking elsewhere on the row (the
+    attachments count, comments count, etc.) no longer opens it.
 
 BUILD: next build -> Compiled successfully.

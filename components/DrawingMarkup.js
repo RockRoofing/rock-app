@@ -159,9 +159,13 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
       let d = draft
       if (Math.abs(d.x2 - d.x1) < 0.04 || Math.abs(d.y2 - d.y1) < 0.02) d = { ...d, x2: d.x1 + 0.18, y2: d.y1 + 0.06 }
       setShapes(s => [...s, d]); setDraft(null); setEditingId(d.id); setSelected(d.id)
+      setTool('select')  // after placing, switch to Select so taps don't add more boxes
       return
     }
-    setShapes(s => [...s, draft]); setDraft(null)
+    const finished = draft
+    setShapes(s => [...s, finished]); setDraft(null)
+    setSelected(finished.id)
+    setTool('select')  // auto-return to Select after each mark
   }
 
   // Start moving a shape (drag its body). Records the original so movement is relative.
@@ -181,11 +185,38 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
 
   function removeSelected() { if (selected) { setShapes(s => s.filter(x => x.id !== selected)); setSelected(null) } }
   function undo() { setShapes(s => s.slice(0, -1)) }
+  function clearAll() {
+    if (!(shapes.length)) return
+    if (!confirm('Clear all markups on this page?')) return
+    setShapes([]); setSelected(null); setEditingId(null)
+  }
+  const saveRef = useRef()
   async function save() {
     // Save images as a flat array (page 1) for back-compat; PDFs as the page map.
     const payload = isImg ? (map[1] || []) : map
     await onSave(payload); setDirty(false)
   }
+  saveRef.current = save
+  // Autosave shortly after any change settles (debounced), so markup persists without
+  // needing to press Save. Skips the initial load and while actively dragging.
+  useEffect(() => {
+    if (!canEdit || !dirty || drag || draft || editingId) return
+    const t = setTimeout(() => { saveRef.current && saveRef.current() }, 800)
+    return () => clearTimeout(t)
+  }, [map, dirty, drag, draft, editingId, canEdit])
+
+  // Keyboard: Delete / Backspace removes the selected mark (unless typing in a field).
+  useEffect(() => {
+    if (!canEdit) return
+    const onKey = (e) => {
+      if (editingId) return  // typing in a text box
+      const t = e.target
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selected) { e.preventDefault(); removeSelected() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selected, editingId, canEdit])
 
   const all = draft ? [...shapes, draft] : shapes
 
@@ -220,7 +251,8 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
           <button onClick={undo} style={ghost}>Undo</button>
           {selected && <button onClick={removeSelected} style={{ ...ghost, color: '#dc2626' }}>Delete selected</button>}
-          <button onClick={save} disabled={!dirty} style={{ ...ghost, background: dirty ? '#7c3aed' : '#eee', color: dirty ? '#fff' : '#999', border: 'none' }}>Save markup</button>
+          <button onClick={clearAll} disabled={!shapes.length} style={{ ...ghost, color: shapes.length ? '#dc2626' : '#bbb', borderColor: shapes.length ? '#f3c0c0' : '#eee' }}>Clear all markups</button>
+          <span style={{ fontSize: 11.5, color: '#16a34a', marginLeft: 2 }}>{dirty ? 'Saving...' : 'Saved'}</span>
         </div>
       )}
 
@@ -294,7 +326,7 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
           )
         })}
       </div>
-      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Draw with a tool, or use Select to edit: click a mark to select it, drag it to move, drag its end/corner handles to resize or reshape, and use the colour / thickness / text controls to restyle it. Double-click a text box to edit its words. Delete selected removes a mark. Markup saves per page - remember to Save markup.</div>}
+      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool and draw - it switches back to Select automatically after each mark. With Select: click a mark to select it, drag to move, drag the handles to resize/reshape, change colour / thickness, or press Delete to remove it. Double-click a text box to edit its words. Changes save automatically.</div>}
     </div>
   )
 }
@@ -317,28 +349,30 @@ function Shape({ sh, selected, tool, canEdit, onSelect, onStartMove, onStartHand
     const pts = (sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')
     const isHl = sh.type === 'highlight'
     return hit(<>
-      <polyline points={pts} stroke="transparent" strokeWidth={Math.max((sh.width || 3) + 14, 18)} fill="none" onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+      <polyline points={pts} stroke="transparent" strokeWidth={Math.max((sh.width || 3) + 24, 28)} fill="none" onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
       <polyline points={pts} stroke={stroke} strokeWidth={isHl ? (sh.width || 16) : (sh.width || 3)} opacity={isHl ? (sh.opacity ?? 0.35) : (sh.opacity ?? 1)} fill="none" strokeLinejoin="round" strokeLinecap="round" style={{ ...sel, pointerEvents: 'none' }} />
     </>)
   }
   if (sh.type === 'rect') {
     const x = Math.min(sh.x1, sh.x2) * S, y = Math.min(sh.y1, sh.y2) * S, w = Math.abs(sh.x2 - sh.x1) * S, h = Math.abs(sh.y2 - sh.y1) * S
     return hit(<>
-      <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel }} />
+      <rect x={x} y={y} width={w} height={h} fill="transparent" stroke="transparent" strokeWidth={24} onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+      <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel, pointerEvents: 'none' }} />
       {selected && editable && cornerHandles(sh, S, onStartHandle)}
     </>)
   }
   if (sh.type === 'circle') {
     const cx = (sh.x1 + sh.x2) / 2 * S, cy = (sh.y1 + sh.y2) / 2 * S, rx = Math.abs(sh.x2 - sh.x1) / 2 * S, ry = Math.abs(sh.y2 - sh.y1) / 2 * S
     return hit(<>
-      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...common} style={{ ...common.style, ...sel }} />
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill="transparent" stroke="transparent" strokeWidth={24} onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...common} style={{ ...common.style, ...sel, pointerEvents: 'none' }} />
       {selected && editable && cornerHandles(sh, S, onStartHandle)}
     </>)
   }
   // line / arrow
   const marker = sh.type === 'arrow' ? { markerEnd: 'url(#arrowhead)' } : {}
   return hit(<>
-    <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} stroke="transparent" strokeWidth={16} onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+    <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} stroke="transparent" strokeWidth={28} onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
     <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} {...common} {...marker} strokeLinecap="round" style={{ ...common.style, ...sel, pointerEvents: 'none' }} />
     {selected && editable && <>
       {endHandle(sh.x1 * S, sh.y1 * S, (e) => onStartHandle(e, 1))}
@@ -349,7 +383,7 @@ function Shape({ sh, selected, tool, canEdit, onSelect, onStartMove, onStartHand
 
 // Draggable endpoint handle (for lines/arrows).
 function endHandle(cx, cy, onDown) {
-  return <circle cx={cx} cy={cy} r={11} fill="#fff" stroke="#7c3aed" strokeWidth={3}
+  return <circle cx={cx} cy={cy} r={14} fill="#fff" stroke="#7c3aed" strokeWidth={3}
     onMouseDown={onDown} onTouchStart={onDown} style={{ cursor: 'crosshair' }} />
 }
 // Two opposite corner handles for rect/circle (handle 1 = x1/y1 corner, 2 = x2/y2 corner).
