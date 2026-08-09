@@ -126,6 +126,9 @@ export default function TechSubPage() {
     if (!isExternal) return false
     return d.approverId === meId
   }
+  // Approval banner: over current (non-superseded) tech subs only.
+  const currentDocs = docs.filter(d => !d.superseded)
+  const anyNeedApproval = currentDocs.some(d => d.approvalStatus !== 'approved')
 
   return (
     <>
@@ -141,6 +144,9 @@ export default function TechSubPage() {
           </div>
           {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Tech Sub'}</button>}
         </div>
+        {currentDocs.length > 0 && (anyNeedApproval
+          ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED</div>
+          : <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVED</div>)}
         {err && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (

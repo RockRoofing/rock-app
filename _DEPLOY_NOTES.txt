@@ -1,26 +1,20 @@
-DEPLOY NOTES - Leak Test Certs page + Calculations label fix
-============================================================
+DEPLOY NOTES - Approval banner + nav reorder
+============================================
 
-FOUR files. TWO are NEW (add via GitHub "Add file"), TWO are EDITS.
-
-  NEW   pages/api/design-leak-test-certs.js
-  NEW   pages/api/design-leak-test-certs-zip.js
-  EDIT  pages/design/[project]/leak-test-certs.js   (was the 3-line shared page - now full)
-  EDIT  pages/design/[project]/calculations.js      (empty-state label fix)
-
-*** Create the two NEW files via "Add file" at those exact paths. ***
+FOUR files, all EDITS - just replace them.
+  lib/designShell.js                              (moves Handover Docs before RFIs)
+  pages/design/[project]/rock-drawings.js         (approval banner)
+  pages/design/[project]/calculations.js          (approval banner)
+  pages/design/[project]/tech-sub.js              (approval banner)
 
 CHANGES
-1. Calculations: empty state now reads "No Calculations Yet." (was "No drawings yet.")
+1. APPROVAL BANNER at the top of Tech Sub, Rock Drawings and Calculations:
+   - RED "APPROVALS NEEDED" when any current item is not yet approved.
+   - GREEN "APPROVED" when every current item is approved.
+   - It looks only at the CURRENT revision of each item (superseded revisions are ignored),
+     and shows nothing on an empty page.
 
-2. Leak Test Certs is now EXACTLY the same as the Warranties page, but for leak test certs:
-   flat thumbnail page (no sections), "+ Upload Leak Test Certs" (Rock Roofing only),
-   thumbnails with View (in-page viewer) / Download / Delete (delete internal only), tick
-   boxes + "Download all" / "Download selected" as a single ZIP. Visible to customers -
-   they can view and download; they cannot upload or delete.
-
-NOTES
-  - Fresh store - leak test certs on the old shared page are not migrated; re-upload via
-    "+ Upload Leak Test Certs".
+2. NAV: "Handover Docs" now sits BEFORE "RFIs" in the Design portal navigation.
+   (Handover Docs stays internal-only, so customers still don't see it.)
 
 BUILD: next build -> Compiled successfully.
