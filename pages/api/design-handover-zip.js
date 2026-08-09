@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
   // Handover Docs is internal-only - customers have no access.
   if (u.role === 'external') return res.status(403).json({ error: 'No access' })
-  if (!canAccessArea(u.role, 'design')) return res.status(403).json({ error: 'No access' })
+  if (!canAccessArea(u.role, 'design') && !canAccessArea(u.role, 'pre-contract')) return res.status(403).json({ error: 'No access' })
 
   // Only allow URLs that belong to this project's handover docs.
   const data = (await get(HKEY(projectNo))) || { sections: [] }

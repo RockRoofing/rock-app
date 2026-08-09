@@ -19,7 +19,8 @@ async function resolveAccess(req, projectNo) {
   if (!u) return { ok: false, code: 401 }
   // Handover Docs is internal-only - customers (external users) have no access at all.
   if (u.role === 'external') return { ok: false, code: 403 }
-  if (!canAccessArea(u.role, 'design')) return { ok: false, code: 403 }
+  // Available in both the Design portal and the Pre-Contract section (same files).
+  if (!canAccessArea(u.role, 'design') && !canAccessArea(u.role, 'pre-contract')) return { ok: false, code: 403 }
   return { ok: true, user: u, canEdit: true }
 }
 
