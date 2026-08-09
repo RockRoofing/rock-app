@@ -25,6 +25,8 @@ export default function HandoverDocsPage() {
   const fileInputs = useRef({})
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
+  // Handover Docs is internal-only - send customers back to the design home.
+  useEffect(() => { if (auth.ready && auth.isExternal) router.replace(`/design/${encodeURIComponent(projectNo)}/rfis`) }, [auth.ready, auth.isExternal, projectNo])
 
   async function load() {
     setLoading(true); setErr('')

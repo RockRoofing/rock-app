@@ -41,12 +41,9 @@ export default async function handler(req, res) {
   const projectNo = String(req.body?.projectNo || '').trim()
   if (!projectNo) return res.status(400).json({ error: 'Missing project' })
 
-  if (u.role === 'external') {
-    const ext = (await getExternalUsers()).find(x => x.id === u.id && x.active !== false)
-    if (!ext || !externalCanAccessProject(ext, projectNo)) return res.status(403).json({ error: 'No access' })
-  } else if (!canAccessArea(u.role, 'design')) {
-    return res.status(403).json({ error: 'No access' })
-  }
+  // Handover Docs is internal-only - customers have no access.
+  if (u.role === 'external') return res.status(403).json({ error: 'No access' })
+  if (!canAccessArea(u.role, 'design')) return res.status(403).json({ error: 'No access' })
 
   // Only allow URLs that belong to this project's handover docs.
   const data = (await get(HKEY(projectNo))) || { sections: [] }

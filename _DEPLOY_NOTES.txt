@@ -1,15 +1,17 @@
-DEPLOY NOTES - Handover Docs: in-page View button
-==================================================
+DEPLOY NOTES - Hide Handover Docs from customers
+=================================================
 
-ONE file, an EDIT - just replace it.
-  pages/design/[project]/handover-docs.js
+FOUR files, all EDITS - just replace them.
+  lib/designShell.js                       (removes Handover Docs from the customer nav)
+  pages/api/design-handover-docs.js        (blocks external users)
+  pages/api/design-handover-zip.js         (blocks external users)
+  pages/design/[project]/handover-docs.js  (redirects a customer away if they hit the URL)
 
-CHANGES
-  - Each thumbnail now has a "View" button (and clicking the thumbnail image also views).
-  - View opens the document in an in-page viewer overlay (images, and multi-page PDFs you
-    can scroll through) - it does NOT open a new tab or navigate away.
-  - Because the viewer is on the same page, any documents you have TICKED stay selected -
-    opening/closing the viewer never clears your selection.
-  - Download and Delete remain on each thumbnail as before.
+WHAT CHANGED
+  Handover Docs is now INTERNAL-ONLY. Customers no longer see it in the Design nav, can't
+  load its data or download its zips, and are redirected away if they open the URL directly.
+
+  Customers still see everything else: RFIs, Tech Sub, Rock Drawings, Calculations,
+  Leak Test Certs, Warranties, O&Ms.
 
 BUILD: next build -> Compiled successfully.

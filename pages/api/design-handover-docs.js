@@ -17,11 +17,8 @@ function readCookie(req, name) {
 async function resolveAccess(req, projectNo) {
   const u = verifySessionToken(readCookie(req, SESSION_COOKIE))
   if (!u) return { ok: false, code: 401 }
-  if (u.role === 'external') {
-    const ext = (await getExternalUsers()).find(x => x.id === u.id && x.active !== false)
-    if (!ext || !externalCanAccessProject(ext, projectNo)) return { ok: false, code: 403 }
-    return { ok: true, user: { ...u, name: ext.name }, canEdit: false }
-  }
+  // Handover Docs is internal-only - customers (external users) have no access at all.
+  if (u.role === 'external') return { ok: false, code: 403 }
   if (!canAccessArea(u.role, 'design')) return { ok: false, code: 403 }
   return { ok: true, user: u, canEdit: true }
 }
