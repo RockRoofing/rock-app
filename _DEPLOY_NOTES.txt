@@ -1,23 +1,27 @@
-DEPLOY NOTES - Markup: draggable text boxes with size / bold / underline
-=======================================================================
+DEPLOY NOTES - Markup: select, move, reshape and restyle any mark
+=================================================================
 
 ONE file, an EDIT - just replace it.
   components/DrawingMarkup.js
 
-WHAT CHANGED (applies to RFI attachment markup AND the Design Drawings markup)
-  The Text tool is now a proper text box you draw, not a pop-up prompt:
-   - Select the Text tool and DRAG OUT a box to the size you want.
-   - Type directly into the box - the writing appears on the drawing as you type.
-   - A text controls row appears (when Text is selected, or a text box is selected):
-       * Text size - pick from 12 up to 48
-       * B - bold on/off
-       * U - underline on/off
-       * the colour swatches also set / change the text colour
-   - Double-click an existing text box (with Select) to edit its wording again.
-   - Empty text boxes are discarded automatically.
-   - Existing/older text notes still display correctly.
+WHAT'S NEW (applies to RFI attachment markup AND the Design Drawings markup, on images
+and PDFs)
+  Every mark you add is now fully editable with the Select tool:
+   - Click a mark to SELECT it (works when several marks overlap - click the one you want).
+   - Drag its body to MOVE it anywhere.
+   - Drag the round HANDLES to reshape:
+       * Arrows / lines: drag either end to stretch, shrink or re-point it.
+       * Boxes / circles: drag a corner handle to resize.
+       * Text boxes: drag the corner handle to resize the box; drag the body to move it.
+   - Restyle the selected mark on the fly: change its COLOUR (colour swatches), thickness,
+     and (for text) size / bold / underline.
+   - Double-click a text box to edit its words again.
+   - "Delete selected" removes the selected mark; "Undo" removes the last one added.
+  Remember to press "Save markup" to store your changes.
 
-  Everything else (arrow, line, box, circle, draw, highlight, colour, thickness, opacity,
-  save markup, download) is unchanged.
+NOTES
+  - Thin lines/arrows have an invisible wider "grab" band so they're easy to select.
+  - Clicking empty space clears the selection.
+  - Existing saved markups keep working and are now editable too.
 
 BUILD: next build -> Compiled successfully.

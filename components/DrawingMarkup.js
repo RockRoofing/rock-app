@@ -46,6 +46,7 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
   const [bold, setBold] = useState(false)
   const [underline, setUnderline] = useState(false)
   const [editingId, setEditingId] = useState(null)   // id of the text box being typed into
+  const [drag, setDrag] = useState(null)             // active edit drag: { id, mode, handle, start, orig }
   const [draft, setDraft] = useState(null)
   const [selected, setSelected] = useState(null)
   const [dirty, setDirty] = useState(false)
@@ -102,8 +103,18 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     setDirty(true)
   }
   const updateShape = (sid, patch) => setShapes(s => s.map(x => x.id === sid ? { ...x, ...patch } : x))
-  // When a text box is selected, editing its style should update that box live.
-  const applyTextStyle = (patch) => { if (selected) { const sh = shapes.find(x => x.id === selected); if (sh && sh.type === 'text') updateShape(selected, patch) } }
+  // Apply a style patch (colour, fontSize, bold, underline, width) to the selected shape.
+  const applyTextStyle = (patch) => { if (selected) updateShape(selected, patch) }
+
+  // Translate every coordinate of a shape by (dx, dy) in normalised space.
+  function moveShape(sh, dx, dy) {
+    const c = (v) => Math.min(1, Math.max(0, v))
+    if (sh.pts) return { ...sh, pts: sh.pts.map(p => ({ x: c(p.x + dx), y: c(p.y + dy) })) }
+    const out = { ...sh }
+    if (sh.x1 != null) { out.x1 = c(sh.x1 + dx); out.x2 = c(sh.x2 + dx); out.y1 = c(sh.y1 + dy); out.y2 = c(sh.y2 + dy) }
+    else if (sh.x != null) { out.x = c(sh.x + dx); out.y = c(sh.y + dy) }
+    return out
+  }
 
   function rel(e) {
     const r = wrapRef.current.getBoundingClientRect()
@@ -111,32 +122,61 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     return { x: Math.min(1, Math.max(0, (t.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (t.clientY - r.top) / r.height)) }
   }
   function down(e) {
-    if (!canEdit || tool === 'select') return
+    if (!canEdit) return
+    // SELECT mode: clicking empty canvas clears selection. Shape/handle drags are started
+    // by the shapes' own handlers (see startMove / startHandle), which call setDrag.
+    if (tool === 'select') { if (!drag) setSelected(null); return }
     e.preventDefault()
     const p = rel(e)
     if (tool === 'free') { setDraft({ id: id(), type: 'free', pts: [p], colour, opacity, width }); return }
-    // Highlighter: freehand, thick and semi-transparent so it reads like a marker.
     if (tool === 'highlight') { setDraft({ id: id(), type: 'highlight', pts: [p], colour, opacity: Math.min(opacity, 0.4), width: Math.max(width * 4, 14) }); return }
-    // Text: drag out the box; on release it becomes editable and you type on-screen.
     if (tool === 'text') { setDraft({ id: id(), type: 'text', x1: p.x, y1: p.y, x2: p.x, y2: p.y, text: '', colour, opacity, fontSize, bold, underline }); return }
     setDraft({ id: id(), type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, colour, opacity, width })
   }
   function move(e) {
+    // Editing an existing shape (move or handle drag).
+    if (drag) {
+      e.preventDefault()
+      const p = rel(e)
+      if (drag.mode === 'move') {
+        const dx = p.x - drag.start.x, dy = p.y - drag.start.y
+        updateShape(drag.id, moveShape(drag.orig, dx, dy))
+      } else if (drag.mode === 'handle') {
+        const c = (v) => Math.min(1, Math.max(0, v))
+        updateShape(drag.id, drag.handle === 1 ? { x1: c(p.x), y1: c(p.y) } : { x2: c(p.x), y2: c(p.y) })
+      }
+      return
+    }
     if (!draft) return
     const p = rel(e)
     if (draft.type === 'free' || draft.type === 'highlight') setDraft(d => ({ ...d, pts: [...d.pts, p] }))
     else setDraft(d => ({ ...d, x2: p.x, y2: p.y }))
   }
   function up() {
+    if (drag) { setDrag(null); return }
     if (!draft) return
     if (draft.type === 'text') {
-      // Give a minimum sensible size if the user just clicked without dragging.
       let d = draft
       if (Math.abs(d.x2 - d.x1) < 0.04 || Math.abs(d.y2 - d.y1) < 0.02) d = { ...d, x2: d.x1 + 0.18, y2: d.y1 + 0.06 }
       setShapes(s => [...s, d]); setDraft(null); setEditingId(d.id); setSelected(d.id)
       return
     }
     setShapes(s => [...s, draft]); setDraft(null)
+  }
+
+  // Start moving a shape (drag its body). Records the original so movement is relative.
+  function startMove(e, sh) {
+    if (!canEdit || tool !== 'select') return
+    e.stopPropagation(); e.preventDefault()
+    setSelected(sh.id)
+    setDrag({ id: sh.id, mode: 'move', start: rel(e), orig: sh })
+  }
+  // Start dragging an endpoint/corner handle (handle 1 = start, 2 = end).
+  function startHandle(e, sh, handle) {
+    if (!canEdit || tool !== 'select') return
+    e.stopPropagation(); e.preventDefault()
+    setSelected(sh.id)
+    setDrag({ id: sh.id, mode: 'handle', handle, start: rel(e), orig: sh })
   }
 
   function removeSelected() { if (selected) { setShapes(s => s.filter(x => x.id !== selected)); setSelected(null) } }
@@ -163,7 +203,7 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
           {COLOURS.map(c => <button key={c} onMouseDown={e => e.preventDefault()} onClick={() => { setColour(c); applyTextStyle({ colour: c }) }} style={{ width: 22, height: 22, borderRadius: 5, background: c, border: colour === c ? '2px solid #111' : '1px solid #ccc', cursor: 'pointer' }} />)}
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
-          <label style={{ fontSize: 12, color: '#666' }}>Thickness<input type="range" min="1" max="12" value={width} onChange={e => setWidth(Number(e.target.value))} style={{ verticalAlign: 'middle', marginLeft: 6, width: 80 }} /></label>
+          <label style={{ fontSize: 12, color: '#666' }}>Thickness<input type="range" min="1" max="12" value={width} onChange={e => { const v = Number(e.target.value); setWidth(v); if (selected) { const sh = shapes.find(x => x.id === selected); if (sh && sh.type !== 'text') applyTextStyle({ width: v }) } }} style={{ verticalAlign: 'middle', marginLeft: 6, width: 80 }} /></label>
           <label style={{ fontSize: 12, color: '#666' }}>Opacity<input type="range" min="0.1" max="1" step="0.1" value={opacity} onChange={e => setOpacity(Number(e.target.value))} style={{ verticalAlign: 'middle', marginLeft: 6, width: 80 }} /></label>
           {(tool === 'text' || (selected && shapes.find(x => x.id === selected)?.type === 'text')) && (
             <>
@@ -208,7 +248,9 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
                 <polygon points="0 0, 10 4, 0 8" fill="context-stroke" />
               </marker>
             </defs>
-            {all.filter(sh => sh.type !== 'text').map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} onClick={() => { if (canEdit && tool === 'select') setSelected(sh.id) }} />)}
+            {all.filter(sh => sh.type !== 'text').map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} tool={tool} canEdit={canEdit}
+              onSelect={() => { if (canEdit && tool === 'select') setSelected(sh.id) }}
+              onStartMove={(e) => startMove(e, sh)} onStartHandle={(e, h) => startHandle(e, sh, h)} />)}
           </svg>
         )}
         {/* Text boxes as HTML overlays (crisp fonts, native editing) */}
@@ -236,32 +278,86 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
               placeholder="Type here..."
               style={{ ...boxStyle, resize: 'none', outline: 'none', fontFamily: 'inherit' }} />
           )
+          const editable = canEdit && tool === 'select'
           return (
-            <div key={sh.id} style={{ ...boxStyle, cursor: canEdit ? 'pointer' : 'default' }}
-              onMouseDown={e => { if (!canEdit) return; e.stopPropagation(); if (tool === 'select') setSelected(sh.id) }}
+            <div key={sh.id} style={{ ...boxStyle, cursor: editable ? (selected === sh.id ? 'move' : 'pointer') : 'default' }}
+              onMouseDown={e => { if (!editable) return; e.stopPropagation(); setSelected(sh.id); setDrag({ id: sh.id, mode: 'move', start: rel(e), orig: sh }) }}
+              onTouchStart={e => { if (!editable) return; e.stopPropagation(); setSelected(sh.id); setDrag({ id: sh.id, mode: 'move', start: rel(e), orig: sh }) }}
               onDoubleClick={e => { if (!canEdit) return; e.stopPropagation(); setSelected(sh.id); setEditingId(sh.id) }}>
               {sh.text || <span style={{ color: '#bbb' }}>(empty)</span>}
+              {editable && selected === sh.id && (
+                <span onMouseDown={e => { e.stopPropagation(); setDrag({ id: sh.id, mode: 'handle', handle: 2, start: rel(e), orig: sh }) }}
+                  onTouchStart={e => { e.stopPropagation(); setDrag({ id: sh.id, mode: 'handle', handle: 2, start: rel(e), orig: sh }) }}
+                  style={{ position: 'absolute', right: -6, bottom: -6, width: 14, height: 14, borderRadius: '50%', background: '#fff', border: '3px solid #7c3aed', cursor: 'nwse-resize' }} />
+              )}
             </div>
           )
         })}
       </div>
-      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool, choose colour / thickness / opacity, then draw on the drawing. For Text, drag out a box and type in it (set size, bold, underline). Use Select then double-click a text box to edit it, or Delete selected to remove a mark. Markup saves per page - remember to Save markup.</div>}
+      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Draw with a tool, or use Select to edit: click a mark to select it, drag it to move, drag its end/corner handles to resize or reshape, and use the colour / thickness / text controls to restyle it. Double-click a text box to edit its words. Delete selected removes a mark. Markup saves per page - remember to Save markup.</div>}
     </div>
   )
 }
 
-function Shape({ sh, selected, onClick }) {
+function Shape({ sh, selected, tool, canEdit, onSelect, onStartMove, onStartHandle }) {
   const S = 1000
   const stroke = sh.colour || '#dc2626'
-  const common = { stroke, strokeWidth: (sh.width || 3), opacity: sh.opacity ?? 1, fill: 'none', style: { cursor: 'pointer' }, onClick }
+  const editable = canEdit && tool === 'select'
+  // In select mode, pressing on the shape body starts a move (and selects it).
+  const bodyDown = (e) => { if (editable) onStartMove(e) }
+  const cursor = editable ? (selected ? 'move' : 'pointer') : 'pointer'
+  const common = { stroke, strokeWidth: (sh.width || 3), opacity: sh.opacity ?? 1, fill: 'none', onMouseDown: bodyDown, onTouchStart: bodyDown, onClick: onSelect, style: { cursor } }
   const sel = selected ? { filter: 'drop-shadow(0 0 2px #7c3aed)' } : {}
-  if (sh.type === 'text') return null  // text boxes render as HTML overlays, not SVG
-  if (sh.type === 'free') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} {...common} strokeLinejoin="round" strokeLinecap="round" style={{ ...common.style, ...sel }} />
-  if (sh.type === 'highlight') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} stroke={stroke} strokeWidth={sh.width || 16} opacity={sh.opacity ?? 0.35} fill="none" strokeLinejoin="round" strokeLinecap="round" onClick={onClick} style={{ cursor: 'pointer', ...sel }} />
-  if (sh.type === 'rect') { const x = Math.min(sh.x1, sh.x2) * S, y = Math.min(sh.y1, sh.y2) * S, w = Math.abs(sh.x2 - sh.x1) * S, h = Math.abs(sh.y2 - sh.y1) * S; return <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel }} /> }
-  if (sh.type === 'circle') { const cx = (sh.x1 + sh.x2) / 2 * S, cy = (sh.y1 + sh.y2) / 2 * S, rx = Math.abs(sh.x2 - sh.x1) / 2 * S, ry = Math.abs(sh.y2 - sh.y1) / 2 * S; return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...common} style={{ ...common.style, ...sel }} /> }
+  if (sh.type === 'text') return null
+
+  // A fat invisible hit-line makes thin lines/arrows easy to grab.
+  const hit = (children) => <g>{children}</g>
+
+  if (sh.type === 'free' || sh.type === 'highlight') {
+    const pts = (sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')
+    const isHl = sh.type === 'highlight'
+    return hit(<>
+      <polyline points={pts} stroke="transparent" strokeWidth={Math.max((sh.width || 3) + 14, 18)} fill="none" onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+      <polyline points={pts} stroke={stroke} strokeWidth={isHl ? (sh.width || 16) : (sh.width || 3)} opacity={isHl ? (sh.opacity ?? 0.35) : (sh.opacity ?? 1)} fill="none" strokeLinejoin="round" strokeLinecap="round" style={{ ...sel, pointerEvents: 'none' }} />
+    </>)
+  }
+  if (sh.type === 'rect') {
+    const x = Math.min(sh.x1, sh.x2) * S, y = Math.min(sh.y1, sh.y2) * S, w = Math.abs(sh.x2 - sh.x1) * S, h = Math.abs(sh.y2 - sh.y1) * S
+    return hit(<>
+      <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel }} />
+      {selected && editable && cornerHandles(sh, S, onStartHandle)}
+    </>)
+  }
+  if (sh.type === 'circle') {
+    const cx = (sh.x1 + sh.x2) / 2 * S, cy = (sh.y1 + sh.y2) / 2 * S, rx = Math.abs(sh.x2 - sh.x1) / 2 * S, ry = Math.abs(sh.y2 - sh.y1) / 2 * S
+    return hit(<>
+      <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...common} style={{ ...common.style, ...sel }} />
+      {selected && editable && cornerHandles(sh, S, onStartHandle)}
+    </>)
+  }
+  // line / arrow
   const marker = sh.type === 'arrow' ? { markerEnd: 'url(#arrowhead)' } : {}
-  return <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} {...common} {...marker} strokeLinecap="round" style={{ ...common.style, ...sel }} />
+  return hit(<>
+    <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} stroke="transparent" strokeWidth={16} onMouseDown={bodyDown} onTouchStart={bodyDown} onClick={onSelect} style={{ cursor }} />
+    <line x1={sh.x1 * S} y1={sh.y1 * S} x2={sh.x2 * S} y2={sh.y2 * S} {...common} {...marker} strokeLinecap="round" style={{ ...common.style, ...sel, pointerEvents: 'none' }} />
+    {selected && editable && <>
+      {endHandle(sh.x1 * S, sh.y1 * S, (e) => onStartHandle(e, 1))}
+      {endHandle(sh.x2 * S, sh.y2 * S, (e) => onStartHandle(e, 2))}
+    </>}
+  </>)
+}
+
+// Draggable endpoint handle (for lines/arrows).
+function endHandle(cx, cy, onDown) {
+  return <circle cx={cx} cy={cy} r={11} fill="#fff" stroke="#7c3aed" strokeWidth={3}
+    onMouseDown={onDown} onTouchStart={onDown} style={{ cursor: 'crosshair' }} />
+}
+// Two opposite corner handles for rect/circle (handle 1 = x1/y1 corner, 2 = x2/y2 corner).
+function cornerHandles(sh, S, onStartHandle) {
+  return <>
+    {endHandle(sh.x1 * S, sh.y1 * S, (e) => onStartHandle(e, 1))}
+    {endHandle(sh.x2 * S, sh.y2 * S, (e) => onStartHandle(e, 2))}
+  </>
 }
 
 function id() { return `m_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` }
