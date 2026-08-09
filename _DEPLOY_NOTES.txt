@@ -1,18 +1,42 @@
-DEPLOY NOTES - Tech Sub: clarify approval visibility for internal staff
-=======================================================================
+DEPLOY NOTES - Handover Docs (replaces Contract Drawings)
+=========================================================
 
-ONE file, an EDIT - just replace it.
-  pages/design/[project]/tech-sub.js
+FIVE files. THREE are NEW (add via GitHub "Add file"), TWO are EDITS.
 
-CONTEXT
-  The approval WAS still on the latest revision - it just isn't shown to Rock Roofing
-  (internal) users, because only the assigned CUSTOMER can approve (as requested). Logged
-  in as the customer, the Approve button appears on the latest/current revision as normal.
+  NEW   pages/api/design-handover-docs.js
+  NEW   pages/api/design-handover-zip.js
+  NEW   pages/design/[project]/handover-docs.js
+  EDIT  lib/designShell.js       (renames the nav item to "Handover Docs")
+  EDIT  package.json             (adds the "archiver" library - REQUIRED for zip download)
 
-THIS CHANGE
-  So it's not confusing for the internal team, Rock Roofing users now see a small
-  "Awaiting customer approval" note where the Approve button would be (on the current,
-  not-yet-approved revision) - both on the table row and in the viewer. Nothing about who
-  can actually approve has changed; this is just a clearer status for internal staff.
+*** Create the three NEW files via "Add file" -> "Create new file" at those exact paths.
+    The page path uses the literal [project] folder with square brackets. ***
+
+*** IMPORTANT - package.json: this adds one new dependency, "archiver" (used to build the
+    zip). When you commit package.json, Vercel will install it automatically on the next
+    build. Just make sure the "archiver": "^8.0.0" line is included. ***
+
+WHAT THIS IS
+  The old "Contract Drawings" tab is renamed to "Handover Docs". (Note: the old drawings
+  upload there never actually stored files - this replaces it with something that works.)
+  The old contract-drawings page/route is left in place but is no longer linked in the nav;
+  it can be deleted later.
+
+  Handover Docs:
+  - FULL WIDTH.
+  - "+ Add Section" - name a section (e.g. "O&M Manuals", "As-Builts").
+  - Within each section, "+ Upload documents" (any file type; multiple at once).
+  - Documents show as THUMBNAILS (image preview, or PDF first-page preview) - not a table.
+    Click a thumbnail to view; each has its own Download.
+  - DOWNLOADS as a single ZIP:
+      * "Download all" (top right) - everything across all sections.
+      * Tick the checkboxes on thumbnails, then "Download selected".
+      * Per section: "Select all" and "Download section".
+
+NOTES
+  - Customers can view and download; adding sections / uploading / deleting is Rock Roofing
+    (internal) only.
+  - Uses the existing Blob upload + the download proxy. The zip is built on the server and
+    streamed back, so very large sets take a few seconds.
 
 BUILD: next build -> Compiled successfully.
