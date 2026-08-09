@@ -1,44 +1,29 @@
-DEPLOY NOTES - Tech Sub page rebuilt (RFI-style) with revisions
-===============================================================
+DEPLOY NOTES - Tech Sub: multi-page viewer, approval flow, buttons
+==================================================================
 
-FIVE files. TWO are NEW (add via GitHub "Add file"), THREE are EDITS.
+THREE files, all EDITS - just replace them.
+  components/DrawingMarkup.js            (multi-page scroll + loading label)
+  pages/api/design-techsubs.js          (approval + approver notification)
+  pages/design/[project]/tech-sub.js    (approval UI, columns, buttons)
 
-  NEW   pages/api/design-techsubs.js
-  NEW   pages/api/cron/design-techsub-daily.js
-  EDIT  pages/design/[project]/tech-sub.js      (was a 5-line stub - now the full page)
-  EDIT  lib/designRfiNotify.js
-  EDIT  vercel.json                             (adds the tech-sub daily digest cron)
+CHANGES
+1. The viewer now says "Loading technical submittal" (was "Loading drawing").
 
-*** Create the two NEW files via "Add file" -> "Create new file" at those exact paths. ***
+2. MULTI-PAGE: the whole document is now scrollable - all pages stack in a scrollable
+   window (pages render as you scroll, so even a 200-page PDF stays responsive). There's
+   also a page box + Prev/Next to jump quickly. Click a page to make it the "active" page
+   for markup (it gets a purple outline); marks are saved per page.
 
-WHAT'S NEW
-  The Tech Sub page now works like the RFI page:
-  - FULL WIDTH.
-  - The old inline document preview at the top is REMOVED.
-  - A table with an "Open" button. Open shows a near-fullscreen window where you can:
-      * see COMMENTS at the top (light-blue panel, @mentions supported),
-      * mark up the document (arrows/lines/boxes/highlight/text, colour, etc.),
-      * download the document.
-  - Comments: like the RFI tracker, if there are comments people are notified in ONE email
-    at the END OF THE DAY. @mentions still get an immediate email.
-  - Unread markers: RFIs... er, Tech Subs with new comments show the orange dot + "N new"
-    on the table so you can see on login what needs reviewing (per user - clears when YOU
-    open it).
+3. APPROVAL:
+   - New "Approval" column: "To Be Approved" (orange) or "Approved" (green).
+   - When you upload a Tech Sub (or a new revision), you must first pick the CUSTOMER who
+     needs to approve it. They are emailed to review / comment / approve.
+   - An "Approve" button appears on the table row and in the viewer. The assigned customer
+     (or internal staff) can approve; once approved it shows who approved it, and the team
+     is emailed.
+   - Making a new revision resets it to "To Be Approved" and re-notifies the approver.
 
-  REVISIONS
-  - "+ Add Tech Sub" uploads a brand-new tech sub (starts at Rev A). You can add as many
-    separate tech subs as you like.
-  - Each row has an "Add revision" button. Uploading a revision creates the next letter
-    (Rev A -> Rev B -> Rev C ...) for THAT tech sub only. The previous revision is marked
-    "Superseded" but keeps its letter; other tech subs are untouched.
-  - New "Revision" column, plus a Status column (Current / Superseded). One row per
-    revision (all shown).
-
-NOTES
-  - vercel.json gains one cron: design-techsub-daily at 18:00 (end-of-day comment digest).
-    You're on Vercel Pro so this is fine. Check Vercel -> Cron Jobs after deploying.
-  - Uses the existing Resend + Blob setup. Existing Tech Subs uploaded via the old page
-    (stored as "design-files") are NOT migrated - this is a fresh Tech Sub store. Re-upload
-    any current tech subs through the new "+ Add Tech Sub" button.
+4. Buttons: "Add revision" is now "Add New Revision", and "Open" is now a solid button so
+   it's clearly separate from the other row actions.
 
 BUILD: next build -> Compiled successfully.

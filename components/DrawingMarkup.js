@@ -33,7 +33,7 @@ function toMap(initial) {
   return {}
 }
 
-export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit, onSave, fileName }) {
+export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit, onSave, fileName, docLabel = 'drawing' }) {
   const isImg = isImageUrl(imageUrl, contentType)
   const [map, setMap] = useState(() => toMap(initial))
   const [page, setPage] = useState(1)
@@ -54,10 +54,14 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
   const wrapRef = useRef()
   const canvasHolderRef = useRef()
   const pdfDocRef = useRef(null)
+  const scrollRef = useRef()
+  const pageEls = useRef({})
 
   useEffect(() => { setMap(toMap(initial)); setPage(1); setDirty(false) }, [imageUrl])
 
-  // Load + render PDF page.
+  // Load the PDF doc + render ALL pages, stacked, so the whole document can be scrolled.
+  // Pages render lazily (only when scrolled near) to stay light on big documents. The
+  // markup overlay attaches to whichever page is "active" (the last one you clicked).
   useEffect(() => {
     if (isImg) return
     let cancelled = false
@@ -77,25 +81,37 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
           if (cancelled) return
           setNumPages(pdfDocRef.current.numPages)
         }
-        const pdf = pdfDocRef.current
-        const pg = await pdf.getPage(page)
-        if (cancelled) return
-        const holder = canvasHolderRef.current; if (!holder) return
-        holder.innerHTML = ''
-        const maxW = Math.min(holder.clientWidth || 1000, 1400)
-        const vp0 = pg.getViewport({ scale: 1 })
-        const scale = (maxW / vp0.width) * (window.devicePixelRatio || 1)
-        const viewport = pg.getViewport({ scale })
-        const canvas = document.createElement('canvas')
-        canvas.width = viewport.width; canvas.height = viewport.height
-        canvas.style.width = '100%'; canvas.style.height = 'auto'; canvas.style.display = 'block'
-        holder.appendChild(canvas)
-        await pg.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
         if (!cancelled) setPdfState('ok')
       } catch { if (!cancelled) setPdfState('failed') }
     })()
     return () => { cancelled = true }
-  }, [imageUrl, page, isImg])
+  }, [imageUrl, isImg])
+
+  // Render a single page's canvas into its holder (called lazily per page).
+  const renderPageCanvas = async (pageNo, holder) => {
+    try {
+      const pdf = pdfDocRef.current; if (!pdf || !holder || holder.dataset.rendered) return
+      holder.dataset.rendered = '1'
+      const pg = await pdf.getPage(pageNo)
+      const maxW = Math.min(holder.clientWidth || 1000, 1400)
+      const vp0 = pg.getViewport({ scale: 1 })
+      const scale = (maxW / vp0.width) * (window.devicePixelRatio || 1)
+      const viewport = pg.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width; canvas.height = viewport.height
+      canvas.style.width = '100%'; canvas.style.height = 'auto'; canvas.style.display = 'block'
+      holder.appendChild(canvas)
+      await pg.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    } catch { holder.dataset.rendered = '' }
+  }
+
+  // Set the active page (for markup) and scroll the stack to it.
+  const gotoPage = (pn) => {
+    const p = Math.max(1, Math.min(numPages, pn))
+    setPage(p); setSelected(null)
+    const el = pageEls.current[p]
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const shapes = map[page] || []
   const setShapes = (updater) => {
@@ -257,37 +273,69 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
       )}
 
       {!isImg && numPages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} style={ghost}>‹ Prev</button>
-          <span style={{ fontSize: 13, color: '#666' }}>Page {page} of {numPages}</span>
-          <button onClick={() => setPage(p => Math.min(numPages, p + 1))} disabled={page >= numPages} style={ghost}>Next ›</button>
-          {(map[page] || []).length > 0 && <span style={{ fontSize: 11.5, color: '#9333ea', fontWeight: 600 }}>{(map[page] || []).length} mark(s) on this page</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+          <button onClick={() => gotoPage(page - 1)} disabled={page <= 1} style={ghost}>‹ Prev</button>
+          <span style={{ fontSize: 13, color: '#666' }}>Page
+            <input type="number" min={1} max={numPages} value={page}
+              onChange={e => { const v = Math.max(1, Math.min(numPages, Number(e.target.value) || 1)); gotoPage(v) }}
+              style={{ width: 54, margin: '0 6px', padding: '3px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 13 }} />
+            of {numPages}</span>
+          <button onClick={() => gotoPage(page + 1)} disabled={page >= numPages} style={ghost}>Next ›</button>
+          {(map[page] || []).length > 0 && <span style={{ fontSize: 11.5, color: '#9333ea', fontWeight: 600 }}>{(map[page] || []).length} mark(s) on active page</span>}
         </div>
       )}
 
-      <div ref={wrapRef} onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up}
-        onTouchStart={down} onTouchMove={move} onTouchEnd={up}
-        style={{ position: 'relative', width: '100%', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden', touchAction: 'none', background: '#f4f4f4', minHeight: isImg ? 0 : 200 }}>
-        {isImg
-          ? <img src={imageUrl} alt="drawing" style={{ display: 'block', width: '100%', pointerEvents: 'none' }} />
-          : <div ref={canvasHolderRef} style={{ width: '100%' }} />}
-        {pdfState === 'loading' && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>Loading drawing…</div>}
-        {pdfState === 'failed' && <div style={{ padding: 40, textAlign: 'center', color: '#bbb' }}>Couldn't render this drawing - use Download to view it.</div>}
-        {pdfState === 'ok' && (
-          <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-            <defs>
-              <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
-                <polygon points="0 0, 10 4, 0 8" fill="context-stroke" />
-              </marker>
-            </defs>
-            {all.filter(sh => sh.type !== 'text').map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} tool={tool} canEdit={canEdit}
-              onSelect={() => { if (canEdit && tool === 'select') setSelected(sh.id) }}
-              onStartMove={(e) => startMove(e, sh)} onStartHandle={(e, h) => startHandle(e, sh, h)} />)}
-          </svg>
-        )}
-        {/* Text boxes as HTML overlays (crisp fonts, native editing) */}
-        {pdfState === 'ok' && all.filter(sh => sh.type === 'text').map(sh => {
-          // Support legacy text shapes that only had a single x/y point.
+      {isImg ? (
+        <div ref={wrapRef} onMouseDown={down} onMouseMove={move} onMouseUp={up} onMouseLeave={up}
+          onTouchStart={down} onTouchMove={move} onTouchEnd={up}
+          style={{ position: 'relative', width: '100%', border: '1px solid #ddd', borderRadius: 8, overflow: 'hidden', touchAction: 'none', background: '#f4f4f4' }}>
+          <img src={imageUrl} alt={docLabel} style={{ display: 'block', width: '100%', pointerEvents: 'none' }} />
+          <Overlay />
+        </div>
+      ) : pdfState === 'loading' ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#bbb', border: '1px solid #ddd', borderRadius: 8 }}>Loading {docLabel}…</div>
+      ) : pdfState === 'failed' ? (
+        <div style={{ padding: 40, textAlign: 'center', color: '#bbb', border: '1px solid #ddd', borderRadius: 8 }}>Couldn't render this {docLabel} - use Download to view it.</div>
+      ) : (
+        <div ref={scrollRef} style={{ border: '1px solid #ddd', borderRadius: 8, background: '#f4f4f4', overflow: 'auto', maxHeight: '70vh' }}>
+          {Array.from({ length: numPages }, (_, i) => i + 1).map(pn => {
+            const isActive = pn === page
+            return (
+              <div key={pn} data-page={pn} ref={el => { pageEls.current[pn] = el }}
+                onMouseDown={isActive ? down : undefined} onMouseMove={isActive ? move : undefined} onMouseUp={isActive ? up : undefined} onMouseLeave={isActive ? up : undefined}
+                onTouchStart={isActive ? down : undefined} onTouchMove={isActive ? move : undefined} onTouchEnd={isActive ? up : undefined}
+                onClick={() => { if (page !== pn) setPage(pn) }}
+                style={{ position: 'relative', width: '100%', margin: '0 auto 10px', touchAction: 'none', outline: isActive && canEdit ? '2px solid #a78bfa' : 'none', outlineOffset: -2 }}>
+                <div ref={el => { if (isActive) wrapRef.current = el }} style={{ position: 'relative', width: '100%' }}>
+                  <PdfPageCanvas pageNo={pn} render={renderPageCanvas} />
+                  {isActive && <Overlay />}
+                </div>
+                <div style={{ position: 'absolute', top: 4, left: 6, fontSize: 11, color: '#888', background: 'rgba(255,255,255,0.8)', borderRadius: 4, padding: '1px 6px' }}>Page {pn}{isActive && canEdit ? ' — active for markup' : ''}</div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {!isImg && canEdit && <div style={{ fontSize: 11.5, color: '#999', marginTop: 4 }}>Scroll to read all pages. Click a page to make it active, then draw on it. Markup is saved per page.</div>}
+      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool and draw - it switches back to Select automatically after each mark. With Select: click a mark to select it, drag to move, drag the handles to resize/reshape, change colour / thickness, or press Delete to remove it. Double-click a text box to edit its words. Changes save automatically.</div>}
+    </div>
+  )
+
+  // The interactive markup overlay (SVG shapes + HTML text boxes) for the active page.
+  function Overlay() {
+    return (
+      <>
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="8" refY="4" orient="auto">
+              <polygon points="0 0, 10 4, 0 8" fill="context-stroke" />
+            </marker>
+          </defs>
+          {all.filter(sh => sh.type !== 'text').map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} tool={tool} canEdit={canEdit}
+            onSelect={() => { if (canEdit && tool === 'select') setSelected(sh.id) }}
+            onStartMove={(e) => startMove(e, sh)} onStartHandle={(e, h) => startHandle(e, sh, h)} />)}
+        </svg>
+        {all.filter(sh => sh.type === 'text').map(sh => {
           const x1 = sh.x1 != null ? sh.x1 : (sh.x || 0), y1 = sh.y1 != null ? sh.y1 : (sh.y || 0)
           const x2 = sh.x2 != null ? sh.x2 : (x1 + 0.2), y2 = sh.y2 != null ? sh.y2 : (y1 + 0.06)
           const L = Math.min(x1, x2) * 100, T = Math.min(y1, y2) * 100
@@ -325,10 +373,23 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
             </div>
           )
         })}
-      </div>
-      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool and draw - it switches back to Select automatically after each mark. With Select: click a mark to select it, drag to move, drag the handles to resize/reshape, change colour / thickness, or press Delete to remove it. Double-click a text box to edit its words. Changes save automatically.</div>}
-    </div>
-  )
+      </>
+    )
+  }
+}
+
+// A single PDF page slot that renders its canvas lazily when scrolled into view.
+function PdfPageCanvas({ pageNo, render }) {
+  const ref = useRef()
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) { render(pageNo, el); io.disconnect(); break }
+    }, { rootMargin: '400px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [pageNo, render])
+  return <div ref={ref} style={{ width: '100%', minHeight: 300, background: '#fff' }} />
 }
 
 function Shape({ sh, selected, tool, canEdit, onSelect, onStartMove, onStartHandle }) {

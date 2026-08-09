@@ -14,14 +14,18 @@ export default function TechSubPage() {
   const [docs, setDocs] = useState([])
   const [people, setPeople] = useState([])
   const [canEdit, setCanEdit] = useState(false)
+  const [meId, setMeId] = useState('')
+  const [isExternal, setIsExternal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [openId, setOpenId] = useState(null)
   const [unread, setUnread] = useState([])
   const [uploading, setUploading] = useState(false)
   const [err, setErr] = useState('')
+  const [approverPick, setApproverPick] = useState(null)
   const addRef = useRef()
   const revRef = useRef()
   const revForId = useRef(null)
+  const pendingApprover = useRef('')
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
   useEffect(() => {
@@ -33,7 +37,7 @@ export default function TechSubPage() {
     setLoading(true); setErr('')
     try {
       const d = await fetch(`/api/design-techsubs?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setDocs(d.docs || []); setPeople(d.people || []); setCanEdit(!!d.canEdit); setUnread(d.unread || [])
+      setDocs(d.docs || []); setPeople(d.people || []); setCanEdit(!!d.canEdit); setUnread(d.unread || []); setMeId(d.meId || ''); setIsExternal(!!d.external)
     } catch { setErr('Could not load') }
     setLoading(false)
   }
@@ -55,10 +59,11 @@ export default function TechSubPage() {
     try {
       for (const file of Array.from(list)) {
         const blob = await uploadOne(file)
-        await fetch('/api/design-techsubs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'add', title: file.name.replace(/\.[^.]+$/, ''), file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } }) })
+        await fetch('/api/design-techsubs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'add', title: file.name.replace(/\.[^.]+$/, ''), approverId: pendingApprover.current || '', file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } }) })
       }
     } catch (e) { setErr(e && e.message ? e.message : 'Upload failed') }
     if (addRef.current) addRef.current.value = ''
+    pendingApprover.current = ''
     setUploading(false); load()
   }
   async function addRevision(list) {
@@ -68,13 +73,29 @@ export default function TechSubPage() {
     try {
       const file = list[0]
       const blob = await uploadOne(file)
-      await fetch('/api/design-techsubs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'add-revision', id: forId, file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } }) })
+      await fetch('/api/design-techsubs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'add-revision', id: forId, approverId: pendingApprover.current || '', file: { name: file.name, url: blob.url, contentType: file.type || '', size: file.size } }) })
     } catch (e) { setErr(e && e.message ? e.message : 'Upload failed') }
     if (revRef.current) revRef.current.value = ''
-    revForId.current = null
+    revForId.current = null; pendingApprover.current = ''
     setUploading(false); load()
   }
-  function triggerRevision(id) { revForId.current = id; if (revRef.current) revRef.current.click() }
+  // Approver must be chosen before the file picker opens.
+  function startAdd() { setApproverPick({ mode: 'add', approverId: '' }) }
+  function startRevision(id) { setApproverPick({ mode: 'revision', id, approverId: docFor(id)?.approverId || '' }) }
+  function confirmApprover() {
+    const p = approverPick; if (!p) return
+    pendingApprover.current = p.approverId || ''
+    setApproverPick(null)
+    if (p.mode === 'add') { if (addRef.current) addRef.current.click() }
+    else { revForId.current = p.id; if (revRef.current) revRef.current.click() }
+  }
+  const docFor = (id) => docs.find(d => d.id === id)
+  async function approve(id) {
+    if (!confirm('Approve this Tech Sub?')) return
+    const r = await fetch('/api/design-techsubs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'approve', id }) })
+    const d = await r.json()
+    if (r.ok) setDocs(ds => ds.map(x => x.id === id ? d.doc : x)); else alert(d.error || 'Could not approve')
+  }
 
   async function del(id) {
     if (!confirm('Delete this Tech Sub revision?')) return
@@ -97,6 +118,13 @@ export default function TechSubPage() {
   if (!auth.ready) return null
   const openDocObj = docs.find(d => d.id === openId)
   const personName = (id) => { const p = people.find(x => x.id === id); return p ? p.name : '' }
+  const customers = people.filter(p => p.external)
+  // Who can approve a given doc: the assigned customer approver, or internal staff.
+  const canApprove = (d) => {
+    if (d.approvalStatus === 'approved') return false
+    if (isExternal) return d.approverId === meId
+    return canEdit
+  }
 
   return (
     <>
@@ -110,7 +138,7 @@ export default function TechSubPage() {
             <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>Tech Sub</h1>
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>Technical submissions. {canEdit ? 'Upload, revise, mark up and comment.' : 'View, mark up and comment.'}</p>
           </div>
-          {canEdit && <button onClick={() => addRef.current && addRef.current.click()} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Tech Sub'}</button>}
+          {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Tech Sub'}</button>}
         </div>
         {err && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}
 
@@ -118,7 +146,7 @@ export default function TechSubPage() {
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead><tr style={{ background: '#faf9f7' }}>
-                {['Tech Sub', 'Revision', 'Status', 'Uploaded by', 'Date', 'Comments', ''].map(h => <th key={h} style={th}>{h}</th>)}
+                {['Tech Sub', 'Revision', 'Status', 'Approval', 'Uploaded by', 'Date', 'Comments', ''].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {docs.map(d => {
@@ -133,30 +161,54 @@ export default function TechSubPage() {
                       <td style={td}>{d.superseded
                         ? <span style={{ color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Superseded</span>
                         : <span style={{ color: '#16a34a', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Current</span>}</td>
+                      <td style={td}>{d.approvalStatus === 'approved'
+                        ? <span style={{ color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#10003; Approved</span>
+                        : <span style={{ color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved</span>}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{d.uploadedBy || '-'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtDate(d.uploadedAt)}</td>
                       <td style={td}>{(d.comments || []).length ? <span style={{ fontWeight: isUnread ? 700 : 400, color: isUnread ? '#c2410c' : undefined }}>{(d.comments || []).length}{isUnread ? ' new' : ''}</span> : '-'}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <button onClick={() => openDoc(d.id)} style={linkBtn}>Open</button>
-                        {canEdit && !d.superseded && <button onClick={() => triggerRevision(d.id)} style={linkBtn}>Add revision</button>}
+                        <button onClick={() => openDoc(d.id)} style={btnOpen}>Open</button>
+                        {d.approvalStatus !== 'approved' && (canApprove(d)) && <button onClick={() => approve(d.id)} style={btnApprove}>Approve</button>}
+                        {canEdit && !d.superseded && <button onClick={() => startRevision(d.id)} style={linkBtn}>Add New Revision</button>}
                         {canEdit && <button onClick={() => del(d.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
                       </td>
                     </tr>
                   )
                 })}
-                {!docs.length && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 26 }}>No Tech Subs yet.</td></tr>}
+                {!docs.length && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 26 }}>No Tech Subs yet.</td></tr>}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {openDocObj && <TechSubViewer doc={openDocObj} people={people} personName={personName} onClose={() => setOpenId(null)} onComment={addComment} onMarkup={saveMarkup} />}
+      {openDocObj && <TechSubViewer doc={openDocObj} people={people} personName={personName} onClose={() => setOpenId(null)} onComment={addComment} onMarkup={saveMarkup}
+        canApprove={canApprove(openDocObj)} onApprove={() => approve(openDocObj.id)} approverName={personName(openDocObj.approverId)} />}
+
+      {approverPick && (
+        <div onClick={() => setApproverPick(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 440, maxWidth: '92vw' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 17, color: INK }}>{approverPick.mode === 'add' ? 'Add Tech Sub' : 'Add New Revision'}</h3>
+            <p style={{ fontSize: 13, color: '#8a857c', marginTop: 0 }}>Choose the customer who needs to review and approve this Tech Sub. They'll be emailed to review, comment or approve it.</p>
+            <label style={{ fontSize: 12, color: '#888', fontWeight: 600 }}>Approver (customer)</label>
+            <select value={approverPick.approverId} onChange={e => setApproverPick({ ...approverPick, approverId: e.target.value })} style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, marginTop: 4 }}>
+              <option value="">Select a customer...</option>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            {customers.length === 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 6 }}>No customer users are assigned to this project yet. Add one in Admin, or continue without an approver.</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button onClick={() => setApproverPick(null)} style={btnGhost}>Cancel</button>
+              <button onClick={confirmApprover} style={btnPrimary}>Choose file...</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
 
-function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup }) {
+function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, canApprove, onApprove, approverName }) {
   const isViewable = (doc.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(doc.url || '') || (doc.contentType || '') === 'application/pdf'
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '2vh 2vw' }}>
@@ -166,8 +218,12 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup }
             <span style={{ fontSize: 17, fontWeight: 700, color: INK }}>{doc.title || doc.name}</span>
             <span style={{ marginLeft: 10, fontWeight: 700, color: '#4338ca', background: '#eef2ff', borderRadius: 6, padding: '2px 8px', fontSize: 13 }}>Rev {doc.revision}</span>
             {doc.superseded && <span style={{ marginLeft: 8, color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Superseded</span>}
+            {doc.approvalStatus === 'approved'
+              ? <span style={{ marginLeft: 8, color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#10003; Approved{doc.approvedBy ? ` by ${doc.approvedBy}` : ''}</span>
+              : <span style={{ marginLeft: 8, color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved{approverName ? ` (${approverName})` : ''}</span>}
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {canApprove && <button onClick={onApprove} style={btnApprove}>Approve</button>}
             <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
           </div>
@@ -193,7 +249,7 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup }
           </div>
 
           {isViewable
-            ? <DrawingMarkup key={doc.url} imageUrl={doc.url} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} />
+            ? <DrawingMarkup key={doc.url} imageUrl={doc.url} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="technical submittal" />
             : <div style={{ padding: 24, textAlign: 'center', color: '#888', background: '#faf9fd', borderRadius: 10 }}>This file type can't be previewed - use Download to view it.</div>}
         </div>
       </div>
@@ -242,5 +298,7 @@ function CommentBox({ people, onSubmit }) {
 const th = { textAlign: 'left', padding: '10px 12px', fontSize: 12, color: '#8a857c', fontWeight: 600, whiteSpace: 'nowrap' }
 const td = { padding: '10px 12px', verticalAlign: 'middle' }
 const linkBtn = { background: 'none', border: 'none', color: PURPLE, cursor: 'pointer', fontSize: 13, marginLeft: 12, fontWeight: 600 }
+const btnOpen = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 6 }
+const btnApprove = { background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 8 }
 const btnPrimary = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }
 const btnGhost = { background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }

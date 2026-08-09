@@ -67,6 +67,23 @@ const revLetter = (n) => {
 const tsLink = (no, id) => `${APP_URL}/design/${encodeURIComponent(no)}/tech-sub?open=${encodeURIComponent(id)}`
 const rid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 
+// Email the assigned customer approver that a Tech Sub needs their review/approval.
+async function notifyApprover(no, doc) {
+  try {
+    if (!doc.approverId) return
+    const people = await peopleFor(no)
+    const approver = people.find(p => p.id === doc.approverId)
+    if (!approver || !approver.email) return
+    const pname = await projectDisplayName(no)
+    await sendRfiCommentNotice({
+      to: approver.email, recipientName: approver.name, projectNo: no, projectName: pname,
+      rfiNumber: `${doc.title} (Rev ${doc.revision})`, authorName: doc.uploadedBy,
+      commentHtml: `A Tech Sub has been uploaded and needs your review. Please <strong>review, comment or approve</strong> it.`,
+      rfiLink: tsLink(no, doc.id), mentioned: false,
+    })
+  } catch (e) { /* ignore */ }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
@@ -140,10 +157,35 @@ export default async function handler(req, res) {
     return res.json({ ok: true, doc: docs[i] })
   }
 
+  // Approve a tech sub. Allowed for the assigned customer approver, and for internal staff.
+  if (body.action === 'approve') {
+    const i = idx(body.id)
+    if (i < 0) return res.status(404).json({ error: 'Tech Sub not found' })
+    if (acc.external && docs[i].approverId && docs[i].approverId !== acc.user.id) {
+      return res.status(403).json({ error: 'Only the assigned approver can approve this Tech Sub.' })
+    }
+    docs[i].approvalStatus = 'approved'
+    docs[i].approvedAt = Date.now()
+    docs[i].approvedBy = acc.user.name || 'User'
+    await set(tsKey(no), docs)
+    // Let the team know it was approved.
+    try {
+      const people = await peopleFor(no)
+      const pname = await projectDisplayName(no)
+      const link = tsLink(no, docs[i].id)
+      for (const p of people) {
+        if (p.external || !p.email) continue
+        await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This Tech Sub has been approved by ${docs[i].approvedBy}.`, rfiLink: link, mentioned: false })
+      }
+    } catch (e) { /* ignore */ }
+    return res.json({ ok: true, doc: docs[i] })
+  }
+
   // Everything below is internal-only.
   if (!acc.canEdit) return res.status(403).json({ error: 'View/comment only' })
 
-  // Add a brand-new tech sub (its own family, starting at Rev A).
+  // Add a brand-new tech sub (its own family, starting at Rev A). Requires an approver
+  // (a customer user who must review/approve it).
   if (body.action === 'add') {
     const f = body.file || {}
     if (!f.url) return res.status(400).json({ error: 'No file' })
@@ -153,9 +195,11 @@ export default async function handler(req, res) {
       name: f.name || 'Tech Sub', url: f.url, contentType: f.contentType || '', size: f.size || 0,
       uploadedBy: acc.user.name || 'User', uploadedAt: Date.now(),
       superseded: false, markup: null, comments: [],
+      approverId: body.approverId || '', approvalStatus: 'pending', approvedAt: 0, approvedBy: '',
     }
     docs = [doc, ...docs]
     await set(tsKey(no), docs)
+    await notifyApprover(no, doc)
     return res.json({ ok: true, docs })
   }
 
@@ -178,9 +222,11 @@ export default async function handler(req, res) {
       name: f.name || base.title, url: f.url, contentType: f.contentType || '', size: f.size || 0,
       uploadedBy: acc.user.name || 'User', uploadedAt: Date.now(),
       superseded: false, markup: null, comments: [],
+      approverId: body.approverId || base.approverId || '', approvalStatus: 'pending', approvedAt: 0, approvedBy: '',
     }
     docs = [doc, ...docs]
     await set(tsKey(no), docs)
+    await notifyApprover(no, doc)
     return res.json({ ok: true, docs })
   }
 
