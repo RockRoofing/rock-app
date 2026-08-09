@@ -1,39 +1,12 @@
-DEPLOY NOTES - Design emails: fix + diagnostics (supersedes previous design-email package)
-==========================================================================================
+DEPLOY NOTES - Design portal: hide "Back to Portal" from customers
+==================================================================
 
-SIX files. TWO are NEW (add via GitHub "Add file"), FOUR are EDITS.
+ONE file, an EDIT - just replace it.
+  pages/design/index.js
 
-  NEW   lib/designEmail.js                     (replace if you already added it from before)
-  NEW   pages/api/design-email-test.js
-  EDIT  pages/api/design-customers.js
-  EDIT  pages/api/design-rfis.js
-  EDIT  pages/admin/design-customers.js
-  EDIT  pages/design/[project]/rfis.js
-
-(If you already deployed the previous package, lib/designEmail.js already exists - just
- replace its contents with this version. design-email-test.js is brand new.)
-
-WHY IT WASN'T SENDING
-  The most likely cause: the design emails used a different "from" address env var
-  (NOTIFY_FROM_EMAIL) than the rest of the app. Every other working email uses
-  FORMS_FROM_EMAIL - the address whose domain is verified in Resend. If NOTIFY_FROM_EMAIL
-  was unset or pointed at an unverified domain, Resend rejects every send. This package
-  switches the design emails to use FORMS_FROM_EMAIL first, exactly like the working
-  Portal-login email.
-
-HOW TO CONFIRM (do this first after deploying)
-  Log in as an admin and visit:
-     https://app.rockroofing.co.uk/api/design-email-test?to=YOUR_EMAIL@rockroofing.co.uk
-  It returns a small JSON showing:
-     - hasResendKey: true/false   (is RESEND_API_KEY set?)
-     - which FROM address it used
-     - sent: true/false, and the exact error if it failed
-  This tells us definitively whether email works and, if not, why (e.g. "domain not
-  verified", "invalid from"). Send me that JSON if it still fails.
-
-ALSO IN THIS PACKAGE
-  - RFI comment notifications now report back: if a notification email fails, the person
-    commenting sees a short message with the reason (instead of it failing silently).
-  - Customer login email + "Resend login email" button as before.
+CHANGE
+  On the Design portal project-list page, the "<- Portal" link (which goes to the internal
+  main portal) is now hidden for external CUSTOMER logins. Internal staff still see it and
+  can jump back to the main portal as before. Customers just see "Design".
 
 BUILD: next build -> Compiled successfully.

@@ -25,8 +25,10 @@ export default function DesignHome() {
       <Head><title>Design Portal - Rock Roofing</title></Head>
       <div style={{ background: '#1a1a19', padding: '0 20px', display: 'flex', alignItems: 'center', height: 52 }}>
         <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 30, width: 30, borderRadius: 4, marginRight: 8 }} />
-        <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>&lt;- Portal</a>
-        <span style={{ color: '#3a3a38', padding: '0 2px' }}>|</span>
+        {!auth.isExternal && <>
+          <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>&lt;- Portal</a>
+          <span style={{ color: '#3a3a38', padding: '0 2px' }}>|</span>
+        </>}
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>Design</span>
       </div>
 
