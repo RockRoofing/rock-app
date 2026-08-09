@@ -1,18 +1,45 @@
-DEPLOY NOTES - Rock Drawings: bulk "Approve selected"
-=====================================================
+DEPLOY NOTES - Approval evidence: audit log + certificate PDF
+=============================================================
 
-TWO files, both EDITS - just replace them.
-  pages/api/design-rock-drawings.js
-  pages/design/[project]/rock-drawings.js
+SIX files. TWO are NEW (add via GitHub "Add file"), FOUR are EDITS.
 
-WHAT'S NEW (this was NOT previously built)
-  - When a CUSTOMER ticks multiple drawings, an "Approve selected (N)" button now appears at
-    the top. It approves all the ticked drawings they are the assigned approver for, in one
-    click. The (N) shows how many of their ticks they can actually approve.
-  - It only approves drawings that are theirs to approve and are still In Review - it quietly
-    skips any that are superseded, already approved, or assigned to a different approver.
-  - Each approval still records the full digital record (name / company / role / email /
-    phone / date+time) and notifies the Rock Roofing team.
-  - The button only shows to customers (Rock Roofing staff never approve).
+  NEW   lib/approvalAudit.js
+  NEW   pages/api/design-approval-audit.js
+  EDIT  pages/api/design-rock-drawings.js
+  EDIT  pages/api/design-techsubs.js
+  EDIT  pages/design/[project]/rock-drawings.js
+  EDIT  pages/design/[project]/tech-sub.js
+
+*** Create the two NEW files via "Add file" at those exact paths. ***
+
+WHAT THIS ADDS (applies to Rock Drawings AND Tech Subs)
+  Every approval now produces proper dispute evidence:
+
+  1. APPEND-ONLY AUDIT LOG. Each approval is written to a separate log
+     (design:approval-audit:<project>) that is only ever added to - never edited or
+     deleted. So even if a drawing/tech sub is later changed or deleted, the record that it
+     was approved (by whom, when, which revision, with the file fingerprint) survives.
+     Internal staff can read it via /api/design-approval-audit?no=<projectNo>.
+
+  2. FILE FINGERPRINT (SHA-256). At the moment of approval we hash the actual file bytes.
+     This proves WHICH version was approved - any change to the file would give a different
+     fingerprint, so nobody can later claim a different file was signed off.
+
+  3. APPROVAL CERTIFICATE PDF. A timestamped certificate is generated automatically on
+     approval and stored. It names the project, item, revision, file + fingerprint, the
+     approver (name, company, role, email, phone, account ID) and the exact date/time. It's
+     downloadable from the green approval panel in the viewer ("Download approval
+     certificate (PDF)").
+
+  The existing on-screen record still shows who/when; this adds the fingerprint line and
+  the certificate download, plus the behind-the-scenes immutable log.
+
+NOTES
+  - Uses pdf-lib (already installed) and @vercel/blob (already used) - no new dependencies.
+  - Certificates are stored in Blob under approvals/. The file fingerprint + audit entry
+    are the primary evidence; the emails everyone already receives on approval remain a
+    second, external record.
+  - Existing approvals (approved before this deploys) won't have a certificate/fingerprint
+    retroactively - only approvals made from now on.
 
 BUILD: next build -> Compiled successfully.

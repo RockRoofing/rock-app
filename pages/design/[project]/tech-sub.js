@@ -267,6 +267,8 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
                 <div><strong>Phone:</strong> {doc.approvalRecord.phone || '-'}</div>
                 <div><strong>Revision:</strong> Rev {doc.revision}</div>
                 <div style={{ gridColumn: '1 / -1' }}><strong>Date &amp; time:</strong> {doc.approvalRecord.atText || new Date(doc.approvalRecord.at).toLocaleString('en-GB')}</div>
+                {doc.approvalRecord.fileHash && <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#4d7c5a', wordBreak: 'break-all' }}><strong>File fingerprint:</strong> {doc.approvalRecord.fileHash}</div>}
+                {doc.approvalRecord.certificateUrl && <div style={{ gridColumn: '1 / -1', marginTop: 4 }}><a href={doc.approvalRecord.certificateUrl} target="_blank" rel="noreferrer" style={{ color: '#15803d', fontWeight: 700, fontSize: 13 }}>Download approval certificate (PDF)</a></div>}
               </div>
             </div>
           )}

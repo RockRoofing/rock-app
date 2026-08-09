@@ -5,6 +5,7 @@ import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { rdRecordPendingComment, rdGetReadMap, rdMarkRead, rdUnread, projectDisplayName } from '../../lib/designRfiNotify'
+import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 
 // Rock Drawings for a project. Each drawing is a REVISION in a "family". Revisions are
 // lettered Rev A, B, C ...; only the newest is current, older ones are superseded (kept,
@@ -68,6 +69,25 @@ const isImg = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png
 const rdLink = (no, id) => `${APP_URL}/design/${encodeURIComponent(no)}/rock-drawings?open=${encodeURIComponent(id)}`
 const rid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 const esc0 = (s) => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+// Write the immutable audit entry + generate the approval certificate for one drawing.
+// Returns { certificateUrl, fileHash, eventId }.
+async function recordAndCertify(no, projectName, doc, approver) {
+  const fileHash = await hashFileAtUrl(doc.url)
+  const evt = await recordApprovalEvent(no, {
+    kind: 'drawing', event: 'approved', projectNo: no, projectName,
+    itemTitle: doc.title, revision: doc.revision, docId: doc.id, familyId: doc.familyId,
+    fileName: doc.name, fileUrl: doc.url, fileHash,
+    approver: { name: approver.name || '', email: approver.email || '', phone: approver.phone || '', company: approver.company || '', role: approver.role || 'Customer', userId: approver.userId },
+    atText: doc.approvalRecord?.atText || '',
+  })
+  const certificateUrl = await generateAndStoreCertificate({
+    kind: 'drawing', projectNo: no, projectName, item: doc.title, revision: doc.revision,
+    fileName: doc.name, fileHash, approver: { name: approver.name, company: approver.company, role: approver.role || 'Customer', email: approver.email, phone: approver.phone, userId: approver.userId },
+    atText: doc.approvalRecord?.atText || '', ts: evt.ts, eventId: evt.id,
+  })
+  return { certificateUrl, fileHash, eventId: evt.id }
+}
 
 async function notifyApprover(no, doc) {
   try {
@@ -165,6 +185,14 @@ export default async function handler(req, res) {
     docs[i].approvedAt = now
     docs[i].approvedBy = ext.name || acc.user.name || 'Customer'
     docs[i].approvalRecord = { name: ext.name || '', email: ext.email || '', phone: ext.phone || '', company: ext.company || '', role: ext.role || 'Customer', userId: acc.user.id, at: now, atText: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', dateStyle: 'full', timeStyle: 'long' }).format(new Date(now)) }
+    // Immutable audit entry + timestamped certificate (evidence for disputes).
+    try {
+      const pname0 = await projectDisplayName(no)
+      const { certificateUrl, fileHash, eventId } = await recordAndCertify(no, pname0, docs[i], { ...ext, userId: acc.user.id })
+      docs[i].approvalRecord.certificateUrl = certificateUrl
+      docs[i].approvalRecord.fileHash = fileHash
+      docs[i].approvalRecord.auditId = eventId
+    } catch (e) { /* audit failure must not block the approval */ }
     await set(RKEY(no), docs)
     try {
       const people = await peopleFor(no)
@@ -194,6 +222,16 @@ export default async function handler(req, res) {
       approvedNow.push(d)
     }
     if (approvedNow.length) {
+      // Immutable audit entry + certificate for each approved drawing.
+      try {
+        const pname0 = await projectDisplayName(no)
+        for (const d of approvedNow) {
+          const { certificateUrl, fileHash, eventId } = await recordAndCertify(no, pname0, d, { ...ext, userId: acc.user.id })
+          d.approvalRecord.certificateUrl = certificateUrl
+          d.approvalRecord.fileHash = fileHash
+          d.approvalRecord.auditId = eventId
+        }
+      } catch (e) { /* audit failure must not block approvals */ }
       await set(RKEY(no), docs)
       try {
         const people = await peopleFor(no)

@@ -5,6 +5,7 @@ import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { tsKey, tsRecordPendingComment, tsGetReadMap, tsMarkRead, tsUnread, projectDisplayName } from '../../lib/designRfiNotify'
+import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 
 // Tech Sub documents for a project. Each doc is a REVISION belonging to a "family" (one
 // tech sub). Revisions within a family are lettered REV A, REV B, ... Only the newest in a
@@ -183,6 +184,26 @@ export default async function handler(req, res) {
       at: now,
       atText: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', dateStyle: 'full', timeStyle: 'long' }).format(new Date(now)),
     }
+    // Immutable audit entry + timestamped certificate (dispute evidence).
+    try {
+      const pname0 = await projectDisplayName(no)
+      const fileHash = await hashFileAtUrl(docs[i].url)
+      const evt = await recordApprovalEvent(no, {
+        kind: 'tech-sub', event: 'approved', projectNo: no, projectName: pname0,
+        itemTitle: docs[i].title, revision: docs[i].revision, docId: docs[i].id, familyId: docs[i].familyId,
+        fileName: docs[i].name, fileUrl: docs[i].url, fileHash,
+        approver: { name: ext.name || '', email: ext.email || '', phone: ext.phone || '', company: ext.company || '', role: ext.role || 'Customer', userId: acc.user.id },
+        atText: docs[i].approvalRecord.atText,
+      })
+      const certificateUrl = await generateAndStoreCertificate({
+        kind: 'tech-sub', projectNo: no, projectName: pname0, item: docs[i].title, revision: docs[i].revision,
+        fileName: docs[i].name, fileHash, approver: { name: ext.name, company: ext.company, role: ext.role || 'Customer', email: ext.email, phone: ext.phone, userId: acc.user.id },
+        atText: docs[i].approvalRecord.atText, ts: evt.ts, eventId: evt.id,
+      })
+      docs[i].approvalRecord.certificateUrl = certificateUrl
+      docs[i].approvalRecord.fileHash = fileHash
+      docs[i].approvalRecord.auditId = evt.id
+    } catch (e) { /* audit failure must not block approval */ }
     await set(tsKey(no), docs)
     // Let the internal team know it was approved.
     try {
