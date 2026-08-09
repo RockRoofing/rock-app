@@ -1,23 +1,18 @@
-DEPLOY NOTES - Tech Sub approval: customer-only + digital record
-================================================================
+DEPLOY NOTES - Tech Sub: clarify approval visibility for internal staff
+=======================================================================
 
-TWO files, both EDITS - just replace them.
-  pages/api/design-techsubs.js
+ONE file, an EDIT - just replace it.
   pages/design/[project]/tech-sub.js
 
-CHANGES
-1. SUPERSEDED tech subs can no longer be approved - the Approve button is hidden and the
-   server rejects it.
-2. Only a CUSTOMER (the assigned approver) can approve. The Approve button is no longer
-   shown to Rock Roofing team members at all, and the server blocks internal approvals.
-3. DIGITAL APPROVAL RECORD: once approved, a date/time-stamped record is shown at the
-   bottom of the tech sub in the viewer - who approved (name), their company, role, email,
-   phone, the revision, and the full date + time of approval (UK time).
+CONTEXT
+  The approval WAS still on the latest revision - it just isn't shown to Rock Roofing
+  (internal) users, because only the assigned CUSTOMER can approve (as requested). Logged
+  in as the customer, the Approve button appears on the latest/current revision as normal.
 
-NOTE ON THE RECORD FIELDS
-  Name, email, company and phone come from the customer's Design-portal account. There is
-  currently no separate "job title" field on customer accounts, so Role shows "Customer".
-  If you want a proper job-title captured, I can add that field to the customer record in
-  the Admin centre - just say so.
+THIS CHANGE
+  So it's not confusing for the internal team, Rock Roofing users now see a small
+  "Awaiting customer approval" note where the Approve button would be (on the current,
+  not-yet-approved revision) - both on the table row and in the viewer. Nothing about who
+  can actually approve has changed; this is just a clearer status for internal staff.
 
 BUILD: next build -> Compiled successfully.

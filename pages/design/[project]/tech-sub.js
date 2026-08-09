@@ -171,6 +171,7 @@ export default function TechSubPage() {
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button onClick={() => openDoc(d.id)} style={btnOpen}>Open</button>
                         {d.approvalStatus !== 'approved' && (canApprove(d)) && <button onClick={() => approve(d.id)} style={btnApprove}>Approve</button>}
+                        {d.approvalStatus !== 'approved' && !d.superseded && !isExternal && <span style={{ fontSize: 11.5, color: '#9a3412', marginLeft: 8 }}>Awaiting customer approval</span>}
                         {canEdit && !d.superseded && <button onClick={() => startRevision(d.id)} style={linkBtn}>Add New Revision</button>}
                         {canEdit && <button onClick={() => del(d.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
                       </td>
@@ -225,6 +226,7 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {canApprove && <button onClick={onApprove} style={btnApprove}>Approve</button>}
+            {!canApprove && doc.approvalStatus !== 'approved' && !doc.superseded && <span style={{ fontSize: 12, color: '#9a3412', fontWeight: 600 }}>Awaiting customer approval</span>}
             <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
           </div>
