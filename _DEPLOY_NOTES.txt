@@ -1,19 +1,18 @@
-DEPLOY NOTES - Superseded items show N/A (not "To Be Approved")
-===============================================================
+DEPLOY NOTES - Status counts banner (Rock Drawings + Calculations)
+==================================================================
 
-THREE files, all EDITS - just replace them.
-  pages/design/[project]/tech-sub.js
+TWO files, both EDITS - just replace them.
   pages/design/[project]/rock-drawings.js
   pages/design/[project]/calculations.js
 
 CHANGE
-  A superseded revision is no longer shown as needing approval. Instead of "To Be Approved"
-  / "In Review", a superseded item now shows a grey "N/A".
-    - Tech Sub: the Approval column shows N/A for superseded rows (and the viewer badge).
-    - Rock Drawings & Calculations: the viewer badge for a superseded revision shows N/A.
-  If a revision was actually approved before being superseded, it still shows "Approved".
+  A second banner now sits under the approval banner on Rock Drawings and Calculations:
 
-  (The top approval banner already ignored superseded items, so a superseded item never
-  triggers "APPROVALS NEEDED".)
+    Status: X for Review / Comment  -  X Construction Issue
+
+  - "for Review / Comment" = number of current items not yet approved.
+  - "Construction Issue" = number of current items marked Construction Issue.
+  - Counts cover the CURRENT revision of each item only (superseded revisions are ignored),
+    and the banner is hidden when the page is empty.
 
 BUILD: next build -> Compiled successfully.
