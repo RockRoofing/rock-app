@@ -67,6 +67,7 @@ const revLetter = (n) => { let s = ''; n = n + 1; while (n > 0) { const r = (n -
 const isImg = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.name || '')
 const rdLink = (no, id) => `${APP_URL}/design/${encodeURIComponent(no)}/rock-drawings?open=${encodeURIComponent(id)}`
 const rid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+const esc0 = (s) => String(s == null ? '' : s).replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
 async function notifyApprover(no, doc) {
   try {
@@ -172,6 +173,37 @@ export default async function handler(req, res) {
       for (const p of people) { if (p.external || !p.email) continue; await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This drawing has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false, cta: 'Review Drawings' }) }
     } catch (e) { /* ignore */ }
     return res.json({ ok: true, doc: docs[i] })
+  }
+
+  // Approve MANY at once (customer only). Approves each selected drawing the caller is the
+  // assigned approver for; silently skips superseded / already-approved / not-theirs.
+  if (body.action === 'approve-many') {
+    if (!acc.external) return res.status(403).json({ error: 'Only the customer can approve drawings.' })
+    const ids = Array.isArray(body.ids) ? body.ids : []
+    const ext = (await getExternalUsers()).find(x => x.id === acc.user.id) || {}
+    const now = Date.now()
+    const approvedNow = []
+    for (const id of ids) {
+      const i = idx(id)
+      if (i < 0) continue
+      const d = docs[i]
+      if (d.superseded || d.status === 'approved') continue
+      if (d.approverId && d.approverId !== acc.user.id) continue   // not their drawing to approve
+      d.status = 'approved'; d.approvedAt = now; d.approvedBy = ext.name || acc.user.name || 'Customer'
+      d.approvalRecord = { name: ext.name || '', email: ext.email || '', phone: ext.phone || '', company: ext.company || '', role: ext.role || 'Customer', userId: acc.user.id, at: now, atText: new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', dateStyle: 'full', timeStyle: 'long' }).format(new Date(now)) }
+      approvedNow.push(d)
+    }
+    if (approvedNow.length) {
+      await set(RKEY(no), docs)
+      try {
+        const people = await peopleFor(no)
+        const pname = await projectDisplayName(no)
+        const link = `${APP_URL}/design/${encodeURIComponent(no)}/rock-drawings`
+        const names = approvedNow.map(d => `${d.title} (Rev ${d.revision})`).join(', ')
+        for (const p of people) { if (p.external || !p.email) continue; await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${approvedNow.length} drawing${approvedNow.length === 1 ? '' : 's'}`, authorName: ext.name || acc.user.name || 'Customer', commentHtml: `<strong>Approved.</strong> ${esc0(names)} approved by ${ext.name || 'the customer'}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false, cta: 'Review Drawings' }) }
+      } catch (e) { /* ignore */ }
+    }
+    return res.json({ ok: true, approved: approvedNow.length, docs })
   }
 
   // Everything below is internal-only (Rock Roofing).

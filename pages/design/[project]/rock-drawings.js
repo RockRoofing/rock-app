@@ -133,6 +133,16 @@ export default function RockDrawingsPage() {
   const personName = (id) => { const p = people.find(x => x.id === id); return p ? p.name : '' }
   const customers = people.filter(p => p.external)
   const canApprove = (d) => { if (!d || d.status === 'approved' || d.superseded) return false; if (!isExternal) return false; return d.approverId === meId }
+  // Of the ticked drawings, how many can THIS customer approve.
+  const approvableSelected = docs.filter(d => selected[d.id] && canApprove(d))
+  const approvableSelectedCount = approvableSelected.length
+  async function approveSelected() {
+    if (!approvableSelectedCount) return
+    if (!confirm(`Approve ${approvableSelectedCount} selected drawing${approvableSelectedCount === 1 ? '' : 's'}?`)) return
+    const ids = approvableSelected.map(d => d.id)
+    const d = await post({ action: 'approve-many', ids })
+    if (d) { setSelected({}); alert(`Approved ${d.approved} drawing${d.approved === 1 ? '' : 's'}.`) }
+  }
 
   // Group into families; newest (non-superseded) is the front card, older are stacked behind.
   const families = []
@@ -160,6 +170,7 @@ export default function RockDrawingsPage() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button onClick={() => downloadZip(docs.map(d => d.url), `${projectNo}-rock-drawings`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
             <button onClick={() => downloadZip(selectedUrls, `${projectNo}-rock-drawings-selected`)} disabled={!selectedUrls.length} style={{ ...btnGhost, opacity: selectedUrls.length ? 1 : 0.5 }}>Download selected ({selectedUrls.length})</button>
+            {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
             {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Drawing'}</button>}
           </div>

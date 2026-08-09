@@ -1,24 +1,18 @@
-DEPLOY NOTES - Text-box fix, button label, email CTAs
+DEPLOY NOTES - Rock Drawings: bulk "Approve selected"
 =====================================================
 
-FIVE files, all EDITS - just replace them.
-  components/DrawingMarkup.js                    (markup text-box typing fix)
-  lib/designEmail.js                             (email button label configurable)
-  pages/api/design-rock-drawings.js              (emails say "Review Drawings")
-  pages/api/design-techsubs.js                   (emails say "Review the Tech Sub")
-  pages/design/[project]/rock-drawings.js        (button label)
+TWO files, both EDITS - just replace them.
+  pages/api/design-rock-drawings.js
+  pages/design/[project]/rock-drawings.js
 
-CHANGES
-1. Rock Drawings: the "View" button is now "View / Add Comments".
-
-2. MARKUP TEXT BOX FIX: text typed into a mark-up text box was appearing REVERSED. Fixed at
-   the source - the text box now keeps the cursor in the right place while you type. Because
-   every page (RFIs, Tech Sub, Rock Drawings, and the older drawing pages) uses this same
-   mark-up component, this fixes the reversed text EVERYWHERE at once.
-
-3. EMAIL BUTTONS now name the right item:
-   - Drawing emails say "Review Drawings" (was "View the RFI").
-   - Tech Sub emails say "Review the Tech Sub".
-   - RFI emails say "Review the RFI".
+WHAT'S NEW (this was NOT previously built)
+  - When a CUSTOMER ticks multiple drawings, an "Approve selected (N)" button now appears at
+    the top. It approves all the ticked drawings they are the assigned approver for, in one
+    click. The (N) shows how many of their ticks they can actually approve.
+  - It only approves drawings that are theirs to approve and are still In Review - it quietly
+    skips any that are superseded, already approved, or assigned to a different approver.
+  - Each approval still records the full digital record (name / company / role / email /
+    phone / date+time) and notifies the Rock Roofing team.
+  - The button only shows to customers (Rock Roofing staff never approve).
 
 BUILD: next build -> Compiled successfully.
