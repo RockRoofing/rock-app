@@ -1,18 +1,44 @@
-DEPLOY NOTES - Status counts banner (Rock Drawings + Calculations)
-==================================================================
+DEPLOY NOTES - O&M Manual builder
+=================================
 
-TWO files, both EDITS - just replace them.
-  pages/design/[project]/rock-drawings.js
-  pages/design/[project]/calculations.js
+THREE files. TWO are NEW (add via GitHub "Add file"), ONE is an EDIT.
 
-CHANGE
-  A second banner now sits under the approval banner on Rock Drawings and Calculations:
+  NEW   lib/omsPdf.js
+  NEW   pages/api/design-oms.js
+  EDIT  pages/design/[project]/oms.js   (was the 3-line shared page - now the full page)
 
-    Status: X for Review / Comment  -  X Construction Issue
+*** Create the two NEW files via "Add file" at those exact paths. ***
 
-  - "for Review / Comment" = number of current items not yet approved.
-  - "Construction Issue" = number of current items marked Construction Issue.
-  - Counts cover the CURRENT revision of each item only (superseded revisions are ignored),
-    and the banner is hidden when the page is empty.
+WHAT THIS DOES
+  The O&Ms page now has a "Build O&M Manual" button (Rock Roofing only) that pulls
+  everything together into ONE professional PDF and shows it in a viewer on the page.
+
+  The manual contains, in order:
+    Front cover  - Rock Roofing logo, "Operation & Maintenance Manual", project name,
+                   project number, project address, Rock Roofing details, and the Main
+                   Contractor's company + address (taken from the Internal Handover Minutes
+                   customer company/address).
+    Contents     - lists each section and the page number it starts at, and how many pages
+                   it runs to (page numbers correctly account for multi-page documents).
+    Sections     - each preceded by a cover sheet titled with the section and its page
+                   number, then the merged documents:
+                     1. Technical Submittal (current revisions)
+                     2. Rock Roofing Construction Issue Drawings (only drawings marked
+                        Construction Issue)
+                     3. Calculations (current revisions)
+                     4. Leak Test Certificates
+                     5. Warranties
+                   Sections with no documents are skipped automatically.
+
+  The built manual shows in an on-page VIEWER (scroll through all pages). You can DOWNLOAD
+  it, but it is view-only - no mark-up. Customers can view and download; only Rock Roofing
+  can build/rebuild. Rebuild after adding/approving more documents to refresh it.
+
+NOTES
+  - The front-cover logo is loaded from /rock-logo.jpg (already in the app's public folder).
+  - Rock Roofing's address/phone/email on the cover are left blank for now (only name + web
+    are shown). If you give me the exact company details you want printed, I'll bake them in.
+  - The manual is stored and remembered per project - reopening the page shows the last
+    built version until you rebuild.
 
 BUILD: next build -> Compiled successfully.
