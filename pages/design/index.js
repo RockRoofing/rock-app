@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import { useDesignAuth, designHref, PURPLE, INK } from '../../lib/designShell'
+import { useDesignAuth, designHref, designLogout, PURPLE, INK } from '../../lib/designShell'
 
 export default function DesignHome() {
   const router = useRouter()
@@ -30,6 +30,11 @@ export default function DesignHome() {
           <span style={{ color: '#3a3a38', padding: '0 2px' }}>|</span>
         </>}
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>Design</span>
+        <div style={{ flex: 1, minWidth: 16 }} />
+        <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
+          style={{ color: '#ca8a04', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', padding: '4px 10px' }}>Report app improvement</button>
+        <button onClick={designLogout}
+          style={{ color: '#bbb', fontSize: 13, background: 'none', border: '1px solid #3a3a38', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', padding: '4px 12px', marginLeft: 8 }}>Log out</button>
       </div>
 
       <div style={{ maxWidth: 1600, margin: '0 auto', padding: '24px 28px 60px' }}>

@@ -1,12 +1,19 @@
-DEPLOY NOTES - Design portal: hide "Back to Portal" from customers
-==================================================================
+DEPLOY NOTES - Design portal: Log out everywhere + Report app improvement on home
+=================================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/design/index.js
+TWO files, both EDITS - just replace them.
+  lib/designShell.js        (adds Log out to the nav shown on every per-project page)
+  pages/design/index.js     (adds Report app improvement + Log out to the home page)
 
-CHANGE
-  On the Design portal project-list page, the "<- Portal" link (which goes to the internal
-  main portal) is now hidden for external CUSTOMER logins. Internal staff still see it and
-  can jump back to the main portal as before. Customers just see "Design".
+CHANGES
+  - LOG OUT button now appears on ALL Design portal pages:
+      * the per-project pages (RFIs, drawings, tech sub, certs, warranties, O&Ms, etc.)
+        via the shared nav, and
+      * the Design home / project-list page.
+    It signs the user out and returns them to the login page.
+  - The Design home page now also has a "Report app improvement" button (the per-project
+    pages already had one). It opens the same report dialog used across the portal.
+
+  Both buttons sit on the right-hand side of the top black bar.
 
 BUILD: next build -> Compiled successfully.
