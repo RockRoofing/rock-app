@@ -1,43 +1,39 @@
-DEPLOY NOTES - Design portal: customer login emails + RFI notifications
-=======================================================================
+DEPLOY NOTES - Design emails: fix + diagnostics (supersedes previous design-email package)
+==========================================================================================
 
-FIVE files. ONE is NEW (add via GitHub "Add file"), FOUR are EDITS.
+SIX files. TWO are NEW (add via GitHub "Add file"), FOUR are EDITS.
 
-  NEW   lib/designEmail.js
+  NEW   lib/designEmail.js                     (replace if you already added it from before)
+  NEW   pages/api/design-email-test.js
   EDIT  pages/api/design-customers.js
   EDIT  pages/api/design-rfis.js
   EDIT  pages/admin/design-customers.js
   EDIT  pages/design/[project]/rfis.js
 
-*** The NEW file lib/designEmail.js must be created via "Add file" -> "Create new file"
-    at exactly that path. The other four replace existing files. ***
+(If you already deployed the previous package, lib/designEmail.js already exists - just
+ replace its contents with this version. design-email-test.js is brand new.)
 
-WHAT THIS FIXES
+WHY IT WASN'T SENDING
+  The most likely cause: the design emails used a different "from" address env var
+  (NOTIFY_FROM_EMAIL) than the rest of the app. Every other working email uses
+  FORMS_FROM_EMAIL - the address whose domain is verified in Resend. If NOTIFY_FROM_EMAIL
+  was unset or pointed at an unverified domain, Resend rejects every send. This package
+  switches the design emails to use FORMS_FROM_EMAIL first, exactly like the working
+  Portal-login email.
 
-1. CUSTOMER LOGIN EMAIL (was not being sent at all)
-   - When you add a Design Customer in the Admin centre, they are now EMAILED their login
-     details (their email address + a temporary password + a link to the login page).
-     They're asked to set their own password on first login.
-   - The admin confirmation now tells you whether the email actually sent; if it couldn't
-     send, it shows the temp password so you can pass it on manually.
-   - NEW button per customer: "Resend login email" - generates a fresh temporary password
-     and emails it. Use this for the customer you already created (they never got an email
-     because the feature didn't exist yet). Note: the original temp password can't be
-     recovered (it's stored hashed), so resending necessarily issues a new one.
+HOW TO CONFIRM (do this first after deploying)
+  Log in as an admin and visit:
+     https://app.rockroofing.co.uk/api/design-email-test?to=YOUR_EMAIL@rockroofing.co.uk
+  It returns a small JSON showing:
+     - hasResendKey: true/false   (is RESEND_API_KEY set?)
+     - which FROM address it used
+     - sent: true/false, and the exact error if it failed
+  This tells us definitively whether email works and, if not, why (e.g. "domain not
+  verified", "invalid from"). Send me that JSON if it still fails.
 
-2. RFI COMMENT NOTIFICATIONS (were not being sent)
-   - Adding a comment on an RFI now emails: anyone @mentioned in the comment, plus the
-     RFI's "Customer responsible" - except whoever wrote the comment. The email includes
-     the comment and a link that opens that RFI directly.
-   - Also: when a NEW RFI is created, the responsible customer is emailed to tell them an
-     RFI has been raised for them, with a link.
-   - Email links open the RFI directly (the page now honours ?open=<id>).
-
-REQUIREMENTS
-   - Uses the existing Resend setup (RESEND_API_KEY, and NOTIFY_FROM_EMAIL / FORMS_FROM_EMAIL
-     for the from-address). These are already set for the rest of the app. If RESEND_API_KEY
-     is ever missing, the app still works - it just reports the email wasn't sent.
-   - Customer/mention notifications only email people who have an email address on file and
-     (for customers) are scoped to that project.
+ALSO IN THIS PACKAGE
+  - RFI comment notifications now report back: if a notification email fails, the person
+    commenting sees a short message with the reason (instead of it failing silently).
+  - Customer login email + "Resend login email" button as before.
 
 BUILD: next build -> Compiled successfully.

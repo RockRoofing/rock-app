@@ -64,7 +64,14 @@ export default function RFIsPage() {
   async function addComment(id, html) {
     const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'comment', id, html }) })
     const d = await r.json()
-    if (r.ok) setRfis(rs => rs.map(x => x.id === id ? d.rfi : x)); else alert(d.error || 'Could not comment')
+    if (r.ok) {
+      setRfis(rs => rs.map(x => x.id === id ? d.rfi : x))
+      const n = d.notify
+      if (n && n.attempted > 0) {
+        if (n.errors && n.errors.length) alert(`Comment added. Email notification issue:\n${n.errors.join('\n')}`)
+        else if (n.sent > 0) console.log(`Notified ${n.sent} recipient(s) by email.`)
+      }
+    } else alert(d.error || 'Could not comment')
   }
 
   if (!auth.ready) return null

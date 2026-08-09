@@ -133,6 +133,7 @@ export default async function handler(req, res) {
 
       // Notify: anyone @mentioned, plus the RFI's responsible customer - excluding the
       // person who wrote the comment. Failures here never block the comment being saved.
+      let notify = { attempted: 0, sent: 0, errors: [] }
       try {
         const people = await peopleWithEmail(no)
         const mentioned = new Set(mentionedIds(html, people))
@@ -144,13 +145,16 @@ export default async function handler(req, res) {
         if (recipients.size) {
           const pname = await projectName(no)
           const link = rfiLinkFor(no, rfis[idx].id)
-          await Promise.all([...recipients.values()].map(({ person, mentioned }) =>
-            person.email ? sendRfiCommentNotice({ to: person.email, recipientName: person.name, projectNo: no, projectName: pname, rfiNumber: rfis[idx].number, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned }) : null
-          ))
+          for (const { person, mentioned } of recipients.values()) {
+            notify.attempted++
+            if (!person.email) { notify.errors.push(`${person.name}: no email on file`); continue }
+            const r = await sendRfiCommentNotice({ to: person.email, recipientName: person.name, projectNo: no, projectName: pname, rfiNumber: rfis[idx].number, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned })
+            if (r.sent) notify.sent++; else notify.errors.push(`${person.name}: ${r.error || 'send failed'}`)
+          }
         }
-      } catch (e) { /* notification failure must not fail the comment */ }
+      } catch (e) { notify.errors.push(e.message || 'notify failed') }
 
-      return res.json({ ok: true, rfi: rfis[idx] })
+      return res.json({ ok: true, rfi: rfis[idx], notify })
     }
 
     // Everything else is internal-only.
