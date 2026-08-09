@@ -1,15 +1,28 @@
-DEPLOY NOTES - Remove Leak Test Cert Builder page
-=================================================
+DEPLOY NOTES - Warranties page (flat thumbnails, customer-visible)
+==================================================================
 
-TWO files, both EDITS - just replace them.
-  lib/designShell.js                              (removes it from the Design nav)
-  pages/design/[project]/leak-test-builder.js     (old URL now redirects to Leak Test Certs)
+THREE files. TWO are NEW (add via GitHub "Add file"), ONE is an EDIT.
 
-WHAT CHANGED
-  - "Leak Test Cert Builder" is removed from the Design portal navigation.
-  - If anyone still has an old link to it, that page now just redirects to "Leak Test Certs".
-  - (The file is kept as a small redirect rather than deleted, so there's nothing to delete
-    in GitHub - just replace it. If you'd rather fully delete the file, you can remove
-    pages/design/[project]/leak-test-builder.js in GitHub and it'll 404 instead.)
+  NEW   pages/api/design-warranties.js
+  NEW   pages/api/design-warranties-zip.js
+  EDIT  pages/design/[project]/warranties.js   (was the 3-line shared page - now full page)
+
+*** Create the two NEW files via "Add file" at those exact paths. ***
+
+WHAT THIS IS
+  Warranties now works like Handover Docs BUT with NO sections - just a simple flat page:
+  - "+ Upload Warranties" (Rock Roofing only) - upload one or many documents; they sit as
+    THUMBNAILS (image preview or PDF first-page preview).
+  - Each thumbnail has View (in-page viewer, does not lose your selection), Download, and
+    (Rock Roofing only) Delete.
+  - Tick boxes + "Download all" / "Download selected" as a single ZIP.
+
+  VISIBLE TO CUSTOMERS: customers can view and download warranties (and select + zip). They
+  cannot upload or delete.
+
+NOTES
+  - Fresh store - warranties previously uploaded via the old shared page are not migrated;
+    re-upload via "+ Upload Warranties".
+  - No cron / notifications for this page (warranties are just documents to view/download).
 
 BUILD: next build -> Compiled successfully.
