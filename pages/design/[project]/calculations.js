@@ -282,7 +282,9 @@ function CalcViewer({ doc, people, personName, onClose, onComment, onMarkup, can
             {doc.superseded && <span style={{ marginLeft: 8, color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Superseded</span>}
             {doc.status === 'approved'
               ? <span style={{ marginLeft: 8, color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#10003; Approved{doc.approvedBy ? ` by ${doc.approvedBy}` : ''}</span>
-              : <span style={{ marginLeft: 8, color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>In Review{approverName ? ` (${approverName})` : ''}</span>}
+              : doc.superseded
+                ? <span style={{ marginLeft: 8, color: '#9ca3af', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>N/A</span>
+                : <span style={{ marginLeft: 8, color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>In Review{approverName ? ` (${approverName})` : ''}</span>}
             {doc.constructionIssue && <span style={{ marginLeft: 8, color: '#2563eb', background: '#dbeafe', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Construction Issue</span>}
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

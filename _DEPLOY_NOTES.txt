@@ -1,20 +1,19 @@
-DEPLOY NOTES - Approval banner + nav reorder
-============================================
+DEPLOY NOTES - Superseded items show N/A (not "To Be Approved")
+===============================================================
 
-FOUR files, all EDITS - just replace them.
-  lib/designShell.js                              (moves Handover Docs before RFIs)
-  pages/design/[project]/rock-drawings.js         (approval banner)
-  pages/design/[project]/calculations.js          (approval banner)
-  pages/design/[project]/tech-sub.js              (approval banner)
+THREE files, all EDITS - just replace them.
+  pages/design/[project]/tech-sub.js
+  pages/design/[project]/rock-drawings.js
+  pages/design/[project]/calculations.js
 
-CHANGES
-1. APPROVAL BANNER at the top of Tech Sub, Rock Drawings and Calculations:
-   - RED "APPROVALS NEEDED" when any current item is not yet approved.
-   - GREEN "APPROVED" when every current item is approved.
-   - It looks only at the CURRENT revision of each item (superseded revisions are ignored),
-     and shows nothing on an empty page.
+CHANGE
+  A superseded revision is no longer shown as needing approval. Instead of "To Be Approved"
+  / "In Review", a superseded item now shows a grey "N/A".
+    - Tech Sub: the Approval column shows N/A for superseded rows (and the viewer badge).
+    - Rock Drawings & Calculations: the viewer badge for a superseded revision shows N/A.
+  If a revision was actually approved before being superseded, it still shows "Approved".
 
-2. NAV: "Handover Docs" now sits BEFORE "RFIs" in the Design portal navigation.
-   (Handover Docs stays internal-only, so customers still don't see it.)
+  (The top approval banner already ignored superseded items, so a superseded item never
+  triggers "APPROVALS NEEDED".)
 
 BUILD: next build -> Compiled successfully.

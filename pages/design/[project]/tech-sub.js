@@ -170,7 +170,9 @@ export default function TechSubPage() {
                         : <span style={{ color: '#16a34a', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Current</span>}</td>
                       <td style={td}>{d.approvalStatus === 'approved'
                         ? <span style={{ color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#10003; Approved</span>
-                        : <span style={{ color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved</span>}</td>
+                        : d.superseded
+                          ? <span style={{ color: '#9ca3af', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>N/A</span>
+                          : <span style={{ color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved</span>}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{d.uploadedBy || '-'}</td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtDate(d.uploadedAt)}</td>
                       <td style={td}>{(d.comments || []).length ? <span style={{ fontWeight: isUnread ? 700 : 400, color: isUnread ? '#c2410c' : undefined }}>{(d.comments || []).length}{isUnread ? ' new' : ''}</span> : '-'}</td>
@@ -228,7 +230,9 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
             {doc.superseded && <span style={{ marginLeft: 8, color: '#b45309', background: '#fef3c7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>Superseded</span>}
             {doc.approvalStatus === 'approved'
               ? <span style={{ marginLeft: 8, color: '#15803d', background: '#dcfce7', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#10003; Approved{doc.approvedBy ? ` by ${doc.approvedBy}` : ''}</span>
-              : <span style={{ marginLeft: 8, color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved{approverName ? ` (${approverName})` : ''}</span>}
+              : doc.superseded
+                ? <span style={{ marginLeft: 8, color: '#9ca3af', background: '#f3f4f6', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>N/A</span>
+                : <span style={{ marginLeft: 8, color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved{approverName ? ` (${approverName})` : ''}</span>}
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {canApprove && <button onClick={onApprove} style={btnApprove}>Approve</button>}
