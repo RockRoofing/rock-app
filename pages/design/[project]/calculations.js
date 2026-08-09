@@ -179,7 +179,7 @@ export default function CalculationsPage() {
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div>
           : families.length === 0 ? (
-            <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 40, textAlign: 'center', color: '#aaa' }}>No drawings yet.</div>
+            <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 40, textAlign: 'center', color: '#aaa' }}>No Calculations Yet.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 22 }}>
               {families.map(fam => {

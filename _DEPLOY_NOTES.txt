@@ -1,28 +1,26 @@
-DEPLOY NOTES - Warranties page (flat thumbnails, customer-visible)
-==================================================================
+DEPLOY NOTES - Leak Test Certs page + Calculations label fix
+============================================================
 
-THREE files. TWO are NEW (add via GitHub "Add file"), ONE is an EDIT.
+FOUR files. TWO are NEW (add via GitHub "Add file"), TWO are EDITS.
 
-  NEW   pages/api/design-warranties.js
-  NEW   pages/api/design-warranties-zip.js
-  EDIT  pages/design/[project]/warranties.js   (was the 3-line shared page - now full page)
+  NEW   pages/api/design-leak-test-certs.js
+  NEW   pages/api/design-leak-test-certs-zip.js
+  EDIT  pages/design/[project]/leak-test-certs.js   (was the 3-line shared page - now full)
+  EDIT  pages/design/[project]/calculations.js      (empty-state label fix)
 
 *** Create the two NEW files via "Add file" at those exact paths. ***
 
-WHAT THIS IS
-  Warranties now works like Handover Docs BUT with NO sections - just a simple flat page:
-  - "+ Upload Warranties" (Rock Roofing only) - upload one or many documents; they sit as
-    THUMBNAILS (image preview or PDF first-page preview).
-  - Each thumbnail has View (in-page viewer, does not lose your selection), Download, and
-    (Rock Roofing only) Delete.
-  - Tick boxes + "Download all" / "Download selected" as a single ZIP.
+CHANGES
+1. Calculations: empty state now reads "No Calculations Yet." (was "No drawings yet.")
 
-  VISIBLE TO CUSTOMERS: customers can view and download warranties (and select + zip). They
-  cannot upload or delete.
+2. Leak Test Certs is now EXACTLY the same as the Warranties page, but for leak test certs:
+   flat thumbnail page (no sections), "+ Upload Leak Test Certs" (Rock Roofing only),
+   thumbnails with View (in-page viewer) / Download / Delete (delete internal only), tick
+   boxes + "Download all" / "Download selected" as a single ZIP. Visible to customers -
+   they can view and download; they cannot upload or delete.
 
 NOTES
-  - Fresh store - warranties previously uploaded via the old shared page are not migrated;
-    re-upload via "+ Upload Warranties".
-  - No cron / notifications for this page (warranties are just documents to view/download).
+  - Fresh store - leak test certs on the old shared page are not migrated; re-upload via
+    "+ Upload Leak Test Certs".
 
 BUILD: next build -> Compiled successfully.
