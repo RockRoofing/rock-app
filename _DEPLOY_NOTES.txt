@@ -1,23 +1,20 @@
-DEPLOY NOTES - Rock Roofing details on O&M cover
-================================================
+DEPLOY NOTES - O&M: each Tech Sub as its own section
+====================================================
 
 ONE file, an EDIT - just replace it.
   pages/api/design-oms.js
 
 CHANGE
-  The O&M Manual cover now prints Rock Roofing's full details in the "Roofing Contractor"
-  box:
-    Rock Roofing Ltd
-    483 Green Lanes, London, N13 4BS
-    0330 165 8924
-    info@rockroofing.co.uk
-    www.rockroofing.co.uk
+  When a project has multiple Tech Subs, each one is now its OWN section in the O&M Manual:
+    - Each gets its own separator / cover sheet ("Tech Sub 1 - <title>", "Tech Sub 2 - ...").
+    - Each is listed separately on the contents page with its own page number.
+  (Only the current, non-superseded revision of each Tech Sub is included, as before.)
 
-  The Main Contractor box already pulls the customer's company + address from the Internal
-  Handover Minutes (customerCompany / customerAddress) - no change needed there. If a job
-  shows "(Not recorded)", those IHM fields are blank for that project; fill them in and
-  rebuild.
+  Drawings, Calculations, Leak Test Certs and Warranties are unchanged - each stays a single
+  combined section.
 
-REMEMBER: rebuild the O&M Manual (it regenerates the PDF with these details).
+  The readiness warning still flags when there are no Tech Subs at all.
+
+REMEMBER: rebuild the O&M Manual to regenerate the PDF.
 
 BUILD: next build -> Compiled successfully.

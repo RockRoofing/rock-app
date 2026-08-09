@@ -62,7 +62,13 @@ async function gatherSections(no) {
   ])
   const curDrawings = currentNonSuperseded(drawings)
   const curCalcs = currentNonSuperseded(calcs)
-  const tsFiles = currentNonSuperseded(techsubs).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
+  const curTechSubs = currentNonSuperseded(techsubs)
+  // Each Tech Sub becomes its OWN section (Tech Sub 1, Tech Sub 2, ...) with its own
+  // separator sheet and its own line in the contents.
+  const techSubSections = curTechSubs.map((d, i) => ({
+    title: `Tech Sub ${i + 1}${d.title ? ` - ${d.title}` : ''}`,
+    files: [{ name: d.name, url: d.url, contentType: d.contentType }],
+  }))
   // Rock Drawings AND Calculations: only items marked CONSTRUCTION ISSUE are included.
   const dwgFiles = curDrawings.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
   const calcFiles = curCalcs.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
@@ -70,7 +76,7 @@ async function gatherSections(no) {
   const warrFiles = ((warranties && warranties.files) || []).map(f => ({ name: f.name, url: f.url, contentType: f.contentType }))
 
   const all = [
-    { title: 'Technical Submittal', files: tsFiles },
+    ...techSubSections,
     { title: 'Rock Roofing Construction Issue Drawings', files: dwgFiles },
     { title: 'Calculations', files: calcFiles },
     { title: 'Leak Test Certificates', files: leakFiles },
@@ -82,6 +88,7 @@ async function gatherSections(no) {
   const notCiDrawings = curDrawings.filter(d => !d.constructionIssue).length
   const notCiCalcs = curCalcs.filter(d => !d.constructionIssue).length
   const missing = all.filter(s => s.files.length === 0).map(s => s.title)
+  if (curTechSubs.length === 0) missing.unshift('Technical Submittal')
   const warnings = []
   if (notCiDrawings > 0) warnings.push(`${notCiDrawings} drawing${notCiDrawings === 1 ? '' : 's'} not yet marked Construction Issue (will be left out)`)
   if (notCiCalcs > 0) warnings.push(`${notCiCalcs} calculation${notCiCalcs === 1 ? '' : 's'} not yet marked Construction Issue (will be left out)`)
