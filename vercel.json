@@ -8,6 +8,7 @@
     { "path": "/api/cron/design-rfi-daily", "schedule": "0 18 * * *" },
     { "path": "/api/cron/design-techsub-daily", "schedule": "0 18 * * *" },
     { "path": "/api/cron/design-rockdrawing-daily", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/design-calculation-daily", "schedule": "0 18 * * *" },
     { "path": "/api/cron/design-rfi-outstanding", "schedule": "0 9 * * *" }
   ]
 }

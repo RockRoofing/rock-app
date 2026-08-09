@@ -1,45 +1,35 @@
-DEPLOY NOTES - Approval evidence: audit log + certificate PDF
-=============================================================
+DEPLOY NOTES - Calculations page (same as Rock Drawings, for calculations)
+==========================================================================
 
-SIX files. TWO are NEW (add via GitHub "Add file"), FOUR are EDITS.
+SEVEN files. THREE are NEW (add via GitHub "Add file"), FOUR are EDITS.
 
-  NEW   lib/approvalAudit.js
-  NEW   pages/api/design-approval-audit.js
-  EDIT  pages/api/design-rock-drawings.js
-  EDIT  pages/api/design-techsubs.js
-  EDIT  pages/design/[project]/rock-drawings.js
-  EDIT  pages/design/[project]/tech-sub.js
+  NEW   pages/api/design-calculations.js
+  NEW   pages/api/design-calculations-zip.js
+  NEW   pages/api/cron/design-calculation-daily.js
+  EDIT  pages/design/[project]/calculations.js   (was a 3-line shared page - now full page)
+  EDIT  lib/designRfiNotify.js
+  EDIT  lib/approvalAudit.js                      (certificate handles "Calculation")
+  EDIT  vercel.json                               (adds calculations comment digest cron)
 
-*** Create the two NEW files via "Add file" at those exact paths. ***
+*** Create the three NEW files via "Add file" at those exact paths. ***
 
-WHAT THIS ADDS (applies to Rock Drawings AND Tech Subs)
-  Every approval now produces proper dispute evidence:
+WHAT THIS IS
+  The Calculations page is now EXACTLY the same as Rock Drawings, but for calculations:
+  thumbnails, revisions (greyed superseded cards behind the current one), In Review ->
+  Approved (customer approves), Construction Issue (Rock Roofing only), mark superseded
+  (requires uploading a new revision), View / Add Comments viewer (comments at the top,
+  @mentions notify, X-only close), Notify project users (with approver picker), Download
+  all / selected (zip), bulk "Approve selected" for customers, and the full approval
+  evidence (append-only audit log + SHA-256 file fingerprint + timestamped certificate PDF).
 
-  1. APPEND-ONLY AUDIT LOG. Each approval is written to a separate log
-     (design:approval-audit:<project>) that is only ever added to - never edited or
-     deleted. So even if a drawing/tech sub is later changed or deleted, the record that it
-     was approved (by whom, when, which revision, with the file fingerprint) survives.
-     Internal staff can read it via /api/design-approval-audit?no=<projectNo>.
-
-  2. FILE FINGERPRINT (SHA-256). At the moment of approval we hash the actual file bytes.
-     This proves WHICH version was approved - any change to the file would give a different
-     fingerprint, so nobody can later claim a different file was signed off.
-
-  3. APPROVAL CERTIFICATE PDF. A timestamped certificate is generated automatically on
-     approval and stored. It names the project, item, revision, file + fingerprint, the
-     approver (name, company, role, email, phone, account ID) and the exact date/time. It's
-     downloadable from the green approval panel in the viewer ("Download approval
-     certificate (PDF)").
-
-  The existing on-screen record still shows who/when; this adds the fingerprint line and
-  the certificate download, plus the behind-the-scenes immutable log.
+  It uses its own separate storage, so Calculations and Rock Drawings never mix.
 
 NOTES
-  - Uses pdf-lib (already installed) and @vercel/blob (already used) - no new dependencies.
-  - Certificates are stored in Blob under approvals/. The file fingerprint + audit entry
-    are the primary evidence; the emails everyone already receives on approval remain a
-    second, external record.
-  - Existing approvals (approved before this deploys) won't have a certificate/fingerprint
-    retroactively - only approvals made from now on.
+  - Customers: view, comment, mark up, download, approve (where assigned). They cannot
+    upload, revise, supersede, mark construction issue, or delete.
+  - vercel.json gains one cron (design-calculation-daily, 18:00 comment digest). Check
+    Vercel -> Cron Jobs after deploying.
+  - Fresh store - anything previously on the old Calculations page is not migrated; re-upload
+    via "+ Add Calculation".
 
 BUILD: next build -> Compiled successfully.
