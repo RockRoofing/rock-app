@@ -1,21 +1,13 @@
-DEPLOY NOTES - Customer RFI attachments + big Tech Sub Approve
-==============================================================
+DEPLOY NOTES - Reorder roles in Project Process template
+========================================================
 
-THREE files, all EDITS - just replace them.
-  pages/api/design-rfis.js                 (allow attachments to be added by anyone)
-  pages/design/[project]/rfis.js           (Add attachments button in the open RFI window)
-  pages/design/[project]/tech-sub.js       (large, clear Approve button)
+ONE file, an EDIT - just replace it.
+  pages/operations/project-process.js
 
-CHANGES
-1. RFI - ADD ATTACHMENTS: the open RFI window now has a clear purple
-   "[paperclip] Add attachments" button. Customers (and Rock Roofing) can upload one or more
-   files straight onto the RFI - no need to be in edit mode. Uploaded files appear in the
-   attachments viewer as normal.
-
-2. TECH SUB - APPROVE BUTTON is now large and clear for the assigned customer approver:
-   - In the table: a bigger green "[tick] Approve" button on the row.
-   - In the open Tech Sub: a big "[tick] Approve Tech Sub" button in the header AND a
-     prominent green approve bar at the top of the window ("Ready to approve this Tech Sub?").
-   (Only the assigned customer sees Approve; Rock Roofing still can't self-approve.)
+CHANGE
+  In the Project Process Templates editor, each role card now has up / down arrows next to
+  its name to move the whole role earlier or later. (Items within a role could already be
+  reordered - now the roles themselves can be too.) The arrows disable at the top/bottom.
+  Save as usual to keep the new order for future projects.
 
 BUILD: next build -> Compiled successfully.

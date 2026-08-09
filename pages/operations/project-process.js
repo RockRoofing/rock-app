@@ -71,6 +71,7 @@ export default function ProjectProcessPage() {
   const tUpd = (fn) => setTmpl(prev => { const next = prev.map(rc => ({ role: rc.role, items: [...rc.items] })); fn(next); return next })
   const tAddRole = () => tUpd(n => n.push({ role: 'New Role', items: [] }))
   const tDelRole = (ri) => { if (!confirm('Remove this role and its items from the template?')) return; tUpd(n => n.splice(ri, 1)) }
+  const tMoveRole = (ri, dir) => tUpd(n => { const j = ri + dir; if (j < 0 || j >= n.length) return; const t = n[ri]; n[ri] = n[j]; n[j] = t })
   const tSetRole = (ri, v) => tUpd(n => { n[ri].role = v })
   const tAddItem = (ri) => tUpd(n => n[ri].items.push(''))
   const tSetItem = (ri, ii, v) => tUpd(n => { n[ri].items[ii] = v })
@@ -189,6 +190,8 @@ export default function ProjectProcessPage() {
                 {tmpl.map((rc, ri) => (
                   <div key={ri} style={{ border: '1px solid #ece9e3', borderRadius: 10, padding: 12, marginBottom: 12, background: '#faf9f7' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                      <button onClick={() => tMoveRole(ri, -1)} title="Move role up" disabled={ri === 0} style={{ ...miniBtn, opacity: ri === 0 ? 0.4 : 1 }}>&uarr;</button>
+                      <button onClick={() => tMoveRole(ri, 1)} title="Move role down" disabled={ri === tmpl.length - 1} style={{ ...miniBtn, opacity: ri === tmpl.length - 1 ? 0.4 : 1 }}>&darr;</button>
                       <input value={rc.role} onChange={e => tSetRole(ri, e.target.value)} placeholder="Role name" style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, fontWeight: 700 }} />
                       <button onClick={() => tDelRole(ri)} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c6c6' }}>Remove role</button>
                     </div>
