@@ -1,27 +1,21 @@
-DEPLOY NOTES - Handover Docs mirrored into Pre-Contract
-=======================================================
+DEPLOY NOTES - Customer RFI attachments + big Tech Sub Approve
+==============================================================
 
-SIX files. TWO are NEW (add via GitHub "Add file"), FOUR are EDITS.
+THREE files, all EDITS - just replace them.
+  pages/api/design-rfis.js                 (allow attachments to be added by anyone)
+  pages/design/[project]/rfis.js           (Add attachments button in the open RFI window)
+  pages/design/[project]/tech-sub.js       (large, clear Approve button)
 
-  NEW   components/HandoverDocs.js
-  NEW   pages/pre-contract-handover-docs.js
-  EDIT  components/PreContractNav.js               (adds the Handover Docs tab)
-  EDIT  pages/api/design-handover-docs.js          (allows Pre-Contract users)
-  EDIT  pages/api/design-handover-zip.js           (allows Pre-Contract users)
-  EDIT  pages/design/[project]/handover-docs.js    (now uses the shared component)
+CHANGES
+1. RFI - ADD ATTACHMENTS: the open RFI window now has a clear purple
+   "[paperclip] Add attachments" button. Customers (and Rock Roofing) can upload one or more
+   files straight onto the RFI - no need to be in edit mode. Uploaded files appear in the
+   attachments viewer as normal.
 
-*** Create the two NEW files via "Add file" at those exact paths. ***
-
-WHAT THIS IS
-  Handover Docs now appears in BOTH the Design portal AND the Pre-Contract section, and they
-  are a TRUE MIRROR - both read and write the SAME files (same underlying store). Upload or
-  delete in one and it shows in the other. Both allow full upload / delete.
-
-  - Design portal: unchanged for the user - same page, same behaviour (it now shares one
-    common component with the Pre-Contract version so they can never drift apart).
-  - Pre-Contract: a new "Handover Docs" tab. It opens a project picker (search + click a
-    project), then shows the exact same Handover Docs page for that project.
-
-  Still internal-only - customers never see Handover Docs in either place.
+2. TECH SUB - APPROVE BUTTON is now large and clear for the assigned customer approver:
+   - In the table: a bigger green "[tick] Approve" button on the row.
+   - In the open Tech Sub: a big "[tick] Approve Tech Sub" button in the header AND a
+     prominent green approve bar at the top of the window ("Ready to approve this Tech Sub?").
+   (Only the assigned customer sees Approve; Rock Roofing still can't self-approve.)
 
 BUILD: next build -> Compiled successfully.

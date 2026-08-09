@@ -97,11 +97,16 @@ export default function RFIsPage() {
     if (r.ok) {
       setRfis(rs => rs.map(x => x.id === id ? d.rfi : x))
       const n = d.notify
-      if (n && n.attempted > 0) {
-        if (n.errors && n.errors.length) alert(`Comment added. Email notification issue:\n${n.errors.join('\n')}`)
-        else if (n.sent > 0) console.log(`Notified ${n.sent} recipient(s) by email.`)
-      }
+      if (n && n.mentioned > 0) console.log(`Emailed ${n.sent}/${n.mentioned} mentioned user(s).`)
     } else alert(d.error || 'Could not comment')
+  }
+
+  async function addAttachments(id, attachments) {
+    const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'add-attachments', id, attachments }) })
+    const d = await r.json()
+    if (r.ok) setRfis(rs => rs.map(x => x.id === id ? d.rfi : x))
+    else alert(d.error || 'Could not add attachments')
+    return r.ok
   }
 
   if (!auth.ready) return null
@@ -170,7 +175,7 @@ export default function RFIsPage() {
 
       {editing && <RfiEditor rfi={editing} people={people} onClose={() => setEditing(null)} onSave={saveRfi} />}
       {openRfiObj && <RfiDetail rfi={openRfiObj} people={people} personName={personName} canEdit={canEdit}
-        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfiObj.id)} onMarkup={saveAttachmentMarkup} />}
+        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfiObj.id)} onMarkup={saveAttachmentMarkup} onAddAttachments={addAttachments} />}
     </>
   )
 }
@@ -238,17 +243,34 @@ function RfiEditor({ rfi, people, onClose, onSave }) {
   )
 }
 
-function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onSaveEdit, onDelete, onMarkup }) {
+function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onSaveEdit, onDelete, onMarkup, onAddAttachments }) {
   const light = dueLight(rfi.requiredDate, rfi.status)
   const atts = rfi.attachments || []
   const [attIdx, setAttIdx] = useState(0)
   const [editMode, setEditMode] = useState(false)
   const [ef, setEf] = useState(null)          // edit form draft
   const [uploading, setUploading] = useState(false)
+  const [addingAtt, setAddingAtt] = useState(false)
   const editRef = useRef()
+  const addAttRef = useRef()
   const customers = people.filter(p => p.external)
   const current = atts[attIdx]
   const isViewable = current && ((current.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(current.url || '') || (current.contentType || '') === 'application/pdf')
+
+  async function addAttachmentFiles(list) {
+    if (!list || !list.length) return
+    setAddingAtt(true)
+    const picked = []
+    for (const file of Array.from(list)) {
+      try {
+        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || 'application/octet-stream' })
+        picked.push({ name: file.name, url: blob.url, contentType: file.type || '', size: file.size })
+      } catch {}
+    }
+    if (addAttRef.current) addAttRef.current.value = ''
+    if (picked.length) await onAddAttachments(rfi.id, picked)
+    setAddingAtt(false)
+  }
 
   function startEdit() { setEf({ ...rfi, attachments: [...(rfi.attachments || [])] }); setEditMode(true) }
   function cancelEdit() { setEditMode(false); setEf(null) }
@@ -332,6 +354,15 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
           ))}
         </div>
         <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
+      </div>
+
+      {/* Add attachments - available to everyone (incl. customers) in the open window */}
+      <div style={{ marginTop: 16 }}>
+        <input ref={addAttRef} type="file" multiple style={{ display: 'none' }} onChange={e => addAttachmentFiles(e.target.files)} />
+        <button onClick={() => addAttRef.current?.click()} disabled={addingAtt}
+          style={{ background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 9, padding: '11px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8, opacity: addingAtt ? 0.6 : 1 }}>
+          {addingAtt ? 'Uploading...' : <>&#128206; Add attachments</>}
+        </button>
       </div>
 
       {/* Attachment markup viewer, embedded (below comments) */}

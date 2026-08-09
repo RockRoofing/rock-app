@@ -1,6 +1,6 @@
 import { get, set, getOpsProjects, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
-import { buildCardsForProject } from '../../lib/projectProcessTemplate'
+import { buildCardsForProject, buildCardsForProjectAsync, getProcessTemplate, saveProcessTemplate } from '../../lib/projectProcessTemplate'
 
 // Project Process Kanban board.
 // Stores:
@@ -49,7 +49,7 @@ async function autoSync(board) {
   for (const p of live) {
     if (seenSet.has(p.projectNo)) continue      // already baselined / considered
     // New project - add it and mark seen.
-    board.columns.push({ projectNo: p.projectNo, name: p.name, customer: p.customer, cards: buildCardsForProject() })
+    board.columns.push({ projectNo: p.projectNo, name: p.name, customer: p.customer, cards: await buildCardsForProjectAsync(get) })
     seen.push(p.projectNo)
     seenSet.add(p.projectNo)
     onBoard.add(p.projectNo)
@@ -79,6 +79,10 @@ export default async function handler(req, res) {
   if (!u) return res.status(401).json({ error: 'Not authenticated' })
 
   if (req.method === 'GET') {
+    if (req.query.template) {
+      const template = await getProcessTemplate(get)
+      return res.json({ template })
+    }
     let board = await getBoard()
     board = await autoSync(board)
     const portal = await getPortalUsers()
@@ -103,7 +107,7 @@ export default async function handler(req, res) {
       const p = (await liveProjects()).find(x => x.projectNo === body.projectNo)
       if (!p) return res.status(404).json({ error: 'Project not found' })
       if (col(p.projectNo)) return res.json({ ok: true, board }) // already there
-      board.columns.push({ projectNo: p.projectNo, name: p.name, customer: p.customer, cards: buildCardsForProject() })
+      board.columns.push({ projectNo: p.projectNo, name: p.name, customer: p.customer, cards: await buildCardsForProjectAsync(get) })
       // Mark as seen so it isn't considered "new" later.
       const seen = (await get(SEEN_KEY)) || []
       if (!seen.includes(p.projectNo)) { seen.push(p.projectNo); await set(SEEN_KEY, seen) }
@@ -220,6 +224,11 @@ export default async function handler(req, res) {
         results.push({ to: pu.email, ...r })
       }
       return res.json({ ok: true, message: msg, notified: results })
+    }
+
+    if (body.action === 'save-template') {
+      const template = await saveProcessTemplate(set, body.template)
+      return res.json({ ok: true, template })
     }
 
     return res.status(400).json({ error: 'Unknown action' })

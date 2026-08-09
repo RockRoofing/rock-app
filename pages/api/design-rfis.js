@@ -142,10 +142,26 @@ export default async function handler(req, res) {
       await set(rkey(no), rfis)
       // The comment's author has obviously seen this RFI.
       try { await markRfiRead(no, acc.user.id, rfis[idx]) } catch {}
-      // Comments do NOT email immediately - they're batched into ONE end-of-day email per
-      // project (see the design-rfi-daily cron). Just record that a comment happened today.
+      // Comments are batched into ONE end-of-day email per project (design-rfi-daily cron).
       try { await recordPending(no, 'comment') } catch {}
-      return res.json({ ok: true, rfi: rfis[idx] })
+      // @mentions are the exception: anyone @mentioned gets an IMMEDIATE email every time.
+      let notify = { mentioned: 0, sent: 0 }
+      try {
+        const people = await peopleWithEmail(no)
+        const ids = mentionedIds(html, people).filter(id => id !== acc.user.id)
+        if (ids.length) {
+          const pname = await projectName(no)
+          const link = rfiLinkFor(no, rfis[idx].id)
+          for (const id of ids) {
+            const p = people.find(x => x.id === id)
+            if (!p || !p.email) continue
+            notify.mentioned++
+            const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: rfis[idx].number, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned: true })
+            if (r.sent) notify.sent++
+          }
+        }
+      } catch (e) { /* mention notification failure must not fail the comment */ }
+      return res.json({ ok: true, rfi: rfis[idx], notify })
     }
 
     // Save markup/annotations for one attachment. Allowed for internal AND external
@@ -159,6 +175,19 @@ export default async function handler(req, res) {
       if (ai < 0) return res.status(404).json({ error: 'Attachment not found' })
       atts[ai] = { ...atts[ai], markup: body.markup }
       rfis[idx].attachments = atts
+      await set(rkey(no), rfis)
+      return res.json({ ok: true, rfi: rfis[idx] })
+    }
+
+    // Add attachments to an RFI - allowed for EVERYONE with access (incl. customers).
+    if (body.action === 'add-attachments') {
+      if (!acc.canComment) return res.status(403).json({ error: 'Not allowed' })
+      const idx = rfis.findIndex(x => x.id === body.id)
+      if (idx < 0) return res.status(404).json({ error: 'RFI not found' })
+      const incoming = Array.isArray(body.attachments) ? body.attachments : []
+      const clean = incoming.filter(a => a && a.url).map(a => ({ name: a.name || 'attachment', url: a.url, contentType: a.contentType || '', size: a.size || 0, addedBy: acc.user.name || 'User', addedByExternal: !!acc.external, addedAt: Date.now() }))
+      if (!clean.length) return res.status(400).json({ error: 'No attachments' })
+      rfis[idx].attachments = [...(rfis[idx].attachments || []), ...clean]
       await set(rkey(no), rfis)
       return res.json({ ok: true, rfi: rfis[idx] })
     }

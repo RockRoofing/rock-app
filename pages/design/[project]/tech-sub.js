@@ -178,7 +178,7 @@ export default function TechSubPage() {
                       <td style={td}>{(d.comments || []).length ? <span style={{ fontWeight: isUnread ? 700 : 400, color: isUnread ? '#c2410c' : undefined }}>{(d.comments || []).length}{isUnread ? ' new' : ''}</span> : '-'}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button onClick={() => openDoc(d.id)} style={btnOpen}>Open</button>
-                        {d.approvalStatus !== 'approved' && (canApprove(d)) && <button onClick={() => approve(d.id)} style={btnApprove}>Approve</button>}
+                        {d.approvalStatus !== 'approved' && (canApprove(d)) && <button onClick={() => approve(d.id)} style={{ ...btnApproveBig, marginLeft: 8, padding: '8px 18px', fontSize: 14 }}>&#10003; Approve</button>}
                         {d.approvalStatus !== 'approved' && !d.superseded && !isExternal && <span style={{ fontSize: 11.5, color: '#9a3412', marginLeft: 8 }}>Awaiting customer approval</span>}
                         {canEdit && !d.superseded && <button onClick={() => startRevision(d.id)} style={linkBtn}>Add New Revision</button>}
                         {canEdit && <button onClick={() => del(d.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
@@ -235,7 +235,7 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
                 : <span style={{ marginLeft: 8, color: '#9a3412', background: '#ffedd5', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>To Be Approved{approverName ? ` (${approverName})` : ''}</span>}
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {canApprove && <button onClick={onApprove} style={btnApprove}>Approve</button>}
+            {canApprove && <button onClick={onApprove} style={btnApproveBig}>&#10003; Approve Tech Sub</button>}
             {!canApprove && doc.approvalStatus !== 'approved' && !doc.superseded && <span style={{ fontSize: 12, color: '#9a3412', fontWeight: 600 }}>Awaiting customer approval</span>}
             <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
@@ -243,6 +243,12 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {canApprove && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 14, color: '#166534', fontWeight: 600 }}>Ready to approve this Tech Sub? Review it below, then approve.</div>
+              <button onClick={onApprove} style={btnApproveBig}>&#10003; Approve Tech Sub</button>
+            </div>
+          )}
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 700, marginBottom: 6 }}>Comments ({(doc.comments || []).length})</div>
             <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 8 }}>
@@ -331,5 +337,6 @@ const td = { padding: '10px 12px', verticalAlign: 'middle' }
 const linkBtn = { background: 'none', border: 'none', color: PURPLE, cursor: 'pointer', fontSize: 13, marginLeft: 12, fontWeight: 600 }
 const btnOpen = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 6 }
 const btnApprove = { background: '#16a34a', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginLeft: 8 }
+const btnApproveBig = { background: '#16a34a', color: '#fff', border: 'none', borderRadius: 9, padding: '10px 22px', fontSize: 15, fontWeight: 800, letterSpacing: 0.3, cursor: 'pointer', boxShadow: '0 2px 6px rgba(22,163,74,0.35)' }
 const btnPrimary = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }
 const btnGhost = { background: '#fff', border: '1px solid #ddd', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }

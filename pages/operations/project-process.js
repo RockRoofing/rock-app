@@ -12,6 +12,10 @@ export default function ProjectProcessPage() {
   const [open, setOpen] = useState(null)       // { projectNo, cardId }
   const [adding, setAdding] = useState(false)
   const [pick, setPick] = useState('')
+  const [tmplOpen, setTmplOpen] = useState(false)
+  const [tmpl, setTmpl] = useState(null)        // [{ role, items:[string] }]
+  const [tmplSaving, setTmplSaving] = useState(false)
+  const [tmplErr, setTmplErr] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +48,35 @@ export default function ProjectProcessPage() {
     await post({ action: 'remove-project', projectNo }); load()
   }
 
+  async function openTemplates() {
+    setTmplOpen(true); setTmplErr(''); setTmpl(null)
+    try {
+      const d = await fetch('/api/project-process?template=1').then(r => r.json())
+      setTmpl((d.template || []).map(rc => ({ role: rc.role, items: [...(rc.items || [])] })))
+    } catch { setTmplErr('Could not load template') }
+  }
+  async function saveTemplate() {
+    // Clean empties before saving.
+    const clean = (tmpl || []).map(rc => ({ role: (rc.role || '').trim(), items: (rc.items || []).map(t => (t || '').trim()).filter(Boolean) })).filter(rc => rc.role)
+    setTmplSaving(true); setTmplErr('')
+    try {
+      const r = await fetch('/api/project-process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save-template', template: clean }) })
+      const d = await r.json()
+      if (!r.ok) { setTmplErr(d.error || 'Could not save'); setTmplSaving(false); return }
+      setTmplOpen(false)
+    } catch { setTmplErr('Could not save') }
+    setTmplSaving(false)
+  }
+  // Template editing helpers (operate on local tmpl state)
+  const tUpd = (fn) => setTmpl(prev => { const next = prev.map(rc => ({ role: rc.role, items: [...rc.items] })); fn(next); return next })
+  const tAddRole = () => tUpd(n => n.push({ role: 'New Role', items: [] }))
+  const tDelRole = (ri) => { if (!confirm('Remove this role and its items from the template?')) return; tUpd(n => n.splice(ri, 1)) }
+  const tSetRole = (ri, v) => tUpd(n => { n[ri].role = v })
+  const tAddItem = (ri) => tUpd(n => n[ri].items.push(''))
+  const tSetItem = (ri, ii, v) => tUpd(n => { n[ri].items[ii] = v })
+  const tDelItem = (ri, ii) => tUpd(n => n[ri].items.splice(ii, 1))
+  const tMoveItem = (ri, ii, dir) => tUpd(n => { const j = ii + dir; if (j < 0 || j >= n[ri].items.length) return; const t = n[ri].items[ii]; n[ri].items[ii] = n[ri].items[j]; n[ri].items[j] = t })
+
   if (loading || !board) return (
     <OperationsShell active="process" section="process" title="Project Process" wide><PageHeading title="Project Process" /><Loading /></OperationsShell>
   )
@@ -58,7 +91,10 @@ export default function ProjectProcessPage() {
           <h1 style={{ margin: '0 0 2px', fontSize: 22, color: INK }}>Project Process</h1>
           <div style={{ fontSize: 13, color: '#8a857c' }}>Each project has a card per role with a checklist to complete. New projects are added automatically; use Add project to pull in an existing one.</div>
         </div>
-        <button onClick={() => setAdding(a => !a)} style={primaryBtn}>{adding ? 'Cancel' : '+ Add project'}</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={openTemplates} style={ghostBtn}>Templates</button>
+          <button onClick={() => setAdding(a => !a)} style={primaryBtn}>{adding ? 'Cancel' : '+ Add project'}</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14, fontSize: 12, color: '#8a857c' }}>
@@ -136,6 +172,46 @@ export default function ProjectProcessPage() {
           projectNo={open.projectNo} projectName={openCol.name} card={openCard} users={users}
           onClose={() => setOpen(null)} post={post} reload={load}
         />
+      )}
+      {tmplOpen && (
+        <div onClick={() => setTmplOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '3vh 3vw' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 20, width: 720, maxWidth: '95vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+              <div>
+                <h2 style={{ margin: '0 0 2px', fontSize: 19, color: INK }}>Project Process Templates</h2>
+                <div style={{ fontSize: 12.5, color: '#8a857c' }}>Edit the role cards and checklists used when a NEW project is added to the board. Existing projects are not changed.</div>
+              </div>
+              <button onClick={() => setTmplOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
+            </div>
+            {tmplErr && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '8px 11px', fontSize: 13, margin: '8px 0' }}>{tmplErr}</div>}
+            {!tmpl ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
+              <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>
+                {tmpl.map((rc, ri) => (
+                  <div key={ri} style={{ border: '1px solid #ece9e3', borderRadius: 10, padding: 12, marginBottom: 12, background: '#faf9f7' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                      <input value={rc.role} onChange={e => tSetRole(ri, e.target.value)} placeholder="Role name" style={{ flex: 1, padding: '8px 10px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, fontWeight: 700 }} />
+                      <button onClick={() => tDelRole(ri)} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c6c6' }}>Remove role</button>
+                    </div>
+                    {rc.items.map((it, ii) => (
+                      <div key={ii} style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
+                        <input value={it} onChange={e => tSetItem(ri, ii, e.target.value)} placeholder="Checklist item" style={{ flex: 1, padding: '6px 9px', border: '1px solid #e0e0e0', borderRadius: 7, fontSize: 13 }} />
+                        <button onClick={() => tMoveItem(ri, ii, -1)} title="Move up" style={miniBtn}>&uarr;</button>
+                        <button onClick={() => tMoveItem(ri, ii, 1)} title="Move down" style={miniBtn}>&darr;</button>
+                        <button onClick={() => tDelItem(ri, ii)} title="Delete" style={{ ...miniBtn, color: '#dc2626' }}>&times;</button>
+                      </div>
+                    ))}
+                    <button onClick={() => tAddItem(ri)} style={{ ...ghostBtn, marginTop: 6, fontSize: 12.5, padding: '5px 10px' }}>+ Add item</button>
+                  </div>
+                ))}
+                <button onClick={tAddRole} style={{ ...ghostBtn, marginTop: 2 }}>+ Add role card</button>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14, borderTop: '1px solid #eee', paddingTop: 12 }}>
+              <button onClick={() => setTmplOpen(false)} style={ghostBtn}>Cancel</button>
+              <button onClick={saveTemplate} disabled={tmplSaving || !tmpl} style={{ ...primaryBtn, opacity: (tmplSaving || !tmpl) ? 0.6 : 1 }}>{tmplSaving ? 'Saving...' : 'Save template'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </OperationsShell>
   )
@@ -408,5 +484,6 @@ function renderMentions(text, users) {
 }
 
 const selStyle = { width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13.5, background: '#fff' }
+const miniBtn = { background: '#fff', border: '1px solid #ddd', borderRadius: 6, width: 28, height: 28, cursor: 'pointer', fontSize: 13, color: '#555', flex: '0 0 auto' }
 const iconBtn = { background: 'none', border: 'none', cursor: 'pointer', color: '#bbb', fontSize: 14, padding: '0 4px' }
 const Lbl = ({ children }) => <div style={{ fontSize: 12, color: '#888', margin: '14px 0 5px', fontWeight: 600 }}>{children}</div>
