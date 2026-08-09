@@ -30,20 +30,29 @@ export default function RFIsPage() {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
   const [openId, setOpenId] = useState(null)
+  const [unread, setUnread] = useState([])
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
   // Deep-link from notification emails: /design/<no>/rfis?open=<rfiId>
   useEffect(() => {
     const openParam = router.query.open ? String(router.query.open) : ''
-    if (openParam && rfis.some(r => r.id === openParam)) setOpenId(openParam)
+    if (openParam && rfis.some(r => r.id === openParam)) openRfi(openParam)
   }, [router.query.open, rfis])
   async function load() {
     setLoading(true)
     try {
       const d = await fetch(`/api/design-rfis?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setRfis(d.rfis || []); setPeople(d.people || []); setCanEdit(!!d.canEdit); setMeId(d.meId || '')
+      setRfis(d.rfis || []); setPeople(d.people || []); setCanEdit(!!d.canEdit); setMeId(d.meId || ''); setUnread(d.unread || [])
     } catch {}
     setLoading(false)
+  }
+  // Open an RFI and mark it read for this user (clears its unread flag).
+  function openRfi(id) {
+    setOpenId(id)
+    if (unread.includes(id)) {
+      setUnread(u => u.filter(x => x !== id))
+      fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'mark-read', id }) }).catch(() => {})
+    }
   }
   const personName = (id) => { const p = people.find(x => x.id === id); return p ? p.name : '' }
 
@@ -81,13 +90,13 @@ export default function RFIsPage() {
   }
 
   if (!auth.ready) return null
-  const openRfi = rfis.find(r => r.id === openId)
+  const openRfiObj = rfis.find(r => r.id === openId)
 
   return (
     <>
       <Head><title>RFIs - Design</title></Head>
       <DesignNav active="rfis" projectNo={projectNo} projectName={auth.project?.name} isInternal={auth.isInternal} />
-      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '22px 28px 60px' }}>
+      <div style={{ width: '100%', margin: 0, padding: '22px 24px 60px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
           <div>
             <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>RFIs</h1>
@@ -105,9 +114,13 @@ export default function RFIsPage() {
               <tbody>
                 {rfis.map(r => {
                   const light = dueLight(r.requiredDate, r.status)
+                  const isUnread = unread.includes(r.id)
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0' }}>
-                      <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.number}</td>
+                    <tr key={r.id} style={{ borderTop: '1px solid #f0f0f0', background: isUnread ? '#fff7ed' : undefined }}>
+                      <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        {isUnread && <span title="New activity - not yet opened" style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#f97316', marginRight: 7, verticalAlign: 'middle' }} />}
+                        {r.number}
+                      </td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{fmtDate(r.issuedAt)}</td>
                       <td style={{ ...td, maxWidth: 380 }}><div style={{ whiteSpace: 'pre-wrap' }}>{r.description || '-'}</div></td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>
@@ -117,10 +130,9 @@ export default function RFIsPage() {
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{personName(r.responsibleUserId) || '-'}</td>
                       <td style={td}>{r.status === 'resolved' ? <Pill c="#16a34a" bg="#dcfce7">Resolved</Pill> : <Pill c="#2563eb" bg="#dbeafe">Open</Pill>}</td>
                       <td style={td}>{(r.attachments || []).length ? <span style={{ background: '#f3e8ff', color: '#7c3aed', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#128206; {(r.attachments || []).length}</span> : <span style={{ color: '#ccc' }}>-</span>}</td>
-                      <td style={td}>{(r.comments || []).length || '-'}</td>
+                      <td style={td}>{(r.comments || []).length ? <span style={{ fontWeight: isUnread ? 700 : 400, color: isUnread ? '#c2410c' : undefined }}>{(r.comments || []).length}{isUnread ? ' new' : ''}</span> : '-'}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setOpenId(r.id)} style={linkBtn}>Open</button>
-                        {canEdit && <button onClick={() => setEditing(r)} style={linkBtn}>Edit</button>}
+                        <button onClick={() => openRfi(r.id)} style={linkBtn}>Open</button>
                         {canEdit && <button onClick={() => del(r.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>}
                       </td>
                     </tr>
@@ -134,8 +146,8 @@ export default function RFIsPage() {
       </div>
 
       {editing && <RfiEditor rfi={editing} people={people} onClose={() => setEditing(null)} onSave={saveRfi} />}
-      {openRfi && <RfiDetail rfi={openRfi} people={people} personName={personName} canEdit={canEdit}
-        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfi.id)} onMarkup={saveAttachmentMarkup} />}
+      {openRfiObj && <RfiDetail rfi={openRfiObj} people={people} personName={personName} canEdit={canEdit}
+        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfiObj.id)} onMarkup={saveAttachmentMarkup} />}
     </>
   )
 }

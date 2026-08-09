@@ -4,6 +4,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, sendRfiIssuedNotice, APP_URL } from '../../lib/designEmail'
+import { recordPending, getReadMap, markRfiRead, unreadFromMap } from '../../lib/designRfiNotify'
 
 // RFIs (Requests for Information) per project.
 // Store: design:rfis:<projectNo> = [ { rfi } ]  (newest first by number)
@@ -108,7 +109,9 @@ export default async function handler(req, res) {
     const people = await peopleFor(no)
     if (req.query.people) return res.json({ people })
     const rfis = (await get(rkey(no))) || []
-    return res.json({ rfis, canEdit: acc.canEdit, people, meId: acc.user.id, meName: acc.user.name, external: acc.external })
+    const readMap = await getReadMap(no, acc.user.id)
+    const unread = unreadFromMap(rfis, readMap)
+    return res.json({ rfis, canEdit: acc.canEdit, people, meId: acc.user.id, meName: acc.user.name, external: acc.external, unread })
   }
 
   if (req.method === 'POST') {
@@ -120,6 +123,13 @@ export default async function handler(req, res) {
 
     let rfis = (await get(rkey(no))) || []
 
+    // Mark a single RFI as read for the current user (called when they open it).
+    if (body.action === 'mark-read') {
+      const rfi = rfis.find(r => r.id === body.id)
+      if (rfi) await markRfiRead(no, acc.user.id, rfi)
+      return res.json({ ok: true })
+    }
+
     // Comment - allowed for internal AND external (on their project).
     if (body.action === 'comment') {
       if (!acc.canComment) return res.status(403).json({ error: 'Not allowed' })
@@ -130,6 +140,10 @@ export default async function handler(req, res) {
       const comment = { id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, authorId: acc.user.id, authorName: acc.user.name || 'User', external: acc.external, html, at: Date.now() }
       rfis[idx].comments = [...(rfis[idx].comments || []), comment]
       await set(rkey(no), rfis)
+      // Also mark this RFI read for the comment's author (they've obviously seen it).
+      try { await markRfiRead(no, acc.user.id, rfis[idx]) } catch {}
+      // Record that a comment happened today (for the once-per-day project digest).
+      try { await recordPending(no, 'comment') } catch {}
 
       // Notify: anyone @mentioned, plus the RFI's responsible customer - excluding the
       // person who wrote the comment. Failures here never block the comment being saved.
@@ -193,6 +207,7 @@ export default async function handler(req, res) {
       }
       rfis = [rfi, ...rfis]
       await set(rkey(no), rfis)
+      try { await recordPending(no, 'rfi') } catch {}
       // Notify the responsible customer that an RFI has been issued to them.
       try {
         if (rfi.responsibleUserId) {
