@@ -75,7 +75,7 @@ async function notifyApprover(no, doc) {
     const approver = people.find(p => p.id === doc.approverId)
     if (!approver || !approver.email) return
     const pname = await projectDisplayName(no)
-    await sendRfiCommentNotice({ to: approver.email, recipientName: approver.name, projectNo: no, projectName: pname, rfiNumber: `${doc.title} (Rev ${doc.revision})`, authorName: doc.uploadedBy, commentHtml: `A drawing has been uploaded and needs your review. Please <strong>review, comment or approve</strong> it.`, rfiLink: rdLink(no, doc.id), mentioned: false })
+    await sendRfiCommentNotice({ to: approver.email, recipientName: approver.name, projectNo: no, projectName: pname, rfiNumber: `${doc.title} (Rev ${doc.revision})`, authorName: doc.uploadedBy, commentHtml: `A drawing has been uploaded and needs your review. Please <strong>review, comment or approve</strong> it.`, rfiLink: rdLink(no, doc.id), mentioned: false, cta: 'Review Drawings' })
   } catch (e) { /* ignore */ }
 }
 
@@ -132,7 +132,7 @@ export default async function handler(req, res) {
           const p = people.find(x => x.id === id)
           if (!p || !p.email) continue
           notify.mentioned++
-          const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title || 'Drawing'} (Rev ${docs[i].revision})`, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned: true })
+          const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title || 'Drawing'} (Rev ${docs[i].revision})`, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned: true, cta: 'Review Drawings' })
           if (r.sent) notify.sent++
         }
       }
@@ -169,7 +169,7 @@ export default async function handler(req, res) {
       const people = await peopleFor(no)
       const pname = await projectDisplayName(no)
       const link = rdLink(no, docs[i].id)
-      for (const p of people) { if (p.external || !p.email) continue; await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This drawing has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false }) }
+      for (const p of people) { if (p.external || !p.email) continue; await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This drawing has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false, cta: 'Review Drawings' }) }
     } catch (e) { /* ignore */ }
     return res.json({ ok: true, doc: docs[i] })
   }
@@ -252,7 +252,7 @@ export default async function handler(req, res) {
       const msg = isApprover
         ? `Rock Roofing have uploaded drawings for project <strong>${pname || no}</strong> for your <strong>review and approval</strong>. Please review, comment and approve them.`
         : `Rock Roofing have uploaded drawings for project <strong>${pname || no}</strong> for your information and review.`
-      const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: 'Rock Drawings', authorName: acc.user.name || 'Rock Roofing', commentHtml: msg, rfiLink: link, mentioned: false })
+      const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: 'Rock Drawings', authorName: acc.user.name || 'Rock Roofing', commentHtml: msg, rfiLink: link, mentioned: false, cta: 'Review Drawings' })
       if (r.sent) sent++
     }
     // Assign chosen approvers to all current (non-superseded) drawings that don't have one.

@@ -1,51 +1,24 @@
-DEPLOY NOTES - Rock Drawings rebuilt (thumbnails, revisions, approval, notify)
-==============================================================================
+DEPLOY NOTES - Text-box fix, button label, email CTAs
+=====================================================
 
-SIX files. THREE are NEW (add via GitHub "Add file"), THREE are EDITS.
+FIVE files, all EDITS - just replace them.
+  components/DrawingMarkup.js                    (markup text-box typing fix)
+  lib/designEmail.js                             (email button label configurable)
+  pages/api/design-rock-drawings.js              (emails say "Review Drawings")
+  pages/api/design-techsubs.js                   (emails say "Review the Tech Sub")
+  pages/design/[project]/rock-drawings.js        (button label)
 
-  NEW   pages/api/design-rock-drawings.js
-  NEW   pages/api/design-rock-drawings-zip.js
-  NEW   pages/api/cron/design-rockdrawing-daily.js
-  EDIT  pages/design/[project]/rock-drawings.js   (was a 4-line stub - now the full page)
-  EDIT  lib/designRfiNotify.js
-  EDIT  vercel.json                               (adds the rock-drawings comment digest cron)
+CHANGES
+1. Rock Drawings: the "View" button is now "View / Add Comments".
 
-*** Create the three NEW files via "Add file" at those exact paths. ***
+2. MARKUP TEXT BOX FIX: text typed into a mark-up text box was appearing REVERSED. Fixed at
+   the source - the text box now keeps the cursor in the right place while you type. Because
+   every page (RFIs, Tech Sub, Rock Drawings, and the older drawing pages) uses this same
+   mark-up component, this fixes the reversed text EVERYWHERE at once.
 
-WHAT'S NEW
-  Rock Drawings is now a full thumbnail page (like Handover Docs), with per-drawing status,
-  revisions and approval.
-
-  - THUMBNAILS: one card per drawing (image preview, or PDF first-page preview). Each has a
-    tick box, View, Download, and (Rock Roofing only) actions.
-  - REVISIONS: older revisions show as GREYED cards stacked BEHIND the current one, with an
-    "N old revs" note and a "Rev A/B/C" tag on the front card.
-  - STATUS: "In Review" -> "Approved". Only the assigned CUSTOMER can approve (green record
-    with name/company/role/email/phone/date+time on the drawing). Approve is hidden from
-    Rock Roofing; internal users see "Awaiting customer approval".
-  - CONSTRUCTION ISSUE: Rock Roofing only - a button to mark/unmark a drawing as
-    Construction Issue (blue tag).
-  - MARK SUPERSEDED: Rock Roofing only. Marking superseded REQUIRES uploading a new
-    revision - it opens the approver picker then the file picker; you cannot supersede
-    without providing the new drawing.
-  - VIEW: opens a near-fullscreen viewer. Comments sit at the TOP (light-blue, @mentions
-    notify immediately). The ONLY way to close the viewer is the X (clicking outside does
-    nothing). Mark up and download inside.
-  - NOTIFY PROJECT USERS (top button, Rock Roofing only): emails everyone on the project
-    that drawings have been uploaded. In the pop-up you tick who needs to APPROVE - they're
-    asked to review + approve; everyone else is just told drawings are up for review.
-  - DOWNLOAD: "Download all" / tick + "Download selected" (single zip).
-
-  CUSTOMER PERMISSIONS: customers can view, comment, mark up, download and approve (where
-  they're the approver). They cannot upload, revise, supersede, mark construction issue, or
-  delete - on this and every other design page (verified server-side).
-
-NOTES
-  - vercel.json gains one cron: design-rockdrawing-daily at 18:00 (end-of-day comment
-    digest, same pattern as RFI/Tech Sub). Check Vercel -> Cron Jobs after deploying.
-  - This is a fresh store - drawings previously uploaded via the old Rock Drawings page are
-    not migrated. Re-upload through "+ Add Drawing".
-  - The old shared components (DesignDrawingsPage) are untouched; contract-drawings route
-    still uses them but is unlinked from the nav.
+3. EMAIL BUTTONS now name the right item:
+   - Drawing emails say "Review Drawings" (was "View the RFI").
+   - Tech Sub emails say "Review the Tech Sub".
+   - RFI emails say "Review the RFI".
 
 BUILD: next build -> Compiled successfully.

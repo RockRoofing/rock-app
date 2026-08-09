@@ -79,7 +79,7 @@ async function notifyApprover(no, doc) {
       to: approver.email, recipientName: approver.name, projectNo: no, projectName: pname,
       rfiNumber: `${doc.title} (Rev ${doc.revision})`, authorName: doc.uploadedBy,
       commentHtml: `A Tech Sub has been uploaded and needs your review. Please <strong>review, comment or approve</strong> it.`,
-      rfiLink: tsLink(no, doc.id), mentioned: false,
+      rfiLink: tsLink(no, doc.id), mentioned: false, cta: 'Review the Tech Sub',
     })
   } catch (e) { /* ignore */ }
 }
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
           const p = people.find(x => x.id === id)
           if (!p || !p.email) continue
           notify.mentioned++
-          const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title || 'Tech Sub'} (Rev ${docs[i].revision})`, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned: true })
+          const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title || 'Tech Sub'} (Rev ${docs[i].revision})`, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned: true, cta: 'Review the Tech Sub' })
           if (r.sent) notify.sent++
         }
       }
@@ -191,7 +191,7 @@ export default async function handler(req, res) {
       const link = tsLink(no, docs[i].id)
       for (const p of people) {
         if (p.external || !p.email) continue
-        await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This Tech Sub has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false })
+        await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: `${docs[i].title} (Rev ${docs[i].revision})`, authorName: docs[i].approvedBy, commentHtml: `<strong>Approved.</strong> This Tech Sub has been approved by ${docs[i].approvedBy}${ext.company ? ` (${ext.company})` : ''}.`, rfiLink: link, mentioned: false, cta: 'Review the Tech Sub' })
       }
     } catch (e) { /* ignore */ }
     return res.json({ ok: true, doc: docs[i] })

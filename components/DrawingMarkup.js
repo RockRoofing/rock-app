@@ -351,12 +351,9 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
             overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           }
           if (editing) return (
-            <textarea key={sh.id} autoFocus value={sh.text || ''}
-              onChange={e => updateShape(sh.id, { text: e.target.value })}
-              onBlur={() => { if (!(sh.text || '').trim()) setShapes(s => s.filter(x => x.id !== sh.id)); setEditingId(null) }}
-              onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
-              placeholder="Type here..."
-              style={{ ...boxStyle, resize: 'none', outline: 'none', fontFamily: 'inherit' }} />
+            <TextEditor key={sh.id} sh={sh} boxStyle={boxStyle}
+              onChange={(val) => updateShape(sh.id, { text: val })}
+              onDone={(val) => { if (!(val || '').trim()) setShapes(s => s.filter(x => x.id !== sh.id)); setEditingId(null) }} />
           )
           const editable = canEdit && tool === 'select'
           return (
@@ -379,6 +376,23 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
 }
 
 // A single PDF page slot that renders its canvas lazily when scrolled into view.
+// Text box editor with its OWN local state so typing never resets the caret (fixes the
+// "text appears reversed" bug that happened when the value was driven from parent state
+// that re-rendered on every keystroke). Commits to parent on each change and on blur.
+function TextEditor({ sh, boxStyle, onChange, onDone }) {
+  const [val, setVal] = useState(sh.text || '')
+  const ref = useRef()
+  useEffect(() => { const el = ref.current; if (el) { el.focus(); const n = el.value.length; el.setSelectionRange(n, n) } }, [])
+  return (
+    <textarea ref={ref} value={val} dir="ltr"
+      onChange={e => { setVal(e.target.value); onChange(e.target.value) }}
+      onBlur={() => onDone(val)}
+      onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+      placeholder="Type here..."
+      style={{ ...boxStyle, resize: 'none', outline: 'none', fontFamily: 'inherit', direction: 'ltr', unicodeBidi: 'plaintext', textAlign: 'left' }} />
+  )
+}
+
 function PdfPageCanvas({ pageNo, render }) {
   const ref = useRef()
   useEffect(() => {

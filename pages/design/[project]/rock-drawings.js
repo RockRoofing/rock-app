@@ -200,7 +200,7 @@ export default function RockDrawingsPage() {
                           {olderCount > 0 && <span style={{ fontSize: 11, color: '#999' }}>{olderCount} old rev{olderCount === 1 ? '' : 's'}</span>}
                         </div>
                         <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <button onClick={() => openDoc(d.id)} style={btnOpenSm}>View</button>
+                          <button onClick={() => openDoc(d.id)} style={btnOpenSm}>View / Add Comments</button>
                           <a href={`/api/download?url=${encodeURIComponent(d.url)}&name=${encodeURIComponent(d.name)}`} style={linkBtn}>Download</a>
                           {canApprove(d) && <button onClick={() => approve(d.id)} style={btnApproveSm}>Approve</button>}
                         </div>
