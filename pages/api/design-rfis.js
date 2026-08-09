@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
+import { sendRfiCommentNotice, sendRfiIssuedNotice, APP_URL } from '../../lib/designEmail'
 
 // RFIs (Requests for Information) per project.
 // Store: design:rfis:<projectNo> = [ { rfi } ]  (newest first by number)
@@ -58,6 +59,46 @@ async function peopleFor(projectNo) {
   return out
 }
 
+// Same as peopleFor but keeps emails - server-side only, never returned to the client.
+async function peopleWithEmail(projectNo) {
+  const [portal, ext] = await Promise.all([getPortalUsers(), getExternalUsers()])
+  const out = []
+  for (const p of (portal || [])) {
+    if (p.active === false) continue
+    if (!canAccessArea(p.role, 'design')) continue
+    out.push({ id: p.id, name: p.name || [p.firstName, p.lastName].filter(Boolean).join(' '), email: p.email || '', external: false })
+  }
+  for (const e of (ext || [])) {
+    if (e.active === false) continue
+    if (!externalCanAccessProject(e, projectNo)) continue
+    out.push({ id: e.id, name: e.name, email: e.email || '', external: true })
+  }
+  return out
+}
+
+async function projectName(projectNo) {
+  try {
+    const d = await fetch(`${APP_URL}/api/planning`).then(r => r.json())
+    const p = (d.projects || []).find(x => String(x.projectNo || x.jobNo || '') === String(projectNo))
+    return p ? (p.name || '') : ''
+  } catch { return '' }
+}
+
+// Which people are @mentioned in a comment's HTML? Mentions render as the person's name
+// inside a styled span (see the RFI comment box), so match on name.
+function mentionedIds(html, people) {
+  const text = String(html || '')
+  const ids = []
+  for (const p of people) {
+    if (!p.name) continue
+    const re = new RegExp('@' + p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w])', 'i')
+    if (re.test(text)) ids.push(p.id)
+  }
+  return [...new Set(ids)]
+}
+
+const rfiLinkFor = (projectNo, rfiId) => `${APP_URL}/design/${encodeURIComponent(projectNo)}/rfis?open=${encodeURIComponent(rfiId)}`
+
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     const no = String(req.query.no || '').trim()
@@ -89,6 +130,26 @@ export default async function handler(req, res) {
       const comment = { id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, authorId: acc.user.id, authorName: acc.user.name || 'User', external: acc.external, html, at: Date.now() }
       rfis[idx].comments = [...(rfis[idx].comments || []), comment]
       await set(rkey(no), rfis)
+
+      // Notify: anyone @mentioned, plus the RFI's responsible customer - excluding the
+      // person who wrote the comment. Failures here never block the comment being saved.
+      try {
+        const people = await peopleWithEmail(no)
+        const mentioned = new Set(mentionedIds(html, people))
+        const recipients = new Map()  // id -> { person, mentioned }
+        for (const id of mentioned) { const p = people.find(x => x.id === id); if (p) recipients.set(id, { person: p, mentioned: true }) }
+        const respId = rfis[idx].responsibleUserId
+        if (respId && !recipients.has(respId)) { const p = people.find(x => x.id === respId); if (p) recipients.set(respId, { person: p, mentioned: false }) }
+        recipients.delete(acc.user.id)  // don't email the author
+        if (recipients.size) {
+          const pname = await projectName(no)
+          const link = rfiLinkFor(no, rfis[idx].id)
+          await Promise.all([...recipients.values()].map(({ person, mentioned }) =>
+            person.email ? sendRfiCommentNotice({ to: person.email, recipientName: person.name, projectNo: no, projectName: pname, rfiNumber: rfis[idx].number, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned }) : null
+          ))
+        }
+      } catch (e) { /* notification failure must not fail the comment */ }
+
       return res.json({ ok: true, rfi: rfis[idx] })
     }
 
@@ -113,6 +174,17 @@ export default async function handler(req, res) {
       }
       rfis = [rfi, ...rfis]
       await set(rkey(no), rfis)
+      // Notify the responsible customer that an RFI has been issued to them.
+      try {
+        if (rfi.responsibleUserId) {
+          const people = await peopleWithEmail(no)
+          const resp = people.find(x => x.id === rfi.responsibleUserId)
+          if (resp && resp.email) {
+            const pname = await projectName(no)
+            await sendRfiIssuedNotice({ to: resp.email, recipientName: resp.name, projectNo: no, projectName: pname, rfiNumber: rfi.number, description: rfi.description, requiredDate: rfi.requiredDate, rfiLink: rfiLinkFor(no, rfi.id) })
+          }
+        }
+      } catch (e) { /* notification failure must not fail the create */ }
       return res.json({ ok: true, rfis })
     }
 

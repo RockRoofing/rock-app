@@ -61,7 +61,10 @@ export default function DesignCustomers() {
       if (!r.ok) { setErr(d.error || 'Could not save.'); return }
       setUsers(d.users || [])
       setForm(null)
-      if (action === 'create' && d.tempPassword) setNotice(`Customer created. Temporary password: ${d.tempPassword} — share this with them; they'll be asked to change it on first login.`)
+      if (action === 'create' && d.tempPassword) {
+        if (d.emailSent) setNotice(`Customer created and login details emailed to ${form.email}. (Temporary password: ${d.tempPassword})`)
+        else setNotice(`Customer created, but the email could NOT be sent${d.emailError ? ` (${d.emailError})` : ''}. Share these login details manually - Email: ${form.email}, Temporary password: ${d.tempPassword}`)
+      }
       else setNotice('Saved.')
     } catch { setErr('Could not save.') }
   }
@@ -71,6 +74,15 @@ export default function DesignCustomers() {
     const r = await fetch('/api/design-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set-password', id: u.id, password: pw }) })
     const d = await r.json()
     if (r.ok) setNotice(`Password updated for ${u.name}.`); else setErr(d.error || 'Could not set password.')
+  }
+  async function resendInvite(u) {
+    if (!confirm(`Email new login details to ${u.name} (${u.email})? This generates a new temporary password.`)) return
+    const r = await fetch('/api/design-customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'resend-invite', id: u.id }) })
+    const d = await r.json()
+    if (!r.ok) { setErr(d.error || 'Could not resend.'); return }
+    setUsers(d.users || [])
+    if (d.emailSent) setNotice(`Login details emailed to ${u.email}. (Temporary password: ${d.tempPassword})`)
+    else setNotice(`Could NOT send email${d.emailError ? ` (${d.emailError})` : ''}. Share manually - Email: ${u.email}, Temporary password: ${d.tempPassword}`)
   }
   async function del(u) {
     if (!confirm(`Delete customer ${u.name}? They will no longer be able to log in.`)) return
@@ -113,6 +125,7 @@ export default function DesignCustomers() {
                     <td style={td}>{u.active === false ? <span style={{ color: '#bbb' }}>Inactive</span> : <span style={{ color: '#16a34a' }}>Active</span>}</td>
                     <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button onClick={() => { setErr(''); setNotice(''); setForm({ ...u, projects: [...(u.projects || [])] }) }} style={link}>Edit</button>
+                      <button onClick={() => resendInvite(u)} style={link}>Resend login email</button>
                       <button onClick={() => resetPw(u)} style={link}>Reset password</button>
                       <button onClick={() => del(u)} style={{ ...link, color: '#dc2626' }}>Delete</button>
                     </td>

@@ -1,5 +1,6 @@
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, saveExternalUsers, stripExternal, normProjects, hashPassword } from '../../lib/designUsers'
+import { sendCustomerWelcome } from '../../lib/designEmail'
 
 // Admin management of EXTERNAL customer/design-team users.
 //   GET  ?action=list                         -> { users }
@@ -54,7 +55,22 @@ export default async function handler(req, res) {
       }
       users.push(newUser)
       await saveExternalUsers(users)
-      return res.json({ ok: true, users: users.map(stripExternal), tempPassword: tempPw })
+      // Email the customer their login details.
+      const mail = await sendCustomerWelcome({ to: email, name, tempPassword: tempPw })
+      return res.json({ ok: true, users: users.map(stripExternal), tempPassword: tempPw, emailSent: mail.sent, emailError: mail.error || null })
+    }
+
+    // Re-send login details: generates a NEW temporary password (the old one can't be
+    // recovered because it's hashed) and emails it to the customer.
+    if (action === 'resend-invite') {
+      const idx = users.findIndex(x => x.id === body.id)
+      if (idx < 0) return res.status(404).json({ error: 'Customer not found' })
+      const tempPw = Math.random().toString(36).slice(2, 10) + 'A1!'
+      users[idx].passwordHash = hashPassword(tempPw)
+      users[idx].mustResetPassword = true
+      await saveExternalUsers(users)
+      const mail = await sendCustomerWelcome({ to: users[idx].email, name: users[idx].name, tempPassword: tempPw, isReset: true })
+      return res.json({ ok: true, users: users.map(stripExternal), tempPassword: tempPw, emailSent: mail.sent, emailError: mail.error || null })
     }
 
     if (action === 'update') {

@@ -31,6 +31,11 @@ export default function RFIsPage() {
   const [openId, setOpenId] = useState(null)
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
+  // Deep-link from notification emails: /design/<no>/rfis?open=<rfiId>
+  useEffect(() => {
+    const openParam = router.query.open ? String(router.query.open) : ''
+    if (openParam && rfis.some(r => r.id === openParam)) setOpenId(openParam)
+  }, [router.query.open, rfis])
   async function load() {
     setLoading(true)
     try {
