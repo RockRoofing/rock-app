@@ -157,6 +157,21 @@ export default async function handler(req, res) {
       return res.json({ ok: true, rfi: rfis[idx], notify })
     }
 
+    // Save markup/annotations for one attachment. Allowed for internal AND external
+    // (customers can mark up their own project's RFI attachments).
+    if (body.action === 'attachment-markup') {
+      if (!acc.canComment) return res.status(403).json({ error: 'Not allowed' })
+      const idx = rfis.findIndex(x => x.id === body.id)
+      if (idx < 0) return res.status(404).json({ error: 'RFI not found' })
+      const atts = rfis[idx].attachments || []
+      const ai = atts.findIndex(a => a.url === body.attachmentUrl)
+      if (ai < 0) return res.status(404).json({ error: 'Attachment not found' })
+      atts[ai] = { ...atts[ai], markup: body.markup }
+      rfis[idx].attachments = atts
+      await set(rkey(no), rfis)
+      return res.json({ ok: true, rfi: rfis[idx] })
+    }
+
     // Everything else is internal-only.
     if (!acc.canEdit) return res.status(403).json({ error: 'View/comment only' })
 

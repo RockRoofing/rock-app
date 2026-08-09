@@ -1,19 +1,29 @@
-DEPLOY NOTES - Design portal: Log out everywhere + Report app improvement on home
-=================================================================================
+DEPLOY NOTES - RFI attachments: viewer + markup (arrows, highlight, text, colours)
+==================================================================================
 
-TWO files, both EDITS - just replace them.
-  lib/designShell.js        (adds Log out to the nav shown on every per-project page)
-  pages/design/index.js     (adds Report app improvement + Log out to the home page)
+THREE files, all EDITS - just replace them.
+  components/DrawingMarkup.js            (adds Highlight tool + Download button)
+  pages/api/design-rfis.js              (saves markup per attachment)
+  pages/design/[project]/rfis.js        (attachments column + viewer/markup modal)
 
-CHANGES
-  - LOG OUT button now appears on ALL Design portal pages:
-      * the per-project pages (RFIs, drawings, tech sub, certs, warranties, O&Ms, etc.)
-        via the shared nav, and
-      * the Design home / project-list page.
-    It signs the user out and returns them to the login page.
-  - The Design home page now also has a "Report app improvement" button (the per-project
-    pages already had one). It opens the same report dialog used across the portal.
+WHAT'S NEW ON THE RFI PAGE
+  - New "Attachments" column in the RFI table showing a paperclip + count.
+  - Open an RFI, and each attachment now has:
+      * "View & mark up" - opens a viewer window showing the PDF (multi-page) or image.
+      * "Download" - saves the original file.
+  - In the viewer you can annotate the drawing itself:
+      * Arrow, Line, Box, Circle, freehand Draw, HIGHLIGHT (marker), and Text boxes.
+      * Choose the COLOUR, thickness and opacity of lines / writing.
+      * Highlighter lays down a thick semi-transparent stroke for highlighting text/areas.
+      * Select + Delete to remove a mark; Undo; then "Save markup".
+  - Markup is saved against that attachment and shown again next time (an attachment that
+    has marks shows a small "marked up" tag). Both internal staff and customers can view,
+    mark up and download.
 
-  Both buttons sit on the right-hand side of the top black bar.
+NOTES
+  - PDFs render with pdf.js (same approach as the drawings pages); very large or unusual
+    PDFs that can't render inline still offer Download.
+  - The Highlight tool and Download button were added to the shared DrawingMarkup
+    component, so the Design "Drawings" pages get them too.
 
 BUILD: next build -> Compiled successfully.

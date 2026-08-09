@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { upload } from '@vercel/blob/client'
 import { useDesignProjectAuth, DesignNav, PURPLE, INK } from '../../../lib/designShell'
+import DrawingMarkup from '../../../components/DrawingMarkup'
 
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 const fmtDateTime = (ts) => ts ? new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''
@@ -61,6 +62,11 @@ export default function RFIsPage() {
     const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'delete', id }) })
     const d = await r.json(); if (r.ok) { setRfis(d.rfis || []); setOpenId(null) }
   }
+  async function saveAttachmentMarkup(id, attachmentUrl, markup) {
+    const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'attachment-markup', id, attachmentUrl, markup }) })
+    const d = await r.json()
+    if (r.ok) setRfis(rs => rs.map(x => x.id === id ? d.rfi : x)); else alert(d.error || 'Could not save markup')
+  }
   async function addComment(id, html) {
     const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'comment', id, html }) })
     const d = await r.json()
@@ -94,7 +100,7 @@ export default function RFIsPage() {
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead><tr style={{ background: '#faf9f7' }}>
-                {['RFI', 'Issued', 'Description', 'Required by', 'Responsible', 'Status', 'Comments', ''].map(h => <th key={h} style={th}>{h}</th>)}
+                {['RFI', 'Issued', 'Description', 'Required by', 'Responsible', 'Status', 'Attachments', 'Comments', ''].map(h => <th key={h} style={th}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {rfis.map(r => {
@@ -110,6 +116,7 @@ export default function RFIsPage() {
                       </td>
                       <td style={{ ...td, whiteSpace: 'nowrap' }}>{personName(r.responsibleUserId) || '-'}</td>
                       <td style={td}>{r.status === 'resolved' ? <Pill c="#16a34a" bg="#dcfce7">Resolved</Pill> : <Pill c="#2563eb" bg="#dbeafe">Open</Pill>}</td>
+                      <td style={td}>{(r.attachments || []).length ? <span style={{ background: '#f3e8ff', color: '#7c3aed', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>&#128206; {(r.attachments || []).length}</span> : <span style={{ color: '#ccc' }}>-</span>}</td>
                       <td style={td}>{(r.comments || []).length || '-'}</td>
                       <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
                         <button onClick={() => setOpenId(r.id)} style={linkBtn}>Open</button>
@@ -119,7 +126,7 @@ export default function RFIsPage() {
                     </tr>
                   )
                 })}
-                {!rfis.length && <tr><td colSpan={8} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 26 }}>No RFIs yet.</td></tr>}
+                {!rfis.length && <tr><td colSpan={9} style={{ ...td, textAlign: 'center', color: '#aaa', padding: 26 }}>No RFIs yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -128,7 +135,7 @@ export default function RFIsPage() {
 
       {editing && <RfiEditor rfi={editing} people={people} onClose={() => setEditing(null)} onSave={saveRfi} />}
       {openRfi && <RfiDetail rfi={openRfi} people={people} personName={personName} canEdit={canEdit}
-        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onEdit={() => { setEditing(openRfi); setOpenId(null) }} onDelete={() => del(openRfi.id)} />}
+        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onEdit={() => { setEditing(openRfi); setOpenId(null) }} onDelete={() => del(openRfi.id)} onMarkup={saveAttachmentMarkup} />}
     </>
   )
 }
@@ -196,8 +203,9 @@ function RfiEditor({ rfi, people, onClose, onSave }) {
   )
 }
 
-function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onEdit, onDelete }) {
+function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onEdit, onDelete, onMarkup }) {
   const light = dueLight(rfi.requiredDate, rfi.status)
+  const [viewAtt, setViewAtt] = useState(null)  // attachment being viewed/marked up
   return (
     <Modal onClose={onClose} title={rfi.number} wide>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
@@ -220,11 +228,18 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
         <div style={{ marginTop: 12 }}>
           <Lbl>Attachments</Lbl>
           {(rfi.attachments || []).map((a, i) => (
-            <div key={i} style={{ fontSize: 13, padding: '3px 0' }}>
-              <a href={`/api/download?url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name)}&inline=1`} target="_blank" rel="noreferrer" style={{ color: PURPLE, textDecoration: 'none', fontWeight: 600 }}>{a.name}</a>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, padding: '5px 0', borderBottom: '1px solid #f4f4f4' }}>
+              <span style={{ flex: 1, wordBreak: 'break-word' }}>{a.name}{(a.markup && (Array.isArray(a.markup) ? a.markup.length : Object.keys(a.markup || {}).length)) ? <span style={{ marginLeft: 8, fontSize: 11, color: '#7c3aed', fontWeight: 700 }}>marked up</span> : null}</span>
+              <button onClick={() => setViewAtt(a)} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff' }}>View &amp; mark up</button>
+              <a href={`/api/download?url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name)}`} style={{ ...linkBtn, marginLeft: 0 }}>Download</a>
             </div>
           ))}
         </div>
+      )}
+
+      {viewAtt && (
+        <AttachmentViewer att={viewAtt} onClose={() => setViewAtt(null)}
+          onSave={(markup) => onMarkup(rfi.id, viewAtt.url, markup)} />
       )}
 
       <div style={{ borderTop: '1px solid #eee', margin: '16px 0 10px' }} />
@@ -245,6 +260,28 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
       <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
       {canEdit && <div style={{ textAlign: 'right', marginTop: 12 }}><button onClick={onDelete} style={{ ...linkBtn, color: '#dc2626', marginLeft: 0 }}>Delete RFI</button></div>}
     </Modal>
+  )
+}
+
+// Full-screen viewer for an RFI attachment: view PDF/image, mark it up (arrows, lines,
+// circles, boxes, freehand, highlighter, text; colour/thickness), download.
+function AttachmentViewer({ att, onClose, onSave }) {
+  const isViewable = (att.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(att.url || '') || (att.contentType || '') === 'application/pdf'
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 200, overflowY: 'auto', padding: '3vh 12px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 18, width: 1000, maxWidth: '96vw' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16, color: INK, wordBreak: 'break-word' }}>{att.name}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>
+        </div>
+        {isViewable
+          ? <DrawingMarkup imageUrl={att.url} contentType={att.contentType} initial={att.markup} canEdit onSave={onSave} fileName={att.name} />
+          : <div style={{ padding: 30, textAlign: 'center', color: '#888' }}>
+              This file type can't be previewed here.
+              <div style={{ marginTop: 12 }}><a href={`/api/download?url=${encodeURIComponent(att.url)}&name=${encodeURIComponent(att.name)}`} style={{ ...btnPrimary, textDecoration: 'none' }}>Download {att.name}</a></div>
+            </div>}
+      </div>
+    </div>
   )
 }
 

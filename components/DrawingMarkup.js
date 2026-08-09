@@ -15,6 +15,7 @@ const TOOLS = [
   { key: 'circle', label: 'Circle' },
   { key: 'line', label: 'Line' },
   { key: 'free', label: 'Draw' },
+  { key: 'highlight', label: 'Highlight' },
   { key: 'text', label: 'Text' },
 ]
 const COLOURS = ['#dc2626', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#111111']
@@ -32,7 +33,7 @@ function toMap(initial) {
   return {}
 }
 
-export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit, onSave }) {
+export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit, onSave, fileName }) {
   const isImg = isImageUrl(imageUrl, contentType)
   const [map, setMap] = useState(() => toMap(initial))
   const [page, setPage] = useState(1)
@@ -108,12 +109,14 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     const p = rel(e)
     if (tool === 'text') { const txt = prompt('Comment text:'); if (txt) setShapes(s => [...s, { id: id(), type: 'text', x: p.x, y: p.y, text: txt, colour, opacity, width }]); return }
     if (tool === 'free') { setDraft({ id: id(), type: 'free', pts: [p], colour, opacity, width }); return }
+    // Highlighter: freehand, thick and semi-transparent so it reads like a marker.
+    if (tool === 'highlight') { setDraft({ id: id(), type: 'highlight', pts: [p], colour, opacity: Math.min(opacity, 0.4), width: Math.max(width * 4, 14) }); return }
     setDraft({ id: id(), type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, colour, opacity, width })
   }
   function move(e) {
     if (!draft) return
     const p = rel(e)
-    if (draft.type === 'free') setDraft(d => ({ ...d, pts: [...d.pts, p] }))
+    if (draft.type === 'free' || draft.type === 'highlight') setDraft(d => ({ ...d, pts: [...d.pts, p] }))
     else setDraft(d => ({ ...d, x2: p.x, y2: p.y }))
   }
   function up() { if (!draft) return; setShapes(s => [...s, draft]); setDraft(null) }
@@ -130,6 +133,10 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
 
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <a href={`/api/download?url=${encodeURIComponent(imageUrl)}&name=${encodeURIComponent(fileName || 'file')}`}
+          style={{ ...ghost, textDecoration: 'none', color: '#7c3aed', fontWeight: 600 }}>Download</a>
+      </div>
       {canEdit && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10, background: '#faf9fd', border: '1px solid #ece9f5', borderRadius: 10, padding: 8 }}>
           {TOOLS.map(t => (
@@ -187,6 +194,7 @@ function Shape({ sh, selected, onClick }) {
   const sel = selected ? { filter: 'drop-shadow(0 0 2px #7c3aed)' } : {}
   if (sh.type === 'text') return <text x={sh.x * S} y={sh.y * S} fill={stroke} opacity={sh.opacity ?? 1} fontSize={Math.max(12, (sh.width || 3) * 6)} onClick={onClick} style={{ cursor: 'pointer', ...sel }}>{sh.text}</text>
   if (sh.type === 'free') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} {...common} strokeLinejoin="round" strokeLinecap="round" style={{ ...common.style, ...sel }} />
+  if (sh.type === 'highlight') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} stroke={stroke} strokeWidth={sh.width || 16} opacity={sh.opacity ?? 0.35} fill="none" strokeLinejoin="round" strokeLinecap="round" onClick={onClick} style={{ cursor: 'pointer', ...sel }} />
   if (sh.type === 'rect') { const x = Math.min(sh.x1, sh.x2) * S, y = Math.min(sh.y1, sh.y2) * S, w = Math.abs(sh.x2 - sh.x1) * S, h = Math.abs(sh.y2 - sh.y1) * S; return <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel }} /> }
   if (sh.type === 'circle') { const cx = (sh.x1 + sh.x2) / 2 * S, cy = (sh.y1 + sh.y2) / 2 * S, rx = Math.abs(sh.x2 - sh.x1) / 2 * S, ry = Math.abs(sh.y2 - sh.y1) / 2 * S; return <ellipse cx={cx} cy={cy} rx={rx} ry={ry} {...common} style={{ ...common.style, ...sel }} /> }
   const marker = sh.type === 'arrow' ? { markerEnd: 'url(#arrowhead)' } : {}
