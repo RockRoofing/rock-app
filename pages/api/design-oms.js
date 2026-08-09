@@ -57,10 +57,12 @@ async function gatherSections(no) {
     get(`design:techsubs:${no}`), get(`design:rock-drawings:${no}`), get(`design:calculations:${no}`),
     get(`design:leak-test-certs:${no}`), get(`design:warranties:${no}`),
   ])
+  const curDrawings = currentNonSuperseded(drawings)
+  const curCalcs = currentNonSuperseded(calcs)
   const tsFiles = currentNonSuperseded(techsubs).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
-  // Rock Roofing CONSTRUCTION ISSUE drawings only.
-  const dwgFiles = currentNonSuperseded(drawings).filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
-  const calcFiles = currentNonSuperseded(calcs).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
+  // Rock Drawings AND Calculations: only items marked CONSTRUCTION ISSUE are included.
+  const dwgFiles = curDrawings.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
+  const calcFiles = curCalcs.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
   const leakFiles = ((leaks && leaks.files) || []).map(f => ({ name: f.name, url: f.url, contentType: f.contentType }))
   const warrFiles = ((warranties && warranties.files) || []).map(f => ({ name: f.name, url: f.url, contentType: f.contentType }))
 
@@ -71,8 +73,18 @@ async function gatherSections(no) {
     { title: 'Leak Test Certificates', files: leakFiles },
     { title: 'Warranties', files: warrFiles },
   ]
-  // Only include sections that actually have documents.
-  return all.filter(s => s.files.length > 0)
+
+  // Readiness: what's missing, and what's current-but-not-yet-Construction-Issue (so would
+  // be left out). These drive the "check with your Design Manager" warning.
+  const notCiDrawings = curDrawings.filter(d => !d.constructionIssue).length
+  const notCiCalcs = curCalcs.filter(d => !d.constructionIssue).length
+  const missing = all.filter(s => s.files.length === 0).map(s => s.title)
+  const warnings = []
+  if (notCiDrawings > 0) warnings.push(`${notCiDrawings} drawing${notCiDrawings === 1 ? '' : 's'} not yet marked Construction Issue (will be left out)`)
+  if (notCiCalcs > 0) warnings.push(`${notCiCalcs} calculation${notCiCalcs === 1 ? '' : 's'} not yet marked Construction Issue (will be left out)`)
+
+  const sections = all.filter(s => s.files.length > 0)
+  return { sections, readiness: { missing, warnings, notCiDrawings, notCiCalcs, ready: missing.length === 0 && warnings.length === 0 } }
 }
 
 async function projectMeta(no) {
@@ -94,9 +106,9 @@ export default async function handler(req, res) {
     const acc = await resolveAccess(req, no)
     if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
     const manual = (await get(OKEY(no))) || null
-    // Report what WOULD be included, so the page can show a summary/enable the button.
-    const sections = await gatherSections(no)
-    return res.json({ manual, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })) })
+    // Report what WOULD be included + readiness, so the page can warn and enable the button.
+    const { sections, readiness } = await gatherSections(no)
+    return res.json({ manual, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -108,7 +120,7 @@ export default async function handler(req, res) {
   if (!acc.canEdit) return res.status(403).json({ error: 'Only Rock Roofing can build the O&M manual.' })
 
   if (body.action === 'build') {
-    const sections = await gatherSections(no)
+    const { sections } = await gatherSections(no)
     if (!sections.length) return res.status(400).json({ error: 'Nothing to include yet - add Tech Subs, Construction Issue drawings, Calculations, Leak Test Certs or Warranties first.' })
     const meta = await projectMeta(no)
     let bytes

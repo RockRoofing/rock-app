@@ -12,6 +12,7 @@ export default function OMsPage() {
   const auth = useDesignProjectAuth(projectNo)
   const [manual, setManual] = useState(null)
   const [available, setAvailable] = useState([])
+  const [readiness, setReadiness] = useState(null)
   const [canEdit, setCanEdit] = useState(false)
   const [loading, setLoading] = useState(false)
   const [building, setBuilding] = useState(false)
@@ -23,14 +24,23 @@ export default function OMsPage() {
     setLoading(true); setErr('')
     try {
       const d = await fetch(`/api/design-oms?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
-      setManual(d.manual || null); setAvailable(d.available || []); setCanEdit(!!d.canEdit)
+      setManual(d.manual || null); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null)
     } catch { setErr('Could not load') }
     setLoading(false)
   }
 
   async function build() {
     if (building) return
-    if (manual && !confirm('Rebuild the O&M Manual? This replaces the current version.')) return
+    // Warn if items are missing or not yet Construction Issue - check with the Design Manager.
+    if (readiness && !readiness.ready) {
+      const lines = []
+      if (readiness.warnings && readiness.warnings.length) lines.push('Still to be marked Construction Issue:\n  - ' + readiness.warnings.join('\n  - '))
+      if (readiness.missing && readiness.missing.length) lines.push('Missing sections (nothing to include):\n  - ' + readiness.missing.join('\n  - '))
+      const msg = 'The O&M Manual may not be ready to compile.\n\n' + lines.join('\n\n') + '\n\nPlease check with your Rock Roofing Design Manager that the O&Ms are ready to be compiled.\n\nBuild anyway?'
+      if (!confirm(msg)) return
+    } else if (manual && !confirm('Rebuild the O&M Manual? This replaces the current version.')) {
+      return
+    }
     setBuilding(true); setErr('')
     try {
       const r = await fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'build' }) })
@@ -60,6 +70,14 @@ export default function OMsPage() {
           </div>
         </div>
         {err && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}
+        {canEdit && readiness && !readiness.ready && (available.length > 0 || (readiness.missing && readiness.missing.length > 0)) && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '12px 14px', fontSize: 13, marginBottom: 14 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>&#9888; Check before compiling</div>
+            {readiness.warnings && readiness.warnings.map((w, i) => <div key={`w${i}`} style={{ marginTop: 2 }}>&bull; {w}</div>)}
+            {readiness.missing && readiness.missing.length > 0 && <div style={{ marginTop: 2 }}>&bull; No documents yet for: {readiness.missing.join(', ')}</div>}
+            <div style={{ marginTop: 8, fontWeight: 600 }}>Please check with your Rock Roofing Design Manager that the O&amp;Ms are ready to be compiled. Only Construction Issue drawings and calculations are included.</div>
+          </div>
+        )}
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
           <>
