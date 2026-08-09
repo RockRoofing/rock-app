@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { upload } from '@vercel/blob/client'
 import { useDesignProjectAuth, DesignNav, PURPLE, INK } from '../../../lib/designShell'
+import DrawingMarkup from '../../../components/DrawingMarkup'
 
 const fmtSize = (b) => { if (!b) return ''; const k = b / 1024; return k < 1024 ? `${Math.round(k)} KB` : `${(k / 1024).toFixed(1)} MB` }
 const isImg = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.url || '')
@@ -20,6 +21,7 @@ export default function HandoverDocsPage() {
   const [sectionName, setSectionName] = useState('')
   const [selected, setSelected] = useState({})   // { fileId: true }
   const [uploadingTo, setUploadingTo] = useState(null)
+  const [viewFile, setViewFile] = useState(null)
   const fileInputs = useRef({})
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
@@ -152,33 +154,34 @@ export default function HandoverDocsPage() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 14 }}>
                   {(s.files || []).map(f => (
-                    <Thumb key={f.id} file={f} selected={!!selected[f.id]} onToggle={() => toggle(f.id)} canEdit={canEdit} onDelete={() => deleteFile(s.id, f.id)} />
+                    <Thumb key={f.id} file={f} selected={!!selected[f.id]} onToggle={() => toggle(f.id)} canEdit={canEdit} onDelete={() => deleteFile(s.id, f.id)} onView={() => setViewFile(f)} />
                   ))}
                 </div>
               )}
             </div>
           ))}
       </div>
+      {viewFile && <DocViewer file={viewFile} onClose={() => setViewFile(null)} />}
     </>
   )
 }
 
-function Thumb({ file, selected, onToggle, canEdit, onDelete }) {
-  const viewHref = `/api/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}&inline=1`
+function Thumb({ file, selected, onToggle, canEdit, onDelete, onView }) {
   const dlHref = `/api/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`
   return (
     <div style={{ border: `2px solid ${selected ? PURPLE : '#eee'}`, borderRadius: 10, overflow: 'hidden', background: '#fff', position: 'relative' }}>
       <label style={{ position: 'absolute', top: 6, left: 6, zIndex: 2, background: 'rgba(255,255,255,0.9)', borderRadius: 5, padding: '1px 3px', display: 'flex', cursor: 'pointer' }}>
         <input type="checkbox" checked={selected} onChange={onToggle} style={{ width: 16, height: 16, cursor: 'pointer' }} />
       </label>
-      <a href={viewHref} target="_blank" rel="noreferrer" style={{ display: 'block', height: 130, background: '#faf9fd', textDecoration: 'none' }}>
+      <button onClick={onView} title="View" style={{ display: 'block', width: '100%', height: 130, background: '#faf9fd', border: 'none', padding: 0, cursor: 'pointer' }}>
         {isImg(file)
           ? <img src={file.url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <PdfThumb file={file} />}
-      </a>
+      </button>
       <div style={{ padding: '8px 10px' }}>
         <div title={file.name} style={{ fontSize: 12.5, color: '#333', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+          <button onClick={onView} style={{ background: 'none', border: 'none', fontSize: 12, color: PURPLE, cursor: 'pointer', fontWeight: 600, padding: 0 }}>View</button>
           <a href={dlHref} style={{ fontSize: 12, color: PURPLE, textDecoration: 'none', fontWeight: 600 }}>Download</a>
           {canEdit && <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Delete</button>}
         </div>
@@ -228,6 +231,34 @@ function PdfThumb({ file }) {
     </div>
   )
   return <div ref={ref} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
+}
+
+// In-page viewer overlay. Opens on the same page so it never disturbs your selections.
+function DocViewer({ file, onClose }) {
+  const viewable = isImg(file) || isPdf(file)
+  const dlHref = `/api/download?url=${encodeURIComponent(file.url)}&name=${encodeURIComponent(file.name)}`
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: '2vh 2vw' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 16, width: '94vw', height: '94vh', maxWidth: '94vw', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flex: '0 0 auto', gap: 10 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: INK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</span>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flex: '0 0 auto' }}>
+            <a href={dlHref} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
+          </div>
+        </div>
+        <div style={{ flex: 1, overflow: 'auto', minHeight: 0, background: '#f4f4f4', borderRadius: 8 }}>
+          {isImg(file)
+            ? <div style={{ display: 'flex', justifyContent: 'center', padding: 10 }}><img src={file.url} alt={file.name} style={{ maxWidth: '100%', height: 'auto', display: 'block' }} /></div>
+            : viewable
+              ? <div style={{ padding: 10 }}><DrawingMarkup imageUrl={file.url} contentType={file.contentType} initial={null} canEdit={false} onSave={() => {}} fileName={file.name} docLabel="document" /></div>
+              : <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>This file type can't be previewed here.
+                  <div style={{ marginTop: 12 }}><a href={dlHref} style={{ ...btnPrimary, textDecoration: 'none' }}>Download {file.name}</a></div>
+                </div>}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const btnPrimary = { background: PURPLE, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }

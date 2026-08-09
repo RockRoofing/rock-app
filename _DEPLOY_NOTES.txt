@@ -1,23 +1,15 @@
-DEPLOY NOTES - Fix "Could not build zip" on Handover Docs
-=========================================================
+DEPLOY NOTES - Handover Docs: in-page View button
+==================================================
 
-THREE files, all EDITS - just replace them.
-  pages/api/design-handover-zip.js       (rewritten - no external library)
-  pages/design/[project]/handover-docs.js (clearer error message)
-  package.json                            (REMOVES the "archiver" dependency)
+ONE file, an EDIT - just replace it.
+  pages/design/[project]/handover-docs.js
 
-WHAT WAS WRONG
-  The zip download used the "archiver" library. That dependency wasn't reliably installed/
-  bundled on the server, so the zip endpoint errored and the page just said "Could not
-  build zip".
-
-THE FIX
-  The zip is now built WITHOUT any external library - it uses only Node's built-in tools to
-  write a standard .zip. This removes the dependency entirely (no install step, nothing to
-  go wrong on deploy). Verified the output opens cleanly as a normal zip.
-
-  Because of this, package.json no longer needs "archiver" - this package removes that line.
-  If you already committed the earlier package.json with "archiver", just replace it with
-  this one (removing archiver is harmless and avoids the failed install).
+CHANGES
+  - Each thumbnail now has a "View" button (and clicking the thumbnail image also views).
+  - View opens the document in an in-page viewer overlay (images, and multi-page PDFs you
+    can scroll through) - it does NOT open a new tab or navigate away.
+  - Because the viewer is on the same page, any documents you have TICKED stay selected -
+    opening/closing the viewer never clears your selection.
+  - Download and Delete remain on each thumbnail as before.
 
 BUILD: next build -> Compiled successfully.
