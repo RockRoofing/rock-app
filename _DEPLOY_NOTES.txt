@@ -1,35 +1,15 @@
-DEPLOY NOTES - Calculations page (same as Rock Drawings, for calculations)
-==========================================================================
+DEPLOY NOTES - Remove Leak Test Cert Builder page
+=================================================
 
-SEVEN files. THREE are NEW (add via GitHub "Add file"), FOUR are EDITS.
+TWO files, both EDITS - just replace them.
+  lib/designShell.js                              (removes it from the Design nav)
+  pages/design/[project]/leak-test-builder.js     (old URL now redirects to Leak Test Certs)
 
-  NEW   pages/api/design-calculations.js
-  NEW   pages/api/design-calculations-zip.js
-  NEW   pages/api/cron/design-calculation-daily.js
-  EDIT  pages/design/[project]/calculations.js   (was a 3-line shared page - now full page)
-  EDIT  lib/designRfiNotify.js
-  EDIT  lib/approvalAudit.js                      (certificate handles "Calculation")
-  EDIT  vercel.json                               (adds calculations comment digest cron)
-
-*** Create the three NEW files via "Add file" at those exact paths. ***
-
-WHAT THIS IS
-  The Calculations page is now EXACTLY the same as Rock Drawings, but for calculations:
-  thumbnails, revisions (greyed superseded cards behind the current one), In Review ->
-  Approved (customer approves), Construction Issue (Rock Roofing only), mark superseded
-  (requires uploading a new revision), View / Add Comments viewer (comments at the top,
-  @mentions notify, X-only close), Notify project users (with approver picker), Download
-  all / selected (zip), bulk "Approve selected" for customers, and the full approval
-  evidence (append-only audit log + SHA-256 file fingerprint + timestamped certificate PDF).
-
-  It uses its own separate storage, so Calculations and Rock Drawings never mix.
-
-NOTES
-  - Customers: view, comment, mark up, download, approve (where assigned). They cannot
-    upload, revise, supersede, mark construction issue, or delete.
-  - vercel.json gains one cron (design-calculation-daily, 18:00 comment digest). Check
-    Vercel -> Cron Jobs after deploying.
-  - Fresh store - anything previously on the old Calculations page is not migrated; re-upload
-    via "+ Add Calculation".
+WHAT CHANGED
+  - "Leak Test Cert Builder" is removed from the Design portal navigation.
+  - If anyone still has an old link to it, that page now just redirects to "Leak Test Certs".
+  - (The file is kept as a small redirect rather than deleted, so there's nothing to delete
+    in GitHub - just replace it. If you'd rather fully delete the file, you can remove
+    pages/design/[project]/leak-test-builder.js in GitHub and it'll 404 instead.)
 
 BUILD: next build -> Compiled successfully.
