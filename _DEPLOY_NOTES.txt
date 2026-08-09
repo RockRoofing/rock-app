@@ -1,29 +1,23 @@
-DEPLOY NOTES - RFI attachments: viewer + markup (arrows, highlight, text, colours)
-==================================================================================
+DEPLOY NOTES - Markup: draggable text boxes with size / bold / underline
+=======================================================================
 
-THREE files, all EDITS - just replace them.
-  components/DrawingMarkup.js            (adds Highlight tool + Download button)
-  pages/api/design-rfis.js              (saves markup per attachment)
-  pages/design/[project]/rfis.js        (attachments column + viewer/markup modal)
+ONE file, an EDIT - just replace it.
+  components/DrawingMarkup.js
 
-WHAT'S NEW ON THE RFI PAGE
-  - New "Attachments" column in the RFI table showing a paperclip + count.
-  - Open an RFI, and each attachment now has:
-      * "View & mark up" - opens a viewer window showing the PDF (multi-page) or image.
-      * "Download" - saves the original file.
-  - In the viewer you can annotate the drawing itself:
-      * Arrow, Line, Box, Circle, freehand Draw, HIGHLIGHT (marker), and Text boxes.
-      * Choose the COLOUR, thickness and opacity of lines / writing.
-      * Highlighter lays down a thick semi-transparent stroke for highlighting text/areas.
-      * Select + Delete to remove a mark; Undo; then "Save markup".
-  - Markup is saved against that attachment and shown again next time (an attachment that
-    has marks shows a small "marked up" tag). Both internal staff and customers can view,
-    mark up and download.
+WHAT CHANGED (applies to RFI attachment markup AND the Design Drawings markup)
+  The Text tool is now a proper text box you draw, not a pop-up prompt:
+   - Select the Text tool and DRAG OUT a box to the size you want.
+   - Type directly into the box - the writing appears on the drawing as you type.
+   - A text controls row appears (when Text is selected, or a text box is selected):
+       * Text size - pick from 12 up to 48
+       * B - bold on/off
+       * U - underline on/off
+       * the colour swatches also set / change the text colour
+   - Double-click an existing text box (with Select) to edit its wording again.
+   - Empty text boxes are discarded automatically.
+   - Existing/older text notes still display correctly.
 
-NOTES
-  - PDFs render with pdf.js (same approach as the drawings pages); very large or unusual
-    PDFs that can't render inline still offer Download.
-  - The Highlight tool and Download button were added to the shared DrawingMarkup
-    component, so the Design "Drawings" pages get them too.
+  Everything else (arrow, line, box, circle, draw, highlight, colour, thickness, opacity,
+  save markup, download) is unchanged.
 
 BUILD: next build -> Compiled successfully.

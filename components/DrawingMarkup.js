@@ -42,6 +42,10 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
   const [colour, setColour] = useState('#dc2626')
   const [opacity, setOpacity] = useState(1)
   const [width, setWidth] = useState(3)
+  const [fontSize, setFontSize] = useState(18)
+  const [bold, setBold] = useState(false)
+  const [underline, setUnderline] = useState(false)
+  const [editingId, setEditingId] = useState(null)   // id of the text box being typed into
   const [draft, setDraft] = useState(null)
   const [selected, setSelected] = useState(null)
   const [dirty, setDirty] = useState(false)
@@ -97,6 +101,9 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     setMap(m => { const cur = m[page] || []; const next = typeof updater === 'function' ? updater(cur) : updater; return { ...m, [page]: next } })
     setDirty(true)
   }
+  const updateShape = (sid, patch) => setShapes(s => s.map(x => x.id === sid ? { ...x, ...patch } : x))
+  // When a text box is selected, editing its style should update that box live.
+  const applyTextStyle = (patch) => { if (selected) { const sh = shapes.find(x => x.id === selected); if (sh && sh.type === 'text') updateShape(selected, patch) } }
 
   function rel(e) {
     const r = wrapRef.current.getBoundingClientRect()
@@ -107,10 +114,11 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     if (!canEdit || tool === 'select') return
     e.preventDefault()
     const p = rel(e)
-    if (tool === 'text') { const txt = prompt('Comment text:'); if (txt) setShapes(s => [...s, { id: id(), type: 'text', x: p.x, y: p.y, text: txt, colour, opacity, width }]); return }
     if (tool === 'free') { setDraft({ id: id(), type: 'free', pts: [p], colour, opacity, width }); return }
     // Highlighter: freehand, thick and semi-transparent so it reads like a marker.
     if (tool === 'highlight') { setDraft({ id: id(), type: 'highlight', pts: [p], colour, opacity: Math.min(opacity, 0.4), width: Math.max(width * 4, 14) }); return }
+    // Text: drag out the box; on release it becomes editable and you type on-screen.
+    if (tool === 'text') { setDraft({ id: id(), type: 'text', x1: p.x, y1: p.y, x2: p.x, y2: p.y, text: '', colour, opacity, fontSize, bold, underline }); return }
     setDraft({ id: id(), type: tool, x1: p.x, y1: p.y, x2: p.x, y2: p.y, colour, opacity, width })
   }
   function move(e) {
@@ -119,7 +127,17 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
     if (draft.type === 'free' || draft.type === 'highlight') setDraft(d => ({ ...d, pts: [...d.pts, p] }))
     else setDraft(d => ({ ...d, x2: p.x, y2: p.y }))
   }
-  function up() { if (!draft) return; setShapes(s => [...s, draft]); setDraft(null) }
+  function up() {
+    if (!draft) return
+    if (draft.type === 'text') {
+      // Give a minimum sensible size if the user just clicked without dragging.
+      let d = draft
+      if (Math.abs(d.x2 - d.x1) < 0.04 || Math.abs(d.y2 - d.y1) < 0.02) d = { ...d, x2: d.x1 + 0.18, y2: d.y1 + 0.06 }
+      setShapes(s => [...s, d]); setDraft(null); setEditingId(d.id); setSelected(d.id)
+      return
+    }
+    setShapes(s => [...s, draft]); setDraft(null)
+  }
 
   function removeSelected() { if (selected) { setShapes(s => s.filter(x => x.id !== selected)); setSelected(null) } }
   function undo() { setShapes(s => s.slice(0, -1)) }
@@ -143,10 +161,22 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
             <button key={t.key} onClick={() => setTool(t.key)} style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${tool === t.key ? '#7c3aed' : '#ddd'}`, background: tool === t.key ? '#7c3aed' : '#fff', color: tool === t.key ? '#fff' : '#333', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>{t.label}</button>
           ))}
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
-          {COLOURS.map(c => <button key={c} onClick={() => setColour(c)} style={{ width: 22, height: 22, borderRadius: 5, background: c, border: colour === c ? '2px solid #111' : '1px solid #ccc', cursor: 'pointer' }} />)}
+          {COLOURS.map(c => <button key={c} onMouseDown={e => e.preventDefault()} onClick={() => { setColour(c); applyTextStyle({ colour: c }) }} style={{ width: 22, height: 22, borderRadius: 5, background: c, border: colour === c ? '2px solid #111' : '1px solid #ccc', cursor: 'pointer' }} />)}
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
           <label style={{ fontSize: 12, color: '#666' }}>Thickness<input type="range" min="1" max="12" value={width} onChange={e => setWidth(Number(e.target.value))} style={{ verticalAlign: 'middle', marginLeft: 6, width: 80 }} /></label>
           <label style={{ fontSize: 12, color: '#666' }}>Opacity<input type="range" min="0.1" max="1" step="0.1" value={opacity} onChange={e => setOpacity(Number(e.target.value))} style={{ verticalAlign: 'middle', marginLeft: 6, width: 80 }} /></label>
+          {(tool === 'text' || (selected && shapes.find(x => x.id === selected)?.type === 'text')) && (
+            <>
+              <span style={{ width: 1, height: 22, background: '#ddd' }} />
+              <label style={{ fontSize: 12, color: '#666' }}>Text size
+                <select value={fontSize} onMouseDown={e => e.stopPropagation()} onChange={e => { const v = Number(e.target.value); setFontSize(v); applyTextStyle({ fontSize: v }) }} style={{ marginLeft: 6, padding: '3px 6px', borderRadius: 6, border: '1px solid #ddd', fontSize: 12.5 }}>
+                  {[12, 14, 16, 18, 22, 28, 36, 48].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <button onMouseDown={e => e.preventDefault()} onClick={() => { const v = !bold; setBold(v); applyTextStyle({ bold: v }) }} style={{ ...ghost, fontWeight: 800, background: bold ? '#7c3aed' : '#fff', color: bold ? '#fff' : '#333', border: 'none' }}>B</button>
+              <button onMouseDown={e => e.preventDefault()} onClick={() => { const v = !underline; setUnderline(v); applyTextStyle({ underline: v }) }} style={{ ...ghost, textDecoration: 'underline', background: underline ? '#7c3aed' : '#fff', color: underline ? '#fff' : '#333', border: 'none' }}>U</button>
+            </>
+          )}
           <span style={{ width: 1, height: 22, background: '#ddd' }} />
           <button onClick={undo} style={ghost}>Undo</button>
           {selected && <button onClick={removeSelected} style={{ ...ghost, color: '#dc2626' }}>Delete selected</button>}
@@ -178,11 +208,44 @@ export default function DrawingMarkup({ imageUrl, contentType, initial, canEdit,
                 <polygon points="0 0, 10 4, 0 8" fill="context-stroke" />
               </marker>
             </defs>
-            {all.map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} onClick={() => { if (canEdit && tool === 'select') setSelected(sh.id) }} />)}
+            {all.filter(sh => sh.type !== 'text').map(sh => <Shape key={sh.id} sh={sh} selected={selected === sh.id} onClick={() => { if (canEdit && tool === 'select') setSelected(sh.id) }} />)}
           </svg>
         )}
+        {/* Text boxes as HTML overlays (crisp fonts, native editing) */}
+        {pdfState === 'ok' && all.filter(sh => sh.type === 'text').map(sh => {
+          // Support legacy text shapes that only had a single x/y point.
+          const x1 = sh.x1 != null ? sh.x1 : (sh.x || 0), y1 = sh.y1 != null ? sh.y1 : (sh.y || 0)
+          const x2 = sh.x2 != null ? sh.x2 : (x1 + 0.2), y2 = sh.y2 != null ? sh.y2 : (y1 + 0.06)
+          const L = Math.min(x1, x2) * 100, T = Math.min(y1, y2) * 100
+          const W = Math.abs(x2 - x1) * 100, H = Math.abs(y2 - y1) * 100
+          const editing = editingId === sh.id
+          const boxStyle = {
+            position: 'absolute', left: `${L}%`, top: `${T}%`, width: `${W}%`, minHeight: `${H}%`,
+            color: sh.colour || '#dc2626', opacity: sh.opacity ?? 1,
+            fontSize: (sh.fontSize || 18), fontWeight: sh.bold ? 700 : 400, textDecoration: sh.underline ? 'underline' : 'none',
+            lineHeight: 1.25, padding: '2px 4px', boxSizing: 'border-box',
+            border: (editing || selected === sh.id) ? '1px dashed #7c3aed' : '1px solid transparent',
+            background: editing ? 'rgba(255,255,255,0.7)' : 'transparent',
+            overflow: 'hidden', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }
+          if (editing) return (
+            <textarea key={sh.id} autoFocus value={sh.text || ''}
+              onChange={e => updateShape(sh.id, { text: e.target.value })}
+              onBlur={() => { if (!(sh.text || '').trim()) setShapes(s => s.filter(x => x.id !== sh.id)); setEditingId(null) }}
+              onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+              placeholder="Type here..."
+              style={{ ...boxStyle, resize: 'none', outline: 'none', fontFamily: 'inherit' }} />
+          )
+          return (
+            <div key={sh.id} style={{ ...boxStyle, cursor: canEdit ? 'pointer' : 'default' }}
+              onMouseDown={e => { if (!canEdit) return; e.stopPropagation(); if (tool === 'select') setSelected(sh.id) }}
+              onDoubleClick={e => { if (!canEdit) return; e.stopPropagation(); setSelected(sh.id); setEditingId(sh.id) }}>
+              {sh.text || <span style={{ color: '#bbb' }}>(empty)</span>}
+            </div>
+          )
+        })}
       </div>
-      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool, choose colour / thickness / opacity, then draw on the drawing. Use Select to click a shape and delete it. Markup saves per page - remember to Save markup.</div>}
+      {canEdit && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>Pick a tool, choose colour / thickness / opacity, then draw on the drawing. For Text, drag out a box and type in it (set size, bold, underline). Use Select then double-click a text box to edit it, or Delete selected to remove a mark. Markup saves per page - remember to Save markup.</div>}
     </div>
   )
 }
@@ -192,7 +255,7 @@ function Shape({ sh, selected, onClick }) {
   const stroke = sh.colour || '#dc2626'
   const common = { stroke, strokeWidth: (sh.width || 3), opacity: sh.opacity ?? 1, fill: 'none', style: { cursor: 'pointer' }, onClick }
   const sel = selected ? { filter: 'drop-shadow(0 0 2px #7c3aed)' } : {}
-  if (sh.type === 'text') return <text x={sh.x * S} y={sh.y * S} fill={stroke} opacity={sh.opacity ?? 1} fontSize={Math.max(12, (sh.width || 3) * 6)} onClick={onClick} style={{ cursor: 'pointer', ...sel }}>{sh.text}</text>
+  if (sh.type === 'text') return null  // text boxes render as HTML overlays, not SVG
   if (sh.type === 'free') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} {...common} strokeLinejoin="round" strokeLinecap="round" style={{ ...common.style, ...sel }} />
   if (sh.type === 'highlight') return <polyline points={(sh.pts || []).map(p => `${p.x * S},${p.y * S}`).join(' ')} stroke={stroke} strokeWidth={sh.width || 16} opacity={sh.opacity ?? 0.35} fill="none" strokeLinejoin="round" strokeLinecap="round" onClick={onClick} style={{ cursor: 'pointer', ...sel }} />
   if (sh.type === 'rect') { const x = Math.min(sh.x1, sh.x2) * S, y = Math.min(sh.y1, sh.y2) * S, w = Math.abs(sh.x2 - sh.x1) * S, h = Math.abs(sh.y2 - sh.y1) * S; return <rect x={x} y={y} width={w} height={h} {...common} style={{ ...common.style, ...sel }} /> }
