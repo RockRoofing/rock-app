@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import { useDesignProjectAuth, DesignNav, INK } from '../../../lib/designShell'
@@ -18,6 +18,12 @@ export default function OMsPage() {
   const [available, setAvailable] = useState([])
   const [readiness, setReadiness] = useState(null)
   const [customers, setCustomers] = useState([])
+  const [comments, setComments] = useState([])
+  const [people, setPeople] = useState([])
+  const [meId, setMeId] = useState('')
+  const [isExternal, setIsExternal] = useState(false)
+  const [customerDownloaded, setCustomerDownloaded] = useState(false)
+  const [downloadedList, setDownloadedList] = useState([])
   const [notifyOpen, setNotifyOpen] = useState(false)
   const [notifyPick, setNotifyPick] = useState({})
   const [notifying, setNotifying] = useState(false)
@@ -33,6 +39,7 @@ export default function OMsPage() {
     try {
       const d = await fetch(`/api/design-oms?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
       setManual(d.manual || null); setRevisions(d.revisions || []); setAvailable(d.available || []); setCanEdit(!!d.canEdit); setReadiness(d.readiness || null); setCustomers(d.customers || [])
+      setComments(d.comments || []); setPeople(d.people || []); setMeId(d.meId || ''); setIsExternal(!!d.isExternal); setCustomerDownloaded(!!d.customerDownloaded); setDownloadedList(d.downloadedList || [])
       setViewingUrl(prev => (d.manual && (!prev || !(d.revisions || []).some(r => r.url === prev))) ? d.manual.url : prev)
     } catch { setErr('Could not load') }
     setLoading(false)
@@ -74,6 +81,19 @@ export default function OMsPage() {
     setNotifying(false)
   }
 
+  async function addComment(html) {
+    try {
+      const r = await fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'comment', html }) })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Could not comment'); return }
+      setComments(d.comments || [])
+    } catch { setErr('Could not comment') }
+  }
+  function recordDownload() {
+    fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'record-download' }) })
+      .then(() => { if (isExternal) { setCustomerDownloaded(true) } }).catch(() => {})
+  }
+
   if (!auth.ready) return null
   const totalDocs = available.reduce((a, s) => a + s.count, 0)
   const viewingRev = revisions.find(r => r.url === viewingUrl) || manual
@@ -90,7 +110,7 @@ export default function OMsPage() {
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>A single Operation &amp; Maintenance Manual combining the Technical Submittal, Construction Issue drawings, Calculations, Leak Test Certs and Warranties.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {viewingRev && <a href={`/api/download?url=${encodeURIComponent(viewingRev.url)}&name=${encodeURIComponent(dlName)}`} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6', textDecoration: 'none' }}>Download{viewingRev.revision ? ` Rev ${viewingRev.revision}` : ''}</a>}
+            {viewingRev && <a href={`/api/download?url=${encodeURIComponent(viewingRev.url)}&name=${encodeURIComponent(dlName)}`} onClick={recordDownload} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6', textDecoration: 'none' }}>Download{viewingRev.revision ? ` Rev ${viewingRev.revision}` : ''}</a>}
             {canEdit && manual && <button onClick={() => setNotifyOpen(true)} style={{ ...btnGhost, color: BRAND, borderColor: '#bbead6' }}>Notify Customer O&amp;Ms are ready</button>}
             {canEdit && <button onClick={build} disabled={building} style={{ ...btnPrimary, opacity: building ? 0.6 : 1 }}>{building ? 'Building...' : (manual ? 'Rebuild O&M Manual' : 'Build O&M Manual')}</button>}
           </div>
@@ -107,6 +127,32 @@ export default function OMsPage() {
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
           <>
+            {manual && (
+              customerDownloaded
+                ? <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 800, letterSpacing: 0.3, marginBottom: 14 }}>CUSTOMER DOWNLOADED</div>
+                : <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 800, letterSpacing: 0.3, marginBottom: 14 }}>CUSTOMER NOT DOWNLOADED</div>
+            )}
+
+            {manual && (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 700, marginBottom: 6 }}>Comments ({comments.length})</div>
+                <div style={{ maxHeight: 220, overflowY: 'auto', marginBottom: 8 }}>
+                  {comments.length === 0 && <div style={{ color: '#7c93b8', fontSize: 13, padding: '6px 0' }}>No comments yet. Customers can leave comments here to request changes.</div>}
+                  {comments.map(c => (
+                    <div key={c.id} style={{ padding: '8px 10px', marginBottom: 8, background: '#fff', border: '1px solid #dbeafe', borderRadius: 8 }}>
+                      <div style={{ fontSize: 12, color: '#5b6b85', marginBottom: 2 }}>
+                        <strong style={{ color: c.external ? '#9333ea' : '#1a1a19' }}>{c.authorName}</strong>
+                        {c.external && <span style={{ marginLeft: 6, fontSize: 10.5, background: '#f3e8ff', color: '#7c3aed', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>Customer</span>}
+                        <span style={{ marginLeft: 8 }}>{new Date(c.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <div style={{ fontSize: 13.5, color: '#222' }} dangerouslySetInnerHTML={{ __html: c.html }} />
+                    </div>
+                  ))}
+                </div>
+                <OmCommentBox people={people} onSubmit={addComment} />
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: manual ? '300px 1fr' : '1fr', gap: 18, alignItems: 'start' }}>
               <div>
                 <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 16 }}>
@@ -182,6 +228,44 @@ export default function OMsPage() {
         </div>
       )}
     </>
+  )
+}
+
+function OmCommentBox({ people, onSubmit }) {
+  const [text, setText] = useState('')
+  const [suggest, setSuggest] = useState(null)
+  const taRef = useRef()
+  function onChange(e) {
+    const v = e.target.value; setText(v)
+    const caret = e.target.selectionStart
+    const m = /@([\w'-]*)$/.exec(v.slice(0, caret))
+    setSuggest(m ? { query: m[1].toLowerCase(), from: caret - m[1].length - 1 } : null)
+  }
+  function pick(u) {
+    const before = text.slice(0, suggest.from)
+    const caret = taRef.current ? taRef.current.selectionStart : text.length
+    const after = text.slice(caret)
+    setText(`${before}@${u.name} ${after}`); setSuggest(null)
+    setTimeout(() => taRef.current && taRef.current.focus(), 0)
+  }
+  function submit() {
+    const t = text.trim(); if (!t) return
+    let html = t.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br/>')
+    for (const u of (people || [])) if (u.name) html = html.replace(new RegExp('@' + u.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w])', 'g'), `<span style="color:#2563eb;font-weight:700">@${u.name}</span>`)
+    onSubmit(html); setText(''); setSuggest(null)
+  }
+  const matches = suggest ? (people || []).filter(u => u.name && u.name.toLowerCase().includes(suggest.query)).slice(0, 6) : []
+  return (
+    <div style={{ position: 'relative' }}>
+      {suggest && matches.length > 0 && (
+        <div style={{ position: 'absolute', bottom: '100%', left: 0, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 -4px 16px rgba(0,0,0,0.1)', overflow: 'hidden', marginBottom: 4, zIndex: 5, minWidth: 200 }}>
+          {matches.map(u => <button key={u.id} onMouseDown={e => { e.preventDefault(); pick(u) }} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: 13 }}><strong>{u.name}</strong></button>)}
+        </div>
+      )}
+      <textarea ref={taRef} value={text} onChange={onChange} placeholder="Add a comment. Use @ to tag someone..." rows={2}
+        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #cdd9ea', borderRadius: 8, padding: '8px 10px', fontSize: 13.5, resize: 'vertical', fontFamily: 'inherit' }} />
+      <div style={{ textAlign: 'right', marginTop: 6 }}><button onClick={submit} disabled={!text.trim()} style={{ ...btnPrimary, opacity: text.trim() ? 1 : 0.5 }}>Comment</button></div>
+    </div>
   )
 }
 

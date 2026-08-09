@@ -11,13 +11,13 @@ export default async function handler(req, res) {
     const pend = await get(rdPendingKey(no))
     if (!pend || pend.date !== today) continue
     if (pend.emailedDate === today) continue
-    if (!(pend.comments > 0)) continue
+    if (!((pend.comments > 0) || (pend.docs > 0))) continue
     const recipients = (await projectRecipients(no)).filter(r => r.email)
     if (recipients.length) {
       const projectName = await projectDisplayName(no)
       for (const r of recipients) {
-        const html = rockDrawingDigestHtml({ name: r.name, projectName, projectNo: no, comments: pend.comments })
-        const out = await sendMail(r.email, `New comments on Rock Drawings for ${projectName || no}`, html)
+        const html = rockDrawingDigestHtml({ name: r.name, projectName, projectNo: no, comments: pend.comments, docs: pend.docs || 0 })
+        const out = await sendMail(r.email, `New updates on Rock Drawings for ${projectName || no}`, html)
         if (out.sent) emailsSent++
       }
       projectsEmailed++

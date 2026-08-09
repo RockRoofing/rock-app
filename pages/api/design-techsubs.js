@@ -4,7 +4,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
-import { tsKey, tsRecordPendingComment, tsGetReadMap, tsMarkRead, tsUnread, projectDisplayName } from '../../lib/designRfiNotify'
+import { tsKey, tsRecordPendingComment, tsRecordPendingDoc, tsGetReadMap, tsMarkRead, tsUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 
 // Tech Sub documents for a project. Each doc is a REVISION belonging to a "family" (one
@@ -237,6 +237,7 @@ export default async function handler(req, res) {
     docs = [doc, ...docs]
     await set(tsKey(no), docs)
     await notifyApprover(no, doc)
+    try { await tsRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
   }
 
@@ -264,6 +265,7 @@ export default async function handler(req, res) {
     docs = [doc, ...docs]
     await set(tsKey(no), docs)
     await notifyApprover(no, doc)
+    try { await tsRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
   }
 

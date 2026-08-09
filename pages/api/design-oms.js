@@ -1,15 +1,17 @@
-import { get, set, getOpsProjects } from '../../lib/db'
+import { get, set, getOpsProjects, getPortalUsers } from '../../lib/db'
 import { put } from '@vercel/blob'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { canAccessArea } from '../../lib/roles'
 import { buildOMManual } from '../../lib/omsPdf'
-import { sendOmReadyNotice } from '../../lib/designEmail'
+import { sendOmReadyNotice, sendRfiCommentNotice } from '../../lib/designEmail'
+import { projectDisplayName } from '../../lib/designRfiNotify'
 
 // Build / retrieve the combined O&M Manual for a project.
 //   GET  ?no=<projectNo>            -> { manual, revisions, canEdit, available, readiness }
 //   POST { projectNo, action:'build' } -> builds a NEW revision, returns { manual, revisions }
-// Store: design:oms-manual:<no> = { current: <manual>, revisions: [<manual>, ...newest first] }
+// Store: design:oms-manual:<no> = { current: <manual>, revisions: [...], comments: [...],
+//   downloads: { <userId>: { name, company, at } } }
 // Each manual: { url, builtAt, builtBy, sections, projectName, projectNo, revision }
 const OKEY = (no) => `design:oms-manual:${no}`
 const APP_URL = process.env.APP_URL || 'https://app.rockroofing.co.uk'
@@ -104,6 +106,23 @@ async function customersFor(no) {
     .filter(c => c.email)
 }
 
+// Everyone who can be @mentioned on an O&M comment: internal design users + customers.
+async function peopleForOms(no) {
+  const [portal, ext] = await Promise.all([getPortalUsers(), getExternalUsers()])
+  const out = []
+  for (const p of (portal || [])) {
+    if (p.active === false) continue
+    if (!canAccessArea(p.role, 'design')) continue
+    out.push({ id: p.id, name: p.name || [p.firstName, p.lastName].filter(Boolean).join(' '), email: p.email || '', external: false, company: 'Rock Roofing' })
+  }
+  for (const e of (ext || [])) {
+    if (e.active === false) continue
+    if (!externalCanAccessProject(e, no)) continue
+    out.push({ id: e.id, name: e.name, email: e.email || '', external: true, company: e.company || 'Customer' })
+  }
+  return out
+}
+
 async function projectMeta(no) {
   const ops = (await getOpsProjects()) || []
   const p = ops.find(x => String(x.projectNo) === String(no))
@@ -118,13 +137,13 @@ async function projectMeta(no) {
 
 async function readStore(no) {
   const raw = await get(OKEY(no))
-  if (!raw) return { current: null, revisions: [] }
+  if (!raw) return { current: null, revisions: [], comments: [], downloads: {} }
   // Migrate the old single-manual shape to the new revisions shape.
   if (raw.url && !raw.revisions) {
     const m = { ...raw, revision: raw.revision || 1 }
-    return { current: m, revisions: [m] }
+    return { current: m, revisions: [m], comments: [], downloads: {} }
   }
-  return { current: raw.current || null, revisions: raw.revisions || [] }
+  return { current: raw.current || null, revisions: raw.revisions || [], comments: raw.comments || [], downloads: raw.downloads || {} }
 }
 
 export default async function handler(req, res) {
@@ -137,7 +156,18 @@ export default async function handler(req, res) {
     // Report what WOULD be included + readiness, so the page can warn and enable the button.
     const { sections, readiness } = await gatherSections(no)
     const customers = acc.canEdit ? await customersFor(no) : []
-    return res.json({ manual: store.current, revisions: store.revisions, canEdit: acc.canEdit, available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness, customers })
+    const people = await peopleForOms(no)
+    const downloads = store.downloads || {}
+    const downloadedList = Object.values(downloads)
+    // A customer is "downloaded" if any external user has downloaded the CURRENT revision.
+    const currentRev = store.current ? store.current.revision : null
+    const customerDownloaded = downloadedList.some(d => d.external && (d.revision === currentRev))
+    return res.json({
+      manual: store.current, revisions: store.revisions, canEdit: acc.canEdit,
+      available: sections.map(s => ({ title: s.title, count: s.files.length })), readiness, customers,
+      comments: store.comments || [], people, meId: acc.user.id, isExternal: acc.user.role === 'external',
+      customerDownloaded, downloadedList,
+    })
   }
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -146,6 +176,50 @@ export default async function handler(req, res) {
   if (!no) return res.status(400).json({ error: 'Missing project' })
   const acc = await resolveAccess(req, no)
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
+
+  // ---- Actions allowed for EVERYONE with access (internal + customer) ----
+  const rid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+
+  if (body.action === 'comment') {
+    const html = String(body.html || '').trim()
+    if (!html) return res.status(400).json({ error: 'Empty comment' })
+    const store = await readStore(no)
+    const isExt = acc.user.role === 'external'
+    let authorName = acc.user.name || 'User'
+    if (isExt) { const e = (await getExternalUsers()).find(x => x.id === acc.user.id); if (e) authorName = e.name || authorName }
+    const comment = { id: rid('c'), authorId: acc.user.id, authorName, external: isExt, html, at: Date.now() }
+    store.comments = [...(store.comments || []), comment]
+    await set(OKEY(no), { current: store.current, revisions: store.revisions, comments: store.comments, downloads: store.downloads || {} })
+    // Email @mentioned people immediately.
+    let notify = { mentioned: 0, sent: 0 }
+    try {
+      const people = await peopleForOms(no)
+      const ids = []
+      for (const p of people) { if (!p.name || p.id === acc.user.id) continue; const re = new RegExp('@' + p.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w])', 'i'); if (re.test(html)) ids.push(p.id) }
+      const pname = await projectDisplayName(no)
+      const link = `${APP_URL}/design/${encodeURIComponent(no)}/oms`
+      for (const id of [...new Set(ids)]) {
+        const p = people.find(x => x.id === id); if (!p || !p.email) continue
+        notify.mentioned++
+        const r = await sendRfiCommentNotice({ to: p.email, recipientName: p.name, projectNo: no, projectName: pname, rfiNumber: 'the O&M Manual', authorName, commentHtml: html, rfiLink: link, mentioned: true, cta: 'Open the O&M page' })
+        if (r.sent) notify.sent++
+      }
+    } catch (e) { /* ignore */ }
+    return res.json({ ok: true, comment, comments: store.comments, notify })
+  }
+
+  if (body.action === 'record-download') {
+    const store = await readStore(no)
+    if (!store.current) return res.json({ ok: true })
+    const isExt = acc.user.role === 'external'
+    let name = acc.user.name || 'User', company = isExt ? 'Customer' : 'Rock Roofing'
+    if (isExt) { const e = (await getExternalUsers()).find(x => x.id === acc.user.id); if (e) { name = e.name || name; company = e.company || company } }
+    store.downloads = store.downloads || {}
+    store.downloads[acc.user.id] = { name, company, external: isExt, at: Date.now(), revision: store.current.revision }
+    await set(OKEY(no), { current: store.current, revisions: store.revisions, comments: store.comments || [], downloads: store.downloads })
+    return res.json({ ok: true })
+  }
+
   if (!acc.canEdit) return res.status(403).json({ error: 'Only Rock Roofing can build the O&M manual.' })
 
   if (body.action === 'build') {
@@ -177,7 +251,7 @@ export default async function handler(req, res) {
       projectName: meta.projectName, projectNo: no, revision: nextRev,
     }
     const revisions = [manual, ...store.revisions]   // newest first; older revisions kept
-    await set(OKEY(no), { current: manual, revisions })
+    await set(OKEY(no), { current: manual, revisions, comments: store.comments || [], downloads: store.downloads || {} })
     return res.json({ ok: true, manual, revisions })
   }
 

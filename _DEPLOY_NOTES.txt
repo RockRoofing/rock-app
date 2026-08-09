@@ -1,20 +1,35 @@
-DEPLOY NOTES - O&M: each Tech Sub as its own section
-====================================================
+DEPLOY NOTES - Digest wording + O&M comments + download flag
+============================================================
 
-ONE file, an EDIT - just replace it.
+TEN files, all EDITS - just replace them.
+  lib/designRfiNotify.js
   pages/api/design-oms.js
+  pages/api/design-rock-drawings.js
+  pages/api/design-calculations.js
+  pages/api/design-techsubs.js
+  pages/api/cron/design-techsub-daily.js
+  pages/api/cron/design-rockdrawing-daily.js
+  pages/api/cron/design-calculation-daily.js
+  pages/api/cron/design-rfi-daily.js
+  pages/design/[project]/oms.js
 
-CHANGE
-  When a project has multiple Tech Subs, each one is now its OWN section in the O&M Manual:
-    - Each gets its own separator / cover sheet ("Tech Sub 1 - <title>", "Tech Sub 2 - ...").
-    - Each is listed separately on the contents page with its own page number.
-  (Only the current, non-superseded revision of each Tech Sub is included, as before.)
+CHANGES
+1. DAILY DIGEST EMAILS now name comments vs documents correctly. Instead of always saying
+   "new comments", they now say:
+     - "new comments"        (only comments that day)
+     - "a new document" / "new documents"  (only uploads that day)
+     - "a new comment and new documents"   (both)
+   ...and end with "Please log in to review." This applies to Tech Subs, Rock Drawings and
+   Calculations (which can have document uploads). RFIs stay comment-based (no docs there).
+   New document uploads (add / new revision) are now counted for the digest, and the digest
+   fires if there are new comments OR new documents that day.
 
-  Drawings, Calculations, Leak Test Certs and Warranties are unchanged - each stays a single
-  combined section.
+2. O&M PAGE - COMMENTS: a comments section now sits at the top of the O&M page. Customers
+   (and Rock Roofing) can comment - e.g. the customer requesting changes. @name mentions
+   notify that person by email. Works like the comments on the other pages.
 
-  The readiness warning still flags when there are no Tech Subs at all.
-
-REMEMBER: rebuild the O&M Manual to regenerate the PDF.
+3. O&M PAGE - DOWNLOAD FLAG: a flag at the top shows "CUSTOMER NOT DOWNLOADED" (red) until a
+   customer downloads the current manual, then "CUSTOMER DOWNLOADED" (green). Rebuilding a
+   new revision resets it to red until the customer downloads the new revision.
 
 BUILD: next build -> Compiled successfully.

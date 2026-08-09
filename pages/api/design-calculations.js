@@ -4,7 +4,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
-import { calcRecordPendingComment, calcGetReadMap, calcMarkRead, calcUnread, projectDisplayName } from '../../lib/designRfiNotify'
+import { calcRecordPendingComment, calcRecordPendingDoc, calcGetReadMap, calcMarkRead, calcUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
 
 // Calculations for a project. Each drawing is a REVISION in a "family". Revisions are
@@ -264,6 +264,7 @@ export default async function handler(req, res) {
     docs = [doc, ...docs]
     await set(RKEY(no), docs)
     await notifyApprover(no, doc)
+    try { await calcRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
   }
 
@@ -290,6 +291,7 @@ export default async function handler(req, res) {
     docs = [doc, ...docs]
     await set(RKEY(no), docs)
     await notifyApprover(no, doc)
+    try { await calcRecordPendingDoc(no) } catch {}
     return res.json({ ok: true, docs })
   }
 
