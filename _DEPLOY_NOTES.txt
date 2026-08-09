@@ -1,39 +1,44 @@
-DEPLOY NOTES - RFI notifications rework + manual reminders
-==========================================================
+DEPLOY NOTES - Tech Sub page rebuilt (RFI-style) with revisions
+===============================================================
 
-SEVEN files, all EDITS (no new files this time - these all already exist from the last
-RFI package). Just replace each one.
+FIVE files. TWO are NEW (add via GitHub "Add file"), THREE are EDITS.
 
-  lib/designRfiNotify.js
-  lib/designEmail.js
-  pages/api/design-rfis.js
-  pages/api/cron/design-rfi-daily.js
-  pages/api/cron/design-rfi-outstanding.js
-  pages/design/[project]/rfis.js
-  vercel.json
+  NEW   pages/api/design-techsubs.js
+  NEW   pages/api/cron/design-techsub-daily.js
+  EDIT  pages/design/[project]/tech-sub.js      (was a 5-line stub - now the full page)
+  EDIT  lib/designRfiNotify.js
+  EDIT  vercel.json                             (adds the tech-sub daily digest cron)
 
-WHAT CHANGED
+*** Create the two NEW files via "Add file" -> "Create new file" at those exact paths. ***
 
-1. NEW RFI -> IMMEDIATE email, one per RFI. Every time an RFI is raised, everyone assigned
-   to the project (Rock Roofing team + customers) gets an email straight away, and it now
-   says clearly "<Name> from Rock Roofing has raised a new RFI ...". One email per new RFI.
+WHAT'S NEW
+  The Tech Sub page now works like the RFI page:
+  - FULL WIDTH.
+  - The old inline document preview at the top is REMOVED.
+  - A table with an "Open" button. Open shows a near-fullscreen window where you can:
+      * see COMMENTS at the top (light-blue panel, @mentions supported),
+      * mark up the document (arrows/lines/boxes/highlight/text, colour, etc.),
+      * download the document.
+  - Comments: like the RFI tracker, if there are comments people are notified in ONE email
+    at the END OF THE DAY. @mentions still get an immediate email.
+  - Unread markers: RFIs... er, Tech Subs with new comments show the orange dot + "N new"
+    on the table so you can see on login what needs reviewing (per user - clears when YOU
+    open it).
 
-2. COMMENTS -> ONE email per project at the END OF THE DAY (not straight away). If there
-   are several comments across the day, people get a single "new comments on RFIs for your
-   project" email that evening. (The daily job now runs once at 18:00.)
-
-3. SEND REMINDERS button (Rock Roofing users only), next to "+ Add RFI". It emails the full
-   list of OUTSTANDING (unresolved) RFIs to everyone assigned to the project on demand.
-   A note beside it reads: "Reminders are also sent out automatically every 3 working days."
-   If there are no outstanding RFIs, it tells you and sends nothing.
-
-4. AUTOMATIC OUTSTANDING REMINDER is now every 3 WORKING DAYS (weekends don't count), in
-   addition to the manual button. Projects with no outstanding RFIs are skipped.
+  REVISIONS
+  - "+ Add Tech Sub" uploads a brand-new tech sub (starts at Rev A). You can add as many
+    separate tech subs as you like.
+  - Each row has an "Add revision" button. Uploading a revision creates the next letter
+    (Rev A -> Rev B -> Rev C ...) for THAT tech sub only. The previous revision is marked
+    "Superseded" but keeps its letter; other tech subs are untouched.
+  - New "Revision" column, plus a Status column (Current / Superseded). One row per
+    revision (all shown).
 
 NOTES
-  - vercel.json: the daily job moved to 18:00; the outstanding job still runs daily at
-    09:00 but now only acts every 3rd working day. No new cron entries (same two as before).
-  - To test the outstanding email immediately (admin): /api/cron/design-rfi-outstanding?force=1
-  - Uses the existing Resend email setup.
+  - vercel.json gains one cron: design-techsub-daily at 18:00 (end-of-day comment digest).
+    You're on Vercel Pro so this is fine. Check Vercel -> Cron Jobs after deploying.
+  - Uses the existing Resend + Blob setup. Existing Tech Subs uploaded via the old page
+    (stored as "design-files") are NOT migrated - this is a fresh Tech Sub store. Re-upload
+    any current tech subs through the new "+ Add Tech Sub" button.
 
 BUILD: next build -> Compiled successfully.
