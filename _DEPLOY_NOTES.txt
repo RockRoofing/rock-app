@@ -1,26 +1,20 @@
-DEPLOY NOTES - RFI markup + viewer refinements
-==============================================
+DEPLOY NOTES - RFI open window refinements
+==========================================
 
-TWO files, both EDITS - just replace them.
-  components/DrawingMarkup.js            (markup behaviour)
-  pages/design/[project]/rfis.js        (RFI viewer layout + open behaviour)
+ONE file, an EDIT - just replace it.
+  pages/design/[project]/rfis.js
 
-MARKUP CHANGES (apply to RFI attachments AND Design Drawings)
-  - DELETE KEY: with a mark selected, press Delete or Backspace to remove it.
-  - AUTO-RETURN TO SELECT: after you draw a mark (arrow, line, box, text, etc.) the tool
-    switches back to Select automatically, so tapping the screen again won't keep adding
-    more marks. Pick the tool again for the next mark.
-  - AUTOSAVE: markup now saves automatically shortly after each change (a small
-    "Saving.../Saved" indicator shows). The manual Save button is gone.
-  - CLEAR ALL: new "Clear all markups" button wipes the current page's marks (asks first).
-  - EASIER TO SELECT: hit areas are much larger - thin lines/arrows have a wide invisible
-    grab band, and the inside of boxes/circles is now grabbable, not just the outline.
-
-RFI VIEWER CHANGES
-  - Opening an RFI now fills almost the whole screen. The PDF/JPEG markup viewer is shown
-    INSIDE the pop-out, with the comments underneath it. If there are several attachments,
-    buttons at the top switch between them.
-  - The RFI only opens via the "Open" button now - clicking elsewhere on the row (the
-    attachments count, comments count, etc.) no longer opens it.
+CHANGES (all inside the open-RFI window)
+  1. COMMENTS moved ABOVE the mark-up viewer, and put in a clear light-blue panel with
+     each comment on its own white card - much easier to read.
+  2. MARK RESOLVED / RE-OPEN stays Rock Roofing (internal) only - customers can't resolve.
+  3. Removed the DUPLICATE Download button. There's now just the one (inside the mark-up
+     viewer's toolbar).
+  4. EDIT is now INLINE - clicking Edit reveals the editable fields (Required by, Customer
+     responsible, Description, Attachments) right inside the open RFI, with Save / Cancel.
+     It no longer opens a separate pop-up. (Issued date stays automatic.)
+     "+ Add RFI" (new RFIs) still uses the normal add form.
+  5. CUSTOMERS can only comment and mark up the drawings - Edit, Mark resolved, Delete and
+     Add RFI remain internal-only (unchanged, confirmed).
 
 BUILD: next build -> Compiled successfully.

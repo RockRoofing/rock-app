@@ -135,7 +135,7 @@ export default function RFIsPage() {
 
       {editing && <RfiEditor rfi={editing} people={people} onClose={() => setEditing(null)} onSave={saveRfi} />}
       {openRfi && <RfiDetail rfi={openRfi} people={people} personName={personName} canEdit={canEdit}
-        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onEdit={() => { setEditing(openRfi); setOpenId(null) }} onDelete={() => del(openRfi.id)} onMarkup={saveAttachmentMarkup} />}
+        onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfi.id)} onMarkup={saveAttachmentMarkup} />}
     </>
   )
 }
@@ -203,39 +203,110 @@ function RfiEditor({ rfi, people, onClose, onSave }) {
   )
 }
 
-function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onEdit, onDelete, onMarkup }) {
+function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onStatus, onSaveEdit, onDelete, onMarkup }) {
   const light = dueLight(rfi.requiredDate, rfi.status)
   const atts = rfi.attachments || []
   const [attIdx, setAttIdx] = useState(0)
+  const [editMode, setEditMode] = useState(false)
+  const [ef, setEf] = useState(null)          // edit form draft
+  const [uploading, setUploading] = useState(false)
+  const editRef = useRef()
+  const customers = people.filter(p => p.external)
   const current = atts[attIdx]
   const isViewable = current && ((current.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp|pdf)$/i.test(current.url || '') || (current.contentType || '') === 'application/pdf')
+
+  function startEdit() { setEf({ ...rfi, attachments: [...(rfi.attachments || [])] }); setEditMode(true) }
+  function cancelEdit() { setEditMode(false); setEf(null) }
+  async function saveEdit() { await onSaveEdit(ef); setEditMode(false); setEf(null) }
+  async function addEditFiles(list) {
+    if (!list || !list.length) return
+    setUploading(true)
+    const next = [...(ef.attachments || [])]
+    for (const file of Array.from(list)) {
+      try {
+        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || 'application/octet-stream' })
+        next.push({ name: file.name, url: blob.url, contentType: file.type || '', size: file.size })
+      } catch {}
+    }
+    if (editRef.current) editRef.current.value = ''
+    setEf({ ...ef, attachments: next }); setUploading(false)
+  }
+
   return (
     <Modal onClose={onClose} title={rfi.number} full>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
         {rfi.status === 'resolved' ? <Pill c="#16a34a" bg="#dcfce7">Resolved</Pill> : <Pill c="#2563eb" bg="#dbeafe">Open</Pill>}
         {light && <span style={{ background: light.bg, color: light.color, borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>{light.label}</span>}
         <div style={{ flex: 1 }} />
-        {canEdit && <button onClick={() => onStatus(rfi.id, rfi.status === 'resolved' ? 'open' : 'resolved')} style={btnGhost}>{rfi.status === 'resolved' ? 'Re-open' : 'Mark resolved'}</button>}
-        {canEdit && <button onClick={onEdit} style={btnGhost}>Edit</button>}
+        {/* Mark resolved / re-open is Rock Roofing (internal) only */}
+        {canEdit && !editMode && <button onClick={() => onStatus(rfi.id, rfi.status === 'resolved' ? 'open' : 'resolved')} style={btnGhost}>{rfi.status === 'resolved' ? 'Re-open' : 'Mark resolved'}</button>}
+        {canEdit && !editMode && <button onClick={startEdit} style={btnGhost}>Edit</button>}
+        {canEdit && editMode && <button onClick={cancelEdit} style={btnGhost}>Cancel</button>}
+        {canEdit && editMode && <button onClick={saveEdit} style={btnPrimary}>Save</button>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, fontSize: 13.5, marginBottom: 12 }}>
-        <Info label="Issued">{fmtDate(rfi.issuedAt)}</Info>
-        <Info label="Required by">{rfi.requiredDate ? fmtDate(new Date(rfi.requiredDate).getTime()) : '-'}</Info>
-        <Info label="Customer responsible">{personName(rfi.responsibleUserId) || '-'}</Info>
-      </div>
-      <Info label="Description"><div style={{ whiteSpace: 'pre-wrap' }}>{rfi.description || '-'}</div></Info>
+      {!editMode ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, fontSize: 13.5, marginBottom: 12 }}>
+            <Info label="Issued">{fmtDate(rfi.issuedAt)}</Info>
+            <Info label="Required by">{rfi.requiredDate ? fmtDate(new Date(rfi.requiredDate).getTime()) : '-'}</Info>
+            <Info label="Customer responsible">{personName(rfi.responsibleUserId) || '-'}</Info>
+          </div>
+          <Info label="Description"><div style={{ whiteSpace: 'pre-wrap' }}>{rfi.description || '-'}</div></Info>
+        </>
+      ) : (
+        <div style={{ background: '#faf9f7', border: '1px solid #ece9e3', borderRadius: 12, padding: 14, marginBottom: 4 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div><Lbl>Issued</Lbl><div style={{ fontSize: 13.5, color: '#666', padding: '9px 0' }}>{fmtDate(rfi.issuedAt)}</div></div>
+            <div><Lbl>Required response date</Lbl><input type="date" value={ef.requiredDate || ''} onChange={e => setEf({ ...ef, requiredDate: e.target.value })} style={inp} /></div>
+            <div><Lbl>Customer responsible</Lbl>
+              <select value={ef.responsibleUserId || ''} onChange={e => setEf({ ...ef, responsibleUserId: e.target.value })} style={inp}>
+                <option value="">Select...</option>
+                {customers.map(p => <option key={p.id} value={p.id}>{p.name}{p.company ? ` (${p.company})` : ''}</option>)}
+              </select>
+            </div>
+          </div>
+          <Lbl>Description</Lbl>
+          <textarea value={ef.description || ''} onChange={e => setEf({ ...ef, description: e.target.value })} style={{ ...inp, minHeight: 80, resize: 'vertical' }} />
+          <Lbl style={{ marginTop: 12 }}>Attachments</Lbl>
+          <input ref={editRef} type="file" multiple style={{ display: 'none' }} onChange={e => addEditFiles(e.target.files)} />
+          <button onClick={() => editRef.current?.click()} disabled={uploading} style={{ ...btnGhost, marginBottom: 6 }}>{uploading ? 'Uploading...' : '+ Attach files'}</button>
+          {(ef.attachments || []).map((a, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, padding: '4px 0' }}>
+              <span style={{ wordBreak: 'break-word' }}>{a.name}</span>
+              <button onClick={() => setEf({ ...ef, attachments: ef.attachments.filter((_, j) => j !== i) })} style={{ ...linkBtn, color: '#dc2626' }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Attachment markup viewer, embedded */}
+      {/* Comments - above the markup, in a clear light-blue panel */}
+      <div style={{ marginTop: 16, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 14 }}>
+        <Lbl style={{ color: '#1e40af' }}>Comments ({(rfi.comments || []).length})</Lbl>
+        <div style={{ margin: '8px 0', maxHeight: 260, overflowY: 'auto' }}>
+          {(rfi.comments || []).length === 0 && <div style={{ color: '#7c93b8', fontSize: 13, padding: '6px 0' }}>No comments yet.</div>}
+          {(rfi.comments || []).map(c => (
+            <div key={c.id} style={{ padding: '8px 10px', marginBottom: 8, background: '#fff', border: '1px solid #dbeafe', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: '#5b6b85', marginBottom: 2 }}>
+                <strong style={{ color: c.external ? '#9333ea' : '#1a1a19' }}>{c.authorName}</strong>
+                {c.external && <span style={{ marginLeft: 6, fontSize: 10.5, background: '#f3e8ff', color: '#7c3aed', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>Customer</span>}
+                <span style={{ marginLeft: 8 }}>{fmtDateTime(c.at)}</span>
+              </div>
+              <div style={{ fontSize: 13.5, color: '#222' }} dangerouslySetInnerHTML={{ __html: c.html }} />
+            </div>
+          ))}
+        </div>
+        <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
+      </div>
+
+      {/* Attachment markup viewer, embedded (below comments) */}
       {atts.length > 0 && (
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
             <Lbl>Attachment{atts.length > 1 ? 's' : ''}</Lbl>
             {atts.length > 1 && atts.map((a, i) => (
               <button key={i} onClick={() => setAttIdx(i)} style={{ ...btnGhost, padding: '5px 10px', background: i === attIdx ? '#7c3aed' : '#fff', color: i === attIdx ? '#fff' : '#333', border: i === attIdx ? 'none' : '1px solid #ddd', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</button>
             ))}
-            <div style={{ flex: 1 }} />
-            <a href={`/api/download?url=${encodeURIComponent(current.url)}&name=${encodeURIComponent(current.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
           </div>
           {isViewable
             ? <DrawingMarkup key={current.url} imageUrl={current.url} contentType={current.contentType} initial={current.markup} canEdit onSave={(markup) => onMarkup(rfi.id, current.url, markup)} fileName={current.name} />
@@ -243,23 +314,6 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
         </div>
       )}
 
-      {/* Comments below the image/PDF */}
-      <div style={{ borderTop: '1px solid #eee', margin: '18px 0 10px' }} />
-      <Lbl>Comments ({(rfi.comments || []).length})</Lbl>
-      <div style={{ margin: '8px 0' }}>
-        {(rfi.comments || []).length === 0 && <div style={{ color: '#aaa', fontSize: 13, padding: '6px 0' }}>No comments yet.</div>}
-        {(rfi.comments || []).map(c => (
-          <div key={c.id} style={{ padding: '8px 0', borderBottom: '1px solid #f4f4f4' }}>
-            <div style={{ fontSize: 12, color: '#8a857c', marginBottom: 2 }}>
-              <strong style={{ color: c.external ? '#9333ea' : '#1a1a19' }}>{c.authorName}</strong>
-              {c.external && <span style={{ marginLeft: 6, fontSize: 10.5, background: '#f3e8ff', color: '#7c3aed', borderRadius: 10, padding: '1px 6px', fontWeight: 700 }}>Customer</span>}
-              <span style={{ marginLeft: 8 }}>{fmtDateTime(c.at)}</span>
-            </div>
-            <div style={{ fontSize: 13.5, color: '#222' }} dangerouslySetInnerHTML={{ __html: c.html }} />
-          </div>
-        ))}
-      </div>
-      <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
       {canEdit && <div style={{ textAlign: 'right', marginTop: 12 }}><button onClick={onDelete} style={{ ...linkBtn, color: '#dc2626', marginLeft: 0 }}>Delete RFI</button></div>}
     </Modal>
   )
