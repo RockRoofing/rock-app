@@ -4,7 +4,7 @@ import { getExternalUsers, externalCanAccessProject } from '../../lib/designUser
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, sendRfiIssuedNotice, APP_URL } from '../../lib/designEmail'
-import { recordPending, getReadMap, markRfiRead, unreadFromMap } from '../../lib/designRfiNotify'
+import { recordPending, getReadMap, markRfiRead, unreadFromMap, projectRecipients, projectDisplayName, outstandingDigestHtml, sendMail } from '../../lib/designRfiNotify'
 
 // RFIs (Requests for Information) per project.
 // Store: design:rfis:<projectNo> = [ { rfi } ]  (newest first by number)
@@ -140,35 +140,12 @@ export default async function handler(req, res) {
       const comment = { id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, authorId: acc.user.id, authorName: acc.user.name || 'User', external: acc.external, html, at: Date.now() }
       rfis[idx].comments = [...(rfis[idx].comments || []), comment]
       await set(rkey(no), rfis)
-      // Also mark this RFI read for the comment's author (they've obviously seen it).
+      // The comment's author has obviously seen this RFI.
       try { await markRfiRead(no, acc.user.id, rfis[idx]) } catch {}
-      // Record that a comment happened today (for the once-per-day project digest).
+      // Comments do NOT email immediately - they're batched into ONE end-of-day email per
+      // project (see the design-rfi-daily cron). Just record that a comment happened today.
       try { await recordPending(no, 'comment') } catch {}
-
-      // Notify: anyone @mentioned, plus the RFI's responsible customer - excluding the
-      // person who wrote the comment. Failures here never block the comment being saved.
-      let notify = { attempted: 0, sent: 0, errors: [] }
-      try {
-        const people = await peopleWithEmail(no)
-        const mentioned = new Set(mentionedIds(html, people))
-        const recipients = new Map()  // id -> { person, mentioned }
-        for (const id of mentioned) { const p = people.find(x => x.id === id); if (p) recipients.set(id, { person: p, mentioned: true }) }
-        const respId = rfis[idx].responsibleUserId
-        if (respId && !recipients.has(respId)) { const p = people.find(x => x.id === respId); if (p) recipients.set(respId, { person: p, mentioned: false }) }
-        recipients.delete(acc.user.id)  // don't email the author
-        if (recipients.size) {
-          const pname = await projectName(no)
-          const link = rfiLinkFor(no, rfis[idx].id)
-          for (const { person, mentioned } of recipients.values()) {
-            notify.attempted++
-            if (!person.email) { notify.errors.push(`${person.name}: no email on file`); continue }
-            const r = await sendRfiCommentNotice({ to: person.email, recipientName: person.name, projectNo: no, projectName: pname, rfiNumber: rfis[idx].number, authorName: comment.authorName, commentHtml: html, rfiLink: link, mentioned })
-            if (r.sent) notify.sent++; else notify.errors.push(`${person.name}: ${r.error || 'send failed'}`)
-          }
-        }
-      } catch (e) { notify.errors.push(e.message || 'notify failed') }
-
-      return res.json({ ok: true, rfi: rfis[idx], notify })
+      return res.json({ ok: true, rfi: rfis[idx] })
     }
 
     // Save markup/annotations for one attachment. Allowed for internal AND external
@@ -189,6 +166,26 @@ export default async function handler(req, res) {
     // Everything else is internal-only.
     if (!acc.canEdit) return res.status(403).json({ error: 'View/comment only' })
 
+    // Manually push the outstanding-RFI list to everyone assigned to the project.
+    if (body.action === 'send-reminders') {
+      const outstanding = rfis.filter(r => r.status !== 'resolved')
+      if (!outstanding.length) return res.json({ ok: true, sent: 0, message: 'No outstanding RFIs to remind about.' })
+      const recipients = (await projectRecipients(no)).filter(r => r.email)
+      if (!recipients.length) return res.json({ ok: true, sent: 0, message: 'No recipients with an email on this project.' })
+      const pname = await projectName(no)
+      const withNames = await peopleWithEmail(no)
+      const nameById = {}
+      for (const p of withNames) nameById[p.id] = p.name
+      const pn = (id) => nameById[id] || ''
+      let sent = 0
+      for (const r of recipients) {
+        const html = outstandingDigestHtml({ name: r.name, projectName: pname, projectNo: no, rfis: outstanding, personName: pn })
+        const out = await sendMail(r.email, `Outstanding RFIs for ${pname || no}`, html)
+        if (out.sent) sent++
+      }
+      return res.json({ ok: true, sent, recipients: recipients.length, outstanding: outstanding.length })
+    }
+
     if (body.action === 'create') {
       const r = body.rfi || {}
       const next = ((await get(nkey(no))) || 0) + 1
@@ -207,16 +204,17 @@ export default async function handler(req, res) {
       }
       rfis = [rfi, ...rfis]
       await set(rkey(no), rfis)
-      try { await recordPending(no, 'rfi') } catch {}
-      // Notify the responsible customer that an RFI has been issued to them.
+      // The person who raised it has obviously seen it.
+      try { await markRfiRead(no, acc.user.id, rfi) } catch {}
+      // Email EVERYONE with access to the project immediately (one email per new RFI),
+      // making clear which Rock Roofing person raised it.
       try {
-        if (rfi.responsibleUserId) {
-          const people = await peopleWithEmail(no)
-          const resp = people.find(x => x.id === rfi.responsibleUserId)
-          if (resp && resp.email) {
-            const pname = await projectName(no)
-            await sendRfiIssuedNotice({ to: resp.email, recipientName: resp.name, projectNo: no, projectName: pname, rfiNumber: rfi.number, description: rfi.description, requiredDate: rfi.requiredDate, rfiLink: rfiLinkFor(no, rfi.id) })
-          }
+        const people = await peopleWithEmail(no)
+        const pname = await projectName(no)
+        const link = rfiLinkFor(no, rfi.id)
+        for (const person of people) {
+          if (!person.email || person.id === acc.user.id) continue
+          await sendRfiIssuedNotice({ to: person.email, recipientName: person.name, raisedByName: acc.user.name, projectNo: no, projectName: pname, rfiNumber: rfi.number, description: rfi.description, requiredDate: rfi.requiredDate, rfiLink: link })
         }
       } catch (e) { /* notification failure must not fail the create */ }
       return res.json({ ok: true, rfis })

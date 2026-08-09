@@ -3,20 +3,29 @@ import { allRfiProjectNos, rfiKey, projectRecipients, projectDisplayName, ukDate
 import { getPortalUsers } from '../../../lib/db'
 import { getExternalUsers } from '../../../lib/designUsers'
 
-const LAST_KEY = 'design:rfis-outstanding-last'  // { date: 'YYYY-MM-DD' }
+const LAST_KEY = 'design:rfis-outstanding-last'  // { date, workingDayCount }
 
-// Runs daily but only ACTS every 3rd day. For each project with UNRESOLVED RFIs, emails
-// everyone with access a table of the outstanding items. Projects with none are skipped.
+// Runs daily but only ACTS every 3 WORKING days (weekends don't count). For each project
+// with UNRESOLVED RFIs, emails everyone with access a table of the outstanding items.
+// Projects with none are skipped.
 export default async function handler(req, res) {
   const today = ukDate()
   const force = req.query.force === '1'
 
-  // Gate to every 3 days using a simple day counter, and guard against double-runs.
-  const last = await get(LAST_KEY)
-  const dayNum = Math.floor(Date.parse(today + 'T00:00:00Z') / 86400000)
+  // Working-day counter: increment on Mon-Fri; when it reaches 3, send and reset to 0.
+  const dow = new Date(today + 'T12:00:00Z').getUTCDay()  // 0 Sun ... 6 Sat
+  const isWorkingDay = dow >= 1 && dow <= 5
+  let last = await get(LAST_KEY) || { date: '', workingDayCount: 0 }
   if (!force) {
-    if (dayNum % 3 !== 0) return res.json({ ok: true, skipped: 'not a send day', today })
-    if (last && last.date === today) return res.json({ ok: true, skipped: 'already ran today', today })
+    if (last.date === today) return res.json({ ok: true, skipped: 'already ran today', today })
+    let count = last.workingDayCount || 0
+    if (isWorkingDay) count += 1
+    if (count < 3) {
+      await set(LAST_KEY, { date: today, workingDayCount: count })
+      return res.json({ ok: true, skipped: `working day ${count}/3`, today })
+    }
+    // count >= 3: send now and reset the counter.
+    await set(LAST_KEY, { date: today, workingDayCount: 0 })
   }
 
   // Build a personName lookup across all design people.
@@ -42,6 +51,5 @@ export default async function handler(req, res) {
     }
     projectsEmailed++
   }
-  await set(LAST_KEY, { date: today })
   return res.json({ ok: true, today, projectsEmailed, emailsSent })
 }

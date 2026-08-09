@@ -31,6 +31,21 @@ export default function RFIsPage() {
   const [editing, setEditing] = useState(null)
   const [openId, setOpenId] = useState(null)
   const [unread, setUnread] = useState([])
+  const [sending, setSending] = useState(false)
+
+  async function sendReminders() {
+    const outstanding = rfis.filter(r => r.status !== 'resolved').length
+    if (!outstanding) { alert('There are no outstanding RFIs to send reminders for.'); return }
+    if (!confirm(`Send the outstanding RFI list (${outstanding} item${outstanding === 1 ? '' : 's'}) to everyone assigned to this project?`)) return
+    setSending(true)
+    try {
+      const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'send-reminders' }) })
+      const d = await r.json()
+      if (r.ok) alert(d.sent ? `Reminder sent to ${d.sent} recipient${d.sent === 1 ? '' : 's'}.` : (d.message || 'Nothing sent.'))
+      else alert(d.error || 'Could not send reminders.')
+    } catch { alert('Could not send reminders.') }
+    setSending(false)
+  }
 
   useEffect(() => { if (auth.ready && projectNo) load() }, [auth.ready, projectNo])
   // Deep-link from notification emails: /design/<no>/rfis?open=<rfiId>
@@ -102,7 +117,15 @@ export default function RFIsPage() {
             <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>RFIs</h1>
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>Requests for Information. {canEdit ? 'Create, track and resolve.' : 'View and comment.'}</p>
           </div>
-          {canEdit && <button onClick={() => setEditing({ description: '', requiredDate: '', responsibleUserId: '', attachments: [] })} style={btnPrimary}>+ Add RFI</button>}
+          {canEdit && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={sendReminders} disabled={sending} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: sending ? 0.6 : 1 }}>{sending ? 'Sending...' : 'Send reminders'}</button>
+                <button onClick={() => setEditing({ description: '', requiredDate: '', responsibleUserId: '', attachments: [] })} style={btnPrimary}>+ Add RFI</button>
+              </div>
+              <span style={{ fontSize: 11.5, color: '#a09a90' }}>Reminders are also sent out automatically every 3 working days.</span>
+            </div>
+          )}
         </div>
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (

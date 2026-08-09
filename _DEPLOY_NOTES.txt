@@ -1,48 +1,39 @@
-DEPLOY NOTES - RFI notifications, unread flags, full width, outstanding digest
-==============================================================================
+DEPLOY NOTES - RFI notifications rework + manual reminders
+==========================================================
 
-SIX files. THREE are NEW (add via GitHub "Add file"), THREE are EDITS.
+SEVEN files, all EDITS (no new files this time - these all already exist from the last
+RFI package). Just replace each one.
 
-  NEW   lib/designRfiNotify.js
-  NEW   pages/api/cron/design-rfi-daily.js
-  NEW   pages/api/cron/design-rfi-outstanding.js
-  EDIT  pages/api/design-rfis.js
-  EDIT  pages/design/[project]/rfis.js
-  EDIT  vercel.json                          (adds two scheduled jobs)
+  lib/designRfiNotify.js
+  lib/designEmail.js
+  pages/api/design-rfis.js
+  pages/api/cron/design-rfi-daily.js
+  pages/api/cron/design-rfi-outstanding.js
+  pages/design/[project]/rfis.js
+  vercel.json
 
-*** Create the three NEW files via "Add file" -> "Create new file" at those exact paths.
-    The cron folder is pages/api/cron/ (it already exists). ***
+WHAT CHANGED
 
-WHAT'S NEW
+1. NEW RFI -> IMMEDIATE email, one per RFI. Every time an RFI is raised, everyone assigned
+   to the project (Rock Roofing team + customers) gets an email straight away, and it now
+   says clearly "<Name> from Rock Roofing has raised a new RFI ...". One email per new RFI.
 
-1. DAILY ACTIVITY EMAIL (once per day, per project)
-   When a new RFI is added, or a comment is posted, everyone with access to that project
-   AND the Design portal (internal team + that project's customers) gets an email:
-     "There have been new RFIs added for your project." and/or
-     "There have been comments added to RFIs for your project."
-   It is sent AT MOST ONCE PER DAY per project - if there's a flurry of comments/new RFIs,
-   people get a single summary that day, not one per comment. (A scheduled job runs a few
-   times a day and sends the day's summary the first time it sees activity, then not again
-   that day.)
+2. COMMENTS -> ONE email per project at the END OF THE DAY (not straight away). If there
+   are several comments across the day, people get a single "new comments on RFIs for your
+   project" email that evening. (The daily job now runs once at 18:00.)
 
-2. UNREAD FLAGS on the RFI tracker
-   RFIs with new activity you haven't opened yet are flagged with an orange dot and a
-   highlighted row, and the comments count shows "N new". This is PER USER - it clears for
-   you when YOU open that RFI (not when a colleague does).
+3. SEND REMINDERS button (Rock Roofing users only), next to "+ Add RFI". It emails the full
+   list of OUTSTANDING (unresolved) RFIs to everyone assigned to the project on demand.
+   A note beside it reads: "Reminders are also sent out automatically every 3 working days."
+   If there are no outstanding RFIs, it tells you and sends nothing.
 
-3. RFI PAGE IS NOW FULL WIDTH.
+4. AUTOMATIC OUTSTANDING REMINDER is now every 3 WORKING DAYS (weekends don't count), in
+   addition to the manual button. Projects with no outstanding RFIs are skipped.
 
-4. EVERY-3-DAYS OUTSTANDING RFI EMAIL
-   Every third day, everyone with access gets an email listing the RFIs still outstanding
-   (unresolved) for their project, as a table (RFI number, description, required-by,
-   responsible). If a project has NO outstanding RFIs, no email is sent for it.
-
-REQUIREMENTS
-   - Uses the existing Resend email setup (same as the other design emails).
-   - Two new scheduled jobs are added to vercel.json:
-       design-rfi-daily        08:00, 12:00, 16:00 (sends each project's daily summary once)
-       design-rfi-outstanding  09:00 daily, but only acts every 3rd day
-     You are on the Vercel Pro plan so the extra crons are fine.
-   - After deploying, check Vercel -> Settings -> Cron Jobs shows the two new jobs.
+NOTES
+  - vercel.json: the daily job moved to 18:00; the outstanding job still runs daily at
+    09:00 but now only acts every 3rd working day. No new cron entries (same two as before).
+  - To test the outstanding email immediately (admin): /api/cron/design-rfi-outstanding?force=1
+  - Uses the existing Resend email setup.
 
 BUILD: next build -> Compiled successfully.
