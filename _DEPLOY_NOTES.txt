@@ -1,29 +1,17 @@
-DEPLOY NOTES - O&M refinements (brand colour, links, revisions)
+DEPLOY NOTES - Status banner fix (Rock Drawings + Calculations)
 ===============================================================
 
-THREE files, all EDITS - just replace them.
-  lib/omsPdf.js
-  pages/api/design-oms.js
-  pages/design/[project]/oms.js
+TWO files, both EDITS - just replace them.
+  pages/design/[project]/rock-drawings.js
+  pages/design/[project]/calculations.js
 
-CHANGES
-1. BRAND COLOUR: the O&M manual and the O&M page now use Rock Roofing GREEN (#1c704f)
-   instead of purple (taken from the logo). (Only the O&M manual/page - the rest of the
-   design portal keeps its existing theme.)
-
-2. SECTION COVER SHEETS no longer print "Page X". Instead, the page number at the BOTTOM of
-   every page is now slightly BIGGER and bold (it was already there on all pages).
-
-3. CONTENTS PAGE is now CLICKABLE - clicking a section jumps to that section's page in the
-   PDF (works in the on-page viewer and any normal PDF reader).
-
-4. DOWNLOAD BUTTONS reduced to ONE - just the button at the top of the page. The extra
-   download links inside the viewer are gone. The top button downloads whichever revision
-   you're currently viewing.
-
-5. REVISIONS: rebuilding now creates a NEW revision (Rev 1, Rev 2, ...) and KEEPS the old
-   ones. A "Revisions" list appears in the left sidebar - the newest is marked CURRENT, the
-   rest OLD; click any to view it. The revision number is printed on the manual's cover page.
-   (Existing single manuals are auto-migrated to "Rev 1" the first time the page loads.)
+CHANGES to the status counts banner
+  - The two numbers now BALANCE: every current item is either Construction Issue or still
+    for Review / Comment, so "for Review / Comment" + "Construction Issue" = the total.
+    ("for Review / Comment" is now simply everything NOT marked Construction Issue.)
+  - Text is now the SAME SIZE as the "APPROVALS NEEDED" banner.
+  - The banner is AMBER/ORANGE (a softer warning than the red "APPROVALS NEEDED") whenever
+    any item is still for Review / Comment. Once every item is Construction Issue, it turns
+    a calm blue.
 
 BUILD: next build -> Compiled successfully.

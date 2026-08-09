@@ -159,9 +159,10 @@ export default function RockDrawingsPage() {
   const currentDocs = families.map(f => f.current).filter(Boolean)
   const anyNeedApproval = currentDocs.some(d => d.status !== 'approved')
   const allApproved = currentDocs.length > 0 && !anyNeedApproval
-  // Status counts (current items): awaiting review/comment vs marked construction issue.
-  const reviewCount = currentDocs.filter(d => d.status !== 'approved').length
+  // Status counts (current items): every item is EITHER Construction Issue OR still for
+  // review/comment - so the two always sum to the total.
   const constructionCount = currentDocs.filter(d => d.constructionIssue).length
+  const reviewCount = currentDocs.length - constructionCount
 
   return (
     <>
@@ -186,7 +187,9 @@ export default function RockDrawingsPage() {
         {currentDocs.length > 0 && (anyNeedApproval
           ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED</div>
           : <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVED</div>)}
-        {currentDocs.length > 0 && <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', borderRadius: 8, padding: '9px 14px', fontSize: 13.5, fontWeight: 600, marginBottom: 12 }}>Status: <span style={{ color: '#b45309' }}>{reviewCount}</span> for Review / Comment&nbsp;&nbsp;&middot;&nbsp;&nbsp;<span style={{ color: '#2563eb' }}>{constructionCount}</span> Construction Issue</div>}
+        {currentDocs.length > 0 && (reviewCount > 0
+          ? <div style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>STATUS: {reviewCount} FOR REVIEW / COMMENT&nbsp;&nbsp;&middot;&nbsp;&nbsp;{constructionCount} CONSTRUCTION ISSUE</div>
+          : <div style={{ background: '#dbeafe', border: '1px solid #bfdbfe', color: '#1d4ed8', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>STATUS: {reviewCount} FOR REVIEW / COMMENT&nbsp;&nbsp;&middot;&nbsp;&nbsp;{constructionCount} CONSTRUCTION ISSUE</div>)}
         {err && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div>
