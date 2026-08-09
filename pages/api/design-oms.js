@@ -17,9 +17,9 @@ const LOGO_URL = `${APP_URL}/rock-logo.jpg`
 
 const ROCK = {
   name: 'Rock Roofing Ltd',
-  address: '', // filled from env if available; left blank otherwise
-  phone: '',
-  email: '',
+  address: '483 Green Lanes, London, N13 4BS',
+  phone: '0330 165 8924',
+  email: 'info@rockroofing.co.uk',
   web: 'www.rockroofing.co.uk',
 }
 

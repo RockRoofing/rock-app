@@ -1,19 +1,23 @@
-DEPLOY NOTES - O&M wording + "Notify Customer" button
-=====================================================
+DEPLOY NOTES - Rock Roofing details on O&M cover
+================================================
 
-THREE files, all EDITS - just replace them.
-  lib/designEmail.js                       (new O&M-ready email)
-  pages/api/design-oms.js                  (customer list + notify action)
-  pages/design/[project]/oms.js            (wording + Notify Customer button/modal)
+ONE file, an EDIT - just replace it.
+  pages/api/design-oms.js
 
-CHANGES
-1. WORDING: the readiness warning now says "Only Construction Issue documents are included."
-   (was "Only Construction Issue drawings and calculations are included.")
+CHANGE
+  The O&M Manual cover now prints Rock Roofing's full details in the "Roofing Contractor"
+  box:
+    Rock Roofing Ltd
+    483 Green Lanes, London, N13 4BS
+    0330 165 8924
+    info@rockroofing.co.uk
+    www.rockroofing.co.uk
 
-2. NOTIFY CUSTOMER BUTTON (Rock Roofing only, shows once a manual has been built):
-   "Notify Customer O&Ms are ready". Clicking it opens a picker of this project's customer
-   users - tick ONE OR MORE, then Send. Each gets an email saying the O&M Manual is ready,
-   with a link to this project's O&M page to view and download it. "Select all" is available.
-   (Emails use the Rock Roofing green button to match the manual.)
+  The Main Contractor box already pulls the customer's company + address from the Internal
+  Handover Minutes (customerCompany / customerAddress) - no change needed there. If a job
+  shows "(Not recorded)", those IHM fields are blank for that project; fill them in and
+  rebuild.
+
+REMEMBER: rebuild the O&M Manual (it regenerates the PDF with these details).
 
 BUILD: next build -> Compiled successfully.
