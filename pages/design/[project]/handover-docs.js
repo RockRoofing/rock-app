@@ -83,7 +83,7 @@ export default function HandoverDocsPage() {
     if (!urls.length) return
     try {
       const r = await fetch('/api/design-handover-zip', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, urls, zipName }) })
-      if (!r.ok) { const d = await r.json().catch(() => ({})); setErr(d.error || 'Could not build zip'); return }
+      if (!r.ok) { let msg = 'Could not build zip'; try { const d = await r.json(); msg = d.error || msg } catch { try { const t = await r.text(); if (t) msg = t.slice(0, 200) } catch {} } setErr(msg); return }
       const blob = await r.blob()
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob); a.download = `${zipName}.zip`
