@@ -12,7 +12,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import * as XLSX from 'xlsx';
-import { mapPipedriveRows } from '../lib/crmImportMap';
+import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, detectExportType } from '../lib/crmImportMap';
 import { SEED_DEALS, PREVIEW_TODAY } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
@@ -715,6 +715,8 @@ export default function CRMPage() {
   const today = PREVIEW_TODAY;
   const router = useRouter();
   const [deals, setDeals] = useState([]);
+  const [orgsData, setOrgsData] = useState([]);
+  const [contactsData, setContactsData] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [openId, setOpenId] = useState(null);
@@ -757,6 +759,8 @@ export default function CRMPage() {
         if (cancelled) return;
         if (Array.isArray(d.deals)) setDeals(d.deals.map((x) => ({ ...x, fields: { ...x.fields }, history: [...(x.history || [])], activities: [...(x.activities || [])], notes: [...(x.notes || [])] })));
         if (Array.isArray(d.schema) && d.schema.length) setSchema(d.schema);
+        if (Array.isArray(d.orgs)) setOrgsData(d.orgs);
+        if (Array.isArray(d.contacts)) setContactsData(d.contacts);
       } catch (e) { /* ignore - stays empty */ }
       if (!cancelled) { setLoaded(true); }
     })();
@@ -813,22 +817,59 @@ export default function CRMPage() {
 
   // Companies & Contacts derived
   const companyRows = useMemo(() => {
-    const m = {};
-    deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, org_address: d.fields.org_address || '-', org_phone: d.fields.org_phone || '-', org_website: d.fields.org_website || '-', org_email: d.fields.org_email || '-', org_reg_number: d.fields.org_reg_number || '-', supply_chain_approved: d.fields.supply_chain_approved === true ? 'Yes' : d.fields.supply_chain_approved === false ? 'No' : '-', deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
-    let rows = Object.values(m);
+    // Live deal stats per organization (from the CRM's own deals).
+    const stat = {};
+    deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!stat[o]) stat[o] = { deals: 0, open_value: 0, won: 0, lost: 0 }; stat[o].deals++; if (d.status === 'open') stat[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') stat[o].won++; if (d.status === 'lost') stat[o].lost++; });
+    let rows;
+    if (orgsData.length) {
+      // Imported companies are the source of truth for company details.
+      rows = orgsData.map((o) => { const live = stat[o.name]; return {
+        name: o.name,
+        org_address: o.org_address || '-', org_phone: o.org_phone || '-', org_website: o.org_website || '-', org_email: o.org_email || '-',
+        org_reg_number: o.org_reg_number || '-',
+        supply_chain_approved: o.supply_chain_approved || '-',
+        deals: live ? live.deals : (o.pd_open_deals + o.pd_won_deals + o.pd_lost_deals),
+        open_value: live ? live.open_value : 0,
+        won: live ? live.won : o.pd_won_deals,
+        lost: live ? live.lost : o.pd_lost_deals,
+      }; });
+    } else {
+      // Fallback (pre-import): derive from deals as before.
+      const m = {};
+      deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, org_address: d.fields.org_address || '-', org_phone: d.fields.org_phone || '-', org_website: d.fields.org_website || '-', org_email: d.fields.org_email || '-', org_reg_number: d.fields.org_reg_number || '-', supply_chain_approved: '-', deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
+      rows = Object.values(m);
+    }
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
-  }, [deals, query, entitySort]);
+  }, [deals, orgsData, query, entitySort]);
 
   const contactRows = useMemo(() => {
-    const m = {};
-    deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, first_name: firstName(c) || '-', last_name: lastName(c) || '-', organization: d.fields.organization || '-', contact_phone: d.fields.contact_phone || '-', contact_email: d.fields.contact_email || '-', contact_job_role: d.fields.contact_job_role || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
-    let rows = Object.values(m);
+    // Live deal stats per contact name (from the CRM's own deals).
+    const stat = {};
+    deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; if (!stat[c]) stat[c] = { deals: 0, open_value: 0 }; stat[c].deals++; if (d.status === 'open') stat[c].open_value += Number(d.fields.value) || 0; });
+    let rows;
+    if (contactsData.length) {
+      rows = contactsData.map((c) => { const live = stat[c.name]; return {
+        name: c.name,
+        first_name: c.first_name || firstName(c.name) || '-',
+        last_name: c.last_name || lastName(c.name) || '-',
+        organization: c.organization || '-',
+        contact_phone: c.contact_phone || '-',
+        contact_email: c.contact_email || '-',
+        contact_job_role: c.contact_job_role || '-',
+        deals: live ? live.deals : (c.pd_open_deals + c.pd_won_deals + c.pd_lost_deals),
+        open_value: live ? live.open_value : 0,
+      }; });
+    } else {
+      const m = {};
+      deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, first_name: firstName(c) || '-', last_name: lastName(c) || '-', organization: d.fields.organization || '-', contact_phone: d.fields.contact_phone || '-', contact_email: d.fields.contact_email || '-', contact_job_role: d.fields.contact_job_role || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
+      rows = Object.values(m);
+    }
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.organization || '').toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
-  }, [deals, query, entitySort]);
+  }, [deals, contactsData, query, entitySort]);
 
   const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
@@ -842,20 +883,41 @@ export default function CRMPage() {
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      setImportMsg(`Mapping ${rows.length} rows...`);
-      const { deals: mapped, skipped } = mapPipedriveRows(rows);
-      if (!mapped.length) { setImportMsg('No deals found in that file. Is it the Pipedrive Deals export?'); setImporting(false); return; }
-      setImportMsg(`Saving ${mapped.length} deals...`);
-      const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', deals: mapped }) });
-      const d = await r.json();
-      if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
-      // Replace in-memory deals too, and don't let the debounced auto-save fire over it.
-      skipSave.current = true;
-      setDeals(mapped);
-      setImportMsg(`Imported ${d.count} deals${skipped ? ` (${skipped} rows skipped - no Deal ID)` : ''}.`);
+      const headers = rows.length ? Object.keys(rows[0]) : [];
+      const kind = detectExportType(headers);
+      if (!kind) { setImportMsg('Unrecognised file. Upload a Pipedrive Deals, Organizations, or People export.'); setImporting(false); return; }
+
+      if (kind === 'deals') {
+        setImportMsg(`Mapping ${rows.length} deals...`);
+        const { deals: mapped, skipped } = mapPipedriveRows(rows);
+        if (!mapped.length) { setImportMsg('No deals found in that file.'); setImporting(false); return; }
+        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', deals: mapped }) });
+        const d = await r.json();
+        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
+        skipSave.current = true; setDeals(mapped);
+        setImportMsg(`Imported ${d.count} deals${skipped ? ` (${skipped} skipped)` : ''}.`);
+      } else if (kind === 'orgs') {
+        setImportMsg(`Mapping ${rows.length} companies...`);
+        const { orgs: mapped, skipped } = mapOrganizationRows(rows);
+        if (!mapped.length) { setImportMsg('No companies found in that file.'); setImporting(false); return; }
+        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import-orgs', orgs: mapped }) });
+        const d = await r.json();
+        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
+        setOrgsData(mapped);
+        setImportMsg(`Imported ${d.count} companies${skipped ? ` (${skipped} skipped)` : ''}.`);
+      } else if (kind === 'people') {
+        setImportMsg(`Mapping ${rows.length} contacts...`);
+        const { contacts: mapped, skipped } = mapPeopleRows(rows);
+        if (!mapped.length) { setImportMsg('No contacts found in that file.'); setImporting(false); return; }
+        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import-contacts', contacts: mapped }) });
+        const d = await r.json();
+        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
+        setContactsData(mapped);
+        setImportMsg(`Imported ${d.count} contacts${skipped ? ` (${skipped} skipped)` : ''}.`);
+      }
       if (importFileRef.current) importFileRef.current.value = '';
     } catch (e) {
-      setImportMsg('Could not read that file. Upload the Pipedrive Deals export (.xlsx or .csv).');
+      setImportMsg('Could not read that file. Upload a Pipedrive export (.xlsx or .csv).');
     }
     setImporting(false);
   }
@@ -938,7 +1000,7 @@ export default function CRMPage() {
               <h2 style={{ margin: '0 0 4px', fontSize: 18, color: C.text }}>Import from Pipedrive</h2>
               {!importing && <button onClick={() => setImportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>}
             </div>
-            <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Upload the Pipedrive <strong>Deals</strong> export (.xlsx or .csv). This replaces all deals in the CRM with the contents of the file. Matching is by Pipedrive Deal ID, so re-importing never creates duplicates.</p>
+            <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Upload a Pipedrive export - <strong>Deals</strong>, <strong>Organizations</strong>, or <strong>People</strong> (.xlsx or .csv). The type is detected automatically. Each import replaces that set (deals / companies / contacts) with the file's contents, matched by Pipedrive ID so re-importing never duplicates.</p>
             <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" disabled={importing}
               onChange={(e) => handleImportFile(e.target.files && e.target.files[0])}
               style={{ display: 'block', width: '100%', fontSize: 13, margin: '10px 0' }} />

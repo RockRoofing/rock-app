@@ -12,6 +12,8 @@ import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
 // the built-in sample data so the page isn't empty.
 const DEALS_KEY = 'crm:deals'
 const SCHEMA_KEY = 'crm:field-schema'
+const ORGS_KEY = 'crm:orgs'
+const CONTACTS_KEY = 'crm:contacts'
 
 function readCookie(req, name) {
   const raw = req.headers.cookie || ''
@@ -43,8 +45,10 @@ export default async function handler(req, res) {
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
   if (req.method === 'GET') {
-    const [deals, schema] = await Promise.all([loadDeals(), loadSchema()])
-    return res.json({ deals, schema })
+    const [deals, schema, orgs, contacts] = await Promise.all([
+      loadDeals(), loadSchema(), get(ORGS_KEY), get(CONTACTS_KEY),
+    ])
+    return res.json({ deals, schema, orgs: Array.isArray(orgs) ? orgs : [], contacts: Array.isArray(contacts) ? contacts : [] })
   }
 
   if (req.method === 'POST') {
@@ -58,12 +62,22 @@ export default async function handler(req, res) {
       if (Array.isArray(body.schema) && body.schema.length) await set(SCHEMA_KEY, body.schema)
       return res.json({ ok: true })
     }
-    // Full import from a Pipedrive export (browser parses the file and sends mapped deals).
-    // Wipe & replace: the uploaded file becomes the entire deal set.
+    // Full import from a Pipedrive export (browser parses the file and sends mapped rows).
+    // Wipe & replace for each entity type.
     if (body.action === 'import') {
       if (!Array.isArray(body.deals)) return res.status(400).json({ error: 'No deals to import' })
       await set(DEALS_KEY, body.deals)
       return res.json({ ok: true, count: body.deals.length })
+    }
+    if (body.action === 'import-orgs') {
+      if (!Array.isArray(body.orgs)) return res.status(400).json({ error: 'No companies to import' })
+      await set(ORGS_KEY, body.orgs)
+      return res.json({ ok: true, count: body.orgs.length })
+    }
+    if (body.action === 'import-contacts') {
+      if (!Array.isArray(body.contacts)) return res.status(400).json({ error: 'No contacts to import' })
+      await set(CONTACTS_KEY, body.contacts)
+      return res.json({ ok: true, count: body.contacts.length })
     }
     return res.status(400).json({ error: 'Unknown action' })
   }

@@ -1,34 +1,35 @@
-DEPLOY NOTES - CRM: persistence + Pre-Contract portal + Pipedrive import
-========================================================================
+DEPLOY NOTES - CRM: Companies & Contacts import
+================================================
 
-FOUR files. TWO are NEW (add via GitHub "Add file"), TWO are EDITS.
+THREE files, ALL EDITS (no new files this time). Replace each in GitHub.
 
-  NEW   pages/api/crm.js            (loads/saves the CRM to the database, + import)
-  NEW   lib/crmImportMap.js         (maps Pipedrive columns -> CRM deals)
-  EDIT  pages/crm.js                (loads/saves from the server; Import button)
-  EDIT  components/PreContractNav.js (adds the "CRM" tab)
-
-*** Create the two NEW files via "Add file" at those exact paths. ***
+  EDIT  lib/crmImportMap.js   (adds Organizations + People mapping, and file-type detection)
+  EDIT  pages/api/crm.js      (stores/returns companies + contacts; import actions)
+  EDIT  pages/crm.js          (import auto-detects file type; Companies/Contacts views read imported data)
 
 WHAT THIS DOES
-1. PERSISTENCE: the CRM now loads its deals + field schema from the database on open, and
-   saves automatically whenever you change something (there's a "Saved / Saving..." note in
-   the CRM's top bar). Data is SHARED across all pre-contract staff. Until the first import,
-   it shows the built-in sample deals.
+- The existing "Import" button now accepts THREE Pipedrive exports and detects which one you
+  uploaded automatically:
+    * Deals export        -> replaces the deals (as before)
+    * Organizations export -> fills the COMPANIES tab (address, phone, website, email, reg no,
+                              company type, deal counts)
+    * People export        -> fills the CONTACTS tab (company, work email, phone, job role,
+                              deal counts)
+- Each import is wipe & replace for THAT set only, matched by Pipedrive ID (no duplicates on
+  re-import). Upload .xlsx OR .csv - either works.
+- The Companies and Contacts tabs now read from the IMPORTED companies/contacts (rich detail),
+  with live deal counts computed from the CRM's own deals layered on top. Before you import
+  Organizations/People, those tabs fall back to being derived from the deals (as before), so
+  nothing looks empty.
 
-2. PRE-CONTRACT PORTAL: a new "CRM" tab in the Pre-Contract nav (and a "<- Portal" link in
-   the CRM top bar). Access is limited to pre-contract / management / admin.
+TESTED against the real exports: 3,542 companies and 4,715 contacts mapped, 0 skipped.
 
-3. IMPORT FROM PIPEDRIVE: an "Import" button in the CRM top bar. Upload the Pipedrive DEALS
-   export (.xlsx OR .csv). The file is read in your browser and its deals REPLACE everything
-   in the CRM (wipe & replace). Matching is by Pipedrive Deal ID, so re-importing never makes
-   duplicates. Tested against the real 6,850-deal export: all 6,850 mapped, 0 skipped.
-   (The file is parsed in the browser, so the 3-4 MB export size is not a problem.)
+HOW TO USE
+  Pre-Contract -> CRM -> Import -> upload Organizations export -> then People export -> then
+  (if not already) Deals export. Order doesn't matter.
 
-NOTE ON EMAILS: the Deals export includes email COUNTS and last-sent/received dates (these
-   import into each deal) but NOT the email bodies. Pulling the actual emails is a separate
-   piece we'll look at next, as agreed.
+NEXT (as agreed): re-tie Sales Dashboard / Scorecards / Negotiating to CRM data. Customer type,
+  first-contact date and received date will be left blank (captured going forward), per your steer.
 
-NO vercel.json change. No new cron.
-
-BUILD: next build -> Compiled successfully.
+NO vercel.json change. No new cron. BUILD: Compiled successfully.
+(The pre-existing "xero" import warnings during build are unrelated and were already present.)
