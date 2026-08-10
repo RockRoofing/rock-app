@@ -4,6 +4,7 @@
 export default function PreContractNav({ active, children }) {
   const tabs = [
     { key: 'sales', label: 'Sales Dashboard', href: '/sales' },
+    { key: 'crm', label: 'CRM', href: '/crm' },
     { key: 'scorecard', label: 'Scorecards', href: '/scorecard' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },

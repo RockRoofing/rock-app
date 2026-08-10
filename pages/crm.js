@@ -11,6 +11,8 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import * as XLSX from 'xlsx';
+import { mapPipedriveRows } from '../lib/crmImportMap';
 import { SEED_DEALS, PREVIEW_TODAY } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
@@ -712,7 +714,9 @@ function EntityTable({ rows, fields, columns, sort, onSort }) {
 export default function CRMPage() {
   const today = PREVIEW_TODAY;
   const router = useRouter();
-  const [deals, setDeals] = useState(() => SEED_DEALS.map((d) => ({ ...d, fields: { ...d.fields }, history: [...(d.history || [])], activities: [...(d.activities || [])] })));
+  const [deals, setDeals] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [openId, setOpenId] = useState(null);
   const [view, setView] = useState('pipeline'); // pipeline | list | companies | contacts
   const [query, setQuery] = useState('');
@@ -732,11 +736,44 @@ export default function CRMPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [confetti, setConfetti] = useState(false);
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
+  const skipSave = useRef(true);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+  const importFileRef = useRef(null);
   const [showFieldMgr, setShowFieldMgr] = useState(false);
   const dragId = useRef(null);
   const nextId = useRef(900000);
 
   useEffect(() => { if (!router.isReady) return; const q = router.query.deal; if (q) setOpenId(Number(q)); }, [router.isReady, router.query.deal]);
+
+  // Load persisted CRM data (deals + schema) from the server on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/crm');
+        const d = await r.json();
+        if (cancelled) return;
+        if (Array.isArray(d.deals)) setDeals(d.deals.map((x) => ({ ...x, fields: { ...x.fields }, history: [...(x.history || [])], activities: [...(x.activities || [])], notes: [...(x.notes || [])] })));
+        if (Array.isArray(d.schema) && d.schema.length) setSchema(d.schema);
+      } catch (e) { /* ignore - stays empty */ }
+      if (!cancelled) { setLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist deals + schema whenever they change (debounced). Skips the initial load.
+  useEffect(() => {
+    if (!loaded) return;
+    if (skipSave.current) { skipSave.current = false; return; }
+    setSaving(true);
+    const t = setTimeout(async () => {
+      try { await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', deals, schema }) }); } catch (e) { /* ignore */ }
+      setSaving(false);
+    }, 800);
+    return () => clearTimeout(t);
+  }, [deals, schema, loaded]);
   const openDealById = (id) => { setOpenId(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
   const closeDeal = () => { setOpenId(null); router.push('/crm', undefined, { shallow: true }); };
   useEffect(() => { setVisibleStages(new Set(stageMode === 'estimator' ? ESTIMATOR_STAGES : STAGES.map((s) => s.id))); }, [stageMode]);
@@ -796,6 +833,33 @@ export default function CRMPage() {
   const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
   // mutations
+  async function handleImportFile(file) {
+    if (!file) return;
+    setImporting(true); setImportMsg('Reading file...');
+    try {
+      const buf = await file.arrayBuffer();
+      // SheetJS reads BOTH .xlsx and .csv from the same call.
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+      setImportMsg(`Mapping ${rows.length} rows...`);
+      const { deals: mapped, skipped } = mapPipedriveRows(rows);
+      if (!mapped.length) { setImportMsg('No deals found in that file. Is it the Pipedrive Deals export?'); setImporting(false); return; }
+      setImportMsg(`Saving ${mapped.length} deals...`);
+      const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', deals: mapped }) });
+      const d = await r.json();
+      if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
+      // Replace in-memory deals too, and don't let the debounced auto-save fire over it.
+      skipSave.current = true;
+      setDeals(mapped);
+      setImportMsg(`Imported ${d.count} deals${skipped ? ` (${skipped} rows skipped - no Deal ID)` : ''}.`);
+      if (importFileRef.current) importFileRef.current.value = '';
+    } catch (e) {
+      setImportMsg('Could not read that file. Upload the Pipedrive Deals export (.xlsx or .csv).');
+    }
+    setImporting(false);
+  }
+
   const patch = (id, fn) => setDeals((prev) => prev.map((d) => d.id === id ? fn(d) : d));
   const moveDeal = (id, stageId) => patch(id, (d) => d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: uid(), type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}` }] });
   const setStatus = (id, status) => { patch(id, (d) => { const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened'; return { ...d, status, history: [...d.history, { id: uid(), type: status === 'open' ? 'note' : status, ts: nowIso(), text }] }; }); if (status === 'won') setConfetti(true); };
@@ -867,11 +931,31 @@ export default function CRMPage() {
       {chooser === 'companies' && <ColumnChooser title="Choose columns" fields={COMPANY_FIELDS} columns={companyCols} onToggle={(k) => setCompanyCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
       {chooser === 'contacts' && <ColumnChooser title="Choose columns" fields={CONTACT_FIELDS} columns={contactCols} onToggle={(k) => setContactCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
 
+      {importOpen && (
+        <div onClick={() => !importing && setImportOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 480, maxWidth: '92vw', fontFamily: FONT }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <h2 style={{ margin: '0 0 4px', fontSize: 18, color: C.text }}>Import from Pipedrive</h2>
+              {!importing && <button onClick={() => setImportOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>&times;</button>}
+            </div>
+            <p style={{ fontSize: 13, color: C.dim, marginTop: 0 }}>Upload the Pipedrive <strong>Deals</strong> export (.xlsx or .csv). This replaces all deals in the CRM with the contents of the file. Matching is by Pipedrive Deal ID, so re-importing never creates duplicates.</p>
+            <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" disabled={importing}
+              onChange={(e) => handleImportFile(e.target.files && e.target.files[0])}
+              style={{ display: 'block', width: '100%', fontSize: 13, margin: '10px 0' }} />
+            {importMsg && <div style={{ fontSize: 13, marginTop: 8, padding: '8px 11px', borderRadius: 8, background: importMsg.startsWith('Imported') ? '#dcfce7' : '#eef2ff', color: importMsg.startsWith('Imported') ? '#166534' : '#3730a3' }}>{importing ? '' : ''}{importMsg}</div>}
+            {importing && <div style={{ fontSize: 13, color: C.dim, marginTop: 8 }}>Working... this can take a moment for a large file.</div>}
+          </div>
+        </div>
+      )}
+
       {/* black nav with Rock Roofing logo */}
       <div style={{ background: C.nav, color: '#fff', padding: '10px 16px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: .3, marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ background: C.link, color: '#fff', borderRadius: 5, padding: '2px 7px', fontSize: 14, fontWeight: 800 }}>RR</span>Rock Roofing
         </span>
+        <a href="/sales" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Portal</a>
+        <span style={{ fontSize: 11.5, color: saving ? '#f5c518' : '#7ac57a', minWidth: 46 }}>{!loaded ? '' : saving ? 'Saving...' : 'Saved'}</span>
+        <button onClick={() => { setImportMsg(''); setImportOpen(true); }} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Import</button>
         <div style={{ display: 'flex', border: `1px solid #444`, borderRadius: 6, overflow: 'hidden' }}>
           <button onClick={() => setView('pipeline')} style={segBtn(view === 'pipeline')}>Pipeline</button>
           <button onClick={() => setView('list')} style={segBtn(view === 'list')}>List</button>

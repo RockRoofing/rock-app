@@ -1,13 +1,34 @@
-DEPLOY NOTES - Reorder roles in Project Process template
-========================================================
+DEPLOY NOTES - CRM: persistence + Pre-Contract portal + Pipedrive import
+========================================================================
 
-ONE file, an EDIT - just replace it.
-  pages/operations/project-process.js
+FOUR files. TWO are NEW (add via GitHub "Add file"), TWO are EDITS.
 
-CHANGE
-  In the Project Process Templates editor, each role card now has up / down arrows next to
-  its name to move the whole role earlier or later. (Items within a role could already be
-  reordered - now the roles themselves can be too.) The arrows disable at the top/bottom.
-  Save as usual to keep the new order for future projects.
+  NEW   pages/api/crm.js            (loads/saves the CRM to the database, + import)
+  NEW   lib/crmImportMap.js         (maps Pipedrive columns -> CRM deals)
+  EDIT  pages/crm.js                (loads/saves from the server; Import button)
+  EDIT  components/PreContractNav.js (adds the "CRM" tab)
+
+*** Create the two NEW files via "Add file" at those exact paths. ***
+
+WHAT THIS DOES
+1. PERSISTENCE: the CRM now loads its deals + field schema from the database on open, and
+   saves automatically whenever you change something (there's a "Saved / Saving..." note in
+   the CRM's top bar). Data is SHARED across all pre-contract staff. Until the first import,
+   it shows the built-in sample deals.
+
+2. PRE-CONTRACT PORTAL: a new "CRM" tab in the Pre-Contract nav (and a "<- Portal" link in
+   the CRM top bar). Access is limited to pre-contract / management / admin.
+
+3. IMPORT FROM PIPEDRIVE: an "Import" button in the CRM top bar. Upload the Pipedrive DEALS
+   export (.xlsx OR .csv). The file is read in your browser and its deals REPLACE everything
+   in the CRM (wipe & replace). Matching is by Pipedrive Deal ID, so re-importing never makes
+   duplicates. Tested against the real 6,850-deal export: all 6,850 mapped, 0 skipped.
+   (The file is parsed in the browser, so the 3-4 MB export size is not a problem.)
+
+NOTE ON EMAILS: the Deals export includes email COUNTS and last-sent/received dates (these
+   import into each deal) but NOT the email bodies. Pulling the actual emails is a separate
+   piece we'll look at next, as agreed.
+
+NO vercel.json change. No new cron.
 
 BUILD: next build -> Compiled successfully.
