@@ -1,35 +1,38 @@
-DEPLOY NOTES - CRM: Companies & Contacts import
-================================================
+DEPLOY NOTES - Parallel CRM Sales Dashboard (for comparison)
+============================================================
 
-THREE files, ALL EDITS (no new files this time). Replace each in GitHub.
+Purpose: run a SECOND Sales Dashboard sourced from the CRM ALONGSIDE the existing one, so you
+can compare them before switching over. The old dashboard is UNTOUCHED and stays on the live
+Pipedrive API. *** Deploy THIS package instead of the earlier "Retie dashboards" package. ***
 
-  EDIT  lib/crmImportMap.js   (adds Organizations + People mapping, and file-type detection)
-  EDIT  pages/api/crm.js      (stores/returns companies + contacts; import actions)
-  EDIT  pages/crm.js          (import auto-detects file type; Companies/Contacts views read imported data)
+FOUR files. THREE NEW (add via "Add file"), ONE EDIT.
 
-WHAT THIS DOES
-- The existing "Import" button now accepts THREE Pipedrive exports and detects which one you
-  uploaded automatically:
-    * Deals export        -> replaces the deals (as before)
-    * Organizations export -> fills the COMPANIES tab (address, phone, website, email, reg no,
-                              company type, deal counts)
-    * People export        -> fills the CONTACTS tab (company, work email, phone, job role,
-                              deal counts)
-- Each import is wipe & replace for THAT set only, matched by Pipedrive ID (no duplicates on
-  re-import). Upload .xlsx OR .csv - either works.
-- The Companies and Contacts tabs now read from the IMPORTED companies/contacts (rich detail),
-  with live deal counts computed from the CRM's own deals layered on top. Before you import
-  Organizations/People, those tabs fall back to being derived from the deals (as before), so
-  nothing looks empty.
+  NEW   lib/crmDashboardAdapter.js  (translates CRM deals -> the flat dashboard shape)
+  NEW   pages/api/deals-crm.js      (parallel deals endpoint, reads crm:deals)
+  NEW   pages/sales-crm.js          (the CRM-sourced Sales Dashboard, at /sales-crm)
+  EDIT  components/PreContractNav.js (adds a temporary "Sales (CRM)" tab)
 
-TESTED against the real exports: 3,542 companies and 4,715 contacts mapped, 0 skipped.
+*** Create the THREE NEW files via "Add file" at those exact paths. ***
 
-HOW TO USE
-  Pre-Contract -> CRM -> Import -> upload Organizations export -> then People export -> then
-  (if not already) Deals export. Order doesn't matter.
+IMPORTANT - the nav EDIT:
+  This PreContractNav.js already includes the "CRM" tab from the CRM persistence package.
+  If you have already deployed that package, just replace PreContractNav.js with this one.
+  It adds ONE new tab: "Sales (CRM)", between "Sales Dashboard" and "CRM".
 
-NEXT (as agreed): re-tie Sales Dashboard / Scorecards / Negotiating to CRM data. Customer type,
-  first-contact date and received date will be left blank (captured going forward), per your steer.
+WHAT YOU GET
+  - "Sales Dashboard" (existing tab)  -> unchanged, live Pipedrive data.
+  - "Sales (CRM)" (new tab)           -> same dashboard, but data from the CRM (imported deals).
+    It carries a green banner marking it as the comparison view.
+  Open both, compare the numbers. The CRM one only populates once you've imported deals in the
+  CRM (Pre-Contract -> CRM -> Import -> Deals export).
 
-NO vercel.json change. No new cron. BUILD: Compiled successfully.
-(The pre-existing "xero" import warnings during build are unrelated and were already present.)
+WHAT IS DELIBERATELY BLANK on the CRM version (captured going forward, per your steer):
+  Customer Type, First-Contact date, Received date - so any metric using those (new-vs-existing
+  customer split, first-contact / received timing) will differ from the old dashboard. That is
+  EXPECTED, not a mapping error. Everything else (value, stage, status, estimator, sales person,
+  region, systems, lost reason, won/created dates) should match once deals are imported.
+
+PREREQUISITE: the CRM persistence + import package must be deployed first (this reads crm:deals).
+
+NO change to /api/deals, /api/negotiating, /sales, /scorecard. No vercel.json change. No cron.
+BUILD: Compiled successfully.
