@@ -1,38 +1,30 @@
-DEPLOY NOTES - Parallel CRM Sales Dashboard (for comparison)
-============================================================
+DEPLOY NOTES - CRM import fix (chunked upload for large files)
+=============================================================
 
-Purpose: run a SECOND Sales Dashboard sourced from the CRM ALONGSIDE the existing one, so you
-can compare them before switching over. The old dashboard is UNTOUCHED and stays on the live
-Pipedrive API. *** Deploy THIS package instead of the earlier "Retie dashboards" package. ***
+TWO files, BOTH EDITS. Replace both in GitHub.
 
-FOUR files. THREE NEW (add via "Add file"), ONE EDIT.
+  EDIT  pages/api/crm.js   (adds a chunked import action)
+  EDIT  pages/crm.js       (import now uploads in batches + clearer error messages)
 
-  NEW   lib/crmDashboardAdapter.js  (translates CRM deals -> the flat dashboard shape)
-  NEW   pages/api/deals-crm.js      (parallel deals endpoint, reads crm:deals)
-  NEW   pages/sales-crm.js          (the CRM-sourced Sales Dashboard, at /sales-crm)
-  EDIT  components/PreContractNav.js (adds a temporary "Sales (CRM)" tab)
+WHY
+The "Could not read that file" error was misleading. The file WAS being read fine - the
+failure was SAVING it: the full 6,850-deal payload exceeded Vercel's ~4.5MB request body limit
+in a single POST, and the old code reported that as a read error.
 
-*** Create the THREE NEW files via "Add file" at those exact paths. ***
+FIX
+- Imports now save in batches of 500 rows (14 small requests for the deals file) instead of one
+  huge request, so the body limit is never hit.
+- Error messages are now split by step, so you can tell read vs map vs save failures apart:
+    * "Could not read that file..."  -> the .xlsx/.csv itself could not be parsed
+    * "Could not map that file..."   -> parsed, but unexpected columns
+    * "Saving failed (...)"          -> a save request failed (shows the real reason)
+- If a save fails partway, just re-run the import - it restarts the set cleanly (the first
+  chunk wipes and re-seeds), so no duplicates or half-states.
 
-IMPORTANT - the nav EDIT:
-  This PreContractNav.js already includes the "CRM" tab from the CRM persistence package.
-  If you have already deployed that package, just replace PreContractNav.js with this one.
-  It adds ONE new tab: "Sales (CRM)", between "Sales Dashboard" and "CRM".
+Behaviour is otherwise unchanged: still wipe & replace per set (deals / companies / contacts),
+still auto-detects the file type, still .xlsx or .csv.
 
-WHAT YOU GET
-  - "Sales Dashboard" (existing tab)  -> unchanged, live Pipedrive data.
-  - "Sales (CRM)" (new tab)           -> same dashboard, but data from the CRM (imported deals).
-    It carries a green banner marking it as the comparison view.
-  Open both, compare the numbers. The CRM one only populates once you've imported deals in the
-  CRM (Pre-Contract -> CRM -> Import -> Deals export).
+AFTER DEPLOY: retry the import. Upload the .xlsx exports as before. You'll now see a
+"Saving X of Y..." progress message as each batch goes up.
 
-WHAT IS DELIBERATELY BLANK on the CRM version (captured going forward, per your steer):
-  Customer Type, First-Contact date, Received date - so any metric using those (new-vs-existing
-  customer split, first-contact / received timing) will differ from the old dashboard. That is
-  EXPECTED, not a mapping error. Everything else (value, stage, status, estimator, sales person,
-  region, systems, lost reason, won/created dates) should match once deals are imported.
-
-PREREQUISITE: the CRM persistence + import package must be deployed first (this reads crm:deals).
-
-NO change to /api/deals, /api/negotiating, /sales, /scorecard. No vercel.json change. No cron.
-BUILD: Compiled successfully.
+NO vercel.json change. No cron. BUILD: Compiled successfully.

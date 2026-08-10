@@ -79,6 +79,19 @@ export default async function handler(req, res) {
       await set(CONTACTS_KEY, body.contacts)
       return res.json({ ok: true, count: body.contacts.length })
     }
+    // Chunked import - avoids the ~4.5MB serverless body limit on large sets.
+    //   { action:'import-chunk', kind:'deals'|'orgs'|'contacts', rows:[...], first:bool, last:bool }
+    // first=true starts a fresh set (wipe); subsequent chunks append; last=true finalises.
+    if (body.action === 'import-chunk') {
+      const kind = body.kind
+      const key = kind === 'deals' ? DEALS_KEY : kind === 'orgs' ? ORGS_KEY : kind === 'contacts' ? CONTACTS_KEY : null
+      if (!key) return res.status(400).json({ error: 'Unknown import kind' })
+      if (!Array.isArray(body.rows)) return res.status(400).json({ error: 'No rows in chunk' })
+      const existing = body.first ? [] : (Array.isArray(await get(key)) ? await get(key) : [])
+      const merged = existing.concat(body.rows)
+      await set(key, merged)
+      return res.json({ ok: true, count: merged.length })
+    }
     return res.status(400).json({ error: 'Unknown action' })
   }
 

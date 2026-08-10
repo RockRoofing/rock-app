@@ -877,47 +877,58 @@ export default function CRMPage() {
   async function handleImportFile(file) {
     if (!file) return;
     setImporting(true); setImportMsg('Reading file...');
+
+    // --- Step 1: read + parse the file (own error boundary) ---
+    let rows, kind;
     try {
       const buf = await file.arrayBuffer();
-      // SheetJS reads BOTH .xlsx and .csv from the same call.
       const wb = XLSX.read(buf, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      const headers = rows.length ? Object.keys(rows[0]) : [];
-      const kind = detectExportType(headers);
-      if (!kind) { setImportMsg('Unrecognised file. Upload a Pipedrive Deals, Organizations, or People export.'); setImporting(false); return; }
+      rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+    } catch (e) {
+      setImportMsg('Could not read that file. Make sure it is the Pipedrive export (.xlsx or .csv), not opened/locked in Excel.');
+      setImporting(false); return;
+    }
+    if (!rows || !rows.length) { setImportMsg('That file has no rows.'); setImporting(false); return; }
+    const headers = Object.keys(rows[0]);
+    kind = detectExportType(headers);
+    if (!kind) { setImportMsg('Unrecognised file. Upload a Pipedrive Deals, Organizations, or People export.'); setImporting(false); return; }
 
-      if (kind === 'deals') {
-        setImportMsg(`Mapping ${rows.length} deals...`);
-        const { deals: mapped, skipped } = mapPipedriveRows(rows);
-        if (!mapped.length) { setImportMsg('No deals found in that file.'); setImporting(false); return; }
-        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', deals: mapped }) });
+    // --- Step 2: map to CRM shape ---
+    let mapped, skipped, chunkKind;
+    try {
+      if (kind === 'deals') { const r = mapPipedriveRows(rows); mapped = r.deals; skipped = r.skipped; chunkKind = 'deals'; }
+      else if (kind === 'orgs') { const r = mapOrganizationRows(rows); mapped = r.orgs; skipped = r.skipped; chunkKind = 'orgs'; }
+      else { const r = mapPeopleRows(rows); mapped = r.contacts; skipped = r.skipped; chunkKind = 'contacts'; }
+    } catch (e) {
+      setImportMsg('Could not map that file (' + (e && e.message ? e.message : 'unexpected format') + ').');
+      setImporting(false); return;
+    }
+    if (!mapped.length) { setImportMsg('No records found in that file.'); setImporting(false); return; }
+
+    // --- Step 3: save in chunks (avoids the ~4.5MB serverless body limit) ---
+    const CHUNK = 500;
+    try {
+      let saved = 0;
+      for (let i = 0; i < mapped.length; i += CHUNK) {
+        const slice = mapped.slice(i, i + CHUNK);
+        const first = i === 0;
+        const last = i + CHUNK >= mapped.length;
+        setImportMsg(`Saving ${Math.min(i + CHUNK, mapped.length)} of ${mapped.length}...`);
+        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import-chunk', kind: chunkKind, rows: slice, first, last }) });
+        if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('server ' + r.status)); }
         const d = await r.json();
-        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
-        skipSave.current = true; setDeals(mapped);
-        setImportMsg(`Imported ${d.count} deals${skipped ? ` (${skipped} skipped)` : ''}.`);
-      } else if (kind === 'orgs') {
-        setImportMsg(`Mapping ${rows.length} companies...`);
-        const { orgs: mapped, skipped } = mapOrganizationRows(rows);
-        if (!mapped.length) { setImportMsg('No companies found in that file.'); setImporting(false); return; }
-        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import-orgs', orgs: mapped }) });
-        const d = await r.json();
-        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
-        setOrgsData(mapped);
-        setImportMsg(`Imported ${d.count} companies${skipped ? ` (${skipped} skipped)` : ''}.`);
-      } else if (kind === 'people') {
-        setImportMsg(`Mapping ${rows.length} contacts...`);
-        const { contacts: mapped, skipped } = mapPeopleRows(rows);
-        if (!mapped.length) { setImportMsg('No contacts found in that file.'); setImporting(false); return; }
-        const r = await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import-contacts', contacts: mapped }) });
-        const d = await r.json();
-        if (!r.ok) { setImportMsg(d.error || 'Import failed'); setImporting(false); return; }
-        setContactsData(mapped);
-        setImportMsg(`Imported ${d.count} contacts${skipped ? ` (${skipped} skipped)` : ''}.`);
+        saved = d.count;
       }
+      // Reflect in memory.
+      if (chunkKind === 'deals') { skipSave.current = true; setDeals(mapped); }
+      else if (chunkKind === 'orgs') setOrgsData(mapped);
+      else setContactsData(mapped);
+      const noun = chunkKind === 'deals' ? 'deals' : chunkKind === 'orgs' ? 'companies' : 'contacts';
+      setImportMsg(`Imported ${saved} ${noun}${skipped ? ` (${skipped} skipped)` : ''}.`);
       if (importFileRef.current) importFileRef.current.value = '';
     } catch (e) {
-      setImportMsg('Could not read that file. Upload a Pipedrive export (.xlsx or .csv).');
+      setImportMsg('Saving failed (' + (e && e.message ? e.message : 'unknown') + '). Some rows may have saved; re-run the import to retry.');
     }
     setImporting(false);
   }
