@@ -123,10 +123,38 @@ export default function PlanningPage() {
     } catch {}
     setLoading(false)
   }
-  // Refresh allocations WITHOUT flipping the loading flag, so the page doesn't
-  // remount/scroll to the top (used after paste / clear).
-  async function refreshData() {
+  // Refresh data WITHOUT flipping the loading flag, so the page doesn't
+  // remount/scroll to the top (used after paste / clear / modal actions).
+  // Pass { full:true } to also refresh operatives + competency + RAMS (used when
+  // a modal may have added an operative or changed RAMS signing).
+  async function refreshData(opts) {
     try {
+      if (opts && opts.full) {
+        const [pl, opr, cmp, rm] = await Promise.all([
+          fetch('/api/planning').then(r => r.json()).catch(() => ({})),
+          fetch('/api/operatives').then(r => r.json()).catch(() => ({})),
+          fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
+          fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
+        ])
+        setData(d => ({ ...(d || {}), projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+        const operatives = opr.operatives || []
+        setOps(operatives)
+        setComp(cmp.competency || {})
+        const signedMap = {}
+        for (const proj of (rm.projects || [])) {
+          const keys = new Set((proj.signerKeys || []))
+          const opsReached = proj.stage === 'operatives' || proj.stage === 'complete'
+          if (!opsReached) { signedMap[proj.key] = {}; continue }
+          const m = {}
+          for (const o of operatives) {
+            const nk = `${o.firstName} ${o.lastName}`.trim().toLowerCase()
+            if (keys.has(nk)) m[o.id] = true
+          }
+          signedMap[proj.key] = m
+        }
+        setRams(signedMap)
+        return
+      }
       const pl = await fetch('/api/planning').then(r => r.json()).catch(() => ({}))
       setData(d => ({ ...(d || {}), projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
     } catch {}
@@ -462,10 +490,10 @@ export default function PlanningPage() {
       </div>
 
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp} ramsSigned={rams[allocModal.proj?.key] || {}}
-        onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
+        onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
-      {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); load() }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
+      {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
     </OperationsShell>
   )
 }

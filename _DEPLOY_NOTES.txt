@@ -1,30 +1,24 @@
-DEPLOY NOTES - CRM import fix (chunked upload for large files)
-=============================================================
+DEPLOY NOTES - Planning tab: no more loading screen on every click
+==================================================================
 
-TWO files, BOTH EDITS. Replace both in GitHub.
+ONE file, EDIT. Replace in GitHub.
 
-  EDIT  pages/api/crm.js   (adds a chunked import action)
-  EDIT  pages/crm.js       (import now uploads in batches + clearer error messages)
+  EDIT  pages/operations/project-management/planning.js
 
-WHY
-The "Could not read that file" error was misleading. The file WAS being read fine - the
-failure was SAVING it: the full 6,850-deal payload exceeded Vercel's ~4.5MB request body limit
-in a single POST, and the old code reported that as a read error.
+PROBLEM
+Every action on the Planning gantt (allocating operatives, closing the allocate modal, the
+water-ingress modal) triggered a full-screen "Loading..." for a few seconds, because those
+actions called the full page loader (which refetches everything and blanks the screen).
 
 FIX
-- Imports now save in batches of 500 rows (14 small requests for the deals file) instead of one
-  huge request, so the body limit is never hit.
-- Error messages are now split by step, so you can tell read vs map vs save failures apart:
-    * "Could not read that file..."  -> the .xlsx/.csv itself could not be parsed
-    * "Could not map that file..."   -> parsed, but unexpected columns
-    * "Saving failed (...)"          -> a save request failed (shows the real reason)
-- If a save fails partway, just re-run the import - it restarts the set cleanly (the first
-  chunk wipes and re-seeds), so no duplicates or half-states.
+Those actions now refresh the data IN PLACE, without the loading screen - the gantt updates
+instantly and stays where you are (no scroll-to-top, no blank). The full loader now only runs
+ONCE, when you first open the page (which is correct).
 
-Behaviour is otherwise unchanged: still wipe & replace per set (deals / companies / contacts),
-still auto-detects the file type, still .xlsx or .csv.
+A new "full" in-place refresh covers everything the allocate / water-ingress modals can change
+(allocations, operatives, RAMS signing, competency) - so the picture stays accurate after you
+add an operative or sign RAMS, just without the flash.
 
-AFTER DEPLOY: retry the import. Upload the .xlsx exports as before. You'll now see a
-"Saving X of Y..." progress message as each batch goes up.
+NOTHING else changes - same data, same behaviour, just instant.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
