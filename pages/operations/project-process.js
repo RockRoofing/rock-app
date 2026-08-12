@@ -253,35 +253,51 @@ function CardModal({ projectNo, projectName, card, users, onClose, post, reload 
   const dragId = useRef(null)
   const notesTimer = useRef(null)
 
-  // Re-sync local state whenever the underlying card DATA changes (not just its id) - so
-  // reopening the same card, or a background refresh, always shows the latest ticks, notes
-  // and chat. Using a content signature means this also fires when the same card is
-  // reopened after edits (its id is unchanged but its contents differ).
-  const cardSig = JSON.stringify({
-    items: (card.items || []).map(i => [i.id, i.text, i.done]),
-    notes: card.notes || '', due: card.dueDate || '', assignee: card.assignee || '',
-    chat: (card.chat || []).map(m => m.id),
-  })
+  // Re-sync local state only when a DIFFERENT card is opened (keyed on its id).
+  // We intentionally do NOT re-sync on every content change of the SAME card:
+  // doing so lets a background board refresh overwrite the user's in-progress
+  // ticks (the "boxes tick themselves back" bug). Local optimistic state is the
+  // source of truth while the modal is open; the board is refreshed on close.
   useEffect(() => {
     setItems(card.items || []); setNotes(card.notes || ''); setDue(card.dueDate || '')
     setAssignee(card.assignee || ''); setChat(card.chat || [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardSig])
+  }, [card.id])
+
+  // Close the modal, then refresh the board once so the traffic light / progress
+  // reflect all the ticks made in this session.
+  function closeAndSync() { onClose(); reload() }
 
   const base = { projectNo, cardId: card.id }
 
   async function toggle(itemId) {
+    // Optimistic update only. We deliberately do NOT reload the board here - a
+    // reload re-syncs this modal from the server and races with fast successive
+    // ticks (making boxes appear to tick/untick themselves). The board's traffic
+    // light / progress is refreshed once when the modal closes (see closeAndSync).
     setItems(its => its.map(i => i.id === itemId ? { ...i, done: !i.done } : i))
     await post({ action: 'toggle-item', ...base, itemId })
-    reload()   // refresh the board so the card's completion / traffic light updates live
   }
   async function addItem() {
     const text = newItem.trim(); if (!text) return
     setNewItem('')
     await post({ action: 'add-item', ...base, text })
-    reload()
+    // Re-fetch to pick up the new item's server-assigned id, but MERGE: keep local
+    // done states (a tick post may still be in flight) and only append items we
+    // don't already have. Never overwrite existing ticks.
     const d = await fetch(API).then(r => r.json()).catch(() => null)
-    if (d) { const col = d.board.columns.find(c => c.projectNo === projectNo); const cc = col && col.cards.find(c => c.id === card.id); if (cc) setItems(cc.items) }
+    if (d) {
+      const col = d.board.columns.find(c => c.projectNo === projectNo)
+      const cc = col && col.cards.find(c => c.id === card.id)
+      if (cc) {
+        setItems(cur => {
+          const haveIds = new Set(cur.map(i => i.id))
+          const appended = cc.items.filter(i => !haveIds.has(i.id))
+          return [...cur, ...appended]
+        })
+      }
+    }
+    reload()
   }
   async function saveEdit() {
     if (editId == null) return
@@ -313,14 +329,14 @@ function CardModal({ projectNo, projectName, card, users, onClose, post, reload 
   async function saveAssignee(v) { setAssignee(v); await post({ action: 'set-card-meta', ...base, assignee: v }); reload() }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }} onMouseDown={closeAndSync}>
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 'min(980px, 96vw)', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>{projectName} - {card.role}</div>
             <div style={{ fontSize: 12, color: '#a09a90' }}>{projectNo}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+          <button onClick={closeAndSync} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
         </div>
 
         <div style={{ display: 'flex', gap: 0, maxHeight: '80vh' }}>

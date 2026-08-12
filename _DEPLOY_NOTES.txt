@@ -1,23 +1,26 @@
-DEPLOY NOTES - Planning tab: no loading screen (dates + modals)
-===============================================================
+DEPLOY NOTES - Project Process: checklist ticks no longer undo themselves
+=========================================================================
 
-ONE file, EDIT. Replace in GitHub. (Supersedes the previous "Planning_no_loading_flash"
-package - includes that fix too, so just deploy this one.)
+ONE file, EDIT. Replace in GitHub.
 
-  EDIT  pages/operations/project-management/planning.js
+  EDIT  pages/operations/project-process.js
 
-WHAT WAS STILL LOADING
-Entering dates into the Planned/Actual Start and Contract Completion columns triggered the
-full-screen loader, because saving a date (and the shift-start that moves the gantt) called
-the full page reload via onSaveMeta={load}.
+PROBLEM
+On the role checklists, ticking items could make them tick/untick themselves - especially
+when ticking several boxes quickly. Cause: every tick re-fetched the whole board and re-synced
+the open card from the server; a fast second tick would race that refresh and get overwritten
+by the older server state.
 
 FIX
-- Date saves in those columns now refresh IN PLACE (onSaveMeta -> refreshData), so the gantt
-  updates instantly with no loading screen and no scroll-to-top.
-- Also included from the previous package: the allocate modal and water-ingress modal now
-  refresh in place too.
-- The full loader now only runs ONCE, when you first open the Planning page.
+- Ticking a box now updates instantly and saves in the background, WITHOUT re-fetching the
+  board mid-session. No more race, no more self-undoing ticks.
+- The open card only re-syncs from the server when you open a DIFFERENT card (not on every
+  background change), so an in-flight refresh can never stomp your ticks.
+- The board's traffic light / progress count refreshes ONCE when you close the card (X or click
+  outside), so it stays accurate.
+- Adding an item now merges (keeps your current ticks, just appends the new item) instead of
+  replacing the whole list.
 
-Everything else is unchanged.
+Everything else (notes, due date, assignee, chat, reorder, edit, delete) works as before.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
