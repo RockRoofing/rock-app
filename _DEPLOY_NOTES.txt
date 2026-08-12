@@ -1,24 +1,23 @@
-DEPLOY NOTES - Planning tab: no more loading screen on every click
-==================================================================
+DEPLOY NOTES - Planning tab: no loading screen (dates + modals)
+===============================================================
 
-ONE file, EDIT. Replace in GitHub.
+ONE file, EDIT. Replace in GitHub. (Supersedes the previous "Planning_no_loading_flash"
+package - includes that fix too, so just deploy this one.)
 
   EDIT  pages/operations/project-management/planning.js
 
-PROBLEM
-Every action on the Planning gantt (allocating operatives, closing the allocate modal, the
-water-ingress modal) triggered a full-screen "Loading..." for a few seconds, because those
-actions called the full page loader (which refetches everything and blanks the screen).
+WHAT WAS STILL LOADING
+Entering dates into the Planned/Actual Start and Contract Completion columns triggered the
+full-screen loader, because saving a date (and the shift-start that moves the gantt) called
+the full page reload via onSaveMeta={load}.
 
 FIX
-Those actions now refresh the data IN PLACE, without the loading screen - the gantt updates
-instantly and stays where you are (no scroll-to-top, no blank). The full loader now only runs
-ONCE, when you first open the page (which is correct).
+- Date saves in those columns now refresh IN PLACE (onSaveMeta -> refreshData), so the gantt
+  updates instantly with no loading screen and no scroll-to-top.
+- Also included from the previous package: the allocate modal and water-ingress modal now
+  refresh in place too.
+- The full loader now only runs ONCE, when you first open the Planning page.
 
-A new "full" in-place refresh covers everything the allocate / water-ingress modals can change
-(allocations, operatives, RAMS signing, competency) - so the picture stays accurate after you
-add an operative or sign RAMS, just without the flash.
-
-NOTHING else changes - same data, same behaviour, just instant.
+Everything else is unchanged.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

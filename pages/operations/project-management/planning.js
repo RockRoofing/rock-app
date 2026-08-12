@@ -469,7 +469,7 @@ export default function PlanningPage() {
             <SectionLabel>LIVE PROJECTS</SectionLabel>
             {liveRows.length === 0 && <EmptyRow>No live projects.</EmptyRow>}
             {liveRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp} rams={rams[p.key] || {}}
-              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} ops={ops} onClashes={setShiftClashes} />)}
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={refreshData} ops={ops} onClashes={setShiftClashes} />)}
 
             <SectionLabel>WATER INGRESS</SectionLabel>
             <WaterIngressRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setWiDay(dk)} />
@@ -477,7 +477,7 @@ export default function PlanningPage() {
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
             {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
-              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={load} ops={ops} onClashes={setShiftClashes} />)}
+              sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={refreshData} ops={ops} onClashes={setShiftClashes} />)}
 
           </div>
         </div>
