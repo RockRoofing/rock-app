@@ -373,63 +373,198 @@ function ProjectDetails({ projectNo, onSaved }) {
 // ── Read-only Handover ──
 function HandoverReadOnly({ projectNo }) {
   const [data, setData] = useState(null)
+  const [sections, setSections] = useState(null)
   const [loading, setLoading] = useState(true)
   const [doc, setDoc] = useState(null)
   useEffect(() => { (async () => {
-    try { const r = await fetch(`/api/ops-projects?no=${projectNo}`); const d = await r.json(); setData(d.project?.data || null) } catch {}
+    try {
+      const [pr, tp] = await Promise.all([
+        fetch(`/api/ops-projects?no=${encodeURIComponent(projectNo)}`).then(r => r.json()),
+        fetch('/api/templates?key=ihm').then(r => r.json()).catch(() => ({})),
+      ])
+      setData(pr.project?.data || null)
+      setSections(Array.isArray(tp.sections) ? tp.sections : [])
+    } catch {}
     setLoading(false)
   })() }, [projectNo])
   if (loading) return <Loading />
   if (!data) return <EmptyCard title="No handover data" body="This project has no stored handover details." />
-  const row = (label, val) => val ? (
+
+  const fmtDate = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('en-GB') }
+  const has = (v) => v != null && !(typeof v === 'string' && v.trim() === '') && !(Array.isArray(v) && v.length === 0)
+
+  const labelCol = { width: 220, color: '#888', fontSize: 13, flexShrink: 0 }
+  const row = (label, val) => has(val) ? (
     <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
-      <div style={{ width: 220, color: '#888', fontSize: 13, flexShrink: 0 }}>{label}</div>
+      <div style={labelCol}>{label}</div>
       <div style={{ fontSize: 14, color: INK, whiteSpace: 'pre-wrap' }}>{val}</div>
     </div>
   ) : null
-  return (
-    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20 }}>
-      {row('Project Name', data.projectName)}
-      {row('Project Number', data.projectNo)}
-      {row('Contracts Manager', data.contractsManager)}
-      {row('Estimator', data.estimator)}
-      {row('Quantity Surveyor', data.quantitySurveyor)}
-      {row('Design Manager', data.designManager)}
-      {row('Operations Manager', data.operationsManager)}
-      {row('Address', data.projectAddress)}
-      {row('Customer', data.customerCompany)}
-      {row('Contract Value', data.contractValue)}
-      {data.scopeOfWorks ? (
-        <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
-          <div style={{ width: 220, color: '#888', fontSize: 13, flexShrink: 0 }}>Scope of Works</div>
-          <div style={{ fontSize: 14, color: INK, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: data.scopeOfWorks }} />
-        </div>
-      ) : null}
-      {Array.isArray(data.scopeFiles) && data.scopeFiles.length > 0 && (
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>Handover documents</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
-            {data.scopeFiles.map((f, i) => {
-              const img = (f.type || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(f.name || f.url || '')
-              return (
-                <div key={i} style={{ border: '1px solid #ececec', borderRadius: 10, overflow: 'hidden' }}>
-                  <div onClick={() => setDoc(f)} style={{ height: 100, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {img ? <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ fontSize: 30, color: '#bbb' }}>📄</div>}
-                  </div>
-                  <div style={{ padding: '8px 10px' }}>
-                    <div style={{ fontSize: 12, color: INK, fontWeight: 600, wordBreak: 'break-word' }}>{f.name}</div>
-                    <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                      <button onClick={() => setDoc(f)} style={linkBtn}>View</button>
-                      <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, textDecoration: 'none' }}>Download</a>
-                    </div>
-                  </div>
+
+  const htmlRow = (label, html) => has(html) ? (
+    <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+      <div style={labelCol}>{label}</div>
+      <div style={{ fontSize: 14, color: INK, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: html }} />
+    </div>
+  ) : null
+
+  // Render a fileslist (scopeFiles or any 'files' field)
+  const filesBlock = (label, files) => (Array.isArray(files) && files.length > 0) ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 10 }}>{label}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
+        {files.map((f, i) => {
+          const img = (f.type || '').startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(f.name || f.url || '')
+          return (
+            <div key={i} style={{ border: '1px solid #ececec', borderRadius: 10, overflow: 'hidden' }}>
+              <div onClick={() => setDoc(f)} style={{ height: 100, background: '#f7f6f4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {img ? <img src={f.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <div style={{ fontSize: 30, color: '#bbb' }}>📄</div>}
+              </div>
+              <div style={{ padding: '8px 10px' }}>
+                <div style={{ fontSize: 12, color: INK, fontWeight: 600, wordBreak: 'break-word' }}>{f.name}</div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
+                  <button onClick={() => setDoc(f)} style={linkBtn}>View</button>
+                  <a href={f.url} download={f.name} target="_blank" rel="noreferrer" style={{ ...linkBtn, textDecoration: 'none' }}>Download</a>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  ) : null
+
+  // Structured array renderers (contacts / mfr contacts / roof types / risks / procurement / live tasks)
+  const contactsBlock = (label, list) => (Array.isArray(list) && list.length) ? (
+    <div style={{ padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+      <div style={{ ...labelCol, width: 'auto', marginBottom: 6 }}>{label}</div>
+      {list.map((c, i) => (
+        <div key={i} style={{ fontSize: 13.5, color: INK, padding: '3px 0' }}>
+          {[c.name, c.role || c.title, c.phone, c.email, c.company].filter(Boolean).join('  ·  ')}
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  const roofTypesBlock = (list) => (Array.isArray(list) && list.length) ? (
+    <div style={{ padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+      <div style={{ ...labelCol, width: 'auto', marginBottom: 6 }}>Roof Types</div>
+      {list.map((r, i) => (
+        <div key={i} style={{ fontSize: 13.5, color: INK, padding: '3px 0' }}>
+          {[r.type || r.name, r.area != null ? `${r.area} m2` : '', r.system, r.notes].filter(Boolean).join('  ·  ')}
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  const risksBlock = (list) => (Array.isArray(list) && list.length) ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 8 }}>Risk Log</div>
+      {list.map((r, i) => (
+        <div key={i} style={{ border: '1px solid #f0efec', borderRadius: 8, padding: 10, marginBottom: 8, background: r.closed ? '#f6faf6' : '#fff' }}>
+          <div style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>{r.risk || r.description}{r.closed ? '  ✓ closed' : ''}</div>
+          {r.mitigation && <div style={{ fontSize: 13, color: '#555', marginTop: 3 }}>Mitigation: {r.mitigation}</div>}
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{[r.assignee ? `Owner: ${r.assignee}` : '', r.closeOutDate ? `Close-out: ${fmtDate(r.closeOutDate)}` : ''].filter(Boolean).join('  ·  ')}</div>
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  const procurementBlock = (list) => (Array.isArray(list) && list.length) ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 8 }}>Procurement</div>
+      {list.map((p, i) => (
+        <div key={i} style={{ border: '1px solid #f0efec', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          <div style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>{p.item || p.description || p.name}</div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{[p.supplier ? `Supplier: ${p.supplier}` : '', p.assignee ? `Owner: ${p.assignee}` : '', p.leadTime ? `Lead: ${p.leadTime}` : '', p.requiredDate ? `Required: ${fmtDate(p.requiredDate)}` : ''].filter(Boolean).join('  ·  ')}</div>
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  const tasksBlock = (list) => (Array.isArray(list) && list.length) ? (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 8 }}>Live Tasks</div>
+      {list.map((t, i) => (
+        <div key={i} style={{ border: '1px solid #f0efec', borderRadius: 8, padding: 10, marginBottom: 8 }}>
+          <div style={{ fontSize: 13.5, color: INK, fontWeight: 600 }}>{t.task || t.title || t.description}</div>
+          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>{[t.assignee ? `Owner: ${t.assignee}` : '', t.dueDate ? `Due: ${fmtDate(t.dueDate)}` : ''].filter(Boolean).join('  ·  ')}</div>
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  // Render one template field by its type, read-only.
+  const renderField = (f) => {
+    const v = data[f.id]
+    switch (f.type) {
+      case 'contacts': return contactsBlock(f.label, v)
+      case 'mfrcontacts': return contactsBlock(f.label || 'Manufacturer Contacts', v)
+      case 'rooftypes': return roofTypesBlock(v)
+      case 'risklog': return risksBlock(v)
+      case 'procurement': return procurementBlock(v)
+      case 'livetasks': return tasksBlock(v)
+      case 'files': return filesBlock(f.label || 'Files', v)
+      case 'date': return row(f.label, fmtDate(v))
+      case 'richtext':
+      case 'html': return htmlRow(f.label, v)
+      default: return row(f.label, typeof v === 'string' ? v : (v != null && typeof v !== 'object' ? String(v) : ''))
+    }
+  }
+
+  const hasTemplate = Array.isArray(sections) && sections.length > 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {hasTemplate ? (
+        sections.map((section, si) => {
+          const rendered = (section.fields || []).map(f => <div key={f.id}>{renderField(f)}</div>).filter(Boolean)
+          // Skip a section entirely if it has nothing to show.
+          const anyContent = (section.fields || []).some(f => has(data[f.id]))
+          if (!anyContent) return null
+          return (
+            <div key={si} style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: GOLD, marginBottom: 8, textTransform: 'uppercase' }}>{section.title}</div>
+              {rendered}
+            </div>
+          )
+        })
+      ) : (
+        // Fallback if the template can't be loaded: the original summary fields.
+        <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20 }}>
+          {row('Project Name', data.projectName)}
+          {row('Project Number', data.projectNo)}
+          {row('Contracts Manager', data.contractsManager)}
+          {row('Estimator', data.estimator)}
+          {row('Quantity Surveyor', data.quantitySurveyor)}
+          {row('Design Manager', data.designManager)}
+          {row('Operations Manager', data.operationsManager)}
+          {row('Address', data.projectAddress)}
+          {row('Customer', data.customerCompany)}
+          {row('Contract Value', data.contractValue)}
+          {htmlRow('Scope of Works', data.scopeOfWorks)}
         </div>
       )}
-      <div style={{ marginTop: 12, fontSize: 12, color: '#aaa' }}>Read-only. Edit via Pre-Contract → Internal Handover Minutes.</div>
+
+      {/* Structured arrays that may live outside the template, shown once. */}
+      {(() => {
+        // Avoid double-rendering arrays already covered by a template field id.
+        const templateIds = new Set(hasTemplate ? sections.flatMap(s => (s.fields || []).map(f => f.id)) : [])
+        return (
+          <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 20 }}>
+            {!templateIds.has('siteContacts') && contactsBlock('Site Contacts', data.siteContacts)}
+            {!templateIds.has('manufacturerContacts') && contactsBlock('Manufacturer Contacts', data.manufacturerContacts)}
+            {!templateIds.has('roofTypes') && roofTypesBlock(data.roofTypes)}
+            {!templateIds.has('risks') && risksBlock(data.risks)}
+            {!templateIds.has('procurement') && procurementBlock(data.procurement)}
+            {!templateIds.has('liveTasks') && tasksBlock(data.liveTasks)}
+            {!templateIds.has('scopeFiles') && filesBlock('Handover documents', data.scopeFiles)}
+          </div>
+        )
+      })()}
+
+      <div style={{ fontSize: 12, color: '#aaa' }}>Read-only. Edit via Pre-Contract &rarr; Internal Handover Minutes.</div>
+
       {doc && (
         <div onClick={() => setDoc(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', color: '#fff' }}>

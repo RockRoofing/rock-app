@@ -1,26 +1,27 @@
-DEPLOY NOTES - Project Process: checklist ticks no longer undo themselves
-=========================================================================
+DEPLOY NOTES - Operations Handover tab: show the FULL minutes
+=============================================================
 
 ONE file, EDIT. Replace in GitHub.
 
-  EDIT  pages/operations/project-process.js
+  EDIT  pages/operations/projects.js
 
-PROBLEM
-On the role checklists, ticking items could make them tick/untick themselves - especially
-when ticking several boxes quickly. Cause: every tick re-fetched the whole board and re-synced
-the open card from the server; a fast second tick would race that refresh and get overwritten
-by the older server state.
+WHAT CHANGED
+The Handover tab on an Operations project used to show only a short summary (about a dozen
+fields). It now pulls through the FULL Internal Handover Minutes - every section and field from
+the IHM template - by loading the same IHM template the Pre-Contract form uses and rendering
+each field read-only:
+  - all template sections and their fields (text, dates, rich text, etc.)
+  - Site Contacts and Manufacturer Contacts
+  - Roof Types
+  - Risk Log
+  - Procurement
+  - Live Tasks
+  - Handover documents (view / download)
+Empty sections are hidden so it stays tidy. If the template can't be loaded for any reason, it
+falls back to the old summary view.
 
-FIX
-- Ticking a box now updates instantly and saves in the background, WITHOUT re-fetching the
-  board mid-session. No more race, no more self-undoing ticks.
-- The open card only re-syncs from the server when you open a DIFFERENT card (not on every
-  background change), so an in-flight refresh can never stomp your ticks.
-- The board's traffic light / progress count refreshes ONCE when you close the card (X or click
-  outside), so it stays accurate.
-- Adding an item now merges (keeps your current ticks, just appends the new item) instead of
-  replacing the whole list.
-
-Everything else (notes, due date, assignee, chat, reorder, edit, delete) works as before.
+STILL READ-ONLY (as requested) - no editing here. It reads the same data as the Pre-Contract
+Internal Handover Minutes (single source of truth), so it always reflects the latest minutes.
+Editing remains in Pre-Contract -> Internal Handover Minutes.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

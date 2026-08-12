@@ -364,11 +364,12 @@ export default function OutstandingInvoicesPage() {
     fetch('/api/chase-email-templates').then(r => r.json()).then(d => setChaseTemplates(d.templates || [])).catch(() => {})
   }, [])
 
-  async function loadAll() {
+  async function loadAll(opts) {
+    const fresh = opts && opts.fresh
     setLoading(true)
     try {
       const [dashR, metaR, teamR, meR] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
+        fetch(fresh ? '/api/dashboard?sync=true' : '/api/dashboard').then(r => r.json()).catch(() => ({})),
         fetch('/api/outstanding-invoices').then(r => r.json()).catch(() => ({ meta: {} })),
         fetch('/api/team').then(r => r.json()).catch(() => ({ members: [] })),
         fetch('/api/portal-auth?action=me').then(r => r.json()).catch(() => ({ user: null })),
@@ -514,7 +515,7 @@ export default function OutstandingInvoicesPage() {
     <>
       <Head><title>Rock Roofing — Outstanding Invoices · v9</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-        <CommercialNav active="/outstanding-invoices" right={<SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />} />
+        <CommercialNav active="/outstanding-invoices" right={<SyncBar show={['invoices']} months={12} onDone={() => loadAll({ fresh: true })} />} />
 
         <div style={{ padding: 24 }}>
           {/* Summary cards */}

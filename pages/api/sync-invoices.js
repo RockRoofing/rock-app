@@ -168,7 +168,7 @@ async function fetchInvoiceLineItems(at, tid, invoiceId) {
 // On-demand: refresh Sales Invoices for ALL projects over a window (default 6 mo).
 // Exact-mirror within the window (older invoices preserved).
 export default async function handler(req, res) {
-  if (!requireRole(req, res, ['accounts', 'management', 'admin'])) return
+  if (!requireRole(req, res, ['accounts', 'post-contract', 'management', 'admin'])) return
   const redis = await getRedis()
   if (!redis) return res.status(500).json({ error: 'No Redis' })
 
