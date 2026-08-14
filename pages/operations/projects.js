@@ -18,7 +18,7 @@ const SUB_TABS = [
   { key: 'concerns', label: 'Project Concerns' },
 ]
 
-const STATUS_LABEL = { active: 'Live', complete: 'Complete', draft: 'Draft' }
+const STATUS_LABEL = { active: 'Live', complete: 'Complete', archived: 'Archived', draft: 'Draft' }
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState([])
@@ -151,7 +151,7 @@ export default function ProjectsPage() {
         <F label="Estimator"><select value={fEst} onChange={e => setFEst(e.target.value)} style={sel}><option value="">All</option>{uniq('estimator').map(v => <option key={v}>{v}</option>)}</select></F>
         <F label="QS"><select value={fQS} onChange={e => setFQS(e.target.value)} style={sel}><option value="">All</option>{uniq('quantitySurveyor').map(v => <option key={v}>{v}</option>)}</select></F>
         <F label="Design Manager"><select value={fDM} onChange={e => setFDM(e.target.value)} style={sel}><option value="">All</option>{uniq('designManager').map(v => <option key={v}>{v}</option>)}</select></F>
-        <F label="Status"><select value={fStatus} onChange={e => setFStatus(e.target.value)} style={sel}><option value="active">Live</option><option value="complete">Complete</option><option value="draft">Draft</option><option value="">All</option></select></F>
+        <F label="Status"><select value={fStatus} onChange={e => setFStatus(e.target.value)} style={sel}><option value="active">Live</option><option value="complete">Complete</option><option value="archived">Archived</option><option value="draft">Draft</option><option value="">All</option></select></F>
         {hasFilters && <button onClick={() => { setQ(''); setFCM(''); setFEst(''); setFQS(''); setFDM(''); setFStatus('active') }} style={{ background: '#f2f2f0', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 13, color: '#555', cursor: 'pointer' }}>Reset</button>}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 13, color: '#999', alignSelf: 'center' }}>{filtered.length} projects</div>
@@ -184,9 +184,10 @@ export default function ProjectsPage() {
                       ? <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 20, padding: '2px 10px', fontSize: 12, fontWeight: 600 }}>Draft</span>
                       : <select value={p.status} onChange={e => setStatus(p.projectNo, e.target.value)}
                           style={{ border: '1px solid #e0e0e0', borderRadius: 20, padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                            background: p.status === 'complete' ? '#eef2ff' : '#ecfdf5', color: p.status === 'complete' ? '#3730a3' : '#065f46' }}>
+                            background: p.status === 'complete' ? '#eef2ff' : p.status === 'archived' ? '#f3f4f6' : '#ecfdf5', color: p.status === 'complete' ? '#3730a3' : p.status === 'archived' ? '#4b5563' : '#065f46' }}>
                           <option value="active">Live</option>
                           <option value="complete">Complete</option>
+                          <option value="archived">Archived</option>
                         </select>}
                   </td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -219,7 +220,7 @@ export default function ProjectsPage() {
           <Lbl>Location</Lbl>
           <input value={manual.location} onChange={e => setManual({ ...manual, location: e.target.value })} style={inp2} />
           <Lbl>Status</Lbl>
-          <select value={manual.status} onChange={e => setManual({ ...manual, status: e.target.value })} style={inp2}><option value="active">Live</option><option value="complete">Complete</option></select>
+          <select value={manual.status} onChange={e => setManual({ ...manual, status: e.target.value })} style={inp2}><option value="active">Live</option><option value="complete">Complete</option><option value="archived">Archived</option></select>
           <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
             <button onClick={saveManual} style={primaryBtn}>{manual.__edit ? 'Save changes' : 'Add project'}</button>
             <button onClick={() => setManual(null)} style={ghostBtn}>Cancel</button>
