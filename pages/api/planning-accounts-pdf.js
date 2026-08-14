@@ -1,6 +1,7 @@
 import { buildAccountsLabourPDF } from '../../lib/weeklyLabourPdf'
 import { assembleWeek } from './planning-week'
 import { requireRole } from '../../lib/portalAuth'
+import { get } from '../../lib/db'
 
 const DAY = 86400000
 const parseISO = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
@@ -17,7 +18,15 @@ export default async function handler(req, res) {
     const mondayStr = body.monday || ''
     const n = Math.min(26, Math.max(1, Number(body.weeks) || 1))
     const includeOpIds = Array.isArray(body.includeOpIds) ? new Set(body.includeOpIds) : null
-    const overnight = body.overnight || {}   // { opId: [dateISO,...] }
+    // Overnight allowances come from the saved store (ops:overnight-allowance = { date: [opId] }),
+    // optionally overlaid with any just-made changes passed in body.overnight ({ opId:[dateISO] }).
+    const storedOA = (await get('ops:overnight-allowance')) || {}
+    // Build a per-op set of dates from the store.
+    const onByOp = {}   // opId -> Set(dateISO)
+    for (const [dk, ids] of Object.entries(storedOA)) for (const id of (ids || [])) { (onByOp[id] = onByOp[id] || new Set()).add(dk) }
+    // Overlay any explicit body.overnight (used right after editing, before a reload).
+    const bodyOvernight = body.overnight || {}
+    for (const [opId, dates] of Object.entries(bodyOvernight)) { const s = onByOp[opId] || new Set(); for (const dk of (dates || [])) s.add(dk); onByOp[opId] = s }
 
     const base = mondayStr ? parseISO(mondayStr) : new Date()
     const mondays = Array.from({ length: n }, (_, i) => iso(new Date(base.getTime() + i * 7 * DAY)))
@@ -28,9 +37,9 @@ export default async function handler(req, res) {
       wk.rows = (wk.rows || [])
         .filter(r => !r.unnamed && (!includeOpIds || includeOpIds.has(r.opId)))
         .map(r => {
-          const days = Array.isArray(overnight[r.opId]) ? overnight[r.opId] : []
           const on = {}
-          for (const dk of days) on[dk] = true
+          const set = onByOp[r.opId]
+          if (set) for (const dk of set) on[dk] = true
           return { ...r, overnight: on }
         })
     }

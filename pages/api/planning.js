@@ -24,6 +24,7 @@ const A_KEY = 'ops:planning-allocations'
 const M_KEY = 'ops:planning-meta'
 const WI_KEY = 'ops:water-ingress'   // { [dateISO]: [ { id, jobName, jobAddress, projectNo, status, unnamed, entries:[{opId,half}] } ] }
 const OH_KEY = 'ops:overheads'       // { [dateISO]: [ { id, opId, category } ] }
+const OA_KEY = 'ops:overnight-allowance'   // { [dateISO]: [opId, ...] }
 const getAlloc = async () => (await get(A_KEY)) || {}
 const saveAlloc = (v) => set(A_KEY, v)
 const getMeta = async () => (await get(M_KEY)) || {}
@@ -32,6 +33,8 @@ const getWI = async () => (await get(WI_KEY)) || {}
 const saveWI = (v) => set(WI_KEY, v)
 const getOH = async () => (await get(OH_KEY)) || {}
 const saveOH = (v) => set(OH_KEY, v)
+const getOA = async () => (await get(OA_KEY)) || {}
+const saveOA = (v) => set(OA_KEY, v)
 
 // Allowed overhead categories.
 const OVERHEAD_CATEGORIES = ['Holidays', 'Internal Time', 'Ops Support', 'Sick', 'Unpaid Leave', 'Paid Leave']
@@ -107,8 +110,8 @@ async function buildProjects() {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const [{ live, negotiated, completed }, allocations, meta, waterIngress, overheads] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI(), getOH()])
-      return res.json({ projects: [...live, ...negotiated], completed, allocations, meta, waterIngress, overheads })
+      const [{ live, negotiated, completed }, allocations, meta, waterIngress, overheads, overnight] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI(), getOH(), getOA()])
+      return res.json({ projects: [...live, ...negotiated], completed, allocations, meta, waterIngress, overheads, overnight })
     } catch (e) {
       console.error('planning GET failed:', e)
       return res.status(500).json({ error: e.message || 'Load failed' })
@@ -300,6 +303,31 @@ export default async function handler(req, res) {
         const oh = await getOH()
         if (oh[date]) { oh[date] = oh[date].filter(e => e.id !== id); if (!oh[date].length) delete oh[date] }
         await saveOH(oh)
+        return res.json({ ok: true })
+      }
+
+      if (action === 'oa-set') {
+        // body: { date, opId, on:bool } - toggle overnight allowance for one installer on one day
+        const { date, opId, on } = body
+        if (!date || !opId) return res.status(400).json({ error: 'Missing date/installer' })
+        const oa = await getOA()
+        const list = new Set(oa[date] || [])
+        if (on) list.add(opId); else list.delete(opId)
+        if (list.size) oa[date] = [...list]; else delete oa[date]
+        await saveOA(oa)
+        return res.json({ ok: true })
+      }
+      if (action === 'oa-set-bulk') {
+        // body: { entries: [{date, opId, on}] } - apply many toggles at once
+        const list = Array.isArray(body.entries) ? body.entries : []
+        const oa = await getOA()
+        for (const e of list) {
+          if (!e || !e.date || !e.opId) continue
+          const s = new Set(oa[e.date] || [])
+          if (e.on) s.add(e.opId); else s.delete(e.opId)
+          if (s.size) oa[e.date] = [...s]; else delete oa[e.date]
+        }
+        await saveOA(oa)
         return res.json({ ok: true })
       }
 

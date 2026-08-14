@@ -1,23 +1,26 @@
-DEPLOY NOTES - Overheads: add staff to multiple days at once
-============================================================
+DEPLOY NOTES - Accounts O/A: saved + reviewable by date/installer
+=================================================================
 
-ONE file, EDIT. Replace in GitHub.
-(Deploy the "Overheads row" package and the "Accounts weekly labour" package first - this
-planning.js includes everything from both plus this change.)
+THREE files, ALL EDITS. Replace each in GitHub.
+(This supersedes the earlier Accounts / Overheads planning packages - this planning.js and
+planning.js API include everything from them plus these changes.)
 
-  EDIT  pages/operations/project-management/planning.js
+  EDIT  pages/api/planning.js                             (saves overnight allowances)
+  EDIT  pages/api/planning-accounts-pdf.js                (report reads SAVED overnight allowances)
+  EDIT  pages/operations/project-management/planning.js   (O/A persists + Review tab)
 
 WHAT CHANGED
-When adding staff to Overheads, you can now apply the same person + category to MULTIPLE days at
-once. In the Overheads panel's "Add staff to overheads" box there is now a row of day chips for
-the visible week:
-  - The clicked day is selected by default.
-  - Tap day chips to toggle which days to apply to.
-  - "All days" / "Just this day" quick buttons.
-  - The Add button reads "Add to N days" and saves the person+category to every selected day.
-If the person is already on overheads on some of those days, those days are skipped and noted;
-the rest still save.
+1. OVERNIGHT ALLOWANCES ARE NOW SAVED
+   In the Accounts Weekly Labour Allocation picker, ticking an O/A box now saves it immediately
+   (stored per installer, per day). Next time you open the picker, all previously-set O/As are
+   already ticked - nothing is lost on close. The downloadable report also reads the saved O/As,
+   so it always reflects what's recorded.
 
-Editing category / removing still works per day on the day you're viewing (as before).
+2. NEW "Review past O/A" TAB
+   The Accounts pop-out now has two tabs: "Build report" (as before) and "Review past O/A".
+   The Review tab lists every recorded overnight allowance and lets you filter by:
+     - From / To date range
+     - Installer
+   so you can check when O/A applied on past dates. You can also remove an entry from here.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

@@ -104,7 +104,7 @@ export default function PlanningPage() {
         fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
         fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
       ])
-      setData({ projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} })
+      setData({ projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {}, overnight: pl.overnight || {} })
       const operatives = opr.operatives || []
       setOps(operatives)
       setComp(cmp.competency || {})
@@ -140,7 +140,7 @@ export default function PlanningPage() {
           fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
           fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
         ])
-        setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} }))
+        setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {}, overnight: pl.overnight || {} }))
         const operatives = opr.operatives || []
         setOps(operatives)
         setComp(cmp.competency || {})
@@ -160,7 +160,7 @@ export default function PlanningPage() {
         return
       }
       const pl = await fetch('/api/planning').then(r => r.json()).catch(() => ({}))
-      setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} }))
+      setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {}, overnight: pl.overnight || {} }))
     } catch {}
   }
   useEffect(() => { load() }, [])
@@ -526,7 +526,7 @@ export default function PlanningPage() {
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp} ramsSigned={rams[allocModal.proj?.key] || {}}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
-      {accountsModal && <AccountsWeekModal monday={accountsModal} onClose={() => setAccountsModal(null)} />}
+      {accountsModal && <AccountsWeekModal monday={accountsModal} data={data} ops={ops} onClose={() => setAccountsModal(null)} onSaved={() => refreshData()} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {ohDay && <OverheadsDayModal date={ohDay} weekDays={days.map(iso)} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
@@ -1145,16 +1145,29 @@ const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #
 const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }
 
 // ── Accounts Weekly Labour: pick installers + mark overnight allowance per day, download PDF ──
-function AccountsWeekModal({ monday, onClose }) {
+function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
+  const [tab, setTab] = useState('build')             // 'build' | 'review'
   const [weeksAhead, setWeeksAhead] = useState(1)
   const [includePrev, setIncludePrev] = useState(false)
   const [weeksData, setWeeksData] = useState(null)
   const [included, setIncluded] = useState(null)      // Set of opIds to show (null = all, set once loaded)
-  const [overnight, setOvernight] = useState({})       // { opId: Set<dateISO> }
+  // Overnight allowances, seeded from the SAVED store (data.overnight = { dateISO: [opId] }).
+  const seedOvernight = () => {
+    const m = {}
+    const store = (data && data.overnight) || {}
+    for (const [dk, ids] of Object.entries(store)) for (const id of (ids || [])) { (m[id] = m[id] || new Set()).add(dk) }
+    return m
+  }
+  const [overnight, setOvernight] = useState(seedOvernight)   // { opId: Set<dateISO> }
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // Review filters
+  const [rFrom, setRFrom] = useState('')
+  const [rTo, setRTo] = useState('')
+  const [rInstaller, setRInstaller] = useState('')
 
   const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}`.trim() || id : id }
   const thisMon = parseISO(monday)
   const nextMon = new Date(thisMon.getTime() + 7 * 86400000)
   const prevMon = new Date(thisMon.getTime() - 7 * 86400000)
@@ -1198,9 +1211,15 @@ function AccountsWeekModal({ monday, onClose }) {
   const isIncluded = (opId) => !included || included.has(opId)
   const toggleIncl = (opId) => setIncluded(prev => { const n = new Set(prev || installers.map(r => r.opId)); n.has(opId) ? n.delete(opId) : n.add(opId); return n })
   const hasON = (opId, dk) => !!(overnight[opId] && overnight[opId].has(dk))
-  const toggleON = (opId, dk) => setOvernight(prev => {
-    const n = { ...prev }; const s = new Set(n[opId] || []); s.has(dk) ? s.delete(dk) : s.add(dk); n[opId] = s; return n
-  })
+  const toggleON = (opId, dk) => {
+    const currentlyOn = hasON(opId, dk)
+    setOvernight(prev => {
+      const n = { ...prev }; const s = new Set(n[opId] || []); s.has(dk) ? s.delete(dk) : s.add(dk); n[opId] = s; return n
+    })
+    // Persist immediately so it's saved for next time.
+    fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oa-set', date: dk, opId, on: !currentlyOn }) })
+      .then(() => onSaved && onSaved()).catch(() => {})
+  }
 
   async function download() {
     setBusy(true); setErr('')
@@ -1225,6 +1244,32 @@ function AccountsWeekModal({ monday, onClose }) {
 
   const chk = { width: 22, height: 22, borderRadius: 5, border: '1px solid #d8d3c8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 11, fontWeight: 700 }
 
+  // Review: flatten ALL saved overnight allowances into rows, filterable by date range + installer.
+  const reviewRows = useMemo(() => {
+    const store = (data && data.overnight) || {}
+    const rows = []
+    for (const [dk, ids] of Object.entries(store)) for (const id of (ids || [])) rows.push({ date: dk, opId: id })
+    return rows
+      .filter(r => !rFrom || r.date >= rFrom)
+      .filter(r => !rTo || r.date <= rTo)
+      .filter(r => !rInstaller || r.opId === rInstaller)
+      .sort((a, b) => b.date.localeCompare(a.date) || opName(a.opId).localeCompare(opName(b.opId)))
+  }, [data, rFrom, rTo, rInstaller])
+
+  const reviewInstallers = useMemo(() => {
+    const store = (data && data.overnight) || {}
+    const ids = new Set()
+    for (const ids2 of Object.values(store)) for (const id of (ids2 || [])) ids.add(id)
+    return [...ids].map(id => ({ id, name: opName(id) })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [data])
+
+  async function removeReviewOA(dk, opId) {
+    try {
+      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oa-set', date: dk, opId, on: false }) })
+      onSaved && onSaved()
+    } catch {}
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
@@ -1236,6 +1281,50 @@ function AccountsWeekModal({ monday, onClose }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
         </div>
 
+        <div style={{ display: 'flex', gap: 4, padding: '10px 22px 0' }}>
+          <button onClick={() => setTab('build')} style={{ padding: '8px 14px', border: 'none', borderBottom: tab === 'build' ? '2px solid #7c3aed' : '2px solid transparent', background: 'transparent', fontSize: 13, fontWeight: tab === 'build' ? 700 : 500, color: tab === 'build' ? INK : '#888', cursor: 'pointer', fontFamily: 'inherit' }}>Build report</button>
+          <button onClick={() => setTab('review')} style={{ padding: '8px 14px', border: 'none', borderBottom: tab === 'review' ? '2px solid #7c3aed' : '2px solid transparent', background: 'transparent', fontSize: 13, fontWeight: tab === 'review' ? 700 : 500, color: tab === 'review' ? INK : '#888', cursor: 'pointer', fontFamily: 'inherit' }}>Review past O/A</button>
+        </div>
+
+        {tab === 'review' ? (
+          <div style={{ padding: 22 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+              <div><div style={lbl}>From</div><input type="date" value={rFrom} onChange={e => setRFrom(e.target.value)} style={fInput} /></div>
+              <div><div style={lbl}>To</div><input type="date" value={rTo} onChange={e => setRTo(e.target.value)} style={fInput} /></div>
+              <div><div style={lbl}>Installer</div>
+                <select value={rInstaller} onChange={e => setRInstaller(e.target.value)} style={{ ...fInput, minWidth: 160, fontFamily: 'inherit' }}>
+                  <option value="">All installers</option>
+                  {reviewInstallers.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+              {(rFrom || rTo || rInstaller) && <button onClick={() => { setRFrom(''); setRTo(''); setRInstaller('') }} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
+              <div style={{ flex: 1 }} />
+              <div style={{ fontSize: 13, color: '#888', alignSelf: 'center' }}>{reviewRows.length} overnight allowance{reviewRows.length === 1 ? '' : 's'}</div>
+            </div>
+            {reviewRows.length === 0 ? (
+              <div style={{ color: '#999', fontSize: 13, padding: 12 }}>No overnight allowances{(rFrom || rTo || rInstaller) ? ' match these filters' : ' recorded yet'}.</div>
+            ) : (
+              <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'hidden' }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                  <thead><tr style={{ background: '#faf9f7' }}>
+                    <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: '#666' }}>Date</th>
+                    <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, color: '#666' }}>Installer</th>
+                    <th style={{ padding: '8px 12px' }}></th>
+                  </tr></thead>
+                  <tbody>
+                    {reviewRows.map((r, i) => (
+                      <tr key={i} style={{ borderTop: '1px solid #f2f2f2' }}>
+                        <td style={{ padding: '8px 12px', fontSize: 13, color: INK }}>{fmtDMY(parseISO(r.date))}</td>
+                        <td style={{ padding: '8px 12px', fontSize: 13, color: INK, fontWeight: 600 }}>{opName(r.opId)}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right' }}><button onClick={() => removeReviewOA(r.date, r.opId)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12.5 }}>Remove</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : (
         <div style={{ padding: 22 }}>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
             <label style={{ fontSize: 13, color: '#555' }}>Weeks ahead:&nbsp;
@@ -1291,6 +1380,7 @@ function AccountsWeekModal({ monday, onClose }) {
             <button onClick={download} disabled={busy || !weeksData || installers.length === 0} style={{ ...primaryBtn, opacity: (busy || !weeksData || !installers.length) ? 0.6 : 1 }}>{busy ? 'Building...' : 'Download report'}</button>
           </div>
         </div>
+        )}
       </div>
     </div>
   )
