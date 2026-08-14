@@ -1,4 +1,4 @@
-import { get, getOpsProjects, getCachedDeals } from '../../lib/db'
+import { get, getOpsProjects, getCachedDeals, getOpsUsers } from '../../lib/db'
 
 // Assembles one week's labour allocation BY OPERATIVE (the Weekly Labour Allocation view).
 //
@@ -31,13 +31,28 @@ export async function assembleWeek(mondayStr) {
     const monday = mondayStr ? mondayOf(parseISO(mondayStr)) : mondayOf(new Date())
     const days = Array.from({ length: 7 }, (_, i) => iso(addDays(monday, i)))
 
-    const [alloc, roster, names, waterIngress] = await Promise.all([
+    const [alloc, roster, names, waterIngress, opsUsers] = await Promise.all([
       get('ops:planning-allocations').then(v => v || {}),
       get('ops:operatives-roster').then(v => v || []),
       projectNameMap(),
       get('ops:water-ingress').then(v => v || {}),
+      getOpsUsers().then(v => v || []).catch(() => []),
     ])
+    // Name resolution: Site App Users are the source of truth; fall back to the
+    // legacy roster, then to a name field, then (last resort) the id.
+    const usersById = {}
+    for (const u of opsUsers) {
+      const nm = `${u.firstName || (u.name || '').split(' ')[0] || ''} ${u.lastName || (u.name || '').split(' ').slice(1).join(' ') || ''}`.trim() || (u.name || '')
+      usersById[u.id] = { name: nm, email: u.email || '', phone: u.phone || '', company: u.company || '' }
+    }
     const opById = Object.fromEntries(roster.map(o => [o.id, o]))
+    const resolveOp = (opId) => {
+      const u = usersById[opId]
+      if (u && u.name) return u
+      const o = opById[opId] || {}
+      const nm = `${o.firstName || ''} ${o.lastName || ''}`.trim() || o.name || opId
+      return { name: nm, email: o.email || '', phone: o.phone || '', company: o.company || '' }
+    }
 
     // opId -> { [dateISO]: [{projectName, half, status}] }
     const byOp = {}
@@ -85,15 +100,15 @@ export async function assembleWeek(mondayStr) {
     }
 
     const rows = Object.keys(byOp).map(opId => {
-      const o = opById[opId] || {}
+      const info = resolveOp(opId)
       const cells = days.map(dk => {
         const list = byOp[opId][dk] || []
         if (!list.length) return null
         return { date: dk, entries: list }
       })
       return {
-        opId, name: `${o.firstName || ''} ${o.lastName || ''}`.trim() || opId,
-        email: o.email || '', phone: o.phone || '', company: o.company || '',
+        opId, name: info.name,
+        email: info.email, phone: info.phone, company: info.company,
         cells,
       }
     }).sort((a, b) => a.name.localeCompare(b.name))

@@ -197,7 +197,11 @@ export default function PlanningPage() {
     if (filters.project && p.key !== filters.project) return false
     if (filters.installer) {
       const opDays = data.allocations[p.key] || {}
-      if (!Object.values(opDays).some(list => (list || []).some(e => e.opId === filters.installer))) return false
+      const hasInstaller = Object.values(opDays).some(cell => {
+        const entries = cellData(cell).entries
+        return entries.some(e => e.opId === filters.installer)
+      })
+      if (!hasInstaller) return false
     }
     return true
   }

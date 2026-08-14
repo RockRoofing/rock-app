@@ -1,29 +1,26 @@
-DEPLOY NOTES - Design Portal: approvals banner wording + O&M download details
-=============================================================================
+DEPLOY NOTES - Planning: two bug fixes (operative names + installer filter crash)
+=================================================================================
 
-FOUR files, ALL EDITS. Replace each in GitHub.
-(All live under pages/design/[project]/ - the folder uses literal square brackets.)
+TWO files, BOTH EDITS. Replace both in GitHub.
 
-  EDIT  pages/design/[project]/calculations.js   (approvals banner wording)
-  EDIT  pages/design/[project]/rock-drawings.js  (approvals banner wording)
-  EDIT  pages/design/[project]/tech-sub.js       (approvals banner wording)
-  EDIT  pages/design/[project]/oms.js            (O&M download who/when)
+  EDIT  pages/api/planning-week.js                          (fixes operative CODE vs NAME)
+  EDIT  pages/operations/project-management/planning.js     (fixes installer-filter crash)
 
-CHANGE 1 - Approvals banner wording (3 pages)
-The red "APPROVALS NEEDED" banner now has a second line beneath it:
-  "Delays to drawing/document approvals may lead to delayed start dates."
-Appears on Calculations, Rock Drawings and Tech Sub wherever the banner shows.
+FIX 1 - Weekly Labour Allocation showed an operative CODE (usr_...) instead of their name
+Some operatives showed as "usr_1785..." on the weekly report. Cause: the report read names
+from a legacy roster store where those operatives had no first/last name. It now resolves
+names from Site App Users (the source of truth) first, falling back to the roster, then a
+name field, and only using the code as a last resort. Those operatives will now show their
+proper names (as long as they have a name on their Site App User record).
 
-CHANGE 2 - O&M download details (O&Ms page)
-The "CUSTOMER DOWNLOADED" banner now lists WHO downloaded and WHEN - based on the customer
-portal user who was logged in when they downloaded (their name, company, date/time, and which
-revision). Multiple customer downloads are all listed, most recent first.
-If the current revision hasn't been downloaded but an earlier one was, the red "NOT DOWNLOADED"
-banner notes who downloaded the earlier revision.
-(The backend already recorded this - it just wasn't shown before. The list refreshes right
-after a download.)
+FIX 2 - Selecting an installer in the Planning filter threw:
+"Application error: a client-side exception has occurred"
+Cause: the filter assumed every day's allocation was a plain list, but some are stored as an
+object ({entries, status,...}); calling .some() on the object crashed the page. The filter now
+reads entries safely for both shapes, so selecting an installer works.
 
-Note: only downloads made via the Download button on the O&M page are tracked. Downloads from
-the emailed link are not counted (same as before).
+NOTE: multi-select installer filter, and the other Planning changes you asked for (Archived
+status, completed-project filter, Overheads/leave row, Overnight allowance + Accounts report,
+auto-RAMS) are being built as separate follow-up packages so each can be tested on its own.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
