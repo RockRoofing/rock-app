@@ -1,27 +1,29 @@
-DEPLOY NOTES - Operations Handover tab: show the FULL minutes
-=============================================================
+DEPLOY NOTES - Design Portal: approvals banner wording + O&M download details
+=============================================================================
 
-ONE file, EDIT. Replace in GitHub.
+FOUR files, ALL EDITS. Replace each in GitHub.
+(All live under pages/design/[project]/ - the folder uses literal square brackets.)
 
-  EDIT  pages/operations/projects.js
+  EDIT  pages/design/[project]/calculations.js   (approvals banner wording)
+  EDIT  pages/design/[project]/rock-drawings.js  (approvals banner wording)
+  EDIT  pages/design/[project]/tech-sub.js       (approvals banner wording)
+  EDIT  pages/design/[project]/oms.js            (O&M download who/when)
 
-WHAT CHANGED
-The Handover tab on an Operations project used to show only a short summary (about a dozen
-fields). It now pulls through the FULL Internal Handover Minutes - every section and field from
-the IHM template - by loading the same IHM template the Pre-Contract form uses and rendering
-each field read-only:
-  - all template sections and their fields (text, dates, rich text, etc.)
-  - Site Contacts and Manufacturer Contacts
-  - Roof Types
-  - Risk Log
-  - Procurement
-  - Live Tasks
-  - Handover documents (view / download)
-Empty sections are hidden so it stays tidy. If the template can't be loaded for any reason, it
-falls back to the old summary view.
+CHANGE 1 - Approvals banner wording (3 pages)
+The red "APPROVALS NEEDED" banner now has a second line beneath it:
+  "Delays to drawing/document approvals may lead to delayed start dates."
+Appears on Calculations, Rock Drawings and Tech Sub wherever the banner shows.
 
-STILL READ-ONLY (as requested) - no editing here. It reads the same data as the Pre-Contract
-Internal Handover Minutes (single source of truth), so it always reflects the latest minutes.
-Editing remains in Pre-Contract -> Internal Handover Minutes.
+CHANGE 2 - O&M download details (O&Ms page)
+The "CUSTOMER DOWNLOADED" banner now lists WHO downloaded and WHEN - based on the customer
+portal user who was logged in when they downloaded (their name, company, date/time, and which
+revision). Multiple customer downloads are all listed, most recent first.
+If the current revision hasn't been downloaded but an earlier one was, the red "NOT DOWNLOADED"
+banner notes who downloaded the earlier revision.
+(The backend already recorded this - it just wasn't shown before. The list refreshes right
+after a download.)
+
+Note: only downloads made via the Download button on the O&M page are tracked. Downloads from
+the emailed link are not counted (same as before).
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

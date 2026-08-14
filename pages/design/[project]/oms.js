@@ -91,7 +91,7 @@ export default function OMsPage() {
   }
   function recordDownload() {
     fetch('/api/design-oms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'record-download' }) })
-      .then(() => { if (isExternal) { setCustomerDownloaded(true) } }).catch(() => {})
+      .then(() => { if (isExternal) setCustomerDownloaded(true); load() }).catch(() => {})
   }
 
   if (!auth.ready) return null
@@ -127,11 +127,31 @@ export default function OMsPage() {
 
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
           <>
-            {manual && (
-              customerDownloaded
-                ? <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 800, letterSpacing: 0.3, marginBottom: 14 }}>CUSTOMER DOWNLOADED</div>
-                : <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 800, letterSpacing: 0.3, marginBottom: 14 }}>CUSTOMER NOT DOWNLOADED</div>
-            )}
+            {manual && (() => {
+              const custDownloads = (downloadedList || []).filter(d => d.external).sort((a, b) => (b.at || 0) - (a.at || 0))
+              const fmt = (ts) => { if (!ts) return ''; const d = new Date(ts); return isNaN(d) ? '' : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
+              return customerDownloaded ? (
+                <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, letterSpacing: 0.3 }}>CUSTOMER DOWNLOADED</div>
+                  <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {custDownloads.map((d, i) => (
+                      <div key={i} style={{ fontSize: 12.5, fontWeight: 600, color: '#15803d' }}>
+                        {d.name || 'Customer user'}{d.company ? ` (${d.company})` : ''} &mdash; {fmt(d.at)}{d.revision ? <>&nbsp;&nbsp;&middot;&nbsp;&nbsp;Rev {d.revision}</> : ''}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '10px 14px', fontSize: 14, fontWeight: 800, letterSpacing: 0.3, marginBottom: 14 }}>
+                  CUSTOMER NOT DOWNLOADED
+                  {custDownloads.length > 0 && (
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', marginTop: 5 }}>
+                      (Previously downloaded an earlier revision: {custDownloads.map(d => `${d.name || 'Customer'}${d.revision ? ` Rev ${d.revision}` : ''}`).join(', ')})
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {manual && (
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 14, marginBottom: 16 }}>

@@ -145,7 +145,7 @@ export default function TechSubPage() {
           {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Tech Sub'}</button>}
         </div>
         {currentDocs.length > 0 && (anyNeedApproval
-          ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED</div>
+          ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED<div style={{ fontWeight: 600, fontSize: 12.5, letterSpacing: 0, marginTop: 4 }}>Delays to drawing/document approvals may lead to delayed start dates.</div></div>
           : <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVED</div>)}
         {err && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 8, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}
 

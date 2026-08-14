@@ -182,7 +182,7 @@ export default function CalculationsPage() {
           </div>
         </div>
         {currentDocs.length > 0 && (anyNeedApproval
-          ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED</div>
+          ? <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVALS NEEDED<div style={{ fontWeight: 600, fontSize: 12.5, letterSpacing: 0, marginTop: 4 }}>Delays to drawing/document approvals may lead to delayed start dates.</div></div>
           : <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', color: '#16a34a', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>APPROVED</div>)}
         {currentDocs.length > 0 && (reviewCount > 0
           ? <div style={{ background: '#fef3c7', border: '1px solid #fde68a', color: '#b45309', borderRadius: 8, padding: '11px 14px', fontSize: 15, fontWeight: 800, letterSpacing: 0.5, marginBottom: 12 }}>STATUS: {reviewCount} FOR REVIEW / COMMENT&nbsp;&nbsp;&middot;&nbsp;&nbsp;{constructionCount} CONSTRUCTION ISSUE</div>
