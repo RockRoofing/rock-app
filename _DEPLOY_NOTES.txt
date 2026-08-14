@@ -1,27 +1,39 @@
-DEPLOY NOTES - Fix: EOM Contracts Manager source + Retention "Applied for"
-==========================================================================
+DEPLOY NOTES - Fix: weekly Outstanding Invoices report not auto-sending (cron)
+==============================================================================
 
-TWO files, BOTH EDITS. Replace both in GitHub.
+ONE file, EDIT. Replace in GitHub.
 
-  EDIT  pages/api/dashboard.js   (CM now from IHM; adds latest-application "applied for")
-  EDIT  pages/retention.js       (Applied for auto-populates from the latest application)
+  EDIT  middleware.js
 
-FIX 1 - CM on Project Financials / EOM was the WRONG source
-The EOM report pulled the Contracts Manager from the project SETTINGS store, while
-Ops -> Edit Project Details reads it from the IHM (Internal Handover Minutes). They could
-differ. The EOM report now reads CM from the IHM first (same source as Edit Project Details),
-falling back to settings only if the IHM has none. Matched by project number.
+LIKELY ROOT CAUSE
+The weekly report sends fine when you press Send (that path skips the schedule and just sends).
+The SCHEDULED send runs from an hourly Vercel cron (/api/cron/weekly-report). The site's
+middleware was gating ALL /api/cron routes behind CRON_SECRET: if a CRON_SECRET is set in the
+environment and doesn't exactly match what Vercel sends, the middleware returns 401 and the cron
+never reaches the send logic - every hour, silently. That would stop the scheduled send while
+manual send still works (manual doesn't go through the cron).
 
-FIX 2 - Retention "Applied for" was always blank / manual
-The "Applied for" column on the Retention register never pulled from applications - it was a
-manual field. It now AUTO-POPULATES from the newest application on each project (the gross
-applied-for total of the latest application by sequence). If you type a value in manually, your
-value still wins (override).
+FIX
+The middleware now also trusts Vercel's own cron header (x-vercel-cron), which Vercel sets on
+every scheduled invocation. So the scheduled crons run even if CRON_SECRET is mismatched or
+rotated. (The existing CRON_SECRET / ?key= checks are kept as-is for manual/browser testing.)
 
-IMPORTANT - cache refresh
-The dashboard caches for up to 4 hours. This change bumps the cache marker so the FIRST load
-after deploying rebuilds the cache with the corrected CM and the new applied-for values - no
-manual sync needed. (If you want it instantly, the Sync button on Project Financials / Outstanding
-Invoices also forces a rebuild.)
+HOW TO VERIFY AFTER DEPLOY
+1) Confirm the schedule is set: Outstanding Invoices -> report settings -> pick the Day + Hour
+   you want, and Save.
+2) Test the LOGIC now (doesn't wait for the day/time): use the "Test schedule" button - it shows
+   a diagnostic of what the scheduler sees (today's UK day/hour vs the wanted day/hour, and when
+   it last sent).
+3) Test an ACTUAL send immediately: open this URL in your browser while logged in -
+      https://app.rockroofing.co.uk/api/cron/weekly-report?force=1
+   It should send the report now and return JSON. (If you have a CRON_SECRET set and it asks for
+   auth, add &key=YOUR_CRON_SECRET.)
+4) Leave it until the next scheduled day/hour and confirm it arrives automatically.
 
-NO vercel.json change. No cron. BUILD: Compiled successfully.
+IF IT STILL DOESN'T FIRE ON SCHEDULE
+Then Vercel isn't invoking the hourly cron on this project (a project/plan setting), not the app
+code. Check Vercel -> Project -> Settings -> Cron Jobs to confirm /api/cron/weekly-report is
+listed and enabled, and Vercel -> Deployments -> Cron logs for hourly runs. Tell me what the
+cron log / the ?force=1 URL returns and I'll take it from there.
+
+NO vercel.json change (crons already configured). BUILD: Compiled successfully.

@@ -75,6 +75,9 @@ export async function middleware(req) {
   // CRON_SECRET is set we require it; if it isn't set we still let cron through (so the
   // jobs work) but they remain non-obvious internal endpoints.
   if (pathname.startsWith('/api/cron')) {
+    // Vercel sets this header on its own scheduled invocations. Trust it so scheduled
+    // crons always run, even if CRON_SECRET is mismatched/rotated.
+    if (req.headers.get('x-vercel-cron')) return NextResponse.next()
     const secret = process.env.CRON_SECRET
     if (!secret) return NextResponse.next()
     const auth = req.headers.get('authorization') || ''
