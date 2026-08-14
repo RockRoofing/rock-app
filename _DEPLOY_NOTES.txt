@@ -1,14 +1,14 @@
-pkg276 - Site App report now matches the portal
-================================================
+pkg277 - Operations navigation at 17px
+=======================================
 
-NOTE: pkg276 REPLACES pkg272, 273, 274 AND 275. Same file list, with the Site App report
-form brought up to match the portal. Deploy this one and ignore the earlier four.
+NOTE: pkg277 REPLACES pkg272 through pkg276. Same file list, nav size changed from 20px
+to 17px. Deploy this one and ignore the earlier five.
 
 
 CHANGED FILES
 -------------
+  components/OperationsNav.js             top navigation 20px -> 17px
   pages/forms/index.js                    Site App report: attachments + screenshot paste
-  components/OperationsNav.js             top navigation 20px + sub-tabs 15px
   middleware.js                           Site App report fix
   components/ReportProblemButton.js       portal attachments + screenshot paste
   pages/api/report-problem.js             store attachments, email them
@@ -17,37 +17,20 @@ CHANGED FILES
 No new files. All are straight replacements.
 
 
-WHAT I CHANGED - AND WHAT I DID NOT
-------------------------------------
-I read "the exact same as the portal" as the REPORT ITSELF - what it can do - because the
-one real difference left was that the portal took attachments and pasted screenshots and
-the Site App did not. That gap is now closed.
+NAVIGATION SIZING
+-----------------
+The dark top row of the Operations portal:
 
-I did NOT change the trigger link's appearance. You specifically asked last time for the
-Site App link to be orange, slightly bigger and NOT a button, and it still is (orange
-#ea580c, 15.5px, underlined). The portal's is gold 13px, so making them identical would
-have undone what you just asked for.
+  link + active text   17px   (was 13px originally, briefly 20px in pkg275)
+  dividers             16px
+  bar height           58px
+  logo                 32px
 
-If you actually meant the LINK should look the same as the portal's, say so and it is a
-one-line change.
+Dividers, bar height and logo were scaled back down from the 20px version so the row
+stays in proportion. 17px should fit a normal laptop screen without the sideways
+scrolling that 20px risked.
 
-
-SITE APP REPORT NOW HAS
-------------------------
-  "+ Add a photo or screenshot"   picks files - on a phone this offers the camera, the
-                                  photo library or a file, multiple at once.
-  Paste                           paste an image anywhere in the sheet and it uploads.
-  Thumbnails                      each attachment shows with a Remove button before send.
-  Send blocked mid-upload         so nothing goes half-finished.
-
-These land in exactly the same place as portal ones: embedded inline in the office email,
-and as thumbnails on Admin > App Improvements.
-
-ONE DIFFERENCE ON PURPOSE: the Site App uploads via /api/upload-file with compressImage,
-the same route Deliveries and Issues already use - NOT the blob client the portal uses.
-Photos straight off a phone camera are large, and this compresses them first. The controls
-are also sized for one-handed use (bigger tap targets) rather than copied pixel-for-pixel
-from the desktop.
+The white sub-tab strip underneath is unchanged at 15px.
 
 
 TESTED
