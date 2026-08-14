@@ -91,6 +91,7 @@ export default function PlanningPage() {
   const [viewModal, setViewModal] = useState(false)   // historic viewer
   const [clearing, setClearing] = useState(false)
   const [wiDay, setWiDay] = useState(null)            // Water Ingress day (iso) being edited
+  const [ohDay, setOhDay] = useState(null)            // Overheads day (iso) being edited
   const dragging = useRef(false)
 
   async function load() {
@@ -102,7 +103,7 @@ export default function PlanningPage() {
         fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
         fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
       ])
-      setData({ projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
+      setData({ projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} })
       const operatives = opr.operatives || []
       setOps(operatives)
       setComp(cmp.competency || {})
@@ -138,7 +139,7 @@ export default function PlanningPage() {
           fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
           fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
         ])
-        setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+        setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} }))
         const operatives = opr.operatives || []
         setOps(operatives)
         setComp(cmp.competency || {})
@@ -158,7 +159,7 @@ export default function PlanningPage() {
         return
       }
       const pl = await fetch('/api/planning').then(r => r.json()).catch(() => ({}))
-      setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+      setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {}, overheads: pl.overheads || {} }))
     } catch {}
   }
   useEffect(() => { load() }, [])
@@ -496,6 +497,9 @@ export default function PlanningPage() {
             <SectionLabel>WATER INGRESS</SectionLabel>
             <WaterIngressRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setWiDay(dk)} />
 
+            <SectionLabel>OVERHEADS</SectionLabel>
+            <OverheadsRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setOhDay(dk)} />
+
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
             {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
@@ -522,6 +526,7 @@ export default function PlanningPage() {
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
+      {ohDay && <OverheadsDayModal date={ohDay} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
     </OperationsShell>
   )
 }
@@ -964,6 +969,127 @@ function Frozen({ w, left, children, style }) {
 function PlainCell({ w, children, style }) {
   return (
     <div style={{ width: w, minWidth: w, padding: '4px 8px', borderRight: '1px solid #f0f0f0', background: '#fff', display: 'flex', alignItems: 'center', ...style }}>{children}</div>
+  )
+}
+
+const OVERHEAD_CATEGORIES = ['Holidays', 'Internal Time', 'Ops Support', 'Sick', 'Unpaid Leave', 'Paid Leave']
+
+// Overheads row: non-project labour (leave, sick, internal time, etc). Multiple
+// staff per day, each with their own category. Mirrors the Water Ingress row.
+function OverheadsRow({ days, weekGroups, view, data, onOpenDay }) {
+  const oh = data.overheads || {}
+  const headcount = (dk) => (oh[dk] || []).length
+  return (
+    <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
+      <Frozen w={NAME_W} left={0} style={{ background: '#f6f3fb', flexDirection: 'column', justifyContent: 'center', display: 'flex' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#6b4ea8' }}>Overheads</div>
+        <div style={{ fontSize: 10, color: '#9a86c0' }}>Holidays, sick, leave, internal time, ops support</div>
+      </Frozen>
+      <PlainCell w={DATE_W} style={{ background: '#f6f3fb' }} />
+      <PlainCell w={DATE_W} style={{ background: '#f6f3fb' }} />
+      <PlainCell w={DATE_W} style={{ background: '#f6f3fb' }} />
+      <PlainCell w={VISITS_W} style={{ background: '#f6f3fb' }} />
+      {view === 'day'
+        ? days.map((d, i) => {
+          const dk = iso(d); const n = headcount(dk); const we = isWeekend(d)
+          return (
+            <div key={i} onClick={() => onOpenDay(dk)} title={n ? `${n} staff on overheads - click to view/edit` : 'Click to add staff to overheads'}
+              style={{ width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: n ? '#ede7f6' : (we ? '#f3f1ec' : '#fff'), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                boxShadow: n ? 'inset 0 -3px 0 0 #6b4ea8' : 'none',
+                fontSize: 12, fontWeight: 700, color: n ? '#6b4ea8' : '#ddd' }}>{n || ''}</div>
+          )
+        })
+        : weekGroups.map((g, i) => {
+          const total = g.reduce((s, d) => s + headcount(iso(d)), 0)
+          return <div key={i} style={{ width: WEEKCELL_W, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid #eee', fontSize: 11, color: total ? '#6b4ea8' : '#ddd', fontWeight: 700 }}>{total || ''}</div>
+        })}
+    </div>
+  )
+}
+
+// Overheads day modal: list staff on overheads for a day; add/remove each with a category.
+function OverheadsDayModal({ date, data, ops, onClose, onDone }) {
+  const [entries, setEntries] = useState((data.overheads || {})[date] || [])
+  const [opId, setOpId] = useState('')
+  const [category, setCategory] = useState(OVERHEAD_CATEGORIES[0])
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}`.trim() || id : id }
+  const usedIds = new Set(entries.map(e => e.opId))
+  const available = ops.filter(o => !usedIds.has(o.id))
+
+  async function add() {
+    setErr('')
+    if (!opId) { setErr('Choose a staff member.'); return }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date, opId, category }) })
+      const d = await r.json()
+      if (!r.ok) { setErr(d.error || 'Could not add'); setSaving(false); return }
+      setEntries(prev => [...prev, d.entry])
+      setOpId('')
+      onDone && onDone()
+    } catch { setErr('Could not add') }
+    setSaving(false)
+  }
+  async function changeCategory(id, cat) {
+    const e = entries.find(x => x.id === id); if (!e) return
+    setEntries(prev => prev.map(x => x.id === id ? { ...x, category: cat } : x))
+    try {
+      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date, id, opId: e.opId, category: cat }) })
+      onDone && onDone()
+    } catch {}
+  }
+  async function remove(id) {
+    setEntries(prev => prev.filter(x => x.id !== id))
+    try {
+      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-delete', date, id }) })
+      onDone && onDone()
+    } catch {}
+  }
+
+  const input = { padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
+      <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Overheads</div>
+            <div style={{ fontSize: 12, color: '#888' }}>{fmtDMY(parseISO(date))}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
+        </div>
+        <div style={{ padding: 22 }}>
+          {entries.length === 0 && <div style={{ color: '#999', fontSize: 13, padding: '4px 0 12px' }}>No staff on overheads for this day yet.</div>}
+          {entries.map(e => (
+            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
+              <div style={{ flex: 1, fontSize: 14, color: INK, fontWeight: 600 }}>{opName(e.opId)}</div>
+              <select value={e.category} onChange={ev => changeCategory(e.id, ev.target.value)} style={{ ...input, padding: '6px 9px' }}>
+                {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button onClick={() => remove(e.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>Remove</button>
+            </div>
+          ))}
+
+          <div style={{ marginTop: 16, padding: 14, background: '#faf9fc', borderRadius: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b4ea8', marginBottom: 8 }}>Add staff to overheads</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <select value={opId} onChange={e => setOpId(e.target.value)} style={{ ...input, flex: 1, minWidth: 160 }}>
+                <option value="">Select staff...</option>
+                {available.map(o => <option key={o.id} value={o.id}>{`${o.firstName} ${o.lastName}`.trim() || o.id}</option>)}
+              </select>
+              <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...input, minWidth: 140 }}>
+                {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button onClick={add} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding...' : 'Add'}</button>
+            </div>
+            {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{err}</div>}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

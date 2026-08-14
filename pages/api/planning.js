@@ -23,12 +23,18 @@ export const config = { api: { bodyParser: { sizeLimit: '2mb' } } }
 const A_KEY = 'ops:planning-allocations'
 const M_KEY = 'ops:planning-meta'
 const WI_KEY = 'ops:water-ingress'   // { [dateISO]: [ { id, jobName, jobAddress, projectNo, status, unnamed, entries:[{opId,half}] } ] }
+const OH_KEY = 'ops:overheads'       // { [dateISO]: [ { id, opId, category } ] }
 const getAlloc = async () => (await get(A_KEY)) || {}
 const saveAlloc = (v) => set(A_KEY, v)
 const getMeta = async () => (await get(M_KEY)) || {}
 const saveMeta = (v) => set(M_KEY, v)
 const getWI = async () => (await get(WI_KEY)) || {}
 const saveWI = (v) => set(WI_KEY, v)
+const getOH = async () => (await get(OH_KEY)) || {}
+const saveOH = (v) => set(OH_KEY, v)
+
+// Allowed overhead categories.
+const OVERHEAD_CATEGORIES = ['Holidays', 'Internal Time', 'Ops Support', 'Sick', 'Unpaid Leave', 'Paid Leave']
 
 // A day-cell can be the legacy array [{opId,half}] OR the new object
 // { status, unnamed, entries:[{opId,half}] }. Normalise to the entries array.
@@ -101,8 +107,8 @@ async function buildProjects() {
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const [{ live, negotiated, completed }, allocations, meta, waterIngress] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI()])
-      return res.json({ projects: [...live, ...negotiated], completed, allocations, meta, waterIngress })
+      const [{ live, negotiated, completed }, allocations, meta, waterIngress, overheads] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI(), getOH()])
+      return res.json({ projects: [...live, ...negotiated], completed, allocations, meta, waterIngress, overheads })
     } catch (e) {
       console.error('planning GET failed:', e)
       return res.status(500).json({ error: e.message || 'Load failed' })
@@ -269,6 +275,31 @@ export default async function handler(req, res) {
         const wi = await getWI()
         if (wi[date]) { wi[date] = wi[date].filter(v => v.id !== id); if (!wi[date].length) delete wi[date] }
         await saveWI(wi)
+        return res.json({ ok: true })
+      }
+
+      if (action === 'oh-save') {
+        // body: { date, opId, category, id? } - one staff member on one overhead category for a day
+        const { date, opId, category, id } = body
+        if (!date || !opId || !category) return res.status(400).json({ error: 'Missing date/staff/category' })
+        if (!OVERHEAD_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid overhead category' })
+        const oh = await getOH()
+        oh[date] = oh[date] || []
+        // Prevent the same person appearing twice on the same day (a person is on one thing per day).
+        const dupe = oh[date].find(e => e.opId === opId && e.id !== id)
+        if (dupe) return res.status(409).json({ error: 'That person is already on an overhead entry for this day.' })
+        const rec = { id: id || `oh_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, opId, category }
+        const idx = oh[date].findIndex(e => e.id === rec.id)
+        if (idx >= 0) oh[date][idx] = rec; else oh[date].push(rec)
+        await saveOH(oh)
+        return res.json({ ok: true, entry: rec })
+      }
+      if (action === 'oh-delete') {
+        const { date, id } = body
+        if (!date || !id) return res.status(400).json({ error: 'Missing date/id' })
+        const oh = await getOH()
+        if (oh[date]) { oh[date] = oh[date].filter(e => e.id !== id); if (!oh[date].length) delete oh[date] }
+        await saveOH(oh)
         return res.json({ ok: true })
       }
 

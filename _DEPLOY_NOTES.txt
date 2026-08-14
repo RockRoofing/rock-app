@@ -1,24 +1,26 @@
-DEPLOY NOTES - Planning: completed-projects filter + multi-select installers
+DEPLOY NOTES - Planning: Overheads row (leave / sick / internal time / etc.)
 ============================================================================
 
 TWO files, BOTH EDITS. Replace both in GitHub.
-(Deploy the "Archived status" package first if you haven't - this builds on it.)
+(Deploy the earlier Planning packages first - this builds on them.)
 
-  EDIT  pages/api/planning.js                             (returns completed/archived projects)
-  EDIT  pages/operations/project-management/planning.js   (new filters + read-only completed rows)
+  EDIT  pages/api/planning.js                             (new overheads store + actions)
+  EDIT  pages/operations/project-management/planning.js   (Overheads row + day modal)
 
-NEW - "Completed projects" filter (multi-select)
-A new filter at the top of Planning lets you pick one OR MORE Complete/Archived projects. The
-selected ones appear in the planner in a read-only section ("COMPLETED / ARCHIVED - VIEWING")
-showing exactly which days were worked - useful for recalling when you were on a job. Archived
-projects are labelled "(archived)". They are view-only here (no editing/allocating) and are not
-shown unless you pick them, so the live planner stays clean.
+NEW - "Overheads" row (below Water Ingress)
+A new row lets you allocate staff to non-project time. Click a day (Day view) to open its
+Overheads panel, then add one or more staff members, EACH with their own category:
+  Holidays, Internal Time, Ops Support, Sick, Unpaid Leave, Paid Leave.
+- Multiple staff per day, each on their own category.
+- The day cell shows the headcount; week view shows the weekly total.
+- You can change a person's category inline or remove them.
+- A person can only be on ONE overhead entry per day (prevents double-booking).
 
-CHANGED - Installer filter is now MULTI-select
-You can now filter by several installers at once (previously one). Projects that have ANY of the
-selected installers on them are shown. This also fixes the old single-installer selector.
+Stored separately from project allocations (ops:overheads), so it doesn't affect project
+labour numbers or clash checks.
 
-Both new filters use a compact "N selected" dropdown with checkboxes and a Clear option. The
-top-level Clear button resets everything including these.
+NOTE: These overhead entries are not yet shown on the Weekly Labour Allocation report - if you
+want them on the report too, tell me and I'll add them (kept separate for now since the report
+is about site labour).
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
