@@ -529,7 +529,7 @@ export default function PlanningPage() {
       {accountsModal && <AccountsWeekModal monday={accountsModal} onClose={() => setAccountsModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
-      {ohDay && <OverheadsDayModal date={ohDay} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
+      {ohDay && <OverheadsDayModal date={ohDay} weekDays={days.map(iso)} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
     </OperationsShell>
   )
 }
@@ -1011,28 +1011,41 @@ function OverheadsRow({ days, weekGroups, view, data, onOpenDay }) {
   )
 }
 
-// Overheads day modal: list staff on overheads for a day; add/remove each with a category.
-function OverheadsDayModal({ date, data, ops, onClose, onDone }) {
+// Overheads day modal: list staff on overheads for the clicked day; add staff to
+// ONE OR MORE selected days at once (each with a category).
+function OverheadsDayModal({ date, weekDays = [], data, ops, onClose, onDone }) {
   const [entries, setEntries] = useState((data.overheads || {})[date] || [])
   const [opId, setOpId] = useState('')
   const [category, setCategory] = useState(OVERHEAD_CATEGORIES[0])
+  const [selDays, setSelDays] = useState([date])   // days to apply the add to (default: clicked day)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [msg, setMsg] = useState('')
 
   const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}`.trim() || id : id }
   const usedIds = new Set(entries.map(e => e.opId))
   const available = ops.filter(o => !usedIds.has(o.id))
+  const days = weekDays.length ? weekDays : [date]
+  const toggleDay = (dk) => setSelDays(prev => prev.includes(dk) ? prev.filter(x => x !== dk) : [...prev, dk])
 
   async function add() {
-    setErr('')
+    setErr(''); setMsg('')
     if (!opId) { setErr('Choose a staff member.'); return }
+    if (!selDays.length) { setErr('Select at least one day.'); return }
     setSaving(true)
+    const added = []
+    const skipped = []
     try {
-      const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date, opId, category }) })
-      const d = await r.json()
-      if (!r.ok) { setErr(d.error || 'Could not add'); setSaving(false); return }
-      setEntries(prev => [...prev, d.entry])
+      for (const dk of selDays) {
+        const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date: dk, opId, category }) })
+        const d = await r.json()
+        if (!r.ok) { skipped.push(fmtDMY(parseISO(dk))); continue }
+        if (dk === date) setEntries(prev => [...prev, d.entry])   // reflect on the day we're viewing
+        added.push(dk)
+      }
       setOpId('')
+      if (added.length) setMsg(`Added to ${added.length} day${added.length === 1 ? '' : 's'}.${skipped.length ? ` Already on: ${skipped.join(', ')}.` : ''}`)
+      else if (skipped.length) setErr(`Already on overheads on: ${skipped.join(', ')}.`)
       onDone && onDone()
     } catch { setErr('Could not add') }
     setSaving(false)
@@ -1054,13 +1067,14 @@ function OverheadsDayModal({ date, data, ops, onClose, onDone }) {
   }
 
   const input = { padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Overheads</div>
-            <div style={{ fontSize: 12, color: '#888' }}>{fmtDMY(parseISO(date))}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Viewing {fmtDMY(parseISO(date))}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
         </div>
@@ -1078,7 +1092,7 @@ function OverheadsDayModal({ date, data, ops, onClose, onDone }) {
 
           <div style={{ marginTop: 16, padding: 14, background: '#faf9fc', borderRadius: 10 }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#6b4ea8', marginBottom: 8 }}>Add staff to overheads</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
               <select value={opId} onChange={e => setOpId(e.target.value)} style={{ ...input, flex: 1, minWidth: 160 }}>
                 <option value="">Select staff...</option>
                 {available.map(o => <option key={o.id} value={o.id}>{`${o.firstName} ${o.lastName}`.trim() || o.id}</option>)}
@@ -1086,9 +1100,27 @@ function OverheadsDayModal({ date, data, ops, onClose, onDone }) {
               <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...input, minWidth: 140 }}>
                 {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button onClick={add} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding...' : 'Add'}</button>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#888', marginBottom: 6 }}>Apply to days (tap to toggle):</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {days.map(dk => {
+                const d = parseISO(dk); const on = selDays.includes(dk)
+                return (
+                  <button key={dk} onClick={() => toggleDay(dk)}
+                    style={{ padding: '6px 9px', borderRadius: 8, border: '1px solid', borderColor: on ? '#7c3aed' : '#d8d3c8', background: on ? '#7c3aed' : '#fff', color: on ? '#fff' : '#666', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {DOW[(d.getDay() + 6) % 7]} {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button onClick={() => setSelDays(days)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>All days</button>
+              <button onClick={() => setSelDays([date])} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>Just this day</button>
+              <div style={{ flex: 1 }} />
+              <button onClick={add} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding...' : `Add to ${selDays.length} day${selDays.length === 1 ? '' : 's'}`}</button>
             </div>
             {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{err}</div>}
+            {msg && <div style={{ color: '#16a34a', fontSize: 13, marginTop: 8 }}>{msg}</div>}
           </div>
         </div>
       </div>

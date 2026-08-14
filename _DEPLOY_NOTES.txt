@@ -1,30 +1,23 @@
-DEPLOY NOTES - Accounts Weekly Labour Allocation (with Overnight Allowance)
-===========================================================================
+DEPLOY NOTES - Overheads: add staff to multiple days at once
+============================================================
 
-THREE files. ONE NEW (add via "Add file"), TWO EDITS.
-(Deploy the earlier Planning packages first - this builds on them.)
+ONE file, EDIT. Replace in GitHub.
+(Deploy the "Overheads row" package and the "Accounts weekly labour" package first - this
+planning.js includes everything from both plus this change.)
 
-  NEW   pages/api/planning-accounts-pdf.js                 (Accounts report PDF endpoint)
-  EDIT  lib/weeklyLabourPdf.js                             (new Accounts PDF generator)
-  EDIT  pages/operations/project-management/planning.js    (new button + picker modal)
+  EDIT  pages/operations/project-management/planning.js
 
-*** Create the NEW file pages/api/planning-accounts-pdf.js via "Add file" at that exact path. ***
+WHAT CHANGED
+When adding staff to Overheads, you can now apply the same person + category to MULTIPLE days at
+once. In the Overheads panel's "Add staff to overheads" box there is now a row of day chips for
+the visible week:
+  - The clicked day is selected by default.
+  - Tap day chips to toggle which days to apply to.
+  - "All days" / "Just this day" quick buttons.
+  - The Add button reads "Add to N days" and saves the person+category to every selected day.
+If the person is already on overheads on some of those days, those days are skipped and noted;
+the rest still save.
 
-WHAT YOU GET
-A new button on the Planning page: "Accounts Weekly Labour Allocation" (next to "Send Weekly
-Labour Allocation"). Clicking it opens a picker where you:
-  1. Choose how many weeks (and optionally the previous week).
-  2. Tick which installers to include on the report.
-  3. For each installer, tick the DAYS that have an Overnight Allowance (a per-installer,
-     per-day O/A grid).
-Then "Download report" produces a PDF that lists only the chosen installers and marks "O/A" on
-each day where you set an overnight allowance, plus a daily overnight-allowance count row.
+Editing category / removing still works per day on the day you're viewing (as before).
 
-NOTES
-- Overnight selections are made in this picker each time you produce the report (they are not
-  stored on the plan). If you'd like them saved/remembered between sessions, tell me and I'll
-  add persistence.
-- The report reads the same allocation data as the normal weekly report, so the labour shown
-  matches the planner.
-
-NO vercel.json change. No cron. No middleware change (portal route). BUILD: Compiled successfully.
+NO vercel.json change. No cron. BUILD: Compiled successfully.
