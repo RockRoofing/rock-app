@@ -63,17 +63,7 @@ export default function LoginPage() {
             <div style={{ fontSize: 13, color: '#999' }}>{resetUser ? 'Set a new password to continue' : forgot ? 'Reset your password' : 'Sign in to continue'}</div>
           </div>
 
-          {!resetUser ? (
-            <form onSubmit={login}>
-              <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus autoComplete="username" /></Field>
-              <Field label="Password"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inp} autoComplete="current-password" /></Field>
-              {err && <div style={errStyle}>{err}</div>}
-              <button type="submit" disabled={busy} style={btn}>{busy ? 'Signing in…' : 'Sign in'}</button>
-              <div style={{ textAlign: 'center', marginTop: 14 }}>
-                <button type="button" onClick={() => { setForgot(true); setErr(''); setForgotMsg('') }} style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Forgot password?</button>
-              </div>
-            </form>
-          ) : forgot ? (
+          {forgot ? (
             <form onSubmit={requestReset}>
               <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>Enter your email and we'll send you a link to reset your password.</div>
               <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus autoComplete="username" /></Field>
@@ -82,6 +72,16 @@ export default function LoginPage() {
               <button type="submit" disabled={busy} style={btn}>{busy ? 'Sending…' : 'Send reset link'}</button>
               <div style={{ textAlign: 'center', marginTop: 14 }}>
                 <button type="button" onClick={() => { setForgot(false); setErr(''); setForgotMsg('') }} style={{ background: 'none', border: 'none', color: '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>&larr; Back to sign in</button>
+              </div>
+            </form>
+          ) : !resetUser ? (
+            <form onSubmit={login}>
+              <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus autoComplete="username" /></Field>
+              <Field label="Password"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inp} autoComplete="current-password" /></Field>
+              {err && <div style={errStyle}>{err}</div>}
+              <button type="submit" disabled={busy} style={btn}>{busy ? 'Signing in…' : 'Sign in'}</button>
+              <div style={{ textAlign: 'center', marginTop: 14 }}>
+                <button type="button" onClick={() => { setForgot(true); setErr(''); setForgotMsg('') }} style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Forgot password?</button>
               </div>
             </form>
           ) : (

@@ -1,14 +1,21 @@
-DEPLOY NOTES - H&S Matrix: bigger attachment icon + red dot when missing
-========================================================================
+DEPLOY NOTES - Fix: "Forgot password?" did nothing
+===================================================
 
 ONE file, EDIT. Replace in GitHub.
 
-  EDIT  pages/operations/hs/hs-matrix.js
+  EDIT  pages/login.js
 
-WHAT CHANGED
-- The certificate paperclip icon on each cell is now noticeably BIGGER and easier to tap.
-- Any cell that HAS a training date/expiry but NO attached certificate now shows a small RED DOT
-  in the corner - so you can see at a glance which entries are still missing their certificate.
-- Empty cells (no date at all) show nothing, as before.
+PROBLEM
+Clicking "Forgot password?" on the main login did nothing. The forgot-password form was
+accidentally nested inside the wrong branch of the page logic, so it only showed when a user
+was ALREADY in the "must reset password" state - never from the normal login screen.
+
+FIX
+The "Forgot password?" view is now checked first, so clicking the link switches straight to the
+"enter your email -> send reset link" form. Everything else (the API, the reset link email, and
+the /reset-password page) was already correct - this was purely the login page not showing the
+form.
+
+(No change needed to the other files from the Forgot-password package.)
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
