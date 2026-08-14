@@ -1,47 +1,68 @@
-pkg285 - Bookkeeping: extra monthly VAT task
-=============================================
+pkg284 - Project Finance: stop depending on the dashboard snapshot
+===================================================================
 
 CHANGED FILES
 -------------
-  pages/bookkeeping-monthly-tasks.js
+  pages/api/cm-project-financials.js      rewritten to read the source stores directly
+  pages/forms/cm/project-finance.js       resolves xeroId first; reports failures properly
+  middleware.js                           INCLUDED so the passthrough is definitely present
 
-No new files. Straight replacement. Independent of every other package.
-
-
-WHAT CHANGED
-------------
-One task added to the bottom of the monthly list:
-
-  "Confirm that the month's VAT return has been filed no later than the 23rd of the month."
-
-Placed last, directly after the existing task that asks Cotton to file the VAT - so the
-request and the confirmation of it sit together and read in order.
-
-Given the id bm14. Ids bm1 to bm13 were already used (bm13 sits mid-list, so the next free
-number is 14, not the position in the list). Ids are what the tick state is stored against,
-so re-using one would have made the new task inherit another task's history.
-
-Existing ticks are unaffected - nothing else was renumbered or reordered.
+middleware.js is in this package deliberately - see cause 1 below.
 
 
-ONE THING TO DECIDE
--------------------
-The page subtitle still reads:
+WHY IT STILL DID NOT WORK
+--------------------------
+My pkg282 fix was correct as far as it went, but it was not the whole story. There were
+up to three separate things that could each produce "no financial data", and I had only
+fixed one of them. Rather than guess at which one you hit, this removes all three.
 
-  "All monthly bookkeeping tasks to be completed no later than the 15th of each month."
+1. MIDDLEWARE. /api/cm-project-financials must be in the Site App passthrough or the
+   request is rewritten to the /forms page and never reaches the API. That passthrough was
+   added in pkg281. pkg282 contained only two files - so if you deployed pkg282 WITHOUT
+   pkg281, the route was still blocked and my fix could not run at all. middleware.js is
+   included here so that cannot be the problem regardless of what you have deployed.
 
-This new task is due the 23rd, so that blanket statement is now wrong for one of the rows.
-The same tension already exists for two others - the payroll timesheet (after the 21st)
-and the payroll batch (by the 28th) - so it predates this change, but this adds a third.
+2. THE SNAPSHOT MIGHT NOT EXIST. The old code needed dashboard:cache to be populated. It
+   expires after 4 hours, so if nobody had opened Project Financials recently there was
+   simply nothing to read.
 
-Options if you want it tidied:
-  - reword the subtitle to something like "...by the 15th unless a later date is stated"
-  - or leave it, since each task states its own deadline in its text
+   The page now resolves the project's Xero id through /api/dashboard first - exactly what
+   the CM Applications screen already does, including the ?sync=true retry. That endpoint
+   REBUILDS the snapshot when it is stale. The API then reads the underlying stores
+   directly (project:<xeroId>, costs:latest:<xeroId>, costs:lines:<xeroId>,
+   invoiced:lines:<xeroId>), so it no longer depends on the snapshot's shape, freshness or
+   existence at all.
 
-Say which and it is a one-line change.
+3. THE CONTRACTS MANAGER CHECK COULD FAIL WRONGLY. The old check compared your name to the
+   CM on the FINANCIAL record, which is a different field, populated differently, from the
+   one the Site App uses to decide which projects are yours. A project could therefore
+   appear in your list and then refuse to open.
+
+   It now checks the OPS project list first - the same source the app itself uses - and
+   accepts the financial record's CM as a fallback. The two can no longer disagree.
+
+
+ALSO: FAILURES NOW SAY WHAT HAPPENED
+-------------------------------------
+If the response is not JSON, the page now says the service could not be reached and names
+the middleware passthrough as the cause, instead of a vague "could not load". If it IS
+JSON, the API's own message is shown. So if this still misbehaves, the screen should tell
+us which of the above it is rather than us guessing again.
+
+Spend also has a fallback: if the aggregate cost cache is empty but cost lines exist, the
+lines are totalled, so the page will not show zero spend against a real cost history.
+
+
+WHAT YOU SHOULD SEE
+--------------------
+Margin (EOM basis, last completed month's valuation date, inc WIP), then labour, materials
+and total budget vs spend vs remaining, then the costs table with Labour / Materials / All
+tabs.
+
+If a project has no valuation date set for last month, margin shows a dash and says so -
+that is correct behaviour, not a failure. The budgets and costs still show.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Checked no duplicate task ids.
