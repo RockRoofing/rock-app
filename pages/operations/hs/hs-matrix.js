@@ -203,10 +203,12 @@ export default function HSMatrixPage() {
                         <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} - ${c.label}`}
                           style={{ height: '100%', minHeight: 38, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: col ? col.bg : 'transparent', color: col ? col.fg : '#ddd', fontSize: 10.5, fontWeight: 600, textAlign: 'center', padding: '2px', position: 'relative' }}>
                           {col ? col.text : ''}
-                          {cell && cell.attachment && (
+                          {cell && cell.attachment ? (
                             <a href={cell.attachment.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title={`View certificate: ${cell.attachment.name}`}
-                              style={{ position: 'absolute', top: 1, right: 2, fontSize: 10, textDecoration: 'none', lineHeight: 1 }}>&#128206;</a>
-                          )}
+                              style={{ position: 'absolute', top: 1, right: 3, fontSize: 15, textDecoration: 'none', lineHeight: 1 }}>&#128206;</a>
+                          ) : (cell && (cell.date || cell.noExpiry) ? (
+                            <span title="No certificate attached" style={{ position: 'absolute', top: 3, right: 3, width: 8, height: 8, borderRadius: '50%', background: '#dc2626' }} />
+                          ) : null)}
                         </div>
                       )}
                     </div>

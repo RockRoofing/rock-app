@@ -1,31 +1,14 @@
-DEPLOY NOTES - Forgot password (main app) + Forgot PIN (Site App)
-=================================================================
+DEPLOY NOTES - H&S Matrix: bigger attachment icon + red dot when missing
+========================================================================
 
-SEVEN files. ONE is NEW (add via "Add file"), SIX are EDITS.
+ONE file, EDIT. Replace in GitHub.
 
-  NEW   pages/reset-password.js        (page where the emailed reset link lands)
-  EDIT  lib/portalAuth.js              (reset-token helpers)
-  EDIT  pages/api/portal-auth.js       (request-reset + reset-password actions + email)
-  EDIT  pages/login.js                 (adds "Forgot password?" on the main login)
-  EDIT  middleware.js                  (allows the /reset-password page when logged out)
-  EDIT  pages/api/ops-users.js         (forgot-pin action)
-  EDIT  pages/forms/index.js           (adds "Forgot your PIN?" on the Site App login)
+  EDIT  pages/operations/hs/hs-matrix.js
 
-*** Create the NEW file pages/reset-password.js via "Add file" at that exact path. ***
-
-MAIN APP (app.rockroofing.co.uk) - Forgot password
-  - "Forgot password?" link on the login page.
-  - Enter email -> emailed a secure reset LINK (works for internal AND external/customer users).
-  - Link opens /reset-password where they set a new password.
-  - The link expires after 1 hour, is single-use (it stops working once the password changes),
-    and the response never reveals whether an email is registered.
-
-SITE APP (siteapp.rockroofing.co.uk) - Forgot PIN
-  - "Forgot your PIN?" link on the Site App login.
-  - Enter mobile -> a NEW temporary PIN is emailed to the operative (same as an admin reset).
-  - They log in with the temp PIN and are prompted to choose their own PIN.
-  - Neutral response - doesn't reveal whether the mobile is registered.
-
-Uses the existing Resend email setup. No new environment variables.
+WHAT CHANGED
+- The certificate paperclip icon on each cell is now noticeably BIGGER and easier to tap.
+- Any cell that HAS a training date/expiry but NO attached certificate now shows a small RED DOT
+  in the corner - so you can see at a glance which entries are still missing their certificate.
+- Empty cells (no date at all) show nothing, as before.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
