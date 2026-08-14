@@ -69,6 +69,18 @@ async function buildProjects() {
       siteSupervisor: p.data?.siteSupervisor || '',
     }))
 
+  // Completed / Archived projects - not shown by default, but available to pull
+  // back into the planner via the "Completed projects" filter (to check dates worked).
+  const completed = (ops || [])
+    .filter(p => { const s = p.status || 'active'; return s === 'complete' || s === 'archived' })
+    .map(p => ({
+      key: `L:${p.projectNo}`, type: 'completed', status: p.status, projectNo: p.projectNo,
+      name: p.data?.projectName || p.projectNo,
+      location: p.data?.projectAddress || p.data?.siteLocation || '',
+      customer: p.data?.customerCompany || '',
+      siteSupervisor: p.data?.siteSupervisor || '',
+    }))
+
   // Negotiated projects (from cached Pipedrive deals at Negotiating stage)
   let negotiated = []
   try {
@@ -83,14 +95,14 @@ async function buildProjects() {
       }))
   } catch {}
 
-  return { live, negotiated }
+  return { live, negotiated, completed }
 }
 
 export default async function handler(req, res) {
   if (req.method === 'GET') {
     try {
-      const [{ live, negotiated }, allocations, meta, waterIngress] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI()])
-      return res.json({ projects: [...live, ...negotiated], allocations, meta, waterIngress })
+      const [{ live, negotiated, completed }, allocations, meta, waterIngress] = await Promise.all([buildProjects(), getAlloc(), getMeta(), getWI()])
+      return res.json({ projects: [...live, ...negotiated], completed, allocations, meta, waterIngress })
     } catch (e) {
       console.error('planning GET failed:', e)
       return res.status(500).json({ error: e.message || 'Load failed' })

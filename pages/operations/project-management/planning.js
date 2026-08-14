@@ -78,7 +78,9 @@ export default function PlanningPage() {
   const [view, setView] = useState('day')          // 'day' | 'week'
   const [anchorMonday, setAnchorMonday] = useState(() => mondayOf(new Date()))
   const [historic, setHistoric] = useState(false)
-  const [filters, setFilters] = useState({ project: '', installer: '', from: '', to: '' })
+  const [filters, setFilters] = useState({ project: '', installers: [], from: '', to: '' })
+  const [completedShown, setCompletedShown] = useState([])   // selected completed/archived project keys to show
+  const [completedPickerOpen, setCompletedPickerOpen] = useState(false)
   // selection: { key, dates:Set<iso> }  — active drag project row
   const [sel, setSel] = useState(null)
   const [shiftClashes, setShiftClashes] = useState(null)   // { projectName, list:[{opId,date,otherKey}] } after a start shift
@@ -100,7 +102,7 @@ export default function PlanningPage() {
         fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
         fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
       ])
-      setData({ projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
+      setData({ projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} })
       const operatives = opr.operatives || []
       setOps(operatives)
       setComp(cmp.competency || {})
@@ -136,7 +138,7 @@ export default function PlanningPage() {
           fetch('/api/hs-matrix?competency=1').then(r => r.json()).catch(() => ({})),
           fetch('/api/rams-matrix').then(r => r.json()).catch(() => ({})),
         ])
-        setData(d => ({ ...(d || {}), projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+        setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
         const operatives = opr.operatives || []
         setOps(operatives)
         setComp(cmp.competency || {})
@@ -156,7 +158,7 @@ export default function PlanningPage() {
         return
       }
       const pl = await fetch('/api/planning').then(r => r.json()).catch(() => ({}))
-      setData(d => ({ ...(d || {}), projects: pl.projects || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
+      setData(d => ({ ...(d || {}), projects: pl.projects || [], completed: pl.completed || [], allocations: pl.allocations || {}, meta: pl.meta || {}, waterIngress: pl.waterIngress || {} }))
     } catch {}
   }
   useEffect(() => { load() }, [])
@@ -193,20 +195,23 @@ export default function PlanningPage() {
 
   const live = data.projects.filter(p => p.type === 'live')
   const negotiated = data.projects.filter(p => p.type === 'negotiated')
+  const completedAll = data.completed || []
+  // Selected completed/archived projects to pull into the planner (read-only history).
+  const completedSelected = completedAll.filter(p => completedShown.includes(p.key))
   const matchProject = (p) => {
     if (filters.project && p.key !== filters.project) return false
-    if (filters.installer) {
+    if (filters.installers && filters.installers.length) {
       const opDays = data.allocations[p.key] || {}
-      const hasInstaller = Object.values(opDays).some(cell => {
-        const entries = cellData(cell).entries
-        return entries.some(e => e.opId === filters.installer)
-      })
-      if (!hasInstaller) return false
+      const anyMatch = filters.installers.some(instId =>
+        Object.values(opDays).some(cell => cellData(cell).entries.some(e => e.opId === instId))
+      )
+      if (!anyMatch) return false
     }
     return true
   }
   const liveRows = live.filter(matchProject)
   const negRows = negotiated.filter(matchProject)
+  const completedRows = completedSelected.filter(matchProject)
 
   const countOnDay = (p, dateKey) => cellData((data.allocations[p.key] || {})[dateKey]).count
   const dayTotal = (date) => {
@@ -368,16 +373,29 @@ export default function PlanningPage() {
             {data.projects.map(p => <option key={p.key} value={p.key}>{p.name}{p.type === 'negotiated' ? ' (neg.)' : ''}</option>)}
           </select>
         </div>
-        <div><div style={lbl}>Installer</div>
-          <select value={filters.installer} onChange={e => setFilters(f => ({ ...f, installer: e.target.value }))} style={{ ...fInput, minWidth: 150, fontFamily: 'inherit' }}>
-            <option value="">All installers</option>
-            {ops.map(o => <option key={o.id} value={o.id}>{o.firstName} {o.lastName}</option>)}
-          </select>
+        <div style={{ position: 'relative' }}><div style={lbl}>Installers</div>
+          <MultiSelect
+            placeholder="All installers"
+            options={ops.map(o => ({ value: o.id, label: `${o.firstName} ${o.lastName}`.trim() || o.id }))}
+            selected={filters.installers}
+            onChange={vals => setFilters(f => ({ ...f, installers: vals }))}
+            minWidth={170}
+          />
+        </div>
+        <div style={{ position: 'relative' }}><div style={lbl}>Completed projects</div>
+          <MultiSelect
+            placeholder={completedAll.length ? 'None shown' : 'None available'}
+            options={completedAll.map(p => ({ value: p.key, label: `${p.name}${p.status === 'archived' ? ' (archived)' : ''}` }))}
+            selected={completedShown}
+            onChange={setCompletedShown}
+            minWidth={200}
+            disabled={!completedAll.length}
+          />
         </div>
         <div><div style={lbl}>From</div><input type="date" value={filters.from} onChange={e => setFilters(f => ({ ...f, from: e.target.value }))} style={fInput} /></div>
         <div><div style={lbl}>To</div><input type="date" value={filters.to} onChange={e => setFilters(f => ({ ...f, to: e.target.value }))} style={fInput} /></div>
-        {(filters.project || filters.installer || filters.from || filters.to) &&
-          <button onClick={() => setFilters({ project: '', installer: '', from: '', to: '' })} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
+        {(filters.project || (filters.installers && filters.installers.length) || completedShown.length || filters.from || filters.to) &&
+          <button onClick={() => { setFilters({ project: '', installers: [], from: '', to: '' }); setCompletedShown([]) }} style={{ ...ghostBtn, padding: '7px 12px' }}>Clear</button>}
       </div>
 
       {/* selection action bar (day view) — FIXED overlay so showing/hiding it never
@@ -483,6 +501,12 @@ export default function PlanningPage() {
             {negRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} neg comp={comp}
               sel={sel} onCellDown={startDrag} onCellEnter={dragTo} onSaveMeta={refreshData} ops={ops} onClashes={setShiftClashes} />)}
 
+            {completedRows.length > 0 && <>
+              <SectionLabel>COMPLETED / ARCHIVED — VIEWING (read-only)</SectionLabel>
+              {completedRows.map(p => <GanttRow key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} countOnDay={countOnDay} comp={comp} rams={rams[p.key] || {}}
+                readOnly ops={ops} />)}
+            </>}
+
           </div>
         </div>
       </div>
@@ -502,7 +526,45 @@ export default function PlanningPage() {
   )
 }
 
-function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta, ops = [], onClashes }) {
+// Compact multi-select: a button showing the count, opening a checkbox list.
+function MultiSelect({ options, selected, onChange, placeholder = 'Select', minWidth = 160, disabled = false }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  const sel = selected || []
+  const label = sel.length === 0 ? placeholder
+    : sel.length === 1 ? (options.find(o => o.value === sel[0])?.label || '1 selected')
+    : `${sel.length} selected`
+  const toggle = (v) => { if (sel.includes(v)) onChange(sel.filter(x => x !== v)); else onChange([...sel, v]) }
+  return (
+    <div ref={ref} style={{ position: 'relative', minWidth }}>
+      <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)}
+        style={{ ...fInput, minWidth, textAlign: 'left', cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, opacity: disabled ? 0.6 : 1 }}>
+        <span style={{ color: sel.length ? INK : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ color: '#999', fontSize: 10 }}>{open ? <>&#9650;</> : <>&#9660;</>}</span>
+      </button>
+      {open && !disabled && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 60, marginTop: 4, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', minWidth: Math.max(minWidth, 200), maxHeight: 260, overflowY: 'auto', padding: 4 }}>
+          {options.length === 0 && <div style={{ padding: 10, fontSize: 12.5, color: '#999' }}>Nothing to show</div>}
+          {sel.length > 0 && <div onClick={() => onChange([])} style={{ padding: '6px 10px', fontSize: 12, color: '#dc2626', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}>Clear selection</div>}
+          {options.map(o => (
+            <label key={o.value} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', fontSize: 13, cursor: 'pointer', borderRadius: 6 }}
+              onMouseEnter={e => e.currentTarget.style.background = '#f6f6f4'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <input type="checkbox" checked={sel.includes(o.value)} onChange={() => toggle(o.value)} />
+              <span style={{ color: INK }}>{o.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams = {}, sel, onCellDown, onCellEnter, onSaveMeta, ops = [], onClashes, readOnly = false }) {
   const meta = data.meta[p.key] || {}
   const _today = new Date(); const todayCellKey = iso(_today)
   const [start, setStart] = useState(meta.startDate || '')
@@ -633,11 +695,11 @@ function GanttRow({ p, days, weekGroups, view, data, neg, countOnDay, comp, rams
           if (isToday) shadows.push('inset -2px 0 0 0 #15803d')
           return (
             <div key={i}
-              onMouseDown={() => onCellDown(p.key, d)}
-              onMouseEnter={() => onCellEnter(p.key, d)}
+              onMouseDown={() => { if (!readOnly && onCellDown) onCellDown(p.key, d) }}
+              onMouseEnter={() => { if (!readOnly && onCellEnter) onCellEnter(p.key, d) }}
               title={isToday ? 'Today' : (isCompl ? 'Contracted completion date' : (we ? 'Weekend' : ''))}
               style={{
-                width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none',
+                width: CELL_W, textAlign: 'center', cursor: readOnly ? 'default' : 'pointer', userSelect: 'none',
                 background: selected ? '#fde68a' : (col ? col.bg : (we ? '#f3f1ec' : '#fff')),
                 borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: shadows.length ? shadows.join(', ') : 'none',

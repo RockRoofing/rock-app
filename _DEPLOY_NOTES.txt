@@ -1,25 +1,24 @@
-DEPLOY NOTES - Projects: new "Archived" status
-===============================================
+DEPLOY NOTES - Planning: completed-projects filter + multi-select installers
+============================================================================
 
-ONE file, EDIT. Replace in GitHub.
+TWO files, BOTH EDITS. Replace both in GitHub.
+(Deploy the "Archived status" package first if you haven't - this builds on it.)
 
-  EDIT  pages/operations/projects.js
+  EDIT  pages/api/planning.js                             (returns completed/archived projects)
+  EDIT  pages/operations/project-management/planning.js   (new filters + read-only completed rows)
 
-WHAT CHANGED
-Projects now have a third status alongside Live and Complete: ARCHIVED.
-- The status dropdown on each project row now offers Live / Complete / Archived.
-- The Status filter at the top now includes Archived (and still has Live / Complete / Draft / All).
-- Archived projects show with a grey status pill.
-- Add / Edit Project can set status to Archived too.
+NEW - "Completed projects" filter (multi-select)
+A new filter at the top of Planning lets you pick one OR MORE Complete/Archived projects. The
+selected ones appear in the planner in a read-only section ("COMPLETED / ARCHIVED - VIEWING")
+showing exactly which days were worked - useful for recalling when you were on a job. Archived
+projects are labelled "(archived)". They are view-only here (no editing/allocating) and are not
+shown unless you pick them, so the live planner stays clean.
 
-BEHAVIOUR
-- Like Complete, Archived projects do NOT appear in the live Planning view (only Live and Draft
-  do). Archived is simply a further "put away" state beyond Complete - useful for old jobs you
-  want out of the Complete list but still retrievable.
-- The upcoming Planning "completed projects" filter will let you pull Archived (and Complete)
-  projects back into the planner on demand to check dates worked.
+CHANGED - Installer filter is now MULTI-select
+You can now filter by several installers at once (previously one). Projects that have ANY of the
+selected installers on them are shown. This also fixes the old single-installer selector.
 
-No data migration needed - existing projects keep their current status; you set Archived when
-you want it.
+Both new filters use a compact "N selected" dropdown with checkboxes and a Clear option. The
+top-level Clear button resets everything including these.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
