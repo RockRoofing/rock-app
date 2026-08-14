@@ -88,6 +88,7 @@ export default function PlanningPage() {
   const [pasting, setPasting] = useState(false)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
   const [weekModal, setWeekModal] = useState(null)    // monday iso
+  const [accountsModal, setAccountsModal] = useState(null)  // monday iso (Accounts report)
   const [viewModal, setViewModal] = useState(false)   // historic viewer
   const [clearing, setClearing] = useState(false)
   const [wiDay, setWiDay] = useState(null)            // Water Ingress day (iso) being edited
@@ -346,6 +347,7 @@ export default function PlanningPage() {
         <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Planning</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
+          <button onClick={() => setAccountsModal(iso(mondayOf(new Date())))} style={ghostBtn}>Accounts Weekly Labour Allocation</button>
           <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
           <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
@@ -524,6 +526,7 @@ export default function PlanningPage() {
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp} ramsSigned={rams[allocModal.proj?.key] || {}}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
+      {accountsModal && <AccountsWeekModal monday={accountsModal} onClose={() => setAccountsModal(null)} />}
       {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {ohDay && <OverheadsDayModal date={ohDay} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
@@ -1108,6 +1111,158 @@ const segBtn = { border: 'none', padding: '7px 14px', fontSize: 13, cursor: 'poi
 const stepBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #d9d5cc', background: '#fff', fontSize: 16, cursor: 'pointer', lineHeight: '1' }
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
 const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }
+
+// ── Accounts Weekly Labour: pick installers + mark overnight allowance per day, download PDF ──
+function AccountsWeekModal({ monday, onClose }) {
+  const [weeksAhead, setWeeksAhead] = useState(1)
+  const [includePrev, setIncludePrev] = useState(false)
+  const [weeksData, setWeeksData] = useState(null)
+  const [included, setIncluded] = useState(null)      // Set of opIds to show (null = all, set once loaded)
+  const [overnight, setOvernight] = useState({})       // { opId: Set<dateISO> }
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const thisMon = parseISO(monday)
+  const nextMon = new Date(thisMon.getTime() + 7 * 86400000)
+  const prevMon = new Date(thisMon.getTime() - 7 * 86400000)
+  const aheadMondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(nextMon.getTime() + i * 7 * 86400000)))
+  const prevMonISO = iso(prevMon)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setWeeksData(null)
+      const plan = []
+      if (includePrev) plan.push({ monday: prevMonISO, kind: 'prev' })
+      aheadMondays.forEach((m, i) => plan.push({ monday: m, kind: 'ahead', idx: i }))
+      const results = await Promise.all(plan.map(p => fetch(`/api/planning-week?monday=${encodeURIComponent(p.monday)}`).then(r => r.json()).then(week => ({ week, kind: p.kind })).catch(() => null)))
+      if (!cancelled) setWeeksData(results.filter(Boolean))
+    }
+    load()
+    return () => { cancelled = true }
+  }, [monday, weeksAhead, includePrev])
+
+  // All named installers across the loaded weeks.
+  const installers = useMemo(() => {
+    if (!weeksData) return []
+    const map = {}
+    for (const w of weeksData) for (const r of w.week.rows) if (!r.unnamed) map[r.opId] = r
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name))
+  }, [weeksData])
+
+  // Default: everyone included, once loaded.
+  useEffect(() => {
+    if (installers.length && included === null) setIncluded(new Set(installers.map(r => r.opId)))
+  }, [installers, included])
+
+  const allDates = useMemo(() => {
+    if (!weeksData) return []
+    const out = []
+    for (const w of weeksData) for (const dk of w.week.days) out.push(dk)
+    return out
+  }, [weeksData])
+
+  const isIncluded = (opId) => !included || included.has(opId)
+  const toggleIncl = (opId) => setIncluded(prev => { const n = new Set(prev || installers.map(r => r.opId)); n.has(opId) ? n.delete(opId) : n.add(opId); return n })
+  const hasON = (opId, dk) => !!(overnight[opId] && overnight[opId].has(dk))
+  const toggleON = (opId, dk) => setOvernight(prev => {
+    const n = { ...prev }; const s = new Set(n[opId] || []); s.has(dk) ? s.delete(dk) : s.add(dk); n[opId] = s; return n
+  })
+
+  async function download() {
+    setBusy(true); setErr('')
+    try {
+      const overnightPlain = {}
+      for (const [opId, set] of Object.entries(overnight)) { const arr = [...set]; if (arr.length) overnightPlain[opId] = arr }
+      const includeOpIds = installers.filter(r => isIncluded(r.opId)).map(r => r.opId)
+      const monday0 = includePrev ? prevMonISO : aheadMondays[0]
+      const count = weeksAhead + (includePrev ? 1 : 0)
+      const r = await fetch('/api/planning-accounts-pdf', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ monday: monday0, weeks: count, includeOpIds, overnight: overnightPlain }),
+      })
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Could not build report') }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch (e) { setErr(e.message || 'Could not build report') }
+    setBusy(false)
+  }
+
+  const chk = { width: 22, height: 22, borderRadius: 5, border: '1px solid #d8d3c8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 11, fontWeight: 700 }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
+      <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
+          <div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Accounts Weekly Labour Allocation</div>
+            <div style={{ fontSize: 12, color: '#888' }}>Pick installers to include and mark overnight allowance days, then download the report.</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
+        </div>
+
+        <div style={{ padding: 22 }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+            <label style={{ fontSize: 13, color: '#555' }}>Weeks ahead:&nbsp;
+              <select value={weeksAhead} onChange={e => setWeeksAhead(Number(e.target.value))} style={{ ...fInput }}>
+                {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 13, color: '#555', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={includePrev} onChange={e => setIncludePrev(e.target.checked)} /> Include previous week
+            </label>
+          </div>
+
+          {!weeksData ? <Loading /> : installers.length === 0 ? (
+            <div style={{ color: '#999', fontSize: 13, padding: 12 }}>No named installers allocated in the selected week(s).</div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
+                <thead>
+                  <tr style={{ background: '#faf9f7' }}>
+                    <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, color: '#666', position: 'sticky', left: 0, background: '#faf9f7' }}>Show</th>
+                    <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, color: '#666' }}>Installer</th>
+                    {allDates.map(dk => {
+                      const d = parseISO(dk); const wknd = d.getDay() === 0 || d.getDay() === 6
+                      return <th key={dk} style={{ padding: '6px 4px', fontSize: 10, color: wknd ? '#b91c1c' : '#666', textAlign: 'center', minWidth: 42 }}>{DOW[(d.getDay() + 6) % 7]}<br />{d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</th>
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {installers.map(r => (
+                    <tr key={r.opId} style={{ borderTop: '1px solid #f2f2f2', opacity: isIncluded(r.opId) ? 1 : 0.4 }}>
+                      <td style={{ padding: '6px 10px', position: 'sticky', left: 0, background: '#fff' }}>
+                        <input type="checkbox" checked={isIncluded(r.opId)} onChange={() => toggleIncl(r.opId)} />
+                      </td>
+                      <td style={{ padding: '6px 10px', fontSize: 13, color: INK, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name}{r.company ? <span style={{ color: '#999', fontWeight: 400 }}> - {r.company}</span> : null}</td>
+                      {allDates.map(dk => (
+                        <td key={dk} style={{ padding: '4px', textAlign: 'center' }}>
+                          <div onClick={() => isIncluded(r.opId) && toggleON(r.opId, dk)}
+                            style={{ ...chk, margin: '0 auto', background: hasON(r.opId, dk) ? '#7c3aed' : '#fff', color: hasON(r.opId, dk) ? '#fff' : '#ccc', borderColor: hasON(r.opId, dk) ? '#7c3aed' : '#d8d3c8', cursor: isIncluded(r.opId) ? 'pointer' : 'not-allowed' }}
+                            title="Toggle overnight allowance">{hasON(r.opId, dk) ? 'O/A' : ''}</div>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 12 }}>{err}</div>}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 18, justifyContent: 'flex-end' }}>
+            <button onClick={onClose} style={ghostBtn}>Close</button>
+            <button onClick={download} disabled={busy || !weeksData || installers.length === 0} style={{ ...primaryBtn, opacity: (busy || !weeksData || !installers.length) ? 0.6 : 1 }}>{busy ? 'Building...' : 'Download report'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── Weekly labour pop-out: filters + one stacked table per week + Download/Send ──
 function WeekModal({ monday, onClose }) {

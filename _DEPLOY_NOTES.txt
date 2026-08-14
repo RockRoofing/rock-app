@@ -1,26 +1,30 @@
-DEPLOY NOTES - Planning: Overheads row (leave / sick / internal time / etc.)
-============================================================================
+DEPLOY NOTES - Accounts Weekly Labour Allocation (with Overnight Allowance)
+===========================================================================
 
-TWO files, BOTH EDITS. Replace both in GitHub.
+THREE files. ONE NEW (add via "Add file"), TWO EDITS.
 (Deploy the earlier Planning packages first - this builds on them.)
 
-  EDIT  pages/api/planning.js                             (new overheads store + actions)
-  EDIT  pages/operations/project-management/planning.js   (Overheads row + day modal)
+  NEW   pages/api/planning-accounts-pdf.js                 (Accounts report PDF endpoint)
+  EDIT  lib/weeklyLabourPdf.js                             (new Accounts PDF generator)
+  EDIT  pages/operations/project-management/planning.js    (new button + picker modal)
 
-NEW - "Overheads" row (below Water Ingress)
-A new row lets you allocate staff to non-project time. Click a day (Day view) to open its
-Overheads panel, then add one or more staff members, EACH with their own category:
-  Holidays, Internal Time, Ops Support, Sick, Unpaid Leave, Paid Leave.
-- Multiple staff per day, each on their own category.
-- The day cell shows the headcount; week view shows the weekly total.
-- You can change a person's category inline or remove them.
-- A person can only be on ONE overhead entry per day (prevents double-booking).
+*** Create the NEW file pages/api/planning-accounts-pdf.js via "Add file" at that exact path. ***
 
-Stored separately from project allocations (ops:overheads), so it doesn't affect project
-labour numbers or clash checks.
+WHAT YOU GET
+A new button on the Planning page: "Accounts Weekly Labour Allocation" (next to "Send Weekly
+Labour Allocation"). Clicking it opens a picker where you:
+  1. Choose how many weeks (and optionally the previous week).
+  2. Tick which installers to include on the report.
+  3. For each installer, tick the DAYS that have an Overnight Allowance (a per-installer,
+     per-day O/A grid).
+Then "Download report" produces a PDF that lists only the chosen installers and marks "O/A" on
+each day where you set an overnight allowance, plus a daily overnight-allowance count row.
 
-NOTE: These overhead entries are not yet shown on the Weekly Labour Allocation report - if you
-want them on the report too, tell me and I'll add them (kept separate for now since the report
-is about site labour).
+NOTES
+- Overnight selections are made in this picker each time you produce the report (they are not
+  stored on the plan). If you'd like them saved/remembered between sessions, tell me and I'll
+  add persistence.
+- The report reads the same allocation data as the normal weekly report, so the labour shown
+  matches the planner.
 
-NO vercel.json change. No cron. BUILD: Compiled successfully.
+NO vercel.json change. No cron. No middleware change (portal route). BUILD: Compiled successfully.
