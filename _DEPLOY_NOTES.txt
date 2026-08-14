@@ -1,59 +1,56 @@
-pkg269 - Smaller stamps + Calculations select-all / bulk actions
-=================================================================
+pkg270 - RFI page: Comments / Approvals upload column
+======================================================
 
 CHANGED FILES
 -------------
-  lib/stampPdf.js                             stamps 30% smaller
-  pages/api/design-calculations.js            new 'construction-issue-many' bulk action
-  pages/design/[project]/calculations.js      Select all + bulk Construction Issue buttons
+  pages/api/design-rfis.js                new uploads store + upload-add / upload-delete
+  pages/design/[project]/rfis.js          slim left-hand Comments / Approvals column
 
-No new files. All three are straight replacements - nothing to create manually in GitHub.
-(lib/stampPdf.js already exists from pkg267.)
+No new files. Both are straight replacements - nothing to create manually in GitHub.
 
 
-1. STAMPS 30% SMALLER
----------------------
-The APPROVED / CONSTRUCTION ISSUE stamps are now 30% smaller. They still scale with sheet
-size, so they stay readable on a large drawing without dominating an A4. The distance from
-the corner is unchanged, so they sit slightly further in from the edge than before.
+WHAT THIS DOES
+--------------
+A slim column down the left of the RFI page (260px, table sits to the right) headed
+"Comments / Approvals", for filing documents you have downloaded out of a client's own
+portal.
 
-Re-rendered and visually checked at A4, A4 rotated 90, and A1 landscape.
+  "+ Upload Comments / Approvals"   internal only. Multi-file - pick several at once.
 
-IMPORTANT: existing stamped copies are NOT regenerated. Anything already stamped keeps its
-old, larger stamp until the status is toggled again. Use Select all -> Unmark Construction
-Issue -> Mark Construction Issue to re-stamp a whole project at the new size.
+Each uploaded document is listed newest first with a date/time stamp and who uploaded it,
+in the same style as the Revisions list on the O&M page. Each entry has:
 
+  View      opens the file in the browser
+  Download  saves it with its proper filename
+  Delete    internal only, with a confirm prompt
 
-2. CALCULATIONS - SELECT ALL (and bulk Construction Issue)
------------------------------------------------------------
-Calculations already had tickboxes and "Approve selected" but no way to tick everything.
-It now has the same toolbar as Rock Drawings:
-
-  "Select all (n)"                  everyone, including customers. Ticks every current
-                                    calculation; flips to "Clear selection" once all are
-                                    ticked. Superseded revisions are ignored.
-
-  "Mark Construction Issue (n)"     internal only. Flips to "Unmark Construction Issue"
-                                    when everything ticked is already marked.
-
-For a customer this means: Select all -> Approve selected, in two clicks.
-
-"Approve selected" only counts calculations where that customer is the assigned approver,
-so a customer ticking everything will only approve the ones that are actually theirs.
+Customers on the project can see and download the list but cannot upload or delete.
 
 
-NOTE ON ROCK DRAWINGS
----------------------
-Rock Drawings already had Select all + Approve selected for customers - that shipped in
-pkg267, so nothing further was needed there.
+WHERE THE DOCUMENTS ARE FILED
+------------------------------
+These are filed against the PROJECT, not against an individual RFI - so the column is the
+same whichever RFI you have open, and the documents do not disappear when an RFI is
+resolved. That matches "the documents should save on the RFI page".
+
+New store:  design:rfi-uploads:<projectNo>
+
+This is separate from the per-RFI Attachments, which are unchanged - if you want a
+document tied to one specific RFI, that still goes on the RFI itself via Attachments.
 
 
-NOT DONE - TECH SUBS
---------------------
-Tech Subs has no selection at all: no tickboxes, and no approve-many action in its API.
-Adding select-all + bulk approve there is a bigger piece (selection UI plus a bulk approve
-path that still writes an audit entry and generates an approval certificate per document).
-Say if you want it and I will build it.
+CHOICES I MADE - SAY IF YOU WANT THEM DIFFERENT
+------------------------------------------------
+1. NO comment/approval TAG. Every upload goes into one list rather than being tagged as
+   either a Comment or an Approval. The filenames coming out of a client portal usually
+   say which it is. Easy to add a tag and a filter if you want them separated.
+
+2. UPLOAD IS INTERNAL ONLY. "Allow us to upload" read as Rock Roofing filing what comes
+   back from the client's portal. If customers should be able to upload their own comments
+   directly, that is a one-line change.
+
+3. NO EMAIL NOTIFICATION on upload. Filing a document does not currently notify anyone.
+   Say if it should.
 
 
 TESTED

@@ -32,6 +32,39 @@ export default function RFIsPage() {
   const [openId, setOpenId] = useState(null)
   const [unread, setUnread] = useState([])
   const [sending, setSending] = useState(false)
+  const [uploads, setUploads] = useState([])
+  const [uploadingDocs, setUploadingDocs] = useState(false)
+  const docsRef = useRef()
+
+  // Comments / approvals documents downloaded from a client's own portal and filed here
+  // against the project. Internal upload/delete; everyone with access can download.
+  async function addUploadDocs(list) {
+    if (!list || !list.length) return
+    setUploadingDocs(true)
+    const files = []
+    for (const file of Array.from(list)) {
+      try {
+        const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || 'application/octet-stream' })
+        files.push({ name: file.name, url: blob.url, contentType: file.type || '', size: file.size })
+      } catch {}
+    }
+    if (docsRef.current) docsRef.current.value = ''
+    if (files.length) {
+      const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'upload-add', files }) })
+      const d = await r.json()
+      if (r.ok) setUploads(d.uploads || [])
+      else alert(d.error || 'Could not save the upload')
+    }
+    setUploadingDocs(false)
+  }
+
+  async function deleteUploadDoc(id, name) {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return
+    const r = await fetch('/api/design-rfis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo, action: 'upload-delete', id }) })
+    const d = await r.json()
+    if (r.ok) setUploads(d.uploads || [])
+    else alert(d.error || 'Could not delete')
+  }
 
   async function sendReminders() {
     const outstanding = rfis.filter(r => r.status !== 'resolved').length
@@ -58,6 +91,7 @@ export default function RFIsPage() {
     try {
       const d = await fetch(`/api/design-rfis?no=${encodeURIComponent(projectNo)}`).then(r => r.json())
       setRfis(d.rfis || []); setPeople(d.people || []); setCanEdit(!!d.canEdit); setMeId(d.meId || ''); setUnread(d.unread || [])
+      setUploads(d.uploads || [])
     } catch {}
     setLoading(false)
   }
@@ -133,6 +167,12 @@ export default function RFIsPage() {
           )}
         </div>
 
+        <input ref={docsRef} type="file" multiple style={{ display: 'none' }} onChange={e => addUploadDocs(e.target.files)} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 18, alignItems: 'start' }}>
+          <UploadsColumn uploads={uploads} canEdit={canEdit} uploading={uploadingDocs}
+            onPick={() => docsRef.current && docsRef.current.click()} onDelete={deleteUploadDoc} />
+
         {loading ? <div style={{ color: '#999', padding: 20 }}>Loading...</div> : (
           <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
@@ -171,12 +211,43 @@ export default function RFIsPage() {
             </table>
           </div>
         )}
+        </div>
       </div>
 
       {editing && <RfiEditor rfi={editing} people={people} onClose={() => setEditing(null)} onSave={saveRfi} />}
       {openRfiObj && <RfiDetail rfi={openRfiObj} people={people} personName={personName} canEdit={canEdit}
         onClose={() => setOpenId(null)} onComment={addComment} onStatus={setStatus} onSaveEdit={saveRfi} onDelete={() => del(openRfiObj.id)} onMarkup={saveAttachmentMarkup} onAddAttachments={addAttachments} />}
     </>
+  )
+}
+
+// Comments / approvals documents pulled down from a client's own portal and filed against
+// the project. Slim left-hand column, newest first, each date/time stamped.
+function UploadsColumn({ uploads, canEdit, uploading, onPick, onDelete }) {
+  const list = uploads || []
+  return (
+    <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Comments / Approvals</div>
+      <div style={{ fontSize: 11.5, color: '#a09a90', marginBottom: 10 }}>Documents downloaded from the client&apos;s own portal and filed here.</div>
+      {canEdit && (
+        <button onClick={onPick} disabled={uploading} style={{ ...btnGhost, width: '100%', color: PURPLE, borderColor: '#e9d5ff', marginBottom: 10, opacity: uploading ? 0.6 : 1 }}>
+          {uploading ? 'Uploading...' : '+ Upload Comments / Approvals'}
+        </button>
+      )}
+      {list.length === 0
+        ? <div style={{ fontSize: 12.5, color: '#bbb', padding: '6px 0' }}>Nothing uploaded yet.</div>
+        : list.map(u => (
+          <div key={u.id} style={{ border: '1px solid #eee', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+            <div title={u.name} style={{ fontSize: 12.5, fontWeight: 700, color: INK, wordBreak: 'break-word' }}>{u.name}</div>
+            <div style={{ fontSize: 11, color: '#999', marginTop: 3 }}>{fmtDateTime(u.uploadedAt)}{u.uploadedBy ? ` - ${u.uploadedBy}` : ''}</div>
+            <div style={{ marginTop: 6, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <a href={`/api/download?url=${encodeURIComponent(u.url)}&name=${encodeURIComponent(u.name)}&inline=1`} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, fontWeight: 600, color: PURPLE, textDecoration: 'none' }}>View</a>
+              <a href={`/api/download?url=${encodeURIComponent(u.url)}&name=${encodeURIComponent(u.name)}`} style={{ fontSize: 11.5, fontWeight: 600, color: PURPLE, textDecoration: 'none' }}>Download</a>
+              {canEdit && <button onClick={() => onDelete(u.id, u.name)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: '#dc2626' }}>Delete</button>}
+            </div>
+          </div>
+        ))}
+    </div>
   )
 }
 

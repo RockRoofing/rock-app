@@ -23,6 +23,11 @@ import { recordPending, getReadMap, markRfiRead, unreadFromMap, projectRecipient
 
 const rkey = (no) => `design:rfis:${no}`
 const nkey = (no) => `design:rfis-next:${no}`   // auto-increment counter
+// Comments / approvals documents pulled down from a client's own portal and filed here
+// against the project (NOT against a single RFI). Newest first.
+//   design:rfi-uploads:<projectNo> = [ { id, name, url, contentType, size,
+//                                        uploadedBy, uploadedAt } ]
+const ukey = (no) => `design:rfi-uploads:${no}`
 
 function readCookie(req, name) {
   const raw = req.headers.cookie || ''
@@ -109,9 +114,10 @@ export default async function handler(req, res) {
     const people = await peopleFor(no)
     if (req.query.people) return res.json({ people })
     const rfis = (await get(rkey(no))) || []
+    const uploads = (await get(ukey(no))) || []
     const readMap = await getReadMap(no, acc.user.id)
     const unread = unreadFromMap(rfis, readMap)
-    return res.json({ rfis, canEdit: acc.canEdit, people, meId: acc.user.id, meName: acc.user.name, external: acc.external, unread })
+    return res.json({ rfis, uploads, canEdit: acc.canEdit, people, meId: acc.user.id, meName: acc.user.name, external: acc.external, unread })
   }
 
   if (req.method === 'POST') {
@@ -194,6 +200,27 @@ export default async function handler(req, res) {
 
     // Everything else is internal-only.
     if (!acc.canEdit) return res.status(403).json({ error: 'View/comment only' })
+
+    // File a comments/approvals document downloaded from a client's own portal against
+    // this project. Stored separately from the RFIs themselves.
+    if (body.action === 'upload-add') {
+      const incoming = Array.isArray(body.files) ? body.files : []
+      const clean = incoming.filter(f => f && f.url).map(f => ({
+        id: `up_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: f.name || 'Document', url: f.url, contentType: f.contentType || '', size: f.size || 0,
+        uploadedBy: acc.user.name || 'Rock Roofing', uploadedAt: Date.now(),
+      }))
+      if (!clean.length) return res.status(400).json({ error: 'No files' })
+      const uploads = [...clean, ...((await get(ukey(no))) || [])]
+      await set(ukey(no), uploads)
+      return res.json({ ok: true, uploads })
+    }
+
+    if (body.action === 'upload-delete') {
+      const uploads = ((await get(ukey(no))) || []).filter(u => u.id !== body.id)
+      await set(ukey(no), uploads)
+      return res.json({ ok: true, uploads })
+    }
 
     // Manually push the outstanding-RFI list to everyone assigned to the project.
     if (body.action === 'send-reminders') {
