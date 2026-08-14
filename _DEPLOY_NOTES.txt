@@ -1,39 +1,35 @@
-DEPLOY NOTES - Fix: weekly Outstanding Invoices report not auto-sending (cron)
-==============================================================================
+DEPLOY NOTES - O&M page: confirm download who/when banner is live (+ version marker)
+====================================================================================
 
 ONE file, EDIT. Replace in GitHub.
+(Path uses literal square brackets: pages/design/[project]/oms.js)
 
-  EDIT  middleware.js
+  EDIT  pages/design/[project]/oms.js
 
-LIKELY ROOT CAUSE
-The weekly report sends fine when you press Send (that path skips the schedule and just sends).
-The SCHEDULED send runs from an hourly Vercel cron (/api/cron/weekly-report). The site's
-middleware was gating ALL /api/cron routes behind CRON_SECRET: if a CRON_SECRET is set in the
-environment and doesn't exactly match what Vercel sends, the middleware returns 401 and the cron
-never reaches the send logic - every hour, silently. That would stop the scheduled send while
-manual send still works (manual doesn't go through the cron).
+BACKGROUND
+Yes - you did ask for this, and it was built earlier: the "CUSTOMER DOWNLOADED" banner shows the
+customer's name (from their portal user account), the date/time they downloaded, and the revision.
+The code for it is present and correct. If it isn't showing on your live banner, the most likely
+reason is that the earlier oms.js wasn't deployed (or is cached). This package re-delivers it and
+adds a small "v2" marker next to the "O&M Manual" heading so you can confirm the new build is live.
 
-FIX
-The middleware now also trusts Vercel's own cron header (x-vercel-cron), which Vercel sets on
-every scheduled invocation. So the scheduled crons run even if CRON_SECRET is mismatched or
-rotated. (The existing CRON_SECRET / ?key= checks are kept as-is for manual/browser testing.)
+HOW TO CHECK
+1) Deploy, then open the O&M page. If you see "O&M Manual v2" in the heading, the new code IS live.
+   - If you DON'T see "v2", the deploy/cache hasn't updated - hard refresh, or check the file saved
+     to the correct path in GitHub.
+2) With the new build live, have a CUSTOMER portal user open the O&M page and click the Download
+   button (the one on the O&M page - NOT the emailed link). The banner should then read
+   "CUSTOMER DOWNLOADED" followed by: their name (company) - date/time - Rev.
 
-HOW TO VERIFY AFTER DEPLOY
-1) Confirm the schedule is set: Outstanding Invoices -> report settings -> pick the Day + Hour
-   you want, and Save.
-2) Test the LOGIC now (doesn't wait for the day/time): use the "Test schedule" button - it shows
-   a diagnostic of what the scheduler sees (today's UK day/hour vs the wanted day/hour, and when
-   it last sent).
-3) Test an ACTUAL send immediately: open this URL in your browser while logged in -
-      https://app.rockroofing.co.uk/api/cron/weekly-report?force=1
-   It should send the report now and return JSON. (If you have a CRON_SECRET set and it asks for
-   auth, add &key=YOUR_CRON_SECRET.)
-4) Leave it until the next scheduled day/hour and confirm it arrives automatically.
+IMPORTANT (how the tracking works)
+- Only downloads via the Download BUTTON on the O&M page are recorded. Downloads from the emailed
+  link are not tracked.
+- The green "CUSTOMER DOWNLOADED" banner appears once a customer has downloaded the CURRENT
+  revision. If a newer revision was built after their download, it shows red "NOT DOWNLOADED" with
+  a note that they downloaded an earlier revision.
+- Internal staff downloads do not turn the banner green (it's specifically the customer we track).
 
-IF IT STILL DOESN'T FIRE ON SCHEDULE
-Then Vercel isn't invoking the hourly cron on this project (a project/plan setting), not the app
-code. Check Vercel -> Project -> Settings -> Cron Jobs to confirm /api/cron/weekly-report is
-listed and enabled, and Vercel -> Deployments -> Cron logs for hourly runs. Tell me what the
-cron log / the ?force=1 URL returns and I'll take it from there.
+Once you've confirmed it's live and working, tell me and I'll send a tiny follow-up removing the
+"v2" marker.
 
-NO vercel.json change (crons already configured). BUILD: Compiled successfully.
+NO vercel.json change. No cron. BUILD: Compiled successfully.

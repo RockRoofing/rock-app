@@ -106,7 +106,7 @@ export default function OMsPage() {
       <div style={{ width: '100%', margin: 0, padding: '22px 24px 60px', boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div>
-            <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>O&amp;M Manual</h1>
+            <h1 style={{ margin: '0 0 2px', color: INK, fontSize: 24 }}>O&amp;M Manual <span style={{ fontSize: 12, color: '#bbb', fontWeight: 400 }}>v2</span></h1>
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>A single Operation &amp; Maintenance Manual combining the Technical Submittal, Construction Issue drawings, Calculations, Leak Test Certs and Warranties.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
