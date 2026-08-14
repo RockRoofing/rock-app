@@ -1,69 +1,59 @@
-pkg274 - Report App Improvement: portal styling reverted, Site App link orange
-===============================================================================
+pkg275 - Operations top navigation at 20px
+===========================================
 
-NOTE: pkg274 REPLACES pkg272 AND pkg273. It contains everything they had, with the
-portal button styling undone. Deploy this one and ignore both earlier packages.
+NOTE: pkg275 REPLACES pkg272, pkg273 AND pkg274. Same file list as pkg274 with the nav
+size change added. Deploy this one and ignore the earlier three.
 
 
 CHANGED FILES
 -------------
-  middleware.js                           Site App report fix (from pkg273)
-  components/ReportProblemButton.js       attachments + screenshot paste (pkg272)
-  pages/api/report-problem.js             store attachments, email them (pkg272)
-  pages/admin/problem-reports.js          show attachments (pkg272)
-  components/OperationsNav.js             bigger sub-tabs ONLY (13.5 -> 15)
+  components/OperationsNav.js             top navigation 13px -> 20px
+  middleware.js                           Site App report fix
+  components/ReportProblemButton.js       attachments + screenshot paste
+  pages/api/report-problem.js             store attachments, email them
+  pages/admin/problem-reports.js          show attachments
   pages/forms/index.js                    Site App link orange + slightly bigger
 
 No new files. All are straight replacements.
 
 
-IMPORTANT - IF YOU ALREADY DEPLOYED pkg273
--------------------------------------------
-pkg273 turned the Report App Improvement link into an orange button in EIGHT portal
-places. That is now undone. These seven files are back to EXACTLY their original
-contents and are NOT in this package, so re-deploying will not touch them:
+WHAT CHANGED IN THE NAVIGATION
+-------------------------------
+The DARK top row of the Operations portal - Forms, Projects, Project Process, Project
+Management, Project Financials, H&S, Scorecards, plus Portal / Report app improvement /
+Open Site App.
 
-  pages/index.js
-  pages/design/index.js
-  pages/business-financials.js
-  pages/project/[id].js
-  components/PreContractNav.js
-  components/CommercialNav.js
-  components/BizNav.js
-
-If you deployed pkg273, you need to restore those seven from pkg272 or earlier - or
-simplest, tell me and I will send them as a revert package. They are only a styling
-change, nothing functional, so there is no rush either way.
-
-components/OperationsNav.js IS in this package because it also carries the bigger
-sub-tabs. Its Report App Improvement button is back to the original gold text; the only
-remaining change in that file is the tab size.
+  link + active text   13px  ->  20px
+  padding              4x10  ->  6x12   (so the active pill is not tight around 20px text)
+  dividers             14px  ->  18px
+  bar height           52px  ->  64px   (20px text in a 52px bar looked cramped)
+  logo                 30px  ->  34px   (to stay in proportion)
 
 
-WHAT CHANGED IN THE SITE APP
------------------------------
-Still plain underlined writing at the bottom of the operative menu - NOT a button.
-
-  colour   #9a3412 (dark red-brown)  ->  #ea580c (orange)
-  size     13px                      ->  15.5px
-  weight, underline and position all unchanged.
-
-
-STILL INCLUDED FROM THE EARLIER PACKAGES
+PLEASE LOOK AT THIS ON YOUR SCREEN FIRST
 -----------------------------------------
-1. Site App reports now actually work. /api/report-problem was missing from the
-   middleware passthrough on the siteapp. host, so the POST was rewritten to /forms and
-   never reached the API. Reports raised from the Site App before this deploy were never
-   saved and cannot be recovered.
+20px is a big jump from 13px - roughly 50% wider text. That row holds ten items and some
+are long ("Project Management", "Project Financials", "Report app improvement"). On a
+normal laptop screen it is likely to run out of room and start scrolling sideways, which
+would mean Scorecards and Open Site App drop off the right-hand edge until you scroll.
 
-2. Portal improvement reports take attachments, including pasted screenshots
-   (Win+Shift+S then Ctrl+V). Images embed inline in the office email and show as
-   thumbnails on Admin > App Improvements.
+The row already had overflowX: 'auto' so nothing breaks or overlaps - it just scrolls.
 
-3. Operations sub-tabs 13.5px -> 15px (the white strip under the dark header).
+If it does overflow, the options are:
+  - drop to 16-17px, which is still clearly bigger but usually still fits
+  - shorten a couple of labels (e.g. "Project Mgmt", "Financials")
+  - let it wrap onto two lines instead of scrolling
+
+Tell me which and it is a quick change.
+
+
+NOT CHANGED
+-----------
+The WHITE sub-tab strip underneath (Completed / Missing, SRAT / Planning / Live Tasks etc)
+is still 15px from the earlier package. Say if you want that at 20px too - though that row
+has ten items under Project Management and would almost certainly scroll.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Seven reverted portal files confirmed byte-identical to the original repo.

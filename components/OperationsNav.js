@@ -49,8 +49,8 @@ export default function OperationsNav({ active, section }) {
   return (
     <div>
       {/* Top row: main sections */}
-      <div style={{ background: '#1a1a19', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 0, height: 52, overflowX: 'auto' }}>
-        <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 30, width: 30, borderRadius: 4, marginRight: 8, flexShrink: 0 }} />
+      <div style={{ background: '#1a1a19', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 0, height: 64, overflowX: 'auto' }}>
+        <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 34, width: 34, borderRadius: 4, marginRight: 8, flexShrink: 0 }} />
         <a href="/" style={linkStyle}>← Portal</a>
         <Divider />
         {NAV.filter(n => !n.hidden).map((item) => {
@@ -101,6 +101,6 @@ function SectionTabs({ active, section }) {
   )
 }
 
-const Divider = () => <span style={{ color: '#3a3a38', fontSize: 14, padding: '0 2px' }}>|</span>
-const linkStyle = { color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', cursor: 'pointer' }
-const activeStyle = { color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28', whiteSpace: 'nowrap' }
+const Divider = () => <span style={{ color: '#3a3a38', fontSize: 18, padding: '0 2px' }}>|</span>
+const linkStyle = { color: '#888', fontSize: 20, textDecoration: 'none', padding: '6px 12px', borderRadius: 6, whiteSpace: 'nowrap', cursor: 'pointer' }
+const activeStyle = { color: '#fff', fontSize: 20, fontWeight: 500, padding: '6px 12px', borderRadius: 6, background: '#2a2a28', whiteSpace: 'nowrap' }
