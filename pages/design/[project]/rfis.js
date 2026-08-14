@@ -322,6 +322,13 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
   const [ef, setEf] = useState(null)          // edit form draft
   const [uploading, setUploading] = useState(false)
   const [addingAtt, setAddingAtt] = useState(false)
+  // Explicit Save. Everything in this window already saves on its own (markup autosaves,
+  // comments post on Comment), but customers need to SEE that it has. Save flushes any
+  // comment still sitting unposted in the box, waits for the markup autosave to land,
+  // then confirms.
+  const [flushSignal, setFlushSignal] = useState(0)
+  const [savingAll, setSavingAll] = useState(false)
+  const [savedAt, setSavedAt] = useState(0)
   const editRef = useRef()
   const addAttRef = useRef()
   const customers = people.filter(p => p.external)
@@ -341,6 +348,13 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
     if (addAttRef.current) addAttRef.current.value = ''
     if (picked.length) await onAddAttachments(rfi.id, picked)
     setAddingAtt(false)
+  }
+
+  async function saveAll() {
+    setSavingAll(true)
+    setFlushSignal(n => n + 1)                                  // post any unsent comment
+    await new Promise(r => setTimeout(r, 1000))                 // let the markup autosave land
+    setSavingAll(false); setSavedAt(Date.now())
   }
 
   function startEdit() { setEf({ ...rfi, attachments: [...(rfi.attachments || [])] }); setEditMode(true) }
@@ -371,6 +385,12 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
         {canEdit && !editMode && <button onClick={startEdit} style={btnGhost}>Edit</button>}
         {canEdit && editMode && <button onClick={cancelEdit} style={btnGhost}>Cancel</button>}
         {canEdit && editMode && <button onClick={saveEdit} style={btnPrimary}>Save</button>}
+        {!editMode && (
+          <>
+            {savedAt > 0 && !savingAll && <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>All changes saved {fmtDateTime(savedAt)}</span>}
+            <button onClick={saveAll} disabled={savingAll} style={{ ...btnPrimary, opacity: savingAll ? 0.6 : 1 }}>{savingAll ? 'Saving...' : 'Save'}</button>
+          </>
+        )}
       </div>
 
       {!editMode ? (
@@ -424,7 +444,7 @@ function RfiDetail({ rfi, people, personName, canEdit, onClose, onComment, onSta
             </div>
           ))}
         </div>
-        <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} />
+        <CommentBox people={people} onSubmit={(html) => onComment(rfi.id, html)} flushSignal={flushSignal} />
       </div>
 
       {/* Add attachments - available to everyone (incl. customers) in the open window */}
@@ -460,11 +480,18 @@ function Info({ label, children }) {
   return <div><div style={{ fontSize: 11.5, color: '#999', fontWeight: 600, marginBottom: 2 }}>{label}</div><div style={{ color: '#222' }}>{children}</div></div>
 }
 
-function CommentBox({ people, onSubmit }) {
+function CommentBox({ people, onSubmit, flushSignal }) {
   const ref = useRef()
   const [showMentions, setShowMentions] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const cmd = (c) => { document.execCommand(c, false, null); ref.current?.focus() }
+  const submitRef = useRef()
+  // Save was pressed in the RFI window - post whatever is still sitting in the box, so a
+  // typed-but-not-sent comment is never silently lost. Does nothing if the box is empty.
+  useEffect(() => {
+    if (!flushSignal) return
+    if (submitRef.current) submitRef.current()
+  }, [flushSignal])
 
   function onInput() {
     const text = ref.current?.innerText || ''
@@ -478,6 +505,7 @@ function CommentBox({ people, onSubmit }) {
     el.focus(); const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = window.getSelection(); s.removeAllRanges(); s.addRange(r)
   }
   function submit() { const html = ref.current?.innerHTML?.trim(); if (!html) return; onSubmit(html); ref.current.innerHTML = '' }
+  submitRef.current = submit
 
   const matches = people.filter(p => p.name.toLowerCase().includes(mentionQuery)).slice(0, 6)
 

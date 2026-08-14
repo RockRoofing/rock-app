@@ -1,56 +1,55 @@
-pkg270 - RFI page: Comments / Approvals upload column
-======================================================
+pkg271 - RFI window: explicit Save button
+==========================================
+
+NOTE: pkg271 REPLACES pkg270 - it contains the Comments / Approvals column from pkg270
+plus the Save button. If you have not deployed pkg270 yet, deploy this one instead.
 
 CHANGED FILES
 -------------
-  pages/api/design-rfis.js                new uploads store + upload-add / upload-delete
-  pages/design/[project]/rfis.js          slim left-hand Comments / Approvals column
+  pages/api/design-rfis.js                unchanged from pkg270 (uploads store + actions)
+  pages/design/[project]/rfis.js          pkg270 column + new Save button
 
-No new files. Both are straight replacements - nothing to create manually in GitHub.
+No new files. Both are straight replacements.
 
 
 WHAT THIS DOES
 --------------
-A slim column down the left of the RFI page (260px, table sits to the right) headed
-"Comments / Approvals", for filing documents you have downloaded out of a client's own
-portal.
+A "Save" button now sits in the header of the open RFI window, visible to EVERYONE
+including customers (the existing internal Edit / Save pair is unchanged and still only
+appears in edit mode).
 
-  "+ Upload Comments / Approvals"   internal only. Multi-file - pick several at once.
+Everything already saved on its own - that has not changed. What the button adds:
 
-Each uploaded document is listed newest first with a date/time stamp and who uploaded it,
-in the same style as the Revisions list on the O&M page. Each entry has:
+  1. It posts any comment still sitting UNSENT in the comment box. Previously a customer
+     could type a comment, not press "Comment", close the window, and lose it. That was
+     the only real data-loss path in this window and it is now closed.
 
-  View      opens the file in the browser
-  Download  saves it with its proper filename
-  Delete    internal only, with a confirm prompt
+  2. It waits for the markup autosave to land, then shows a green confirmation:
+     "All changes saved 14 Aug 26, 15:42"
 
-Customers on the project can see and download the list but cannot upload or delete.
-
-
-WHERE THE DOCUMENTS ARE FILED
-------------------------------
-These are filed against the PROJECT, not against an individual RFI - so the column is the
-same whichever RFI you have open, and the documents do not disappear when an RFI is
-resolved. That matches "the documents should save on the RFI page".
-
-New store:  design:rfi-uploads:<projectNo>
-
-This is separate from the per-RFI Attachments, which are unchanged - if you want a
-document tied to one specific RFI, that still goes on the RFI itself via Attachments.
+So a customer who is unsure whether their work stuck can press Save and get told plainly.
 
 
-CHOICES I MADE - SAY IF YOU WANT THEM DIFFERENT
-------------------------------------------------
-1. NO comment/approval TAG. Every upload goes into one list rather than being tagged as
-   either a Comment or an Approval. The filenames coming out of a client portal usually
-   say which it is. Easy to add a tag and a filter if you want them separated.
+WHY IT WORKS THIS WAY - PLEASE READ
+------------------------------------
+The zip I was given is at pkg264. It does NOT contain pkg265 - `hideDownload` does not
+exist anywhere in components/DrawingMarkup.js.
 
-2. UPLOAD IS INTERNAL ONLY. "Allow us to upload" read as Rock Roofing filing what comes
-   back from the client's portal. If customers should be able to upload their own comments
-   directly, that is a one-line change.
+The tidy way to build this button was to edit DrawingMarkup.js so Save could force the
+markup write instantly. Had I shipped that file as a full replacement built on this copy,
+it would have SILENTLY REVERTED pkg265 and brought back the untracked Download button on
+the O&M page - the exact bug pkg265 existed to fix.
 
-3. NO EMAIL NOTIFICATION on upload. Filing a document does not currently notify anyone.
-   Say if it should.
+So I did not touch DrawingMarkup.js. Markup already autosaves 800ms after you stop
+drawing, so Save waits 1 second and then confirms - same end result for the user.
+
+TWO THINGS TO CHECK:
+  - Did pkg265 ever get deployed? If it did, please send a fresh zip of the repo before
+    the next package, because anything I build from this copy risks reverting it.
+  - If pkg265 was NOT deployed, the O&M untracked-download bug is still live and pkg265
+    still needs deploying.
+
+Same question applies to anything else delivered after pkg264 that is missing here.
 
 
 TESTED
