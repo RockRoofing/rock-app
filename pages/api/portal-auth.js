@@ -1,6 +1,6 @@
 import { getPortalUsers, savePortalUsers } from '../../lib/db'
 import { getExternalUsers, saveExternalUsers, findExternalByEmail, verifyExternalPassword, stripExternal } from '../../lib/designUsers'
-import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
+import { hashPassword, verifyPassword, createSessionToken, verifySessionToken, SESSION_COOKIE, createResetToken, verifyResetToken } from '../../lib/portalAuth'
 import { ROLES, normRole } from '../../lib/roles'
 
 // Portal authentication + user management.
@@ -60,6 +60,33 @@ async function sendPortalInvite({ to, name, tempPassword, origin }) {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: FROM, to, reply_to: REPLY_TO, subject: 'Your Rock Roofing Portal login', html }),
+    })
+    const data = await r.json()
+    return { sent: r.ok, error: r.ok ? null : (data?.message || 'Send failed') }
+  } catch (e) { return { sent: false, error: e.message } }
+}
+
+// Emails a password-reset link.
+async function sendResetLink({ to, name, resetUrl }) {
+  const RESEND_KEY = process.env.RESEND_API_KEY
+  if (!RESEND_KEY) return { sent: false, error: 'Email not configured' }
+  const FROM = process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
+  const REPLY_TO = process.env.FORMS_REPLY_TO || 'notifications@rockroofing.co.uk'
+  const html = `
+    <div style="font-family:system-ui,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1a1a19">
+      <h2 style="color:#1a1a19">Hi ${name ? name.split(' ')[0] : 'there'},</h2>
+      <p>We received a request to reset your Rock Roofing Portal password.</p>
+      <p style="text-align:center;margin:24px 0">
+        <a href="${resetUrl}" style="background:#ca8a04;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;display:inline-block">Reset my password</a>
+      </p>
+      <p style="font-size:13px;color:#666">Or paste this link into your browser: <a href="${resetUrl}">${resetUrl}</a></p>
+      <p style="font-size:12px;color:#999">This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email - your password won't change.</p>
+    </div>`
+  try {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to, reply_to: REPLY_TO, subject: 'Reset your Rock Roofing Portal password', html }),
     })
     const data = await r.json()
     return { sent: r.ok, error: r.ok ? null : (data?.message || 'Send failed') }
@@ -155,6 +182,53 @@ export default async function handler(req, res) {
     if (action === 'logout') {
       clearSessionCookie(res)
       return res.json({ ok: true })
+    }
+
+    // ── Forgot password: request a reset link ──────────────────────────────
+    // Always returns ok (don't reveal whether an email exists).
+    if (action === 'request-reset') {
+      const email = String(body.email || '').toLowerCase().trim()
+      const origin = (body.origin || `https://${req.headers.host}`).replace(/\/$/, '')
+      if (email) {
+        let user = null, isExternal = false
+        const users = await getPortalUsers()
+        user = users.find(u => u.email === email && u.active !== false)
+        if (!user) { const ext = await findExternalByEmail(email); if (ext) { user = ext; isExternal = true } }
+        if (user && user.passwordHash) {
+          const token = createResetToken(user)
+          const resetUrl = `${origin}/reset-password?token=${encodeURIComponent(token)}&e=${encodeURIComponent(email)}`
+          await sendResetLink({ to: email, name: user.name, resetUrl })
+        }
+      }
+      return res.json({ ok: true })
+    }
+
+    // ── Forgot password: complete the reset with the emailed token ─────────
+    if (action === 'reset-password') {
+      const email = String(body.email || '').toLowerCase().trim()
+      const { token, password } = body
+      if (!token || !email) return res.status(400).json({ error: 'Invalid reset link.' })
+      if (!password || password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' })
+      // Internal first, then external.
+      const users = await getPortalUsers()
+      const ui = users.findIndex(u => u.email === email)
+      if (ui >= 0) {
+        if (!verifyResetToken(token, users[ui])) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' })
+        users[ui].passwordHash = hashPassword(password)
+        users[ui].mustResetPassword = false
+        await savePortalUsers(users)
+        return res.json({ ok: true })
+      }
+      const ext = await getExternalUsers()
+      const ei = ext.findIndex(u => (u.email || '').toLowerCase() === email)
+      if (ei >= 0) {
+        if (!verifyResetToken(token, ext[ei])) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' })
+        ext[ei].passwordHash = hashPassword(password)
+        ext[ei].mustResetPassword = false
+        await saveExternalUsers(ext)
+        return res.json({ ok: true })
+      }
+      return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' })
     }
 
     if (action === 'set-password') {

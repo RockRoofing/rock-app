@@ -154,6 +154,23 @@ export default async function handler(req, res) {
       return res.json({ ok: true, user: safe, mustResetPin: !!user.mustResetPin })
     }
 
+    // ── Forgot PIN: enter mobile, get a new temp PIN emailed ───────────────
+    // Public (user is not logged in). Neutral response - don't reveal if the
+    // mobile exists. Reuses the same reset+email path as an admin reset.
+    if (body.action === 'forgot-pin') {
+      const normPhone = normalisePhone(body.phone)
+      if (normPhone) {
+        const idx = users.findIndex(u => normalisePhone(u.phone) === normPhone && u.active !== false)
+        if (idx >= 0 && users[idx].email) {
+          const tempPin = genPin()
+          users[idx] = { ...users[idx], pin: tempPin, mustResetPin: true, failedAttempts: 0, lockedUntil: null }
+          await saveOpsUsers(users)
+          await sendInviteEmail({ to: users[idx].email, firstName: users[idx].firstName, pin: tempPin, isReset: true })
+        }
+      }
+      return res.json({ ok: true })
+    }
+
     // ── Operative sets their own PIN (first login or change) ───────────────
     if (body.action === 'set-pin') {
       const { id, pin } = body

@@ -90,6 +90,7 @@ export async function middleware(req) {
     pathname.startsWith('/favicon') ||
     pathname === '/rock-logo.jpg' ||
     pathname === '/login' ||
+    pathname === '/reset-password' ||
     pathname.startsWith('/go/') ||
     pathname === '/rams-approve' ||
     pathname === '/api/rams-token' ||

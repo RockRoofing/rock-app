@@ -9,6 +9,8 @@ export default function LoginPage() {
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [resetUser, setResetUser] = useState(null)
+  const [forgot, setForgot] = useState(false)
+  const [forgotMsg, setForgotMsg] = useState('')
   const [newPw, setNewPw] = useState('')
   const [newPw2, setNewPw2] = useState('')
 
@@ -22,6 +24,18 @@ export default function LoginPage() {
       if (d.mustResetPassword) { setResetUser(d.user); setBusy(false); return }
       router.replace('/')
     } catch (e) { setErr('Login failed'); setBusy(false) }
+  }
+
+  async function requestReset(e) {
+    e?.preventDefault()
+    setErr(''); setForgotMsg('')
+    if (!email.trim()) { setErr('Please enter your email.'); return }
+    setBusy(true)
+    try {
+      await fetch('/api/portal-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'request-reset', email, origin: window.location.origin }) })
+      setForgotMsg('If that email is registered, a reset link is on its way. Please check your inbox (and spam).')
+    } catch (e) { setForgotMsg('If that email is registered, a reset link is on its way. Please check your inbox (and spam).') }
+    setBusy(false)
   }
 
   async function setPassword_(e) {
@@ -46,7 +60,7 @@ export default function LoginPage() {
           <div style={{ textAlign: 'center', marginBottom: 24 }}>
             <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 54, borderRadius: 8 }} />
             <h1 style={{ fontSize: 20, color: '#1a1a19', margin: '14px 0 2px' }}>Rock Roofing Portal</h1>
-            <div style={{ fontSize: 13, color: '#999' }}>{resetUser ? 'Set a new password to continue' : 'Sign in to continue'}</div>
+            <div style={{ fontSize: 13, color: '#999' }}>{resetUser ? 'Set a new password to continue' : forgot ? 'Reset your password' : 'Sign in to continue'}</div>
           </div>
 
           {!resetUser ? (
@@ -55,6 +69,20 @@ export default function LoginPage() {
               <Field label="Password"><input type="password" value={password} onChange={e => setPassword(e.target.value)} style={inp} autoComplete="current-password" /></Field>
               {err && <div style={errStyle}>{err}</div>}
               <button type="submit" disabled={busy} style={btn}>{busy ? 'Signing in…' : 'Sign in'}</button>
+              <div style={{ textAlign: 'center', marginTop: 14 }}>
+                <button type="button" onClick={() => { setForgot(true); setErr(''); setForgotMsg('') }} style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>Forgot password?</button>
+              </div>
+            </form>
+          ) : forgot ? (
+            <form onSubmit={requestReset}>
+              <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>Enter your email and we'll send you a link to reset your password.</div>
+              <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} style={inp} autoFocus autoComplete="username" /></Field>
+              {err && <div style={errStyle}>{err}</div>}
+              {forgotMsg && <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 12px', fontSize: 13, color: '#166534', marginBottom: 12 }}>{forgotMsg}</div>}
+              <button type="submit" disabled={busy} style={btn}>{busy ? 'Sending…' : 'Send reset link'}</button>
+              <div style={{ textAlign: 'center', marginTop: 14 }}>
+                <button type="button" onClick={() => { setForgot(false); setErr(''); setForgotMsg('') }} style={{ background: 'none', border: 'none', color: '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>&larr; Back to sign in</button>
+              </div>
             </form>
           ) : (
             <form onSubmit={setPassword_}>

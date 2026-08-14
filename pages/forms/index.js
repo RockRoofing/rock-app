@@ -25,6 +25,8 @@ export default function FormsHome() {
   const [resetUser, setResetUser] = useState(null)  // user who must set a new PIN
   const [newPin, setNewPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
+  const [forgot, setForgot] = useState(false)
+  const [forgotMsg, setForgotMsg] = useState('')
 
   // Restore session + remembered mobile.
   useEffect(() => {
@@ -35,6 +37,17 @@ export default function FormsHome() {
       if (savedPhone) { setRememberedPhone(savedPhone); setPhone(savedPhone) }
     } catch {}
   }, [])
+
+  async function forgotPin() {
+    setErr(''); setForgotMsg('')
+    if (!phone) { setErr('Enter your mobile number first.'); return }
+    setBusy(true)
+    try {
+      await fetch('/api/ops-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'forgot-pin', phone }) })
+      setForgotMsg('If that mobile is registered, a new temporary PIN has been emailed to you. Log in with it, then choose your own PIN.')
+    } catch { setForgotMsg('If that mobile is registered, a new temporary PIN has been emailed to you. Log in with it, then choose your own PIN.') }
+    setBusy(false)
+  }
 
   async function login() {
     if (!phone || !pin) return
@@ -153,9 +166,14 @@ export default function FormsHome() {
             style={{ ...pinInput, marginBottom: 14 }}
           />
           {err && <div style={{ color: '#dc2626', fontSize: 14, textAlign: 'center', marginBottom: 12 }}>{err}</div>}
+          {forgotMsg && <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 12px', fontSize: 13.5, color: '#166534', textAlign: 'center', marginBottom: 12 }}>{forgotMsg}</div>}
           <button onClick={login} disabled={busy || !phone || !pin} style={bigBtn(busy || !phone || !pin)}>
             {busy ? 'Checking…' : 'Log in'}
           </button>
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button onClick={forgotPin} disabled={busy} style={{ background: 'none', border: 'none', color: BRAND, cursor: 'pointer', fontSize: 13.5, fontFamily: 'inherit', textDecoration: 'underline' }}>Forgot your PIN?</button>
+            {!rememberedPhone && <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 4 }}>Enter your mobile above first, then tap this.</div>}
+          </div>
         </div>
       </Shell>
     )
