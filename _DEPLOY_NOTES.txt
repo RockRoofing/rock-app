@@ -1,128 +1,24 @@
-pkg267 - PDF Approval / Construction Issue stamps
-       + Rock Drawings: Select all / bulk Construction Issue
-==========================================================
-
-NOTE: pkg267 REPLACES pkg266 - it contains everything pkg266 had, plus the Rock Drawings
-select-all work. If you have not deployed pkg266 yet, just deploy this one instead.
-
-WHAT THIS DOES
---------------
-When a design document is marked Approved and/or Construction Issue, a semi-translucent
-stamp is baked onto page 1, top-right, stacked:
-  - green  APPROVED           + UK date/time
-  - blue   CONSTRUCTION ISSUE + UK date/time
-One stamp if one status is set, both if both are set.
-
-The stamp appears everywhere the document is seen or handed out: the portal viewer,
-the thumbnails, the Download buttons, Download all / Download selected (zips), and the
-O&M Manual bundle.
-
-HOW IT WORKS
-------------
-The ORIGINAL uploaded file is never modified. On any approve / construction-issue /
-status change, a stamped COPY is generated and stored in Blob, and its URL is saved on
-the document as `stampedUrl`. Every consumer uses `stampedUrl || url`.
-
-That means un-approving or un-marking Construction Issue reverts cleanly - the doc simply
-falls back to the untouched original.
-
-Non-PDFs (images etc.) are not stamped; they keep their original url. If stamping fails
-for any reason it fails silently and the original is used - stamping can never block an
-approval from going through.
-
-
-NEW FILE - must be created manually in GitHub ("Add file" -> "Create new file")
--------------------------------------------------------------------------------
-  lib/stampPdf.js
-
-All other files in this package are REPLACEMENTS for existing files.
-
+pkg268 - Rock Drawings: clearer bulk Construction Issue button label
+====================================================================
 
 CHANGED FILES
 -------------
-  lib/stampPdf.js                             NEW - stamp rendering + stamped-copy builder
-  pages/api/design-calculations.js            stamp on approve / approve-many / construction-issue
-  pages/api/design-rock-drawings.js           stamp on approve / approve-many / construction-issue
-  pages/api/design-techsubs.js                stamp on approve
-  pages/api/design-drawings.js                stamp on status change + status timestamps
-  pages/api/design-calculations-zip.js        allow stamped urls through the download whitelist
-  pages/api/design-rock-drawings-zip.js       allow stamped urls through the download whitelist
-  pages/api/design-oms.js                     O&M bundle uses the stamped copies
-  pages/design/[project]/calculations.js      viewer / thumbs / downloads use stamped copy
-  pages/design/[project]/rock-drawings.js     viewer / thumbs / downloads use stamped copy
-  pages/design/[project]/tech-sub.js          viewer / download use stamped copy
-  components/DesignDrawingsPage.js            viewer / downloads use stamped copy (Drawings tab)
+  pages/design/[project]/rock-drawings.js     button label only
 
-Rock Drawings select-all (pkg267 addition):
-  pages/api/design-rock-drawings.js           new 'construction-issue-many' bulk action
-  pages/design/[project]/rock-drawings.js     Select all + bulk Construction Issue buttons
+No new files. Nothing to create manually in GitHub - this is a straight replacement.
 
 
-NEW DATA FIELDS
----------------
-  stampedUrl           url of the stamped copy ('' or absent when there is none)
-  constructionIssueAt  timestamp for when Construction Issue was marked (was not recorded
-                       before - only approvedAt existed)
+WHAT CHANGED
+------------
+The bulk button in the Rock Drawings toolbar now reads:
 
+  "Mark Construction Issue (n)"     was "Construction Issue (n)"
+  "Unmark Construction Issue (n)"   was "Unmark Constr. (n)"
 
-IMPORTANT - EXISTING DOCUMENTS
-------------------------------
-Stamps are generated at the moment the status CHANGES. Documents already approved or
-already marked Construction Issue before this deploy will NOT have a stamped copy yet,
-so they will keep showing unstamped until the status is toggled.
-
-To stamp an existing document: un-mark it and re-mark it (e.g. Unmark Constr. then
-Construction Issue again). Approved items can only be re-approved by the customer, so
-those need a new revision or a one-off backfill.
-
-Say the word and I can build a one-off backfill button that walks every project and
-generates the missing stamped copies in one go.
-
-
-KNOWN LIMITS (these are existing data-model limits, not bugs in the stamping)
------------------------------------------------------------------------------
-1. TECH SUBS have no Construction Issue concept anywhere in the system - there is no
-   toggle and no field. So Tech Subs can only ever show the APPROVED stamp.
-
-2. DRAWINGS (the Drawings tab) use a single status dropdown where In Review / Approved /
-   Construction Issue are mutually exclusive. A drawing can therefore never be both
-   Approved AND Construction Issue, so it can never show both stamps.
-
-   Calculations and Rock Drawings have separate fields, so those two tabs CAN show both
-   stamps stacked, exactly as specified.
-
-If you want both stamps possible on the Drawings tab, or a Construction Issue toggle on
-Tech Subs, both are follow-up jobs - say which and I will do them.
-
-
-ROCK DRAWINGS - SELECT ALL / BULK CONSTRUCTION ISSUE
------------------------------------------------------
-Two new buttons in the Rock Drawings toolbar:
-
-  "Select all (n)"       ticks every current drawing. Once everything is ticked it flips
-                         to "Clear selection". Superseded revisions are ignored - they do
-                         not have a tickbox. Everyone sees this button (it also drives the
-                         existing Download selected / Approve selected).
-
-  "Construction Issue (n)"  internal only. Marks every ticked drawing as Construction
-                         Issue in one go, stamps each one, and clears the selection.
-
-                         If every ticked drawing is ALREADY marked, this button flips to
-                         "Unmark Constr. (n)" - so a mistaken "mark all" is one click to
-                         undo rather than unpicking them one at a time.
-
-The bulk action skips superseded revisions and anything already in the requested state,
-so it will not regenerate stamps needlessly.
-
-This is on Rock Drawings only. Calculations has the identical layout and the same gap if
-you want it there too - say the word.
+Behaviour is unchanged - it still flips to the Unmark wording when every ticked drawing
+is already marked, and both are spelled out in full now rather than abbreviated.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-
-Stamp rendering was test-rendered and visually checked on: A4 at page rotations 0, 90,
-180 and 270 degrees, and an A1 landscape sheet. Rotation matters - a drawing saved with
-a /Rotate flag would otherwise get a sideways stamp in the wrong corner. The stamp also
-scales with sheet size so it stays readable on a large drawing without dominating an A4.

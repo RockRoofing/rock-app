@@ -207,7 +207,7 @@ export default function RockDrawingsPage() {
             <button onClick={() => downloadZip(docs.map(d => viewUrl(d)), `${projectNo}-rock-drawings`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
             <button onClick={() => downloadZip(selectedUrls, `${projectNo}-rock-drawings-selected`)} disabled={!selectedUrls.length} style={{ ...btnGhost, opacity: selectedUrls.length ? 1 : 0.5 }}>Download selected ({selectedUrls.length})</button>
             {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
-            {canEdit && <button onClick={markSelectedConstruction} disabled={!selectedCurrentCount} style={{ ...btnGhost, color: '#2563eb', borderColor: '#bfdbfe', opacity: selectedCurrentCount ? 1 : 0.5 }}>{bulkCiOn ? 'Construction Issue' : 'Unmark Constr.'} ({selectedCurrentCount})</button>}
+            {canEdit && <button onClick={markSelectedConstruction} disabled={!selectedCurrentCount} style={{ ...btnGhost, color: '#2563eb', borderColor: '#bfdbfe', opacity: selectedCurrentCount ? 1 : 0.5 }}>{bulkCiOn ? 'Mark Construction Issue' : 'Unmark Construction Issue'} ({selectedCurrentCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
             {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Drawing'}</button>}
           </div>
