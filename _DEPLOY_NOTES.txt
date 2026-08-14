@@ -1,59 +1,61 @@
-pkg275 - Operations top navigation at 20px
-===========================================
+pkg276 - Site App report now matches the portal
+================================================
 
-NOTE: pkg275 REPLACES pkg272, pkg273 AND pkg274. Same file list as pkg274 with the nav
-size change added. Deploy this one and ignore the earlier three.
+NOTE: pkg276 REPLACES pkg272, 273, 274 AND 275. Same file list, with the Site App report
+form brought up to match the portal. Deploy this one and ignore the earlier four.
 
 
 CHANGED FILES
 -------------
-  components/OperationsNav.js             top navigation 13px -> 20px
+  pages/forms/index.js                    Site App report: attachments + screenshot paste
+  components/OperationsNav.js             top navigation 20px + sub-tabs 15px
   middleware.js                           Site App report fix
-  components/ReportProblemButton.js       attachments + screenshot paste
+  components/ReportProblemButton.js       portal attachments + screenshot paste
   pages/api/report-problem.js             store attachments, email them
   pages/admin/problem-reports.js          show attachments
-  pages/forms/index.js                    Site App link orange + slightly bigger
 
 No new files. All are straight replacements.
 
 
-WHAT CHANGED IN THE NAVIGATION
--------------------------------
-The DARK top row of the Operations portal - Forms, Projects, Project Process, Project
-Management, Project Financials, H&S, Scorecards, plus Portal / Report app improvement /
-Open Site App.
+WHAT I CHANGED - AND WHAT I DID NOT
+------------------------------------
+I read "the exact same as the portal" as the REPORT ITSELF - what it can do - because the
+one real difference left was that the portal took attachments and pasted screenshots and
+the Site App did not. That gap is now closed.
 
-  link + active text   13px  ->  20px
-  padding              4x10  ->  6x12   (so the active pill is not tight around 20px text)
-  dividers             14px  ->  18px
-  bar height           52px  ->  64px   (20px text in a 52px bar looked cramped)
-  logo                 30px  ->  34px   (to stay in proportion)
+I did NOT change the trigger link's appearance. You specifically asked last time for the
+Site App link to be orange, slightly bigger and NOT a button, and it still is (orange
+#ea580c, 15.5px, underlined). The portal's is gold 13px, so making them identical would
+have undone what you just asked for.
 
-
-PLEASE LOOK AT THIS ON YOUR SCREEN FIRST
------------------------------------------
-20px is a big jump from 13px - roughly 50% wider text. That row holds ten items and some
-are long ("Project Management", "Project Financials", "Report app improvement"). On a
-normal laptop screen it is likely to run out of room and start scrolling sideways, which
-would mean Scorecards and Open Site App drop off the right-hand edge until you scroll.
-
-The row already had overflowX: 'auto' so nothing breaks or overlaps - it just scrolls.
-
-If it does overflow, the options are:
-  - drop to 16-17px, which is still clearly bigger but usually still fits
-  - shorten a couple of labels (e.g. "Project Mgmt", "Financials")
-  - let it wrap onto two lines instead of scrolling
-
-Tell me which and it is a quick change.
+If you actually meant the LINK should look the same as the portal's, say so and it is a
+one-line change.
 
 
-NOT CHANGED
------------
-The WHITE sub-tab strip underneath (Completed / Missing, SRAT / Planning / Live Tasks etc)
-is still 15px from the earlier package. Say if you want that at 20px too - though that row
-has ten items under Project Management and would almost certainly scroll.
+SITE APP REPORT NOW HAS
+------------------------
+  "+ Add a photo or screenshot"   picks files - on a phone this offers the camera, the
+                                  photo library or a file, multiple at once.
+  Paste                           paste an image anywhere in the sheet and it uploads.
+  Thumbnails                      each attachment shows with a Remove button before send.
+  Send blocked mid-upload         so nothing goes half-finished.
+
+These land in exactly the same place as portal ones: embedded inline in the office email,
+and as thumbnails on Admin > App Improvements.
+
+ONE DIFFERENCE ON PURPOSE: the Site App uploads via /api/upload-file with compressImage,
+the same route Deliveries and Issues already use - NOT the blob client the portal uses.
+Photos straight off a phone camera are large, and this compresses them first. The controls
+are also sized for one-handed use (bigger tap targets) rather than copied pixel-for-pixel
+from the desktop.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+
+
+STILL OUTSTANDING
+-----------------
+The zip I am working from is pkg264 and does not contain pkg265. Please confirm whether
+pkg265 was deployed - if it was, send a fresh export before the next package.

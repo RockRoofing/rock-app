@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
+import { compressImage } from '../../lib/compressImage'
 
 // forms.rockroofing.co.uk — operative-facing app.
 // Mobile-first, big tap targets, one decision per screen. No portal access.
@@ -351,15 +352,68 @@ function SiteAppReportProblem({ user }) {
   const [sending, setSending] = useState(false)
   const [done, setDone] = useState(false)
   const [err, setErr] = useState('')
+  const [attachments, setAttachments] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef()
+
+  // Photos / screenshots attached to the report. Uses the Site App's existing
+  // /api/upload-file route (raw bytes + headers) and compressImage, same as Deliveries
+  // and Issues - photos off a phone are large and this keeps them manageable.
+  async function addFiles(list) {
+    const picked = Array.from(list || []).filter(Boolean)
+    if (!picked.length) return
+    setUploading(true); setErr('')
+    let failed = 0
+    for (const original of picked) {
+      try {
+        const file = await compressImage(original)
+        const up = await fetch('/api/upload-file', {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'x-filename': encodeURIComponent(file.name || `photo-${Date.now()}.jpg`),
+            'x-content-type': file.type || 'application/octet-stream',
+          },
+          body: file,
+        })
+        const ud = await up.json()
+        if (!up.ok || !ud.url) { failed++; continue }
+        setAttachments(prev => [...prev, { name: file.name || 'Photo', url: ud.url, contentType: file.type || '', size: file.size || 0 }])
+      } catch { failed++ }
+    }
+    if (fileRef.current) fileRef.current.value = ''
+    if (failed) setErr(`${failed} file${failed === 1 ? '' : 's'} could not be uploaded.`)
+    setUploading(false)
+  }
+
+  // Paste a screenshot straight in. Only image data is intercepted - pasting text
+  // still behaves normally.
+  function onPaste(e) {
+    const items = (e.clipboardData && e.clipboardData.items) || []
+    const imgs = []
+    for (const it of items) {
+      if (it.kind === 'file' && String(it.type || '').startsWith('image/')) {
+        const f = it.getAsFile()
+        if (f) {
+          const ext = (f.type.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '')
+          imgs.push(new File([f], f.name && f.name !== 'image.png' ? f.name : `screenshot-${Date.now()}.${ext}`, { type: f.type }))
+        }
+      }
+    }
+    if (imgs.length) { e.preventDefault(); addFiles(imgs) }
+  }
+
+  function removeAttachment(i) { setAttachments(a => a.filter((_, j) => j !== i)) }
 
   async function submit() {
     if (!description.trim()) { setErr('Please describe the problem.'); return }
     if (!priority) { setErr('Please select a priority.'); return }
+    if (uploading) { setErr('Please wait for the upload to finish.'); return }
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/report-problem', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userName: user?.name || '', userEmail: user?.email || '', platform: 'Site App', page, description, priority }),
+        body: JSON.stringify({ userName: user?.name || '', userEmail: user?.email || '', platform: 'Site App', page, description, priority, attachments }),
       })
       let d = {}; try { d = await r.json() } catch {}
       if (!r.ok) { setErr(d.error || 'Could not submit'); setSending(false); return }
@@ -369,14 +423,14 @@ function SiteAppReportProblem({ user }) {
 
   return (
     <div style={{ marginTop: 28, textAlign: 'center' }}>
-      <button onClick={() => { setPage(''); setDescription(''); setPriority(''); setDone(false); setErr(''); setOpen(true) }}
+      <button onClick={() => { setPage(''); setDescription(''); setPriority(''); setAttachments([]); setDone(false); setErr(''); setOpen(true) }}
         style={{ background: 'none', border: 'none', color: '#ea580c', fontSize: 15.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
         <span>&#9888;</span> Report app improvement
       </button>
 
       {open && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }} onClick={() => setOpen(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
+          <div onClick={e => e.stopPropagation()} onPaste={onPaste} style={{ background: '#fff', borderRadius: '16px 16px 0 0', width: '100%', maxWidth: 520, padding: '20px 18px 28px', maxHeight: '90vh', overflowY: 'auto', textAlign: 'left' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: INK }}>Report app improvement</div>
               <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>×</button>
@@ -402,6 +456,22 @@ function SiteAppReportProblem({ user }) {
                   </div>
                 </RpField>
                 <RpField label="Describe the problem"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} style={{ ...rpInp, resize: 'vertical' }} placeholder="What went wrong?" /></RpField>
+                <RpField label="Photos / screenshots">
+                  <input ref={fileRef} type="file" multiple style={{ display: 'none' }} onChange={e => addFiles(e.target.files)} />
+                  <button type="button" onClick={() => fileRef.current && fileRef.current.click()} disabled={uploading}
+                    style={{ width: '100%', padding: '13px 12px', border: '2px dashed #e3e0d9', borderRadius: 12, background: '#faf9f7', fontSize: 15, fontWeight: 700, color: '#666', cursor: 'pointer', fontFamily: 'inherit', opacity: uploading ? 0.6 : 1 }}>
+                    {uploading ? 'Uploading...' : '+ Add a photo or screenshot'}
+                  </button>
+                  {attachments.map((a, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: '8px 10px', border: '1px solid #eee', borderRadius: 10 }}>
+                      {String(a.contentType || '').startsWith('image/')
+                        ? <img src={a.url} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 8, border: '1px solid #eee' }} />
+                        : <span style={{ width: 46, textAlign: 'center', fontSize: 22 }}>&#128206;</span>}
+                      <span style={{ flex: 1, fontSize: 13, color: '#444', wordBreak: 'break-word' }}>{a.name}</span>
+                      <button type="button" onClick={() => removeAttachment(i)} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 14, fontWeight: 700, cursor: 'pointer', padding: '6px 4px' }}>Remove</button>
+                    </div>
+                  ))}
+                </RpField>
                 {err && <div style={{ color: '#dc2626', fontSize: 13, marginBottom: 8 }}>{err}</div>}
                 <button onClick={submit} disabled={sending} style={bigBtn(sending)}>{sending ? 'Sending…' : 'Send report'}</button>
               </>
