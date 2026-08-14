@@ -1,5 +1,9 @@
-pkg266 - PDF Approval / Construction Issue stamps
-=================================================
+pkg267 - PDF Approval / Construction Issue stamps
+       + Rock Drawings: Select all / bulk Construction Issue
+==========================================================
+
+NOTE: pkg267 REPLACES pkg266 - it contains everything pkg266 had, plus the Rock Drawings
+select-all work. If you have not deployed pkg266 yet, just deploy this one instead.
 
 WHAT THIS DOES
 --------------
@@ -49,6 +53,10 @@ CHANGED FILES
   pages/design/[project]/tech-sub.js          viewer / download use stamped copy
   components/DesignDrawingsPage.js            viewer / downloads use stamped copy (Drawings tab)
 
+Rock Drawings select-all (pkg267 addition):
+  pages/api/design-rock-drawings.js           new 'construction-issue-many' bulk action
+  pages/design/[project]/rock-drawings.js     Select all + bulk Construction Issue buttons
+
 
 NEW DATA FIELDS
 ---------------
@@ -85,6 +93,29 @@ KNOWN LIMITS (these are existing data-model limits, not bugs in the stamping)
 
 If you want both stamps possible on the Drawings tab, or a Construction Issue toggle on
 Tech Subs, both are follow-up jobs - say which and I will do them.
+
+
+ROCK DRAWINGS - SELECT ALL / BULK CONSTRUCTION ISSUE
+-----------------------------------------------------
+Two new buttons in the Rock Drawings toolbar:
+
+  "Select all (n)"       ticks every current drawing. Once everything is ticked it flips
+                         to "Clear selection". Superseded revisions are ignored - they do
+                         not have a tickbox. Everyone sees this button (it also drives the
+                         existing Download selected / Approve selected).
+
+  "Construction Issue (n)"  internal only. Marks every ticked drawing as Construction
+                         Issue in one go, stamps each one, and clears the selection.
+
+                         If every ticked drawing is ALREADY marked, this button flips to
+                         "Unmark Constr. (n)" - so a mistaken "mark all" is one click to
+                         undo rather than unpicking them one at a time.
+
+The bulk action skips superseded revisions and anything already in the requested state,
+so it will not regenerate stamps needlessly.
+
+This is on Rock Drawings only. Calculations has the identical layout and the same gap if
+you want it there too - say the word.
 
 
 TESTED

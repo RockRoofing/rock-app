@@ -167,6 +167,29 @@ export default function RockDrawingsPage() {
   const constructionCount = currentDocs.filter(d => d.constructionIssue).length
   const reviewCount = currentDocs.length - constructionCount
 
+  // Select all / clear, over the CURRENT (non-superseded) drawings - the ones that
+  // actually show a tickbox.
+  const allSelected = currentDocs.length > 0 && currentDocs.every(d => selected[d.id])
+  function toggleSelectAll() {
+    if (allSelected) { setSelected({}); return }
+    const next = {}
+    for (const d of currentDocs) next[d.id] = true
+    setSelected(next)
+  }
+
+  // Bulk Construction Issue. If every ticked drawing is already marked, the button flips
+  // to unmark, so a mistaken "mark all" can be undone in one click.
+  const selectedCurrent = currentDocs.filter(d => selected[d.id])
+  const selectedCurrentCount = selectedCurrent.length
+  const bulkCiOn = !(selectedCurrentCount > 0 && selectedCurrent.every(d => d.constructionIssue))
+  async function markSelectedConstruction() {
+    if (!selectedCurrentCount) return
+    const verb = bulkCiOn ? 'Mark' : 'Unmark'
+    if (!confirm(`${verb} ${selectedCurrentCount} selected drawing${selectedCurrentCount === 1 ? '' : 's'} as Construction Issue?`)) return
+    const d = await post({ action: 'construction-issue-many', ids: selectedCurrent.map(x => x.id), value: bulkCiOn })
+    if (d) setSelected({})
+  }
+
   return (
     <>
       <Head><title>Rock Drawings - Design</title></Head>
@@ -180,9 +203,11 @@ export default function RockDrawingsPage() {
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>Our own drawings. {canEdit ? 'Upload, revise, mark up and comment.' : 'View, mark up and comment.'}</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={toggleSelectAll} disabled={!currentDocs.length} style={{ ...btnGhost, opacity: currentDocs.length ? 1 : 0.5 }}>{allSelected ? 'Clear selection' : `Select all (${currentDocs.length})`}</button>
             <button onClick={() => downloadZip(docs.map(d => viewUrl(d)), `${projectNo}-rock-drawings`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
             <button onClick={() => downloadZip(selectedUrls, `${projectNo}-rock-drawings-selected`)} disabled={!selectedUrls.length} style={{ ...btnGhost, opacity: selectedUrls.length ? 1 : 0.5 }}>Download selected ({selectedUrls.length})</button>
             {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
+            {canEdit && <button onClick={markSelectedConstruction} disabled={!selectedCurrentCount} style={{ ...btnGhost, color: '#2563eb', borderColor: '#bfdbfe', opacity: selectedCurrentCount ? 1 : 0.5 }}>{bulkCiOn ? 'Construction Issue' : 'Unmark Constr.'} ({selectedCurrentCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
             {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Drawing'}</button>}
           </div>

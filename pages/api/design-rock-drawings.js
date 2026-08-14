@@ -314,6 +314,30 @@ export default async function handler(req, res) {
     return res.json({ ok: true, doc: docs[i] })
   }
 
+  // Mark / unmark Construction Issue on MANY drawings at once (internal only). Skips
+  // superseded revisions and anything already in the requested state. Rebuilds the
+  // stamped copy for each one that actually changed.
+  if (body.action === 'construction-issue-many') {
+    const ids = Array.isArray(body.ids) ? body.ids : []
+    const on = body.value !== false
+    const now = Date.now()
+    const changed = []
+    for (const id of ids) {
+      const i = idx(id)
+      if (i < 0) continue
+      if (docs[i].superseded) continue
+      if (!!docs[i].constructionIssue === on) continue
+      docs[i].constructionIssue = on
+      docs[i].constructionIssueAt = on ? now : 0
+      changed.push(docs[i])
+    }
+    for (const d of changed) {
+      try { d.stampedUrl = await buildStampedCopy(d, { projectNo: no }) } catch (e) { /* stamping must not block */ }
+    }
+    if (changed.length) await set(RKEY(no), docs)
+    return res.json({ ok: true, changed: changed.length, docs })
+  }
+
   if (body.action === 'delete') {
     docs = docs.filter(d => d.id !== body.id)
     await set(RKEY(no), docs)
