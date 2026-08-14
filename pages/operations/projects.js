@@ -3,6 +3,7 @@ import { compressImage } from '../../lib/compressImage'
 import OperationsShell, { PageHeading, SubTabs, ComingSoon } from '../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDateTime } from '../../components/opsUI'
 import ProjectFiles from '../../components/ProjectFiles'
+import ProjectDrawings from '../../components/ProjectDrawings'
 import PreStartForm from '../../components/PreStartForm'
 import SubmissionModal from '../../components/SubmissionModal'
 import ProjectConcerns from '../../components/ProjectConcerns'
@@ -118,7 +119,7 @@ export default function ProjectsPage() {
         {sub === 'details' && <ProjectDetails projectNo={openNo} onSaved={load} />}
         {sub === 'handover' && <HandoverReadOnly projectNo={openNo} />}
         {sub === 'prestart' && <PreStartForm projectNo={openNo} />}
-        {sub === 'drawings' && <ProjectFiles projectNo={openNo} category="drawing" title="Project drawings" note="Upload drawings (PDF/image). These are visible to operatives in the Site App." />}
+        {sub === 'drawings' && <ProjectDrawings projectNo={openNo} />}
         {sub === 'rams' && <RamsTable projectNo={openNo} />}
         {sub === 'submissions' && <ProjectSubmissions projectNo={openNo} />}
         {sub === 'images' && <ProjectImages projectNo={openNo} />}

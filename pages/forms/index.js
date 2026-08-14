@@ -618,8 +618,12 @@ function ProjectDetailsView({ onBack, only }) {
     setFilesLoading(true)
     ;(async () => {
       try {
-        const cat = tab === 'drawings' ? 'drawing' : 'rams'
-        const r = await fetch(`/api/project-files?no=${encodeURIComponent(proj.projectNo)}&cat=${cat}`)
+        // Drawings come from the Design Portal's Rock Drawings, filtered to CONSTRUCTION
+        // ISSUE only - operatives must never see a drawing that has not been released for
+        // construction. RAMS still come from project-files.
+        const r = tab === 'drawings'
+          ? await fetch(`/api/project-drawings?no=${encodeURIComponent(proj.projectNo)}&ci=1`)
+          : await fetch(`/api/project-files?no=${encodeURIComponent(proj.projectNo)}&cat=rams`)
         const d = await r.json()
         let list = d.files || []
         // API returns newest-first. RAMS: operatives only ever see the CURRENT
@@ -682,7 +686,7 @@ function ProjectDetailsView({ onBack, only }) {
         ))}
       </div>
       {filesLoading ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading…</div>
-        : !files.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>No {tab === 'drawings' ? 'drawings' : 'RAMS'} uploaded for this project yet.</div>
+        : !files.length ? <div style={{ background: '#fff', border: '1px dashed #d9d5cc', borderRadius: 14, padding: 24, textAlign: 'center', color: '#999', fontSize: 14 }}>{tab === 'drawings' ? 'No drawings have been issued for construction on this project yet.' : 'No RAMS uploaded for this project yet.'}</div>
         : tab === 'drawings' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 12 }}>
             {files.map((f, i) => (

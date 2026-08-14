@@ -1,63 +1,106 @@
-pkg278 - Applications: percentages now accept decimals
-=======================================================
+pkg279 - Ops Drawings fed from the Design Portal; Site App = Construction Issue only
+=====================================================================================
 
-CHANGED FILES
--------------
-  pages/applications.js
-
-No new files. Straight replacement. Independent of pkg277 - deploy in either order.
+NOTE: pkg279 REPLACES pkg272 through pkg277. Deploy this one and ignore those.
+pkg278 (applications.js decimals) is SEPARATE and still needs deploying - it is not
+included here.
 
 
-ROOT CAUSE
-----------
-It was not that decimals were rejected - it was that the decimal POINT could never be
-typed in the first place.
+NEW FILES - must be created manually in GitHub ("Add file" -> "Create new file")
+--------------------------------------------------------------------------------
+  pages/api/project-drawings.js
+  components/ProjectDrawings.js
 
-Every percentage box converted what you typed into a number on each keystroke. So typing
-"12." ran parseFloat("12.") = 12, the box re-rendered showing "12", and the point vanished
-before you could type the digit after it. There was no way to get past the point.
-
-Starting with a zero was worse. The boxes were written as `value={pct ? pct : ''}`, and 0
-is falsy in JavaScript, so the moment you typed "0" to start "0.5" the box blanked itself.
-
-
-THE FIX
--------
-A new PctInput component keeps the RAW TEXT while you are typing, so the decimal point
-survives, and still commits the parsed number on every keystroke so Value to date and the
-totals update live as you type. When you click away, the box shows the tidy final value.
-
-Only digits and a single decimal point can be entered - letters and stray extra points are
-ignored rather than silently becoming 0.
-
-It is defined at module scope, not inside the editor. Defining it inside would remount it
-on every render and the box would lose focus after each character.
+CHANGED FILES (straight replacements)
+--------------------------------------
+  pages/operations/projects.js            Drawings tab now read-only, design-sourced
+  pages/forms/index.js                    Site App drawings = Construction Issue only
+  middleware.js                           new route allowed through on the Site App host
+  components/OperationsNav.js             (earlier) nav 17px
+  components/ReportProblemButton.js       (earlier) attachments + paste
+  pages/api/report-problem.js             (earlier) store attachments
+  pages/admin/problem-reports.js          (earlier) show attachments
 
 
-BOXES FIXED (4)
----------------
-  Contract works    % Complete
-  Variations        % Complete
-  Materials         % Claimed
-  Materials         Mark-up %   (allowed above 100, up to 1000 - it is a mark-up, not a
-                                 proportion, so clamping it to 100 would be wrong)
+HOW IT WORKS
+------------
+Nothing is copied or synced. The Ops page reads design:rock-drawings:<projectNo> LIVE, so
+the Design Portal is the single source of truth. Approve a drawing or mark it Construction
+Issue in the Design Portal and the Ops page and Site App reflect it immediately - there is
+no sync job to wait for and nothing to go stale.
 
-The "100%" tick buttons next to each box still work exactly as before.
+Only the NEWEST revision of each drawing is shown. Superseded revisions stay in the Design
+Portal as history and never reach Ops or site. (If a drawing somehow has every revision
+marked superseded, the newest is still shown rather than the drawing disappearing.)
 
-Already worked, left alone: the bulk mark-up box, the PO picker mark-up boxes and the
-manual line mark-up box. Those keep what you type as text and never coerced it, so they
-took decimals already.
+Where a stamped copy exists, that is what is shown and downloaded - so the APPROVED /
+CONSTRUCTION ISSUE stamp is on the PDF itself, not just the label on screen.
 
 
-DOWNSTREAM - NOTHING ELSE NEEDED
----------------------------------
-I checked lib/applications.js and lib/applicationPdf.js. Both read percentages with
-parseFloat and divide by 100, so 12.5% flows through the value-to-date maths, the summary
-and the PDF correctly. No rounding to whole numbers anywhere in that path.
+1. OPS > PROJECTS > DRAWINGS
+-----------------------------
+Upload and Delete are GONE. View and Download only.
 
-Existing saved applications are unaffected - whole numbers are still whole numbers.
+Two banners across the top:
+  green   "X of Y approved"              + how many still awaiting customer approval
+  blue    "X of Y Construction Issue"    + how many are not released to site
+
+Every drawing shows as a card with its first page as a thumbnail and three labels:
+  Rev A / B / C
+  Approved            or  Not approved
+  Construction Issue  or  Not for site
+
+
+2. SITE APP > DRAWINGS
+-----------------------
+Now shows ONLY drawings marked Construction Issue. Operatives cannot see anything that has
+not been released for construction.
+
+Empty state reworded - it used to say "No drawings uploaded for this project yet", which
+would now be misleading. It says drawings have not been issued for construction.
+
+RAMS in the Site App are untouched and still come from project-files.
+
+
+*** READ THIS BEFORE DEPLOYING ***
+-----------------------------------
+Any drawings previously UPLOADED under Ops > Projects > Drawings will DISAPPEAR from both
+the Ops page and the Site App the moment this goes live.
+
+They are not deleted - they are still stored - but nothing displays them any more, because
+both screens now read the Design Portal instead.
+
+So on any live project where operatives currently get their drawings from an Ops upload
+rather than the Design Portal, site will lose access until those drawings exist in the
+Design Portal's Rock Drawings AND are marked Construction Issue.
+
+WORTH CHECKING FIRST: pick two or three live jobs and confirm their drawings are in the
+Design Portal and marked Construction Issue before you push this.
+
+If it turns out a lot of projects rely on the old uploads, tell me and I can either:
+  - add a "Previously uploaded" section on the Ops page so the old files stay reachable
+    and can be moved across, or
+  - write a one-off migration that copies them into the Design Portal.
+
+Neither is difficult - but it is much better to decide before site loses drawings than
+after.
+
+
+ALSO WORTH KNOWING
+------------------
+Drawings only carry the stamp on the PDF if their status was set AFTER the stamping work
+went live. Anything approved or marked Construction Issue before that shows the correct
+LABELS on the Ops page (those are read live), but the PDF itself will not carry a stamp
+until the status is toggled. Select all -> Unmark -> Mark Construction Issue on the Design
+Portal's Rock Drawings page re-stamps a whole project.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+
+
+STILL OUTSTANDING
+-----------------
+The zip I am working from is pkg264 and does not contain pkg265. Please confirm whether
+pkg265 was deployed - if it was, send a fresh export before the next package.
