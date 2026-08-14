@@ -91,7 +91,7 @@ export default function PlanningPage() {
   const [viewModal, setViewModal] = useState(false)   // historic viewer
   const [clearing, setClearing] = useState(false)
   const [wiDay, setWiDay] = useState(null)            // Water Ingress day (iso) being edited
-  const [ohDay, setOhDay] = useState(null)            // Overheads day (iso) being edited
+  const [ohDates, setOhDates] = useState(null)        // Overheads: selected dates (array) being edited
   const dragging = useRef(false)
 
   async function load() {
@@ -250,9 +250,10 @@ export default function PlanningPage() {
 
   const openAllocate = (mode = 'add') => {
     if (!sel || !sel.dates.size) return
+    const dates = [...sel.dates].sort()
+    if (sel.key === 'overheads') { setOhDates(dates); return }
     const proj = data.projects.find(p => p.key === sel.key)
     if (!proj) return
-    const dates = [...sel.dates].sort()
     setAllocModal({ proj, dates, mode })
   }
   // does the current selection already have any labour allocated?
@@ -404,13 +405,13 @@ export default function PlanningPage() {
       {view === 'day' && sel && sel.dates.size > 0 && (
         <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', background: '#fffbeb', border: '1px solid #f0e2b0', borderRadius: 10, padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,0.18)', maxWidth: 'calc(100vw - 32px)' }}>
           <div style={{ fontSize: 13, color: '#92400e' }}>
-            <strong>{data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
+            <strong>{sel.key === 'overheads' ? 'Overheads' : data.projects.find(p => p.key === sel.key)?.name}</strong> — {sel.dates.size} day{sel.dates.size === 1 ? '' : 's'} selected
           </div>
-          <button onClick={() => openAllocate('add')} style={primaryBtn}>Allocate labour →</button>
-          {selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
-          {selectionHasLabour() && <button onClick={copySelection} style={{ ...ghostBtn, background: '#eef6ff', color: '#1d4ed8', borderColor: '#cfe0fb', fontWeight: 600 }}>Copy</button>}
-          {clipboard && <button onClick={pasteToSelection} disabled={pasting} style={{ ...ghostBtn, background: '#eafaf0', color: '#166534', borderColor: '#c3ecd2', fontWeight: 600 }}>{pasting ? 'Pasting…' : `Paste (${clipboard.cells.length} day${clipboard.cells.length === 1 ? '' : 's'})`}</button>}
-          {selectionHasLabour() && <button onClick={clearSelectionLabour} disabled={clearing} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c0c0' }}>{clearing ? 'Clearing…' : 'Clear labour'}</button>}
+          <button onClick={() => openAllocate('add')} style={primaryBtn}>{sel.key === 'overheads' ? 'Add / edit overheads →' : 'Allocate labour →'}</button>
+          {sel.key !== 'overheads' && selectionHasLabour() && <button onClick={() => openAllocate('edit')} style={{ ...ghostBtn, background: '#fef3c7', color: '#92400e', fontWeight: 600 }}>Edit labour allocation</button>}
+          {sel.key !== 'overheads' && selectionHasLabour() && <button onClick={copySelection} style={{ ...ghostBtn, background: '#eef6ff', color: '#1d4ed8', borderColor: '#cfe0fb', fontWeight: 600 }}>Copy</button>}
+          {sel.key !== 'overheads' && clipboard && <button onClick={pasteToSelection} disabled={pasting} style={{ ...ghostBtn, background: '#eafaf0', color: '#166534', borderColor: '#c3ecd2', fontWeight: 600 }}>{pasting ? 'Pasting…' : `Paste (${clipboard.cells.length} day${clipboard.cells.length === 1 ? '' : 's'})`}</button>}
+          {sel.key !== 'overheads' && selectionHasLabour() && <button onClick={clearSelectionLabour} disabled={clearing} style={{ ...ghostBtn, color: '#dc2626', borderColor: '#f3c0c0' }}>{clearing ? 'Clearing…' : 'Clear labour'}</button>}
           <button onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }} onClick={(e) => { e.stopPropagation(); dragging.current = false; setSel(null) }} style={ghostBtn}>Deselect</button>
           {clipboard && <button onClick={() => setClipboard(null)} style={{ ...ghostBtn, fontSize: 11, color: '#999' }} title="Clear the copied labour">Clear clipboard</button>}
         </div>
@@ -498,7 +499,7 @@ export default function PlanningPage() {
             <WaterIngressRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setWiDay(dk)} />
 
             <SectionLabel>OVERHEADS</SectionLabel>
-            <OverheadsRow days={days} weekGroups={weekGroups} view={view} data={data} onOpenDay={(dk) => view === 'day' && setOhDay(dk)} />
+            <OverheadsRow days={days} weekGroups={weekGroups} view={view} data={data} sel={sel} onCellDown={startDrag} onCellEnter={dragTo} />
 
             <SectionLabel neg>NEGOTIATED — NOT YET SECURED</SectionLabel>
             {negRows.length === 0 && <EmptyRow>No negotiated projects.</EmptyRow>}
@@ -526,7 +527,7 @@ export default function PlanningPage() {
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
       {viewModal && <ViewWeekModal data={data} ops={ops} onClose={() => setViewModal(false)} onSaved={() => refreshData()} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
-      {ohDay && <OverheadsDayModal date={ohDay} weekDays={days.map(iso)} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
+      {ohDates && <OverheadsDayModal dates={ohDates} data={data} ops={ops} onClose={() => setOhDates(null)} onDone={() => refreshData()} />}
     </OperationsShell>
   )
 }
@@ -976,9 +977,10 @@ const OVERHEAD_CATEGORIES = ['Holidays', 'Internal Time', 'Ops Support', 'Sick',
 
 // Overheads row: non-project labour (leave, sick, internal time, etc). Multiple
 // staff per day, each with their own category. Mirrors the Water Ingress row.
-function OverheadsRow({ days, weekGroups, view, data, onOpenDay }) {
+function OverheadsRow({ days, weekGroups, view, data, sel, onCellDown, onCellEnter }) {
   const oh = data.overheads || {}
   const headcount = (dk) => (oh[dk] || []).length
+  const OH_KEY = 'overheads'
   return (
     <div style={{ display: 'flex', borderBottom: '1px solid #f2f2f2', minHeight: ROW_H, alignItems: 'stretch' }}>
       <Frozen w={NAME_W} left={0} style={{ background: '#f6f3fb', flexDirection: 'column', justifyContent: 'center', display: 'flex' }}>
@@ -992,10 +994,14 @@ function OverheadsRow({ days, weekGroups, view, data, onOpenDay }) {
       {view === 'day'
         ? days.map((d, i) => {
           const dk = iso(d); const n = headcount(dk); const we = isWeekend(d)
+          const selected = sel && sel.key === OH_KEY && sel.dates.has(dk)
           return (
-            <div key={i} onClick={() => onOpenDay(dk)} title={n ? `${n} staff on overheads - click to view/edit` : 'Click to add staff to overheads'}
+            <div key={i}
+              onMouseDown={() => onCellDown(OH_KEY, d)}
+              onMouseEnter={() => onCellEnter(OH_KEY, d)}
+              title="Drag to select days, then Allocate to add staff to overheads"
               style={{ width: CELL_W, textAlign: 'center', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: n ? '#ede7f6' : (we ? '#f3f1ec' : '#fff'), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
+                background: selected ? '#fde68a' : (n ? '#ede7f6' : (we ? '#f3f1ec' : '#fff')), borderLeft: (d.getDay() === 1 ? '2px solid #d9d5cc' : '1px solid #f5f5f5'),
                 boxShadow: n ? 'inset 0 -3px 0 0 #6b4ea8' : 'none',
                 fontSize: 12, fontWeight: 700, color: n ? '#6b4ea8' : '#ddd' }}>{n || ''}</div>
           )
@@ -1008,124 +1014,103 @@ function OverheadsRow({ days, weekGroups, view, data, onOpenDay }) {
   )
 }
 
-// Overheads day modal: list staff on overheads for the clicked day; add staff to
-// ONE OR MORE selected days at once (each with a category).
-function OverheadsDayModal({ date, weekDays = [], data, ops, onClose, onDone }) {
-  const [entries, setEntries] = useState((data.overheads || {})[date] || [])
+// Overheads modal: add staff (each with a category) to the SELECTED day(s), which
+// come from the same drag-select used for projects. Also lists/edits who is already
+// on overheads across those days.
+function OverheadsDayModal({ dates = [], data, ops, onClose, onDone }) {
   const [opId, setOpId] = useState('')
   const [category, setCategory] = useState(OVERHEAD_CATEGORIES[0])
-  const [selDays, setSelDays] = useState([date])   // days to apply the add to (default: clicked day)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
+  // Local view of entries across the selected days: { dateISO: [ {id,opId,category} ] }
+  const [byDay, setByDay] = useState(() => { const m = {}; for (const dk of dates) m[dk] = [...((data.overheads || {})[dk] || [])]; return m })
 
   const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}`.trim() || id : id }
-  const usedIds = new Set(entries.map(e => e.opId))
-  const available = ops.filter(o => !usedIds.has(o.id))
-  const days = weekDays.length ? weekDays : [date]
-  const toggleDay = (dk) => setSelDays(prev => prev.includes(dk) ? prev.filter(x => x !== dk) : [...prev, dk])
+  const sorted = [...dates].sort()
+  const rangeLabel = sorted.length === 1 ? fmtDMY(parseISO(sorted[0]))
+    : `${fmtDMY(parseISO(sorted[0]))} - ${fmtDMY(parseISO(sorted[sorted.length - 1]))} (${sorted.length} days)`
 
   async function add() {
     setErr(''); setMsg('')
     if (!opId) { setErr('Choose a staff member.'); return }
-    if (!selDays.length) { setErr('Select at least one day.'); return }
     setSaving(true)
-    const added = []
-    const skipped = []
+    const added = []; const skipped = []
     try {
-      for (const dk of selDays) {
+      for (const dk of sorted) {
         const r = await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date: dk, opId, category }) })
         const d = await r.json()
         if (!r.ok) { skipped.push(fmtDMY(parseISO(dk))); continue }
-        if (dk === date) setEntries(prev => [...prev, d.entry])   // reflect on the day we're viewing
+        setByDay(prev => ({ ...prev, [dk]: [...(prev[dk] || []), d.entry] }))
         added.push(dk)
       }
       setOpId('')
-      if (added.length) setMsg(`Added to ${added.length} day${added.length === 1 ? '' : 's'}.${skipped.length ? ` Already on: ${skipped.join(', ')}.` : ''}`)
+      if (added.length) setMsg(`Added ${opName(opId)} (${category}) to ${added.length} day${added.length === 1 ? '' : 's'}.${skipped.length ? ` Already on: ${skipped.join(', ')}.` : ''}`)
       else if (skipped.length) setErr(`Already on overheads on: ${skipped.join(', ')}.`)
       onDone && onDone()
     } catch { setErr('Could not add') }
     setSaving(false)
   }
-  async function changeCategory(id, cat) {
-    const e = entries.find(x => x.id === id); if (!e) return
-    setEntries(prev => prev.map(x => x.id === id ? { ...x, category: cat } : x))
-    try {
-      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date, id, opId: e.opId, category: cat }) })
-      onDone && onDone()
-    } catch {}
+  async function changeCategory(dk, id, cat) {
+    const e = (byDay[dk] || []).find(x => x.id === id); if (!e) return
+    setByDay(prev => ({ ...prev, [dk]: prev[dk].map(x => x.id === id ? { ...x, category: cat } : x) }))
+    try { await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-save', date: dk, id, opId: e.opId, category: cat }) }); onDone && onDone() } catch {}
   }
-  async function remove(id) {
-    setEntries(prev => prev.filter(x => x.id !== id))
-    try {
-      await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-delete', date, id }) })
-      onDone && onDone()
-    } catch {}
+  async function remove(dk, id) {
+    setByDay(prev => ({ ...prev, [dk]: prev[dk].filter(x => x.id !== id) }))
+    try { await fetch('/api/planning', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'oh-delete', date: dk, id }) }); onDone && onDone() } catch {}
   }
 
   const input = { padding: '9px 11px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
-  const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 2vw', overflowY: 'auto' }} onMouseDown={onClose}>
-      <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 560 }}>
+      <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 580 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
           <div>
             <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Overheads</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Viewing {fmtDMY(parseISO(date))}</div>
+            <div style={{ fontSize: 12, color: '#888' }}>{rangeLabel}</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
         </div>
         <div style={{ padding: 22 }}>
-          {entries.length === 0 && <div style={{ color: '#999', fontSize: 13, padding: '4px 0 12px' }}>No staff on overheads for this day yet.</div>}
-          {entries.map(e => (
-            <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #f3f3f1' }}>
-              <div style={{ flex: 1, fontSize: 14, color: INK, fontWeight: 600 }}>{opName(e.opId)}</div>
-              <select value={e.category} onChange={ev => changeCategory(e.id, ev.target.value)} style={{ ...input, padding: '6px 9px' }}>
-                {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <button onClick={() => remove(e.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 13 }}>Remove</button>
-            </div>
-          ))}
-
-          <div style={{ marginTop: 16, padding: 14, background: '#faf9fc', borderRadius: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b4ea8', marginBottom: 8 }}>Add staff to overheads</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div style={{ padding: 14, background: '#faf9fc', borderRadius: 10, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#6b4ea8', marginBottom: 8 }}>Add staff to the selected {sorted.length === 1 ? 'day' : `${sorted.length} days`}</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <select value={opId} onChange={e => setOpId(e.target.value)} style={{ ...input, flex: 1, minWidth: 160 }}>
                 <option value="">Select staff...</option>
-                {available.map(o => <option key={o.id} value={o.id}>{`${o.firstName} ${o.lastName}`.trim() || o.id}</option>)}
+                {ops.map(o => <option key={o.id} value={o.id}>{`${o.firstName} ${o.lastName}`.trim() || o.id}</option>)}
               </select>
               <select value={category} onChange={e => setCategory(e.target.value)} style={{ ...input, minWidth: 140 }}>
                 {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-            </div>
-            <div style={{ fontSize: 11.5, color: '#888', marginBottom: 6 }}>Apply to days (tap to toggle):</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-              {days.map(dk => {
-                const d = parseISO(dk); const on = selDays.includes(dk)
-                return (
-                  <button key={dk} onClick={() => toggleDay(dk)}
-                    style={{ padding: '6px 9px', borderRadius: 8, border: '1px solid', borderColor: on ? '#7c3aed' : '#d8d3c8', background: on ? '#7c3aed' : '#fff', color: on ? '#fff' : '#666', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {DOW[(d.getDay() + 6) % 7]} {d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
-                  </button>
-                )
-              })}
-            </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button onClick={() => setSelDays(days)} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>All days</button>
-              <button onClick={() => setSelDays([date])} style={{ ...ghostBtn, padding: '5px 10px', fontSize: 12 }}>Just this day</button>
-              <div style={{ flex: 1 }} />
-              <button onClick={add} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding...' : `Add to ${selDays.length} day${selDays.length === 1 ? '' : 's'}`}</button>
+              <button onClick={add} disabled={saving} style={{ ...primaryBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Adding...' : 'Add'}</button>
             </div>
             {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 8 }}>{err}</div>}
             {msg && <div style={{ color: '#16a34a', fontSize: 13, marginTop: 8 }}>{msg}</div>}
           </div>
+
+          {sorted.map(dk => (
+            <div key={dk} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: INK, marginBottom: 4 }}>{fmtDMY(parseISO(dk))}</div>
+              {(byDay[dk] || []).length === 0 && <div style={{ color: '#999', fontSize: 12.5, padding: '2px 0' }}>No staff on overheads.</div>}
+              {(byDay[dk] || []).map(e => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: '1px solid #f3f3f1' }}>
+                  <div style={{ flex: 1, fontSize: 13.5, color: INK, fontWeight: 600 }}>{opName(e.opId)}</div>
+                  <select value={e.category} onChange={ev => changeCategory(dk, e.id, ev.target.value)} style={{ ...input, padding: '5px 8px' }}>
+                    {OVERHEAD_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <button onClick={() => remove(dk, e.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12.5 }}>Remove</button>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>
   )
 }
 
-const HeadCell = ({ w, children, style }) => <div style={{ width: w, padding: '6px 8px', fontSize: 11, color: '#666', ...style }}>{children}</div>
+
 const SectionLabel = ({ children, neg }) => (
   <div style={{ position: 'sticky', left: 0, padding: '5px 10px', fontSize: 10.5, fontWeight: 700, letterSpacing: 0.5, color: neg ? '#8a6d1a' : GOLD, background: neg ? '#fdfbf3' : '#faf9f7', borderBottom: '1px solid #eee', borderTop: '1px solid #eee' }}>{children}</div>
 )
@@ -1141,7 +1126,7 @@ const stepBtn = { width: 28, height: 28, borderRadius: 6, border: '1px solid #d9
 const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 6, padding: '4px 4px', fontSize: 10.5, fontFamily: 'inherit', background: 'transparent' }
 const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }
 
-// ── Accounts Weekly Labour: pick installers + mark overnight allowance per day, download PDF ──
+// View Weekly Labour Allocations: view a week, mark overnight allowance, download report.
 function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
   const [tab, setTab] = useState('build')             // 'build' | 'review'
   // Week picker: any W/C Monday from 2 years back to 1 year forward.

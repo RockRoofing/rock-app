@@ -59,7 +59,9 @@ export async function assembleWeek(mondayStr) {
     const byOp = {}
     const unnamedByProjDay = {}  // pk -> { dk: {count, status, projectName} }
     for (const [pk, daysMap] of Object.entries(alloc)) {
-      const pinfo = names[pk] || { name: pk, address: '' }
+      // Fall back to the project number (strip the L:/N: key prefix) if the project
+      // isn't in the current lookup (e.g. completed/archived/removed since allocation).
+      const pinfo = names[pk] || { name: String(pk).replace(/^[LN]:/, ''), address: '' }
       const pname = pinfo.name; const paddr = pinfo.address
       for (const dk of days) {
         const cell = daysMap[dk]

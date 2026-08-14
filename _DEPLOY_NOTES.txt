@@ -1,28 +1,24 @@
-DEPLOY NOTES - Consolidate into "View Weekly Labour Allocations" (+ overheads on report)
-========================================================================================
+DEPLOY NOTES - Planning: project-name fallback + Overheads use drag-select
+==========================================================================
 
 TWO files, BOTH EDITS. Replace both in GitHub.
-(This supersedes the separate "Accounts Weekly Labour" packages - everything is now folded into
-"View Weekly Labour Allocations". Deploy the earlier Overheads + O/A API packages first, i.e.
-pages/api/planning.js and pages/api/planning-accounts-pdf.js must already be live.)
 
-  EDIT  pages/api/planning-week.js                        (overheads now appear in the week data)
-  EDIT  pages/operations/project-management/planning.js   (removed the Accounts button; View is now the hub)
+  EDIT  pages/api/planning-week.js                        (cleaner project name fallback)
+  EDIT  pages/operations/project-management/planning.js   (Overheads now multi-select like projects)
 
-WHAT CHANGED
-1. The separate "Accounts Weekly Labour Allocation" BUTTON is REMOVED.
-2. "View Weekly Labour Allocations" is now the single place for everything:
-   - Pick a Week commencing (2 years back to 1 year forward) and how many weeks.
-   - See each staff member's row with their actual allocation in each day cell.
-   - OVERHEADS now show in the cells too - e.g. "Holidays", "Paid Leave", "Sick" - on that
-     person's own row, exactly like a project (shown in purple).
-   - Click any day cell to toggle that person's OVERNIGHT ALLOWANCE (O/A). It SAVES instantly
-     and the "O/A" tag appears on the cell. Go back to any past/future week and the saved O/As
-     are shown again.
-   - "Review past O/A" tab: filter all saved O/As by date range + installer, and remove entries.
-   - "Download report" produces the PDF (installers + overheads in the cells, O/A marked).
+FIX 1 - "L:J203" style codes on the report
+When a project could not be found in the current project list (e.g. old/test/removed jobs),
+the report showed the raw key like "L:J203". It now strips the prefix and shows just the
+project number ("J203"). Real, current projects continue to show their proper name; this only
+affects ones no longer in the project list.
 
-NOTE: overhead people appear on their own row on the day(s) they have an overhead. Someone with
-only overheads that week still gets a row.
+FIX 2 - Overheads multi-day now works like projects
+The Overheads row no longer opens a single-day panel with a long list of dates. Instead it uses
+the SAME drag-to-select as the project rows:
+  - In Day view, click/drag across the Overheads row to select one or more days.
+  - The action bar appears ("Overheads - N days selected") with "Add / edit overheads".
+  - That opens a panel to add staff + category to ALL selected days at once, and to see/edit
+    who is already on overheads for each of those days.
+No more big in-modal date checklist - it matches how you allocate projects.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
