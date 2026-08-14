@@ -164,6 +164,30 @@ export default function CalculationsPage() {
   const constructionCount = currentDocs.filter(d => d.constructionIssue).length
   const reviewCount = currentDocs.length - constructionCount
 
+  // Select all / clear, over the CURRENT (non-superseded) calculations - the ones that
+  // actually show a tickbox. Available to customers too, so they can tick everything and
+  // approve in one go.
+  const allSelected = currentDocs.length > 0 && currentDocs.every(d => selected[d.id])
+  function toggleSelectAll() {
+    if (allSelected) { setSelected({}); return }
+    const next = {}
+    for (const d of currentDocs) next[d.id] = true
+    setSelected(next)
+  }
+
+  // Bulk Construction Issue (internal). Flips to unmark when everything ticked is already
+  // marked, so a mistaken "mark all" is one click to undo.
+  const selectedCurrent = currentDocs.filter(d => selected[d.id])
+  const selectedCurrentCount = selectedCurrent.length
+  const bulkCiOn = !(selectedCurrentCount > 0 && selectedCurrent.every(d => d.constructionIssue))
+  async function markSelectedConstruction() {
+    if (!selectedCurrentCount) return
+    const verb = bulkCiOn ? 'Mark' : 'Unmark'
+    if (!confirm(`${verb} ${selectedCurrentCount} selected calculation${selectedCurrentCount === 1 ? '' : 's'} as Construction Issue?`)) return
+    const d = await post({ action: 'construction-issue-many', ids: selectedCurrent.map(x => x.id), value: bulkCiOn })
+    if (d) setSelected({})
+  }
+
   return (
     <>
       <Head><title>Calculations - Design</title></Head>
@@ -177,9 +201,11 @@ export default function CalculationsPage() {
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>Design calculations & reports. {canEdit ? 'Upload, revise, mark up and comment.' : 'View, mark up and comment.'}</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={toggleSelectAll} disabled={!currentDocs.length} style={{ ...btnGhost, opacity: currentDocs.length ? 1 : 0.5 }}>{allSelected ? 'Clear selection' : `Select all (${currentDocs.length})`}</button>
             <button onClick={() => downloadZip(docs.map(d => viewUrl(d)), `${projectNo}-calculations`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
             <button onClick={() => downloadZip(selectedUrls, `${projectNo}-calculations-selected`)} disabled={!selectedUrls.length} style={{ ...btnGhost, opacity: selectedUrls.length ? 1 : 0.5 }}>Download selected ({selectedUrls.length})</button>
             {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
+            {canEdit && <button onClick={markSelectedConstruction} disabled={!selectedCurrentCount} style={{ ...btnGhost, color: '#2563eb', borderColor: '#bfdbfe', opacity: selectedCurrentCount ? 1 : 0.5 }}>{bulkCiOn ? 'Mark Construction Issue' : 'Unmark Construction Issue'} ({selectedCurrentCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
             {canEdit && <button onClick={startAdd} disabled={uploading} style={{ ...btnPrimary, opacity: uploading ? 0.6 : 1 }}>{uploading ? 'Uploading...' : '+ Add Calculation'}</button>}
           </div>

@@ -1,22 +1,59 @@
-pkg268 - Rock Drawings: clearer bulk Construction Issue button label
-====================================================================
+pkg269 - Smaller stamps + Calculations select-all / bulk actions
+=================================================================
 
 CHANGED FILES
 -------------
-  pages/design/[project]/rock-drawings.js     button label only
+  lib/stampPdf.js                             stamps 30% smaller
+  pages/api/design-calculations.js            new 'construction-issue-many' bulk action
+  pages/design/[project]/calculations.js      Select all + bulk Construction Issue buttons
 
-No new files. Nothing to create manually in GitHub - this is a straight replacement.
+No new files. All three are straight replacements - nothing to create manually in GitHub.
+(lib/stampPdf.js already exists from pkg267.)
 
 
-WHAT CHANGED
-------------
-The bulk button in the Rock Drawings toolbar now reads:
+1. STAMPS 30% SMALLER
+---------------------
+The APPROVED / CONSTRUCTION ISSUE stamps are now 30% smaller. They still scale with sheet
+size, so they stay readable on a large drawing without dominating an A4. The distance from
+the corner is unchanged, so they sit slightly further in from the edge than before.
 
-  "Mark Construction Issue (n)"     was "Construction Issue (n)"
-  "Unmark Construction Issue (n)"   was "Unmark Constr. (n)"
+Re-rendered and visually checked at A4, A4 rotated 90, and A1 landscape.
 
-Behaviour is unchanged - it still flips to the Unmark wording when every ticked drawing
-is already marked, and both are spelled out in full now rather than abbreviated.
+IMPORTANT: existing stamped copies are NOT regenerated. Anything already stamped keeps its
+old, larger stamp until the status is toggled again. Use Select all -> Unmark Construction
+Issue -> Mark Construction Issue to re-stamp a whole project at the new size.
+
+
+2. CALCULATIONS - SELECT ALL (and bulk Construction Issue)
+-----------------------------------------------------------
+Calculations already had tickboxes and "Approve selected" but no way to tick everything.
+It now has the same toolbar as Rock Drawings:
+
+  "Select all (n)"                  everyone, including customers. Ticks every current
+                                    calculation; flips to "Clear selection" once all are
+                                    ticked. Superseded revisions are ignored.
+
+  "Mark Construction Issue (n)"     internal only. Flips to "Unmark Construction Issue"
+                                    when everything ticked is already marked.
+
+For a customer this means: Select all -> Approve selected, in two clicks.
+
+"Approve selected" only counts calculations where that customer is the assigned approver,
+so a customer ticking everything will only approve the ones that are actually theirs.
+
+
+NOTE ON ROCK DRAWINGS
+---------------------
+Rock Drawings already had Select all + Approve selected for customers - that shipped in
+pkg267, so nothing further was needed there.
+
+
+NOT DONE - TECH SUBS
+--------------------
+Tech Subs has no selection at all: no tickboxes, and no approve-many action in its API.
+Adding select-all + bulk approve there is a bigger piece (selection UI plus a bulk approve
+path that still writes an audit entry and generates an approval certificate per document).
+Say if you want it and I will build it.
 
 
 TESTED
