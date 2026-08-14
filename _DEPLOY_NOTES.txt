@@ -1,35 +1,20 @@
-DEPLOY NOTES - Fix orphaned J203 + hide orphaned allocations from the report
-============================================================================
+DEPLOY NOTES - Give Management access to Design Customers
+=========================================================
 
-TWO files. ONE is the temp diagnostic you already added (now with a cleanup action),
-ONE is an EDIT.
+THREE files, ALL EDITS. Replace each in GitHub.
 
-  EDIT  pages/api/planning-trace.js   (adds a one-click cleanup for the orphaned key)
-  EDIT  pages/api/planning-week.js    (report now hides allocations whose project no longer exists)
+  EDIT  pages/admin/design-customers.js   (page now allows management, back-link adapts)
+  EDIT  pages/api/design-customers.js      (API now allows management)
+  EDIT  pages/design/index.js              (adds a "Manage Customers" link in the Design header)
 
-WHAT WE FOUND
-J203 does NOT exist as a project (deleted or never created), but the planner data still had a
-booking under "L:J203" for two operatives Mon-Fri 10-14 Aug. The planner can't show it (no
-project row), but the per-operative report was surfacing it. It's orphaned leftover data.
+WHAT CHANGED
+- The Design Customers section (managing external customer / design-team logins) was ADMIN ONLY.
+  It now also allows users with MANAGEMENT permissions - both the page and its API.
+- Because management users don't have the Admin area, they previously had no way to reach it.
+  There is now a "Manage Customers" link in the Design portal header, shown only to admin and
+  management (not to customers/external users, and not to other internal roles).
+- The back-link on the page points to Design for management users, and Admin for admins.
 
-FIX 1 - Report now ignores orphans (permanent)
-The Weekly Labour report now skips any allocation whose project no longer exists. Completed and
-Archived projects are unaffected (they still exist, so they still show); only true orphans like
-J203 are hidden. So even before you clean it up, J203 will stop appearing on the report.
+Admins are unaffected - they still reach it from the Admin page as before.
 
-FIX 2 - Clean up the J203 data (one-off)
-After deploying, remove the orphaned booking with ONE of these:
-
-  Option A (browser console, while logged in to the portal):
-    fetch('/api/planning-trace', { method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ deleteKey: 'L:J203' }) }).then(r=>r.json()).then(console.log)
-
-  It should return { ok:true, removed:true, key:'L:J203' }.
-
-  Then re-check:  https://app.rockroofing.co.uk/api/planning-trace?q=J203
-  allocationKeysFound should now be empty [].
-
-AFTER THAT: tell me and I'll give you a final package that DELETES the temp planning-trace.js
-endpoint (we don't want a data-deletion endpoint left in the app).
-
-NO vercel.json change. No cron. BUILD: Compiled successfully.
+NO vercel.json change. No cron. No middleware change. BUILD: Compiled successfully.

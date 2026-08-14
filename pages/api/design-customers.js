@@ -19,7 +19,7 @@ function currentUser(req) { return verifySessionToken(readCookie(req, SESSION_CO
 
 export default async function handler(req, res) {
   const me = currentUser(req)
-  if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' })
+  if (!me || (me.role !== 'admin' && me.role !== 'management')) return res.status(403).json({ error: 'Not authorised' })
 
   if (req.method === 'GET') {
     const users = await getExternalUsers()

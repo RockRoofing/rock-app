@@ -23,7 +23,7 @@ export default function DesignCustomers() {
     try {
       const d = await fetch('/api/portal-auth?action=me').then(r => r.json())
       if (!d.user) { router.replace('/login'); return }
-      if (d.user.role !== 'admin') { router.replace('/'); return }
+      if (d.user.role !== 'admin' && d.user.role !== 'management') { router.replace('/'); return }
       setMe(d.user)
       await Promise.all([loadUsers(), loadProjects()])
     } catch {}
@@ -98,7 +98,7 @@ export default function DesignCustomers() {
     <>
       <Head><title>Design Customers — Admin</title></Head>
       <div style={{ background: '#1a1a19', color: '#fff', padding: '16px 24px' }}>
-        <a href="/admin" style={{ color: '#bbb', fontSize: 13, textDecoration: 'none' }}>‹ Admin</a>
+        <a href={me && me.role === 'management' ? '/design' : '/admin'} style={{ color: '#bbb', fontSize: 13, textDecoration: 'none' }}>{me && me.role === 'management' ? '\u2039 Design' : '\u2039 Admin'}</a>
         <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>Design Customers</div>
         <div style={{ color: '#999', fontSize: 13, marginTop: 2 }}>External customer / design-team logins for the Design portal. Each is scoped to specific projects and can only view, comment, approve and download.</div>
       </div>

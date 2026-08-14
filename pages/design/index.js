@@ -30,6 +30,9 @@ export default function DesignHome() {
           <span style={{ color: '#3a3a38', padding: '0 2px' }}>|</span>
         </>}
         <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>Design</span>
+        {!auth.isExternal && (auth.user?.role === 'admin' || auth.user?.role === 'management') && (
+          <a href="/admin/design-customers" style={{ color: '#c4b5fd', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>Manage Customers</a>
+        )}
         <div style={{ flex: 1, minWidth: 16 }} />
         <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
           style={{ color: '#ca8a04', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', padding: '4px 10px' }}>Report app improvement</button>
