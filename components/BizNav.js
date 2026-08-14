@@ -35,7 +35,7 @@ export function BizNav() {
         })}
         <div style={{ marginLeft: 'auto' }}>
           <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-            style={{ background: 'none', border: 'none', color: GOLD, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>⚠ Report app improvement</button>
+            style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
         </div>
       </div>
     </div>

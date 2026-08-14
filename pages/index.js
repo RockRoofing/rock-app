@@ -208,8 +208,8 @@ export default function Portal() {
           {user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-                <span>⚠</span> Report app improvement
+                style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>&#9888;</span> Report app improvement
               </button>
               {user.role === 'admin' && <a href="/admin" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
               {user.role === 'management' && <a href="/operations/users" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}

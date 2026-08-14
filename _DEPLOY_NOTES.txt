@@ -1,47 +1,72 @@
-pkg272 - App Improvement attachments / screenshot paste + bigger Operations tabs
-=================================================================================
+pkg273 - Site App improvement reports fixed + orange/bigger buttons
+====================================================================
+
+NOTE: pkg273 REPLACES pkg272 - it contains everything pkg272 had (attachments, screenshot
+paste, bigger Operations tabs) plus this work. If pkg272 is not deployed yet, deploy this
+one instead and skip pkg272.
+
 
 CHANGED FILES
 -------------
-  components/ReportProblemButton.js       attach files + paste screenshots
-  pages/api/report-problem.js             store attachments, show them in the email
-  pages/admin/problem-reports.js          show attachments on the admin page
-  components/OperationsNav.js             sub-tab text 13.5 -> 15
+  middleware.js                           THE FIX - see below
+  components/ReportProblemButton.js       (pkg272) attachments + screenshot paste
+  pages/api/report-problem.js             (pkg272) store attachments, email them
+  pages/admin/problem-reports.js          (pkg272) show attachments
+  components/OperationsNav.js             (pkg272) bigger tabs + orange button
+  components/PreContractNav.js            orange button
+  components/CommercialNav.js             orange button
+  components/BizNav.js                    orange button
+  pages/index.js                          orange button
+  pages/design/index.js                   orange button
+  pages/business-financials.js            orange button
+  pages/project/[id].js                   orange button
+  pages/forms/index.js                    orange button (Site App)
 
-No new files. All four are straight replacements.
-
-
-1. APP IMPROVEMENT - ATTACHMENTS AND PASTED SCREENSHOTS
---------------------------------------------------------
-The "Report app improvement" window now has a "Screenshots / attachments" box.
-
-  - Click "+ Attach a file, or paste a screenshot" to pick files (multiple at once).
-  - OR just paste. Win+Shift+S to snip, then Ctrl+V anywhere in the window, and the image
-    is uploaded and attached automatically. Pasting ordinary text still behaves normally -
-    only image data is intercepted.
-  - Each attachment shows a thumbnail with a Remove link before sending.
-  - Send is blocked while an upload is still running, so nothing gets sent half-finished.
-
-Attachments are stored on the report and appear in two places:
-  - The notification email to the office - images are embedded inline, so a pasted
-    screenshot can be read straight from the email without clicking anything.
-  - Admin > App Improvements - thumbnail grid on each report, click to view, or Download.
-
-Limit of 10 attachments per report.
-
-NOT COVERED: the Site App has its own separate report button (pages/forms/index.js) and
-still has no attachments. Say if you want it there too - it is a similar change but the
-Site App needs /api/blob-upload adding to the middleware passthrough first.
+No new files. All are straight replacements.
 
 
-2. OPERATIONS TABS SLIGHTLY LARGER
------------------------------------
-The sub-tab row across the top of the Operations pages (Projects / Planning / SRATs etc)
-goes from 13.5px to 15px.
+1. WHY THE SITE APP REPORT WAS NOT WORKING
+-------------------------------------------
+ROOT CAUSE: middleware.js. On the siteapp. host, only a whitelist of /api/* paths is let
+through - everything else gets rewritten to /forms. `/api/report-problem` was never added
+to that whitelist, so the Site App's POST was being rewritten to the /forms page instead
+of reaching the API. It returned the HTML page, the JSON parse gave nothing useful, and
+the report vanished. Nothing was ever saved.
 
-To be clear which row changed: this is the WHITE tab strip directly under the dark header,
-not the dark top menu itself. If you meant the dark row, that is a separate one-line change
-- say the word.
+This is the same class of problem as the note in the build rules: "New Site App API routes
+must be in middleware.js passthrough or they're blocked."
+
+FIX: added to the passthrough -
+  /api/report-problem     the report itself
+  /api/blob-upload        so Site App attachments can upload too
+
+WORTH KNOWING: reports raised from the Site App before this deploy were never saved and
+cannot be recovered - they were never written to the database. If anyone has been telling
+you they reported something and you never saw it, that is why.
+
+
+2. BUTTON NOW ORANGE AND BIGGER
+--------------------------------
+It was gold (#ca8a04) 13px plain text - it read as a link, not a button. Now a solid
+orange (#ea580c) pill with white text on all nine places it appears:
+
+  Portal (8):  Home, Operations, Pre-Contract, Commercial, Business Financials,
+               Business nav, Design portal, Project page
+               14.5px bold, white on orange, rounded, warning icon.
+
+  Site App (1): 16px bold with a larger tap target (14px x 22px padding) since it is used
+               one-handed on a phone.
+
+
+3. SITE APP ATTACHMENTS
+------------------------
+With /api/blob-upload now allowed through, the Site App report could take attachments and
+pasted screenshots the same way the portal does. I have NOT added that UI in this package -
+the Site App report form is a separate component in pages/forms/index.js. Say the word and
+it is a small follow-up now the middleware blocker is gone.
+
+Worth having: an operative photographing a problem on site is exactly the case attachments
+are for.
 
 
 TESTED
@@ -49,7 +74,8 @@ TESTED
 npm run build - Compiled successfully.
 
 
-STILL OUTSTANDING FROM EARLIER
--------------------------------
-The zip I am working from is at pkg264 and does not contain pkg265. Please confirm whether
-pkg265 was deployed, and if so send a fresh export before the next package.
+STILL OUTSTANDING
+-----------------
+The zip I am working from is at pkg264 and does not contain pkg265 (hideDownload is not in
+components/DrawingMarkup.js). Please confirm whether pkg265 was deployed - if it was, send
+a fresh export before the next package so I do not revert it.

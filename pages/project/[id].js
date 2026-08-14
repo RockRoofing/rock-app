@@ -242,7 +242,7 @@ export default function ProjectPage() {
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4 }}>⚠ Report app improvement</button>
+                style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
               <button onClick={() => setEditMode(!editMode)} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 {editMode ? 'Cancel' : 'Edit Project Details'}
               </button>

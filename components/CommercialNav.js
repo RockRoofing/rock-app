@@ -72,7 +72,7 @@ export default function CommercialNav({ active, right = null }) {
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-              style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>&#9888; Report app improvement</button>
+              style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
             {right}
           </div>
         </div>
