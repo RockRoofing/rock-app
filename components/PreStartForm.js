@@ -145,10 +145,37 @@ export default function PreStartForm({ projectNo }) {
       // Then trigger send (server generates PDF, emails attendees, locks record).
       const r = await fetch('/api/pre-start-send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectNo }) })
       const d = await r.json()
-      if (r.ok) { setData(d.data); setEditing(false); alert('Pre-Start Minutes sent and locked.') }
+      if (r.ok) {
+        await createLiveTasksForActions(payload)
+        setData(d.data); setEditing(false); alert('Pre-Start Minutes sent and locked.')
+      }
       else alert(d.error || 'Send failed')
     } catch (e) { alert(e?.message || 'Send failed') }
     setSending(false)
+  }
+
+  // For each Meeting Action assigned to a Rock Roofing portal user, create a Live
+  // Project Task (once). Runs on Save & Send. Best-effort - never blocks the send.
+  async function createLiveTasksForActions(payload) {
+    try {
+      const actions = Array.isArray(payload?.meetingActions) ? payload.meetingActions : []
+      const projName = data?.projectName || payload?.projectName || ''
+      for (const a of actions) {
+        if (a.responsibleKind !== 'portal' || !a.responsible || a._taskCreated) continue
+        const memberId = String(a.responsible).replace(/^user:/, '')
+        const member = team.find(m => String(m.id) === memberId)
+        const task = {
+          id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          projectNo, projectName: projName,
+          description: a.task || 'Pre-Start meeting action',
+          assignee: member ? teamName(member) : (a.responsibleLabel || ''),
+          closeOutDate: a.dueDate || '', closed: false, comments: '',
+          source: 'pre-start', attachments: [], createdAt: Date.now(),
+        }
+        const r = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ task }) })
+        if (r.ok) a._taskCreated = true
+      }
+    } catch (e) { /* non-blocking */ }
   }
 
   function downloadPDF() { window.open(`/api/pre-start-pdf?no=${encodeURIComponent(projectNo)}`, '_blank') }
@@ -201,6 +228,7 @@ export default function PreStartForm({ projectNo }) {
 
               {sec.fields.map(f => (
                 <FieldRow key={f.id} field={f} value={src?.[f.id]} editing={editing} team={team} supervisors={supervisors}
+                  custAttendees={src?.attendeesCustomer || []}
                   ihmDocs={f.id === 'scopeFiles' ? scopeFilesIHM.filter(d => !(src?.dismissedIhmDocs || []).includes(d.url)) : null}
                   onView={setDoc}
                   onDismissIhm={f.id === 'scopeFiles' ? (remaining => {
@@ -273,7 +301,7 @@ function ResolvedRow({ resolved, comments }) {
   )
 }
 
-function FieldRow({ field, value, editing, team, supervisors = [], ihmDocs, onView, onChange, onDismissIhm }) {
+function FieldRow({ field, value, editing, team, supervisors = [], custAttendees = [], ihmDocs, onView, onChange, onDismissIhm }) {
   const { type, label, help } = field
 
   if (type === 'qrow') {
@@ -361,6 +389,78 @@ function FieldRow({ field, value, editing, team, supervisors = [], ihmDocs, onVi
               </div>
             ))}
             <button onClick={() => onChange([...rows, { role: '', name: '', email: '', phone: '' }])} style={ghostBtn}>+ Add customer attendee</button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (type === 'portalaccess') {
+    const rows = Array.isArray(value) ? value : []
+    return (
+      <div style={{ padding: '10px 0' }}>
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>{label}</div>
+        {!editing ? (
+          !rows.length ? <div style={{ fontSize: 13, color: '#bbb' }}>&mdash;</div> :
+            rows.map((r, i) => <div key={i} style={{ fontSize: 13.5, color: INK }}>{[[r.firstName, r.lastName].filter(Boolean).join(' '), r.company, r.email, r.phone].filter(Boolean).join(' &middot; ').replace(/&middot;/g, '\u00b7')}</div>)
+        ) : (
+          <>
+            {rows.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                <input value={r.firstName || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, firstName: e.target.value }; onChange(n) }} placeholder="First name" style={{ ...inp2, flex: '1 1 110px' }} />
+                <input value={r.lastName || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, lastName: e.target.value }; onChange(n) }} placeholder="Last name" style={{ ...inp2, flex: '1 1 110px' }} />
+                <input value={r.email || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, email: e.target.value }; onChange(n) }} placeholder="Email" style={{ ...inp2, flex: '1 1 160px' }} />
+                <input value={r.phone || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, phone: e.target.value }; onChange(n) }} placeholder="Phone" style={{ ...inp2, flex: '1 1 120px' }} />
+                <input value={r.company || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, company: e.target.value }; onChange(n) }} placeholder="Company" style={{ ...inp2, flex: '1 1 130px' }} />
+                <button onClick={() => onChange(rows.filter((_, j) => j !== i))} style={{ ...ghostBtn, flexShrink: 0 }}>Remove</button>
+              </div>
+            ))}
+            <button onClick={() => onChange([...rows, { firstName: '', lastName: '', email: '', phone: '', company: '' }])} style={ghostBtn}>+ Add person</button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  if (type === 'meetingactions') {
+    const rows = Array.isArray(value) ? value : []
+    // Responsible options: Rock Roofing portal users (team), plus customer attendees named in the meeting.
+    const portalOpts = team.map(m => ({ value: `user:${m.id}`, label: `${teamName(m)}${m.role ? ` - ${m.role}` : ''}`, kind: 'portal' }))
+    const custOpts = (custAttendees || []).filter(a => a.name).map((a, i) => ({ value: `cust:${a.name}`, label: `${a.name}${a.role ? ` (${a.role})` : ''} - customer`, kind: 'customer' }))
+    return (
+      <div style={{ padding: '10px 0' }}>
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>{label}</div>
+        {!editing ? (
+          !rows.length ? <div style={{ fontSize: 13, color: '#bbb' }}>&mdash;</div> :
+            rows.map((r, i) => (
+              <div key={i} style={{ fontSize: 13.5, color: INK, padding: '4px 0', borderBottom: '1px solid #f3f3f1' }}>
+                <strong>{r.task || '(no task)'}</strong>
+                <span style={{ color: '#888' }}>{r.dueDate ? `  \u00b7  by ${r.dueDate}` : ''}{r.responsibleLabel ? `  \u00b7  ${r.responsibleLabel}` : ''}</span>
+              </div>
+            ))
+        ) : (
+          <>
+            {rows.map((r, i) => (
+              <div key={i} style={{ border: '1px solid #eee', borderRadius: 8, padding: 8, marginBottom: 8 }}>
+                <textarea value={r.task || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, task: e.target.value }; onChange(n) }} placeholder="Task / action" rows={2} style={{ ...inp2, width: '100%', boxSizing: 'border-box', resize: 'vertical', marginBottom: 6 }} />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <label style={{ fontSize: 11.5, color: '#888' }}>Resolution date&nbsp;
+                    <input type="date" value={r.dueDate || ''} onChange={e => { const n = [...rows]; n[i] = { ...r, dueDate: e.target.value }; onChange(n) }} style={{ ...inp2, padding: '5px 7px' }} />
+                  </label>
+                  <select value={r.responsible || ''} onChange={e => {
+                    const opt = [...portalOpts, ...custOpts].find(o => o.value === e.target.value)
+                    const n = [...rows]; n[i] = { ...r, responsible: e.target.value, responsibleLabel: opt ? opt.label : '', responsibleKind: opt ? opt.kind : '' }; onChange(n)
+                  }} style={{ ...inp2, flex: '1 1 220px' }}>
+                    <option value="">Person responsible…</option>
+                    {portalOpts.length > 0 && <optgroup label="Rock Roofing (portal users)">{portalOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>}
+                    {custOpts.length > 0 && <optgroup label="Customer (in the meeting)">{custOpts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</optgroup>}
+                  </select>
+                  <button onClick={() => onChange(rows.filter((_, j) => j !== i))} style={{ ...ghostBtn, flexShrink: 0 }}>Remove</button>
+                </div>
+                {r.responsibleKind === 'portal' && <div style={{ fontSize: 11, color: '#6b4ea8', marginTop: 4 }}>A Live Project Task will be created for this person when the minutes are sent.</div>}
+              </div>
+            ))}
+            <button onClick={() => onChange([...rows, { task: '', dueDate: '', responsible: '', responsibleLabel: '', responsibleKind: '' }])} style={ghostBtn}>+ Add action</button>
           </>
         )}
       </div>
