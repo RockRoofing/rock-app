@@ -1,34 +1,27 @@
-DEPLOY NOTES - Pre-Start Minutes: Design Portal access + Meeting Actions
-========================================================================
+DEPLOY NOTES - Fix: EOM Contracts Manager source + Retention "Applied for"
+==========================================================================
 
-THREE files, ALL EDITS. Replace each in GitHub.
+TWO files, BOTH EDITS. Replace both in GitHub.
 
-  EDIT  lib/preStartSchema.js     (adds the Design question + Meeting Actions section)
-  EDIT  components/PreStartForm.js (renders the two new field types + creates live tasks)
-  EDIT  lib/preStartPdf.js         (shows both in the sent PDF)
+  EDIT  pages/api/dashboard.js   (CM now from IHM; adds latest-application "applied for")
+  EDIT  pages/retention.js       (Applied for auto-populates from the latest application)
 
-WHAT'S NEW (Ops -> Projects -> Pre-Start Minutes)
+FIX 1 - CM on Project Financials / EOM was the WRONG source
+The EOM report pulled the Contracts Manager from the project SETTINGS store, while
+Ops -> Edit Project Details reads it from the IHM (Internal Handover Minutes). They could
+differ. The EOM report now reads CM from the IHM first (same source as Edit Project Details),
+falling back to settings only if the IHM has none. Matched by project number.
 
-1. DESIGN APPROVALS - new question:
-   "Who from the customer's organisation or stakeholders needs access to the Rock Roofing
-    Design Portal?"
-   Add each person as a row: First name, Last name, Email, Phone, Company. Repeatable.
+FIX 2 - Retention "Applied for" was always blank / manual
+The "Applied for" column on the Retention register never pulled from applications - it was a
+manual field. It now AUTO-POPULATES from the newest application on each project (the gross
+applied-for total of the latest application by sequence). If you type a value in manually, your
+value still wins (override).
 
-2. NEW SECTION "Meeting Actions":
-   Each action has: Task, Required Resolution Date, and Person Responsible.
-   The Person Responsible dropdown lists BOTH:
-     - Rock Roofing portal users, and
-     - the customer attendees entered at the top of the meeting ("Customer's Team").
-   When an action is assigned to a Rock Roofing portal user, a LIVE PROJECT TASK is created for
-   that person (with the task text, due date = resolution date) at the moment you use
-   "Save & send". Actions assigned to a customer attendee are recorded in the minutes only.
-
-Both new items appear in the emailed/downloaded Pre-Start PDF.
-
-NOTES
-- Live tasks are created on SAVE & SEND only (not on draft auto-save), so nothing is created
-  until the minutes are actually issued.
-- The customer attendee options come from the "Customer's Team" list in Meeting Details, so fill
-  that in first for those options to appear.
+IMPORTANT - cache refresh
+The dashboard caches for up to 4 hours. This change bumps the cache marker so the FIRST load
+after deploying rebuilds the cache with the corrected CM and the new applied-for values - no
+manual sync needed. (If you want it instantly, the Sync button on Project Financials / Outstanding
+Invoices also forces a rebuild.)
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

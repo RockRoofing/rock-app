@@ -187,7 +187,8 @@ export default function RetentionPage() {
           vat: p.vat || 0,
           vatRateLabel: p.vatRateLabel || '—',
           paid: p.paid || 0,
-          appliedFor: '',
+          appliedFor: p.appliedForLatest ? String(p.appliedForLatest) : '',
+          appliedForLatest: p.appliedForLatest || 0,
           retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
           detailsMissing: p.detailsMissing || [],
@@ -293,6 +294,9 @@ export default function RetentionPage() {
         retentionPct: e.retentionPct || x.retentionPct,
         completionDate: e.completionDate || x.completionDate,
         qsName: e.qsName || x.qsName,
+        // Applied-for auto-populates from the latest application; a manually typed
+        // value on the saved entry still wins.
+        appliedFor: (e.appliedFor != null && e.appliedFor !== '') ? e.appliedFor : (x.appliedForLatest ? String(x.appliedForLatest) : (e.appliedFor || '')),
         comments: x.comments != null && x.comments !== '' ? x.comments : e.comments,
         // markedComplete is a manual saved flag on `e` — keep it.
       }
@@ -474,7 +478,7 @@ export default function RetentionPage() {
                         ['Customer', 'left', 'Customer name from project details.', 'customer'],
                         ['Project', 'left', 'Project name from project details.', 'project'],
                         ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.', 'finalAccount'],
-                        ['Applied for', 'right', 'Amount applied for. Manual for now; will auto-populate from the Application tab once built.', 'appliedFor'],
+                        ['Applied for', 'right', 'Auto-populates from the latest application on this project. You can still type a value to override it.', 'appliedFor'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],

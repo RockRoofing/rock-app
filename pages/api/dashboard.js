@@ -1,4 +1,5 @@
-import { getAllProjectSettings } from '../../lib/db'
+import { getAllProjectSettings, getOpsProjects } from '../../lib/db'
+import { computeApplicationSummary } from '../../lib/applications'
 import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
 import { getTokens, saveTokens } from '../../lib/db'
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention') {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -71,6 +72,10 @@ export default async function handler(req, res) {
     // For resolving project people (team roles + customer contacts) from the IHM.
     let opsProjects = [], portalUsers = []
     try { opsProjects = (await redis.get('ops:projects')) || [] } catch {}
+    // Lookup IHM data by project number, so people fields (CM etc.) come from the
+    // IHM - the same source as Ops -> Edit Project Details - not project settings.
+    const ihmByNo = {}
+    for (const op of (opsProjects || [])) { if (op && op.projectNo) ihmByNo[String(op.projectNo).trim()] = op.data || {} }
     try { const { getPortalUsers } = await import('../../lib/db'); portalUsers = await getPortalUsers() } catch {}
     const { resolveProjectPeople } = await import('../../lib/projectPeople')
 
@@ -155,6 +160,23 @@ export default async function handler(req, res) {
       // Payment status
       const allPaid = invoiceLines.length > 0 && invoiceLines.every(inv => (inv.amountDue || 0) === 0)
       const amountOutstanding = invoiceLines.reduce((s, inv) => s + (inv.amountDue || 0), 0)
+
+      // ── Latest application "applied for" (gross) ──────────────────────────
+      // The retention register's "Applied for" auto-populates from the newest
+      // application on this project (by sequence). Gross = the application total
+      // before MCD/retention deductions.
+      let appliedForLatest = 0
+      try {
+        const apps = Array.isArray(settings.applications) ? settings.applications.slice() : []
+        if (apps.length) {
+          apps.sort((a, b) => (a.seq || 0) - (b.seq || 0))
+          const latest = apps[apps.length - 1]
+          let prevGross = 0
+          for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
+          const sum = computeApplicationSummary(latest, prevGross)
+          appliedForLatest = sum.grossCurrent || sum.applicationTotal || 0
+        }
+      } catch {}
 
       // ── Contract / AFA ────────────────────────────────────────────────────
       const contractValue = parseFloat(settings.contractValue || 0)
@@ -244,7 +266,8 @@ export default async function handler(req, res) {
         status: stage,
         stageSource: 'retention',   // marker: stage now driven by Retention Tracker
         customer: settings.customerName || '',
-        contractsManager: settings.contractsManager || '',
+        contractsManager: (ihmByNo[String(cp.jobNo).trim()]?.contractsManager) || settings.contractsManager || '',
+        appliedForLatest,
         estimator: settings.estimator || '',
         qsName: settings.qsName || '',
         qsEmail: settings.qsEmail || '',
