@@ -325,6 +325,7 @@ function FormsHomeMenu({ user }) {
               ['📝', 'SRATs', 'View & create SRATs', '/forms/cm/srats', 0, null],
               ['🗂️', 'Live Tasks', 'Manage project tasks', '/forms/cm/tasks', overdueTaskCount, '#dc2626'],
               ['💷', 'Variations', 'View project variations', '/forms/cm/variations', 0, null],
+              ['📈', 'Project Finance', 'Margin, labour & materials budgets', '/forms/cm/project-finance', 0, null],
               ['📑', 'Contracted Rates', 'View the rate schedule', '/forms/cm/contracted-rates', 0, null],
             ].map(([icon, title, sub, href, badge, badgeColour]) => (
               <button key={href} onClick={() => router.push(href)} style={homeCard}>

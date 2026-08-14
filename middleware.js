@@ -38,6 +38,7 @@ export async function middleware(req) {
       pathname.startsWith('/api/ops-projects') ||
       pathname.startsWith('/api/project-files') ||
       pathname.startsWith('/api/project-drawings') ||
+      pathname.startsWith('/api/cm-project-financials') ||
       pathname.startsWith('/api/site-badges') ||
       pathname.startsWith('/api/rams-signatures') ||
       pathname.startsWith('/api/rams-approvals') ||

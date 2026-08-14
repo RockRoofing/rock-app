@@ -1,98 +1,86 @@
-pkg279 - Ops Drawings fed from the Design Portal; Site App = Construction Issue only
-=====================================================================================
+pkg280 - Site App: Project Finance for Contracts Managers
+==========================================================
 
-NOTE: pkg279 REPLACES pkg272 through pkg277. Deploy this one and ignore those.
-pkg278 (applications.js decimals) is SEPARATE and still needs deploying - it is not
-included here.
+NOTE: pkg280 REPLACES pkg272 through pkg279. Deploy this one and ignore those.
+pkg278 (applications.js decimals) is SEPARATE and still needs deploying.
 
 
 NEW FILES - must be created manually in GitHub ("Add file" -> "Create new file")
 --------------------------------------------------------------------------------
-  pages/api/project-drawings.js
-  components/ProjectDrawings.js
+  pages/api/cm-project-financials.js
+  pages/forms/cm/project-finance.js
+  pages/api/project-drawings.js        (from pkg279)
+  components/ProjectDrawings.js        (from pkg279)
 
 CHANGED FILES (straight replacements)
 --------------------------------------
-  pages/operations/projects.js            Drawings tab now read-only, design-sourced
-  pages/forms/index.js                    Site App drawings = Construction Issue only
-  middleware.js                           new route allowed through on the Site App host
-  components/OperationsNav.js             (earlier) nav 17px
-  components/ReportProblemButton.js       (earlier) attachments + paste
-  pages/api/report-problem.js             (earlier) store attachments
-  pages/admin/problem-reports.js          (earlier) show attachments
+  pages/forms/index.js                 new Project Finance tile (CM section)
+  middleware.js                        new route allowed through on the Site App host
+  pages/operations/projects.js         (pkg279) Drawings tab read-only, design-sourced
+  components/OperationsNav.js          (earlier) nav 17px
+  components/ReportProblemButton.js    (earlier) attachments + paste
+  pages/api/report-problem.js          (earlier) store attachments
+  pages/admin/problem-reports.js       (earlier) show attachments
 
 
-HOW IT WORKS
-------------
-Nothing is copied or synced. The Ops page reads design:rock-drawings:<projectNo> LIVE, so
-the Design Portal is the single source of truth. Approve a drawing or mark it Construction
-Issue in the Design Portal and the Ops page and Site App reflect it immediately - there is
-no sync job to wait for and nothing to go stale.
+PROJECT FINANCE - WHAT IT DOES
+-------------------------------
+New tile in the Contracts Manager section of the Site App. It does NOT appear for anyone
+else - the page itself also redirects away if the user is not accessLevel
+'contracts-manager', so it cannot be reached by typing the URL.
 
-Only the NEWEST revision of each drawing is shown. Superseded revisions stay in the Design
-Portal as history and never reach Ops or site. (If a drawing somehow has every revision
-marked superseded, the newest is still shown rather than the drawing disappearing.)
+Project-first, as asked: you land on a project list and pick one before seeing anything.
+That list shows only LIVE projects (status 'active' - completed and archived are excluded)
+where the logged-in user is named as Contracts Manager.
 
-Where a stamped copy exists, that is what is shown and downloaded - so the APPROVED /
-CONSTRUCTION ISSUE stamp is on the PDF itself, not just the label on screen.
+Once a project is picked:
+
+  MARGIN        one big number, colour-coded (red negative, amber under 10%, green above),
+                with the valuation date it is stated as at.
+
+  LABOUR        budget / spend / remaining, with a usage bar
+  MATERIALS     budget / spend / remaining, with a usage bar
+  TOTAL         the two combined
+
+Bars turn amber over 90% used and red when over budget, and "Remaining" goes red when
+negative, so an overspend is obvious at a glance on a phone.
 
 
-1. OPS > PROJECTS > DRAWINGS
+HOW THE MARGIN IS CALCULATED
 -----------------------------
-Upload and Delete are GONE. View and Download only.
+Deliberately the SAME basis as the EOM report, using the same shared computeProjectWip
+from lib/wipCalc.js: to the LAST COMPLETED month's valuation date, INCLUDING WIP.
 
-Two banners across the top:
-  green   "X of Y approved"              + how many still awaiting customer approval
-  blue    "X of Y Construction Issue"    + how many are not released to site
+  margin = (profit to valuation date + WIP profit) / (invoiced to valuation date + WIP)
 
-Every drawing shows as a card with its first page as a thumbnail and three labels:
-  Rev A / B / C
-  Approved            or  Not approved
-  Construction Issue  or  Not for site
+The valuation date is the project's own - a per-month override wins, otherwise the
+project's valuation day applied to that month. This is the same rule Commercial use, so a
+CM on site and Commercial in the office see the same number.
 
+If a project has no valuation date set for last month, the margin shows as a dash with
+"No valuation date set for last month" rather than a misleading figure.
 
-2. SITE APP > DRAWINGS
------------------------
-Now shows ONLY drawings marked Construction Issue. Operatives cannot see anything that has
-not been released for construction.
-
-Empty state reworded - it used to say "No drawings uploaded for this project yet", which
-would now be misleading. It says drawings have not been issued for construction.
-
-RAMS in the Site App are untouched and still come from project-files.
+Budgets are taken from the dashboard snapshot and INCLUDE instructed variations, which
+matches Project Financials.
 
 
-*** READ THIS BEFORE DEPLOYING ***
------------------------------------
-Any drawings previously UPLOADED under Ops > Projects > Drawings will DISAPPEAR from both
-the Ops page and the Site App the moment this goes live.
+TWO THINGS TO BE AWARE OF
+--------------------------
+1. THE FIGURES COME FROM THE DASHBOARD CACHE, which rebuilds every 4 hours. So the numbers
+   can be up to 4 hours behind a fresh Xero sync. For a high-level "how is my job doing"
+   view on site that is fine, but it is not a live feed. If a project has never been
+   through a dashboard sync, the page says there is no financial data yet rather than
+   showing zeroes.
 
-They are not deleted - they are still stored - but nothing displays them any more, because
-both screens now read the Design Portal instead.
+2. ACCESS CONTROL MATCHES THE EXISTING CM SCREENS, NOT MORE. The Site App has no portal
+   login cookie, so the server checks the CM name supplied by the app against the project's
+   Contracts Manager and refuses if they do not match. That is the same trust model the
+   existing CM Applications / Variations / Contracted Rates screens already use, and it is
+   a real check rather than nothing - but it is client-supplied identity.
 
-So on any live project where operatives currently get their drawings from an Ops upload
-rather than the Design Portal, site will lose access until those drawings exist in the
-Design Portal's Rock Drawings AND are marked Construction Issue.
-
-WORTH CHECKING FIRST: pick two or three live jobs and confirm their drawings are in the
-Design Portal and marked Construction Issue before you push this.
-
-If it turns out a lot of projects rely on the old uploads, tell me and I can either:
-  - add a "Previously uploaded" section on the Ops page so the old files stay reachable
-    and can be moved across, or
-  - write a one-off migration that copies them into the Design Portal.
-
-Neither is difficult - but it is much better to decide before site loses drawings than
-after.
-
-
-ALSO WORTH KNOWING
-------------------
-Drawings only carry the stamp on the PDF if their status was set AFTER the stamping work
-went live. Anything approved or marked Construction Issue before that shows the correct
-LABELS on the Ops page (those are read live), but the PDF itself will not carry a stamp
-until the status is toggled. Select all -> Unmark -> Mark Construction Issue on the Design
-Portal's Rock Drawings page re-stamps a whole project.
+   Given this screen shows margin, I would rather flag that plainly than let it pass. If
+   you want it hardened, the fix is a proper signed Site App session token, which would
+   also benefit every other CM screen. That is a separate piece of work - say the word.
 
 
 TESTED
