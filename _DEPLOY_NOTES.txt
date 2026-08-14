@@ -1,88 +1,70 @@
-pkg281 - Report app improvement link: one shared component, consistent everywhere
-==================================================================================
+pkg282 - Project Finance: fix no-data bug + add costs incurred table
+=====================================================================
 
-NOTE: pkg281 REPLACES pkg272 through pkg280. Deploy this one and ignore those.
-pkg278 (applications.js decimals) is SEPARATE and still needs deploying.
+CHANGED FILES
+-------------
+  pages/api/cm-project-financials.js      the fix + cost lines
+  pages/forms/cm/project-finance.js       costs table
 
-
-NEW FILES - must be created manually in GitHub ("Add file" -> "Create new file")
---------------------------------------------------------------------------------
-  components/ReportImprovementLink.js      <- new in this package
-  pages/api/cm-project-financials.js       (from pkg280)
-  pages/forms/cm/project-finance.js        (from pkg280)
-  pages/api/project-drawings.js            (from pkg279)
-  components/ProjectDrawings.js            (from pkg279)
-
-CHANGED FILES (straight replacements)
---------------------------------------
-  components/OperationsNav.js              uses the shared link
-  components/PreContractNav.js             uses the shared link
-  components/CommercialNav.js              uses the shared link
-  components/BizNav.js                     uses the shared link
-  pages/index.js                           uses the shared link
-  pages/design/index.js                    uses the shared link
-  pages/business-financials.js             uses the shared link
-  pages/project/[id].js                    uses the shared link
-  ... plus everything carried from pkg279 / pkg280 (see those sections below)
+No new files IF you have already deployed pkg281. If you have NOT deployed pkg281 yet,
+these two files are among its new files - create them from THIS package instead, and take
+everything else from pkg281.
 
 
-WHY THEY WERE DIFFERENT
-------------------------
-The link's styling had been COPIED into all eight files rather than shared. They were
-close but never identical, and they drifted further apart every time one got touched -
-most recently when the Operations nav went to 17px, because that one link inherits the
-nav's link style and the other seven do not.
+ROOT CAUSE OF THE MISSING DATA
+-------------------------------
+Not a permissions or matching problem - I was reading the cache wrongly.
 
-Rather than paste the Operations styling into seven more files (which would drift again),
-there is now ONE component:
+dashboard.js stores the snapshot as a BARE ARRAY:
 
-  components/ReportImprovementLink.js
+    await redis.set('dashboard:cache', projects, { ex: 60 * 60 * 4 })
 
-All eight places render that. Change it once and every location changes together. It
-cannot go out of step again.
+My API read it as an object:
 
+    const rows = (snap && Array.isArray(snap.projects)) ? snap.projects : []
 
-WHAT IT LOOKS LIKE
--------------------
-Exactly the Operations portal version, everywhere:
+snap IS the array, so snap.projects was undefined, rows was always empty, and every
+project fell through to "No financial data for this project yet." It would never have
+worked for any project - it was not intermittent and not data-dependent.
 
-  gold #ca8a04, 17px, warning icon, plain text - NOT a button
-  padding 6px 12px, no underline
+FIXED: now accepts either shape (array, or { projects: [] }) so it cannot break again if
+that store is ever reshaped.
 
-Locations updated: Portal home, Operations, Pre-Contract, Commercial, Business Financials,
-Business nav, Design portal, Project page.
-
-WORTH A LOOK: 17px is noticeably larger than the surrounding link text in the navs OUTSIDE
-Operations - those rows are still 13px, because only the Operations nav was resized. So the
-link will now be the biggest text in those bars. That is what "same as Operations" means,
-but if it looks out of place, tell me and I will either size it to sit with each nav or
-bring the other navs up to 17px.
-
-The SITE APP link is deliberately NOT included - you asked for that one to be orange,
-underlined and phone-sized, and it stays that way. It is noted in the component file so it
-does not get folded in by mistake later.
+Also improved: if the snapshot is genuinely missing (never synced), it now says so
+explicitly - "Financial data has not been built yet. Open Project Financials in the portal
+once, then try again" - instead of the misleading per-project message.
 
 
-ALSO IN THIS PACKAGE (from pkg280 / pkg279, unchanged)
--------------------------------------------------------
-  - Site App Project Finance for Contracts Managers (margin on the EOM basis, labour and
-    materials budget vs spend vs remaining, live projects only, project-first).
-  - Ops Drawings tab read-only and fed live from the Design Portal's Rock Drawings, with
-    approved / Construction Issue banners; Site App drawings limited to Construction Issue.
-    *** That change makes previously UPLOADED Ops drawings disappear from both screens -
-        see the pkg279 warning if you have not already read it. ***
-  - App Improvement attachments and pasted screenshots, portal and Site App.
-  - Site App improvement reports fixed (middleware passthrough).
-  - Operations nav 17px, sub-tabs 15px.
+NEW - COSTS INCURRED TABLE
+---------------------------
+Under the budget cards, a table of the actual cost lines, newest first, with three tabs:
+
+  Labour   |   Materials   |   All
+
+Each tab shows its own total on the tab itself, then Date / Supplier + description /
+Amount, with a line count and total in the footer.
+
+CLASSIFICATION: bills lines already carry a Labour/Materials type. Wages lines predate
+that field, so those fall back to the same account-code rule the bills importer uses -
+your Account Categorisation config first, then the default 320/321 = labour. So the split
+matches the rest of the app rather than being a second, competing rule.
+
+LIMIT: the 400 most recent lines are sent, to keep the page usable on a phone. If a project
+has more, a note says so and makes clear the TAB TOTALS ARE STILL FOR ALL LINES - only the
+visible list is capped, not the arithmetic.
+
+
+WORTH KNOWING
+-------------
+The cost lines come from costs:lines:<xeroId>, which is the same source the Budget Tracker
+and EOM report use - so the totals here should reconcile with Project Financials.
+
+The budget/spend cards still come from the 4-hourly dashboard snapshot, so both can be up
+to 4 hours behind a fresh Xero sync.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Confirmed no copies of the old inline link remain anywhere in pages/ or components/.
-
-
-STILL OUTSTANDING
------------------
-The zip I am working from is pkg264 and does not contain pkg265. Please confirm whether
-pkg265 was deployed - if it was, send a fresh export before the next package.
+Cache-shape handling verified against both the bare-array form the dashboard actually
+writes and the object form, plus null.

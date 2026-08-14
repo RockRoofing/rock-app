@@ -25,6 +25,7 @@ export default function CmProjectFinance() {
   const [data, setData] = useState(null)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
+  const [costTab, setCostTab] = useState('labour')
 
   useEffect(() => {
     const s = sessionStorage.getItem('ops_operative')
@@ -85,6 +86,9 @@ export default function CmProjectFinance() {
                   <Budget title="Materials" b={data.materials} />
                   <Budget title="Total" b={data.total} strong />
 
+                  <CostsTable costs={data.costs || []} totals={data.costTotals || {}}
+                    truncated={!!data.costsTruncated} tab={costTab} setTab={setCostTab} />
+
                   <div style={{ fontSize: 11.5, color: '#999', textAlign: 'center', lineHeight: 1.5, padding: '0 6px' }}>
                     Margin is on the same basis as the EOM report - to the last completed month&apos;s
                     valuation date, including WIP. Budgets include instructed variations.
@@ -97,6 +101,88 @@ export default function CmProjectFinance() {
     </Shell>
   )
 }
+
+
+// Costs actually incurred, split labour / materials. Newest first.
+function CostsTable({ costs, totals, truncated, tab, setTab }) {
+  const rows = (costs || []).filter(c => tab === 'all' ? true : c.type.toLowerCase() === tab)
+  const shownTotal = rows.reduce((s, c) => s + (c.amount || 0), 0)
+  const tabs = [
+    ['labour', 'Labour', totals.labour],
+    ['materials', 'Materials', totals.materials],
+    ['all', 'All', (totals.labour || 0) + (totals.materials || 0)],
+  ]
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e3e0d9', borderRadius: 16, padding: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 10 }}>Costs incurred</div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {tabs.map(([k, label, tot]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            flex: 1, padding: '9px 4px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+            border: '1px solid ' + (tab === k ? BRAND : '#e3e0d9'),
+            background: tab === k ? BRAND : '#fff', color: tab === k ? '#fff' : INK,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
+            <div style={{ fontSize: 11, opacity: 0.85, marginTop: 1 }}>{money(tot)}</div>
+          </button>
+        ))}
+      </div>
+
+      {!rows.length ? (
+        <div style={{ color: '#999', fontSize: 13.5, textAlign: 'center', padding: '14px 0' }}>No costs recorded.</div>
+      ) : (
+        <>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ background: '#faf9f7' }}>
+                  <th style={thL}>Date</th>
+                  <th style={thL}>Supplier / description</th>
+                  <th style={thR}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c, i) => (
+                  <tr key={i} style={{ borderTop: '1px solid #f1efea' }}>
+                    <td style={{ ...tdL, whiteSpace: 'nowrap', color: '#888' }}>{shortDate(c.date)}</td>
+                    <td style={tdL}>
+                      <div style={{ fontWeight: 600, color: INK }}>{c.supplier || '\u2014'}</div>
+                      {c.description && c.description !== c.supplier &&
+                        <div style={{ color: '#999', fontSize: 11.5, marginTop: 1 }}>{c.description}</div>}
+                    </td>
+                    <td style={{ ...tdR, whiteSpace: 'nowrap', fontWeight: 600 }}>{money(c.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ borderTop: '2px solid #e3e0d9' }}>
+                  <td style={tdL} colSpan={2}><strong>{rows.length} line{rows.length === 1 ? '' : 's'}</strong></td>
+                  <td style={{ ...tdR, fontWeight: 800 }}>{money(shownTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {truncated && (
+            <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 8 }}>
+              Showing the 400 most recent lines of {totals.count}. The tab totals above are for ALL lines.
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+const shortDate = (s) => {
+  if (!s) return ''
+  const d = new Date(s + 'T00:00:00')
+  return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+}
+const thL = { textAlign: 'left', padding: '7px 6px', fontSize: 11.5, color: '#888', fontWeight: 700 }
+const thR = { textAlign: 'right', padding: '7px 6px', fontSize: 11.5, color: '#888', fontWeight: 700 }
+const tdL = { textAlign: 'left', padding: '8px 6px', verticalAlign: 'top' }
+const tdR = { textAlign: 'right', padding: '8px 6px', verticalAlign: 'top' }
 
 function Budget({ title, b, strong }) {
   const d = b || {}

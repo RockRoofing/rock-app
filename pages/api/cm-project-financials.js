@@ -33,9 +33,14 @@ export default async function handler(req, res) {
   if (!who) return res.status(401).json({ error: 'Not identified' })
 
   // Dashboard snapshot carries the budgets, spends and the per-project date settings.
+  // NOTE: dashboard:cache is stored as a BARE ARRAY of projects, not { projects: [...] }.
+  // Reading it as an object was why this returned "no financial data" for every project.
   let snap = null
   try { snap = await redis.get('dashboard:cache') } catch {}
-  const rows = (snap && Array.isArray(snap.projects)) ? snap.projects : []
+  const rows = Array.isArray(snap) ? snap : (snap && Array.isArray(snap.projects) ? snap.projects : [])
+  if (!rows.length) {
+    return res.status(503).json({ error: 'Financial data has not been built yet. Open Project Financials in the portal once, then try again.' })
+  }
   const p = rows.find(r => normJobNo(r.jobNo || r.projectNo) === normJobNo(no))
   if (!p) return res.status(404).json({ error: 'No financial data for this project yet.' })
 
@@ -87,6 +92,45 @@ export default async function handler(req, res) {
   const materialsBudget = numOr0(p.materialsBudget)
   const materialsSpend = numOr0(p.materialsSpend)
 
+  // ---- Cost lines actually incurred, split labour / materials ----
+  // Bills lines carry type 'Labour'/'Materials'. Wages lines predate that field, so fall
+  // back to the same account-code rule the importer uses (config first, then 320/321).
+  let catConfig = {}
+  try { catConfig = (await redis.get('config:account-categorisation')) || {} } catch {}
+  const DEFAULT_LABOUR_CODES = ['320', '321']
+  const isLabourLine = (l) => {
+    if (l.type) return String(l.type).toLowerCase() === 'labour'
+    const code = String(l.accountCode || '')
+    const cfg = catConfig[code]
+    if (cfg && cfg.category) return cfg.category === 'labour'
+    return DEFAULT_LABOUR_CODES.includes(code)
+  }
+
+  let costs = []
+  try {
+    const cLines = (await redis.get(`costs:lines:${p.xeroId}`)) || []
+    costs = cLines.map(l => ({
+      date: l.date || '',
+      supplier: l.supplier || '',
+      description: l.description || '',
+      reference: l.reference || '',
+      amount: numOr0(l.amount),
+      type: isLabourLine(l) ? 'Labour' : 'Materials',
+    }))
+    costs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+  } catch { costs = [] }
+
+  // Keep the payload sensible on a phone - newest first, capped, with a flag so the page
+  // can say so rather than quietly showing a partial list.
+  const CAP = 400
+  const costsTruncated = costs.length > CAP
+  const costTotals = {
+    labour: costs.filter(c => c.type === 'Labour').reduce((s, c) => s + c.amount, 0),
+    materials: costs.filter(c => c.type === 'Materials').reduce((s, c) => s + c.amount, 0),
+    count: costs.length,
+  }
+  if (costsTruncated) costs = costs.slice(0, CAP)
+
   const block = (budget, spend) => ({
     budget, spend,
     remaining: budget - spend,
@@ -106,6 +150,9 @@ export default async function handler(req, res) {
     labour: block(labourBudget, labourSpend),
     materials: block(materialsBudget, materialsSpend),
     total: block(labourBudget + materialsBudget, labourSpend + materialsSpend),
+    costs,
+    costTotals,
+    costsTruncated,
     stale: !valStr,
   })
 }
