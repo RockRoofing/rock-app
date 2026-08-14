@@ -1,70 +1,69 @@
-pkg282 - Project Finance: fix no-data bug + add costs incurred table
-=====================================================================
+pkg283 - Variations / Edit Project Details: show pence, not whole pounds
+=========================================================================
 
 CHANGED FILES
 -------------
-  pages/api/cm-project-financials.js      the fix + cost lines
-  pages/forms/cm/project-finance.js       costs table
+  pages/project/[id].js       Edit Project Details - variations, budgets, AFA
+  pages/variations.js         Variations page
 
-No new files IF you have already deployed pkg281. If you have NOT deployed pkg281 yet,
-these two files are among its new files - create them from THIS package instead, and take
-everything else from pkg281.
+No new files. Both straight replacements. Independent of the other packages.
+
+FOLDER NOTE: pages/project/[id].js goes in the folder with LITERAL square brackets -
+pages/project/[id].js
 
 
-ROOT CAUSE OF THE MISSING DATA
+ROOT CAUSE - AND THE GOOD NEWS
 -------------------------------
-Not a permissions or matching problem - I was reading the cache wrongly.
+Nothing is wrong with your data. Nothing has ever been saved rounded.
 
-dashboard.js stores the snapshot as a BARE ARRAY:
+Both screens formatted money for DISPLAY with maximumFractionDigits: 0, so every figure
+was rounded to whole pounds on the way to the screen only. The stored values keep full
+pence, and every calculation (AFA, budgets, margin, the EOM report) has always used the
+real numbers.
 
-    await redis.set('dashboard:cache', projects, { ex: 60 * 60 * 4 })
+The imbalance you were seeing is what happens when you round the parts and the total
+separately:
 
-My API read it as an object:
+  SHOWN (old):   £1,235 + £890 + £77  =  £2,202     three lines, shown total
+  ACTUALLY:      1234.56 + 890.45 + 77.30 = 2202.31
+  ADD UP THE SHOWN LINES: 1235 + 890 + 77 = 2202    ... but each line is out by pence,
+                                                        and on more lines the gap grows
 
-    const rows = (snap && Array.isArray(snap.projects)) ? snap.projects : []
-
-snap IS the array, so snap.projects was undefined, rows was always empty, and every
-project fell through to "No financial data for this project yet." It would never have
-worked for any project - it was not intermittent and not data-dependent.
-
-FIXED: now accepts either shape (array, or { projects: [] }) so it cannot break again if
-that store is ever reshaped.
-
-Also improved: if the snapshot is genuinely missing (never synced), it now says so
-explicitly - "Financial data has not been built yet. Open Project Financials in the portal
-once, then try again" - instead of the misleading per-project message.
+With enough variations the visible discrepancy can be several pounds, which is exactly the
+"imbalance" you spotted. It was never in the arithmetic - only in what was printed.
 
 
-NEW - COSTS INCURRED TABLE
----------------------------
-Under the budget cards, a table of the actual cost lines, newest first, with three tabs:
+THE FIX
+-------
+1. Both screens now display 2 decimal places:
 
-  Labour   |   Materials   |   All
+   Edit Project Details - each variation's Total, "Instructed variations", and AFA
+   Variations page      - every money figure (14 places, all on that page)
 
-Each tab shows its own total on the tab itself, then Date / Supplier + description /
-Amount, with a line count and total in the footer.
+   The whole-pound formatting is UNCHANGED on the project dashboard cards, cost tables and
+   invoice tables, where whole pounds are easier to read and nothing has to sum on screen.
+   If you want those at 2dp as well, say so.
 
-CLASSIFICATION: bills lines already carry a Labour/Materials type. Wages lines predate
-that field, so those fall back to the same account-code rule the bills importer uses -
-your Account Categorisation config first, then the default 320/321 = labour. So the split
-matches the rest of the app rather than being a second, competing rule.
+2. Every money input on both screens now carries step="0.01" and inputMode="decimal".
+   They were plain type="number", which defaults to step="1" - so some browsers flagged
+   "please enter a valid value" on a pence figure and the up/down arrows jumped a whole
+   pound at a time. Entering pence now behaves properly, and mobile gets a numeric keypad.
 
-LIMIT: the 400 most recent lines are sent, to keep the page usable on a phone. If a project
-has more, a note says so and makes clear the TAB TOTALS ARE STILL FOR ALL LINES - only the
-visible list is capped, not the arithmetic.
+   Inputs changed: Original contract value, Labour budget, Materials budget, and the
+   Materials / Labour / Profit boxes on every variation (project page, plus the Add and
+   Edit variation modals on the Variations page).
 
 
-WORTH KNOWING
--------------
-The cost lines come from costs:lines:<xeroId>, which is the same source the Budget Tracker
-and EOM report use - so the totals here should reconcile with Project Financials.
-
-The budget/spend cards still come from the 4-hourly dashboard snapshot, so both can be up
-to 4 hours behind a fresh Xero sync.
+NO DATA MIGRATION NEEDED
+-------------------------
+Because the values were never rounded on save, existing variations will simply start
+displaying their true pence as soon as this deploys. You may see figures you have not seen
+before (e.g. a variation you thought was £890 showing as £890.45) - that is the real stored
+value, not a change.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Cache-shape handling verified against both the bare-array form the dashboard actually
-writes and the object form, plus null.
+Rounding behaviour verified against worked examples showing the old parts-vs-total gap and
+its absence after the change.

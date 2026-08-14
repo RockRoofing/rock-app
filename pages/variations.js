@@ -4,7 +4,10 @@ import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import { useRouter } from 'next/router'
 
-const fmt = (n) => n == null || n === '' || isNaN(n) ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(parseFloat(n))
+// Pence-accurate throughout. Variations are individually small and have to add up to
+// the totals shown, so rounding each to whole pounds made the parts disagree with
+// the sum.
+const fmt = (n) => n == null || n === '' || isNaN(n) ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(parseFloat(n))
 const fmtN = (n) => n == null || n === '' ? 0 : parseFloat(n) || 0
 
 // Display-only: remove a redundant leading job-number from a project name so the
@@ -532,7 +535,7 @@ export default function VariationTracker() {
                 {[['materials', 'Materials (£)'], ['labour', 'Labour / Lodge (£)'], ['profit', 'Profit (£)']].map(([key, label]) => (
                   <div key={key}>
                     <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>{label}</label>
-                    <input type="number" value={editModal.form[key]}
+                    <input type="number" step="0.01" inputMode="decimal" value={editModal.form[key]}
                       onChange={e => setEditModal(m => ({ ...m, form: { ...m.form, [key]: e.target.value } }))}
                       placeholder="0.00" style={inputS} />
                   </div>
@@ -609,7 +612,7 @@ export default function VariationTracker() {
                 {[['materials', 'Materials (£)'], ['labour', 'Labour / Lodge (£)'], ['profit', 'Profit (£)']].map(([key, label]) => (
                   <div key={key}>
                     <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>{label}</label>
-                    <input type="number" value={addForm[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
+                    <input type="number" step="0.01" inputMode="decimal" value={addForm[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
                       placeholder="0.00" style={inputS} />
                   </div>
                 ))}

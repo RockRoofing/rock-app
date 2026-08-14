@@ -9,6 +9,10 @@ import ReportImprovementLink from '../../components/ReportImprovementLink'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
+// Pence-accurate. Used in Edit Project Details, where variation lines have to add up
+// to the totals shown beneath them - rounding each figure to whole pounds made the
+// parts disagree with the sum.
+const fmtP = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
 
 const ROLES = ['Contracts Manager', 'Operations Manager', 'Quantity Surveyor', 'Estimator']
@@ -1568,11 +1572,11 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
           </div>
         )}
         <label style={labelStyle}>Original contract value (£)</label>
-        <input type="number" value={form.contractValue || ''} onChange={f('contractValue')} style={inputStyle} placeholder="0.00" />
+        <input type="number" step="0.01" inputMode="decimal" value={form.contractValue || ''} onChange={f('contractValue')} style={inputStyle} placeholder="0.00" />
         <label style={labelStyle}>Labour budget (£)</label>
-        <input type="number" value={form.labourBudget || ''} onChange={f('labourBudget')} style={inputStyle} placeholder="0.00" />
+        <input type="number" step="0.01" inputMode="decimal" value={form.labourBudget || ''} onChange={f('labourBudget')} style={inputStyle} placeholder="0.00" />
         <label style={labelStyle}>Materials budget (£)</label>
-        <input type="number" value={form.materialsBudget || ''} onChange={f('materialsBudget')} style={inputStyle} placeholder="0.00" />
+        <input type="number" step="0.01" inputMode="decimal" value={form.materialsBudget || ''} onChange={f('materialsBudget')} style={inputStyle} placeholder="0.00" />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Variations</div>
@@ -1593,12 +1597,12 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                 {[['Materials', 'materials'], ['Labour', 'labour'], ['Profit', 'profit']].map(([label, key]) => (
                   <div key={key}>
                     <div style={{ fontSize: 10, color: '#888', marginBottom: 2 }}>{label} (£)</div>
-                    <input type="number" value={v[key] || ''} onChange={e => updateVariation(i, key, e.target.value)} placeholder="0.00" style={{ ...inputStyle, marginBottom: 0 }} />
+                    <input type="number" step="0.01" inputMode="decimal" value={v[key] || ''} onChange={e => updateVariation(i, key, e.target.value)} placeholder="0.00" style={{ ...inputStyle, marginBottom: 0 }} />
                   </div>
                 ))}
                 <div>
                   <div style={{ fontSize: 10, color: '#888', marginBottom: 2 }}>Total</div>
-                  <div style={{ ...inputStyle, marginBottom: 0, background: '#fff', display: 'flex', alignItems: 'center', fontWeight: 600, color: v.instructed ? '#16a34a' : '#888' }}>{fmtC(total)}</div>
+                  <div style={{ ...inputStyle, marginBottom: 0, background: '#fff', display: 'flex', alignItems: 'center', fontWeight: 600, color: v.instructed ? '#16a34a' : '#888' }}>{fmtP(total)}</div>
                 </div>
               </div>
             </div>
@@ -1608,11 +1612,11 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <div style={{ marginTop: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 6, fontSize: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
             <span style={{ color: '#555' }}>Instructed variations:</span>
-            <strong>{fmtC(afa - (parseFloat(form.contractValue) || 0))}</strong>
+            <strong>{fmtP(afa - (parseFloat(form.contractValue) || 0))}</strong>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span style={{ color: '#555' }}>AFA:</span>
-            <strong style={{ color: '#16a34a' }}>{fmtC(afa)}</strong>
+            <strong style={{ color: '#16a34a' }}>{fmtP(afa)}</strong>
           </div>
         </div>
       </div>
