@@ -1,23 +1,35 @@
-DEPLOY NOTES - TEMP diagnostic: trace where J203 is coming from
-===============================================================
+DEPLOY NOTES - Fix orphaned J203 + hide orphaned allocations from the report
+============================================================================
 
-ONE file, NEW. Add via "Add file" at pages/api/planning-trace.js.
-This is a TEMPORARY diagnostic - we'll delete it once we've found the answer.
+TWO files. ONE is the temp diagnostic you already added (now with a cleanup action),
+ONE is an EDIT.
 
-HOW TO USE
-After deploying, while logged in to the portal, open this URL in your browser:
+  EDIT  pages/api/planning-trace.js   (adds a one-click cleanup for the orphaned key)
+  EDIT  pages/api/planning-week.js    (report now hides allocations whose project no longer exists)
 
-  https://app.rockroofing.co.uk/api/planning-trace?q=J203
+WHAT WE FOUND
+J203 does NOT exist as a project (deleted or never created), but the planner data still had a
+booking under "L:J203" for two operatives Mon-Fri 10-14 Aug. The planner can't show it (no
+project row), but the per-operative report was surfacing it. It's orphaned leftover data.
 
-It returns JSON showing:
-  - allocationKeysFound : the exact key(s) in the planner data that reference J203
-  - projectExists / projectStatus / projectName : whether a J203 project exists and its status
-  - detail[].dates : EVERY date J203 is allocated on, and which operatives (opIds) are on it
+FIX 1 - Report now ignores orphans (permanent)
+The Weekly Labour report now skips any allocation whose project no longer exists. Completed and
+Archived projects are unaffected (they still exist, so they still show); only true orphans like
+J203 are hidden. So even before you clean it up, J203 will stop appearing on the report.
 
-Copy the JSON back to me and I'll tell you exactly where J203 is coming from and the right fix
-(e.g. it's an orphaned/test allocation to clear, or a completed project that should be hidden
-from the report).
+FIX 2 - Clean up the J203 data (one-off)
+After deploying, remove the orphaned booking with ONE of these:
 
-You can also check other things by changing the query, e.g. ?q=L: to list all project keys.
+  Option A (browser console, while logged in to the portal):
+    fetch('/api/planning-trace', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ deleteKey: 'L:J203' }) }).then(r=>r.json()).then(console.log)
+
+  It should return { ok:true, removed:true, key:'L:J203' }.
+
+  Then re-check:  https://app.rockroofing.co.uk/api/planning-trace?q=J203
+  allocationKeysFound should now be empty [].
+
+AFTER THAT: tell me and I'll give you a final package that DELETES the temp planning-trace.js
+endpoint (we don't want a data-deletion endpoint left in the app).
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

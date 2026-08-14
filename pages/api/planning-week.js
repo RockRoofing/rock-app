@@ -59,9 +59,12 @@ export async function assembleWeek(mondayStr) {
     const byOp = {}
     const unnamedByProjDay = {}  // pk -> { dk: {count, status, projectName} }
     for (const [pk, daysMap] of Object.entries(alloc)) {
-      // Fall back to the project number (strip the L:/N: key prefix) if the project
-      // isn't in the current lookup (e.g. completed/archived/removed since allocation).
-      const pinfo = names[pk] || { name: String(pk).replace(/^[LN]:/, ''), address: '' }
+      // Skip orphaned allocations whose project no longer exists at all (e.g. a
+      // project was deleted without clearing its bookings). Completed/archived
+      // projects ARE still in `names` (getOpsProjects returns all statuses), so
+      // this only drops true orphans - not legitimate finished jobs.
+      if (!names[pk]) continue
+      const pinfo = names[pk]
       const pname = pinfo.name; const paddr = pinfo.address
       for (const dk of days) {
         const cell = daysMap[dk]
