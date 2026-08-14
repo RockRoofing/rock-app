@@ -1,57 +1,55 @@
-pkg271 - RFI window: explicit Save button
-==========================================
-
-NOTE: pkg271 REPLACES pkg270 - it contains the Comments / Approvals column from pkg270
-plus the Save button. If you have not deployed pkg270 yet, deploy this one instead.
+pkg272 - App Improvement attachments / screenshot paste + bigger Operations tabs
+=================================================================================
 
 CHANGED FILES
 -------------
-  pages/api/design-rfis.js                unchanged from pkg270 (uploads store + actions)
-  pages/design/[project]/rfis.js          pkg270 column + new Save button
+  components/ReportProblemButton.js       attach files + paste screenshots
+  pages/api/report-problem.js             store attachments, show them in the email
+  pages/admin/problem-reports.js          show attachments on the admin page
+  components/OperationsNav.js             sub-tab text 13.5 -> 15
 
-No new files. Both are straight replacements.
-
-
-WHAT THIS DOES
---------------
-A "Save" button now sits in the header of the open RFI window, visible to EVERYONE
-including customers (the existing internal Edit / Save pair is unchanged and still only
-appears in edit mode).
-
-Everything already saved on its own - that has not changed. What the button adds:
-
-  1. It posts any comment still sitting UNSENT in the comment box. Previously a customer
-     could type a comment, not press "Comment", close the window, and lose it. That was
-     the only real data-loss path in this window and it is now closed.
-
-  2. It waits for the markup autosave to land, then shows a green confirmation:
-     "All changes saved 14 Aug 26, 15:42"
-
-So a customer who is unsure whether their work stuck can press Save and get told plainly.
+No new files. All four are straight replacements.
 
 
-WHY IT WORKS THIS WAY - PLEASE READ
-------------------------------------
-The zip I was given is at pkg264. It does NOT contain pkg265 - `hideDownload` does not
-exist anywhere in components/DrawingMarkup.js.
+1. APP IMPROVEMENT - ATTACHMENTS AND PASTED SCREENSHOTS
+--------------------------------------------------------
+The "Report app improvement" window now has a "Screenshots / attachments" box.
 
-The tidy way to build this button was to edit DrawingMarkup.js so Save could force the
-markup write instantly. Had I shipped that file as a full replacement built on this copy,
-it would have SILENTLY REVERTED pkg265 and brought back the untracked Download button on
-the O&M page - the exact bug pkg265 existed to fix.
+  - Click "+ Attach a file, or paste a screenshot" to pick files (multiple at once).
+  - OR just paste. Win+Shift+S to snip, then Ctrl+V anywhere in the window, and the image
+    is uploaded and attached automatically. Pasting ordinary text still behaves normally -
+    only image data is intercepted.
+  - Each attachment shows a thumbnail with a Remove link before sending.
+  - Send is blocked while an upload is still running, so nothing gets sent half-finished.
 
-So I did not touch DrawingMarkup.js. Markup already autosaves 800ms after you stop
-drawing, so Save waits 1 second and then confirms - same end result for the user.
+Attachments are stored on the report and appear in two places:
+  - The notification email to the office - images are embedded inline, so a pasted
+    screenshot can be read straight from the email without clicking anything.
+  - Admin > App Improvements - thumbnail grid on each report, click to view, or Download.
 
-TWO THINGS TO CHECK:
-  - Did pkg265 ever get deployed? If it did, please send a fresh zip of the repo before
-    the next package, because anything I build from this copy risks reverting it.
-  - If pkg265 was NOT deployed, the O&M untracked-download bug is still live and pkg265
-    still needs deploying.
+Limit of 10 attachments per report.
 
-Same question applies to anything else delivered after pkg264 that is missing here.
+NOT COVERED: the Site App has its own separate report button (pages/forms/index.js) and
+still has no attachments. Say if you want it there too - it is a similar change but the
+Site App needs /api/blob-upload adding to the middleware passthrough first.
+
+
+2. OPERATIONS TABS SLIGHTLY LARGER
+-----------------------------------
+The sub-tab row across the top of the Operations pages (Projects / Planning / SRATs etc)
+goes from 13.5px to 15px.
+
+To be clear which row changed: this is the WHITE tab strip directly under the dark header,
+not the dark top menu itself. If you meant the dark row, that is a separate one-line change
+- say the word.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+
+
+STILL OUTSTANDING FROM EARLIER
+-------------------------------
+The zip I am working from is at pkg264 and does not contain pkg265. Please confirm whether
+pkg265 was deployed, and if so send a fresh export before the next package.

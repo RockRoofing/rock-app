@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const { userName, userEmail, platform, page, description, priority } = req.body || {}
+    const { userName, userEmail, platform, page, description, priority, attachments } = req.body || {}
     if (!description || !description.trim()) return res.status(400).json({ error: 'Please describe the improvement.' })
     const prio = ['low', 'medium', 'high'].includes(priority) ? priority : 'medium'
 
@@ -49,6 +49,11 @@ export default async function handler(req, res) {
       page: (page || '').trim(),
       description: description.trim(),
       priority: prio,
+      // Screenshots / files attached (or pasted) by the person raising it.
+      attachments: (Array.isArray(attachments) ? attachments : [])
+        .filter(a => a && a.url)
+        .slice(0, 10)
+        .map(a => ({ name: String(a.name || 'Attachment').slice(0, 120), url: String(a.url), contentType: String(a.contentType || ''), size: Number(a.size) || 0 })),
       comments: '',
       createdAt: Date.now(),
       status: 'open',
@@ -71,6 +76,7 @@ export default async function handler(req, res) {
             <tr><td style="padding:4px 12px 4px 0;color:#888">Page</td><td>${esc(report.page || '—')}</td></tr>
             <tr><td style="padding:4px 12px 4px 0;color:#888;vertical-align:top">Details</td><td>${esc(report.description).replace(/\n/g, '<br>')}</td></tr>
           </table>
+          ${attachmentsHtml(report.attachments)}
         </div>`
       try {
         await fetch('https://api.resend.com/emails', {
@@ -89,6 +95,20 @@ export default async function handler(req, res) {
 }
 
 function esc(s) { return String(s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
+
+// Attachments block for the office notification. Images are shown inline so a pasted
+// screenshot can be read straight from the email; anything else is a link.
+function attachmentsHtml(list) {
+  const atts = Array.isArray(list) ? list : []
+  if (!atts.length) return ''
+  const rows = atts.map(a => {
+    const isImg = String(a.contentType || '').startsWith('image/')
+    return isImg
+      ? `<div style="margin-top:10px"><a href="${esc(a.url)}"><img src="${esc(a.url)}" alt="${esc(a.name)}" style="max-width:100%;border:1px solid #eee;border-radius:8px" /></a><div style="font-size:12px;color:#999;margin-top:3px">${esc(a.name)}</div></div>`
+      : `<div style="margin-top:8px;font-size:13px"><a href="${esc(a.url)}">${esc(a.name)}</a></div>`
+  }).join('')
+  return `<div style="margin-top:14px"><div style="font-size:13px;color:#888">Attachments (${atts.length})</div>${rows}</div>`
+}
 
 async function notifyReporterResolved(report, req) {
   const RESEND_KEY = process.env.RESEND_API_KEY

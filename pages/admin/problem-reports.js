@@ -136,6 +136,28 @@ export default function AppImprovementsPage() {
                     {r.page && <div style={{ fontSize: 12.5, color: '#999', marginTop: 6 }}>Page: {r.page}</div>}
                     <div style={{ fontSize: 14, color: '#1a1a19', marginTop: 8, whiteSpace: 'pre-wrap' }}>{r.description}</div>
 
+                    {(r.attachments || []).length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 6 }}>Attachments ({(r.attachments || []).length})</div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {(r.attachments || []).map((a, i) => {
+                            const isImg = String(a.contentType || '').startsWith('image/')
+                            return (
+                              <div key={i} style={{ width: 150 }}>
+                                <a href={`/api/download?url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name)}&inline=1`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
+                                  {isImg
+                                    ? <img src={a.url} alt={a.name} style={{ width: '100%', height: 100, objectFit: 'cover', borderRadius: 8, border: '1px solid #eee', display: 'block' }} />
+                                    : <div style={{ width: '100%', height: 100, borderRadius: 8, border: '1px solid #eee', background: '#faf9f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>&#128206;</div>}
+                                </a>
+                                <div title={a.name} style={{ fontSize: 11.5, color: '#666', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
+                                <a href={`/api/download?url=${encodeURIComponent(a.url)}&name=${encodeURIComponent(a.name)}`} style={{ fontSize: 11.5, fontWeight: 600, color: '#ca8a04', textDecoration: 'none' }}>Download</a>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ marginTop: 12 }}>
                       <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 5 }}>Comments {resolved ? '' : '(included in the email when you resolve)'}</div>
                       <textarea value={commentOf(r)} onChange={e => setDrafts(d => ({ ...d, [r.id]: e.target.value }))} rows={2}

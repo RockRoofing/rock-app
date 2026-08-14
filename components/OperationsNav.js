@@ -91,7 +91,7 @@ function SectionTabs({ active, section }) {
         const on = active === c.key
         return (
           <a key={c.key} href={c.href} style={{
-            fontSize: 13.5, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap',
+            fontSize: 15, textDecoration: 'none', padding: '8px 14px', whiteSpace: 'nowrap',
             color: on ? '#1a1a19' : '#888', fontWeight: on ? 600 : 400,
             borderBottom: on ? '2px solid #ca8a04' : '2px solid transparent', marginBottom: -1,
           }}>{c.label}</a>
