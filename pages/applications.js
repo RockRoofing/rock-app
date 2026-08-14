@@ -446,6 +446,40 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
 }
 
 // ── Application editor ────────────────────────────────────────────────────────
+// Percentage input that accepts DECIMALS.
+//
+// The old inputs coerced to a number on every keystroke, so typing "12." became
+// parseFloat("12.") = 12, the field re-rendered as "12" and the decimal point could never
+// be typed. Starting with "0" was worse: 0 is falsy, so `value={pct ? pct : ''}` blanked
+// the field before you could type "0.5".
+//
+// Fix: hold the RAW TEXT while the field is being edited so the point survives, while
+// still committing the parsed number on every keystroke so totals stay live. The draft is
+// dropped on blur, so the field then shows the clamped, canonical value.
+function PctInput({ value, onCommit, width = 58, max = 100, style }) {
+  const [draft, setDraft] = useState(null)
+  const shown = draft !== null ? draft : (value === '' || value == null ? '' : String(value))
+
+  function change(raw) {
+    // Digits and a single decimal point only.
+    let t = String(raw).replace(/[^0-9.]/g, '')
+    const bits = t.split('.')
+    if (bits.length > 2) t = bits[0] + '.' + bits.slice(1).join('')
+    setDraft(t)
+    if (t === '' || t === '.') { onCommit(0); return }
+    const n = parseFloat(t)
+    if (isNaN(n)) { onCommit(0); return }
+    onCommit(Math.max(0, Math.min(max, n)))
+  }
+
+  return (
+    <input type="text" inputMode="decimal" value={shown}
+      onChange={e => change(e.target.value)}
+      onBlur={() => setDraft(null)}
+      style={{ width, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right', ...(style || {}) }} />
+  )
+}
+
 function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
   const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
@@ -721,7 +755,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={tdR}>
                       {!measurable ? '' : locked ? `${r.pctComplete || 0}%` : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                          <input type="text" inputMode="decimal" value={r.pctComplete ? r.pctComplete : ''} onChange={e => setPct(r.id, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                          <PctInput value={r.pctComplete} onCommit={(n) => setPct(r.id, n)} width={58} />
                           <button title="Mark 100% complete" onClick={() => setPct(r.id, 100)} style={{ background: (r.pctComplete === 100) ? '#16a34a' : '#f0f2f5', color: (r.pctComplete === 100) ? '#fff' : '#16a34a', border: '1px solid ' + ((r.pctComplete === 100) ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                         </div>
                       )}
@@ -777,7 +811,7 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={tdR}>
                       {!instructed ? <span style={{ color: '#cbd5e1' }}>—</span> : locked ? `${v.pctComplete || 0}%` : (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                          <input type="text" inputMode="decimal" value={v.pctComplete ? v.pctComplete : ''} onChange={e => setVarPct(v.key, e.target.value)} style={{ width: 58, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                          <PctInput value={v.pctComplete} onCommit={(n) => setVarPct(v.key, n)} width={58} />
                           <button title="100%" onClick={() => setVarPct(v.key, 100)} style={{ background: v.pctComplete === 100 ? '#16a34a' : '#f0f2f5', color: v.pctComplete === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (v.pctComplete === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                         </div>
                       )}
@@ -868,13 +902,14 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
                     <td style={{ ...tdR, background: noMarkup ? '#fee2e2' : '#fff7ed' }} title={noMarkup ? 'No mark-up applied to this line' : 'Internal only — hidden on the customer copy'}>{locked ? `${m.markupPct || 0}%` : (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
                         {noMarkup && <span title="No mark-up applied" style={{ color: '#dc2626', fontWeight: 700 }}>⚠</span>}
-                        <input type="number" value={m.markupPct ?? 0} onChange={e => setMatField(m.id, 'markupPct', e.target.value === '' ? 0 : parseFloat(e.target.value))} style={{ width: 52, padding: '4px 6px', border: '1px solid ' + (noMarkup ? '#dc2626' : '#fdba74'), borderRadius: 5, fontSize: 12.5, textAlign: 'right', background: '#fff' }} />
+                        <PctInput value={m.markupPct ?? 0} onCommit={(n) => setMatField(m.id, 'markupPct', n)} width={52} max={1000}
+                          style={{ border: '1px solid ' + (noMarkup ? '#dc2626' : '#fdba74'), background: '#fff' }} />
                       </div>
                     )}</td>
                     <td style={{ ...tdR, fontWeight: 600 }}>{fmt(total)}</td>
                     <td style={tdR}>{locked ? `${pct}%` : (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end' }}>
-                        <input type="text" inputMode="decimal" value={pct ? pct : ''} onChange={e => setMatPct(m.id, e.target.value)} style={{ width: 52, padding: '4px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 12.5, textAlign: 'right' }} />
+                        <PctInput value={pct} onCommit={(n) => setMatPct(m.id, n)} width={52} />
                         <button title="100%" onClick={() => setMatPct(m.id, 100)} style={{ background: pct === 100 ? '#16a34a' : '#f0f2f5', color: pct === 100 ? '#fff' : '#16a34a', border: '1px solid ' + (pct === 100 ? '#16a34a' : '#d1fae5'), borderRadius: 5, padding: '3px 7px', fontSize: 12, cursor: 'pointer', lineHeight: 1 }}>✓</button>
                       </div>
                     )}</td>

@@ -1,44 +1,63 @@
-pkg277 - Operations navigation at 17px
-=======================================
-
-NOTE: pkg277 REPLACES pkg272 through pkg276. Same file list, nav size changed from 20px
-to 17px. Deploy this one and ignore the earlier five.
-
+pkg278 - Applications: percentages now accept decimals
+=======================================================
 
 CHANGED FILES
 -------------
-  components/OperationsNav.js             top navigation 20px -> 17px
-  pages/forms/index.js                    Site App report: attachments + screenshot paste
-  middleware.js                           Site App report fix
-  components/ReportProblemButton.js       portal attachments + screenshot paste
-  pages/api/report-problem.js             store attachments, email them
-  pages/admin/problem-reports.js          show attachments
+  pages/applications.js
 
-No new files. All are straight replacements.
+No new files. Straight replacement. Independent of pkg277 - deploy in either order.
 
 
-NAVIGATION SIZING
------------------
-The dark top row of the Operations portal:
+ROOT CAUSE
+----------
+It was not that decimals were rejected - it was that the decimal POINT could never be
+typed in the first place.
 
-  link + active text   17px   (was 13px originally, briefly 20px in pkg275)
-  dividers             16px
-  bar height           58px
-  logo                 32px
+Every percentage box converted what you typed into a number on each keystroke. So typing
+"12." ran parseFloat("12.") = 12, the box re-rendered showing "12", and the point vanished
+before you could type the digit after it. There was no way to get past the point.
 
-Dividers, bar height and logo were scaled back down from the 20px version so the row
-stays in proportion. 17px should fit a normal laptop screen without the sideways
-scrolling that 20px risked.
+Starting with a zero was worse. The boxes were written as `value={pct ? pct : ''}`, and 0
+is falsy in JavaScript, so the moment you typed "0" to start "0.5" the box blanked itself.
 
-The white sub-tab strip underneath is unchanged at 15px.
+
+THE FIX
+-------
+A new PctInput component keeps the RAW TEXT while you are typing, so the decimal point
+survives, and still commits the parsed number on every keystroke so Value to date and the
+totals update live as you type. When you click away, the box shows the tidy final value.
+
+Only digits and a single decimal point can be entered - letters and stray extra points are
+ignored rather than silently becoming 0.
+
+It is defined at module scope, not inside the editor. Defining it inside would remount it
+on every render and the box would lose focus after each character.
+
+
+BOXES FIXED (4)
+---------------
+  Contract works    % Complete
+  Variations        % Complete
+  Materials         % Claimed
+  Materials         Mark-up %   (allowed above 100, up to 1000 - it is a mark-up, not a
+                                 proportion, so clamping it to 100 would be wrong)
+
+The "100%" tick buttons next to each box still work exactly as before.
+
+Already worked, left alone: the bulk mark-up box, the PO picker mark-up boxes and the
+manual line mark-up box. Those keep what you type as text and never coerced it, so they
+took decimals already.
+
+
+DOWNSTREAM - NOTHING ELSE NEEDED
+---------------------------------
+I checked lib/applications.js and lib/applicationPdf.js. Both read percentages with
+parseFloat and divide by 100, so 12.5% flows through the value-to-date maths, the summary
+and the PDF correctly. No rounding to whole numbers anywhere in that path.
+
+Existing saved applications are unaffected - whole numbers are still whole numbers.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-
-
-STILL OUTSTANDING
------------------
-The zip I am working from is pkg264 and does not contain pkg265. Please confirm whether
-pkg265 was deployed - if it was, send a fresh export before the next package.
