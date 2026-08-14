@@ -35,7 +35,14 @@ export default function CmSrats() {
         fetch('/api/srats').then(r => r.json()),
         fetch('/api/tasks').then(r => r.json()),
       ])
-      setSrats((ds.srats || []).filter(s => s.projectNo === p.projectNo))
+      // Show this project's SRATs from the last 4 weeks only (keeps the on-site
+      // list short). Older ones remain in the portal, which shows everything.
+      const cutoff = Date.now() - 28 * 86400000
+      const sratDate = (s) => (s.createdAt ? s.createdAt : (s.date ? new Date(s.date).getTime() : 0))
+      setSrats((ds.srats || [])
+        .filter(s => s.projectNo === p.projectNo)
+        .filter(s => sratDate(s) >= cutoff)
+        .sort((a, b) => sratDate(b) - sratDate(a)))
       const map = {}; for (const t of (dt.tasks || [])) map[t.id] = t
       setTasksById(map)
     } catch {}

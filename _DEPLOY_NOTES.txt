@@ -1,21 +1,28 @@
-DEPLOY NOTES - Fix: "Forgot password?" did nothing
-===================================================
+DEPLOY NOTES - SRATs: shared correctly between Site App & Portal + 4-week Site App window
+=========================================================================================
 
-ONE file, EDIT. Replace in GitHub.
+TWO files, BOTH EDITS. Replace both in GitHub.
 
-  EDIT  pages/login.js
+  EDIT  pages/api/srats.js         (stamps date + createdAt on every SRAT, from either app)
+  EDIT  pages/forms/cm/srats.js    (Site App shows only the last 4 weeks)
 
-PROBLEM
-Clicking "Forgot password?" on the main login did nothing. The forgot-password form was
-accidentally nested inside the wrong branch of the page logic, so it only showed when a user
-was ALREADY in the "must reset password" state - never from the normal login screen.
+WHAT CHANGED
+1. SRATs created on the Site App had no "date" field. In the portal (which sorts/filters by
+   date) that made them sort oddly or look blank. The API now always stamps createdAt AND a
+   date on save - for SRATs from BOTH apps - so a Site-App SRAT shows correctly in the portal.
+   Both apps read/write the SAME shared store (ops:srats); nothing is app-specific.
 
-FIX
-The "Forgot password?" view is now checked first, so clicking the link switches straight to the
-"enter your email -> send reset link" form. Everything else (the API, the reset link email, and
-the /reset-password page) was already correct - this was purely the login page not showing the
-form.
+2. The Site App SRAT list now shows only this project's SRATs from the LAST 4 WEEKS (newest
+   first), to keep the on-site list short. The PORTAL still shows EVERYTHING (all projects, all
+   dates) - older SRATs remain fully visible there.
 
-(No change needed to the other files from the Forgot-password package.)
+HOW TO VERIFY
+- Add a SRAT on the Site App -> it appears in the Site App list (within 4 weeks) AND in the
+  portal SRATs page (Operations -> Project Management -> SRAT).
+- If an older SRAT drops off the Site App list, confirm it's still in the portal.
 
-NO vercel.json change. No cron. BUILD: Compiled successfully.
+NOTE: existing Site-App SRATs that were saved WITHOUT a date will get one stamped the next time
+they're edited/saved. If any historical ones look mis-sorted in the portal, opening and saving
+them once will fix their date. If you'd like, I can add a one-time backfill - just ask.
+
+NO vercel.json change. No cron. No middleware change (SRAT API already passes through). BUILD: Compiled successfully.

@@ -24,14 +24,23 @@ export default async function handler(req, res) {
     const { srat } = req.body || {}
     if (!srat) return res.status(400).json({ error: 'srat required' })
     let srats = await getSrats()
+    const isoDate = (ts) => new Date(ts).toISOString().slice(0, 10)
     if (!srat.id) {
       srat.id = `srat_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
       srat.createdAt = Date.now()
+      if (!srat.date) srat.date = isoDate(srat.createdAt)
       srats.push(srat)
     } else {
       const idx = srats.findIndex(s => s.id === srat.id)
-      if (idx >= 0) srats[idx] = { ...srats[idx], ...srat }
-      else srats.push(srat)
+      if (idx >= 0) {
+        srats[idx] = { ...srats[idx], ...srat }
+      } else {
+        // New SRAT arriving with a client-generated id (e.g. from the Site App).
+        // Make sure it has createdAt + date so the portal sorts/filters it correctly.
+        if (!srat.createdAt) srat.createdAt = Date.now()
+        if (!srat.date) srat.date = isoDate(srat.createdAt)
+        srats.push(srat)
+      }
     }
     await saveSrats(srats)
     return res.json({ ok: true, id: srat.id })
