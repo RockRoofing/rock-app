@@ -1,69 +1,68 @@
-pkg283 - Variations / Edit Project Details: show pence, not whole pounds
-=========================================================================
+pkg284 - Project Finance: stop depending on the dashboard snapshot
+===================================================================
 
 CHANGED FILES
 -------------
-  pages/project/[id].js       Edit Project Details - variations, budgets, AFA
-  pages/variations.js         Variations page
+  pages/api/cm-project-financials.js      rewritten to read the source stores directly
+  pages/forms/cm/project-finance.js       resolves xeroId first; reports failures properly
+  middleware.js                           INCLUDED so the passthrough is definitely present
 
-No new files. Both straight replacements. Independent of the other packages.
-
-FOLDER NOTE: pages/project/[id].js goes in the folder with LITERAL square brackets -
-pages/project/[id].js
+middleware.js is in this package deliberately - see cause 1 below.
 
 
-ROOT CAUSE - AND THE GOOD NEWS
--------------------------------
-Nothing is wrong with your data. Nothing has ever been saved rounded.
+WHY IT STILL DID NOT WORK
+--------------------------
+My pkg282 fix was correct as far as it went, but it was not the whole story. There were
+up to three separate things that could each produce "no financial data", and I had only
+fixed one of them. Rather than guess at which one you hit, this removes all three.
 
-Both screens formatted money for DISPLAY with maximumFractionDigits: 0, so every figure
-was rounded to whole pounds on the way to the screen only. The stored values keep full
-pence, and every calculation (AFA, budgets, margin, the EOM report) has always used the
-real numbers.
+1. MIDDLEWARE. /api/cm-project-financials must be in the Site App passthrough or the
+   request is rewritten to the /forms page and never reaches the API. That passthrough was
+   added in pkg281. pkg282 contained only two files - so if you deployed pkg282 WITHOUT
+   pkg281, the route was still blocked and my fix could not run at all. middleware.js is
+   included here so that cannot be the problem regardless of what you have deployed.
 
-The imbalance you were seeing is what happens when you round the parts and the total
-separately:
+2. THE SNAPSHOT MIGHT NOT EXIST. The old code needed dashboard:cache to be populated. It
+   expires after 4 hours, so if nobody had opened Project Financials recently there was
+   simply nothing to read.
 
-  SHOWN (old):   £1,235 + £890 + £77  =  £2,202     three lines, shown total
-  ACTUALLY:      1234.56 + 890.45 + 77.30 = 2202.31
-  ADD UP THE SHOWN LINES: 1235 + 890 + 77 = 2202    ... but each line is out by pence,
-                                                        and on more lines the gap grows
+   The page now resolves the project's Xero id through /api/dashboard first - exactly what
+   the CM Applications screen already does, including the ?sync=true retry. That endpoint
+   REBUILDS the snapshot when it is stale. The API then reads the underlying stores
+   directly (project:<xeroId>, costs:latest:<xeroId>, costs:lines:<xeroId>,
+   invoiced:lines:<xeroId>), so it no longer depends on the snapshot's shape, freshness or
+   existence at all.
 
-With enough variations the visible discrepancy can be several pounds, which is exactly the
-"imbalance" you spotted. It was never in the arithmetic - only in what was printed.
+3. THE CONTRACTS MANAGER CHECK COULD FAIL WRONGLY. The old check compared your name to the
+   CM on the FINANCIAL record, which is a different field, populated differently, from the
+   one the Site App uses to decide which projects are yours. A project could therefore
+   appear in your list and then refuse to open.
 
-
-THE FIX
--------
-1. Both screens now display 2 decimal places:
-
-   Edit Project Details - each variation's Total, "Instructed variations", and AFA
-   Variations page      - every money figure (14 places, all on that page)
-
-   The whole-pound formatting is UNCHANGED on the project dashboard cards, cost tables and
-   invoice tables, where whole pounds are easier to read and nothing has to sum on screen.
-   If you want those at 2dp as well, say so.
-
-2. Every money input on both screens now carries step="0.01" and inputMode="decimal".
-   They were plain type="number", which defaults to step="1" - so some browsers flagged
-   "please enter a valid value" on a pence figure and the up/down arrows jumped a whole
-   pound at a time. Entering pence now behaves properly, and mobile gets a numeric keypad.
-
-   Inputs changed: Original contract value, Labour budget, Materials budget, and the
-   Materials / Labour / Profit boxes on every variation (project page, plus the Add and
-   Edit variation modals on the Variations page).
+   It now checks the OPS project list first - the same source the app itself uses - and
+   accepts the financial record's CM as a fallback. The two can no longer disagree.
 
 
-NO DATA MIGRATION NEEDED
--------------------------
-Because the values were never rounded on save, existing variations will simply start
-displaying their true pence as soon as this deploys. You may see figures you have not seen
-before (e.g. a variation you thought was £890 showing as £890.45) - that is the real stored
-value, not a change.
+ALSO: FAILURES NOW SAY WHAT HAPPENED
+-------------------------------------
+If the response is not JSON, the page now says the service could not be reached and names
+the middleware passthrough as the cause, instead of a vague "could not load". If it IS
+JSON, the API's own message is shown. So if this still misbehaves, the screen should tell
+us which of the above it is rather than us guessing again.
+
+Spend also has a fallback: if the aggregate cost cache is empty but cost lines exist, the
+lines are totalled, so the page will not show zero spend against a real cost history.
+
+
+WHAT YOU SHOULD SEE
+--------------------
+Margin (EOM basis, last completed month's valuation date, inc WIP), then labour, materials
+and total budget vs spend vs remaining, then the costs table with Labour / Materials / All
+tabs.
+
+If a project has no valuation date set for last month, margin shows a dash and says so -
+that is correct behaviour, not a failure. The budgets and costs still show.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Rounding behaviour verified against worked examples showing the old parts-vs-total gap and
-its absence after the change.

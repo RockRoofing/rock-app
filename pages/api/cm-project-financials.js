@@ -1,21 +1,20 @@
 import { Redis } from '@upstash/redis'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { nameMatches, normJobNo } from '../../lib/cmSiteApp'
+import { getOpsProjects } from '../../lib/db'
 
 // High-level project financials for the Contracts Manager Site App.
 //
-// GET /api/cm-project-financials?no=<projectNo>&name=<cm name>
+// GET /api/cm-project-financials?no=<projectNo>&xeroId=<id>&name=<cm name>
 //
-// Deliberately HIGH LEVEL and READ ONLY - margin, and budget vs spend vs remaining for
-// labour and materials. No invoice lines, no cost lines, no retention, no WIP detail.
+// xeroId is supplied by the page, which resolves it from /api/dashboard the same way the
+// CM Applications screen already does. When it is supplied this reads the UNDERLYING
+// stores directly - project:<xeroId>, costs:latest:<xeroId>, costs:lines:<xeroId>,
+// invoiced:lines:<xeroId> - so it no longer depends on the dashboard snapshot existing,
+// being fresh, or being any particular shape. Without xeroId it falls back to the snapshot.
 //
-// The margin is calculated on the SAME basis as the EOM report (last completed month's
-// valuation date, including WIP) using the shared computeProjectWip, so the number a CM
-// sees on site matches the number Commercial sees.
-//
-// ACCESS: the caller must be named as the Contracts Manager on the project. The Site App
-// has no portal cookie, so the name is supplied by the client - the same trust model the
-// other CM Site App screens already use.
+// Margin is on the SAME basis as the EOM report (last completed month's valuation date,
+// including WIP) via the shared computeProjectWip, so site and Commercial agree.
 
 const redis = new Redis({
   url: process.env.kv_KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
@@ -29,25 +28,58 @@ export default async function handler(req, res) {
 
   const no = String(req.query.no || '').trim()
   const who = String(req.query.name || '').trim()
+  let xeroId = String(req.query.xeroId || '').trim()
   if (!no) return res.status(400).json({ error: 'Project number required' })
   if (!who) return res.status(401).json({ error: 'Not identified' })
 
-  // Dashboard snapshot carries the budgets, spends and the per-project date settings.
-  // NOTE: dashboard:cache is stored as a BARE ARRAY of projects, not { projects: [...] }.
-  // Reading it as an object was why this returned "no financial data" for every project.
-  let snap = null
-  try { snap = await redis.get('dashboard:cache') } catch {}
-  const rows = Array.isArray(snap) ? snap : (snap && Array.isArray(snap.projects) ? snap.projects : [])
-  if (!rows.length) {
-    return res.status(503).json({ error: 'Financial data has not been built yet. Open Project Financials in the portal once, then try again.' })
-  }
-  const p = rows.find(r => normJobNo(r.jobNo || r.projectNo) === normJobNo(no))
-  if (!p) return res.status(404).json({ error: 'No financial data for this project yet.' })
+  // ---- Access: the caller must be the Contracts Manager on this project. ----
+  // Checked against the OPS project list, which is the same source the Site App uses to
+  // decide whose projects are whose - so the server and the app cannot disagree.
+  let opsProject = null
+  try {
+    const opsProjects = (await getOpsProjects()) || []
+    opsProject = opsProjects.find(x => normJobNo(x.projectNo) === normJobNo(no)) || null
+  } catch {}
+  let allowed = !!(opsProject && nameMatches(who, opsProject.contractsManager || ''))
 
-  // Only the project's own Contracts Manager may see this.
-  if (!nameMatches(who, p.contractsManager || '')) {
-    return res.status(403).json({ error: 'You are not the Contracts Manager on this project.' })
+  // ---- Resolve the project's financial record ----
+  let p = null
+  if (xeroId) {
+    const settings = (await redis.get(`project:${xeroId}`).catch(() => null)) || {}
+    const costCache = (await redis.get(`costs:latest:${xeroId}`).catch(() => null)) || {}
+    const vars = Array.isArray(settings.variations) ? settings.variations : []
+    const instructed = vars.filter(v => v.instructed)
+    p = {
+      xeroId,
+      jobNo: no,
+      name: (opsProject && opsProject.projectName) || settings.projectName || '',
+      contractsManager: settings.contractsManager || '',
+      labourBudget: numOr0(settings.labourBudget) + instructed.reduce((s, v) => s + numOr0(v.labour), 0),
+      materialsBudget: numOr0(settings.materialsBudget) + instructed.reduce((s, v) => s + numOr0(v.materials), 0),
+      labourSpend: numOr0(costCache.labourSpend),
+      materialsSpend: numOr0(costCache.materialsSpend),
+      valuationDay: settings.valuationDay || null,
+      dateOverrides: settings.dateOverrides || {},
+      wipMarginOverride: (settings.wipMarginOverride != null && settings.wipMarginOverride !== '') ? settings.wipMarginOverride : null,
+      wipAdjustments: (await redis.get(`wip:adjustments:${xeroId}`).catch(() => null)) || [],
+    }
+  } else {
+    // Fallback: the dashboard snapshot. Stored as a BARE ARRAY, not { projects: [...] }.
+    let snap = null
+    try { snap = await redis.get('dashboard:cache') } catch {}
+    const rows = Array.isArray(snap) ? snap : (snap && Array.isArray(snap.projects) ? snap.projects : [])
+    if (!rows.length) {
+      return res.status(503).json({ error: 'Financial data has not been built yet. Open Project Financials in the portal once, then try again.' })
+    }
+    p = rows.find(r => normJobNo(r.jobNo || r.projectNo) === normJobNo(no)) || null
+    if (!p) return res.status(404).json({ error: 'This project has no financial record in Xero yet.' })
+    xeroId = p.xeroId
   }
+
+  // A CM named on the financial record counts too - covers projects where the Ops IHM has
+  // not been completed but Commercial have set the Contracts Manager.
+  if (!allowed && p.contractsManager && nameMatches(who, p.contractsManager)) allowed = true
+  if (!allowed) return res.status(403).json({ error: 'You are not listed as the Contracts Manager on this project.' })
 
   // ---- Margin on the EOM basis: last COMPLETED month's valuation date, inc WIP ----
   const nowD = new Date()
@@ -57,7 +89,6 @@ export default async function handler(req, res) {
   const eomMonthKey = `${eomYear}-${String(eomMonth).padStart(2, '0')}`
   const monthEndStr = new Date(Date.UTC(eomYear, eomMonth, 0)).toISOString().split('T')[0]
 
-  // Valuation date: a per-month override wins, otherwise the project's valuation day.
   let valStr = null
   const ov = p.dateOverrides && p.dateOverrides[eomMonthKey] && p.dateOverrides[eomMonthKey].valuationDate
   if (ov) valStr = ov
@@ -67,12 +98,13 @@ export default async function handler(req, res) {
     valStr = new Date(Date.UTC(eomYear, eomMonth - 1, day)).toISOString().split('T')[0]
   }
 
+  const cLines = (await redis.get(`costs:lines:${xeroId}`).catch(() => null)) || []
+  const iLines = (await redis.get(`invoiced:lines:${xeroId}`).catch(() => null)) || []
+
   let margin = null, invoicedIncWip = 0, profitIncWip = 0
   if (valStr) {
     try {
       const invVal = (i) => (i.sales200 != null ? i.sales200 : (i.subTotal != null ? i.subTotal : 0))
-      const cLines = (await redis.get(`costs:lines:${p.xeroId}`).catch(() => null)) || []
-      const iLines = (await redis.get(`invoiced:lines:${p.xeroId}`).catch(() => null)) || []
       const costsToDate = cLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + (l.amount || 0), 0)
       const grossToDate = iLines.filter(l => l.date && l.date <= valStr).reduce((s, l) => s + invVal(l), 0)
       const monthAdj = Array.isArray(p.wipAdjustments) ? p.wipAdjustments.filter(a => a.month === eomMonthKey) : []
@@ -86,14 +118,8 @@ export default async function handler(req, res) {
     } catch { margin = null }
   }
 
-  // ---- Budget vs spend. Budgets already include instructed variations. ----
-  const labourBudget = numOr0(p.labourBudget)
-  const labourSpend = numOr0(p.labourSpend)
-  const materialsBudget = numOr0(p.materialsBudget)
-  const materialsSpend = numOr0(p.materialsSpend)
-
-  // ---- Cost lines actually incurred, split labour / materials ----
-  // Bills lines carry type 'Labour'/'Materials'. Wages lines predate that field, so fall
+  // ---- Cost lines, split labour / materials ----
+  // Bills lines carry a Labour/Materials type. Wages lines predate that field, so fall
   // back to the same account-code rule the importer uses (config first, then 320/321).
   let catConfig = {}
   try { catConfig = (await redis.get('config:account-categorisation')) || {} } catch {}
@@ -106,22 +132,16 @@ export default async function handler(req, res) {
     return DEFAULT_LABOUR_CODES.includes(code)
   }
 
-  let costs = []
-  try {
-    const cLines = (await redis.get(`costs:lines:${p.xeroId}`)) || []
-    costs = cLines.map(l => ({
-      date: l.date || '',
-      supplier: l.supplier || '',
-      description: l.description || '',
-      reference: l.reference || '',
-      amount: numOr0(l.amount),
-      type: isLabourLine(l) ? 'Labour' : 'Materials',
-    }))
-    costs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-  } catch { costs = [] }
+  let costs = (Array.isArray(cLines) ? cLines : []).map(l => ({
+    date: l.date || '',
+    supplier: l.supplier || '',
+    description: l.description || '',
+    reference: l.reference || '',
+    amount: numOr0(l.amount),
+    type: isLabourLine(l) ? 'Labour' : 'Materials',
+  }))
+  costs.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
 
-  // Keep the payload sensible on a phone - newest first, capped, with a flag so the page
-  // can say so rather than quietly showing a partial list.
   const CAP = 400
   const costsTruncated = costs.length > CAP
   const costTotals = {
@@ -130,6 +150,14 @@ export default async function handler(req, res) {
     count: costs.length,
   }
   if (costsTruncated) costs = costs.slice(0, CAP)
+
+  // ---- Budgets vs spend. Budgets include instructed variations. ----
+  const labourBudget = numOr0(p.labourBudget)
+  const materialsBudget = numOr0(p.materialsBudget)
+  // Spend from the aggregate cost cache; if that is empty but we have lines, total the
+  // lines instead so the page is never blank just because the aggregate is stale.
+  const labourSpend = numOr0(p.labourSpend) || costTotals.labour
+  const materialsSpend = numOr0(p.materialsSpend) || costTotals.materials
 
   const block = (budget, spend) => ({
     budget, spend,
@@ -141,10 +169,9 @@ export default async function handler(req, res) {
   return res.json({
     projectNo: p.jobNo || no,
     projectName: p.name || '',
-    contractsManager: p.contractsManager || '',
-    asAt: valStr,                                  // the valuation date the margin is at
+    asAt: valStr,
     asAtMonth: eomMonthKey,
-    margin,                                        // 0-1, or null when not calculable
+    margin,
     invoicedIncWip,
     profitIncWip,
     labour: block(labourBudget, labourSpend),

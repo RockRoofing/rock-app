@@ -44,8 +44,32 @@ export default function CmProjectFinance() {
   async function pick(p) {
     setProj(p); setData(null); setErr(''); setLoading(true)
     try {
-      const r = await fetch(`/api/cm-project-financials?no=${encodeURIComponent(p.projectNo)}&name=${encodeURIComponent(user?.name || '')}`)
-      const d = await r.json()
+      // Resolve the Xero id first, exactly as the CM Applications screen does - the
+      // dashboard endpoint rebuilds itself if the snapshot is stale or missing, so the
+      // figures do not depend on someone having opened Project Financials recently.
+      let xeroId = ''
+      try {
+        const matchKey = (x) => String(x.jobNo || x.projectNo || '').trim()
+        let d0 = await fetch('/api/dashboard').then(r => r.json())
+        let row = (d0.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
+        if (!row) {
+          d0 = await fetch('/api/dashboard?sync=true').then(r => r.json())
+          row = (d0.projects || []).find(x => matchKey(x) === String(p.projectNo).trim())
+        }
+        if (row && row.xeroId) xeroId = row.xeroId
+      } catch {}
+
+      const qs = new URLSearchParams({ no: p.projectNo, name: user?.name || '' })
+      if (xeroId) qs.set('xeroId', xeroId)
+      const r = await fetch(`/api/cm-project-financials?${qs.toString()}`)
+      const text = await r.text()
+      let d = null
+      try { d = JSON.parse(text) } catch {
+        // A non-JSON body means the request never reached the API - almost always the
+        // Site App middleware passthrough missing this route.
+        setErr('The financials service could not be reached on the Site App. Check /api/cm-project-financials is in the middleware passthrough.')
+        setLoading(false); return
+      }
       if (!r.ok) setErr(d.error || 'Could not load the figures.')
       else setData(d)
     } catch { setErr('Could not load the figures.') }
