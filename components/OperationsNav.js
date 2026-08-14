@@ -1,3 +1,4 @@
+import ReportImprovementLink from './ReportImprovementLink'
 // Two-tier Operations navigation.
 // Top row: main sections (no dropdowns). Clicking a section navigates to it.
 // Sections with sub-pages render a SECOND ROW of tabs underneath (like the
@@ -45,6 +46,7 @@ export const NAV = [
 
 const RIGHT = []
 
+
 export default function OperationsNav({ active, section }) {
   return (
     <div>
@@ -69,8 +71,7 @@ export default function OperationsNav({ active, section }) {
             <Divider />
           </span>
         ))}
-        <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-          style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>⚠ Report app improvement</button>
+        <ReportImprovementLink />
         <Divider />
         <a href="https://siteapp.rockroofing.co.uk" target="_blank" rel="noreferrer"
           style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap' }}>Open Site App ↗</a>

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ReportImprovementLink from './ReportImprovementLink'
 
 // Commercial Portal nav. Most items are single pages. Two items are GROUPS with their
 // own sub-nav row: "Applications" and "Scorecards".
@@ -71,8 +72,7 @@ export default function CommercialNav({ active, right = null }) {
             })}
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-              style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
+            <ReportImprovementLink />
             {right}
           </div>
         </div>

@@ -2,6 +2,7 @@ import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { canAccessArea } from '../lib/roles'
+import ReportImprovementLink from '../components/ReportImprovementLink'
 
 const departments = [
   {
@@ -207,10 +208,7 @@ export default function Portal() {
           <div style={{ flex: 1 }} />
           {user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <span>&#9888;</span> Report app improvement
-              </button>
+              <ReportImprovementLink />
               {user.role === 'admin' && <a href="/admin" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
               {user.role === 'management' && <a href="/operations/users" style={{ color: '#ca8a04', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}>Admin</a>}
               <span style={{ color: '#888', fontSize: 13 }}>{user.name} · {user.role}</span>

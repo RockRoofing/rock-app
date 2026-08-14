@@ -5,6 +5,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { computeProjectWip } from '../../lib/wipCalc'
 import { missingProjectFields } from '../../lib/projectComplete'
+import ReportImprovementLink from '../../components/ReportImprovementLink'
 
 const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
@@ -241,8 +242,7 @@ export default function ProjectPage() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-                style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
+              <ReportImprovementLink />
               <button onClick={() => setEditMode(!editMode)} style={{ background: 'transparent', border: '1px solid #444', color: '#ccc', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>
                 {editMode ? 'Cancel' : 'Edit Project Details'}
               </button>

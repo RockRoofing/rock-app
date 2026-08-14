@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { useDesignAuth, designHref, designLogout, PURPLE, INK } from '../../lib/designShell'
+import ReportImprovementLink from '../../components/ReportImprovementLink'
 
 export default function DesignHome() {
   const router = useRouter()
@@ -34,8 +35,7 @@ export default function DesignHome() {
           <a href="/admin/design-customers" style={{ color: '#c4b5fd', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>Manage Customers</a>
         )}
         <div style={{ flex: 1, minWidth: 16 }} />
-        <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-          style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
+        <ReportImprovementLink />
         <button onClick={designLogout}
           style={{ color: '#bbb', fontSize: 13, background: 'none', border: '1px solid #3a3a38', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', padding: '4px 12px', marginLeft: 8 }}>Log out</button>
       </div>

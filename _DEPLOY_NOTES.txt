@@ -1,91 +1,85 @@
-pkg280 - Site App: Project Finance for Contracts Managers
-==========================================================
+pkg281 - Report app improvement link: one shared component, consistent everywhere
+==================================================================================
 
-NOTE: pkg280 REPLACES pkg272 through pkg279. Deploy this one and ignore those.
+NOTE: pkg281 REPLACES pkg272 through pkg280. Deploy this one and ignore those.
 pkg278 (applications.js decimals) is SEPARATE and still needs deploying.
 
 
 NEW FILES - must be created manually in GitHub ("Add file" -> "Create new file")
 --------------------------------------------------------------------------------
-  pages/api/cm-project-financials.js
-  pages/forms/cm/project-finance.js
-  pages/api/project-drawings.js        (from pkg279)
-  components/ProjectDrawings.js        (from pkg279)
+  components/ReportImprovementLink.js      <- new in this package
+  pages/api/cm-project-financials.js       (from pkg280)
+  pages/forms/cm/project-finance.js        (from pkg280)
+  pages/api/project-drawings.js            (from pkg279)
+  components/ProjectDrawings.js            (from pkg279)
 
 CHANGED FILES (straight replacements)
 --------------------------------------
-  pages/forms/index.js                 new Project Finance tile (CM section)
-  middleware.js                        new route allowed through on the Site App host
-  pages/operations/projects.js         (pkg279) Drawings tab read-only, design-sourced
-  components/OperationsNav.js          (earlier) nav 17px
-  components/ReportProblemButton.js    (earlier) attachments + paste
-  pages/api/report-problem.js          (earlier) store attachments
-  pages/admin/problem-reports.js       (earlier) show attachments
+  components/OperationsNav.js              uses the shared link
+  components/PreContractNav.js             uses the shared link
+  components/CommercialNav.js              uses the shared link
+  components/BizNav.js                     uses the shared link
+  pages/index.js                           uses the shared link
+  pages/design/index.js                    uses the shared link
+  pages/business-financials.js             uses the shared link
+  pages/project/[id].js                    uses the shared link
+  ... plus everything carried from pkg279 / pkg280 (see those sections below)
 
 
-PROJECT FINANCE - WHAT IT DOES
--------------------------------
-New tile in the Contracts Manager section of the Site App. It does NOT appear for anyone
-else - the page itself also redirects away if the user is not accessLevel
-'contracts-manager', so it cannot be reached by typing the URL.
+WHY THEY WERE DIFFERENT
+------------------------
+The link's styling had been COPIED into all eight files rather than shared. They were
+close but never identical, and they drifted further apart every time one got touched -
+most recently when the Operations nav went to 17px, because that one link inherits the
+nav's link style and the other seven do not.
 
-Project-first, as asked: you land on a project list and pick one before seeing anything.
-That list shows only LIVE projects (status 'active' - completed and archived are excluded)
-where the logged-in user is named as Contracts Manager.
+Rather than paste the Operations styling into seven more files (which would drift again),
+there is now ONE component:
 
-Once a project is picked:
+  components/ReportImprovementLink.js
 
-  MARGIN        one big number, colour-coded (red negative, amber under 10%, green above),
-                with the valuation date it is stated as at.
-
-  LABOUR        budget / spend / remaining, with a usage bar
-  MATERIALS     budget / spend / remaining, with a usage bar
-  TOTAL         the two combined
-
-Bars turn amber over 90% used and red when over budget, and "Remaining" goes red when
-negative, so an overspend is obvious at a glance on a phone.
+All eight places render that. Change it once and every location changes together. It
+cannot go out of step again.
 
 
-HOW THE MARGIN IS CALCULATED
------------------------------
-Deliberately the SAME basis as the EOM report, using the same shared computeProjectWip
-from lib/wipCalc.js: to the LAST COMPLETED month's valuation date, INCLUDING WIP.
+WHAT IT LOOKS LIKE
+-------------------
+Exactly the Operations portal version, everywhere:
 
-  margin = (profit to valuation date + WIP profit) / (invoiced to valuation date + WIP)
+  gold #ca8a04, 17px, warning icon, plain text - NOT a button
+  padding 6px 12px, no underline
 
-The valuation date is the project's own - a per-month override wins, otherwise the
-project's valuation day applied to that month. This is the same rule Commercial use, so a
-CM on site and Commercial in the office see the same number.
+Locations updated: Portal home, Operations, Pre-Contract, Commercial, Business Financials,
+Business nav, Design portal, Project page.
 
-If a project has no valuation date set for last month, the margin shows as a dash with
-"No valuation date set for last month" rather than a misleading figure.
+WORTH A LOOK: 17px is noticeably larger than the surrounding link text in the navs OUTSIDE
+Operations - those rows are still 13px, because only the Operations nav was resized. So the
+link will now be the biggest text in those bars. That is what "same as Operations" means,
+but if it looks out of place, tell me and I will either size it to sit with each nav or
+bring the other navs up to 17px.
 
-Budgets are taken from the dashboard snapshot and INCLUDE instructed variations, which
-matches Project Financials.
+The SITE APP link is deliberately NOT included - you asked for that one to be orange,
+underlined and phone-sized, and it stays that way. It is noted in the component file so it
+does not get folded in by mistake later.
 
 
-TWO THINGS TO BE AWARE OF
---------------------------
-1. THE FIGURES COME FROM THE DASHBOARD CACHE, which rebuilds every 4 hours. So the numbers
-   can be up to 4 hours behind a fresh Xero sync. For a high-level "how is my job doing"
-   view on site that is fine, but it is not a live feed. If a project has never been
-   through a dashboard sync, the page says there is no financial data yet rather than
-   showing zeroes.
-
-2. ACCESS CONTROL MATCHES THE EXISTING CM SCREENS, NOT MORE. The Site App has no portal
-   login cookie, so the server checks the CM name supplied by the app against the project's
-   Contracts Manager and refuses if they do not match. That is the same trust model the
-   existing CM Applications / Variations / Contracted Rates screens already use, and it is
-   a real check rather than nothing - but it is client-supplied identity.
-
-   Given this screen shows margin, I would rather flag that plainly than let it pass. If
-   you want it hardened, the fix is a proper signed Site App session token, which would
-   also benefit every other CM screen. That is a separate piece of work - say the word.
+ALSO IN THIS PACKAGE (from pkg280 / pkg279, unchanged)
+-------------------------------------------------------
+  - Site App Project Finance for Contracts Managers (margin on the EOM basis, labour and
+    materials budget vs spend vs remaining, live projects only, project-first).
+  - Ops Drawings tab read-only and fed live from the Design Portal's Rock Drawings, with
+    approved / Construction Issue banners; Site App drawings limited to Construction Issue.
+    *** That change makes previously UPLOADED Ops drawings disappear from both screens -
+        see the pkg279 warning if you have not already read it. ***
+  - App Improvement attachments and pasted screenshots, portal and Site App.
+  - Site App improvement reports fixed (middleware passthrough).
+  - Operations nav 17px, sub-tabs 15px.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+Confirmed no copies of the old inline link remain anywhere in pages/ or components/.
 
 
 STILL OUTSTANDING

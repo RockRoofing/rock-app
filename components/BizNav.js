@@ -1,5 +1,6 @@
 import { useRouter } from 'next/router'
 import { useState } from 'react'
+import ReportImprovementLink from './ReportImprovementLink'
 
 export const GOLD = '#ca8a04'
 export const INK = '#1a1a19'
@@ -34,8 +35,7 @@ export function BizNav() {
           return <a key={href} href={href} style={{ color: active ? '#fff' : '#9a9a97', background: active ? 'rgba(255,255,255,0.1)' : 'transparent', fontSize: 13, fontWeight: active ? 600 : 500, textDecoration: 'none', padding: '7px 12px', borderRadius: 7 }}>{label}</a>
         })}
         <div style={{ marginLeft: 'auto' }}>
-          <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-            style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }}><span>&#9888;</span> Report app improvement</button>
+          <ReportImprovementLink />
         </div>
       </div>
     </div>

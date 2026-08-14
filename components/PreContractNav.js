@@ -1,6 +1,8 @@
 // Shared top navigation for all Pre-Contract pages.
 // Fixed order, a divider between every tab, and the current page highlighted.
 // Order: Portal | Sales Dashboard | Scorecards | Negotiating | Project Financials
+import ReportImprovementLink from './ReportImprovementLink'
+
 export default function PreContractNav({ active, children }) {
   const tabs = [
     { key: 'sales', label: 'Sales Dashboard', href: '/sales' },
@@ -27,13 +29,11 @@ export default function PreContractNav({ active, children }) {
       ))}
       <div style={{ flex: 1 }} />
       {children}
-      <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-        style={{ ...reportBtn, marginLeft: 8 }}><span>&#9888;</span> Report app improvement</button>
+      <ReportImprovementLink style={{ marginLeft: 8 }} />
     </div>
   )
 }
 
 const Divider = () => <span style={{ color: '#3a3a38', fontSize: 14, padding: '0 2px' }}>|</span>
-const reportBtn = { background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }
 const linkStyle = { color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap' }
 const activeStyle = { color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 12px', borderRadius: 6, background: '#2a2a28', whiteSpace: 'nowrap' }
