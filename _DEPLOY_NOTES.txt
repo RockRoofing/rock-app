@@ -1,24 +1,23 @@
-DEPLOY NOTES - Planning: project-name fallback + Overheads use drag-select
-==========================================================================
+DEPLOY NOTES - TEMP diagnostic: trace where J203 is coming from
+===============================================================
 
-TWO files, BOTH EDITS. Replace both in GitHub.
+ONE file, NEW. Add via "Add file" at pages/api/planning-trace.js.
+This is a TEMPORARY diagnostic - we'll delete it once we've found the answer.
 
-  EDIT  pages/api/planning-week.js                        (cleaner project name fallback)
-  EDIT  pages/operations/project-management/planning.js   (Overheads now multi-select like projects)
+HOW TO USE
+After deploying, while logged in to the portal, open this URL in your browser:
 
-FIX 1 - "L:J203" style codes on the report
-When a project could not be found in the current project list (e.g. old/test/removed jobs),
-the report showed the raw key like "L:J203". It now strips the prefix and shows just the
-project number ("J203"). Real, current projects continue to show their proper name; this only
-affects ones no longer in the project list.
+  https://app.rockroofing.co.uk/api/planning-trace?q=J203
 
-FIX 2 - Overheads multi-day now works like projects
-The Overheads row no longer opens a single-day panel with a long list of dates. Instead it uses
-the SAME drag-to-select as the project rows:
-  - In Day view, click/drag across the Overheads row to select one or more days.
-  - The action bar appears ("Overheads - N days selected") with "Add / edit overheads".
-  - That opens a panel to add staff + category to ALL selected days at once, and to see/edit
-    who is already on overheads for each of those days.
-No more big in-modal date checklist - it matches how you allocate projects.
+It returns JSON showing:
+  - allocationKeysFound : the exact key(s) in the planner data that reference J203
+  - projectExists / projectStatus / projectName : whether a J203 project exists and its status
+  - detail[].dates : EVERY date J203 is allocated on, and which operatives (opIds) are on it
+
+Copy the JSON back to me and I'll tell you exactly where J203 is coming from and the right fix
+(e.g. it's an orphaned/test allocation to clear, or a completed project that should be hidden
+from the report).
+
+You can also check other things by changing the query, e.g. ?q=L: to list all project keys.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.
