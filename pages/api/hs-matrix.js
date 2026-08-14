@@ -196,12 +196,19 @@ export default async function handler(req, res) {
         return res.json({ ok: true, columns: reordered })
       }
       if (action === 'set-cell') {
-        const { personId, colId, value } = req.body  // value = { date } | { noExpiry:true } | null
+        const { personId, colId, value } = req.body  // value = { date?, noExpiry?, attachment? } | null
         if (!personId || !colId) return res.status(400).json({ error: 'Missing personId/colId' })
         const data = (await get(DATA_KEY)) || {}
         data[personId] = data[personId] || {}
-        if (!value || (!value.date && !value.noExpiry)) delete data[personId][colId]
-        else data[personId][colId] = value.noExpiry ? { noExpiry: true } : { date: value.date }
+        const att = value && value.attachment ? value.attachment : null   // { url, name, contentType }
+        // A cell is kept if it has a date, noExpiry, OR an attachment.
+        if (!value || (!value.date && !value.noExpiry && !att)) {
+          delete data[personId][colId]
+        } else {
+          const cell = value.noExpiry ? { noExpiry: true } : (value.date ? { date: value.date } : {})
+          if (att) cell.attachment = att
+          data[personId][colId] = cell
+        }
         if (!Object.keys(data[personId]).length) delete data[personId]
         await set(DATA_KEY, data)
         return res.json({ ok: true })

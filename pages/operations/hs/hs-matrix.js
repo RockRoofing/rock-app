@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { upload } from '@vercel/blob/client'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, Loading, ghostBtn, primaryBtn } from '../../../components/opsUI'
 
@@ -199,9 +200,13 @@ export default function HSMatrixPage() {
                       {isEditing ? (
                         <CellEditor cell={cell} onSave={(v) => saveCell(p.id, c.id, v)} onCancel={() => setEdit(null)} />
                       ) : (
-                        <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} — ${c.label}`}
-                          style={{ height: '100%', minHeight: 38, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: col ? col.bg : 'transparent', color: col ? col.fg : '#ddd', fontSize: 10.5, fontWeight: 600, textAlign: 'center', padding: '2px' }}>
+                        <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} - ${c.label}`}
+                          style={{ height: '100%', minHeight: 38, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: col ? col.bg : 'transparent', color: col ? col.fg : '#ddd', fontSize: 10.5, fontWeight: 600, textAlign: 'center', padding: '2px', position: 'relative' }}>
                           {col ? col.text : ''}
+                          {cell && cell.attachment && (
+                            <a href={cell.attachment.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title={`View certificate: ${cell.attachment.name}`}
+                              style={{ position: 'absolute', top: 1, right: 2, fontSize: 10, textDecoration: 'none', lineHeight: 1 }}>&#128206;</a>
+                          )}
                         </div>
                       )}
                     </div>
@@ -222,17 +227,53 @@ export default function HSMatrixPage() {
 function CellEditor({ cell, onSave, onCancel }) {
   const [date, setDate] = useState(cell && cell.date ? cell.date : '')
   const [noExpiry, setNoExpiry] = useState(!!(cell && cell.noExpiry))
-  const hasValue = !!(cell && (cell.date || cell.noExpiry))
+  const [attachment, setAttachment] = useState(cell && cell.attachment ? cell.attachment : null)
+  const [uploading, setUploading] = useState(false)
+  const [upErr, setUpErr] = useState('')
+  const hasValue = !!(cell && (cell.date || cell.noExpiry || cell.attachment))
+
+  async function onFile(file) {
+    if (!file) return
+    setUploading(true); setUpErr('')
+    try {
+      const blob = await upload(file.name, file, { access: 'public', handleUploadUrl: '/api/blob-upload', contentType: file.type || 'application/octet-stream' })
+      setAttachment({ url: blob.url, name: file.name, contentType: file.type || '' })
+    } catch (e) { setUpErr('Upload failed. Try again.') }
+    setUploading(false)
+  }
+  const buildValue = () => {
+    const v = noExpiry ? { noExpiry: true } : (date ? { date } : {})
+    if (attachment) v.attachment = attachment
+    return (v.date || v.noExpiry || v.attachment) ? v : null
+  }
+
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20, background: '#fff', border: `2px solid ${GOLD}`, borderRadius: 8, padding: 8, width: 190, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+    <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20, background: '#fff', border: `2px solid ${GOLD}`, borderRadius: 8, padding: 8, width: 210, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
       <input type="date" value={date} disabled={noExpiry} onChange={e => setDate(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '6px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', opacity: noExpiry ? 0.5 : 1 }} />
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, marginTop: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={noExpiry} onChange={e => setNoExpiry(e.target.checked)} /> Does not expire
       </label>
+
+      <div style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+        <div style={{ fontSize: 10.5, color: '#888', marginBottom: 4 }}>Certificate / card</div>
+        {attachment ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <a href={attachment.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: 11.5, color: '#7c3aed', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={attachment.name}>&#128206; {attachment.name}</a>
+            <button onClick={() => setAttachment(null)} title="Remove attachment" style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>&times;</button>
+          </div>
+        ) : (
+          <label style={{ display: 'inline-block', fontSize: 11.5, color: '#7c3aed', cursor: uploading ? 'wait' : 'pointer' }}>
+            {uploading ? 'Uploading...' : '+ Attach file'}
+            <input type="file" accept="image/*,application/pdf" disabled={uploading} onChange={e => onFile(e.target.files && e.target.files[0])} style={{ display: 'none' }} />
+          </label>
+        )}
+        {upErr && <div style={{ color: '#dc2626', fontSize: 10.5, marginTop: 3 }}>{upErr}</div>}
+      </div>
+
       <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-        <button onClick={() => onSave(noExpiry ? { noExpiry: true } : (date ? { date } : null))} style={{ ...primaryBtn, padding: '5px 10px', fontSize: 12, flex: 1 }}>Save</button>
+        <button onClick={() => onSave(buildValue())} disabled={uploading} style={{ ...primaryBtn, padding: '5px 10px', fontSize: 12, flex: 1, opacity: uploading ? 0.6 : 1 }}>Save</button>
         {hasValue && <button onClick={() => onSave(null)} title="Clear this cell" style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12, color: '#dc2626' }}>Clear</button>}
-        <button onClick={onCancel} style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12 }}>×</button>
+        <button onClick={onCancel} style={{ ...ghostBtn, padding: '5px 8px', fontSize: 12 }}>&times;</button>
       </div>
     </div>
   )

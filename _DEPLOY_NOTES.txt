@@ -1,20 +1,22 @@
-DEPLOY NOTES - Give Management access to Design Customers
-=========================================================
+DEPLOY NOTES - H&S Training Matrix: attach a certificate to each date cell
+==========================================================================
 
-THREE files, ALL EDITS. Replace each in GitHub.
+TWO files, BOTH EDITS. Replace both in GitHub.
 
-  EDIT  pages/admin/design-customers.js   (page now allows management, back-link adapts)
-  EDIT  pages/api/design-customers.js      (API now allows management)
-  EDIT  pages/design/index.js              (adds a "Manage Customers" link in the Design header)
+  EDIT  pages/operations/hs/hs-matrix.js   (cell editor gains file attach + view)
+  EDIT  pages/api/hs-matrix.js             (stores the attachment on the cell)
 
 WHAT CHANGED
-- The Design Customers section (managing external customer / design-team logins) was ADMIN ONLY.
-  It now also allows users with MANAGEMENT permissions - both the page and its API.
-- Because management users don't have the Admin area, they previously had no way to reach it.
-  There is now a "Manage Customers" link in the Design portal header, shown only to admin and
-  management (not to customers/external users, and not to other internal roles).
-- The back-link on the page points to Design for management users, and Admin for admins.
+Each date cell in the H&S Training Matrix can now hold an attachment (the training certificate /
+CSCS card image or PDF):
+  - Click a cell to open the editor. As well as the expiry date / "Does not expire", there is now
+    a "Certificate / card" section with "+ Attach file" (images or PDF).
+  - Once attached, the file name shows with a link; you can remove or replace it.
+  - Cells with an attachment show a small paperclip in the top-right corner. Click the paperclip
+    to open the certificate in a new tab (without opening the editor) - so you can check the CSCS
+    card matches at a glance.
+  - A cell can hold just an attachment, just a date, or both.
 
-Admins are unaffected - they still reach it from the Admin page as before.
+Files upload straight to secure blob storage (same mechanism as the design certificates).
 
 NO vercel.json change. No cron. No middleware change. BUILD: Compiled successfully.
