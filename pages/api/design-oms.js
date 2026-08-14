@@ -69,11 +69,12 @@ async function gatherSections(no) {
   // separator sheet and its own line in the contents.
   const techSubSections = curTechSubs.map((d, i) => ({
     title: `Tech Sub ${i + 1}${d.title ? ` - ${d.title}` : ''}`,
-    files: [{ name: d.name, url: d.url, contentType: d.contentType }],
+    files: [{ name: d.name, url: d.stampedUrl || d.url, contentType: d.contentType }],
   }))
   // Rock Drawings AND Calculations: only items marked CONSTRUCTION ISSUE are included.
-  const dwgFiles = curDrawings.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
-  const calcFiles = curCalcs.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.url, contentType: d.contentType }))
+  // Use the stamped copy so the O&M carries the Approved / Construction Issue stamps.
+  const dwgFiles = curDrawings.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.stampedUrl || d.url, contentType: d.contentType }))
+  const calcFiles = curCalcs.filter(d => d.constructionIssue).map(d => ({ name: d.name, url: d.stampedUrl || d.url, contentType: d.contentType }))
   const leakFiles = ((leaks && leaks.files) || []).map(f => ({ name: f.name, url: f.url, contentType: f.contentType }))
   const warrFiles = ((warranties && warranties.files) || []).map(f => ({ name: f.name, url: f.url, contentType: f.contentType }))
 

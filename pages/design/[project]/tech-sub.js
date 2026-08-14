@@ -7,6 +7,10 @@ import DrawingMarkup from '../../../components/DrawingMarkup'
 
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
+// Approved / Construction Issue documents get a stamped copy baked at the moment the
+// status changes. Always view and hand out the stamped copy when there is one.
+const viewUrl = (d) => (d && d.stampedUrl) || (d && d.url) || ''
+
 export default function TechSubPage() {
   const router = useRouter()
   const projectNo = router.query.project ? String(router.query.project) : ''
@@ -237,7 +241,7 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {canApprove && <button onClick={onApprove} style={btnApproveBig}>&#10003; Approve Tech Sub</button>}
             {!canApprove && doc.approvalStatus !== 'approved' && !doc.superseded && <span style={{ fontSize: 12, color: '#9a3412', fontWeight: 600 }}>Awaiting customer approval</span>}
-            <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
+            <a href={`/api/download?url=${encodeURIComponent(viewUrl(doc))}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
           </div>
         </div>
@@ -268,7 +272,7 @@ function TechSubViewer({ doc, people, personName, onClose, onComment, onMarkup, 
           </div>
 
           {isViewable
-            ? <DrawingMarkup key={doc.url} imageUrl={doc.url} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="technical submittal" />
+            ? <DrawingMarkup key={viewUrl(doc)} imageUrl={viewUrl(doc)} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="technical submittal" />
             : <div style={{ padding: 24, textAlign: 'center', color: '#888', background: '#faf9fd', borderRadius: 10 }}>This file type can't be previewed - use Download to view it.</div>}
 
           {/* Digital approval record, date/time-stamped, at the end of the tech sub */}

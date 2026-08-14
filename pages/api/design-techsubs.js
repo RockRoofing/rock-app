@@ -6,6 +6,7 @@ import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { tsKey, tsRecordPendingComment, tsRecordPendingDoc, tsGetReadMap, tsMarkRead, tsUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
+import { buildStampedCopy } from '../../lib/stampPdf'
 
 // Tech Sub documents for a project. Each doc is a REVISION belonging to a "family" (one
 // tech sub). Revisions within a family are lettered REV A, REV B, ... Only the newest in a
@@ -204,6 +205,8 @@ export default async function handler(req, res) {
       docs[i].approvalRecord.fileHash = fileHash
       docs[i].approvalRecord.auditId = evt.id
     } catch (e) { /* audit failure must not block approval */ }
+    // Bake a stamped APPROVED copy so the stamp shows in the viewer, downloads and zips.
+    try { docs[i].stampedUrl = await buildStampedCopy(docs[i], { projectNo: no }) } catch (e) { /* stamping must not block */ }
     await set(tsKey(no), docs)
     // Let the internal team know it was approved.
     try {

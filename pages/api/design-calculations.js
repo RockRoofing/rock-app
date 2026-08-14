@@ -6,6 +6,7 @@ import { canAccessArea } from '../../lib/roles'
 import { sendRfiCommentNotice, APP_URL } from '../../lib/designEmail'
 import { calcRecordPendingComment, calcRecordPendingDoc, calcGetReadMap, calcMarkRead, calcUnread, projectDisplayName } from '../../lib/designRfiNotify'
 import { hashFileAtUrl, recordApprovalEvent, generateAndStoreCertificate } from '../../lib/approvalAudit'
+import { buildStampedCopy } from '../../lib/stampPdf'
 
 // Calculations for a project. Each drawing is a REVISION in a "family". Revisions are
 // lettered Rev A, B, C ...; only the newest is current, older ones are superseded (kept,
@@ -193,6 +194,8 @@ export default async function handler(req, res) {
       docs[i].approvalRecord.fileHash = fileHash
       docs[i].approvalRecord.auditId = eventId
     } catch (e) { /* audit failure must not block the approval */ }
+    // Bake a stamped copy (APPROVED, plus CONSTRUCTION ISSUE if already set).
+    try { docs[i].stampedUrl = await buildStampedCopy(docs[i], { projectNo: no }) } catch (e) { /* stamping must not block */ }
     await set(RKEY(no), docs)
     try {
       const people = await peopleFor(no)
@@ -232,6 +235,9 @@ export default async function handler(req, res) {
           d.approvalRecord.auditId = eventId
         }
       } catch (e) { /* audit failure must not block approvals */ }
+      for (const d of approvedNow) {
+        try { d.stampedUrl = await buildStampedCopy(d, { projectNo: no }) } catch (e) { /* stamping must not block */ }
+      }
       await set(RKEY(no), docs)
       try {
         const people = await peopleFor(no)
@@ -295,11 +301,15 @@ export default async function handler(req, res) {
     return res.json({ ok: true, docs })
   }
 
-  // Toggle Construction Issue (internal only).
+  // Toggle Construction Issue (internal only). Records when it was marked, and rebuilds
+  // the stamped copy so the stamp appears / disappears everywhere.
   if (body.action === 'construction-issue') {
     const i = idx(body.id)
     if (i < 0) return res.status(404).json({ error: 'Calculation not found' })
-    docs[i].constructionIssue = body.value !== false
+    const on = body.value !== false
+    docs[i].constructionIssue = on
+    docs[i].constructionIssueAt = on ? Date.now() : 0
+    try { docs[i].stampedUrl = await buildStampedCopy(docs[i], { projectNo: no }) } catch (e) { /* stamping must not block */ }
     await set(RKEY(no), docs)
     return res.json({ ok: true, doc: docs[i] })
   }

@@ -8,6 +8,9 @@ import DrawingMarkup from '../../../components/DrawingMarkup'
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 const isImg = (f) => (f.contentType || '').startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(f.name || f.url || '')
 const isPdf = (f) => (f.contentType || '') === 'application/pdf' || /\.pdf$/i.test(f.url || f.name || '')
+// Approved / Construction Issue documents get a stamped copy baked at the moment the
+// status changes. Always view and hand out the stamped copy when there is one.
+const viewUrl = (d) => (d && d.stampedUrl) || (d && d.url) || ''
 
 export default function CalculationsPage() {
   const router = useRouter()
@@ -116,7 +119,7 @@ export default function CalculationsPage() {
   async function saveMarkup(id, markup) { await post({ action: 'markup', id, markup }) }
 
   function toggleSel(id) { setSelected(s => ({ ...s, [id]: !s[id] })) }
-  const selectedUrls = docs.filter(d => selected[d.id]).map(d => d.url)
+  const selectedUrls = docs.filter(d => selected[d.id]).map(d => viewUrl(d))
   async function downloadZip(urls, zipName) {
     if (!urls.length) return
     try {
@@ -174,7 +177,7 @@ export default function CalculationsPage() {
             <p style={{ color: '#8a857c', fontSize: 14, margin: 0 }}>Design calculations & reports. {canEdit ? 'Upload, revise, mark up and comment.' : 'View, mark up and comment.'}</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => downloadZip(docs.map(d => d.url), `${projectNo}-calculations`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
+            <button onClick={() => downloadZip(docs.map(d => viewUrl(d)), `${projectNo}-calculations`)} disabled={!docs.length} style={{ ...btnGhost, opacity: docs.length ? 1 : 0.5 }}>Download all</button>
             <button onClick={() => downloadZip(selectedUrls, `${projectNo}-calculations-selected`)} disabled={!selectedUrls.length} style={{ ...btnGhost, opacity: selectedUrls.length ? 1 : 0.5 }}>Download selected ({selectedUrls.length})</button>
             {isExternal && <button onClick={approveSelected} disabled={!approvableSelectedCount} style={{ ...btnApprove, opacity: approvableSelectedCount ? 1 : 0.5 }}>Approve selected ({approvableSelectedCount})</button>}
             {canEdit && <button onClick={() => setNotifyOpen(true)} disabled={!docs.length} style={{ ...btnGhost, color: PURPLE, borderColor: '#e9d5ff', opacity: docs.length ? 1 : 0.5 }}>Notify project users</button>}
@@ -224,7 +227,7 @@ export default function CalculationsPage() {
                         </div>
                         <div style={{ marginTop: 8, display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                           <button onClick={() => openDoc(d.id)} style={btnOpenSm}>View / Add Comments</button>
-                          <a href={`/api/download?url=${encodeURIComponent(d.url)}&name=${encodeURIComponent(d.name)}`} style={linkBtn}>Download</a>
+                          <a href={`/api/download?url=${encodeURIComponent(viewUrl(d))}&name=${encodeURIComponent(d.name)}`} style={linkBtn}>Download</a>
                           {canApprove(d) && <button onClick={() => approve(d.id)} style={btnApproveSm}>Approve</button>}
                         </div>
                         {canEdit && (
@@ -294,7 +297,7 @@ function CalcViewer({ doc, people, personName, onClose, onComment, onMarkup, can
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {canApprove && <button onClick={onApprove} style={btnApprove}>Approve</button>}
-            <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
+            <a href={`/api/download?url=${encodeURIComponent(viewUrl(doc))}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnGhost, color: PURPLE, textDecoration: 'none' }}>Download</a>
             <button onClick={onClose} title="Close" style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#999' }}>&times;</button>
           </div>
         </div>
@@ -321,10 +324,10 @@ function CalcViewer({ doc, people, personName, onClose, onComment, onMarkup, can
           {dwg ? (
             <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 24, textAlign: 'center', background: '#faf9fd' }}>
               <div style={{ color: '#666', fontSize: 14, marginBottom: 10 }}>This is a .dwg CAD file, which can't be shown in the browser.</div>
-              <a href={`/api/download?url=${encodeURIComponent(doc.url)}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnPrimary, textDecoration: 'none' }}>Download drawing</a>
+              <a href={`/api/download?url=${encodeURIComponent(viewUrl(doc))}&name=${encodeURIComponent(doc.name)}`} style={{ ...btnPrimary, textDecoration: 'none' }}>Download drawing</a>
             </div>
           ) : viewable ? (
-            <DrawingMarkup key={doc.url} imageUrl={doc.url} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="calculation" />
+            <DrawingMarkup key={viewUrl(doc)} imageUrl={viewUrl(doc)} contentType={doc.contentType} initial={doc.markup} canEdit onSave={(m) => onMarkup(doc.id, m)} fileName={doc.name} docLabel="calculation" />
           ) : (
             <div style={{ padding: 24, textAlign: 'center', color: '#888', background: '#faf9fd', borderRadius: 10 }}>This file type can't be previewed - use Download to view it.</div>
           )}
@@ -428,7 +431,7 @@ function PdfThumb({ file }) {
           await new Promise((resolve, reject) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'; s.onload = resolve; s.onerror = reject; document.body.appendChild(s) })
           window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
         }
-        const pdf = await window.pdfjsLib.getDocument(file.url).promise
+        const pdf = await window.pdfjsLib.getDocument(viewUrl(file)).promise
         const pg = await pdf.getPage(1)
         if (cancelled) return
         const holder = ref.current; if (!holder) return
@@ -443,7 +446,7 @@ function PdfThumb({ file }) {
       } catch { if (!cancelled) setFailed(true) }
     })()
     return () => { cancelled = true }
-  }, [file.url])
+  }, [file.url, file.stampedUrl])
   if (failed) return <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9333ea' }}><div style={{ fontSize: 34 }}>&#128196;</div><div style={{ fontSize: 11, color: '#999' }}>{isPdf(file) ? 'PDF' : 'File'}</div></div>
   return <div ref={ref} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
 }

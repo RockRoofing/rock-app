@@ -18,6 +18,10 @@ const STATUS = {
 
 // set = 'rock' | 'contract'. Contract drawings show title-block metadata + extract on
 // upload; Rock drawings show status (In Review -> Approved / Construction Issue).
+// Approved / Construction Issue documents get a stamped copy baked at the moment the
+// status changes. Always view and hand out the stamped copy when there is one.
+const viewUrl = (d) => (d && d.stampedUrl) || (d && d.url) || ''
+
 export default function DesignDrawingsPage({ pageKey, set, title, intro }) {
   const router = useRouter()
   const projectNo = router.query.project ? String(router.query.project) : ''
@@ -208,18 +212,18 @@ function DrawingModal({ drawing, set, people, canEdit, canMarkup, onClose, onMar
               <option value="in-review">In Review</option><option value="approved">Approved</option><option value="construction-issue">Construction Issue</option>
             </select>}
             <div style={{ flex: 1 }} />
-            <a href={`/api/download?url=${encodeURIComponent(drawing.url)}&name=${encodeURIComponent(drawing.name)}`} style={linkBtn}>Download</a>
+            <a href={`/api/download?url=${encodeURIComponent(viewUrl(drawing))}&name=${encodeURIComponent(drawing.name)}`} style={linkBtn}>Download</a>
           </div>
         )}
 
         {dwg ? (
           <div style={{ border: '1px solid #eee', borderRadius: 8, padding: 16, textAlign: 'center', background: '#faf9fd' }}>
             <div style={{ color: '#666', fontSize: 14, marginBottom: 10 }}>This is a .dwg CAD file, which can't be shown in the browser. Download it to open in CAD.</div>
-            <a href={`/api/download?url=${encodeURIComponent(drawing.url)}&name=${encodeURIComponent(drawing.name)}`} style={btnPrimary}>Download drawing</a>
+            <a href={`/api/download?url=${encodeURIComponent(viewUrl(drawing))}&name=${encodeURIComponent(drawing.name)}`} style={btnPrimary}>Download drawing</a>
             <div style={{ fontSize: 12, color: '#aaa', marginTop: 10 }}>Tip: upload a PDF of the drawing to view and mark it up here.</div>
           </div>
         ) : (
-          <DrawingMarkup imageUrl={drawing.url} contentType={drawing.contentType} initial={drawing.markup} canEdit={canMarkup} onSave={m => onMarkup(drawing.id, m)} />
+          <DrawingMarkup key={viewUrl(drawing)} imageUrl={viewUrl(drawing)} contentType={drawing.contentType} initial={drawing.markup} canEdit={canMarkup} onSave={m => onMarkup(drawing.id, m)} />
         )}
 
         <div style={{ borderTop: '1px solid #eee', margin: '16px 0 10px' }} />

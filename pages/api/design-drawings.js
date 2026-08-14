@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { getExternalUsers, externalCanAccessProject } from '../../lib/designUsers'
 import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
+import { buildStampedCopy } from '../../lib/stampPdf'
 
 // Drawings per project + set ('rock' | 'contract').
 // Store: design:drawings:<set>:<projectNo> = [ {drawing} ]
@@ -119,7 +120,15 @@ export default async function handler(req, res) {
     if (body.action === 'status') {
       const i = idxOf(body.id); if (i < 0) return res.status(404).json({ error: 'Not found' })
       const allowed = ['in-review', 'approved', 'construction-issue']
-      drawings[i].status = allowed.includes(body.status) ? body.status : drawings[i].status
+      if (allowed.includes(body.status)) {
+        drawings[i].status = body.status
+        // Timestamp the status so the stamp can carry a UK date/time. Status here is
+        // one-of-three, so only ever one stamp on this tab.
+        const now = Date.now()
+        drawings[i].approvedAt = body.status === 'approved' ? now : 0
+        drawings[i].constructionIssueAt = body.status === 'construction-issue' ? now : 0
+        try { drawings[i].stampedUrl = await buildStampedCopy(drawings[i], { projectNo: no }) } catch (e) { /* stamping must not block */ }
+      }
       await set(dkey(set, no), drawings)
       return res.json({ ok: true, drawings })
     }

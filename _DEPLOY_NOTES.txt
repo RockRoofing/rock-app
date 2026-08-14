@@ -1,35 +1,97 @@
-DEPLOY NOTES - O&M page: confirm download who/when banner is live (+ version marker)
-====================================================================================
+pkg266 - PDF Approval / Construction Issue stamps
+=================================================
 
-ONE file, EDIT. Replace in GitHub.
-(Path uses literal square brackets: pages/design/[project]/oms.js)
+WHAT THIS DOES
+--------------
+When a design document is marked Approved and/or Construction Issue, a semi-translucent
+stamp is baked onto page 1, top-right, stacked:
+  - green  APPROVED           + UK date/time
+  - blue   CONSTRUCTION ISSUE + UK date/time
+One stamp if one status is set, both if both are set.
 
-  EDIT  pages/design/[project]/oms.js
+The stamp appears everywhere the document is seen or handed out: the portal viewer,
+the thumbnails, the Download buttons, Download all / Download selected (zips), and the
+O&M Manual bundle.
 
-BACKGROUND
-Yes - you did ask for this, and it was built earlier: the "CUSTOMER DOWNLOADED" banner shows the
-customer's name (from their portal user account), the date/time they downloaded, and the revision.
-The code for it is present and correct. If it isn't showing on your live banner, the most likely
-reason is that the earlier oms.js wasn't deployed (or is cached). This package re-delivers it and
-adds a small "v2" marker next to the "O&M Manual" heading so you can confirm the new build is live.
+HOW IT WORKS
+------------
+The ORIGINAL uploaded file is never modified. On any approve / construction-issue /
+status change, a stamped COPY is generated and stored in Blob, and its URL is saved on
+the document as `stampedUrl`. Every consumer uses `stampedUrl || url`.
 
-HOW TO CHECK
-1) Deploy, then open the O&M page. If you see "O&M Manual v2" in the heading, the new code IS live.
-   - If you DON'T see "v2", the deploy/cache hasn't updated - hard refresh, or check the file saved
-     to the correct path in GitHub.
-2) With the new build live, have a CUSTOMER portal user open the O&M page and click the Download
-   button (the one on the O&M page - NOT the emailed link). The banner should then read
-   "CUSTOMER DOWNLOADED" followed by: their name (company) - date/time - Rev.
+That means un-approving or un-marking Construction Issue reverts cleanly - the doc simply
+falls back to the untouched original.
 
-IMPORTANT (how the tracking works)
-- Only downloads via the Download BUTTON on the O&M page are recorded. Downloads from the emailed
-  link are not tracked.
-- The green "CUSTOMER DOWNLOADED" banner appears once a customer has downloaded the CURRENT
-  revision. If a newer revision was built after their download, it shows red "NOT DOWNLOADED" with
-  a note that they downloaded an earlier revision.
-- Internal staff downloads do not turn the banner green (it's specifically the customer we track).
+Non-PDFs (images etc.) are not stamped; they keep their original url. If stamping fails
+for any reason it fails silently and the original is used - stamping can never block an
+approval from going through.
 
-Once you've confirmed it's live and working, tell me and I'll send a tiny follow-up removing the
-"v2" marker.
 
-NO vercel.json change. No cron. BUILD: Compiled successfully.
+NEW FILE - must be created manually in GitHub ("Add file" -> "Create new file")
+-------------------------------------------------------------------------------
+  lib/stampPdf.js
+
+All other files in this package are REPLACEMENTS for existing files.
+
+
+CHANGED FILES
+-------------
+  lib/stampPdf.js                             NEW - stamp rendering + stamped-copy builder
+  pages/api/design-calculations.js            stamp on approve / approve-many / construction-issue
+  pages/api/design-rock-drawings.js           stamp on approve / approve-many / construction-issue
+  pages/api/design-techsubs.js                stamp on approve
+  pages/api/design-drawings.js                stamp on status change + status timestamps
+  pages/api/design-calculations-zip.js        allow stamped urls through the download whitelist
+  pages/api/design-rock-drawings-zip.js       allow stamped urls through the download whitelist
+  pages/api/design-oms.js                     O&M bundle uses the stamped copies
+  pages/design/[project]/calculations.js      viewer / thumbs / downloads use stamped copy
+  pages/design/[project]/rock-drawings.js     viewer / thumbs / downloads use stamped copy
+  pages/design/[project]/tech-sub.js          viewer / download use stamped copy
+  components/DesignDrawingsPage.js            viewer / downloads use stamped copy (Drawings tab)
+
+
+NEW DATA FIELDS
+---------------
+  stampedUrl           url of the stamped copy ('' or absent when there is none)
+  constructionIssueAt  timestamp for when Construction Issue was marked (was not recorded
+                       before - only approvedAt existed)
+
+
+IMPORTANT - EXISTING DOCUMENTS
+------------------------------
+Stamps are generated at the moment the status CHANGES. Documents already approved or
+already marked Construction Issue before this deploy will NOT have a stamped copy yet,
+so they will keep showing unstamped until the status is toggled.
+
+To stamp an existing document: un-mark it and re-mark it (e.g. Unmark Constr. then
+Construction Issue again). Approved items can only be re-approved by the customer, so
+those need a new revision or a one-off backfill.
+
+Say the word and I can build a one-off backfill button that walks every project and
+generates the missing stamped copies in one go.
+
+
+KNOWN LIMITS (these are existing data-model limits, not bugs in the stamping)
+-----------------------------------------------------------------------------
+1. TECH SUBS have no Construction Issue concept anywhere in the system - there is no
+   toggle and no field. So Tech Subs can only ever show the APPROVED stamp.
+
+2. DRAWINGS (the Drawings tab) use a single status dropdown where In Review / Approved /
+   Construction Issue are mutually exclusive. A drawing can therefore never be both
+   Approved AND Construction Issue, so it can never show both stamps.
+
+   Calculations and Rock Drawings have separate fields, so those two tabs CAN show both
+   stamps stacked, exactly as specified.
+
+If you want both stamps possible on the Drawings tab, or a Construction Issue toggle on
+Tech Subs, both are follow-up jobs - say which and I will do them.
+
+
+TESTED
+------
+npm run build - Compiled successfully.
+
+Stamp rendering was test-rendered and visually checked on: A4 at page rotations 0, 90,
+180 and 270 degrees, and an A1 landscape sheet. Rotation matters - a drawing saved with
+a /Rotate flag would otherwise get a sideways stamp in the wrong corner. The stamp also
+scales with sheet size so it stays readable on a large drawing without dominating an A4.

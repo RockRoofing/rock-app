@@ -52,7 +52,12 @@ export default async function handler(req, res) {
   // Only allow URLs that belong to this project's rock drawings (flat array of docs).
   const docs = (await get(HKEY(projectNo))) || []
   const allowed = new Map()
-  for (const d of (Array.isArray(docs) ? docs : [])) if (d.url) allowed.set(d.url, d.name)
+  // Both the original and the stamped (Approved / Construction Issue) copy are valid
+  // download targets - the page hands out stampedUrl when there is one.
+  for (const d of (Array.isArray(docs) ? docs : [])) {
+    if (d.url) allowed.set(d.url, d.name)
+    if (d.stampedUrl) allowed.set(d.stampedUrl, d.name)
+  }
 
   const requested = Array.isArray(req.body?.urls) ? req.body.urls : []
   const files = requested.map(url => ({ url, name: allowed.get(url) })).filter(f => f.name)
