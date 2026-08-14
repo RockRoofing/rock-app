@@ -1,81 +1,69 @@
-pkg273 - Site App improvement reports fixed + orange/bigger buttons
-====================================================================
+pkg274 - Report App Improvement: portal styling reverted, Site App link orange
+===============================================================================
 
-NOTE: pkg273 REPLACES pkg272 - it contains everything pkg272 had (attachments, screenshot
-paste, bigger Operations tabs) plus this work. If pkg272 is not deployed yet, deploy this
-one instead and skip pkg272.
+NOTE: pkg274 REPLACES pkg272 AND pkg273. It contains everything they had, with the
+portal button styling undone. Deploy this one and ignore both earlier packages.
 
 
 CHANGED FILES
 -------------
-  middleware.js                           THE FIX - see below
-  components/ReportProblemButton.js       (pkg272) attachments + screenshot paste
-  pages/api/report-problem.js             (pkg272) store attachments, email them
-  pages/admin/problem-reports.js          (pkg272) show attachments
-  components/OperationsNav.js             (pkg272) bigger tabs + orange button
-  components/PreContractNav.js            orange button
-  components/CommercialNav.js             orange button
-  components/BizNav.js                    orange button
-  pages/index.js                          orange button
-  pages/design/index.js                   orange button
-  pages/business-financials.js            orange button
-  pages/project/[id].js                   orange button
-  pages/forms/index.js                    orange button (Site App)
+  middleware.js                           Site App report fix (from pkg273)
+  components/ReportProblemButton.js       attachments + screenshot paste (pkg272)
+  pages/api/report-problem.js             store attachments, email them (pkg272)
+  pages/admin/problem-reports.js          show attachments (pkg272)
+  components/OperationsNav.js             bigger sub-tabs ONLY (13.5 -> 15)
+  pages/forms/index.js                    Site App link orange + slightly bigger
 
 No new files. All are straight replacements.
 
 
-1. WHY THE SITE APP REPORT WAS NOT WORKING
+IMPORTANT - IF YOU ALREADY DEPLOYED pkg273
 -------------------------------------------
-ROOT CAUSE: middleware.js. On the siteapp. host, only a whitelist of /api/* paths is let
-through - everything else gets rewritten to /forms. `/api/report-problem` was never added
-to that whitelist, so the Site App's POST was being rewritten to the /forms page instead
-of reaching the API. It returned the HTML page, the JSON parse gave nothing useful, and
-the report vanished. Nothing was ever saved.
+pkg273 turned the Report App Improvement link into an orange button in EIGHT portal
+places. That is now undone. These seven files are back to EXACTLY their original
+contents and are NOT in this package, so re-deploying will not touch them:
 
-This is the same class of problem as the note in the build rules: "New Site App API routes
-must be in middleware.js passthrough or they're blocked."
+  pages/index.js
+  pages/design/index.js
+  pages/business-financials.js
+  pages/project/[id].js
+  components/PreContractNav.js
+  components/CommercialNav.js
+  components/BizNav.js
 
-FIX: added to the passthrough -
-  /api/report-problem     the report itself
-  /api/blob-upload        so Site App attachments can upload too
+If you deployed pkg273, you need to restore those seven from pkg272 or earlier - or
+simplest, tell me and I will send them as a revert package. They are only a styling
+change, nothing functional, so there is no rush either way.
 
-WORTH KNOWING: reports raised from the Site App before this deploy were never saved and
-cannot be recovered - they were never written to the database. If anyone has been telling
-you they reported something and you never saw it, that is why.
-
-
-2. BUTTON NOW ORANGE AND BIGGER
---------------------------------
-It was gold (#ca8a04) 13px plain text - it read as a link, not a button. Now a solid
-orange (#ea580c) pill with white text on all nine places it appears:
-
-  Portal (8):  Home, Operations, Pre-Contract, Commercial, Business Financials,
-               Business nav, Design portal, Project page
-               14.5px bold, white on orange, rounded, warning icon.
-
-  Site App (1): 16px bold with a larger tap target (14px x 22px padding) since it is used
-               one-handed on a phone.
+components/OperationsNav.js IS in this package because it also carries the bigger
+sub-tabs. Its Report App Improvement button is back to the original gold text; the only
+remaining change in that file is the tab size.
 
 
-3. SITE APP ATTACHMENTS
-------------------------
-With /api/blob-upload now allowed through, the Site App report could take attachments and
-pasted screenshots the same way the portal does. I have NOT added that UI in this package -
-the Site App report form is a separate component in pages/forms/index.js. Say the word and
-it is a small follow-up now the middleware blocker is gone.
+WHAT CHANGED IN THE SITE APP
+-----------------------------
+Still plain underlined writing at the bottom of the operative menu - NOT a button.
 
-Worth having: an operative photographing a problem on site is exactly the case attachments
-are for.
+  colour   #9a3412 (dark red-brown)  ->  #ea580c (orange)
+  size     13px                      ->  15.5px
+  weight, underline and position all unchanged.
+
+
+STILL INCLUDED FROM THE EARLIER PACKAGES
+-----------------------------------------
+1. Site App reports now actually work. /api/report-problem was missing from the
+   middleware passthrough on the siteapp. host, so the POST was rewritten to /forms and
+   never reached the API. Reports raised from the Site App before this deploy were never
+   saved and cannot be recovered.
+
+2. Portal improvement reports take attachments, including pasted screenshots
+   (Win+Shift+S then Ctrl+V). Images embed inline in the office email and show as
+   thumbnails on Admin > App Improvements.
+
+3. Operations sub-tabs 13.5px -> 15px (the white strip under the dark header).
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-
-
-STILL OUTSTANDING
------------------
-The zip I am working from is at pkg264 and does not contain pkg265 (hideDownload is not in
-components/DrawingMarkup.js). Please confirm whether pkg265 was deployed - if it was, send
-a fresh export before the next package so I do not revert it.
+Seven reverted portal files confirmed byte-identical to the original repo.

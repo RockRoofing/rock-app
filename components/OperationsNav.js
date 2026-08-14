@@ -70,7 +70,7 @@ export default function OperationsNav({ active, section }) {
           </span>
         ))}
         <button onClick={() => window.dispatchEvent(new CustomEvent('open-report-problem'))}
-          style={reportBtn}><span>&#9888;</span> Report app improvement</button>
+          style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>⚠ Report app improvement</button>
         <Divider />
         <a href="https://siteapp.rockroofing.co.uk" target="_blank" rel="noreferrer"
           style={{ ...linkStyle, color: '#ca8a04', whiteSpace: 'nowrap' }}>Open Site App ↗</a>
@@ -101,7 +101,6 @@ function SectionTabs({ active, section }) {
   )
 }
 
-const reportBtn = { background: '#ea580c', border: 'none', color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', borderRadius: 8, padding: '8px 16px', display: 'inline-flex', alignItems: 'center', gap: 6 }
 const Divider = () => <span style={{ color: '#3a3a38', fontSize: 14, padding: '0 2px' }}>|</span>
 const linkStyle = { color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 10px', borderRadius: 6, whiteSpace: 'nowrap', cursor: 'pointer' }
 const activeStyle = { color: '#fff', fontSize: 13, fontWeight: 500, padding: '4px 10px', borderRadius: 6, background: '#2a2a28', whiteSpace: 'nowrap' }

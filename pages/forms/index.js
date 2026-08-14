@@ -370,7 +370,7 @@ function SiteAppReportProblem({ user }) {
   return (
     <div style={{ marginTop: 28, textAlign: 'center' }}>
       <button onClick={() => { setPage(''); setDescription(''); setPriority(''); setDone(false); setErr(''); setOpen(true) }}
-        style={{ background: '#ea580c', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', borderRadius: 12, padding: '14px 22px', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        style={{ background: 'none', border: 'none', color: '#ea580c', fontSize: 15.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'underline' }}>
         <span>&#9888;</span> Report app improvement
       </button>
 
