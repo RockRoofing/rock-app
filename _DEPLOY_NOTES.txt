@@ -1,26 +1,28 @@
-DEPLOY NOTES - Accounts O/A: saved + reviewable by date/installer
-=================================================================
+DEPLOY NOTES - Consolidate into "View Weekly Labour Allocations" (+ overheads on report)
+========================================================================================
 
-THREE files, ALL EDITS. Replace each in GitHub.
-(This supersedes the earlier Accounts / Overheads planning packages - this planning.js and
-planning.js API include everything from them plus these changes.)
+TWO files, BOTH EDITS. Replace both in GitHub.
+(This supersedes the separate "Accounts Weekly Labour" packages - everything is now folded into
+"View Weekly Labour Allocations". Deploy the earlier Overheads + O/A API packages first, i.e.
+pages/api/planning.js and pages/api/planning-accounts-pdf.js must already be live.)
 
-  EDIT  pages/api/planning.js                             (saves overnight allowances)
-  EDIT  pages/api/planning-accounts-pdf.js                (report reads SAVED overnight allowances)
-  EDIT  pages/operations/project-management/planning.js   (O/A persists + Review tab)
+  EDIT  pages/api/planning-week.js                        (overheads now appear in the week data)
+  EDIT  pages/operations/project-management/planning.js   (removed the Accounts button; View is now the hub)
 
 WHAT CHANGED
-1. OVERNIGHT ALLOWANCES ARE NOW SAVED
-   In the Accounts Weekly Labour Allocation picker, ticking an O/A box now saves it immediately
-   (stored per installer, per day). Next time you open the picker, all previously-set O/As are
-   already ticked - nothing is lost on close. The downloadable report also reads the saved O/As,
-   so it always reflects what's recorded.
+1. The separate "Accounts Weekly Labour Allocation" BUTTON is REMOVED.
+2. "View Weekly Labour Allocations" is now the single place for everything:
+   - Pick a Week commencing (2 years back to 1 year forward) and how many weeks.
+   - See each staff member's row with their actual allocation in each day cell.
+   - OVERHEADS now show in the cells too - e.g. "Holidays", "Paid Leave", "Sick" - on that
+     person's own row, exactly like a project (shown in purple).
+   - Click any day cell to toggle that person's OVERNIGHT ALLOWANCE (O/A). It SAVES instantly
+     and the "O/A" tag appears on the cell. Go back to any past/future week and the saved O/As
+     are shown again.
+   - "Review past O/A" tab: filter all saved O/As by date range + installer, and remove entries.
+   - "Download report" produces the PDF (installers + overheads in the cells, O/A marked).
 
-2. NEW "Review past O/A" TAB
-   The Accounts pop-out now has two tabs: "Build report" (as before) and "Review past O/A".
-   The Review tab lists every recorded overnight allowance and lets you filter by:
-     - From / To date range
-     - Installer
-   so you can check when O/A applied on past dates. You can also remove an entry from here.
+NOTE: overhead people appear on their own row on the day(s) they have an overhead. Someone with
+only overheads that week still gets a row.
 
 NO vercel.json change. No cron. BUILD: Compiled successfully.

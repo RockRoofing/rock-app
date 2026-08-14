@@ -31,12 +31,13 @@ export async function assembleWeek(mondayStr) {
     const monday = mondayStr ? mondayOf(parseISO(mondayStr)) : mondayOf(new Date())
     const days = Array.from({ length: 7 }, (_, i) => iso(addDays(monday, i)))
 
-    const [alloc, roster, names, waterIngress, opsUsers] = await Promise.all([
+    const [alloc, roster, names, waterIngress, opsUsers, overheads] = await Promise.all([
       get('ops:planning-allocations').then(v => v || {}),
       get('ops:operatives-roster').then(v => v || []),
       projectNameMap(),
       get('ops:water-ingress').then(v => v || {}),
       getOpsUsers().then(v => v || []).catch(() => []),
+      get('ops:overheads').then(v => v || {}),
     ])
     // Name resolution: Site App Users are the source of truth; fall back to the
     // legacy roster, then to a name field, then (last resort) the id.
@@ -98,6 +99,19 @@ export async function assembleWeek(mondayStr) {
         }
       }
     }
+
+    // Overheads: each staff member's non-project time (Holidays, Sick, etc.) shows
+    // in THEIR OWN row's day cell, labelled with the category (like a project name).
+    for (const dk of days) {
+      const list = overheads[dk] || []
+      for (const e of list) {
+        if (!e.opId) continue
+        byOp[e.opId] = byOp[e.opId] || {}
+        byOp[e.opId][dk] = byOp[e.opId][dk] || []
+        byOp[e.opId][dk].push({ projectName: e.category || 'Overhead', projectAddress: '', half: 'full', status: 'confirmed', overhead: true })
+      }
+    }
+
 
     const rows = Object.keys(byOp).map(opId => {
       const info = resolveOp(opId)

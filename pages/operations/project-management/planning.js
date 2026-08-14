@@ -88,7 +88,6 @@ export default function PlanningPage() {
   const [pasting, setPasting] = useState(false)
   const [allocModal, setAllocModal] = useState(null)  // { proj, dates:[iso] }
   const [weekModal, setWeekModal] = useState(null)    // monday iso
-  const [accountsModal, setAccountsModal] = useState(null)  // monday iso (Accounts report)
   const [viewModal, setViewModal] = useState(false)   // historic viewer
   const [clearing, setClearing] = useState(false)
   const [wiDay, setWiDay] = useState(null)            // Water Ingress day (iso) being edited
@@ -347,7 +346,6 @@ export default function PlanningPage() {
         <h1 style={{ margin: 0, fontSize: 22, color: INK }}>Planning</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setWeekModal(iso(mondayOf(new Date())))} style={primaryBtn}>Send Weekly Labour Allocation</button>
-          <button onClick={() => setAccountsModal(iso(mondayOf(new Date())))} style={ghostBtn}>Accounts Weekly Labour Allocation</button>
           <button onClick={() => setViewModal(true)} style={ghostBtn}>View Weekly Labour Allocations</button>
           <div style={{ display: 'flex', border: '1px solid #e0e0e0', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setView('day')} style={{ ...segBtn, background: view === 'day' ? GOLD : '#fff', color: view === 'day' ? '#fff' : '#555' }}>Day</button>
@@ -526,8 +524,7 @@ export default function PlanningPage() {
       {allocModal && <AllocateModal proj={allocModal.proj} dates={allocModal.dates} mode={allocModal.mode} data={data} ops={ops} comp={comp} ramsSigned={rams[allocModal.proj?.key] || {}}
         onClose={() => setAllocModal(null)} onDone={() => { setAllocModal(null); setSel(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {weekModal && <WeekModal monday={weekModal} onClose={() => setWeekModal(null)} />}
-      {accountsModal && <AccountsWeekModal monday={accountsModal} data={data} ops={ops} onClose={() => setAccountsModal(null)} onSaved={() => refreshData()} />}
-      {viewModal && <ViewWeekModal onClose={() => setViewModal(false)} />}
+      {viewModal && <ViewWeekModal data={data} ops={ops} onClose={() => setViewModal(false)} onSaved={() => refreshData()} />}
       {wiDay && <WaterIngressDayModal date={wiDay} data={data} ops={ops} comp={comp} onClose={() => setWiDay(null)} onDone={() => { setWiDay(null); refreshData({ full: true }) }} reloadOps={async () => { const d = await fetch('/api/operatives').then(r => r.json()); setOps(d.operatives || []); return d.operatives || [] }} />}
       {ohDay && <OverheadsDayModal date={ohDay} weekDays={days.map(iso)} data={data} ops={ops} onClose={() => setOhDay(null)} onDone={() => refreshData()} />}
     </OperationsShell>
@@ -1145,10 +1142,17 @@ const dateInput = { width: '100%', boxSizing: 'border-box', border: '1px solid #
 const warnLine = { fontSize: 10.5, fontWeight: 700, color: '#ff2d2d', whiteSpace: 'nowrap' }
 
 // ── Accounts Weekly Labour: pick installers + mark overnight allowance per day, download PDF ──
-function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
+function ViewWeekModal({ data, ops = [], onClose, onSaved }) {
   const [tab, setTab] = useState('build')             // 'build' | 'review'
-  const [weeksAhead, setWeeksAhead] = useState(1)
-  const [includePrev, setIncludePrev] = useState(false)
+  // Week picker: any W/C Monday from 2 years back to 1 year forward.
+  const wcOptions = useMemo(() => {
+    const base = mondayOf(new Date())
+    const opts = []
+    for (let i = -104; i <= 52; i++) opts.push(iso(new Date(base.getTime() + i * 7 * 86400000)))
+    return opts
+  }, [])
+  const [fromMonISO, setFromMonISO] = useState(iso(mondayOf(new Date())))
+  const [weeksAhead, setWeeksAhead] = useState(1)     // number of weeks from the chosen W/C
   const [weeksData, setWeeksData] = useState(null)
   const [included, setIncluded] = useState(null)      // Set of opIds to show (null = all, set once loaded)
   // Overnight allowances, seeded from the SAVED store (data.overnight = { dateISO: [opId] }).
@@ -1168,25 +1172,20 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
 
   const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
   const opName = (id) => { const o = ops.find(x => x.id === id); return o ? `${o.firstName} ${o.lastName}`.trim() || id : id }
-  const thisMon = parseISO(monday)
-  const nextMon = new Date(thisMon.getTime() + 7 * 86400000)
-  const prevMon = new Date(thisMon.getTime() - 7 * 86400000)
-  const aheadMondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(nextMon.getTime() + i * 7 * 86400000)))
-  const prevMonISO = iso(prevMon)
+  const wcLabel = (m) => `W/C ${parseISO(m).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
+  const startMon = parseISO(fromMonISO)
+  const weekMondays = Array.from({ length: weeksAhead }, (_, i) => iso(new Date(startMon.getTime() + i * 7 * 86400000)))
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setWeeksData(null)
-      const plan = []
-      if (includePrev) plan.push({ monday: prevMonISO, kind: 'prev' })
-      aheadMondays.forEach((m, i) => plan.push({ monday: m, kind: 'ahead', idx: i }))
-      const results = await Promise.all(plan.map(p => fetch(`/api/planning-week?monday=${encodeURIComponent(p.monday)}`).then(r => r.json()).then(week => ({ week, kind: p.kind })).catch(() => null)))
+      const results = await Promise.all(weekMondays.map(m => fetch(`/api/planning-week?monday=${encodeURIComponent(m)}`).then(r => r.json()).then(week => ({ week })).catch(() => null)))
       if (!cancelled) setWeeksData(results.filter(Boolean))
     }
     load()
     return () => { cancelled = true }
-  }, [monday, weeksAhead, includePrev])
+  }, [fromMonISO, weeksAhead])
 
   // All named installers across the loaded weeks.
   const installers = useMemo(() => {
@@ -1208,6 +1207,22 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
     return out
   }, [weeksData])
 
+  // Map opId -> { dateISO -> cell } across all loaded weeks, so a row can show its
+  // actual allocation (projects + overheads) on each day.
+  const cellMap = useMemo(() => {
+    const m = {}
+    if (!weeksData) return m
+    for (const w of weeksData) {
+      for (const r of w.week.rows) {
+        if (r.unnamed) continue
+        m[r.opId] = m[r.opId] || {}
+        w.week.days.forEach((dk, i) => { const c = r.cells[i]; if (c) m[r.opId][dk] = c })
+      }
+    }
+    return m
+  }, [weeksData])
+  const cellFor = (r, dk) => (cellMap[r.opId] && cellMap[r.opId][dk]) || null
+
   const isIncluded = (opId) => !included || included.has(opId)
   const toggleIncl = (opId) => setIncluded(prev => { const n = new Set(prev || installers.map(r => r.opId)); n.has(opId) ? n.delete(opId) : n.add(opId); return n })
   const hasON = (opId, dk) => !!(overnight[opId] && overnight[opId].has(dk))
@@ -1227,11 +1242,9 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
       const overnightPlain = {}
       for (const [opId, set] of Object.entries(overnight)) { const arr = [...set]; if (arr.length) overnightPlain[opId] = arr }
       const includeOpIds = installers.filter(r => isIncluded(r.opId)).map(r => r.opId)
-      const monday0 = includePrev ? prevMonISO : aheadMondays[0]
-      const count = weeksAhead + (includePrev ? 1 : 0)
       const r = await fetch('/api/planning-accounts-pdf', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ monday: monday0, weeks: count, includeOpIds, overnight: overnightPlain }),
+        body: JSON.stringify({ monday: fromMonISO, weeks: weeksAhead, includeOpIds, overnight: overnightPlain }),
       })
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Could not build report') }
       const blob = await r.blob()
@@ -1275,8 +1288,8 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 1000 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee', position: 'sticky', top: 0, background: '#fff', borderRadius: '14px 14px 0 0', zIndex: 5 }}>
           <div>
-            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>Accounts Weekly Labour Allocation</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Pick installers to include and mark overnight allowance days, then download the report.</div>
+            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>View Weekly Labour Allocations</div>
+            <div style={{ fontSize: 12, color: '#888' }}>View a week, click a day cell to toggle its Overnight Allowance (saved), then download the report.</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, color: '#999', cursor: 'pointer' }}>&times;</button>
         </div>
@@ -1326,29 +1339,32 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
           </div>
         ) : (
         <div style={{ padding: 22 }}>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-            <label style={{ fontSize: 13, color: '#555' }}>Weeks ahead:&nbsp;
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+            <label style={{ fontSize: 13, color: '#555' }}>Week commencing:&nbsp;
+              <select value={fromMonISO} onChange={e => setFromMonISO(e.target.value)} style={{ ...fInput, minWidth: 190, fontFamily: 'inherit' }}>
+                {wcOptions.map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: 13, color: '#555' }}>Weeks:&nbsp;
               <select value={weeksAhead} onChange={e => setWeeksAhead(Number(e.target.value))} style={{ ...fInput }}>
                 {[1, 2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
               </select>
             </label>
-            <label style={{ fontSize: 13, color: '#555', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input type="checkbox" checked={includePrev} onChange={e => setIncludePrev(e.target.checked)} /> Include previous week
-            </label>
           </div>
+          <div style={{ fontSize: 11.5, color: '#999', marginBottom: 14 }}>Click any day cell to toggle Overnight Allowance (O/A). It saves instantly and appears again whenever you view this week.</div>
 
           {!weeksData ? <Loading /> : installers.length === 0 ? (
-            <div style={{ color: '#999', fontSize: 13, padding: 12 }}>No named installers allocated in the selected week(s).</div>
+            <div style={{ color: '#999', fontSize: 13, padding: 12 }}>No staff allocated in the selected week(s).</div>
           ) : (
             <div style={{ overflowX: 'auto', border: '1px solid #eee', borderRadius: 10 }}>
-              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
                 <thead>
                   <tr style={{ background: '#faf9f7' }}>
                     <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, color: '#666', position: 'sticky', left: 0, background: '#faf9f7' }}>Show</th>
-                    <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, color: '#666' }}>Installer</th>
+                    <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 11, color: '#666' }}>Staff</th>
                     {allDates.map(dk => {
                       const d = parseISO(dk); const wknd = d.getDay() === 0 || d.getDay() === 6
-                      return <th key={dk} style={{ padding: '6px 4px', fontSize: 10, color: wknd ? '#b91c1c' : '#666', textAlign: 'center', minWidth: 42 }}>{DOW[(d.getDay() + 6) % 7]}<br />{d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</th>
+                      return <th key={dk} style={{ padding: '6px 4px', fontSize: 10, color: wknd ? '#b91c1c' : '#666', textAlign: 'center', minWidth: 88 }}>{DOW[(d.getDay() + 6) % 7]}<br />{d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</th>
                     })}
                   </tr>
                 </thead>
@@ -1359,13 +1375,22 @@ function AccountsWeekModal({ monday, data, ops = [], onClose, onSaved }) {
                         <input type="checkbox" checked={isIncluded(r.opId)} onChange={() => toggleIncl(r.opId)} />
                       </td>
                       <td style={{ padding: '6px 10px', fontSize: 13, color: INK, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name}{r.company ? <span style={{ color: '#999', fontWeight: 400 }}> - {r.company}</span> : null}</td>
-                      {allDates.map(dk => (
-                        <td key={dk} style={{ padding: '4px', textAlign: 'center' }}>
-                          <div onClick={() => isIncluded(r.opId) && toggleON(r.opId, dk)}
-                            style={{ ...chk, margin: '0 auto', background: hasON(r.opId, dk) ? '#7c3aed' : '#fff', color: hasON(r.opId, dk) ? '#fff' : '#ccc', borderColor: hasON(r.opId, dk) ? '#7c3aed' : '#d8d3c8', cursor: isIncluded(r.opId) ? 'pointer' : 'not-allowed' }}
-                            title="Toggle overnight allowance">{hasON(r.opId, dk) ? 'O/A' : ''}</div>
-                        </td>
-                      ))}
+                      {allDates.map(dk => {
+                        const cell = cellFor(r, dk)
+                        const on = hasON(r.opId, dk)
+                        return (
+                          <td key={dk} onClick={() => isIncluded(r.opId) && toggleON(r.opId, dk)}
+                            title="Click to toggle Overnight Allowance"
+                            style={{ padding: '4px 5px', verticalAlign: 'top', cursor: isIncluded(r.opId) ? 'pointer' : 'not-allowed', borderLeft: '1px solid #f3f3f1', background: on ? '#f4effc' : '#fff', minWidth: 88 }}>
+                            {cell && cell.entries.map((e, ei) => (
+                              <div key={ei} style={{ fontSize: 10.5, lineHeight: 1.25, color: e.overhead ? '#6b4ea8' : (e.status === 'provisional' ? '#2563eb' : '#16a34a'), fontWeight: e.overhead ? 700 : 500 }}>
+                                {e.projectName}{e.half !== 'full' ? ` (${String(e.half).toUpperCase()})` : ''}
+                              </div>
+                            ))}
+                            {on && <div style={{ marginTop: 2, display: 'inline-block', fontSize: 9.5, fontWeight: 800, color: '#fff', background: '#7c3aed', borderRadius: 4, padding: '1px 4px' }}>O/A</div>}
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
@@ -1553,67 +1578,6 @@ function WeekModal({ monday, onClose }) {
 }
 
 // ── Historic viewer: pick any W/C, view + download PDF only (no send) ──
-function ViewWeekModal({ onClose }) {
-  // Offer a list of W/C Mondays: 2 years back to 1 year forward.
-  const wcOptions = useMemo(() => {
-    const base = mondayOf(new Date())
-    const opts = []
-    for (let i = -104; i <= 52; i++) opts.push(iso(new Date(base.getTime() + i * 7 * 86400000)))
-    return opts
-  }, [])
-  const thisMon = iso(mondayOf(new Date()))
-  const [fromMonISO, setFromMonISO] = useState(thisMon)
-  const [toMonISO, setToMonISO] = useState(thisMon)
-
-  const fromMon = parseISO(fromMonISO)
-  const toMon = parseISO(toMonISO)
-  const weekCount = Math.min(26, Math.max(1, Math.round((toMon - fromMon) / (7 * 86400000)) + 1))
-  const wcLabel = (m) => `W/C ${parseISO(m).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`
-
-  // the weeks that will be in the PDF
-  const weeksInRange = Array.from({ length: weekCount }, (_, i) => iso(new Date(fromMon.getTime() + i * 7 * 86400000)))
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 2vw', overflowY: 'auto' }}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 520 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 22px', borderBottom: '1px solid #eee' }}>
-          <div>
-            <div style={{ fontWeight: 700, color: INK, fontSize: 16 }}>View Weekly Labour Allocations</div>
-            <div style={{ fontSize: 12, color: '#888' }}>Download past &amp; upcoming weeks as a PDF</div>
-          </div>
-          <button onClick={onClose} style={{ fontSize: 24, border: 'none', background: 'none', cursor: 'pointer', color: '#999' }}>×</button>
-        </div>
-
-        <div style={{ padding: '18px 22px 22px' }}>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
-            <div><div style={lbl}>From</div>
-              <select value={fromMonISO} onChange={e => { const v = e.target.value; setFromMonISO(v); if (parseISO(v) > parseISO(toMonISO)) setToMonISO(v) }} style={{ ...fInput, minWidth: 190, fontFamily: 'inherit' }}>
-                {wcOptions.map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
-              </select>
-            </div>
-            <div><div style={lbl}>To</div>
-              <select value={toMonISO} onChange={e => setToMonISO(e.target.value)} style={{ ...fInput, minWidth: 190, fontFamily: 'inherit' }}>
-                {wcOptions.filter(m => parseISO(m) >= fromMon).map(m => <option key={m} value={m}>{wcLabel(m)}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div style={{ fontSize: 12.5, color: '#555', marginBottom: 8 }}>{weekCount} week{weekCount === 1 ? '' : 's'} will be included (one page each, max 26):</div>
-          <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #eee', borderRadius: 10, padding: '6px 0' }}>
-            {weeksInRange.map(m => (
-              <div key={m} style={{ padding: '6px 14px', fontSize: 13, color: INK, borderBottom: '1px solid #f5f5f5' }}>{wcLabel(m)}</div>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: '1px solid #eee', paddingTop: 16 }}>
-            <button onClick={onClose} style={ghostBtn}>Close</button>
-            <a href={`/api/planning-week-pdf?monday=${encodeURIComponent(fromMonISO)}&weeks=${weekCount}`} target="_blank" rel="noreferrer" style={{ ...primaryBtn, textDecoration: 'none', display: 'inline-block' }}>Download PDF ({weekCount} wk{weekCount === 1 ? '' : 's'})</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 const wth = { padding: '8px 10px', fontSize: 11, fontWeight: 700, color: '#444', textAlign: 'center', borderBottom: '1px solid #eee' }
 const wtd = { padding: '7px 10px', fontSize: 12, color: '#333', verticalAlign: 'top' }
