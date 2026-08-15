@@ -1,40 +1,43 @@
-pkg350 - "Call" prefilled when setting the next activity
-=========================================================
+pkg351 - Fixes the Activities tab crash from pkg349
+====================================================
 
-REPLACES pkg302 through pkg349. Deploy this one only.
+REPLACES pkg302 through pkg350. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
+  pages/crm.js            THE FIX
   pages/api/crm.js        unchanged since pkg346
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT CHANGED
-------------
-Mark an activity done and the "What needs doing next?" box now starts with "Call" already
-in it. Leave it and you get a Call. Type over it for anything else.
+WHAT HAPPENED
+-------------
+"activityStaleFilter is not defined" - my mistake in pkg349.
 
-Clicking into the box selects the word, so typing replaces it rather than you having to
-delete it first.
+Taking the diagnostics out, I removed a block by line range and it took an adjacent
+definition with it. That one was still in use: it is the check that spots a saved filter
+matching nothing, so the filter can be ignored instead of silently emptying the table.
 
-If it is emptied - or left as spaces - it still saves as "Call" rather than a blank
-activity. Checked all four cases: prefilled, typed over, cleared, and spaces only.
+Used in one place, defined in none - so the tab threw the moment it rendered.
 
-
-THE BUTTON IS NO LONGER DISABLED
----------------------------------
-"Done & set next" used to grey out until you typed something. With "Call" already there
-that made no sense, so it is always available. The quickest path is now: tick, Enter a due
-date if you want to change it, press the button.
-
-"Just mark done" is still there for when there genuinely is no follow-up.
-
-The wording under the heading now says what it does rather than "leave blank to just mark
-this one done", which no longer applies.
+It is back, with a comment saying what it does so it does not get swept up again.
 
 
-CONSISTENCY NOTE
-----------------
-This matches the deal's own add-activity box, which has always defaulted to "Call" when
-nothing was typed. The two behaved differently before, which was a small trap.
+WHY THE BUILD DID NOT CATCH IT
+-------------------------------
+It compiles perfectly well. JavaScript only complains about a missing name when that line
+actually runs, which is when you open the tab - not when it is built. So "Compiled
+successfully" was never going to tell us.
+
+I have since scanned every value passed into the Activities table and the deal view for
+names that are used but never defined. Nothing else is missing.
+
+I am adding that check to what I do before packaging anything from this file - two crashes
+in a row (pkg346 and now this) have both been of exactly this kind, and both got past a
+clean build.
+
+
+ALSO IN HERE FROM pkg350
+-------------------------
+The next activity box is prefilled with "Call", selects on click so typing replaces it, and
+falls back to "Call" if emptied. "Done & set next" is no longer greyed out.

@@ -1833,6 +1833,14 @@ function CRMPageInner() {
 
 
 
+  // True when a saved filter matches nothing at all, so it can be ignored rather than
+  // silently emptying the table. Removed by accident when the diagnostics came out in
+  // pkg349 - it was still being used, which is what crashed the tab.
+  const activityStaleFilter = useMemo(() => (
+    (!!actPerson && !activityRows.some((r) => r.assignee === actPerson)) ||
+    (!!actCustomer && !activityRows.some((r) => r.company === actCustomer))
+  ), [actPerson, actCustomer, activityRows]);
+
   const actPeople = useMemo(() => [...new Set(activityRows.map((r) => r.assignee).filter(Boolean))].sort(), [activityRows]);
   const actCustomers = useMemo(() => [...new Set(activityRows.map((r) => r.company).filter(Boolean))].sort(), [activityRows]);
 
