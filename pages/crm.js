@@ -512,10 +512,12 @@ function ColumnChooser({ title, fields, columns, onToggle, onClose }) {
 // ===========================================================================
 // Activity row (editable text+date combined, complete, delete)
 // ===========================================================================
-function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
+function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(activity.text);
   const [due, setDue] = useState(activity.due);
+  const [assignee, setAssignee] = useState(activity.assignee || '');
+  const people = ['', ...(me?.name ? [me.name] : []), ...MENTION_USERS.map((u) => u.name).filter((n) => n !== me?.name)];
   return (
     <div style={{ border: `1px solid ${overdue ? C.red : C.activityBorder}`, background: '#fff', borderRadius: 6, padding: 10, marginBottom: 8 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
@@ -524,7 +526,10 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue }) {
           <input value={text} onChange={(e) => setText(e.target.value)} style={miniInput} />
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
-            <button onClick={() => { onEdit(activity.id, text || 'Call', due); setEditing(false); }} style={miniBtn}>Save</button>
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} style={{ ...miniInput, width: 150 }} title="Person responsible">
+              {people.map((n) => <option key={n || 'none'} value={n}>{n ? (n === me?.name ? `${n} (you)` : n) : 'Nobody'}</option>)}
+            </select>
+            <button onClick={() => { onEdit(activity.id, text || 'Call', due, assignee); setEditing(false); }} style={miniBtn}>Save</button>
             <button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button>
           </div>
         </div>
@@ -681,7 +686,9 @@ function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddN
             {(openActs.length > 0) && <div style={{ textAlign: 'right', marginBottom: 10 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>}
             {(adding || openActs.length === 0) && (
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: openActs.length ? 10 : 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>
+          Activity{activity.assignee ? <span style={{ textTransform: 'none', fontWeight: 600, color: C.link }}> &middot; {activity.assignee}</span> : <span style={{ textTransform: 'none', fontWeight: 400, color: '#bbb' }}> &middot; nobody assigned</span>}
+        </div>
                 <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
@@ -700,7 +707,7 @@ function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddN
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} onEdit={(id, t, d) => onEditActivity(deal.id, id, t, d)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} me={me} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -1484,7 +1491,14 @@ function CRMPageInner() {
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
   const addActivity = (id, text, due, assignee) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }]; if (assignee) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `${assignee} assigned an activity — email would send in live version` }); if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
-  const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
+  // Keeps the assignee. It used to drop it, so editing an activity from the deal quietly
+  // cleared whoever was responsible for it.
+  const editActivity = (id, aid, text, due, assignee) => patch(id, (d) => ({
+    ...d,
+    activities: d.activities.map((a) => a.id === aid
+      ? { ...a, text, due, assignee: assignee === undefined ? (a.assignee || null) : (assignee || null) }
+      : a),
+  }));
   const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); };
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
   // Company / contact detail fields that should flow back to the master lists when they
@@ -2073,7 +2087,7 @@ function CRMPageInner() {
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} trace={activityTrace} staleFilter={activityStaleFilter}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
-            search={actSearch} setSearch={setActSearch}
+            search={actSearch} setSearch={setActSearch} me={me}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2232,9 +2246,10 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch, me }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
-  const [editing, setEditing] = useState(null);         // row being edited
+  const [editing, setEditing] = useState(null);         // row being edited in the big box
+  const assigneeOptions = ['', ...(me?.name ? [me.name] : []), ...MENTION_USERS.map((u) => u.name).filter((n) => n !== me?.name)];
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -2345,15 +2360,23 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                       <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
                     </td>
                     <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>
-                      <button onClick={() => setEditing(r)} title="Edit this activity"
-                        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer', textDecoration: 'inherit' }}>
-                        {r.text}
-                      </button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <div style={{ flex: 1 }}>
+                          <InlineCell value={r.text} onSave={(v) => onEdit(r, v, r.due, r.assignee)} placeholder="Activity" />
+                        </div>
+                        <button onClick={() => setEditing(r)} title="Open in a bigger box (for call or email notes)"
+                          style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>&#9998;</button>
+                      </div>
                     </td>
-                    <td style={{ ...td, whiteSpace: 'nowrap', color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }}>
-                      {shortDate(r.due)}{isOverdue ? ' \u00b7 OVERDUE' : ''}
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                      <InlineCell type="date" value={r.due} onSave={(v) => onEdit(r, r.text, v, r.assignee)}
+                        style={{ color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }} />
+                      {isOverdue && <div style={{ color: C.red, fontSize: 10, fontWeight: 700 }}>OVERDUE</div>}
                     </td>
-                    <td style={td}>{r.assignee || '\u2014'}</td>
+                    <td style={td}>
+                      <InlineCell type="select" value={r.assignee} options={assigneeOptions}
+                        onSave={(v) => onEdit(r, r.text, r.due, v)} placeholder="Nobody" />
+                    </td>
                     <td style={td}>{r.company || '\u2014'}</td>
                     <td style={td}>{r.customer || '\u2014'}</td>
                     <td style={td}>{r.email ? <a href={`mailto:${r.email}`} style={{ color: C.link }}>{r.email}</a> : '\u2014'}</td>
@@ -2378,6 +2401,46 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       )}
     </div>
   );
+}
+
+// Edit a single cell in place. Click, type, then Enter or click away to save; Escape
+// abandons it. Defined at module scope on purpose - a component declared inside another
+// remounts on every render and loses focus after one character.
+function InlineCell({ value, onSave, type = 'text', options, placeholder, style }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? '');
+  useEffect(() => { setDraft(value ?? ''); }, [value]);
+
+  const commit = () => { setEditing(false); if ((draft ?? '') !== (value ?? '')) onSave(draft); };
+  const cancel = () => { setDraft(value ?? ''); setEditing(false); };
+
+  if (!editing) {
+    return (
+      <div onClick={() => setEditing(true)} title="Click to edit"
+        style={{ cursor: 'text', minHeight: 18, borderBottom: '1px dashed transparent', ...style }}
+        onMouseEnter={(e) => { e.currentTarget.style.borderBottom = '1px dashed ' + C.line; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderBottom = '1px dashed transparent'; }}>
+        {value || <span style={{ color: '#ccc' }}>{placeholder || '\u2014'}</span>}
+      </div>
+    );
+  }
+
+  const common = {
+    autoFocus: true,
+    value: draft,
+    onChange: (e) => setDraft(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); },
+    style: { width: '100%', boxSizing: 'border-box', padding: '3px 5px', border: '1px solid ' + C.link, borderRadius: 5, fontSize: 12.5, fontFamily: 'inherit' },
+  };
+  if (type === 'select') {
+    return (
+      <select {...common} onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}>
+        {(options || []).map((o) => <option key={o} value={o}>{o || 'Nobody'}</option>)}
+      </select>
+    );
+  }
+  return <input type={type} {...common} />;
 }
 
 // Marking done is the moment you know what happens next, so this captures the outcome and
