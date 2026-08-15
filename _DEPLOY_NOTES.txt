@@ -1,48 +1,62 @@
-pkg322 - Activities tab: faster, and it now says what it is hiding
-===================================================================
+pkg323 - Activities added in a project were never being saved
+==============================================================
 
-REPLACES pkg302 through pkg321. Deploy this one only.
+REPLACES pkg302 through pkg322. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
-  pages/api/crm.js        caches the rebuilt outstanding list
+  pages/crm.js            THE FIX
+  pages/api/crm.js        unchanged since pkg322
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. WHY IT WAS SLOW
--------------------
-Your activities were imported before the flat outstanding-list existed, so every time you
-opened the tab it rebuilt that list from scratch - reading the per-deal records for every
-project with something outstanding, a few hundred keys, on EVERY page load.
+ROOT CAUSE - THE SAVE WAS FAILING SILENTLY
+--------------------------------------------
+The Activities tab was reading correctly. The activity was never being stored.
 
-It now saves the list once it has built it, so that happens a single time and every load
-afterwards reads it directly. I also halved the batch size (150 keys per request rather
-than 300), which is gentler on the database and less likely to be throttled.
+Opening a deal loads that deal's imported activities and notes and merges them INTO the
+deal so the deal view can show them. The autosave then writes the whole deals list back -
+including those merged copies, which already live in their own per-deal stores.
 
-First open after deploying will still take a moment while it builds and stores the list.
-After that it should be quick.
+    crm:deals on its own                 6.4 MB
+    request body limit                   8 MB
+    if every deal were opened            29.9 MB
+
+So after opening a few deals the payload crosses the limit and the save is rejected. And
+the save was written as:
+
+    catch (e) { /* ignore */ }
+
+It failed silently, the header still said "Saved", and the activity sat in the browser
+looking fine until the next reload took it away.
+
+That is my fault twice over: merging imported records into the saved object, and swallowing
+the error that would have told us.
 
 
-2. YOUR ACTIVITY NOT SHOWING
------------------------------
-I could not tell you which of two rules hid it, so the tab now accounts for every row it
-holds back rather than dropping them silently:
+THE FIX
+-------
+1. Imported activities and notes are now stripped before saving. They are flagged when
+   loaded, so they are easy to identify, and they are already stored per deal - there was
+   never any reason to write them back. The payload returns to the size of the deals
+   themselves and the save succeeds.
 
-  A REMEMBERED FILTER. The CRM remembers your Person responsible and Customer filters
-  between visits. An activity you add with no person assigned will not match a saved
-  "person" filter - and you would have no way of knowing a filter was even set.
-  There is now an amber line: "Filtered by person: Edita  clear" with a one-click clear.
+   Verified: an activity you add is kept, the imported copies are dropped.
 
-  THE PROJECT IS NOT OPEN. The tab only lists activities on open projects (you asked for
-  that in pkg317). If you added it to a project marked won or lost, it will not appear.
-  There is now a line saying "N more on won or lost projects (not shown)".
+2. SAVE FAILURES ARE NOW VISIBLE. The "Saved" badge in the header turns red and says what
+   went wrong - e.g. "Save failed (server 413). Your last change is not stored." No more
+   silently losing work while the screen says it is fine.
 
-Between them, one of these should account for your missing activity the moment you open
-the tab. If neither line appears and it is still missing, that is a genuine bug and I will
-chase it - but the screen should now tell you rather than leaving you guessing.
 
-Both counts sit under the activity total on the right of the filter bar.
+WHAT TO EXPECT
+--------------
+Add an activity inside a project and it appears in the Activities tab, and survives a
+reload. Same for notes, stage moves and field edits - all of which were at risk from the
+same failing save, though an activity is where you happened to notice it.
+
+WORTH CHECKING: anything you added in the CRM over the last few sessions may not have been
+saved. Spot-check a couple of projects you know you edited. If work is missing, it was lost
+at this point, and I am sorry - the silent catch is why it went unnoticed for so long.
 
 
 TESTED

@@ -871,6 +871,7 @@ function CRMPageInner() {
   const [confetti, setConfetti] = useState(false);
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
   const skipSave = useRef(true);
+  const [saveError, setSaveError] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
@@ -972,7 +973,27 @@ function CRMPageInner() {
     if (skipSave.current) { skipSave.current = false; return; }
     setSaving(true);
     const t = setTimeout(async () => {
-      try { await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', deals, schema }) }); } catch (e) { /* ignore */ }
+      try {
+        // Opening a deal merges that deal's IMPORTED activities and notes into it so the
+        // deal view can show them. They must not be written back into crm:deals - they
+        // already live in their own per-deal stores, and re-saving them inflates this
+        // payload well past the request limit, at which point the save fails and anything
+        // you have just added is lost on the next reload.
+        const lean = deals.map((d) => ({
+          ...d,
+          activities: (d.activities || []).filter((a) => !a.imported),
+          notes: (d.notes || []).filter((n) => !n.imported),
+          history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
+        }));
+        const r = await fetch('/api/crm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save', deals: lean, schema }),
+        });
+        if (!r.ok) { setSaveError(`Save failed (server ${r.status}). Your last change is not stored.`); }
+        else setSaveError('');
+      } catch (e) {
+        setSaveError('Save failed - check your connection. Your last change is not stored.');
+      }
       setSaving(false);
     }, 800);
     return () => clearTimeout(t);
@@ -1716,7 +1737,9 @@ function CRMPageInner() {
           <span style={{ background: C.link, color: '#fff', borderRadius: 5, padding: '2px 7px', fontSize: 14, fontWeight: 800 }}>RR</span>Rock Roofing
         </span>
         <a href="/sales" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Portal</a>
-        <span style={{ fontSize: 11.5, color: saving ? '#f5c518' : '#7ac57a', minWidth: 46 }}>{!loaded ? '' : saving ? 'Saving...' : 'Saved'}</span>
+        <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
+        </span>
         <button onClick={() => { setImportMsg(''); setImportOpen(true); }} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Import</button>
         <div style={{ display: 'flex', border: `1px solid #444`, borderRadius: 6, overflow: 'hidden' }}>
           <button onClick={() => setView('pipeline')} style={segBtn(view === 'pipeline')}>Pipeline</button>
