@@ -1,62 +1,62 @@
-pkg323 - Activities added in a project were never being saved
-==============================================================
+pkg324 - Activities: a breakdown so we can find where yours is going
+=====================================================================
 
-REPLACES pkg302 through pkg322. Deploy this one only.
+REPLACES pkg302 through pkg323. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            THE FIX
+  pages/crm.js
   pages/api/crm.js        unchanged since pkg322
   lib/crmImportMap.js     unchanged since pkg305
 
 
-ROOT CAUSE - THE SAVE WAS FAILING SILENTLY
---------------------------------------------
-The Activities tab was reading correctly. The activity was never being stored.
+WHERE I HAVE GOT TO
+--------------------
+I have verified the two ends and they are both correct:
 
-Opening a deal loads that deal's imported activities and notes and merges them INTO the
-deal so the deal view can show them. The autosave then writes the whole deals list back -
-including those merged copies, which already live in their own per-deal stores.
+  - addActivity() does add to the deal's own activity list, with done: false
+  - the Activities tab does read that list and merge it with the imported ones
 
-    crm:deals on its own                 6.4 MB
-    request body limit                   8 MB
-    if every deal were opened            29.9 MB
-
-So after opening a few deals the payload crosses the limit and the save is rejected. And
-the save was written as:
-
-    catch (e) { /* ignore */ }
-
-It failed silently, the header still said "Saved", and the activity sat in the browser
-looking fine until the next reload took it away.
-
-That is my fault twice over: merging imported records into the saved object, and swallowing
-the error that would have told us.
+So the data goes in, and the reader looks in the right place. Something between the two is
+dropping it, and I have not been able to see what by reading the code. Rather than guess a
+fourth time, this makes the tab show its own workings.
 
 
-THE FIX
--------
-1. Imported activities and notes are now stripped before saving. They are flagged when
-   loaded, so they are easy to identify, and they are already stored per deal - there was
-   never any reason to write them back. The payload returns to the size of the deals
-   themselves and the save succeeds.
+"WHERE ARE MY ACTIVITIES?"
+--------------------------
+A small expander next to the activity count. Open it and it shows:
 
-   Verified: an activity you add is kept, the imported copies are dropped.
+  Added in the CRM:            how many activities exist on deals that were NOT imported,
+                               and how many of those are still open
+  Imported and outstanding:    the count from the Pipedrive import
+  Rows built:                  how many rows the table actually assembled, and how many of
+                               those came from activities added in the CRM
+  On won/lost projects:        how many were set aside by the open-projects-only rule
 
-2. SAVE FAILURES ARE NOW VISIBLE. The "Saved" badge in the header turns red and says what
-   went wrong - e.g. "Save failed (server 413). Your last change is not stored." No more
-   silently losing work while the screen says it is fine.
+That pins it down immediately:
+
+  - if "Added in the CRM" is 0 right after you add one, it never reached the deal
+  - if it counts yours but "of which N added in the CRM" is 0, the merge is dropping it
+  - if the row is built but not visible, a filter or the open-project rule is hiding it,
+    and the amber "Filtered by..." line and the won/lost line above say which
+
+Send me those numbers after adding an activity and I can name the cause rather than
+theorise about it.
 
 
-WHAT TO EXPECT
---------------
-Add an activity inside a project and it appears in the Activities tab, and survives a
-reload. Same for notes, stage moves and field edits - all of which were at risk from the
-same failing save, though an activity is where you happened to notice it.
+TWO RULES THAT MAKE THE TWO VIEWS DIFFER LEGITIMATELY
+-------------------------------------------------------
+Worth ruling out first, because both are working as designed and either would look like
+"it did not pull through":
 
-WORTH CHECKING: anything you added in the CRM over the last few sessions may not have been
-saved. Spot-check a couple of projects you know you edited. If work is missing, it was lost
-at this point, and I am sorry - the silent catch is why it went unnoticed for so long.
+  1. The tab lists OPEN activities only unless you tick "Include completed". The deal shows
+     all of them.
+  2. The tab lists activities on OPEN projects only. The deal shows them whatever its
+     status. So an activity you set on a won or lost project will never appear on the tab.
+
+If your test project is won or lost, that is the whole explanation - the won/lost line will
+show a count. Tell me if you would rather won projects were included; you are still working
+those jobs, so there is a fair case for it.
 
 
 TESTED

@@ -1561,7 +1561,7 @@ function CRMPageInner() {
 
     const seen = new Set();
     const rows = [];
-    const push = (a, dealId, done) => {
+    const push = (a, dealId, done, source) => {
       const key = `${dealId}|${a.id}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -1588,14 +1588,15 @@ function CRMPageInner() {
         done: !!done,
         dealOpen,
         dealStatus: deal.status,
+        source,
       });
     };
 
-    for (const a of (openActivities || [])) push(a, a.dealId, false);
+    for (const a of (openActivities || [])) push(a, a.dealId, false, 'imported');
     for (const d of deals) {
       for (const a of (d.activities || [])) {
         if (!actShowDone && a.done) continue;
-        push(a, d.id, a.done);
+        push(a, d.id, a.done, a.imported ? 'imported' : 'crm');
       }
     }
     return rows;
@@ -1603,6 +1604,26 @@ function CRMPageInner() {
 
   const activityRows = useMemo(() => activityRowsAll.filter((r) => r.dealOpen), [activityRowsAll]);
   const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => !r.dealOpen).length, [activityRowsAll]);
+
+  // Where every activity ended up. Shown on the tab so a missing one can be traced to the
+  // rule that hid it, instead of it just not being there.
+  const activityBreakdown = useMemo(() => {
+    let inCrmTotal = 0, inCrmOpen = 0;
+    for (const d of deals) {
+      for (const a of (d.activities || [])) {
+        if (a.imported) continue;
+        inCrmTotal++;
+        if (!a.done) inCrmOpen++;
+      }
+    }
+    return {
+      inCrmTotal, inCrmOpen,
+      imported: (openActivities || []).length,
+      builtRows: activityRowsAll.length,
+      fromCrm: activityRowsAll.filter((r) => r.source === 'crm').length,
+      onClosed: activityClosedCount,
+    };
+  }, [deals, openActivities, activityRowsAll, activityClosedCount]);
 
   const actPeople = useMemo(() => [...new Set(activityRows.map((r) => r.assignee).filter(Boolean))].sort(), [activityRows]);
   const actCustomers = useMemo(() => [...new Set(activityRows.map((r) => r.company).filter(Boolean))].sort(), [activityRows]);
@@ -1825,7 +1846,7 @@ function CRMPageInner() {
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
-            closedCount={activityClosedCount}
+            closedCount={activityClosedCount} breakdown={activityBreakdown}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -1984,7 +2005,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2023,6 +2044,21 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           )}
           {closedCount > 0 && (
             <div style={{ color: '#aaa', marginTop: 2 }}>{closedCount} more on won or lost projects (not shown)</div>
+          )}
+          {breakdown && (
+            <details style={{ marginTop: 3 }}>
+              <summary style={{ cursor: 'pointer', color: C.link, fontSize: 11.5, listStyle: 'none' }}>Where are my activities?</summary>
+              <div style={{ textAlign: 'left', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '10px 12px', marginTop: 6, fontSize: 11.5, color: '#666', lineHeight: 1.7, minWidth: 320 }}>
+                <div>Added in the CRM: <strong>{breakdown.inCrmTotal}</strong> ({breakdown.inCrmOpen} still open)</div>
+                <div>Imported and outstanding: <strong>{breakdown.imported}</strong></div>
+                <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
+                <div>On won/lost projects: <strong>{breakdown.onClosed}</strong></div>
+                <div style={{ marginTop: 6, color: '#999' }}>
+                  If &quot;added in the CRM&quot; counts an activity you cannot see in the table, tell me these
+                  numbers and I can pinpoint which rule dropped it.
+                </div>
+              </div>
+            </details>
           )}
         </div>
       </div>
