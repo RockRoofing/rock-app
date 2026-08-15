@@ -1417,8 +1417,16 @@ export default function CRMPage() {
   const healedRef = useRef(false);
   useEffect(() => {
     if (view !== 'activities' || healedRef.current) return;
-    const needed = Object.entries(activitySummary || {}).filter(([, v]) => (v?.open || 0) > 0).map(([id]) => id);
-    if (!needed.length || openActivities.length) { healedRef.current = true; return; }
+
+    // Do NOT give up just because the summary has not arrived yet. Since the CRM now
+    // remembers your last tab, landing straight on Activities means this effect runs
+    // BEFORE the data loads - and the old guard marked itself finished at that point and
+    // never ran again. Wait for the summary instead; the effect re-runs when it lands.
+    if (!Object.keys(activitySummary || {}).length) return;
+
+    if (openActivities.length) { healedRef.current = true; return; }
+    const needed = Object.entries(activitySummary).filter(([, v]) => (v?.open || 0) > 0).map(([id]) => id);
+    if (!needed.length) { healedRef.current = true; return; }
     healedRef.current = true;
     (async () => {
       setActLoading(true);
@@ -1624,7 +1632,8 @@ export default function CRMPage() {
             showDone={actShowDone} setShowDone={setActShowDone}
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
-            deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed} />
+            deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
+            onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
       </div>
 
@@ -1776,7 +1785,7 @@ const ACT_COLS = [
   ['phone', 'Customer phone'],
 ];
 
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry }) {
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -1808,7 +1817,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 
       {!rows.length ? (
         <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)}
-          deals={deals} openList={openList} dealsAreSeed={dealsAreSeed} />
+          deals={deals} openList={openList} dealsAreSeed={dealsAreSeed} onRetry={onRetry} />
       ) : (
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
@@ -1851,7 +1860,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // An empty table is ambiguous - nothing imported, or nothing outstanding? This works it
 // out from the per-deal summary and says which, so nobody has to guess whether the import
 // failed.
-function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAreSeed }) {
+function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAreSeed, onRetry }) {
   const box = { background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13.5, color: C.dim };
   if (loading) return <div style={box}>Loading activities...</div>;
 
@@ -1916,10 +1925,17 @@ function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAre
         <div>Deals currently loaded: <strong style={code}>{(deals || []).length.toLocaleString('en-GB')}</strong></div>
         <div>Their ids look like: <span style={code}>{dealSample.join(', ') || '(none)'}</span></div>
         <div style={{ marginTop: 6 }}>The activities are attached to deal ids: <span style={code}>{actSample.join(', ') || '(none)'}</span></div>
+        {!(openList || []).length && (
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
+            <button onClick={onRetry} style={{ ...primaryBtn }}>Load activities</button>
+            <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 6 }}>
+              The activity list is empty rather than mismatched. This fetches it from the imported data.
+            </div>
+          </div>
+        )}
         <div style={{ marginTop: 10, color: '#aaa' }}>
-          If those two sets of numbers look like different things, the deals and the activities came
-          from different exports. Re-import the Deals export that matches, then the Activities export.
-          If they look the same, send me this screen and I will take it from there.
+          If both sets of numbers are shown and look like different things, the deals and the
+          activities came from different exports. If they look the same, send me this screen.
         </div>
       </div>
     </div>

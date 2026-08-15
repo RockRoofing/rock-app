@@ -1,72 +1,63 @@
-pkg314 - New companies and contacts now reach the Companies / Contacts pages
-=============================================================================
+pkg315 - Activities tab: the real cause
+========================================
 
-REPLACES pkg302 through pkg313. Deploy this one only.
+REPLACES pkg302 through pkg314. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            creates the records, plus a catch-up for existing ones
-  pages/api/crm.js        new upsert-org / upsert-contact
+  pages/crm.js            THE FIX
+  pages/api/crm.js        unchanged since pkg314
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT WAS HAPPENING
--------------------
-Both pages switch behaviour once an import exists:
+THE SCREENSHOT SETTLED IT
+--------------------------
+    Deals currently loaded: 6,860
+    Their ids look like: 258, 379, 414, 428, 646
+    The activities are attached to deal ids: (none)
 
-    if (orgsData.length) { rows = orgsData.map(...) }    // imported list ONLY
-    else { ...derive from deals... }                     // pre-import fallback
-
-Before you imported, a new company on a project appeared automatically. After the import,
-the imported lists became the source of truth and anything existing only on a deal was
-invisible - so new business added since would quietly never appear on those pages.
-
-
-NOW
----
-1. CREATING A PROJECT. Everything typed into the "new contact" and "new customer" panels
-   on that form is written as a proper record - company name, address, phone, website,
-   email, registration number, supply chain approved; contact name, phone, email, job role.
-   They appear on Companies and Contacts straight away.
-
-2. EDITING THE PROJECT AFTERWARDS. Changing any of those fields on the deal keeps the
-   master lists in step, so a phone number added later is not stranded on the deal. You
-   asked for both, and the second is the one that would otherwise have been missed.
-
-3. CATCH-UP FOR WHAT IS ALREADY THERE. Any company or person that currently exists only on
-   a deal is now listed as well, with whatever details the deal holds. So anything added
-   between the import and this deploy turns up without you doing anything.
+Your deals are fine - 6,860 of them, real ids, not the sample data. And "(none)" is the
+answer: the activity list was EMPTY. Nothing was being compared, so nothing could match.
+The "different exports" message was wrong, and so was telling you to re-import.
 
 
-MERGING RULES - THE IMPORTANT BIT
-----------------------------------
-Matching is on name, case-insensitive, so "wates construction ltd" updates the existing
-"Wates Construction Ltd" rather than creating a duplicate.
+ROOT CAUSE - AND IT WAS SOMETHING I INTRODUCED
+------------------------------------------------
+Your activities were imported before the flat outstanding-list existed, so pkg312 added a
+fallback: read the per-deal summary, find the deals with outstanding activities, fetch
+just those. That fallback never ran.
 
-A BLANK NEVER OVERWRITES SOMETHING ALREADY RECORDED. If a company has a phone number from
-the import and someone creates a project leaving that box empty, the number stays. Without
-that rule, a half-filled project form would quietly strip detail off an established
-customer record - which would be much worse than the original problem.
+    if (view !== 'activities' || healedRef.current) return;
+    const needed = ...summary...
+    if (!needed.length || openActivities.length) { healedRef.current = true; return; }
 
-Verified: existing phone kept when the new value was blank, new website added, matched
-despite different capitalisation, no duplicate created.
+pkg311 made the CRM remember your last tab. You were on Activities, so the page now opens
+straight onto it - and that code runs on mount, BEFORE the deals and summary have loaded.
+With an empty summary it found nothing to do, marked itself finished, and never ran again.
+The summary arrived a moment later to a switch already flipped off.
 
+So two features I added a few packages apart combined to break this. It would have worked
+for anyone whose last tab was Pipeline, which is why it looked so inconsistent.
 
-WORTH KNOWING
--------------
-Records created this way are tagged addedInCrm, so they can be told apart from imported
-ones later if you ever want to - for example to review what has been added since cutover.
+FIXED: it now waits for the summary to arrive instead of giving up when it is absent, and
+only marks itself finished once it has actually seen the data.
 
-This also feeds the Activities tab: customer email and phone there are looked up from the
-Contacts list, so a contact created via a project will now show its details rather than
-dashes.
-
-CAUTION AT CUTOVER: company and contact imports are still wipe-and-replace. Re-importing
-either export will remove records created in the CRM. Once you have cut over from
-Pipedrive that stops mattering, but until then, avoid re-importing those two after adding
-projects by hand - or tell me and I will make those imports merge rather than replace.
+Reproduced the exact mount sequence before and after: old guard never fetched, new guard
+does.
 
 
-TESTED
-------
-npm run build - Compiled successfully.
+ALSO ADDED
+----------
+A "Load activities" button on that screen. If the fetch ever fails - a dropped connection
+mid-load - you can retry without reloading the page. It only appears when the list is
+genuinely empty rather than mismatched.
+
+The wording is also corrected: it no longer tells you to re-import when it does not know
+that is the problem.
+
+
+WHAT TO EXPECT
+--------------
+Open the Activities tab and you should see your 1,023 outstanding activities, oldest due
+first, with project, person responsible and customer details. The kanban dots should come
+to life at the same time, since both read the same data.
