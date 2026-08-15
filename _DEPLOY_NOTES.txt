@@ -1,66 +1,46 @@
-pkg355 - Tender return becomes an activity
-===========================================
+pkg356 - Tender return date is a date box again
+================================================
 
-REPLACES pkg302 through pkg354. Deploy this one only.
+REPLACES pkg302 through pkg355. Deploy this one only.
 
 CHANGED FILES
 -------------
+  lib/crmFieldSchema.js   THE FIX
   pages/crm.js
-  lib/crmFieldSchema.js   <- NOTE: this file is in the package for the first time in a while
   pages/api/crm.js        unchanged since pkg346
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. OUT OF THE SUMMARY
+WHAT I BROKE IN pkg355
+-----------------------
+To get Tender Return date out of the deal summary I deleted its entry from the field
+schema. But that schema is also what tells the forms WHAT KIND of field it is:
+
+    schemaFor = (k) => SCHEMA.find(x => x.key === k) || { key: k, type: 'text' }
+
+With no entry, it fell back to type 'text' - so the Add Project form gave you a plain
+typing box instead of a date picker.
+
+
+THE FIX
+-------
+The field is declared again, as a date, but in a group of its own ('none') rather than
+'summary'. So:
+
+  - the Add Project form shows a proper date picker
+  - it still does NOT appear in the deal summary
+  - it does not turn up in Details, or in the field manager lists either
+
+Checked all three: date picker restored, and the field appears in none of the group
+listings.
+
+
+UNCHANGED FROM pkg355
 ----------------------
-Tender Return date is no longer a field in the deal summary. It was a date sitting there
-that nothing acted on.
-
-
-2. IT CREATES AN ACTIVITY INSTEAD
-----------------------------------
-Setting a tender return date when adding a project creates an activity:
-
-    "Tender return", due that date, assigned to the Estimator Responsible
-
-So it appears on the Activities tab, drives the kanban dot, goes red when overdue, and is
-completed like anything else - rather than being a date nobody is accountable for.
-
-The Add Project form says so underneath the field, so it is not a surprise.
-
-
-3. WARNING ON THE CARD WHEN THERE IS NO ESTIMATOR
----------------------------------------------------
-A deal with a tender return and no Estimator Responsible now shows an amber flag on its
-kanban card:
-
-    (!) No estimator assigned
-
-It appears whether or not the activity has been created yet - so a project added with a
-date but no estimator is flagged immediately. It disappears the moment an estimator is set.
-
-
-4. SETTING THE ESTIMATOR UPDATES THE ACTIVITY
------------------------------------------------
-Set or change the Estimator Responsible and the open Tender return activity is reassigned
-to them automatically. A COMPLETED one is left alone - that is a record of who actually did
-it, and rewriting history would be wrong.
-
-
-5. ESTIMATOR LIST NOW MATCHES THE PORTAL
-------------------------------------------
-The Estimator Responsible dropdown was four hard-coded first names - Roman, Niall, James,
-Simon. It now lists the same portal users (pre-contract + admin) you can assign an activity
-to.
-
-That was the whole point of your request: the estimator on the deal and the person on the
-activity are now the same name from the same list, so they cannot drift the way "James" and
-"James McVeigh" did.
-
-
-EXISTING DEALS
---------------
-Nothing is migrated. Deals that already carry a tender return date keep it in their data -
-it simply is not shown in the summary any more, and no activity is created retrospectively.
-Say if you want a one-off pass to create Tender return activities for open deals that have
-a date but no activity; it would need care over which ones are still live.
+  - setting a tender return date creates a "Tender return" activity, due that date,
+    assigned to the Estimator Responsible
+  - an amber "No estimator assigned" flag on the kanban card when there is a tender return
+    and nobody responsible
+  - setting the estimator reassigns the open Tender return activity; a completed one is
+    left as it was
+  - the estimator dropdown lists your portal users, matching activity owners
