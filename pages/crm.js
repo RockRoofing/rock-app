@@ -1298,6 +1298,7 @@ export default function CRMPage() {
     // Editing any of these on the project keeps the Companies / Contacts pages in step,
     // so a detail added here is not stranded on the deal.
     if (ORG_KEYS.includes(key) || CONTACT_KEYS.includes(key)) {
+      try {
       const d0 = deals.find((x) => x.id === id);
       if (d0) {
         const f = { ...d0.fields, [key]: val };
@@ -1308,6 +1309,7 @@ export default function CRMPage() {
           upsertContact({ name: f.contact_person, organization: f.organization, contact_phone: f.contact_phone, contact_email: f.contact_email, contact_job_role: f.contact_job_role });
         }
       }
+      } catch (e) { console.error('Could not file the company/contact record:', e); }
     }
     return patch(id, (d) => {
     const old = d.fields[key];
@@ -1364,10 +1366,13 @@ export default function CRMPage() {
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
     ['site_location','site_postcode','region','size_m2','credit_score','credit_limit','insured_credit_limit','glenigan_id','estimator_responsible','project_stage','roofing_works_onsite','sales_person','project_start_date','project_type','systems_priced','lead_source','scope_of_works','general_info','contact_phone','contact_email','contact_job_role','org_address','org_phone','org_website','org_email','org_reg_number','supply_chain_approved'].forEach((k) => { fields[k] = data[k] || null; });
     const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
-    const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
+    const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], notes: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
     setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
 
     // Anything typed into the new-company / new-contact panels becomes a real record.
+    // Wrapped: creating the project is the important part, and must not fail because
+    // filing the company or contact did.
+    try {
     if (fields.organization) {
       upsertOrg({
         name: fields.organization, org_address: fields.org_address, org_phone: fields.org_phone,
@@ -1382,6 +1387,7 @@ export default function CRMPage() {
         contact_job_role: fields.contact_job_role,
       });
     }
+    } catch (e) { console.error('Could not file the company/contact record:', e); }
   };
 
   const addField = (f) => setSchema((prev) => [...prev, f]);
@@ -1466,6 +1472,9 @@ export default function CRMPage() {
       seen.add(key);
       const deal = dealById.get(String(dealId));
       if (!deal) return;                                  // deal not in the CRM
+      // Open projects only. This is a to-do list - chasing work on a job that was won or
+      // lost months ago is noise, and it was inflating the overdue count badly.
+      if (deal.status !== 'open') return;
       const custName = deal.fields?.contact_person || '';
       const contact = contactByName.get(String(custName).trim().toLowerCase());
       rows.push({
@@ -1785,6 +1794,10 @@ const ACT_COLS = [
   ['phone', 'Customer phone'],
 ];
 
+// NOTE: the page body is a fixed-height flex child with overflow:hidden, so a table that
+// simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
+// each manage their own scrolling; this one has to do the same - hence the column layout
+// with a scrollable table area and a header row that stays put.
 function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry }) {
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
@@ -1794,8 +1807,8 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
   const overdue = rows.filter((r) => r.due && r.due < today && !r.done).length;
 
   return (
-    <div>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, padding: 12, boxSizing: 'border-box' }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, flexShrink: 0 }}>
         <select value={person} onChange={(e) => setPerson(e.target.value)} style={sel}>
           <option value="">All people</option>
           {people.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -1819,9 +1832,9 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)}
           deals={deals} openList={openList} dealsAreSeed={dealsAreSeed} onRetry={onRetry} />
       ) : (
-        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto' }}>
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto', flex: 1, minHeight: 0 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
-            <thead>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
                 {ACT_COLS.map(([k, label]) => (
                   <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
