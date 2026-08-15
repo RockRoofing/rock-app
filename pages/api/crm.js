@@ -364,6 +364,30 @@ export default async function handler(req, res) {
     // body over 4.5MB before the code even runs - which is the "server 413". Sending the
     // full list on every keystroke could never work at this size; it only survived while
     // the CRM held a few hundred sample deals.
+    // Delete a project and everything filed against it. Its activities and notes live in
+    // their own keys, so removing only the deal would leave those behind for good.
+    if (body.action === 'delete-deal') {
+      const dealId = String(body.dealId || '')
+      if (!dealId) return res.status(400).json({ error: 'dealId required' })
+
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      await set(DEALS_KEY, list.filter(d => String(d.id) !== dealId))
+
+      for (const kind of ['activities', 'notes']) {
+        await set(SUB_KEY(kind, dealId), [])
+        const idx = (await get(SUB_INDEX(kind))) || []
+        await set(SUB_INDEX(kind), idx.filter(id => String(id) !== dealId))
+        const sum = (await get(SUB_SUMMARY(kind))) || {}
+        delete sum[dealId]
+        await set(SUB_SUMMARY(kind), sum)
+      }
+
+      const open = (await get(OPEN_ACTIVITIES)) || []
+      await set(OPEN_ACTIVITIES, open.filter(a => String(a.dealId) !== dealId))
+
+      return res.json({ ok: true })
+    }
+
     if (body.action === 'save-deals-partial') {
       const changed = Array.isArray(body.deals) ? body.deals : []
       const removed = new Set((Array.isArray(body.removedIds) ? body.removedIds : []).map(String))

@@ -1,46 +1,58 @@
-pkg356 - Tender return date is a date box again
-================================================
+pkg357 - Delete a project from inside the deal
+===============================================
 
-REPLACES pkg302 through pkg355. Deploy this one only.
+REPLACES pkg302 through pkg356. Deploy this one only.
 
 CHANGED FILES
 -------------
-  lib/crmFieldSchema.js   THE FIX
   pages/crm.js
-  pages/api/crm.js        unchanged since pkg346
+  pages/api/crm.js        server-side delete
+  lib/crmFieldSchema.js   unchanged since pkg356
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT I BROKE IN pkg355
+WHAT YOU GET
+------------
+A small red "Delete" in the deal header, immediately after Won / Lost (and Reopen when it
+is there). Plain red text, no border, noticeably smaller than the others - deliberately not
+something you hit by accident next to two buttons you press often.
+
+
+TWO CONFIRMATIONS
+-----------------
+    Delete "Bensham Lane"?
+    This removes the project and all of its activities, notes and history. It cannot be
+    undone.
+
+then
+
+    Last check - permanently delete "Bensham Lane"?
+
+Two prompts because there is no undo and no recycle bin. A single confirm on a destructive,
+irreversible action sitting beside Won and Lost is not enough.
+
+
+WHAT IT ACTUALLY REMOVES
+-------------------------
+The project, and everything filed against it:
+
+    the deal record
+    its activities        (crm:activities:<id>)
+    its notes             (crm:notes:<id>)
+    its entry in the outstanding activity list and the kanban counts
+    its index entries
+
+That matters. Activities and notes live in their own keys per project - deleting only the
+deal would leave those behind permanently, invisible and unreachable, quietly filling up
+the database. They are cleared properly.
+
+The screen updates immediately and you are returned to the board. If the server delete
+fails you are told to reload before carrying on, rather than being left with a board that
+disagrees with what is stored.
+
+
+WHAT IT DOES NOT TOUCH
 -----------------------
-To get Tender Return date out of the deal summary I deleted its entry from the field
-schema. But that schema is also what tells the forms WHAT KIND of field it is:
-
-    schemaFor = (k) => SCHEMA.find(x => x.key === k) || { key: k, type: 'text' }
-
-With no entry, it fell back to type 'text' - so the Add Project form gave you a plain
-typing box instead of a date picker.
-
-
-THE FIX
--------
-The field is declared again, as a date, but in a group of its own ('none') rather than
-'summary'. So:
-
-  - the Add Project form shows a proper date picker
-  - it still does NOT appear in the deal summary
-  - it does not turn up in Details, or in the field manager lists either
-
-Checked all three: date picker restored, and the field appears in none of the group
-listings.
-
-
-UNCHANGED FROM pkg355
-----------------------
-  - setting a tender return date creates a "Tender return" activity, due that date,
-    assigned to the Estimator Responsible
-  - an amber "No estimator assigned" flag on the kanban card when there is a tender return
-    and nobody responsible
-  - setting the estimator reassigns the open Tender return activity; a completed one is
-    left as it was
-  - the estimator dropdown lists your portal users, matching activity owners
+The company and the contact stay on the Companies and Contacts pages. They are shared
+records - other projects may use them - so deleting one project must not take a customer
+with it. Remove those separately if you want them gone.

@@ -650,7 +650,7 @@ function HistoryFeed(props) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
+function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
@@ -695,6 +695,10 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
           <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}
+          <button onClick={() => onDeleteDeal(deal.id)} title="Delete this project permanently"
+            style={{ background: 'none', border: 'none', color: '#ff6b6b', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: '0 2px', marginLeft: 2 }}>
+            Delete
+          </button>
         </div>
       </div>
 
@@ -1658,6 +1662,31 @@ function CRMPageInner() {
     } catch { /* as above */ }
   }
 
+  // Delete a project outright. Removes the deal AND its activities and notes, which live in
+  // their own per-deal stores - otherwise those would be left behind as orphans that
+  // nothing can ever read or clear.
+  async function deleteDeal(id) {
+    const d = deals.find((x) => x.id === id);
+    const name = d ? d.title : 'this project';
+    if (!window.confirm(`Delete "${name}"?\n\nThis removes the project and all of its activities, notes and history. It cannot be undone.`)) return;
+    if (!window.confirm(`Last check - permanently delete "${name}"?`)) return;
+
+    closeDeal();
+    setDeals((prev) => prev.filter((x) => x.id !== id));
+    setOpenActivities((prev) => prev.filter((a) => String(a.dealId) !== String(id)));
+    try {
+      await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete-deal', dealId: String(id) }),
+      });
+      savedSnapshot.current.delete(String(id));
+      prevActivities.current.delete(String(id));
+      prevNotes.current.delete(String(id));
+    } catch (e) {
+      setSaveError('The project could not be deleted on the server - reload before carrying on.');
+    }
+  }
+
   const createProject = (data) => {
     const id = nextId.current++;
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
@@ -1905,7 +1934,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
+        <DealView deal={live} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }
