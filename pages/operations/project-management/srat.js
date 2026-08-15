@@ -6,8 +6,8 @@ const clamp = (s, n = 80) => { if (!s) return '—'; const t = String(s); return
 const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 const parseLocal = (d) => { if (!d) return null; const [y, m, day] = d.split('-').map(Number); return new Date(y, (m || 1) - 1, day || 1) }
 const fmtLocal = (d) => { const dt = parseLocal(d); return dt ? dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' }
-const emptySrat = () => ({ projectNo: '', projectName: '', date: todayISO(), situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
-const PAGE_SIZE = 50
+const emptySrat = () => ({ projectNo: '', projectName: '', contractsManager: '', date: todayISO(), situation: '', roadblocks: '', actionsText: '', actionTaskIds: [], timeline: '' })
+const PAGE_SIZE = 25
 const cellTd = { padding: '8px 10px', fontSize: 12, borderBottom: '1px solid #f0f0f0', verticalAlign: 'top', overflow: 'hidden', textOverflow: 'ellipsis', cursor: 'pointer' }
 const filterInp = { padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff', minWidth: 150 }
 
@@ -36,13 +36,21 @@ export default function SratsPage() {
         fetch('/api/tasks').then(r => r.json()).catch(() => ({})),
       ])
       setSrats(s.srats || [])
-      setProjects((p.projects || []).map(x => ({ no: x.projectNo, name: x.projectName || x.name || '' })).filter(x => x.no))
+      // Live projects only - Complete and Archived jobs are not raised against.
+      setProjects((p.projects || [])
+        .filter(x => (x.status || 'active') === 'active')
+        .map(x => ({ no: x.projectNo, name: x.projectName || x.name || '', cm: x.contractsManager || '' }))
+        .filter(x => x.no))
       setUsers((t.members || []).filter(u => u.active !== false))
       setTasks(tk.tasks || [])
     } catch {}
     setLoading(false)
   }
   useEffect(() => { load() }, [])
+
+  // The CM recorded ON the SRAT wins - it is who was responsible at the time. SRATs saved
+  // before this column existed have none, so fall back to the project's current CM.
+  const cmFor = (s) => s.contractsManager || (projects.find(p => p.no === s.projectNo) || {}).cm || ''
 
   function toggleSort(key) { setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }) }
   const arrow = (key) => sort.key === key ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''
@@ -62,6 +70,7 @@ export default function SratsPage() {
     const arr = [...filtered]
     const val = (s) => {
       if (sort.key === 'project') return `${s.projectNo || ''} ${s.projectName || ''}`.toLowerCase()
+      if (sort.key === 'cm') return cmFor(s).toLowerCase()
       if (sort.key === 'date') return s.date || ''
       if (sort.key === 'situation') return (s.situation || '').toLowerCase()
       if (sort.key === 'roadblocks') return (s.roadblocks || '').toLowerCase()
@@ -70,7 +79,7 @@ export default function SratsPage() {
     }
     arr.sort((a, b) => { const av = val(a), bv = val(b); if (av < bv) return sort.dir === 'asc' ? -1 : 1; if (av > bv) return sort.dir === 'asc' ? 1 : -1; return 0 })
     return arr
-  }, [filtered, sort])
+  }, [filtered, sort, projects])
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
   const pageRows = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
   useEffect(() => { if (page >= pageCount) setPage(0) }, [pageCount, page])
@@ -116,16 +125,18 @@ export default function SratsPage() {
         <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: 1100 }}>
             <colgroup>
-              <col style={{ width: '14%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '17%' }} />
+              <col style={{ width: '15%' }} />
               <col style={{ width: '10%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '10%' }} />
+              <col style={{ width: '8%' }} />
             </colgroup>
             <thead><tr style={{ background: '#faf9f7' }}>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('project')}>Project{arrow('project')}</th>
+              <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('cm')}>Contracts Manager{arrow('cm')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('date')}>Date{arrow('date')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('situation')}>Situation{arrow('situation')}</th>
               <th style={{ ...th, cursor: 'pointer' }} onClick={() => toggleSort('roadblocks')}>Roadblocks{arrow('roadblocks')}</th>
@@ -138,8 +149,9 @@ export default function SratsPage() {
                 const nTasks = (s.actionTaskIds || []).length
                 return (
                   <tr key={s.id} style={{ borderTop: '1px solid #f0f0f0', verticalAlign: 'top' }}>
-                    <td style={{ ...td, overflow: 'hidden' }}><strong>{s.projectNo || '—'}</strong>{s.projectName ? <div style={{ fontSize: 11, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.projectName}</div> : null}</td>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.date ? fmtLocal(s.date) : '—'}</td>
+                    <td style={{ ...td, overflow: 'hidden' }}><strong>{s.projectNo || '\u2014'}</strong>{s.projectName ? <div style={{ fontSize: 11, color: '#999', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.projectName}</div> : null}</td>
+                    <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cmFor(s) || '\u2014'}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{s.date ? fmtLocal(s.date) : '\u2014'}</td>
                     <td style={cellTd} onClick={() => s.situation && setCell({ title: 'Situation', text: s.situation })}>{clamp(s.situation)}</td>
                     <td style={cellTd} onClick={() => s.roadblocks && setCell({ title: 'Roadblocks', text: s.roadblocks })}>{clamp(s.roadblocks)}</td>
                     <td style={cellTd} onClick={() => s.actionsText && setCell({ title: 'Actions', text: s.actionsText })}>{clamp(s.actionsText)}{nTasks ? <div style={{ fontSize: 11, color: '#ca8a04', marginTop: 2 }}>{nTasks} task{nTasks === 1 ? '' : 's'}</div> : null}</td>
@@ -166,14 +178,14 @@ export default function SratsPage() {
       )}
 
       {cell && <Modal onClose={() => setCell(null)} title={cell.title}><div style={{ fontSize: 14, color: '#333', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{cell.text}</div></Modal>}
-      {view && <ViewModal srat={view} tasks={tasks} onClose={() => setView(null)} />}
+      {view && <ViewModal srat={view} tasks={tasks} cmFallback={cmFor(view)} onClose={() => setView(null)} />}
       {edit && <EditModal initial={edit} projects={projects} users={users} tasks={tasks} setTasks={setTasks} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load() }} />}
     </OperationsShell>
   )
 }
 
 // ---- Large read-only view ----
-function ViewModal({ srat, tasks, onClose }) {
+function ViewModal({ srat, tasks, onClose, cmFallback }) {
   const myTasks = tasks.filter(t => (srat.actionTaskIds || []).includes(t.id))
   const Row = ({ label, children }) => (
     <div style={{ marginBottom: 18 }}>
@@ -183,6 +195,7 @@ function ViewModal({ srat, tasks, onClose }) {
   )
   return (
     <Modal onClose={onClose} title={`SRAT — ${srat.projectNo || ''} ${srat.projectName || ''}`}>
+      <Row label="Contracts Manager">{srat.contractsManager || cmFallback || '—'}</Row>
       <Row label="Date">{srat.date ? fmtLocal(srat.date) : '—'}</Row>
       <Row label="Situation">{srat.situation || '—'}</Row>
       <Row label="Roadblocks">{srat.roadblocks || '—'}</Row>
@@ -210,7 +223,9 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
 
   function pickProject(no) {
     const p = projects.find(x => x.no === no)
-    set({ projectNo: no, projectName: p?.name || '' })
+    // Auto-fill the Contracts Manager from the project. Stored on the SRAT so it stays as
+    // a record of who was responsible even if the project's CM changes later.
+    set({ projectNo: no, projectName: p?.name || '', contractsManager: p?.cm || '' })
   }
 
   // One-way push to Live Project Tasks: create the task, keep its id, but no live sync.
@@ -254,6 +269,11 @@ function EditModal({ initial, projects, users, tasks, setTasks, onClose, onSaved
         <option value="">Select a project…</option>
         {projects.map(p => <option key={p.no} value={p.no}>{[p.no, p.name].filter(Boolean).join(' — ')}</option>)}
       </select>
+
+      <L>Contracts Manager</L>
+      <input value={f.contractsManager || ''} onChange={e => set({ contractsManager: e.target.value })} style={input}
+        placeholder={f.projectNo ? 'No Contracts Manager set on this project' : 'Select a project first'} />
+      <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 4 }}>Filled in from the project. You can change it if someone else is covering.</div>
 
       <L>Date</L>
       <input type="date" value={f.date || ''} onChange={e => set({ date: e.target.value })} style={{ ...input, maxWidth: 200 }} />

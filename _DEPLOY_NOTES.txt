@@ -1,58 +1,57 @@
-pkg298 - H&S Matrix: rows now reach the last column
-====================================================
-
-REPLACES pkg295, pkg296 and pkg297 - it carries all of them. Deploy this one only.
+pkg299 - SRATs: live projects only, 25 per page, Contracts Manager column
+==========================================================================
 
 CHANGED FILES
 -------------
-  pages/operations/hs/hs-matrix.js     THE FIX (+ frozen header, sorting)
-  pages/api/hs-matrix.js               column deletion fix (from pkg297)
+  pages/operations/project-management/srat.js
 
-No new files. Both straight replacements.
-
-
-ROOT CAUSE
-----------
-An off-by-one in the table's declared width.
-
-FIVE meta columns are drawn on every row - Employee, Company, Trade, Phone, Email - but
-the width was calculated as if there were four:
-
-    minWidth: NAME_W + META_W * 3 + columns.length * COL_W      (Employee + 3 metas)
-
-With 36 training columns that declared 3,986px while the content actually needs 4,106px -
-short by exactly 120px, one meta column.
-
-The training cells still DREW past that point, because each cell has its own fixed width
-and simply overflowed. But the ROW element itself stopped at the declared width, and the
-row striping and bottom borders are painted by the row - so they stopped 120px early while
-the cells carried on. That is the ragged right-hand edge in your screenshot.
-
-The header looked fine only because each header cell paints its own orange background, so
-the overflow still looked filled in. It was actually the same width all along.
-
-FIXED: the width now counts META_W * 4, so the rows are as wide as their contents and the
-striping, borders and hover area run to the final column.
+No new files. Straight replacement. Independent of every other package.
+No API change was needed - /api/srats stores the whole SRAT object, so the new field
+persists on its own.
 
 
-ALSO FIXED - THE CELL EDITOR WAS BEING CUT OFF
------------------------------------------------
-Visible on the right of your screenshot: the date / "Does not expire" / Attach file panel
-runs off the edge and the Save button is unreachable on the last columns.
+1. LIVE PROJECTS ONLY
+---------------------
+The project dropdowns - both the filter at the top and the picker when adding a SRAT - now
+list only projects with status 'active'. Complete and Archived jobs are gone.
 
-It always opened to the RIGHT of the cell, which falls outside the scroll box on the last
-couple of columns. It now opens to the LEFT for the final two columns, so the whole panel
-and the Save button stay on screen.
+NOTE: this filters the PICKERS. Existing SRATs raised against a project that has since
+been completed still appear in the table, which is deliberate - they are the historical
+record and hiding them would lose them. Say if you would rather they were filtered out too.
 
 
-ALSO IN THIS PACKAGE
---------------------
-  pkg297 - built-in columns can actually be deleted (the backfill was re-adding them)
-  pkg296 - click Employee / Company / Trade / Phone / Email to sort, A-Z then Z-A
-  pkg295 - frozen header row, with the four fixed columns still frozen left
+2. 25 PER PAGE
+--------------
+Was 50. The Prev / Next control and the "Page x of y" counter already existed and adjust
+automatically.
+
+
+3. CONTRACTS MANAGER COLUMN
+---------------------------
+New column immediately after Project, as asked. It is sortable like the others - click the
+header for A-Z, again for Z-A.
+
+The column widths were rebalanced across all eight columns rather than squeezing the new
+one in, so nothing gets crushed. Header, colgroup and body cells all verified at 8.
+
+The Contracts Manager also now appears on the read-only View window.
+
+
+4. AUTO-POPULATE WHEN ADDING
+-----------------------------
+Selecting a project on the New SRAT form fills the Contracts Manager in from that project
+automatically. The field stays editable - if someone else is covering, type over it.
+
+IT IS STORED ON THE SRAT, not looked up each time. That is deliberate: a SRAT is a record
+of a moment, so it should keep showing who was responsible then, even if the project's CM
+changes months later.
+
+EXISTING SRATs have no stored CM, so for those the table falls back to the project's
+CURRENT Contracts Manager rather than showing a dash. So the column is populated from day
+one. From now on, each new SRAT captures its own.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Width arithmetic checked: 3,986 declared vs 4,106 needed at 36 columns.
+Column counts checked: 8 colgroup / 8 headers / 8 body cells.
