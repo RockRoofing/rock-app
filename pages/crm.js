@@ -376,6 +376,8 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
   // so it is flagged on the card rather than only being visible inside the deal.
   const needsEstimator = !deal.fields?.estimator_responsible
     && ((deal.activities || []).some((a) => a.text === 'Tender return' && !a.done) || !!deal.fields?.expected_close_date);
+  // Same idea for Negotiating: the four handover tasks are worthless if nobody owns them.
+  const needsSalesPerson = deal.stageId === 'stage_negotiating' && !deal.fields?.sales_person;
   return (
     <div draggable onDragStart={(e) => onDragStart(e, deal.id)} onClick={() => onOpen(deal.id)} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 6, padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
@@ -393,6 +395,12 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
         <div title="Tender return with no estimator responsible"
           style={{ marginTop: 6, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 5, padding: '3px 6px', fontSize: 10.5, fontWeight: 700 }}>
           &#9888; No estimator assigned
+        </div>
+      )}
+      {needsSalesPerson && (
+        <div title="In Negotiating with no sales person - the handover tasks have nobody responsible"
+          style={{ marginTop: 6, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 5, padding: '3px 6px', fontSize: 10.5, fontWeight: 700 }}>
+          &#9888; No sales person assigned
         </div>
       )}
     </div>
@@ -468,7 +476,7 @@ function SideBox({ title, action, children, collapsed, onToggle }) {
 // ===========================================================================
 // Editable sidebar field
 // ===========================================================================
-function EditableField({ field, value, onSave }) {
+function EditableField({ field, value, onSave, users }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value ?? '');
   useEffect(() => { setDraft(value ?? ''); }, [value]);
@@ -493,7 +501,7 @@ function EditableField({ field, value, onSave }) {
       {(field.type === 'text' || field.type === 'number' || field.type === 'currency') && <input type={field.type === 'text' ? 'text' : 'number'} {...cp} />}
       {field.type === 'date' && <input type="date" {...cp} />}
       {field.type === 'yesno' && <select {...cp}><option>Yes</option><option>No</option></select>}
-      {field.type === 'select' && <select {...cp}><option value="">-</option>{(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
+      {field.type === 'select' && <select {...cp}><option value="">-</option>{(field.fromPortalUsers ? (users || []).map((u) => u.name) : (field.options || [])).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
       {field.type === 'multiselect' && <MultiSelect value={draft} onChange={setDraft} options={field.options || []} placeholder="Select…" />}
       <span style={{ display: 'flex', gap: 4 }}><button onClick={() => save(draft)} style={miniBtn}>Save</button><button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button></span>
     </span>
@@ -711,20 +719,20 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
         {/* LEFT — collapsible grey boxes on white */}
         <div style={{ width: 330, flexShrink: 0, borderRight: `1px solid ${C.line}`, padding: 16, boxSizing: 'border-box', background: statusTint }}>
           <SideBox title="Summary" collapsed={collapsed.summary} onToggle={() => toggle('summary')}>
-            {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+            {summaryFields.map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
           </SideBox>
           <SideBox title="Details" collapsed={collapsed.details} onToggle={() => toggle('details')}>
-            {groupFields('details').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+            {groupFields('details').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
           </SideBox>
           <SideBox title="Customer Contact" collapsed={collapsed.person} onToggle={() => toggle('person')}>
             <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text', search: 'contact' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
             <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(deal.fields.contact_person) || '-'}</span></div>
             <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(deal.fields.contact_person) || '-'}</span></div>
-            {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+            {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
           </SideBox>
           <SideBox title="Organization" collapsed={collapsed.organization} onToggle={() => toggle('organization')}>
             <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
-            {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>)}
+            {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
           </SideBox>
           <button onClick={onManageFields} style={{ ...ghostBtn, width: '100%', marginTop: 4 }}>⚙ Customise fields</button>
         </div>
@@ -1535,7 +1543,35 @@ function CRMPageInner() {
   }
 
   const patch = (id, fn) => setDeals((prev) => prev.map((d) => d.id === id ? fn(d) : d));
-  const moveDeal = (id, stageId) => patch(id, (d) => d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: uid(), type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}` }] });
+  // Moving a project into Negotiating always needs the same four things doing, so they are
+  // created as activities rather than relying on anyone remembering. Assigned to the Sales
+  // Person on the deal; if there is not one, they are created unassigned and the card's
+  // warning picks that up.
+  const NEGOTIATING_TASKS = [
+    'Update Details information for Post Contract: Location, m2, Value, Credit Score, Credit Limit, Credit Insurance, Roofing Works on Site, Description of Project Scope of Works (Comprehensive list of all systems and types)',
+    'Have we added the company to Top Service monitoring?',
+    'Confirm provisional start on site date internally or with the Customer',
+    'Have we confirmed a fully insured limit? Notify Director if full limit not obtained.',
+  ];
+
+  const moveDeal = (id, stageId) => {
+    const before = deals.find((x) => x.id === id);
+    const entering = stageId === 'stage_negotiating' && before && before.stageId !== 'stage_negotiating';
+    moveDealStage(id, stageId);
+    if (!entering) return;
+
+    // ONCE ONLY, for the life of the project. Recorded on the deal itself rather than
+    // worked out from the activities that happen to be there - otherwise completing them
+    // and moving out and back in would create a fresh set.
+    if (before.negotiatingTasksAdded) return;
+
+    const owner = before.fields?.sales_person || null;
+    const due = todayISO();
+    for (const t of NEGOTIATING_TASKS) addActivity(id, t, due, owner);
+    patch(id, (d) => ({ ...d, negotiatingTasksAdded: nowIso() }));
+  };
+
+  const moveDealStage = (id, stageId) => patch(id, (d) => d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: uid(), type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}` }] });
   const setStatus = (id, status) => { patch(id, (d) => { const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened'; return { ...d, status, history: [...d.history, { id: uid(), type: status === 'open' ? 'note' : status, ts: nowIso(), text }] }; }); if (status === 'won') setConfetti(true); };
   const addNote = (id, body) => { const m = extractMentions(body); patch(id, (d) => { const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, history: [...d.history, ...ev] }; }); };
   const commentNote = (id, hid, body) => { const m = extractMentions(body); patch(id, (d) => { const withComment = d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso() }] } : h); const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }] : []; return { ...d, history: [...withComment, ...extra] }; }); };
@@ -1562,6 +1598,22 @@ function CRMPageInner() {
   const editField = (id, key, val) => {
     // The Tender return activity follows the Estimator Responsible. Set or change the
     // estimator and the activity is reassigned to them, so the two cannot disagree.
+    // Setting the Sales Person picks up the Negotiating handover tasks that were created
+    // without an owner, so they do not sit unassigned once someone is named.
+    if (key === 'sales_person' && val) {
+      const d0 = deals.find((x) => x.id === id);
+      if (d0) {
+        const names = new Set(NEGOTIATING_TASKS.map((t) => t.trim().toLowerCase()));
+        if ((d0.activities || []).some((a) => !a.done && !a.assignee && names.has((a.text || '').trim().toLowerCase()))) {
+          patch(id, (d) => ({
+            ...d,
+            activities: d.activities.map((a) => (!a.done && !a.assignee && names.has((a.text || '').trim().toLowerCase()))
+              ? { ...a, assignee: val } : a),
+          }));
+        }
+      }
+    }
+
     if (key === 'estimator_responsible') {
       const d0 = deals.find((x) => x.id === id);
       if (d0 && (d0.activities || []).some((a) => a.text === 'Tender return' && !a.done)) {

@@ -1,58 +1,61 @@
-pkg357 - Delete a project from inside the deal
-===============================================
+pkg358 - Negotiating handover tasks, created once
+==================================================
 
-REPLACES pkg302 through pkg356. Deploy this one only.
+REPLACES pkg302 through pkg357. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        server-side delete
-  lib/crmFieldSchema.js   unchanged since pkg356
+  lib/crmFieldSchema.js   Sales Person now uses portal users
+  pages/api/crm.js        unchanged since pkg357
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT YOU GET
+WHAT HAPPENS
 ------------
-A small red "Delete" in the deal header, immediately after Won / Lost (and Reopen when it
-is there). Plain red text, no border, noticeably smaller than the others - deliberately not
-something you hit by accident next to two buttons you press often.
+The FIRST time a project moves into Negotiating, four activities are created, due today,
+assigned to the Sales Person on the deal:
+
+  1. Update Details information for Post Contract: Location, m2, Value, Credit Score,
+     Credit Limit, Credit Insurance, Roofing Works on Site, Description of Project Scope of
+     Works (Comprehensive list of all systems and types)
+  2. Have we added the company to Top Service monitoring?
+  3. Confirm provisional start on site date internally or with the Customer
+  4. Have we confirmed a fully insured limit? Notify Director if full limit not obtained.
 
 
-TWO CONFIRMATIONS
------------------
-    Delete "Bensham Lane"?
-    This removes the project and all of its activities, notes and history. It cannot be
-    undone.
+ONCE ONLY, AS ASKED
+--------------------
+The project records that it has been done, on the deal itself. Move it out of Negotiating
+and back in and nothing is created a second time - even if the original four have been
+completed or deleted in the meantime.
 
-then
+That marker is deliberately stored on the deal rather than worked out from whatever
+activities happen to be present. Inferring it from the activity list would mean completing
+them all and moving back in would look identical to a project that had never been through
+the stage, and you would get a fresh set.
 
-    Last check - permanently delete "Bensham Lane"?
-
-Two prompts because there is no undo and no recycle bin. A single confirm on a destructive,
-irreversible action sitting beside Won and Lost is not enough.
-
-
-WHAT IT ACTUALLY REMOVES
--------------------------
-The project, and everything filed against it:
-
-    the deal record
-    its activities        (crm:activities:<id>)
-    its notes             (crm:notes:<id>)
-    its entry in the outstanding activity list and the kanban counts
-    its index entries
-
-That matters. Activities and notes live in their own keys per project - deleting only the
-deal would leave those behind permanently, invisible and unreachable, quietly filling up
-the database. They are cleared properly.
-
-The screen updates immediately and you are returned to the board. If the server delete
-fails you are told to reload before carrying on, rather than being left with a board that
-disagrees with what is stored.
+Confirmed the marker survives being saved - if it did not, the tasks would reappear after
+a reload.
 
 
-WHAT IT DOES NOT TOUCH
------------------------
-The company and the contact stay on the Companies and Contacts pages. They are shared
-records - other projects may use them - so deleting one project must not take a customer
-with it. Remove those separately if you want them gone.
+IF THERE IS NO SALES PERSON
+----------------------------
+The four are still created, unassigned, and the kanban card shows an amber
+"No sales person assigned" flag. Better to have the work recorded with nobody on it than
+not recorded at all.
+
+Set the Sales Person afterwards and those four are picked up and assigned to them
+automatically - the same way the estimator adopts the Tender return activity.
+
+
+SALES PERSON NOW COMES FROM THE PORTAL
+----------------------------------------
+It was another hard-coded list of first names - Edita, Roman, Niall, James, Simon - the
+same thing that gave you "James" and "James McVeigh" as two people. It now lists your
+portal users, matching the estimator field and the activity owners.
+
+I also had to fix the deal sidebar's dropdowns while doing this: they read their options
+straight from the schema, so with the hard-coded list removed both Estimator Responsible
+and Sales Person would have shown as EMPTY dropdowns on the deal. They now use the portal
+users like the Add Project form does.
