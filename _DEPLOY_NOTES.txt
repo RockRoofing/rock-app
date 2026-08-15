@@ -1,61 +1,67 @@
-pkg358 - Negotiating handover tasks, created once
-==================================================
+pkg359 - Daily "your activities" email
+=======================================
 
-REPLACES pkg302 through pkg357. Deploy this one only.
+REPLACES pkg302 through pkg358. Deploy this one only.
 
-CHANGED FILES
--------------
-  pages/crm.js
-  lib/crmFieldSchema.js   Sales Person now uses portal users
+
+NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
+-----------------------------------------------------------------------
+  lib/crmDailyActivityEmail.js
+  pages/api/cron/crm-daily-activities.js
+
+CHANGED FILES (straight replacements)
+--------------------------------------
+  vercel.json             adds the hourly cron
+  pages/crm.js            unchanged since pkg358
   pages/api/crm.js        unchanged since pkg357
+  lib/crmFieldSchema.js   unchanged since pkg358
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT HAPPENS
+WHAT IT SENDS
+-------------
+Each morning, everyone with activities DUE TODAY OR OVERDUE gets one email listing only
+their own. Overdue first, in red, with how many days late; then due today, in green. Each
+line shows the activity, the project and the customer, and there is a button through to the
+CRM.
+
+Nobody with nothing due gets an email. If nobody at all has anything, nothing is sent.
+
+
+WHO GETS ONE
 ------------
-The FIRST time a project moves into Negotiating, four activities are created, due today,
-assigned to the Sales Person on the deal:
+Portal users with a pre-contract or admin role and an email address - the same people who
+can be assigned an activity in the first place.
 
-  1. Update Details information for Post Contract: Location, m2, Value, Credit Score,
-     Credit Limit, Credit Insurance, Roofing Works on Site, Description of Project Scope of
-     Works (Comprehensive list of all systems and types)
-  2. Have we added the company to Top Service monitoring?
-  3. Confirm provisional start on site date internally or with the Customer
-  4. Have we confirmed a fully insured limit? Notify Director if full limit not obtained.
+Names are matched the same way the CRM screen does: exact, then a unique first name, then a
+unique surname. So an activity assigned to "James" still reaches James McVeigh. A first
+name shared by two people is NOT guessed at - that activity is left out rather than emailed
+to the wrong person.
 
 
-ONCE ONLY, AS ASKED
---------------------
-The project records that it has been done, on the deal itself. Move it out of Negotiating
-and back in and nothing is created a second time - even if the original four have been
-completed or deleted in the meantime.
+WHAT IS EXCLUDED, AND WHY
+--------------------------
+  future activities        not due yet
+  won or lost projects     matches the Activities tab; chasing a finished job is noise
+  unassigned activities    nobody to send them to (the kanban card already flags these)
 
-That marker is deliberately stored on the deal rather than worked out from whatever
-activities happen to be present. Inferring it from the activity list would mean completing
-them all and moving back in would look identical to a project that had never been through
-the stage, and you would get a fresh set.
-
-Confirmed the marker survives being saved - if it did not, the tasks would reappear after
-a reload.
+Verified all four exclusions plus the short-name matching against a worked example.
 
 
-IF THERE IS NO SALES PERSON
-----------------------------
-The four are still created, unassigned, and the kanban card shows an amber
-"No sales person assigned" flag. Better to have the work recorded with nobody on it than
-not recorded at all.
+WHEN IT RUNS
+------------
+Hourly cron, sending in the 07:00 UK hour. Hourly rather than a fixed daily time so it does
+not drift by an hour when the clocks change, which a UTC-pinned cron would.
 
-Set the Sales Person afterwards and those four are picked up and assigned to them
-automatically - the same way the estimator adopts the Tender return activity.
+TESTING:
+  ...?dryRun=1   lists who WOULD get one and how many activities each, sends nothing
+  ...?force=1    sends immediately regardless of the hour
+
+Run the dryRun first - it is the quickest way to confirm the name matching is picking up
+the right people before anything lands in anyone's inbox.
 
 
-SALES PERSON NOW COMES FROM THE PORTAL
-----------------------------------------
-It was another hard-coded list of first names - Edita, Roman, Niall, James, Simon - the
-same thing that gave you "James" and "James McVeigh" as two people. It now lists your
-portal users, matching the estimator field and the activity owners.
-
-I also had to fix the deal sidebar's dropdowns while doing this: they read their options
-straight from the schema, so with the hard-coded list removed both Estimator Responsible
-and Sales Person would have shown as EMPTY dropdowns on the deal. They now use the portal
-users like the Add Project form does.
+NOTE
+----
+It reads the same outstanding-activity list the CRM uses, which is kept current on every
+write - so the email cannot disagree with what the Activities tab shows.
