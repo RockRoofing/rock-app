@@ -113,6 +113,19 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = req.body || {}
+    // Fetch several deals' activities/notes at once. Used to build the Activities tab
+    // from data imported BEFORE the flat open-list existed, without a re-import.
+    if (body.action === 'get-sub-many') {
+      const kind = body.kind
+      if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
+      const ids = (Array.isArray(body.dealIds) ? body.dealIds : []).slice(0, 400).map(String)
+      const out = {}
+      await Promise.all(ids.map(async (id) => {
+        try { out[id] = (await get(SUB_KEY(kind, id))) || [] } catch { out[id] = [] }
+      }))
+      return res.json({ ok: true, items: out })
+    }
+
     if (body.action === 'get-sub') {
       const kind = body.kind
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })

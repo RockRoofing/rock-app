@@ -1,59 +1,62 @@
-pkg311 - CRM: remembers your tab, filters, columns and sort
-============================================================
+pkg312 - Activities tab: works without a re-import, and says why it is empty
+=============================================================================
 
-REPLACES pkg302 through pkg310. Deploy this one only.
+REPLACES pkg302 through pkg311. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            remembered preferences (+ everything from earlier packages)
-  pages/api/crm.js        unchanged since pkg310
+  pages/crm.js            self-healing tab + explanatory empty state
+  pages/api/crm.js        new batch fetch for per-deal activities
   lib/crmImportMap.js     unchanged since pkg305
 
 No new files. All straight replacements.
 
 
-WHAT IS REMEMBERED
-------------------
-Close the CRM, come back tomorrow, and it opens exactly as you left it:
+A GAP I LEFT IN pkg310
+-----------------------
+The Activities tab read a flat list of outstanding activities that is written DURING an
+import. Your activities were imported before that existed, so there was no list to read -
+the tab would have sat empty even if you did have outstanding activities. It would only
+have started working after your next import, which I did not make clear.
 
-  WHICH TAB      Pipeline / List / Companies / Contacts / Activities
-  FILTERS        status (open/won/lost), estimator, any custom filters,
-                 which stages are showing, and the stage mode
-  COLUMNS        your chosen columns on List, Companies and Contacts - each
-                 remembered separately, so a different selection per tab is fine
-  SORT           the sort column and direction on every table
-  ACTIVITIES     person responsible, customer, include-completed, and its sort
-
-The one thing deliberately NOT remembered is the search box - a stale search would look
-like missing data the next time you opened it, and it takes a second to retype.
+FIXED: the tab now falls back to the per-deal summary, which already records how many
+activities each deal has outstanding, and fetches just those deals directly. Typically a
+few hundred, not the 5,000+ that hold only completed history. No re-import needed.
 
 
-HOW IT IS STORED
-----------------
-In the browser, not the database. These are per-person display choices that change on
-almost every click; writing them server-side would mean a database write every time you
-tick a column.
+THE EMPTY TABLE NOW EXPLAINS ITSELF
+------------------------------------
+"No activities" is ambiguous - did the import fail, or is there genuinely nothing to do?
+The tab now works it out from the data actually present and tells you which:
 
-The trade-off: they are per browser. Log in on a different computer and you get the
-defaults there until you set it up again. If you would rather they followed each user
-across devices, that is a straightforward change - it just needs a per-user store and a
-save on change. Say the word.
-
-Saved preferences carry a version stamp. If the layout ever changes in a future release,
-old preferences are ignored rather than restored into fields that no longer exist. A
-corrupted or unreadable value is also ignored - it falls back to the defaults rather than
-failing to load.
+  nothing imported     "No activities have been imported yet."
+  YOUR CURRENT DATA    "36,824 activities are imported across 6,261 projects - but every
+                        one is marked complete." plus how to fix the export
+  filters too narrow   "No activities match those filters."
+  imported but no deals "...none could be matched to a project in the CRM."
 
 
-"RESET VIEW" BUTTON
--------------------
-New button next to the tabs. This matters: if someone leaves a narrow filter set - say one
-estimator and two stages - the CRM would open looking almost empty the next day and seem
-broken. Reset View clears the lot and puts everything back to how it opens out of the box.
+WHAT YOU WILL SEE AFTER DEPLOYING
+----------------------------------
+Almost certainly the second message. That is the honest answer: the import worked, and
+there is nothing outstanding in the file to show.
+
+I have said this a few times now without it being much use to you, so the tab itself now
+carries the explanation and the fix:
+
+  In Pipedrive, open the Activities list, set the filter to include activities that are
+  NOT done, and export again. Before uploading, open the file and check the Done column
+  has a MIX of values rather than saying "Done" on all 39,401 rows.
+
+Pipedrive's own counters on your deals export say there are 1,023 activities to do across
+357 open deals. Those are the rows missing from the file. Once they are in, this table
+fills up and the kanban dots start working too.
+
+Export everything in one go rather than just the outstanding ones - the import replaces
+what is there, so an outstanding-only file would wipe the history you have already loaded.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Save/restore verified, including the version bump and a corrupted value both falling back
-to defaults without error.
+All four empty-state cases checked, including your current data shape.

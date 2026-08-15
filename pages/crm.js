@@ -812,6 +812,8 @@ export default function CRMPage() {
   const [contactCols, setContactCols] = useState(DEFAULT_CONTACT_COLUMNS);
   const [chooser, setChooser] = useState(null); // 'list' | 'companies' | 'contacts'
   const [openActivities, setOpenActivities] = useState([]);
+  const [activitySummary, setActivitySummary] = useState({});
+  const [actLoading, setActLoading] = useState(false);
   const [actSort, setActSort] = useState({ key: 'due', dir: 'asc' });
   const [actPerson, setActPerson] = useState('');
   const [actCustomer, setActCustomer] = useState('');
@@ -897,6 +899,7 @@ export default function CRMPage() {
           const actSum = d.activitySummary || {};
           const noteSum = d.noteSummary || {};
           setOpenActivities(Array.isArray(d.openActivities) ? d.openActivities : []);
+          setActivitySummary(d.activitySummary || {});
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1290,6 +1293,38 @@ export default function CRMPage() {
   // Two sources, both already in memory: the imported outstanding list, and any activity
   // added by hand in the CRM (those live on the deal itself). Joined to the deal for the
   // project and customer company, and to the contacts list for email / phone.
+  // Activities imported BEFORE the flat open-list existed have no aggregate to read, so
+  // the tab would sit empty until the next import. The per-deal summary still knows which
+  // deals have outstanding activities, so fetch just those - usually a few hundred at
+  // most, not the 5,000+ that have only completed history.
+  const healedRef = useRef(false);
+  useEffect(() => {
+    if (view !== 'activities' || healedRef.current) return;
+    const needed = Object.entries(activitySummary || {}).filter(([, v]) => (v?.open || 0) > 0).map(([id]) => id);
+    if (!needed.length || openActivities.length) { healedRef.current = true; return; }
+    healedRef.current = true;
+    (async () => {
+      setActLoading(true);
+      try {
+        const found = [];
+        for (let i = 0; i < needed.length; i += 300) {
+          const d = await fetch('/api/crm', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get-sub-many', kind: 'activities', dealIds: needed.slice(i, i + 300) }),
+          }).then((r) => r.json());
+          for (const [dealId, list] of Object.entries(d.items || {})) {
+            for (const a of (list || [])) {
+              if (a.done) continue;
+              found.push({ id: a.id, dealId, text: a.subject || a.text || 'Activity', due: a.dueDate || '', assignee: a.assignee || '' });
+            }
+          }
+        }
+        if (found.length) setOpenActivities(found);
+      } catch { /* leave the tab empty rather than erroring */ }
+      setActLoading(false);
+    })();
+  }, [view, activitySummary, openActivities.length]);
+
   const activityRows = useMemo(() => {
     const dealById = new Map(deals.map((d) => [String(d.id), d]));
     const contactByName = new Map();
@@ -1471,7 +1506,7 @@ export default function CRMPage() {
             customer={actCustomer} setCustomer={setActCustomer}
             showDone={actShowDone} setShowDone={setActShowDone}
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
-            today={today} onOpen={openDealById} />
+            today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary} />
         )}
       </div>
 
@@ -1623,7 +1658,7 @@ const ACT_COLS = [
   ['phone', 'Customer phone'],
 ];
 
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary }) {
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -1654,12 +1689,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       </div>
 
       {!rows.length ? (
-        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', color: C.dim, fontSize: 13.5 }}>
-          No outstanding activities.
-          <div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>
-            If you expected some, check the Done column in your Pipedrive activities export - if every row says &quot;Done&quot;, the outstanding ones were filtered out of the file.
-          </div>
-        </div>
+        <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)} />
       ) : (
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
@@ -1697,4 +1727,54 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       )}
     </div>
   );
+}
+
+// An empty table is ambiguous - nothing imported, or nothing outstanding? This works it
+// out from the per-deal summary and says which, so nobody has to guess whether the import
+// failed.
+function EmptyActivities({ loading, summary, filtered }) {
+  const box = { background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13.5, color: C.dim };
+  if (loading) return <div style={box}>Loading activities...</div>;
+
+  const vals = Object.values(summary || {});
+  const projects = vals.length;
+  const totalActs = vals.reduce((n, v) => n + (v?.total || 0), 0);
+  const openActs = vals.reduce((n, v) => n + (v?.open || 0), 0);
+
+  if (filtered) {
+    return <div style={box}>No activities match those filters.<div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>Clear the person or customer filter to see the rest.</div></div>;
+  }
+
+  if (!totalActs) {
+    return (
+      <div style={box}>
+        No activities have been imported yet.
+        <div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>
+          Import your Deals export first, then the Activities export.
+        </div>
+      </div>
+    );
+  }
+
+  if (!openActs) {
+    return (
+      <div style={box}>
+        <div style={{ color: C.text, fontWeight: 600 }}>
+          {totalActs.toLocaleString('en-GB')} activities are imported across {projects.toLocaleString('en-GB')} projects &mdash; but every one is marked complete.
+        </div>
+        <div style={{ fontSize: 12.5, marginTop: 10, color: '#888', maxWidth: 560, margin: '10px auto 0', lineHeight: 1.6 }}>
+          So there is nothing outstanding to list. The import worked; the file simply
+          contained no activities that were still to do.
+          <br /><br />
+          In Pipedrive, open the Activities list, set the filter to include activities that
+          are NOT done, and export again. Before uploading, open the file and check the
+          <strong> Done</strong> column has a mix of values rather than saying
+          &quot;Done&quot; on every row. Export everything in one go, not just the
+          outstanding ones - the import replaces what is there.
+        </div>
+      </div>
+    );
+  }
+
+  return <div style={box}>{openActs} outstanding activities found, but none could be matched to a project in the CRM.<div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>Re-import your Deals export, then the Activities export.</div></div>;
 }
