@@ -121,6 +121,35 @@ export default async function handler(req, res) {
     const body = req.body || {}
     // Fetch several deals' activities/notes at once. Used to build the Activities tab
     // from data imported BEFORE the flat open-list existed, without a re-import.
+    // Add or update a single company / contact, matched on name (case-insensitive).
+    // Used when a project is created or edited with a company or person the CRM has not
+    // seen before, so they reach the Companies and Contacts pages instead of existing
+    // only as text on the deal.
+    if (body.action === 'upsert-org' || body.action === 'upsert-contact') {
+      const isOrg = body.action === 'upsert-org'
+      const key = isOrg ? ORGS_KEY : CONTACTS_KEY
+      const rec = body.record || {}
+      const name = String(rec.name || '').trim()
+      if (!name) return res.status(400).json({ error: 'Name required' })
+
+      const list = Array.isArray(await get(key)) ? await get(key) : []
+      const i = list.findIndex(x => String(x?.name || '').trim().toLowerCase() === name.toLowerCase())
+      if (i < 0) {
+        list.push({ ...rec, name, addedInCrm: true })
+      } else {
+        // Merge, but never let a blank overwrite something already recorded - a project
+        // form left half-filled must not wipe details that came from the import.
+        const merged = { ...list[i] }
+        for (const [k, v] of Object.entries(rec)) {
+          if (v === null || v === undefined || String(v).trim() === '') continue
+          merged[k] = v
+        }
+        list[i] = merged
+      }
+      await set(key, list)
+      return res.json({ ok: true, list })
+    }
+
     if (body.action === 'get-sub-many') {
       const kind = body.kind
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })

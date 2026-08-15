@@ -1007,6 +1007,29 @@ export default function CRMPage() {
     // Live deal stats per organization (from the CRM's own deals).
     const stat = {};
     deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!stat[o]) stat[o] = { deals: 0, open_value: 0, won: 0, lost: 0 }; stat[o].deals++; if (d.status === 'open') stat[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') stat[o].won++; if (d.status === 'lost') stat[o].lost++; });
+    // Companies that exist only on a deal - added before this synced, or created while
+    // offline - are appended so nothing is stranded. Marked so it is clear they came from
+    // a project rather than the import.
+    const extraOrgs = [];
+    if (orgsData.length) {
+      const known = new Set(orgsData.map((o) => String(o.name || '').trim().toLowerCase()));
+      const seenX = new Set();
+      deals.forEach((d) => {
+        const o = d.fields.organization;
+        if (!o) return;
+        const k = String(o).trim().toLowerCase();
+        if (!k || known.has(k) || seenX.has(k)) return;
+        seenX.add(k);
+        extraOrgs.push({
+          name: o, org_address: d.fields.org_address || '-', org_phone: d.fields.org_phone || '-',
+          org_website: d.fields.org_website || '-', org_email: d.fields.org_email || '-',
+          org_reg_number: d.fields.org_reg_number || '-', supply_chain_approved: d.fields.supply_chain_approved || '-',
+          deals: 0, open_value: 0, won: 0, lost: 0, addedInCrm: true,
+        });
+      });
+      for (const e of extraOrgs) { const live = stat[e.name]; if (live) { e.deals = live.deals; e.open_value = live.open_value; e.won = live.won; e.lost = live.lost; } }
+    }
+
     let rows;
     if (orgsData.length) {
       // Imported companies are the source of truth for company details.
@@ -1026,6 +1049,7 @@ export default function CRMPage() {
       deals.forEach((d) => { const o = d.fields.organization; if (!o) return; if (!m[o]) m[o] = { name: o, org_address: d.fields.org_address || '-', org_phone: d.fields.org_phone || '-', org_website: d.fields.org_website || '-', org_email: d.fields.org_email || '-', org_reg_number: d.fields.org_reg_number || '-', supply_chain_approved: '-', deals: 0, open_value: 0, won: 0, lost: 0 }; m[o].deals++; if (d.status === 'open') m[o].open_value += Number(d.fields.value) || 0; if (d.status === 'won') m[o].won++; if (d.status === 'lost') m[o].lost++; });
       rows = Object.values(m);
     }
+    rows = [...rows, ...extraOrgs];
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
@@ -1052,6 +1076,27 @@ export default function CRMPage() {
       const m = {};
       deals.forEach((d) => { const c = d.fields.contact_person; if (!c) return; const key = c + '|' + (d.fields.organization || ''); if (!m[key]) m[key] = { name: c, first_name: firstName(c) || '-', last_name: lastName(c) || '-', organization: d.fields.organization || '-', contact_phone: d.fields.contact_phone || '-', contact_email: d.fields.contact_email || '-', contact_job_role: d.fields.contact_job_role || '-', deals: 0, open_value: 0 }; m[key].deals++; if (d.status === 'open') m[key].open_value += Number(d.fields.value) || 0; });
       rows = Object.values(m);
+    }
+    // Same safety net as Companies: list anyone who exists only on a deal.
+    if (contactsData.length) {
+      const known = new Set(contactsData.map((c) => String(c.name || '').trim().toLowerCase()));
+      const seenX = new Set();
+      const extra = [];
+      deals.forEach((d) => {
+        const c = d.fields.contact_person;
+        if (!c) return;
+        const k = String(c).trim().toLowerCase();
+        if (!k || known.has(k) || seenX.has(k)) return;
+        seenX.add(k);
+        const live = stat[c];
+        extra.push({
+          name: c, first_name: firstName(c) || '-', last_name: lastName(c) || '-',
+          organization: d.fields.organization || '-', contact_phone: d.fields.contact_phone || '-',
+          contact_email: d.fields.contact_email || '-', contact_job_role: d.fields.contact_job_role || '-',
+          deals: live ? live.deals : 0, open_value: live ? live.open_value : 0, addedInCrm: true,
+        });
+      });
+      rows = [...rows, ...extra];
     }
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.organization || '').toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
@@ -1244,7 +1289,27 @@ export default function CRMPage() {
   const editActivity = (id, aid, text, due) => patch(id, (d) => ({ ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, text, due } : a) }));
   const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); };
   const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
-  const editField = (id, key, val) => patch(id, (d) => {
+  // Company / contact detail fields that should flow back to the master lists when they
+  // are edited on a deal.
+  const ORG_KEYS = ['organization', 'org_address', 'org_phone', 'org_website', 'org_email', 'org_reg_number', 'supply_chain_approved'];
+  const CONTACT_KEYS = ['contact_person', 'contact_phone', 'contact_email', 'contact_job_role'];
+
+  const editField = (id, key, val) => {
+    // Editing any of these on the project keeps the Companies / Contacts pages in step,
+    // so a detail added here is not stranded on the deal.
+    if (ORG_KEYS.includes(key) || CONTACT_KEYS.includes(key)) {
+      const d0 = deals.find((x) => x.id === id);
+      if (d0) {
+        const f = { ...d0.fields, [key]: val };
+        if (f.organization) {
+          upsertOrg({ name: f.organization, org_address: f.org_address, org_phone: f.org_phone, org_website: f.org_website, org_email: f.org_email, org_reg_number: f.org_reg_number, supply_chain_approved: f.supply_chain_approved });
+        }
+        if (f.contact_person) {
+          upsertContact({ name: f.contact_person, organization: f.organization, contact_phone: f.contact_phone, contact_email: f.contact_email, contact_job_role: f.contact_job_role });
+        }
+      }
+    }
+    return patch(id, (d) => {
     const old = d.fields[key];
     const hist = (key === 'value') ? [{ id: uid(), type: 'value', ts: nowIso(), text: `Value: ${money(old)} → ${money(val)}` }]
       : (key === 'expected_close_date') ? [{ id: uid(), type: 'close', ts: nowIso(), text: `Tender Return date: ${shortDate(old) || 'empty'} → ${shortDate(val) || 'empty'}` }]
@@ -1258,7 +1323,41 @@ export default function CRMPage() {
       link = { person: fields.contact_person, org: fields.organization, ts: nowIso() };
     }
     return { ...d, fields, link, history: [...d.history, ...hist] };
-  });
+    });
+  };
+
+  // Push a company / contact into the master lists so it appears on the Companies and
+  // Contacts pages. Called when a project is created with a new one, and when the
+  // organisation or contact details are edited on the deal itself.
+  async function upsertOrg(rec) {
+    const name = String(rec?.name || '').trim();
+    if (!name) return;
+    setOrgsData((prev) => {
+      const i = prev.findIndex((o) => String(o.name || '').trim().toLowerCase() === name.toLowerCase());
+      if (i < 0) return [...prev, { ...rec, name, addedInCrm: true }];
+      const merged = { ...prev[i] };
+      for (const [k, v] of Object.entries(rec)) if (v !== null && v !== undefined && String(v).trim() !== '') merged[k] = v;
+      return prev.map((o, j) => j === i ? merged : o);
+    });
+    try {
+      await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upsert-org', record: { ...rec, name } }) });
+    } catch { /* the on-screen list still updates; it will re-sync on the next save */ }
+  }
+
+  async function upsertContact(rec) {
+    const name = String(rec?.name || '').trim();
+    if (!name) return;
+    setContactsData((prev) => {
+      const i = prev.findIndex((c) => String(c.name || '').trim().toLowerCase() === name.toLowerCase());
+      if (i < 0) return [...prev, { ...rec, name, first_name: firstName(name), last_name: lastName(name), addedInCrm: true }];
+      const merged = { ...prev[i] };
+      for (const [k, v] of Object.entries(rec)) if (v !== null && v !== undefined && String(v).trim() !== '') merged[k] = v;
+      return prev.map((c, j) => j === i ? merged : c);
+    });
+    try {
+      await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'upsert-contact', record: { ...rec, name, first_name: firstName(name), last_name: lastName(name) } }) });
+    } catch { /* as above */ }
+  }
 
   const createProject = (data) => {
     const id = nextId.current++;
@@ -1267,6 +1366,22 @@ export default function CRMPage() {
     const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
     const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
     setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
+
+    // Anything typed into the new-company / new-contact panels becomes a real record.
+    if (fields.organization) {
+      upsertOrg({
+        name: fields.organization, org_address: fields.org_address, org_phone: fields.org_phone,
+        org_website: fields.org_website, org_email: fields.org_email,
+        org_reg_number: fields.org_reg_number, supply_chain_approved: fields.supply_chain_approved,
+      });
+    }
+    if (fields.contact_person) {
+      upsertContact({
+        name: fields.contact_person, organization: fields.organization,
+        contact_phone: fields.contact_phone, contact_email: fields.contact_email,
+        contact_job_role: fields.contact_job_role,
+      });
+    }
   };
 
   const addField = (f) => setSchema((prev) => [...prev, f]);

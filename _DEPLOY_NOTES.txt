@@ -1,63 +1,70 @@
-pkg313 - Activities tab: show WHY nothing matches, instead of guessing
-=======================================================================
+pkg314 - New companies and contacts now reach the Companies / Contacts pages
+=============================================================================
 
-REPLACES pkg302 through pkg312. Deploy this one only.
+REPLACES pkg302 through pkg313. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            diagnostic empty state
-  pages/api/crm.js        reports whether the deals are your data or the sample
+  pages/crm.js            creates the records, plus a catch-up for existing ones
+  pages/api/crm.js        new upsert-org / upsert-contact
   lib/crmImportMap.js     unchanged since pkg305
 
 
-FIRST - THE GOOD NEWS
-----------------------
-"1023 outstanding activities found" means your re-export worked. The activities are in,
-with the outstanding ones present, and the count matches Pipedrive's own figure exactly.
-That part is done.
+WHAT WAS HAPPENING
+-------------------
+Both pages switch behaviour once an import exists:
+
+    if (orgsData.length) { rows = orgsData.map(...) }    // imported list ONLY
+    else { ...derive from deals... }                     // pre-import fallback
+
+Before you imported, a new company on a project appeared automatically. After the import,
+the imported lists became the source of truth and anything existing only on a deal was
+invisible - so new business added since would quietly never appear on those pages.
 
 
-YOU WERE RIGHT TO PUSH BACK
-----------------------------
-"Re-import your Deals export" was a guess dressed up as an instruction. I did not know why
-they were not matching, and telling you to redo a large import on a hunch was not good
-enough. Sorry.
+NOW
+---
+1. CREATING A PROJECT. Everything typed into the "new contact" and "new customer" panels
+   on that form is written as a proper record - company name, address, phone, website,
+   email, registration number, supply chain approved; contact name, phone, email, job role.
+   They appear on Companies and Contacts straight away.
 
-The join itself is sound - it matches an activity's Deal ID against the deal's id, both
-compared as text, so a number/text difference cannot be the cause.
+2. EDITING THE PROJECT AFTERWARDS. Changing any of those fields on the deal keeps the
+   master lists in step, so a phone number added later is not stranded on the deal. You
+   asked for both, and the second is the one that would otherwise have been missed.
 
-The most likely explanation is one I can now detect. pages/api/crm.js falls back to a
-built-in set of 378 SAMPLE deals whenever crm:deals is missing or unreadable:
-
-    const saved = await get(DEALS_KEY)
-    if (Array.isArray(saved)) return saved
-    return (SEED_DEALS || []).map(...)          // <- preview data
-
-If that fallback is in play, the board looks populated but those are demo projects with
-different ids, so nothing your activities point at can possibly match. The API now reports
-which of the two you are looking at.
+3. CATCH-UP FOR WHAT IS ALREADY THERE. Any company or person that currently exists only on
+   a deal is now listed as well, with whatever details the deal holds. So anything added
+   between the import and this deploy turns up without you doing anything.
 
 
-WHAT THE TAB NOW SHOWS
------------------------
-Instead of a guess, it shows the evidence:
+MERGING RULES - THE IMPORTANT BIT
+----------------------------------
+Matching is on name, case-insensitive, so "wates construction ltd" updates the existing
+"Wates Construction Ltd" rather than creating a duplicate.
 
-  - how many deals are currently loaded
-  - the first few of THEIR ids
-  - the first few deal ids YOUR ACTIVITIES are attached to
-  - and, if the sample data is in play, a plain warning saying so
+A BLANK NEVER OVERWRITES SOMETHING ALREADY RECORDED. If a company has a phone number from
+the import and someone creates a project leaving that box empty, the number stays. Without
+that rule, a half-filled project form would quietly strip detail off an established
+customer record - which would be much worse than the original problem.
 
-Comparing those two lists of numbers should make the cause obvious in seconds. If the ids
-look like different things, the deals and activities came from different exports. If they
-look identical, it is something I have not thought of - send me that screen and I will
-work from the real numbers rather than guessing again.
+Verified: existing phone kept when the new value was blank, new website added, matched
+despite different capitalisation, no duplicate created.
 
 
-WORTH CHECKING WHILE YOU ARE THERE
------------------------------------
-Open the Pipeline tab and see whether the projects shown are actually yours. If you see
-unfamiliar deals, the sample-data fallback is what you are looking at, and importing your
-Deals export will fix both that and this.
+WORTH KNOWING
+-------------
+Records created this way are tagged addedInCrm, so they can be told apart from imported
+ones later if you ever want to - for example to review what has been added since cutover.
+
+This also feeds the Activities tab: customer email and phone there are looked up from the
+Contacts list, so a contact created via a project will now show its details rather than
+dashes.
+
+CAUTION AT CUTOVER: company and contact imports are still wipe-and-replace. Re-importing
+either export will remove records created in the CRM. Once you have cut over from
+Pipedrive that stops mattering, but until then, avoid re-importing those two after adding
+projects by hand - or tell me and I will make those imports merge rather than replace.
 
 
 TESTED
