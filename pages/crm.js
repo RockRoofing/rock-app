@@ -1454,6 +1454,68 @@ function CRMPageInner() {
   // Two sources, both already in memory: the imported outstanding list, and any activity
   // added by hand in the CRM (those live on the deal itself). Joined to the deal for the
   // project and customer company, and to the contacts list for email / phone.
+  // ---- Acting on an activity from the Activities tab -----------------------
+  // An activity lives in one of two places: imported ones sit in their own per-deal
+  // store, manually-added ones sit on the deal. Both have to be handled, so these
+  // helpers work out which it is and take the right route.
+  const isManualActivity = (dealId, actId) => {
+    const d = deals.find((x) => String(x.id) === String(dealId));
+    return !!(d && (d.activities || []).some((a) => a.id === actId));
+  };
+
+  async function patchImportedActivity(dealId, actId, patch) {
+    const got = await fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(dealId) }),
+    }).then((r) => r.json());
+    const items = (got.items || []).map((a) => a.id === actId ? { ...a, ...patch } : a);
+    await fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save-sub', kind: 'activities', dealId: String(dealId), items }),
+    });
+  }
+
+  // Mark done, record what happened on the deal's history, and optionally set the next one.
+  async function completeActivityFromTable(row, outcome, next) {
+    const dealId = row.dealId;
+    try {
+      if (isManualActivity(dealId, row.rawId)) {
+        completeActivity(Number(dealId), row.rawId);
+      } else {
+        await patchImportedActivity(dealId, row.rawId, { done: true, doneAt: Date.now() });
+        setOpenActivities((prev) => prev.filter((a) => !(String(a.dealId) === String(dealId) && a.id === row.rawId)));
+      }
+
+      if (outcome && outcome.trim()) {
+        patch(Number(dealId), (d) => ({
+          ...d,
+          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim() }],
+        }));
+      }
+
+      if (next && next.text && next.text.trim()) {
+        addActivity(Number(dealId), next.text.trim(), next.due || today, next.assignee || null);
+      }
+    } catch (e) { console.error('Could not complete the activity:', e); }
+  }
+
+  // Edit the description (and due date / owner) from the table.
+  async function editActivityFromTable(row, text, due, assignee) {
+    const dealId = row.dealId;
+    try {
+      if (isManualActivity(dealId, row.rawId)) {
+        patch(Number(dealId), (d) => ({
+          ...d,
+          activities: d.activities.map((a) => a.id === row.rawId ? { ...a, text, due, assignee: assignee || a.assignee || null } : a),
+        }));
+      } else {
+        await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, assignee: assignee || '' });
+        setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
+          ? { ...a, text, due, assignee: assignee || a.assignee } : a));
+      }
+    } catch (e) { console.error('Could not update the activity:', e); }
+  }
+
   // Activities imported BEFORE the flat open-list existed have no aggregate to read, so
   // the tab would sit empty until the next import. The per-deal summary still knows which
   // deals have outstanding activities, so fetch just those - usually a few hundred at
@@ -1517,6 +1579,7 @@ function CRMPageInner() {
       const contact = contactByName.get(String(custName).trim().toLowerCase());
       rows.push({
         id: key,
+        rawId: a.id,
         dealId,
         project: deal.title || '',
         text: a.text || 'Activity',
@@ -1679,6 +1742,7 @@ function CRMPageInner() {
             showDone={actShowDone} setShowDone={setActShowDone}
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
+            onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
@@ -1836,7 +1900,9 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit }) {
+  const [completing, setCompleting] = useState(null);   // row being marked done
+  const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -1874,6 +1940,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
+                <th style={{ ...th, cursor: 'default', width: 44 }}></th>
                 {ACT_COLS.map(([k, label]) => (
                   <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
                 ))}
@@ -1888,7 +1955,19 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                     <td style={td}>
                       <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
                     </td>
-                    <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>{r.text}</td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      {!r.done && (
+                        <button onClick={() => setCompleting(r)} title="Mark this activity done"
+                          style={{ width: 20, height: 20, borderRadius: 4, border: '1.5px solid ' + C.dotGrey, background: '#fff', cursor: 'pointer', padding: 0 }} />
+                      )}
+                      {r.done && <span title="Completed" style={{ color: C.green, fontWeight: 700 }}>&#10003;</span>}
+                    </td>
+                    <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>
+                      <button onClick={() => setEditing(r)} title="Edit this activity"
+                        style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'inherit', textAlign: 'left', cursor: 'pointer', textDecoration: 'inherit' }}>
+                        {r.text}
+                      </button>
+                    </td>
                     <td style={{ ...td, whiteSpace: 'nowrap', color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }}>
                       {shortDate(r.due)}{isOverdue ? ' \u00b7 OVERDUE' : ''}
                     </td>
@@ -1904,6 +1983,108 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           </table>
         </div>
       )}
+
+      {completing && (
+        <CompleteActivityModal row={completing} today={today}
+          onClose={() => setCompleting(null)}
+          onDone={(outcome, next) => { onComplete(completing, outcome, next); setCompleting(null); }} />
+      )}
+      {editing && (
+        <EditActivityModal row={editing}
+          onClose={() => setEditing(null)}
+          onSave={(text, due, assignee) => { onEdit(editing, text, due, assignee); setEditing(null); }} />
+      )}
+    </div>
+  );
+}
+
+// Marking done is the moment you know what happens next, so this captures the outcome and
+// offers to set the follow-up in the same step rather than leaving the project with nothing
+// booked - which is how deals go quiet.
+function CompleteActivityModal({ row, today, onClose, onDone }) {
+  const [outcome, setOutcome] = useState('');
+  const [nextText, setNextText] = useState('');
+  const [nextDue, setNextDue] = useState(today);
+  const [nextAssignee, setNextAssignee] = useState(row.assignee || '');
+  const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
+  const lbl = { fontSize: 12, fontWeight: 700, color: C.dim, display: 'block', marginBottom: 5 };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 620, maxWidth: '100%', padding: 22 }}>
+        <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Complete activity</h3>
+        <div style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>{row.project} &middot; {row.text}</div>
+
+        <label style={lbl}>What happened? (call notes, email summary, outcome)</label>
+        <textarea value={outcome} onChange={(e) => setOutcome(e.target.value)} rows={6}
+          placeholder="Spoke to..., agreed..., they will..." style={{ ...inp, resize: 'vertical' }} />
+        <div style={{ fontSize: 11.5, color: '#aaa', marginTop: 5 }}>Saved to the project&apos;s history against this activity.</div>
+
+        <div style={{ borderTop: '1px solid ' + C.line, margin: '18px 0 14px' }} />
+
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Set the next activity</div>
+        <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>Leave blank to just mark this one done.</div>
+        <label style={lbl}>What needs doing next?</label>
+        <input value={nextText} onChange={(e) => setNextText(e.target.value)} placeholder="e.g. Chase pricing" style={inp} />
+        <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Due</label>
+            <input type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Person responsible</label>
+            <input value={nextAssignee} onChange={(e) => setNextAssignee(e.target.value)} placeholder="Who is doing it?" style={inp} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={ghostBtn}>Cancel</button>
+          <button onClick={() => onDone(outcome, null)} style={ghostBtn}>Just mark done</button>
+          <button onClick={() => onDone(outcome, { text: nextText, due: nextDue, assignee: nextAssignee })}
+            disabled={!nextText.trim()} style={{ ...primaryBtn, opacity: nextText.trim() ? 1 : 0.5 }}>
+            Done &amp; set next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Clicking the activity text opens this - a full-size box, because these are call and email
+// notes, not a one-line label squeezed into a table cell.
+function EditActivityModal({ row, onClose, onSave }) {
+  const [text, setText] = useState(row.text || '');
+  const [due, setDue] = useState(row.due || '');
+  const [assignee, setAssignee] = useState(row.assignee || '');
+  const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
+  const lbl = { fontSize: 12, fontWeight: 700, color: C.dim, display: 'block', marginBottom: 5 };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 680, maxWidth: '100%', padding: 22 }}>
+        <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Edit activity</h3>
+        <div style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>{row.project}</div>
+
+        <label style={lbl}>Activity</label>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={9}
+          placeholder="What needs doing, or what was discussed on the call / in the email..."
+          style={{ ...inp, resize: 'vertical' }} />
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Due</label>
+            <input type="date" value={due} onChange={(e) => setDue(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Person responsible</label>
+            <input value={assignee} onChange={(e) => setAssignee(e.target.value)} style={inp} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={ghostBtn}>Cancel</button>
+          <button onClick={() => onSave(text, due, assignee)} disabled={!text.trim()}
+            style={{ ...primaryBtn, opacity: text.trim() ? 1 : 0.5 }}>Save</button>
+        </div>
+      </div>
     </div>
   );
 }

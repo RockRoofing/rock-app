@@ -1,7 +1,7 @@
-pkg318 - Make the CRM crash tell us what it is
-===============================================
+pkg319 - Activities tab: complete and edit without leaving the page
+====================================================================
 
-REPLACES pkg302 through pkg317. Deploy this one only.
+REPLACES pkg302 through pkg318. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,39 +10,53 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHY THIS RATHER THAN ANOTHER FIX
----------------------------------
-I have been unable to find the Add Project crash by reading the code, and I have checked
-everything I introduced. Guessing again would just cost you another deploy.
+1. MARK DONE FROM THE TABLE
+----------------------------
+New tick box at the start of each row. Click it and a window opens:
 
-The blocker is the message itself. "Application error: a client-side exception has
-occurred" is Next.js's stand-in for a crashed page - the real error only exists in the
-browser console, so every attempt has been me working blind.
+  WHAT HAPPENED?     a proper text box for call notes, email summary, outcome. Saved to
+                     the project's history against that activity, so the record of the
+                     conversation sits where anyone looking at the deal will find it.
 
-This puts the actual error ON SCREEN. Instead of that generic line you will get:
+  SET THE NEXT ONE   description, due date and person responsible, pre-filled with today
+                     and the current owner.
 
-  - the error message
-  - the component stack showing exactly which part failed
-  - a Reload button
-  - a "Reload and clear saved view" button, in case a remembered filter or column is
-    involved (that would also confirm it in one click)
+Three buttons: Cancel, "Just mark done", and "Done & set next".
 
-Screenshot that and I can fix it properly. It is one round trip instead of the several
-we have just had.
-
-Your data is not at risk either way - a crash on this page is a rendering fault, nothing
-is saved or lost by it.
+The follow-up prompt is deliberate. Marking something done is the moment you know what
+happens next, and a project with nothing booked is how deals go quiet - it is also exactly
+what puts the warning triangle on the kanban. You can still skip it with "Just mark done".
 
 
-ALSO WORTH TRYING WHEN YOU DEPLOY
-----------------------------------
-Press "Reload and clear saved view" once even if the CRM looks fine. The remembered-view
-feature was behind the Activities bug in pkg315, and it is the most likely culprit here
-too - a saved column or filter referring to something that no longer exists would crash
-on render. If clearing it fixes Add Project, that tells us both the cause and the fix
-immediately.
+2. THE ACTIVITY COLUMN IS EDITABLE
+-----------------------------------
+Click the activity text and a large window opens with a full-size box for the description -
+nine rows, resizable - plus due date and person responsible. Notes about a call or an email
+need room, not a single line squeezed into a table cell.
+
+
+HOW IT SAVES - THE FIDDLY BIT
+------------------------------
+An activity lives in one of two places depending on where it came from:
+
+  imported from Pipedrive  ->  its own per-deal store
+  added inside the CRM     ->  on the deal itself
+
+Both are handled. The code works out which one it is and takes the right route, so it
+behaves identically whichever you are looking at. Verified both paths route correctly.
+
+Activities you create through "Done & set next" are saved on the deal, so they appear in
+the table immediately and on the deal's own activity list.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+Column counts checked after adding the tick box: 9 headers, 9 body cells.
+
+
+STILL OUTSTANDING
+-----------------
+The Add Project crash. pkg318 (included here) puts the real error on screen instead of
+"Application error" - please screenshot it, and press "Reload and clear saved view" once,
+which is my main suspect.
