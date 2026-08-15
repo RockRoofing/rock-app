@@ -1,75 +1,70 @@
-pkg308 - CRM activities import: fixes the 413
-==============================================
+pkg309 - CRM: the activity traffic lights were frozen on 9 July
+================================================================
 
-REPLACES pkg302 through pkg307. Deploy this one only.
+REPLACES pkg302 through pkg308. Deploy this one only.
 
 CHANGED FILES
 -------------
+  pages/crm.js            THE FIX (+ everything from the earlier packages)
+  pages/api/crm.js        unchanged since pkg308
   lib/crmImportMap.js     unchanged since pkg305
-  pages/api/crm.js        request body limit raised (this is the fix)
-  pages/crm.js            chunks sized by bytes rather than by project count
 
 No new files. All straight replacements.
 
 
-WHY 413, AND WHY NOTES WORKED BUT ACTIVITIES DID NOT
-------------------------------------------------------
-413 means "payload too large". Next.js caps API request bodies at 1MB BY DEFAULT, and
-pages/api/crm.js never raised it. Every other bulk-import endpoint in the app does -
-import-bills-bulk uses 10mb, issues 8mb, pre-start 4mb - the CRM one was simply missed
-when the chunked import was built.
+ROOT CAUSE - "TODAY" WAS HARD-CODED
+-------------------------------------
+The CRM was not working out today's date at all:
 
-Measured against your real files at 300 projects per chunk:
+    const today = PREVIEW_TODAY;          // '2026-07-09'
 
-    activities   largest request 1.18MB   ->  4 chunks over the 1MB limit  ->  413
-    notes        largest request 0.82MB   ->  0 chunks over the limit      ->  fine
+PREVIEW_TODAY lives in lib/crmSeedDeals.js, the demo seed file, and was baked in when that
+preview data was generated back in July. It never moved. So for the last five weeks the
+whole board has been comparing every due date against 9 July.
 
-That is exactly the behaviour you saw: notes uploaded, activities failed partway.
+Anything due between 9 July and today looked like it was still in the future - grey -
+when it was actually overdue. That is exactly what you are seeing.
 
-Activities are bigger per record than notes - subject, type, due date, assignee, creator,
-done flag - so they cross the line and notes do not.
+    due 20 Jul   ->  was GREY,  should be RED
+    due 10 Aug   ->  was GREY,  should be RED
+    due 15 Aug   ->  was GREY,  should be GREEN (today)
 
+FIXED: it now uses the real date, and re-checks every minute so a screen left open
+overnight rolls over rather than sticking on yesterday.
 
-THE FIX - TWO PARTS
--------------------
-1. The CRM endpoint now allows an 8MB body, in line with the other import endpoints.
-
-2. More importantly, chunks are now built by MEASURED SIZE rather than a fixed count of
-   projects. A fixed count was always a guess: one project with 96 activities is worth a
-   hundred projects with one each, so a busy run could blow the limit even when the
-   average looked comfortable. Each chunk now fills to a 3MB budget (against the 8MB
-   server limit), with a 400-project cap as a second guard.
-
-   This is the part that stops it happening again - if a project accumulates a lot of
-   history in future, the chunker simply makes that chunk smaller.
-
-Re-measured with the new chunker:
-
-    activities   32,564 records / 5,415 projects  ->  14 requests, largest 1.26MB
-    notes        10,232 records / 5,542 projects  ->  14 requests, largest 0.82MB
-    every project accounted for in both cases
-
-There is now roughly 6x headroom between the largest request and the server limit.
+Deliberately NOT toISOString() - that converts to UTC and would show the previous day for
+anyone looking during a BST evening.
 
 
-RE-RUNNING THE ACTIVITIES IMPORT
----------------------------------
-Just import the file again. It is wipe-and-replace, and the partial data from the failed
-run is overwritten - the wipe now only clears keys that will not be rewritten, so a re-run
-is quick rather than the 200-second stall that pkg307 fixed.
+ABOUT THE COLOURS YOU SPECIFIED
+--------------------------------
+You wrote:
 
-Your notes import is unaffected; leave it alone.
+    Grey: < Today        Green: Today        Red: > Today
+
+Taken literally that means an activity due BEFORE today is grey and one due AFTER today is
+red - which is the opposite of your own point that overdue activities should be showing
+red. So I have left the logic as it stands, which is:
+
+    RED    - due before today   (overdue)
+    GREEN  - due today
+    GREY   - due after today    (upcoming)
+
+That matches what you actually described wanting, and it is what the code already did.
+Nothing was wrong with the colour rules - only the date they were being compared against.
+
+If you did mean it the other way round, say so and it is a two-line change.
 
 
 ALSO STILL IN THIS PACKAGE
 ---------------------------
-Everything from pkg303-307: both Pipedrive export formats, records skipped when their deal
-is not in the CRM, deals-first ordering enforced, parallel writes, index and summary sent
-once at the end, 60s function timeout, progress with a time estimate.
+Everything from pkg303-308: both Pipedrive export formats; activities and notes import;
+records skipped when their deal is not in the CRM; deals-first ordering enforced; parallel
+writes; 8MB body limit and size-based chunking (the 413 fix); progress with a time
+estimate.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Chunk sizes measured against your real files, before and after, with every project
-confirmed present in the chunk set.
+Before/after checked across six due dates spanning the frozen date and today.

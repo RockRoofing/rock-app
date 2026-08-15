@@ -13,7 +13,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import * as XLSX from 'xlsx';
 import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, mapNoteRows, groupByDeal, detectExportType } from '../lib/crmImportMap';
-import { SEED_DEALS, PREVIEW_TODAY } from '../lib/crmSeedDeals';
+import { SEED_DEALS } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
 
@@ -58,6 +58,14 @@ const dateTime = (v) => { if (!v) return ''; const d = new Date(v); return isNaN
 const nowIso = () => new Date().toISOString();
 const firstName = (n) => n ? String(n).trim().split(/\s+/)[0] : '';
 const lastName = (n) => { if (!n) return ''; const p = String(n).trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; };
+// Local-date YYYY-MM-DD. Deliberately NOT toISOString(), which converts to UTC and would
+// show the previous day for anyone in BST during the evening.
+const todayISO = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 // Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
 // so convert rather than showing raw tags: breaks become newlines, entities decoded.
@@ -743,7 +751,17 @@ function EntityTable({ rows, fields, columns, sort, onSort }) {
 // PAGE
 // ===========================================================================
 export default function CRMPage() {
-  const today = PREVIEW_TODAY;
+  // The REAL today, in UK local time, as YYYY-MM-DD so it compares directly with the
+  // activity due dates. This was PREVIEW_TODAY - a date hard-coded into the preview seed
+  // file when the demo data was generated. It never moved, so every activity due after
+  // that date was treated as "in the future" no matter how overdue it actually was.
+  const [today, setToday] = useState(todayISO());
+  useEffect(() => {
+    setToday(todayISO());
+    // Roll over if the page is left open past midnight.
+    const t = setInterval(() => setToday(todayISO()), 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
   const router = useRouter();
   const [deals, setDeals] = useState([]);
   const [orgsData, setOrgsData] = useState([]);
