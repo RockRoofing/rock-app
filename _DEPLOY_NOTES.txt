@@ -1,63 +1,61 @@
-pkg325 - You were right: the activities were not saving
-========================================================
+pkg326 - The 413: saves now send only what changed
+===================================================
 
-REPLACES pkg302 through pkg324. Deploy this one only.
+REPLACES pkg302 through pkg325. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            THE FIX
-  pages/api/crm.js        unchanged since pkg322
+  pages/crm.js            partial saves + column order
+  pages/api/crm.js        new save-deals-partial
   lib/crmImportMap.js     unchanged since pkg305
 
 
-YOUR HUNCH WAS CORRECT
------------------------
-The activity was never being written to the deal. The Activities tab was innocent all
-along - I had been looking at the wrong end of it.
+1. WHY THE SAVE KEPT FAILING WITH 413
+--------------------------------------
+The autosave was sending the ENTIRE deals list on every change.
 
-There were TWO separate save faults. pkg323 fixed the first (the payload growing past the
-request limit and failing silently). This is the second, and it is the one that would still
-have been biting you.
+    crm:deals for 6,860 projects   ~6.4 MB
+    Vercel request body limit       4.5 MB   (hard, before your code runs)
+
+It could never have worked at this size. It only survived until now because the CRM held a
+few hundred sample deals - the real import is what pushed it over. Raising the Next.js body
+limit does not help; the 4.5MB ceiling is Vercel's and sits in front of everything.
+
+pkg323 trimmed the payload by stripping imported records, which helped but was not enough.
+This is the actual fix.
+
+NOW: each save compares every deal against the version last successfully saved and sends
+ONLY the ones that differ. Editing one project sends one project - a few kilobytes instead
+of 6.4MB. The server merges those into the stored list by id.
+
+Two details that make it reliable:
+
+  - the baseline only advances when a save SUCCEEDS, so a failed save is retried in full
+    on the next change rather than being quietly forgotten
+  - the in-memory kanban summaries are excluded from the comparison, otherwise every deal
+    would look changed and we would be back to sending everything
+
+Deleted projects are handled too - removals are sent as a list of ids.
 
 
-THE RACE
---------
-Opening a deal kicks off a background fetch of that deal's imported activities and notes.
-When it returns, it merges them in - and it used to suppress the save that would otherwise
-follow, since there was nothing new worth writing.
-
-But saves are debounced by 800ms, and that suppression cancels anything already pending.
-So if you opened a deal and added an activity while the fetch was still in flight:
-
-    1. your activity     -> save scheduled, 800ms
-    2. fetch resolves    -> merge suppresses saving, and in doing so CANCELS your
-                            pending save
-    3. nothing is ever written
-
-Reproduced it in isolation: old behaviour saves nothing, new behaviour saves your change.
-
-Adding an activity is exactly when this happens, because you open a deal and go straight
-to it - inside the window while the fetch is still running.
-
-FIXED by letting that merge save normally. It is harmless now: pkg323 already strips
-imported records before saving, so the merge adds nothing to the payload - it just carries
-your change along with it.
+2. MARK DONE / PROJECT COLUMNS SWAPPED
+---------------------------------------
+Exactly as your screenshot showed. When I added the tick box in pkg319 I put the CELL after
+the project name but the HEADER before it, so the two headings read across the wrong
+columns. The tick box is now the first cell, matching its header. Nothing else moved.
 
 
 WHAT TO EXPECT
 --------------
-Add an activity inside a deal, wait a second for "Saved", then reload. It should still be
-there, and it should appear in the Activities tab.
+Add an activity inside a deal. The badge should go "Saving..." then "Saved" in green - not
+red. Reload, and it should still be there and in the Activities tab.
 
-If a save ever does fail now, the badge in the header turns red and tells you, rather than
-claiming "Saved" - that came in with pkg323 and stays.
-
-The "Where are my activities?" breakdown from pkg324 is still there too. If anything is
-still missing, open it and send me the numbers - but I expect this was the cause.
+If the badge does go red again, the message will carry the status code. But 413 should now
+be impossible: a single changed deal is a fraction of the limit.
 
 
-A NOTE ON THE LAST FEW PACKAGES
---------------------------------
-This took far too many rounds. I kept examining the Activities tab because that is where
-the symptom appeared, when the fault was in how the deal was being saved. Your instinct
-that it was a saving problem is what turned it around.
+WORTH KNOWING
+-------------
+Everything you have added in the CRM since the deals import may have failed to save for
+this reason - the failure was silent until pkg323 and the cause was not fixed until now.
+Worth spot-checking a couple of projects you know you edited.

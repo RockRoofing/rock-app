@@ -872,6 +872,9 @@ function CRMPageInner() {
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
   const skipSave = useRef(true);
   const [saveError, setSaveError] = useState('');
+  // id -> JSON of the deal as last successfully saved, so each save can send just the
+  // deals that actually differ.
+  const savedSnapshot = useRef(new Map());
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
@@ -951,6 +954,14 @@ function CRMPageInner() {
           setDealsAreSeed(!!d.dealsAreSeed);
           setDeletedOrgs(d.deletedOrgs || []);
           setDeletedContacts(d.deletedContacts || []);
+          const seed = new Map();
+          for (const x of d.deals) {
+            seed.set(String(x.id), JSON.stringify({
+              ...x, fields: { ...x.fields }, history: [...(x.history || [])],
+              activities: [...(x.activities || [])], notes: [...(x.notes || [])],
+            }));
+          }
+          savedSnapshot.current = seed;
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -974,23 +985,47 @@ function CRMPageInner() {
     setSaving(true);
     const t = setTimeout(async () => {
       try {
-        // Opening a deal merges that deal's IMPORTED activities and notes into it so the
-        // deal view can show them. They must not be written back into crm:deals - they
-        // already live in their own per-deal stores, and re-saving them inflates this
-        // payload well past the request limit, at which point the save fails and anything
-        // you have just added is lost on the next reload.
-        const lean = deals.map((d) => ({
-          ...d,
-          activities: (d.activities || []).filter((a) => !a.imported),
-          notes: (d.notes || []).filter((n) => !n.imported),
-          history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
-        }));
+        // Imported activities and notes are merged into a deal when you open it, so the
+        // deal view can show them. They must not be written back - they already live in
+        // their own per-deal stores.
+        const lean = deals.map((d) => {
+          // _actSummary / _noteSummary are attached in memory for the kanban dots. They
+          // must be dropped, or every deal would differ from its saved copy and the
+          // "only what changed" comparison would match nothing.
+          const { _actSummary, _noteSummary, ...rest } = d;
+          return {
+            ...rest,
+            activities: (d.activities || []).filter((a) => !a.imported),
+            notes: (d.notes || []).filter((n) => !n.imported),
+            history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
+          };
+        });
+
+        // Send ONLY what changed. The full list is ~6.4MB and Vercel refuses any request
+        // body over 4.5MB, so a whole-list save can never succeed at this size.
+        const prev = savedSnapshot.current;
+        const changed = [];
+        const nextSnap = new Map();
+        for (const d of lean) {
+          const json = JSON.stringify(d);
+          nextSnap.set(String(d.id), json);
+          if (prev.get(String(d.id)) !== json) changed.push(d);
+        }
+        const removedIds = [];
+        for (const id of prev.keys()) if (!nextSnap.has(id)) removedIds.push(id);
+
+        if (!changed.length && !removedIds.length) { setSaving(false); return; }
+
         const r = await fetch('/api/crm', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'save', deals: lean, schema }),
+          body: JSON.stringify({ action: 'save-deals-partial', deals: changed, removedIds, schema }),
         });
-        if (!r.ok) { setSaveError(`Save failed (server ${r.status}). Your last change is not stored.`); }
-        else setSaveError('');
+        if (!r.ok) {
+          setSaveError(`Save failed (server ${r.status}). Your last change is not stored.`);
+        } else {
+          savedSnapshot.current = nextSnap;   // only advance the baseline on success
+          setSaveError('');
+        }
       } catch (e) {
         setSaveError('Save failed - check your connection. Your last change is not stored.');
       }
@@ -2092,15 +2127,15 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                 const isToday = r.due === today && !r.done;
                 return (
                   <tr key={r.id} style={{ borderTop: '1px solid #f4f3f0', background: r.done ? '#fafafa' : '#fff' }}>
-                    <td style={td}>
-                      <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
-                    </td>
                     <td style={{ ...td, textAlign: 'center' }}>
                       {!r.done && (
                         <button onClick={() => setCompleting(r)} title="Mark this activity done"
                           style={{ width: 20, height: 20, borderRadius: 4, border: '1.5px solid ' + C.dotGrey, background: '#fff', cursor: 'pointer', padding: 0 }} />
                       )}
                       {r.done && <span title="Completed" style={{ color: C.green, fontWeight: 700 }}>&#10003;</span>}
+                    </td>
+                    <td style={td}>
+                      <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
                     </td>
                     <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>
                       <button onClick={() => setEditing(r)} title="Edit this activity"

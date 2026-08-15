@@ -217,6 +217,26 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
+    // Save only the deals that actually changed.
+    //
+    // The whole deals list is ~6.4MB for 6,860 projects, and Vercel rejects any request
+    // body over 4.5MB before the code even runs - which is the "server 413". Sending the
+    // full list on every keystroke could never work at this size; it only survived while
+    // the CRM held a few hundred sample deals.
+    if (body.action === 'save-deals-partial') {
+      const changed = Array.isArray(body.deals) ? body.deals : []
+      const removed = new Set((Array.isArray(body.removedIds) ? body.removedIds : []).map(String))
+
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      const byId = new Map(list.map(d => [String(d.id), d]))
+      for (const d of changed) if (d && d.id != null) byId.set(String(d.id), d)
+      for (const id of removed) byId.delete(id)
+
+      await set(DEALS_KEY, Array.from(byId.values()))
+      if (Array.isArray(body.schema) && body.schema.length) await set(SCHEMA_KEY, body.schema)
+      return res.json({ ok: true, saved: changed.length, removed: removed.size })
+    }
+
     if (body.action === 'save') {
       if (Array.isArray(body.deals)) await set(DEALS_KEY, body.deals)
       if (Array.isArray(body.schema) && body.schema.length) await set(SCHEMA_KEY, body.schema)
