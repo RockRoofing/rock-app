@@ -2288,7 +2288,6 @@ const ACT_COLS = [
 function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch, me, users }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
-  const assigneeOptions = ['', ...(me?.name ? [me.name] : []), ...(users || []).map((u) => u.name).filter((n) => n !== me?.name)];
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -2377,6 +2376,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
                 <th style={{ ...th, cursor: 'default', width: 78, whiteSpace: 'nowrap' }}>Mark Done</th>
+                <th style={{ ...th, cursor: 'default', width: 60, whiteSpace: 'nowrap' }}>Edit</th>
                 {ACT_COLS.map(([k, label]) => (
                   <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
                 ))}
@@ -2395,27 +2395,20 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                       )}
                       {r.done && <span title="Completed" style={{ color: C.green, fontWeight: 700 }}>&#10003;</span>}
                     </td>
+                    <td style={{ ...td, textAlign: 'center' }}>
+                      <button onClick={() => setEditing(r)} title="Edit this activity"
+                        style={{ background: 'none', border: '1px solid ' + C.line, borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, color: C.link, fontFamily: 'inherit' }}>
+                        Edit
+                      </button>
+                    </td>
                     <td style={td}>
                       <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
                     </td>
-                    <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                        <div style={{ flex: 1 }}>
-                          <InlineCell value={r.text} onSave={(v) => onEdit(r, v, r.due, r.assignee)} placeholder="Activity" />
-                        </div>
-                        <button onClick={() => setEditing(r)} title="Open in a bigger box (for call or email notes)"
-                          style={{ background: 'none', border: 'none', color: C.dim, cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1 }}>&#9998;</button>
-                      </div>
+                    <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>{r.text}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap', color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }}>
+                      {shortDate(r.due)}{isOverdue ? ' \u00b7 OVERDUE' : ''}
                     </td>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                      <InlineCell type="date" value={r.due} onSave={(v) => onEdit(r, r.text, v, r.assignee)}
-                        style={{ color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }} />
-                      {isOverdue && <div style={{ color: C.red, fontSize: 10, fontWeight: 700 }}>OVERDUE</div>}
-                    </td>
-                    <td style={td}>
-                      <InlineCell type="select" value={r.assignee} options={assigneeOptions}
-                        onSave={(v) => onEdit(r, r.text, r.due, v)} placeholder="Nobody" />
-                    </td>
+                    <td style={td}>{r.assignee || '\u2014'}</td>
                     <td style={td}>{r.company || '\u2014'}</td>
                     <td style={td}>{r.customer || '\u2014'}</td>
                     <td style={td}>{r.email ? <a href={`mailto:${r.email}`} style={{ color: C.link }}>{r.email}</a> : '\u2014'}</td>
@@ -2434,52 +2427,12 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           onDone={(outcome, next) => { onComplete(completing, outcome, next); setCompleting(null); }} />
       )}
       {editing && (
-        <EditActivityModal row={editing}
+        <EditActivityModal row={editing} me={me} users={users}
           onClose={() => setEditing(null)}
           onSave={(text, due, assignee) => { onEdit(editing, text, due, assignee); setEditing(null); }} />
       )}
     </div>
   );
-}
-
-// Edit a single cell in place. Click, type, then Enter or click away to save; Escape
-// abandons it. Defined at module scope on purpose - a component declared inside another
-// remounts on every render and loses focus after one character.
-function InlineCell({ value, onSave, type = 'text', options, placeholder, style }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value ?? '');
-  useEffect(() => { setDraft(value ?? ''); }, [value]);
-
-  const commit = () => { setEditing(false); if ((draft ?? '') !== (value ?? '')) onSave(draft); };
-  const cancel = () => { setDraft(value ?? ''); setEditing(false); };
-
-  if (!editing) {
-    return (
-      <div onClick={() => setEditing(true)} title="Click to edit"
-        style={{ cursor: 'text', minHeight: 18, borderBottom: '1px dashed transparent', ...style }}
-        onMouseEnter={(e) => { e.currentTarget.style.borderBottom = '1px dashed ' + C.line; }}
-        onMouseLeave={(e) => { e.currentTarget.style.borderBottom = '1px dashed transparent'; }}>
-        {value || <span style={{ color: '#ccc' }}>{placeholder || '\u2014'}</span>}
-      </div>
-    );
-  }
-
-  const common = {
-    autoFocus: true,
-    value: draft,
-    onChange: (e) => setDraft(e.target.value),
-    onBlur: commit,
-    onKeyDown: (e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); },
-    style: { width: '100%', boxSizing: 'border-box', padding: '3px 5px', border: '1px solid ' + C.link, borderRadius: 5, fontSize: 12.5, fontFamily: 'inherit' },
-  };
-  if (type === 'select') {
-    return (
-      <select {...common} onKeyDown={(e) => { if (e.key === 'Escape') cancel(); }}>
-        {(options || []).map((o) => <option key={o} value={o}>{o || 'Nobody'}</option>)}
-      </select>
-    );
-  }
-  return <input type={type} {...common} />;
 }
 
 // Marking done is the moment you know what happens next, so this captures the outcome and
@@ -2535,7 +2488,7 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
 
 // Clicking the activity text opens this - a full-size box, because these are call and email
 // notes, not a one-line label squeezed into a table cell.
-function EditActivityModal({ row, onClose, onSave }) {
+function EditActivityModal({ row, onClose, onSave, me, users }) {
   const [text, setText] = useState(row.text || '');
   const [due, setDue] = useState(row.due || '');
   const [assignee, setAssignee] = useState(row.assignee || '');
@@ -2559,7 +2512,15 @@ function EditActivityModal({ row, onClose, onSave }) {
           </div>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Person responsible</label>
-            <input value={assignee} onChange={(e) => setAssignee(e.target.value)} style={inp} />
+            <select value={assignee} onChange={(e) => setAssignee(e.target.value)} style={inp}>
+              {/* Free text before - which is how names like "James" ended up alongside
+                  "James McVeigh". Restricted to the same people you can pick anywhere else. */}
+              <option value="">Nobody</option>
+              {me?.name && <option value={me.name}>{me.name} (you)</option>}
+              {(users || []).filter((u) => u.name !== me?.name).map((u) => <option key={u.username || u.name} value={u.name}>{u.name}</option>)}
+              {assignee && !(users || []).some((u) => u.name === assignee) && assignee !== me?.name &&
+                <option value={assignee}>{assignee} (no longer available)</option>}
+            </select>
           </div>
         </div>
 

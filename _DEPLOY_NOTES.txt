@@ -1,46 +1,45 @@
-pkg346 - Fixes the crash on opening a project + limits the assignee list
-=========================================================================
+pkg347 - Inline editing removed; an Edit button instead
+========================================================
 
-REPLACES pkg302 through pkg345. Deploy this one only.
+REPLACES pkg302 through pkg346. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            THE CRASH FIX
-  pages/api/crm.js        assignee list limited by role
+  pages/crm.js
+  pages/api/crm.js        unchanged since pkg346
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. "activity is not defined"
------------------------------
-My mistake in pkg344, and the error screen named it exactly.
+WHAT CHANGED
+------------
+Inline editing is gone. The Activities table has an EDIT column immediately after Mark
+Done, with a proper button on every row. It opens the same window you already liked -
+big text box, due date, person responsible.
 
-I added the "ACTIVITY - James McVeigh" heading so you could see who owns an activity
-without opening it. It was meant to go on an existing activity row. It landed in the
-NEW-activity box instead - a different component, where there is no activity to read a name
-from. So the page threw the moment a deal was opened.
+Column order: Mark Done | Edit | Project | Activity | Due date | Person responsible |
+Customer company | Customer name | Customer email | Customer phone.
 
-Both places have an identical "Activity" heading, which is how I put it in the wrong one.
-
-FIXED: the heading with the person on it is now on the activity ROW, where it belongs, and
-the new-activity box has its plain heading back. Checked that every reference to that
-activity now sits inside the component that has one.
-
-Also corrected while there: an existing row said "Assigned to current user" when nothing
-was assigned. It now says "nobody", which is what it means.
+Header and body cell counts verified at 10 each, so nothing has slipped out of line.
 
 
-2. ASSIGNEE LIST LIMITED TO PRE-CONTRACT AND ADMIN
-----------------------------------------------------
-Only portal users with a pre-contract or admin role can be given a CRM activity. Estimators,
-sales and admin - the people who actually work in here.
+YOU WERE RIGHT ABOUT THE DATE
+------------------------------
+A native date box fires a change on every keystroke, so typing a date sends part-formed
+values as you go, and clicking away could commit whichever fragment it had - or nothing at
+all, if the browser had not settled on a valid date. That is why it was unreliable rather
+than simply broken.
 
-Post-contract, management and legacy "standard" users are excluded. Verified against a
-sample of all five roles.
+It also made the whole thing ambiguous: a cell that silently saves when you click away
+gives you no confirmation, which is exactly what you were describing. A button and a window
+with a Save in it does not have that problem.
 
-This applies everywhere you pick a person: adding an activity on a deal, editing one there,
-and the Person Responsible cell in the Activities table.
 
-WORTH KNOWING: this filters who you can CHOOSE. Historic activities already assigned to
-somebody outside that group still show their name, so nothing is rewritten or hidden - they
-simply cannot be picked for anything new. That is deliberate; silently reassigning
-somebody's past work would be worse.
+ONE IMPROVEMENT WHILE I WAS IN THERE
+--------------------------------------
+The edit window's Person responsible was a FREE TEXT box - which is how names like "James"
+ended up sitting alongside "James McVeigh" in the first place. It is now the same dropdown
+as everywhere else: you first, then the other pre-contract and admin users, then Nobody.
+
+If an activity is already assigned to somebody no longer on that list, they are shown as
+"(no longer available)" and kept unless you change it - so historic ownership is not
+quietly rewritten.
