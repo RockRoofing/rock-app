@@ -32,7 +32,10 @@ export default function ScheduleOfWorks() {
         // (older cache may not). If none report it, don't filter it out — show all
         // accessible projects and let the CR check happen on open.
         const flagKnown = list.some(p => 'hasContractedRates' in p)
-        const base = (flagKnown ? list.filter(p => p.hasContractedRates) : list)
+        // Live projects only, like the rest of the Site App. These rows come from the
+        // dashboard, where "live" is the stage INPROGRESS (DEFECTS and CLOSED are not).
+        const liveOnly = list.filter(p => !p.status || p.status === 'INPROGRESS')
+        const base = (flagKnown ? liveOnly.filter(p => p.hasContractedRates) : liveOnly)
           .map(p => ({ projectNo: p.jobNo || '', projectName: p.name || '', jobNo: p.jobNo || '', xeroId: p.xeroId }))
           .filter(p => p.projectNo)
         // Apply the operative's project permissions.

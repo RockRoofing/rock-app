@@ -1,62 +1,64 @@
-pkg289 - Site App Project Finance: fix the false "not the Contracts Manager" block
-===================================================================================
+pkg290 - Site App: live projects only, everywhere
+==================================================
 
 CHANGED FILES
 -------------
-  pages/api/cm-project-financials.js
+  lib/cmSiteApp.js                     covers ALL 8 Contracts Manager screens at once
+  pages/forms/index.js                 home-screen badge counts
+  pages/forms/schedule.js              contracted-rates schedule picker
+  pages/forms/cm/project-finance.js    removed its now-duplicated local filter
 
-No new files IF pkg284 is deployed - this is a straight replacement of that file.
-Nothing else changes. Independent of the other outstanding packages.
+No new files. All straight replacements.
 
-
-ROOT CAUSE - MY MISTAKE
-------------------------
-The good news is the plumbing is now working: the request reached the API and the API
-answered. It just refused you, wrongly.
-
-getOpsProjects() returns the RAW project records, where the fields sit NESTED under .data:
-
-    { projectNo: 'J203', data: { contractsManager: 'Will Smith', ... } }
-
-I read x.contractsManager off that record. On a raw record that is ALWAYS undefined - the
-CM lives at x.data.contractsManager. It is /api/ops-projects that flattens the records,
-and that is what the Site App itself calls, which is exactly why the project appears in
-your list (flattened, CM found) and then refuses to open (raw, CM undefined).
-
-So the check was comparing your name against an empty string for every project, and
-nameMatches() returns false when either side is blank. It would have refused EVERY project
-for EVERY user - it was never going to let anyone in.
-
-That is the same nested-vs-flattened trap as the dashboard:cache array bug earlier in this
-run. I should have checked the shape rather than assuming.
+pages/forms/index.js also carries the earlier Site App work (report attachments, orange
+link, Construction Issue drawings). If you are deploying older packages too, take
+index.js from THIS one - it is the newest.
 
 
-THE FIX
--------
-Reads x.data.contractsManager, falling back to x.contractsManager, so it works whichever
-shape it is handed.
-
-Two other improvements while in there:
-
-1. A commercial OVERRIDE of the CM now also grants access. If Edit Project Details shows
-   you as CM because of an override, the Site App agrees - previously only the Ops value
-   counted, so an overridden CM would have been locked out even after the fix above.
-
-2. If it ever does refuse, the message now names the project and says who the CM actually
-   is - e.g. "You are not listed as the Contracts Manager on J203. It is currently set to
-   Will Smith." - instead of a flat denial with nothing to act on.
+WHAT WAS ALREADY CORRECT
+-------------------------
+The operative-facing screens already filtered to live and were not touched:
+  Complete a Form (fill.js), Drawings, RAMS, Report Site Issue (issue.js),
+  and Browse (which filters on the dashboard stage INPROGRESS).
 
 
-WHAT YOU SHOULD SEE
---------------------
-Pick a live project you are CM on and it should now open: margin, labour/materials/total
-budget vs spend vs remaining, and the costs table with Labour / Materials / All tabs.
+WHAT WAS WRONG
+--------------
+1. ALL EIGHT CM SCREENS. Applications, Contracted Rates, Forms Completed, Missing Forms,
+   Pre-Start, SRATs, Live Tasks and Variations all get their project list from the shared
+   useMyProjects hook in lib/cmSiteApp.js, and that hook did not filter by status. So
+   Complete and Archived jobs were appearing in every CM project picker.
 
-If it still refuses, the message will now tell us which name it is comparing against - send
-me that and it is a quick fix from there.
+   Fixed in the hook itself rather than in eight separate files, so it stays consistent
+   and cannot drift apart later.
+
+2. HOME SCREEN BADGE COUNTS. The RAMS / overdue-task / issue badges on the Site App home
+   were counted across all statuses, so a completed job could still put a red number on
+   the menu. Now counted on live projects only.
+
+3. CONTRACTED RATES SCHEDULE. That picker filtered on whether a project has contracted
+   rates but not on status, so finished jobs stayed selectable. Now live only.
+
+
+ONE THING WORTH KNOWING - TWO DIFFERENT MEANINGS OF "LIVE"
+-----------------------------------------------------------
+The Site App draws projects from two different sources, and each has its own idea of live:
+
+  Ops projects (ops:projects)  ->  status 'active'      (Live / Complete / Archived,
+                                                         set in Ops > Projects)
+  Dashboard rows (Xero)        ->  stage 'INPROGRESS'   (driven by the Retention Tracker:
+                                                         INPROGRESS / DEFECTS / CLOSED)
+
+Both are now filtered to their own version of live, which is the right answer for each.
+But they can disagree: a job marked Complete in Ops but still INPROGRESS on the Retention
+Tracker would drop off most screens while remaining on the two dashboard-fed ones
+(Contracted Rates schedule, Browse).
+
+If you want a single definition driving everything, that is a bigger piece - tell me which
+of the two should win and I will make the other follow it.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Verified the CM is now found on the raw nested record AND on the flattened shape.
+Audited every project list in pages/forms and lib/cmSiteApp.js - all now filter by status.

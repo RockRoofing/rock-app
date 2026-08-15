@@ -37,9 +37,8 @@ export default function CmProjectFinance() {
     setUser(u); setReady(true)
   }, [])
 
+  // useMyProjects is live-only for the whole Site App, so no extra filter here.
   const { myProjects, loading: projLoading } = useMyProjects(user)
-  // Only LIVE projects - a CM does not need finance on completed or archived jobs here.
-  const liveProjects = (myProjects || []).filter(p => (p.status || 'active') === 'active')
 
   async function pick(p) {
     setProj(p); setData(null); setErr(''); setLoading(true)
@@ -86,7 +85,7 @@ export default function CmProjectFinance() {
           <h2 style={{ fontSize: 18, color: INK, margin: '8px 0 4px' }}>Project Finance</h2>
           {projLoading
             ? <div style={{ textAlign: 'center', color: '#aaa', padding: 24 }}>Loading...</div>
-            : <ProjectPicker projects={liveProjects} onPick={pick} subtitle="Select a live project you are Contracts Manager on." />}
+            : <ProjectPicker projects={myProjects} onPick={pick} subtitle="Select a live project you are Contracts Manager on." />}
         </>
       ) : (
         <>

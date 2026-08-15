@@ -232,7 +232,9 @@ function FormsHomeMenu({ user }) {
       try {
         const d = await fetch('/api/ops-projects').then(r => r.json())
         const norm = s => (s || '').trim().toLowerCase()
-        const mine = (d.projects || []).filter(p => {
+        // Live projects only - badges must not count work on Complete/Archived jobs.
+        const live = (d.projects || []).filter(p => (p.status || 'active') === 'active')
+        const mine = live.filter(p => {
           const a = norm(user.name), b = norm(p.contractsManager)
           if (!a || !b) return false
           if (a === b) return true
