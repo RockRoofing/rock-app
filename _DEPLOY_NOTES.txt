@@ -1,44 +1,54 @@
-pkg291 - Report app improvement link on the Bookkeeping pages
-==============================================================
+pkg292 - Contracted Rates: labour and materials budget on every line
+=====================================================================
 
 CHANGED FILES
 -------------
-  pages/bookkeeping.js          main Bookkeeping page
-  components/BookkeepingNav.js  Weekly Tasks + Monthly Tasks pages
+  pages/forms/cm/contracted-rates.js      Site App, Contracts Manager view
 
-No new files IF pkg281 is deployed - both use components/ReportImprovementLink.js, which
-is a NEW file introduced in pkg281.
-
-*** IF YOU HAVE NOT DEPLOYED pkg281, DEPLOY IT FIRST (or at least create
-    components/ReportImprovementLink.js from it) or these two files will not build. ***
+No new files. Straight replacement. Independent of the other packages.
 
 
-WHAT CHANGED
-------------
-The same shared "Report app improvement" link now appears on all three Bookkeeping pages:
+WHY ONLY THIS FILE
+-------------------
+The PORTAL Contracted Rates page (pages/contracted-rates.js) already shows all four
+columns per line - Mat rate, Mat total, Lab rate, Lab total - so nothing was needed there.
 
-  Bookkeeping        added directly to that page's own header (it does not use the
-                     shared nav component)
-  Weekly Tasks       via BookkeepingNav
-  Monthly Tasks      via BookkeepingNav
+The gap was the SITE APP Contracts Manager view. It only ever rendered qty, unit, rate and
+the line total, even though the API was already sending the full item records with matRate
+and labRate on them. The figures were in the payload and simply were not being drawn.
 
-Both use the shared components/ReportImprovementLink.js, so it is identical to every other
-page and will follow any future change to it automatically.
-
-The report window itself is already mounted globally in pages/_app.js, so nothing else was
-needed to make it open.
+If you meant the portal page instead, say so - but there was nothing missing on it.
 
 
-PLACEMENT NOTE
---------------
-On the main Bookkeeping page the top bar is already crowded (sync controls, month
-selector, Upload Bills, Bookkeeping Tools) and scrolls sideways on a narrow screen. I put
-the link as the FIRST right-hand item, immediately after the title, so it stays reachable
-rather than being pushed off the end behind the sync buttons.
+WHAT YOU NOW SEE, PER LINE
+---------------------------
+Under each rate line, two small panels:
 
-On the two task pages the bar is nearly empty, so it sits at the far right as usual.
+  Materials   the budget for that line, with the rate underneath (@ £6.20)
+  Labour      the budget for that line, with the rate underneath (@ £5.10)
+
+Budget = qty x rate, calculated with lineMatTotal / lineLabTotal imported from
+lib/contractRatesParser - the SAME helpers the portal page uses. So the numbers cannot
+drift apart from the portal, and a change to that calculation updates both at once.
+
+Lines with no materials or labour rate (TBC / rate-only items) show nothing extra rather
+than a row of dashes.
+
+
+ALSO ADDED
+----------
+The green "Contract works total" bar now carries the section totals too:
+
+  Materials budget £x,xxx.xx     Labour budget £x,xxx.xx
+
+Taken from cr.totals.aboveMaterials / aboveLabour, which the API was already computing and
+sending - again, the same figures the portal shows.
+
+Above-the-line only, matching what this screen already displayed. Below-the-line
+(optional / variation) items remain hidden here as before.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+Per-line and section arithmetic checked against the shared helpers.

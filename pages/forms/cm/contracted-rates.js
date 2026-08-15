@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { Shell } from '../index'
 import { INK, BRAND, useMyProjects, ProjectPicker, ProjectHeader } from '../../../lib/cmSiteApp'
+// Same per-line helpers the portal Contracted Rates page uses, so the materials and
+// labour budgets shown here cannot drift from the ones shown there.
+import { lineMatTotal, lineLabTotal } from '../../../lib/contractRatesParser'
 
 const money = (n) => (n || n === 0) ? `£${Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'
 const rate = (n) => n == null || n === '' ? '' : Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -71,9 +74,15 @@ export default function CmContractedRates() {
                 <Section title="Contract works" items={above} accent="#0f766e" />
                 {/* Total line for above-the-line. */}
                 {cr?.totals && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f766e', color: '#fff', borderRadius: 12, padding: '12px 16px', marginTop: 2, marginBottom: 16 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>Contract works total</span>
-                    <span style={{ fontSize: 16, fontWeight: 800 }}>{money(cr.totals.aboveTotal)}</span>
+                  <div style={{ background: '#0f766e', color: '#fff', borderRadius: 12, padding: '12px 16px', marginTop: 2, marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>Contract works total</span>
+                      <span style={{ fontSize: 16, fontWeight: 800 }}>{money(cr.totals.aboveTotal)}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.25)', fontSize: 12.5 }}>
+                      <span style={{ opacity: 0.85 }}>Materials budget <strong style={{ opacity: 1 }}>{money(cr.totals.aboveMaterials)}</strong></span>
+                      <span style={{ opacity: 0.85 }}>Labour budget <strong style={{ opacity: 1 }}>{money(cr.totals.aboveLabour)}</strong></span>
+                    </div>
                   </div>
                 )}
                 {/* Variations — instructed status + values, below the total. */}
@@ -112,10 +121,28 @@ function Section({ title, items, accent, belowLine }) {
               <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
                 {x.qty != null ? `${x.qty} ${x.unit || ''}` : (x.unit || '')}{x.rate != null ? `  ·  @ £${rate(x.rate)}` : ''}
               </div>
+              {(x.matRate != null || x.labRate != null) && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, paddingTop: 8, borderTop: '1px solid #f1efea' }}>
+                  <BudgetCell label="Materials" total={lineMatTotal(x)} r={x.matRate} colour="#0f766e" />
+                  <BudgetCell label="Labour" total={lineLabTotal(x)} r={x.labRate} colour="#b45309" />
+                </div>
+              )}
             </div>
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Per-line materials / labour budget. Budget = qty x rate, the same calculation the
+// portal uses, with the rate shown underneath for reference.
+function BudgetCell({ label, total, r, colour }) {
+  return (
+    <div style={{ flex: 1, background: '#faf9f7', border: '1px solid #eee', borderRadius: 8, padding: '6px 8px' }}>
+      <div style={{ fontSize: 10.5, color: '#999', fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: colour, marginTop: 1 }}>{total ? money(total) : '\u2014'}</div>
+      {r != null && <div style={{ fontSize: 10.5, color: '#aaa', marginTop: 1 }}>@ &pound;{rate(r)}</div>}
     </div>
   )
 }
