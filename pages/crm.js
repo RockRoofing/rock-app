@@ -1502,10 +1502,10 @@ function CRMPageInner() {
       setActLoading(true);
       try {
         const found = [];
-        for (let i = 0; i < needed.length; i += 300) {
+        for (let i = 0; i < needed.length; i += 150) {
           const d = await fetch('/api/crm', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get-sub-many', kind: 'activities', dealIds: needed.slice(i, i + 300) }),
+            body: JSON.stringify({ action: 'get-sub-many', kind: 'activities', dealIds: needed.slice(i, i + 150) }),
           }).then((r) => r.json());
           for (const [dealId, list] of Object.entries(d.items || {})) {
             for (const a of (list || [])) {
@@ -1514,13 +1514,23 @@ function CRMPageInner() {
             }
           }
         }
-        if (found.length) setOpenActivities(found);
+        if (found.length) {
+          setOpenActivities(found);
+          // Cache it, so this rebuild happens once rather than on every page load. That
+          // rebuild is why the tab was slow to open.
+          try {
+            await fetch('/api/crm', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'save-open-activities', openList: found }),
+            });
+          } catch { /* not fatal - it just rebuilds again next time */ }
+        }
       } catch { /* leave the tab empty rather than erroring */ }
       setActLoading(false);
     })();
   }, [view, activitySummary, openActivities.length]);
 
-  const activityRows = useMemo(() => {
+  const activityRowsAll = useMemo(() => {
     const dealById = new Map(deals.map((d) => [String(d.id), d]));
     const contactByName = new Map();
     for (const c of (contactsData || [])) {
@@ -1536,9 +1546,10 @@ function CRMPageInner() {
       seen.add(key);
       const deal = dealById.get(String(dealId));
       if (!deal) return;                                  // deal not in the CRM
-      // Open projects only. This is a to-do list - chasing work on a job that was won or
-      // lost months ago is noise, and it was inflating the overdue count badly.
-      if (deal.status !== 'open') return;
+      // Open projects only - chasing work on a job won or lost months ago is noise. But the
+      // row is still built and tagged, so the table can SAY how many it is holding back
+      // rather than leaving you wondering where an activity went.
+      const dealOpen = deal.status === 'open';
       const custName = deal.fields?.contact_person || '';
       const contact = contactByName.get(String(custName).trim().toLowerCase());
       rows.push({
@@ -1554,6 +1565,8 @@ function CRMPageInner() {
         email: contact?.contact_email || '',
         phone: contact?.contact_phone || '',
         done: !!done,
+        dealOpen,
+        dealStatus: deal.status,
       });
     };
 
@@ -1566,6 +1579,9 @@ function CRMPageInner() {
     }
     return rows;
   }, [deals, contactsData, openActivities, actShowDone]);
+
+  const activityRows = useMemo(() => activityRowsAll.filter((r) => r.dealOpen), [activityRowsAll]);
+  const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => !r.dealOpen).length, [activityRowsAll]);
 
   const actPeople = useMemo(() => [...new Set(activityRows.map((r) => r.assignee).filter(Boolean))].sort(), [activityRows]);
   const actCustomers = useMemo(() => [...new Set(activityRows.map((r) => r.company).filter(Boolean))].sort(), [activityRows]);
@@ -1786,6 +1802,8 @@ function CRMPageInner() {
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
+            closedCount={activityClosedCount}
+            onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
@@ -1943,7 +1961,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -1969,9 +1987,20 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           Include completed
         </label>
         <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 12.5, color: C.dim }}>
-          {rows.length}{rows.length !== total ? ` of ${total}` : ''} activit{rows.length === 1 ? 'y' : 'ies'}
-          {overdue ? <span style={{ color: C.red, fontWeight: 700 }}> &middot; {overdue} overdue</span> : null}
+        <div style={{ fontSize: 12.5, color: C.dim, textAlign: 'right' }}>
+          <div>
+            {rows.length}{rows.length !== total ? ` of ${total}` : ''} activit{rows.length === 1 ? 'y' : 'ies'}
+            {overdue ? <span style={{ color: C.red, fontWeight: 700 }}> &middot; {overdue} overdue</span> : null}
+          </div>
+          {(person || customer) && (
+            <div style={{ color: '#b45309', marginTop: 2 }}>
+              Filtered by {[person && `person: ${person}`, customer && `customer: ${customer}`].filter(Boolean).join(', ')}
+              {' '}<button onClick={onClearFilters} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>clear</button>
+            </div>
+          )}
+          {closedCount > 0 && (
+            <div style={{ color: '#aaa', marginTop: 2 }}>{closedCount} more on won or lost projects (not shown)</div>
+          )}
         </div>
       </div>
 

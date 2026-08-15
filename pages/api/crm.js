@@ -181,6 +181,13 @@ export default async function handler(req, res) {
       return res.json({ ok: true, list })
     }
 
+    // Store the rebuilt outstanding-activity list so the Activities tab does not have to
+    // reconstruct it from hundreds of per-deal keys on every single page load.
+    if (body.action === 'save-open-activities') {
+      await set(OPEN_ACTIVITIES, Array.isArray(body.openList) ? body.openList : [])
+      return res.json({ ok: true })
+    }
+
     if (body.action === 'get-sub-many') {
       const kind = body.kind
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
