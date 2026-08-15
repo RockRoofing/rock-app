@@ -1,7 +1,7 @@
-pkg328 - Saved filters can no longer hide your new activity
-============================================================
+pkg329 - Activity filters no longer persist between visits
+===========================================================
 
-REPLACES pkg302 through pkg327. Deploy this one only.
+REPLACES pkg302 through pkg328. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,39 +10,44 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-GOOD - THE SAVE IS FIXED
--------------------------
-Activities saving inside a deal means the 413 chain is done with. What is left is purely
-about what the table chooses to display.
+YOUR SCREENSHOT SOLVED IT - THERE IS NO BUG LEFT
+--------------------------------------------------
+    Added in the CRM: 1 (1 still open)          -> it saved
+    Rows built: 1024 - of which 1 added in CRM  -> the merge picked it up
+    Filtered by person: James McVeigh           -> 31 of 364 shown
+
+The activity was there the whole time. The saved "person responsible" filter was hiding it,
+because the activity has a different person on it (or none).
+
+pkg328 only ignored a filter that matched NOTHING. This one matched 31 rows, so it stayed
+on and did its job - just not the job you wanted.
 
 
-THE MOST LIKELY CAUSE, NOW CLOSED OFF
---------------------------------------
-The CRM remembers your Person responsible and Customer filters between visits. If a saved
-filter is set - say a person - and you then add an activity with NOBODY assigned, that
-activity cannot match it, so the table stays empty and gives no hint that a filter is even
-active.
+WHAT I HAVE CHANGED
+--------------------
+1. THE PERSON AND CUSTOMER FILTERS NO LONGER PERSIST between visits. They reset each time
+   you open the CRM, and still hold while you are working in it.
 
-A saved filter that matches nothing at all is now IGNORED rather than obeyed, and the tab
-says so:
+   This is the third time a remembered filter has looked like a broken feature - twice on
+   this tab and once on the Activities load itself. A filter is working state, not a
+   setting, and remembering it costs more than it gains. Your TAB, COLUMNS and SORT are
+   still remembered, because those genuinely are settings.
 
-    "A saved filter matched nothing and has been ignored.  clear it"
+2. THE FILTER LINE NOW SAYS WHAT IT IS HIDING, in bold:
 
-That single rule covers the whole class of problem: a filter set weeks ago quietly hiding
-everything you add today.
+       Filtered by person: James McVeigh - hiding 333   clear
+
+   Previously it named the filter but not the consequence, which is easy to skim past.
 
 
-IF IT IS STILL NOT THERE
--------------------------
-Open "Where are my activities?" next to the activity count and send me the four numbers.
-They separate the remaining possibilities in one go:
+NOTHING ELSE TO DO
+------------------
+Your activity is already saved and will show as soon as the filter is off - clear it now,
+or it will be gone by itself after this deploys.
 
-  "Added in the CRM"  is 0        -> it is not reaching the deal at all
-  counted, but "rows built" low   -> the merge is dropping it
-  rows built, nothing visible     -> a filter or the open-project rule
-  "On won/lost projects" > 0      -> your test project is not open, and the tab only lists
-                                     activities on open projects
 
-That last one is worth checking first. If you are testing on a project marked won or lost,
-it will never appear, and that is by design from pkg317 - tell me if you would rather won
-projects were included, since you are still actively working those.
+ONE THING STILL WORTH DECIDING
+-------------------------------
+"660 more on won or lost projects (not shown)". That is a lot of hidden activity. The tab
+lists open projects only, from pkg317. If you chase variations and follow-ups on jobs after
+they are won, tell me and I will include won projects - keeping only lost ones out.

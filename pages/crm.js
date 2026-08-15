@@ -926,9 +926,12 @@ function CRMPageInner() {
       if (p.sort && p.sort.key) setSort(p.sort);
       if (p.entitySort && p.entitySort.key) setEntitySort(p.entitySort);
       if (p.actSort && p.actSort.key) setActSort(p.actSort);
-      if (typeof p.actPerson === 'string') setActPerson(p.actPerson);
-      if (typeof p.actCustomer === 'string') setActCustomer(p.actCustomer);
       if (typeof p.actShowDone === 'boolean') setActShowDone(p.actShowDone);
+      // Person / customer filters are deliberately NOT restored. Remembering them meant a
+      // filter set weeks ago silently hid activities added today - which looked exactly
+      // like the activity failing to save. Tab, columns and sort are still remembered;
+      // these two reset each visit, and still hold while you are working.
+      setActPerson(''); setActCustomer('');
     }
     prefsReady.current = true;
   }, []);
@@ -942,11 +945,11 @@ function CRMPageInner() {
       visibleStages: Array.from(visibleStages),
       columns, companyCols, contactCols,
       sort, entitySort,
-      actSort, actPerson, actCustomer, actShowDone,
+      actSort, actShowDone,
     });
   }, [view, statusFilter, mcsnEstimator, customFilters, stageMode, visibleStages,
       columns, companyCols, contactCols, sort, entitySort,
-      actSort, actPerson, actCustomer, actShowDone]);
+      actSort, actShowDone]);
   const dragId = useRef(null);
   const nextId = useRef(900000);
 
@@ -2121,8 +2124,9 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             </div>
           )}
           {(person || customer) && !staleFilter && (
-            <div style={{ color: '#b45309', marginTop: 2 }}>
+            <div style={{ color: '#b45309', marginTop: 2, fontWeight: 600 }}>
               Filtered by {[person && `person: ${person}`, customer && `customer: ${customer}`].filter(Boolean).join(', ')}
+              {total > rows.length ? ` - hiding ${total - rows.length}` : ''}
               {' '}<button onClick={onClearFilters} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>clear</button>
             </div>
           )}
