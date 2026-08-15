@@ -1,7 +1,7 @@
-pkg339 - The tab now names the rule that is hiding your activity
-=================================================================
+pkg340 - Your activity IS saved. The open-projects rule is hiding it.
+======================================================================
 
-REPLACES pkg302 through pkg338. Deploy this one only.
+REPLACES pkg302 through pkg339. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,42 +10,48 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHY THIS RATHER THAN ANOTHER FIX
----------------------------------
-I have shipped several fixes for this and each one has been a guess at which of the rules
-was excluding your activity. That is not working and it is wasting your time.
+WHAT YOUR NUMBERS PROVED
+-------------------------
+    In the shared store and outstanding: 1024
 
-So instead of guessing again: open "Where are my activities?" and the tab now lists EVERY
-activity you have added, and states for each one exactly where it stands.
+It was 1023 before you added yours. That one extra IS your activity. It saved, it went to
+the shared store, and it is sitting alongside the Pipedrive ones exactly as you wanted.
 
-    Bensham Lane - Chase drawings (2026-08-20)
-        showing
+    On won/lost projects: 660
 
-    Round Silo - Call back Tuesday (2026-08-25)
-        hidden: project is "won" (tab lists open projects only)
-
-    Dwyer Road - Send quote (no date)
-        hidden: person filter is "James McVeigh", this is "nobody"
-
-It checks the rules in order - done, project status, person filter, customer filter - and
-reports the first one that excludes it. If it says "showing" and you still cannot see it in
-the table, that is a different problem entirely and I will know where to look.
-
-One screenshot of that panel ends this.
+And that is what is hiding it. The project you added it to is not open, and pkg336
+restricted this tab to open projects - at your request, and it is doing exactly that.
 
 
-WHAT IT TELLS US
-----------------
-  "showing"                       the rules are fine; the fault is in the table itself
-  "project is won/lost"           pkg336 restricted this tab to open projects at your
-                                  request, and that is what is catching them
-  "person filter is..."           a filter is set that your activity does not match
-  "marked done"                   it was saved as complete
-  "project is not in the CRM"     the deal it belongs to is not loaded
+TWO THINGS I HAD WRONG ON THAT PANEL
+-------------------------------------
+1. "Added in the CRM: 0" was misleading. It counted activities held ON a deal, and since
+   pkg338 nothing is held there - everything goes to the shared store, where yours and the
+   imported ones are indistinguishable. That is the single-store behaviour you asked for,
+   but the label made it look like nothing had saved. It now reads:
+
+       Still held on a deal (pre-update): 0
+       In the shared store and outstanding: 1024 - imported and yours together
+
+2. The per-activity trace only looked at activities held on a deal, so with nothing there
+   it printed nothing - just when it was most needed. It now traces the shared store too
+   and names the rule excluding each one:
+
+       Round Silo - Call back Tuesday (2026-08-25)
+           hidden: project is "won" - this tab lists open projects only
 
 
-ALSO IN HERE
-------------
-pkg338's single-request save, so a deal and its activities are always written together and
-neither can be stored without the other. That was a genuine fault and is worth having
-regardless of what the trace shows.
+THE DECISION IS YOURS
+----------------------
+The tab lists open projects only because you asked for that in pkg336, and I have left it
+alone. But 660 outstanding activities are sitting behind that rule, and your test is one of
+them.
+
+Say which you want and it is a one-line change:
+
+  a) open projects only            - as now
+  b) open and won                  - excludes lost jobs only; my recommendation, since you
+                                     still chase variations and follow-ups after a win
+  c) everything
+
+Given how long this has taken I did not want to change it again without you saying so.

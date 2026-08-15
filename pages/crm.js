@@ -1798,10 +1798,19 @@ function CRMPageInner() {
         out.push({ deal: d.title, dealId: d.id, text: a.text, due: a.due || '(no date)', verdict });
       }
     }
+    // Also trace the shared store. Since activities are no longer kept on the deal, this
+    // is where everything lives - so anything hidden has to be explained from here, not
+    // just from the deal. Only the ones being EXCLUDED are listed, otherwise this would
+    // print a thousand rows.
     for (const a of (openActivities || [])) {
       if (out.some((o) => String(o.dealId) === String(a.dealId) && o.text === a.text)) continue;
       const d = deals.find((x) => String(x.id) === String(a.dealId));
-      if (!d) { out.push({ deal: '(project not loaded)', dealId: a.dealId, text: a.text, due: a.due, verdict: 'hidden: its project is not in the CRM' }); continue; }
+      if (!d) { out.push({ deal: '(project not in the CRM)', dealId: a.dealId, text: a.text, due: a.due, verdict: 'hidden: its project is not loaded' }); continue; }
+      let verdict = null;
+      if (d.status !== 'open') verdict = `hidden: project is "${d.status}" - this tab lists open projects only`;
+      else if (actPerson && (a.assignee || '') !== actPerson) verdict = `hidden: person filter is "${actPerson}", this is "${a.assignee || 'nobody'}"`;
+      else if (actCustomer && (d.fields?.organization || '') !== actCustomer) verdict = `hidden: customer filter is "${actCustomer}"`;
+      if (verdict) out.push({ deal: d.title, dealId: d.id, text: a.text, due: a.due || '(no date)', verdict });
     }
     return out.slice(0, 25);
   }, [deals, openActivities, actShowDone, actPerson, actCustomer]);
@@ -2264,13 +2273,13 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             <details style={{ marginTop: 3 }}>
               <summary style={{ cursor: 'pointer', color: C.link, fontSize: 11.5, listStyle: 'none' }}>Where are my activities?</summary>
               <div style={{ textAlign: 'left', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '10px 12px', marginTop: 6, fontSize: 11.5, color: '#666', lineHeight: 1.7, minWidth: 320 }}>
-                <div>Added in the CRM: <strong>{breakdown.inCrmTotal}</strong> ({breakdown.inCrmOpen} still open)</div>
-                <div>Imported and outstanding: <strong>{breakdown.imported}</strong></div>
+                <div>Still held on a deal (pre-update): <strong>{breakdown.inCrmTotal}</strong></div>
+                <div>In the shared store and outstanding: <strong>{breakdown.imported}</strong> &mdash; imported and yours together</div>
                 <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
                 <div>On won/lost projects: <strong>{breakdown.onClosed}</strong></div>
                 {(trace || []).length > 0 && (
                   <div style={{ marginTop: 10, borderTop: '1px solid ' + C.line, paddingTop: 8 }}>
-                    <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>Activities you have added, and where each one stands:</div>
+                    <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>Activities that exist but are not on screen:</div>
                     {trace.map((t, i) => (
                       <div key={i} style={{ marginBottom: 4 }}>
                         <span style={{ color: C.text }}>{t.deal}</span> &mdash; {t.text} ({t.due})
