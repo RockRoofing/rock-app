@@ -1,57 +1,88 @@
-pkg299 - SRATs: live projects only, 25 per page, Contracts Manager column
-==========================================================================
+pkg300 - CSCS / Working at Height renewal notifications
+========================================================
 
-CHANGED FILES
--------------
-  pages/operations/project-management/srat.js
-
-No new files. Straight replacement. Independent of every other package.
-No API change was needed - /api/srats stores the whole SRAT object, so the new field
-persists on its own.
+REPLACES pkg295-pkg298 (it carries the frozen header, sorting, column-delete fix and the
+full-width fix). Deploy this one; those are all inside it.
 
 
-1. LIVE PROJECTS ONLY
----------------------
-The project dropdowns - both the filter at the top and the picker when adding a SRAT - now
-list only projects with status 'active'. Complete and Archived jobs are gone.
+NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
+-----------------------------------------------------------------------
+  lib/hsRenewalNotify.js
+  pages/api/cron/hs-renewals.js
+  pages/api/hs-renewal-settings.js
 
-NOTE: this filters the PICKERS. Existing SRATs raised against a project that has since
-been completed still appear in the table, which is deliberate - they are the historical
-record and hiding them would lose them. Say if you would rather they were filtered out too.
-
-
-2. 25 PER PAGE
---------------
-Was 50. The Prev / Next control and the "Page x of y" counter already existed and adjust
-automatically.
+CHANGED FILES (straight replacements)
+--------------------------------------
+  vercel.json                          adds the hourly cron
+  pages/operations/hs/hs-matrix.js     "Renewal notifications" panel (+ earlier fixes)
+  pages/api/hs-matrix.js               column-delete fix (from pkg297)
 
 
-3. CONTRACTS MANAGER COLUMN
----------------------------
-New column immediately after Project, as asked. It is sortable like the others - click the
-header for A-Z, again for Z-A.
+WHAT TRIGGERS - AND WHAT DOES NOT
+----------------------------------
+Only CSCS and Working at Height. Matched on the COLUMN LABEL, so it keeps working if a
+column is renamed, as long as it still contains "CSCS" or "Working at Height". Confirmed
+matching: "CSCS", "Working at Height", "Working at Height / H&S (office)". Not matched:
+SSSTS, First aid, IPAF and the rest.
 
-The column widths were rebalanced across all eight columns rather than squeezing the new
-one in, so nothing gets crushed. Header, colgroup and body cells all verified at 8.
-
-The Contracts Manager also now appears on the read-only View window.
+Cells marked "No expiry" and cells with no date are ignored.
 
 
-4. AUTO-POPULATE WHEN ADDING
------------------------------
-Selecting a project on the New SRAT form fills the Contracts Manager in from that project
-automatically. The field stays editable - if someone else is covering, type over it.
+1. THE OPERATIVE'S OWN REMINDER
+--------------------------------
+From 6 weeks (42 days) before expiry the person is emailed directly, then again every 7
+days, stopping once the ticket is 2 weeks overdue. It stays on the management list after
+that - it just stops chasing the individual.
 
-IT IS STORED ON THE SRAT, not looked up each time. That is deliberate: a SRAT is a record
-of a moment, so it should keep showing who was responsible then, even if the project's CM
-changes months later.
+The email says their CSCS card / Working at Height training expires (or expired) on the
+date, and asks them to send the renewal to Rock Roofing to keep their training up to date
+and maintain their ability to work for Rock Roofing.
 
-EXISTING SRATs have no stored CM, so for those the table falls back to the project's
-CURRENT Contracts Manager rather than showing a dash. So the column is populated from day
-one. From now on, each new SRAT captures its own.
+Sent to the email on their Site App user record. Anyone without an email is skipped and
+counted in the cron response - worth checking, since a missing email means silent
+non-delivery.
+
+Throttling is per person PER TICKET, so somebody whose CSCS and Working at Height both
+lapse gets one email about each, not one merged one.
+
+
+2. THE WEEKLY LIST - RECIPIENTS ARE EDITABLE, AS ASKED
+-------------------------------------------------------
+Nobody is hard-coded. On the H&S Training Matrix page there is a new
+"Renewal notifications" button next to "+ Add training column". It opens a panel where you
+can:
+
+  - add and remove recipients (any email, internal or external)
+  - set the day and hour (defaults to FRIDAY 17:00 UK, as requested)
+  - see how many tickets are currently due/overdue
+  - "Send now" to fire it immediately for testing
+
+So add Dori, Carl, Mike and Will there yourself, and change it later without me.
+
+*** THE WEEKLY EMAIL WILL NOT SEND UNTIL YOU ADD RECIPIENTS. *** That is deliberate - it
+will not guess. The panel warns you in orange when the list is empty.
+
+The email lists everything overdue and everything due within 6 weeks, split into two
+tables, with person, company, training and expiry date. In-date tickets beyond 6 weeks are
+never included.
+
+
+HOW IT RUNS
+-----------
+One hourly cron, /api/cron/hs-renewals, with both jobs self-gating - the same approach the
+Outstanding Invoices weekly report already uses. Hourly is needed because a 17:00 send
+cannot be guaranteed by a once-daily cron, and the gate is evaluated in UK time so it does
+not drift an hour when the clocks change.
+
+  Operative reminders: run once a day, in the 08:00 UK hour.
+  Weekly list:         runs on the configured day/hour, once per day.
+
+TESTING: append ?force=1 to run both immediately ignoring every gate, or ?dryRun=1 to see
+what the weekly list would do without sending. Both return a JSON summary of what happened.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Column counts checked: 8 colgroup / 8 headers / 8 body cells.
+Label matching and both windows verified (6 weeks before -> 2 weeks overdue for the
+individual; overdue-and-within-6-weeks for the list).

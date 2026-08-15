@@ -1,14 +1,45 @@
 {
   "framework": "nextjs",
   "crons": [
-    { "path": "/api/cron/deliveries-sync", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/hs-expiry-email", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/weekly-report", "schedule": "0 * * * *" },
-    { "path": "/api/cron/notifications", "schedule": "0 7 * * *" },
-    { "path": "/api/cron/design-rfi-daily", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/design-techsub-daily", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/design-rockdrawing-daily", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/design-calculation-daily", "schedule": "0 18 * * *" },
-    { "path": "/api/cron/design-rfi-outstanding", "schedule": "0 9 * * *" }
+    {
+      "path": "/api/cron/deliveries-sync",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/hs-expiry-email",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-report",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/design-rfi-daily",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/design-techsub-daily",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/design-rockdrawing-daily",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/design-calculation-daily",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/design-rfi-outstanding",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/hs-renewals",
+      "schedule": "0 * * * *"
+    }
   ]
 }

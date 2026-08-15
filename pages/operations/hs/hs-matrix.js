@@ -31,6 +31,7 @@ export default function HSMatrixPage() {
   const [data, setData] = useState({})
   const [people, setPeople] = useState([])
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' })
+  const [renewalOpen, setRenewalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({ person: '', company: '', trade: '' })
   const [edit, setEdit] = useState(null)       // { personId, colId } cell editor
@@ -128,7 +129,12 @@ export default function HSMatrixPage() {
 
   return (
     <OperationsShell active="hs:hs-matrix" section="hs" title="H&S Training Matrix" wide>
-      <PageHeading title="H&S Training Matrix" sub="Training expiry per person. Green = >2 months, amber = <2 months, red = expired. Blank = no record." action={<button onClick={addColumn} style={primaryBtn}>+ Add training column</button>} />
+      <PageHeading title="H&S Training Matrix" sub="Training expiry per person. Green = >2 months, amber = <2 months, red = expired. Blank = no record." action={
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setRenewalOpen(true)} style={ghostBtn}>Renewal notifications</button>
+          <button onClick={addColumn} style={primaryBtn}>+ Add training column</button>
+        </div>
+      } />
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-end', marginBottom: 12 }}>
         <div><div style={lbl}>Person</div>
@@ -249,6 +255,8 @@ export default function HSMatrixPage() {
           </div>
         </div>
       </div>
+      {renewalOpen && <RenewalSettings onClose={() => setRenewalOpen(false)} />}
+
       <div style={{ fontSize: 11.5, color: '#999', marginTop: 8 }}>Click a cell to set an expiry date or “No expiry”. Drag a column header to reorder. Click ⋯ on a column to lock it (a locked column can't be renamed, recoloured or deleted — cell dates stay editable), colour it, or delete it.</div>
     </OperationsShell>
   )
@@ -340,3 +348,126 @@ const CellFix = ({ w, left, bold, bg, children }) => (
 
 const lbl = { fontSize: 11, color: '#888', marginBottom: 3 }
 const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 12.5 }
+
+// Editable recipient list + schedule for the weekly CSCS / Working at Height renewals
+// email. Same idea as the Outstanding Invoices weekly report settings.
+function RenewalSettings({ onClose }) {
+  const [list, setList] = useState([])
+  const [entry, setEntry] = useState('')
+  const [sched, setSched] = useState({ dayOfWeek: 5, hour: 17 })
+  const [counts, setCounts] = useState({ dueCount: 0, overdueCount: 0 })
+  const [loading, setLoading] = useState(true)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => { (async () => {
+    try {
+      const d = await fetch('/api/hs-renewal-settings').then(r => r.json())
+      setList(d.recipients || [])
+      if (d.schedule) setSched({ dayOfWeek: d.schedule.dayOfWeek, hour: d.schedule.hour })
+      setCounts({ dueCount: d.dueCount || 0, overdueCount: d.overdueCount || 0 })
+    } catch {}
+    setLoading(false)
+  })() }, [])
+
+  const valid = (e) => /@/.test(e) && /\./.test(e.split('@')[1] || '')
+  function add() {
+    const e = entry.trim()
+    if (!e) return
+    if (!valid(e)) { setMsg('That does not look like an email address.'); return }
+    if (list.some(x => x.toLowerCase() === e.toLowerCase())) { setMsg('Already on the list.'); return }
+    setList([...list, e]); setEntry(''); setMsg('')
+  }
+
+  async function save() {
+    setBusy(true); setMsg('')
+    try {
+      const r = await fetch('/api/hs-renewal-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients: list, dayOfWeek: sched.dayOfWeek, hour: sched.hour }),
+      })
+      setMsg(r.ok ? 'Saved.' : 'Could not save.')
+    } catch { setMsg('Could not save.') }
+    setBusy(false)
+  }
+
+  async function sendNow() {
+    if (!list.length) { setMsg('Add at least one recipient first.'); return }
+    if (!window.confirm(`Send the renewals list to ${list.length} recipient(s) now?`)) return
+    setBusy(true); setMsg('')
+    try {
+      await fetch('/api/hs-renewal-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients: list, dayOfWeek: sched.dayOfWeek, hour: sched.hour }),
+      })
+      const d = await fetch('/api/hs-renewal-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send-now' }),
+      }).then(r => r.json())
+      setMsg(d.ok ? 'Sent.' : (d.reason || d.error || 'Could not send.'))
+    } catch { setMsg('Could not send.') }
+    setBusy(false)
+  }
+
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const inp = { padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 400, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 22, width: 620, maxWidth: '100%' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <h3 style={{ margin: 0, fontSize: 17, color: INK }}>Renewal notifications</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, color: '#999', cursor: 'pointer', lineHeight: 1 }}>&times;</button>
+        </div>
+        <p style={{ fontSize: 12.5, color: '#888', margin: '0 0 16px' }}>
+          CSCS cards and Working at Height training only. Operatives are emailed automatically
+          from 6 weeks before expiry, then weekly until 2 weeks overdue. The summary below goes
+          to whoever you list here.
+        </p>
+
+        {loading ? <Loading /> : (
+          <>
+            <div style={{ background: counts.overdueCount ? '#fef2f2' : '#f0fdf4', border: `1px solid ${counts.overdueCount ? '#fecaca' : '#bbf7d0'}`, borderRadius: 10, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+              <strong>{counts.dueCount}</strong> ticket{counts.dueCount === 1 ? '' : 's'} currently overdue or due within 6 weeks
+              {counts.overdueCount ? <> &middot; <strong style={{ color: '#b91c1c' }}>{counts.overdueCount} overdue</strong></> : null}
+            </div>
+
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: INK, marginBottom: 6 }}>Who receives the weekly list</div>
+            {list.length === 0 && <div style={{ fontSize: 12.5, color: '#b45309', marginBottom: 8 }}>No recipients yet - the weekly email will not send until someone is added.</div>}
+            {list.map((e, i) => (
+              <div key={e} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f4f3f0' }}>
+                <span style={{ flex: 1, fontSize: 13 }}>{e}</span>
+                <button onClick={() => setList(list.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Remove</button>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <input value={entry} onChange={e => setEntry(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add() }}
+                placeholder="name@rockroofing.co.uk" style={{ ...inp, flex: 1 }} />
+              <button onClick={add} style={ghostBtn}>Add</button>
+            </div>
+
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: INK, margin: '20px 0 6px' }}>When to send</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <select value={sched.dayOfWeek} onChange={e => setSched(s => ({ ...s, dayOfWeek: parseInt(e.target.value) }))} style={inp}>
+                {DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+              </select>
+              <select value={sched.hour} onChange={e => setSched(s => ({ ...s, hour: parseInt(e.target.value) }))} style={inp}>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+              </select>
+              <span style={{ fontSize: 12, color: '#999' }}>UK time</span>
+            </div>
+
+            {msg && <div style={{ marginTop: 14, fontSize: 13, color: msg === 'Saved.' || msg === 'Sent.' ? '#16a34a' : '#b91c1c' }}>{msg}</div>}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={save} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Working...' : 'Save'}</button>
+              <button onClick={sendNow} disabled={busy} style={ghostBtn}>Send now</button>
+              <div style={{ flex: 1 }} />
+              <button onClick={onClose} style={ghostBtn}>Close</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
