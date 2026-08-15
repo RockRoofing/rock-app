@@ -1,48 +1,50 @@
-pkg341 - It is in the table. Here is how to find it.
-=====================================================
+pkg342 - "Assign to (current user)" was saving nobody
+======================================================
 
-REPLACES pkg302 through pkg340. Deploy this one only.
+REPLACES pkg302 through pkg341. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        unchanged since pkg338
+  pages/api/crm.js        returns who is logged in
   lib/crmImportMap.js     unchanged since pkg305
 
 
-YOUR NUMBERS SAY IT IS THERE
------------------------------
-    In the shared store and outstanding: 1025    (it was 1024 - the extra one is yours)
-    On won/lost projects: 660                    (UNCHANGED - so yours is NOT one of them)
-
-That combination is conclusive. Your activity saved, it is in the shared store, and its
-project is open - so it is one of the 365 rows the table is showing.
-
-The trouble is finding it. The table sorts by due date, OLDEST FIRST, across 365 rows. An
-activity you set today with a due date next week sits right down at the bottom. It looks
-missing when it is just a long way down the list.
-
-
-WHAT I HAVE ADDED
------------------
-1. A SEARCH BOX on the Activities tab. Type any part of the project name, the activity
-   text, the person or the customer and the table narrows to it. Type a word from your
-   activity and it will be the only row on screen.
-
-2. THE DIAGNOSTIC PANEL NOW SCROLLS. It was running off the bottom of the window with no
-   way to reach the rest, which is why you could not read the trace - the part that would
-   have told you all this. Capped at 45% of the window height with its own scrollbar.
-
-
-THE QUICKEST WAY TO CHECK, RIGHT NOW
+GOOD SPOT - AND IT WAS EXACTLY THAT
 -------------------------------------
-Rather than scrolling 365 rows: click the "Due date" header once to sort newest first, and
-your activity will be at or near the top. Or type its text in the new search box.
+The Assign to dropdown on the add-activity form read:
+
+    <option value="">(current user)</option>
+
+The LABEL said current user. The VALUE was an empty string. So leaving it alone - the
+obvious thing to do - saved the activity with nobody responsible, and Person Responsible
+came through blank.
+
+Worse, the page had no idea who was logged in. It never asked. So "(current user)" could
+not have worked even in principle; there was nothing behind it.
 
 
-WHAT THIS MEANS FOR EVERYTHING BEFORE IT
-------------------------------------------
-The saving has been working since pkg338. The last few rounds have been about display -
-first the open-projects rule, now sort order and the missing scrollbar. I should have
-spotted that a to-do list sorted oldest-first buries anything you have just created, and
-that a diagnostic panel you cannot scroll is no diagnostic at all.
+THE FIX
+-------
+  - the CRM now knows who is logged in, from the portal session
+  - the dropdown's first entry is your actual name: "James McVeigh (you)"
+  - it is PRESELECTED, so an activity is assigned to you unless you change it
+  - "Nobody" is still there as a deliberate choice rather than an accident
+
+
+THIS ALSO EXPLAINS THE PERSON FILTER TROUBLE
+----------------------------------------------
+Several rounds back, your activity vanished behind a saved "person: James McVeigh" filter.
+That is why: every activity you created had NO person on it, so a person filter could never
+match one. Both symptoms, one cause.
+
+
+ONE THING WORTH KNOWING
+------------------------
+The rest of the dropdown is a hard-coded list of five first names - Roman, Niall, James,
+Simon, Edita - written when the CRM was a prototype. It is not your portal users.
+
+So you can assign to yourself correctly now, but assigning to a colleague is limited to
+those five, by first name only. Worth replacing with the real portal user list, which would
+also let the Activities tab's person filter line up with actual people. Say the word - it is
+a small job and I did not want to bundle it into a fix you are waiting on.

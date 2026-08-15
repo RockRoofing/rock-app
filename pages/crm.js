@@ -597,12 +597,14 @@ function HistoryFeed(props) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
+function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
   const [noteText, setNoteText] = useState('');
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
   const [newAssignee, setNewAssignee] = useState('');
+  // Default the new activity to whoever is logged in - the common case by far.
+  useEffect(() => { if (me?.name) setNewAssignee((v) => v || me.name); }, [me]);
   const [flash, setFlash] = useState(false);
   useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(false), 800); return () => clearTimeout(t); }, [flash]);
 
@@ -685,8 +687,12 @@ function DealView({ deal, today, schema, onBack, onMove, onSetStatus, onAddNote,
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
                   <span style={{ fontSize: 12, color: C.dim }}>Assign to</span>
                   <select value={newAssignee} onChange={(e) => setNewAssignee(e.target.value)} style={{ ...miniInput, width: 150 }}>
-                    <option value="">(current user)</option>
-                    {MENTION_USERS.map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
+                    {/* This used to read "(current user)" with an EMPTY value, so leaving
+                        it alone saved the activity with nobody responsible. It now carries
+                        the logged-in user's actual name. */}
+                    {me?.name && <option value={me.name}>{me.name} (you)</option>}
+                    <option value="">Nobody</option>
+                    {MENTION_USERS.filter((u) => u.name !== me?.name).map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
                   </select>
                   <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue, newAssignee); setNewText(''); setNewDue(''); setNewAssignee(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
                   {openActs.length > 0 && <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>}
@@ -886,6 +892,7 @@ function CRMPageInner() {
   const [openActivities, setOpenActivities] = useState([]);
   const [activitySummary, setActivitySummary] = useState({});
   const [dealsAreSeed, setDealsAreSeed] = useState(false);
+  const [me, setMe] = useState({ name: '', username: '' });
   const [deletedOrgs, setDeletedOrgs] = useState([]);
   const [deletedContacts, setDeletedContacts] = useState([]);
   const [actLoading, setActLoading] = useState(false);
@@ -988,6 +995,7 @@ function CRMPageInner() {
           setOpenActivities(Array.isArray(d.openActivities) ? d.openActivities : []);
           setActivitySummary(d.activitySummary || {});
           setDealsAreSeed(!!d.dealsAreSeed);
+          if (d.me) setMe(d.me);
           setDeletedOrgs(d.deletedOrgs || []);
           setDeletedContacts(d.deletedContacts || []);
           const seed = new Map();
@@ -1869,7 +1877,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
+        <DealView deal={live} today={today} schema={schema} me={me} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
     );
   }

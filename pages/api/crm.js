@@ -119,6 +119,12 @@ export default async function handler(req, res) {
       noteSummary: noteSum || {},
       openActivities: Array.isArray(openActs) ? openActs : [],
       dealsAreSeed: LAST_DEALS_WERE_SEED,
+      // Who is logged in. The page never knew, which is why "Assign to (current user)"
+      // saved an activity with nobody on it.
+      me: {
+        name: [acc.user.firstName, acc.user.lastName].filter(Boolean).join(' ') || acc.user.name || acc.user.username || '',
+        username: acc.user.username || '',
+      },
       deletedOrgs: Array.isArray(delOrgs) ? delOrgs : [],
       deletedContacts: Array.isArray(delContacts) ? delContacts : [],
     })
