@@ -1,53 +1,58 @@
-pkg329 - Activity filters no longer persist between visits
-===========================================================
+pkg331 - Activities now live in ONE place
+==========================================
 
-REPLACES pkg302 through pkg328. Deploy this one only.
+REPLACES pkg302 through pkg330. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        unchanged since pkg326
+  pages/api/crm.js
   lib/crmImportMap.js     unchanged since pkg305
 
 
-YOUR SCREENSHOT SOLVED IT - THERE IS NO BUG LEFT
---------------------------------------------------
-    Added in the CRM: 1 (1 still open)          -> it saved
-    Rows built: 1024 - of which 1 added in CRM  -> the merge picked it up
-    Filtered by person: James McVeigh           -> 31 of 364 shown
+YOU WERE RIGHT
+---------------
+There was no good reason for two stores. The split existed because the import could not put
+36,824 activities onto the deals (crm:deals would have been 31MB, read on every page load) -
+but that was a constraint on the IMPORT, not a reason for activities created in the CRM to
+be filed somewhere else. Once Pipedrive is gone the distinction means nothing, and it has
+been the cause of nearly every fault in this run.
 
-The activity was there the whole time. The saved "person responsible" filter was hiding it,
-because the activity has a different person on it (or none).
-
-pkg328 only ignored a filter that matched NOTHING. This one matched 31 rows, so it stayed
-on and did its job - just not the job you wanted.
-
-
-WHAT I HAVE CHANGED
---------------------
-1. THE PERSON AND CUSTOMER FILTERS NO LONGER PERSIST between visits. They reset each time
-   you open the CRM, and still hold while you are working in it.
-
-   This is the third time a remembered filter has looked like a broken feature - twice on
-   this tab and once on the Activities load itself. A filter is working state, not a
-   setting, and remembering it costs more than it gains. Your TAB, COLUMNS and SORT are
-   still remembered, because those genuinely are settings.
-
-2. THE FILTER LINE NOW SAYS WHAT IT IS HIDING, in bold:
-
-       Filtered by person: James McVeigh - hiding 333   clear
-
-   Previously it named the filter but not the consequence, which is easy to skim past.
+Now there is one store: crm:activities:<dealId>. Imported and CRM-created sit side by side
+in the same place, and the deal view and the Activities tab read the same records.
 
 
-NOTHING ELSE TO DO
-------------------
-Your activity is already saved and will show as soon as the filter is off - clear it now,
-or it will be gone by itself after this deploys.
+WHAT CHANGED
+------------
+  - activities are no longer written onto the deal at all
+  - creating, editing or completing one writes to the shared per-deal store
+  - the kanban summary and the flat outstanding list are rebuilt on EVERY write path, so
+    the board, the deal and the tab cannot drift apart
+  - imported activities are preserved when CRM ones are saved - the server keeps them and
+    replaces only the CRM-created set
+
+Verified end to end: adding an activity keeps the imported ones, puts the new one in the
+tab's list, updates the kanban dot, and completing it removes it from both again.
 
 
-ONE THING STILL WORTH DECIDING
--------------------------------
-"660 more on won or lost projects (not shown)". That is a lot of hidden activity. The tab
-lists open projects only, from pkg317. If you chase variations and follow-ups on jobs after
-they are won, tell me and I will include won projects - keeping only lost ones out.
+MIGRATION - AUTOMATIC, NOTHING TO DO
+-------------------------------------
+Activities already sitting on a deal are moved across the first time that deal is saved.
+Until then they still display, so nothing disappears and nothing is lost. It happens
+quietly as you work.
+
+
+WHAT THIS FIXES
+---------------
+The activity you have been chasing. It will now appear in the tab because there is only one
+list to appear in. It also removes the whole class of problem behind the last several
+packages - two lists that had to be stitched together, with every rule applied to the seam.
+
+Also in this package, from pkg330: the project scope dropdown (Open / Open + won / All,
+defaulting to Open + won), so a won job's activities are no longer hidden.
+
+
+ONE THING I HAVE NOT DONE
+--------------------------
+Notes are still on the deal. They are far smaller, and the same argument applies but with
+much less at stake. Worth doing eventually for consistency - say if you want it now.

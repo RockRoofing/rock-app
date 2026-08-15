@@ -183,6 +183,43 @@ export default async function handler(req, res) {
 
     // Store the rebuilt outstanding-activity list so the Activities tab does not have to
     // reconstruct it from hundreds of per-deal keys on every single page load.
+    // ONE STORE FOR ACTIVITIES.
+    //
+    // Everything lives in crm:activities:<dealId> - imported and CRM-created alike. The
+    // client sends the activities it created for a deal; anything imported that is already
+    // stored is preserved. The flat outstanding list is rebuilt for that deal at the same
+    // time, so the Activities tab and the deal can never disagree.
+    if (body.action === 'save-deal-activities') {
+      const dealId = String(body.dealId || '')
+      if (!dealId) return res.status(400).json({ error: 'dealId required' })
+      const supplied = (Array.isArray(body.activities) ? body.activities : []).map(a => ({ ...a, crm: true }))
+
+      const stored = (await get(SUB_KEY('activities', dealId))) || []
+      const keptImported = stored.filter(a => !a.crm)
+      const merged = [...keptImported, ...supplied]
+      await set(SUB_KEY('activities', dealId), merged)
+
+      // keep the index current so a rebuild can still find this deal
+      const index = (await get(SUB_INDEX('activities'))) || []
+      if (!index.includes(dealId)) { index.push(dealId); await set(SUB_INDEX('activities'), index) }
+
+      // per-deal summary for the kanban dot
+      const summary = (await get(SUB_SUMMARY('activities'))) || {}
+      summary[dealId] = summarise('activities', merged)
+      await set(SUB_SUMMARY('activities'), summary)
+
+      // and this deal's slice of the flat outstanding list
+      const open = (await get(OPEN_ACTIVITIES)) || []
+      const others = open.filter(a => String(a.dealId) !== dealId)
+      const mine = merged.filter(a => !a.done).map(a => ({
+        id: a.id, dealId, text: a.subject || a.text || 'Activity',
+        due: a.dueDate || a.due || '', assignee: a.assignee || '',
+      }))
+      await set(OPEN_ACTIVITIES, [...others, ...mine])
+
+      return res.json({ ok: true, total: merged.length, open: mine.length })
+    }
+
     if (body.action === 'save-open-activities') {
       await set(OPEN_ACTIVITIES, Array.isArray(body.openList) ? body.openList : [])
       return res.json({ ok: true })
@@ -211,9 +248,27 @@ export default async function handler(req, res) {
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
       const dealId = String(body.dealId || '')
       if (!dealId) return res.status(400).json({ error: 'dealId required' })
-      await set(SUB_KEY(kind, dealId), Array.isArray(body.items) ? body.items : [])
+      const items = Array.isArray(body.items) ? body.items : []
+      await set(SUB_KEY(kind, dealId), items)
       const index = (await get(SUB_INDEX(kind))) || []
       if (!index.includes(dealId)) { index.push(dealId); await set(SUB_INDEX(kind), index) }
+
+      // Keep the summary and the flat outstanding list in step. Without this, completing
+      // an activity from the Activities table looked right until the next reload, when it
+      // came back - the stored record said done but the aggregate still listed it.
+      if (kind === 'activities') {
+        const summary = (await get(SUB_SUMMARY('activities'))) || {}
+        summary[dealId] = summarise('activities', items)
+        await set(SUB_SUMMARY('activities'), summary)
+
+        const open = (await get(OPEN_ACTIVITIES)) || []
+        const others = open.filter(a => String(a.dealId) !== dealId)
+        const mine = items.filter(a => !a.done).map(a => ({
+          id: a.id, dealId, text: a.subject || a.text || 'Activity',
+          due: a.dueDate || a.due || '', assignee: a.assignee || '',
+        }))
+        await set(OPEN_ACTIVITIES, [...others, ...mine])
+      }
       return res.json({ ok: true })
     }
 

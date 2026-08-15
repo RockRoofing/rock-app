@@ -103,11 +103,17 @@ const leanDeal = (d) => {
   const { _actSummary, _noteSummary, ...rest } = d;
   return {
     ...rest,
-    activities: (d.activities || []).filter((a) => !a.imported),
+    // Activities are NOT stored on the deal any more. They all live in one place -
+    // crm:activities:<dealId> - whether they were imported or created here. Keeping a
+    // second copy on the deal is what let the two views disagree.
+    activities: [],
     notes: (d.notes || []).filter((n) => !n.imported),
     history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
   };
 };
+
+// The activities this deal owns that were created in the CRM (not imported).
+const crmActivities = (d) => (d.activities || []).filter((a) => !a.imported);
 
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 // Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
@@ -879,6 +885,8 @@ function CRMPageInner() {
   const [actPerson, setActPerson] = useState('');
   const [actCustomer, setActCustomer] = useState('');
   const [actShowDone, setActShowDone] = useState(false);
+  // 'open' | 'openwon' | 'all' - which projects' activities to list.
+  const [actScope, setActScope] = useState('openwon');
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
@@ -889,6 +897,8 @@ function CRMPageInner() {
   // id -> JSON of the deal as last successfully saved, so each save can send just the
   // deals that actually differ.
   const savedSnapshot = useRef(new Map());
+  // id -> JSON of that deal's CRM-created activities as last written to the shared store.
+  const prevActivities = useRef(new Map());
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
@@ -972,8 +982,16 @@ function CRMPageInner() {
           setDeletedOrgs(d.deletedOrgs || []);
           setDeletedContacts(d.deletedContacts || []);
           const seed = new Map();
-          for (const x of d.deals) seed.set(String(x.id), JSON.stringify(leanDeal(x)));
+          const actSeed = new Map();
+          for (const x of d.deals) {
+            seed.set(String(x.id), JSON.stringify(leanDeal(x)));
+            // Deliberately NOT seeded with the deal's own activities. Anything still held
+            // on a deal from before this change therefore looks new, and gets written
+            // across to the shared store on the next save - a quiet one-off migration.
+            actSeed.set(String(x.id), JSON.stringify([]));
+          }
           savedSnapshot.current = seed;
+          prevActivities.current = actSeed;
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1031,6 +1049,22 @@ function CRMPageInner() {
         if (cur.length) batches.push(cur);
         if (!batches.length) batches.push([]);          // removals only
 
+        // Activities go to the shared per-deal store, not into the deal record. Only for
+        // deals that actually changed, so this is normally a single small request.
+        try {
+          for (const d of changed) {
+            const mine = crmActivities(deals.find((x) => String(x.id) === String(d.id)) || {});
+            const before = prevActivities.current.get(String(d.id));
+            const now = JSON.stringify(mine);
+            if (before === now) continue;
+            const r2 = await fetch('/api/crm', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'save-deal-activities', dealId: String(d.id), activities: mine }),
+            });
+            if (r2.ok) prevActivities.current.set(String(d.id), now);
+          }
+        } catch (e) { console.error('Could not save activities:', e); }
+
         let ok = true;
         for (let bi = 0; bi < batches.length; bi++) {
           if (batches.length > 1) setSaveError(`Saving ${bi + 1} of ${batches.length}...`);
@@ -1073,7 +1107,7 @@ function CRMPageInner() {
       const acts = (a.items || []).map((x) => ({
         id: x.id, text: x.text || x.subject || 'Activity', due: x.dueDate || '',
         done: !!x.done, assignee: x.assignee || null, author: x.createdBy || null,
-        type: x.type || '', imported: true,
+        type: x.type || '', imported: !x.crm,
       }));
       const notes = (n.items || []).map((x) => ({
         id: x.id, text: stripHtml(x.html || ''), author: x.author || null,
@@ -1672,8 +1706,11 @@ function CRMPageInner() {
     return rows;
   }, [deals, contactsData, openActivities, actShowDone]);
 
-  const activityRows = useMemo(() => activityRowsAll.filter((r) => r.dealOpen), [activityRowsAll]);
-  const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => !r.dealOpen).length, [activityRowsAll]);
+  const inScope = (r) => actScope === 'all' ? true
+    : actScope === 'openwon' ? (r.dealStatus === 'open' || r.dealStatus === 'won')
+      : r.dealStatus === 'open';
+  const activityRows = useMemo(() => activityRowsAll.filter(inScope), [activityRowsAll, actScope]);
+  const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => !inScope(r)).length, [activityRowsAll, actScope]);
 
   // Where every activity ended up. Shown on the tab so a missing one can be traced to the
   // rule that hid it, instead of it just not being there.
@@ -1928,6 +1965,7 @@ function CRMPageInner() {
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
+            scope={actScope} setScope={setActScope}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2086,7 +2124,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2106,6 +2144,11 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         <select value={customer} onChange={(e) => setCustomer(e.target.value)} style={sel}>
           <option value="">All customers</option>
           {customers.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={scope} onChange={(e) => setScope(e.target.value)} style={sel} title="Which projects to include">
+          <option value="open">Open projects</option>
+          <option value="openwon">Open + won projects</option>
+          <option value="all">All projects</option>
         </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: C.dim, cursor: 'pointer' }}>
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
@@ -2131,7 +2174,10 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             </div>
           )}
           {closedCount > 0 && (
-            <div style={{ color: '#aaa', marginTop: 2 }}>{closedCount} more on won or lost projects (not shown)</div>
+            <div style={{ color: '#aaa', marginTop: 2 }}>
+              {closedCount} more on projects outside &quot;{scope === 'open' ? 'Open projects' : 'Open + won projects'}&quot;
+              {' '}<button onClick={() => setScope('all')} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>show all</button>
+            </div>
           )}
           {breakdown && (
             <details style={{ marginTop: 3 }}>
