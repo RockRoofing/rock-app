@@ -215,6 +215,7 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
   if (f.type === 'procurement') return <ProcurementField value={value || []} onChange={onChange} team={team} projectNo={projectNo} projectName={projectName} />
   if (f.type === 'livetasks') return <LiveTasksField value={value || []} onChange={onChange} team={team} projectNo={projectNo} projectName={projectName} />
   if (f.type === 'files') return <FilesField label={f.label} value={value || []} onChange={onChange} />
+  if (f.type === 'checklist') return <ChecklistField label={f.label} items={f.items || []} value={value || {}} onChange={onChange} />
 
   if (f.type === 'team') {
     // Every team member selectable for every role. Use a real <select> so it
@@ -252,6 +253,51 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
             <option value="">—</option><option>Yes</option><option>No</option><option>N/A</option><option>TBC</option>
           </select>
         : <input value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} />}
+    </div>
+  )
+}
+
+// Fixed tick list. The items come from the schema, so the list is the same on every
+// project. Stored as { '<item text>': 'Yes' | 'No' | 'N/A' } - keyed by the item text so
+// existing answers survive the list being reordered.
+function ChecklistField({ label, items, value, onChange }) {
+  const set = (item, v) => onChange({ ...(value || {}), [item]: v })
+  const allYes = items.length > 0 && items.every(i => (value || {})[i] === 'Yes')
+  const markAll = () => {
+    const next = { ...(value || {}) }
+    for (const i of items) next[i] = allYes ? '' : 'Yes'
+    onChange(next)
+  }
+  return (
+    <div style={{ margin: '14px 0' }}>
+      <Lbl>{label}</Lbl>
+      <div style={{ border: '1px solid #e8e6e1', borderRadius: 10, overflow: 'hidden', marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '6px 10px', background: '#faf9f7', borderBottom: '1px solid #f0efec' }}>
+          <button type="button" onClick={markAll}
+            style={{ background: 'none', border: 'none', color: '#ca8a04', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {allYes ? 'Clear all' : 'Mark all Yes'}
+          </button>
+        </div>
+        {items.map((item, i) => {
+          const v = (value || {})[item] || ''
+          return (
+            <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderTop: i === 0 ? 'none' : '1px solid #f4f3f0' }}>
+              <div style={{ flex: 1, fontSize: 13.5, color: '#333' }}>{item}</div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {['Yes', 'No', 'N/A'].map(opt => (
+                  <button key={opt} type="button" onClick={() => set(item, v === opt ? '' : opt)}
+                    style={{
+                      border: '1px solid ' + (v === opt ? (opt === 'Yes' ? '#16a34a' : opt === 'No' ? '#dc2626' : '#9ca3af') : '#e0e0e0'),
+                      background: v === opt ? (opt === 'Yes' ? '#16a34a' : opt === 'No' ? '#dc2626' : '#9ca3af') : '#fff',
+                      color: v === opt ? '#fff' : '#777',
+                      borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    }}>{opt}</button>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

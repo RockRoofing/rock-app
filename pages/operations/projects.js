@@ -496,6 +496,29 @@ function HandoverReadOnly({ projectNo }) {
     </div>
   ) : null
 
+  // Fixed tick list (schema-defined items, answers keyed by item text).
+  const checklistBlock = (label, items, v) => {
+    const answers = v && typeof v === 'object' ? v : {}
+    if (!items.length) return null
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: '#888', fontWeight: 600, marginBottom: 6 }}>{label}</div>
+        <div style={{ border: '1px solid #f0efec', borderRadius: 8, overflow: 'hidden' }}>
+          {items.map((item, i) => {
+            const a = answers[item] || ''
+            const col = a === 'Yes' ? '#16a34a' : a === 'No' ? '#dc2626' : '#9ca3af'
+            return (
+              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderTop: i === 0 ? 'none' : '1px solid #f6f5f2' }}>
+                <div style={{ flex: 1, fontSize: 13, color: '#333' }}>{item}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: a ? col : '#ccc' }}>{a || '-'}</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   // Render one template field by its type, read-only.
   const renderField = (f) => {
     const v = data[f.id]
@@ -507,6 +530,7 @@ function HandoverReadOnly({ projectNo }) {
       case 'procurement': return procurementBlock(v)
       case 'livetasks': return tasksBlock(v)
       case 'files': return filesBlock(f.label || 'Files', v)
+      case 'checklist': return checklistBlock(f.label, f.items || [], v)
       case 'date': return row(f.label, fmtDate(v))
       case 'richtext':
       case 'html': return htmlRow(f.label, v)
