@@ -1,64 +1,44 @@
-pkg290 - Site App: live projects only, everywhere
-==================================================
+pkg291 - Report app improvement link on the Bookkeeping pages
+==============================================================
 
 CHANGED FILES
 -------------
-  lib/cmSiteApp.js                     covers ALL 8 Contracts Manager screens at once
-  pages/forms/index.js                 home-screen badge counts
-  pages/forms/schedule.js              contracted-rates schedule picker
-  pages/forms/cm/project-finance.js    removed its now-duplicated local filter
+  pages/bookkeeping.js          main Bookkeeping page
+  components/BookkeepingNav.js  Weekly Tasks + Monthly Tasks pages
 
-No new files. All straight replacements.
+No new files IF pkg281 is deployed - both use components/ReportImprovementLink.js, which
+is a NEW file introduced in pkg281.
 
-pages/forms/index.js also carries the earlier Site App work (report attachments, orange
-link, Construction Issue drawings). If you are deploying older packages too, take
-index.js from THIS one - it is the newest.
+*** IF YOU HAVE NOT DEPLOYED pkg281, DEPLOY IT FIRST (or at least create
+    components/ReportImprovementLink.js from it) or these two files will not build. ***
 
 
-WHAT WAS ALREADY CORRECT
--------------------------
-The operative-facing screens already filtered to live and were not touched:
-  Complete a Form (fill.js), Drawings, RAMS, Report Site Issue (issue.js),
-  and Browse (which filters on the dashboard stage INPROGRESS).
+WHAT CHANGED
+------------
+The same shared "Report app improvement" link now appears on all three Bookkeeping pages:
+
+  Bookkeeping        added directly to that page's own header (it does not use the
+                     shared nav component)
+  Weekly Tasks       via BookkeepingNav
+  Monthly Tasks      via BookkeepingNav
+
+Both use the shared components/ReportImprovementLink.js, so it is identical to every other
+page and will follow any future change to it automatically.
+
+The report window itself is already mounted globally in pages/_app.js, so nothing else was
+needed to make it open.
 
 
-WHAT WAS WRONG
+PLACEMENT NOTE
 --------------
-1. ALL EIGHT CM SCREENS. Applications, Contracted Rates, Forms Completed, Missing Forms,
-   Pre-Start, SRATs, Live Tasks and Variations all get their project list from the shared
-   useMyProjects hook in lib/cmSiteApp.js, and that hook did not filter by status. So
-   Complete and Archived jobs were appearing in every CM project picker.
+On the main Bookkeeping page the top bar is already crowded (sync controls, month
+selector, Upload Bills, Bookkeeping Tools) and scrolls sideways on a narrow screen. I put
+the link as the FIRST right-hand item, immediately after the title, so it stays reachable
+rather than being pushed off the end behind the sync buttons.
 
-   Fixed in the hook itself rather than in eight separate files, so it stays consistent
-   and cannot drift apart later.
-
-2. HOME SCREEN BADGE COUNTS. The RAMS / overdue-task / issue badges on the Site App home
-   were counted across all statuses, so a completed job could still put a red number on
-   the menu. Now counted on live projects only.
-
-3. CONTRACTED RATES SCHEDULE. That picker filtered on whether a project has contracted
-   rates but not on status, so finished jobs stayed selectable. Now live only.
-
-
-ONE THING WORTH KNOWING - TWO DIFFERENT MEANINGS OF "LIVE"
------------------------------------------------------------
-The Site App draws projects from two different sources, and each has its own idea of live:
-
-  Ops projects (ops:projects)  ->  status 'active'      (Live / Complete / Archived,
-                                                         set in Ops > Projects)
-  Dashboard rows (Xero)        ->  stage 'INPROGRESS'   (driven by the Retention Tracker:
-                                                         INPROGRESS / DEFECTS / CLOSED)
-
-Both are now filtered to their own version of live, which is the right answer for each.
-But they can disagree: a job marked Complete in Ops but still INPROGRESS on the Retention
-Tracker would drop off most screens while remaining on the two dashboard-fed ones
-(Contracted Rates schedule, Browse).
-
-If you want a single definition driving everything, that is a bigger piece - tell me which
-of the two should win and I will make the other follow it.
+On the two task pages the bar is nearly empty, so it sits at the far right as usual.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Audited every project list in pages/forms and lib/cmSiteApp.js - all now filter by status.

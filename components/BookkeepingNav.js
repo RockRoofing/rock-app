@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import ReportImprovementLink from './ReportImprovementLink'
 
 const INK = '#1a1a2e'
 const SUBS = [
@@ -16,6 +17,8 @@ export default function BookkeepingNav({ active }) {
           <Link href="/" style={{ color: '#aaa', fontSize: 13, textDecoration: 'none', padding: '4px 10px' }}>&larr; Portal</Link>
           <span style={{ color: '#444' }}>|</span>
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>Bookkeeping</span>
+          <div style={{ flex: 1 }} />
+          <ReportImprovementLink />
         </div>
       </div>
       {/* Sub-nav (Ops style: white bar, gold underline) */}

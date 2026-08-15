@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import ReportImprovementLink from '../components/ReportImprovementLink'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 
 const fmt = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2 }).format(n || 0)
@@ -266,6 +267,7 @@ export default function BookkeepingPage() {
           <span style={{ color: '#444' }}>|</span>
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}>Bookkeeping</span>
           <div style={{ flex: 1 }} />
+          <ReportImprovementLink />
           {syncMsg && <span style={{ color: '#9fe3b0', fontSize: 12, whiteSpace: 'nowrap' }}>{syncMsg}</span>}
           <span style={{ color: '#888', fontSize: 12 }}>Sync last</span>
           <select value={syncMonths} onChange={e => setSyncMonths(parseInt(e.target.value))}
