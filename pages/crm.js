@@ -1683,6 +1683,10 @@ function CRMPageInner() {
   // 6.4MB and would make this too expensive to do often.
   const [actRefreshedAt, setActRefreshedAt] = useState(null);
   const refreshingRef = useRef(false);
+  // Writes still in flight. The background refresh must not overwrite the screen with
+  // server data that does not yet include a change being saved - that would make a row
+  // you just completed flicker back.
+  const pendingWrites = useRef(0);
   async function rebuildActivityState() {
     if (!window.confirm('Recount the activity list from stored records?\n\nThis only recounts what is already saved - nothing is added or removed.')) return;
     setActLoading(true);
@@ -1697,7 +1701,7 @@ function CRMPageInner() {
   }
 
   async function refreshActivityState() {
-    if (refreshingRef.current) return;
+    if (refreshingRef.current || pendingWrites.current > 0) return;
     refreshingRef.current = true;
     try {
       const d = await fetch('/api/crm', {
@@ -1963,12 +1967,25 @@ function CRMPageInner() {
   // Mark done, record what happened on the deal's history, and optionally set the next one.
   async function completeActivityFromTable(row, outcome, next) {
     const dealId = row.dealId;
+    pendingWrites.current++;
     try {
+      // Take it off the list IMMEDIATELY, then do the saving behind it. Previously the row
+      // sat there until two network round trips had finished - fetch the deal's
+      // activities, write them back - which is the delay you were seeing. If the save
+      // fails, it is put back and you are told.
+      const removed = openActivities.filter((a) => String(a.dealId) === String(dealId) && a.id === row.rawId);
+      setOpenActivities((prev) => prev.filter((a) => !(String(a.dealId) === String(dealId) && a.id === row.rawId)));
+
       if (isManualActivity(dealId, row.rawId)) {
         completeActivity(Number(dealId), row.rawId);
       } else {
-        await patchImportedActivity(dealId, row.rawId, { done: true, doneAt: Date.now() });
-        setOpenActivities((prev) => prev.filter((a) => !(String(a.dealId) === String(dealId) && a.id === row.rawId)));
+        try {
+          await patchImportedActivity(dealId, row.rawId, { done: true, doneAt: Date.now() });
+        } catch (e) {
+          if (removed.length) setOpenActivities((prev) => [...prev, ...removed]);   // put it back
+          setSaveError('That activity could not be marked done - it has been put back.');
+          throw e;
+        }
       }
 
       if (outcome && outcome.trim()) {
@@ -1982,6 +1999,7 @@ function CRMPageInner() {
         addActivity(Number(dealId), next.text.trim(), next.due || today, next.assignee || null);
       }
     } catch (e) { console.error('Could not complete the activity:', e); }
+    finally { pendingWrites.current = Math.max(0, pendingWrites.current - 1); }
   }
 
   // Edit the description (and due date / owner) from the table.
@@ -2424,7 +2442,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       {completing && (
         <CompleteActivityModal row={completing} today={today}
           onClose={() => setCompleting(null)}
-          onDone={(outcome, next) => { onComplete(completing, outcome, next); setCompleting(null); }} />
+          onDone={(outcome, next) => { setCompleting(null); onComplete(completing, outcome, next); }} />
       )}
       {editing && (
         <EditActivityModal row={editing} me={me} users={users}

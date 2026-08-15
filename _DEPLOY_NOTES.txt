@@ -1,7 +1,7 @@
-pkg347 - Inline editing removed; an Edit button instead
-========================================================
+pkg348 - Mark done is instant now
+==================================
 
-REPLACES pkg302 through pkg346. Deploy this one only.
+REPLACES pkg302 through pkg347. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,36 +10,32 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT CHANGED
-------------
-Inline editing is gone. The Activities table has an EDIT column immediately after Mark
-Done, with a proper button on every row. It opens the same window you already liked -
-big text box, due date, person responsible.
+WHY IT WAS SLOW
+---------------
+Completing an activity did the work first and updated the screen afterwards. For an
+imported activity that meant TWO round trips before the row moved:
 
-Column order: Mark Done | Edit | Project | Activity | Due date | Person responsible |
-Customer company | Customer name | Customer email | Customer phone.
+    fetch that deal's activities  ->  write them back  ->  only then remove the row
 
-Header and body cell counts verified at 10 each, so nothing has slipped out of line.
-
-
-YOU WERE RIGHT ABOUT THE DATE
-------------------------------
-A native date box fires a change on every keystroke, so typing a date sends part-formed
-values as you go, and clicking away could commit whichever fragment it had - or nothing at
-all, if the browser had not settled on a valid date. That is why it was unreliable rather
-than simply broken.
-
-It also made the whole thing ambiguous: a cell that silently saves when you click away
-gives you no confirmation, which is exactly what you were describing. A button and a window
-with a Save in it does not have that problem.
+Plus the window stayed open until both had finished. So a couple of hundred milliseconds
+each way felt like a hang.
 
 
-ONE IMPROVEMENT WHILE I WAS IN THERE
---------------------------------------
-The edit window's Person responsible was a FREE TEXT box - which is how names like "James"
-ended up sitting alongside "James McVeigh" in the first place. It is now the same dropdown
-as everywhere else: you first, then the other pre-contract and admin users, then Nobody.
+NOW
+---
+The row disappears immediately and the window closes immediately. The saving happens behind
+it. Nothing waits on the network.
 
-If an activity is already assigned to somebody no longer on that list, they are shown as
-"(no longer available)" and kept unless you change it - so historic ownership is not
-quietly rewritten.
+If the save fails, the row is PUT BACK and the badge says "That activity could not be
+marked done - it has been put back." So a dropped connection cannot leave you thinking
+something was actioned when it was not.
+
+
+ONE THING THIS NEEDED CARE WITH
+--------------------------------
+The tab refreshes itself every 60 seconds. Without a guard, a refresh landing while a save
+was still in flight would fetch server data that did not yet include your change - and the
+row you had just completed would flicker back onto the list.
+
+The refresh now stands aside while any write is in progress. Briefly stale is fine; a row
+reappearing after you have actioned it is not.
