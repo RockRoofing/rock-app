@@ -1,59 +1,51 @@
-pkg338 - One store, one request. Done properly.
-================================================
+pkg339 - The tab now names the rule that is hiding your activity
+=================================================================
 
-REPLACES pkg302 through pkg337. Deploy this one only.
+REPLACES pkg302 through pkg338. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js
+  pages/api/crm.js        unchanged since pkg338
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT YOU ASKED FOR, AND WHAT YOU NOW HAVE
--------------------------------------------
-Pipedrive activities and activities you create on a deal are in the SAME PLACE:
-
-    crm:activities:<projectId>
-
-There is no second copy anywhere. An activity added on a deal appears in the Activities
-tab; an activity completed from the tab updates the deal. Both read the same records.
-
-
-WHY MY LAST TWO ATTEMPTS FAILED
---------------------------------
-pkg331 put everything in one store, but wrote the activities in a SEPARATE request from
-the deal. If that request did not land, the deal was still saved without them - so your
-activities disappeared while the imported ones, already in the store, carried on showing.
-That is exactly what you saw.
-
-pkg337 then went back to keeping yours on the deal, which fixed the symptom but reinstated
-the two-places arrangement you had told me to get rid of. Wrong answer to the right
-complaint.
-
-NOW: the activities travel WITH the deal in the SAME request. The server receives the deal
-and its activities together and files both. There is no window where one can be saved
-without the other, because there is only one call.
-
-
-WHAT HAPPENS WHERE
-------------------
-  You add an activity on a deal
-      -> saved with that deal, into the shared store
-      -> appears in the Activities tab and on the kanban dot immediately
-
-  You complete one from the Activities tab
-      -> written to the same store
-      -> the deal shows it completed
-
-  Imported Pipedrive activities
-      -> already in that store; shown on the deal alongside yours
-
-Verified end to end: after saving, the store holds the imported one AND yours, the deal
-record holds neither (by design), the tab lists yours, and opening the deal shows both.
-
-
-ONE THING TO EXPECT ON FIRST USE
+WHY THIS RATHER THAN ANOTHER FIX
 ---------------------------------
-The first time you open a deal after deploying, it may save itself once - that is the deal
-moving its records into the shared store. Harmless, and only happens once per deal.
+I have shipped several fixes for this and each one has been a guess at which of the rules
+was excluding your activity. That is not working and it is wasting your time.
+
+So instead of guessing again: open "Where are my activities?" and the tab now lists EVERY
+activity you have added, and states for each one exactly where it stands.
+
+    Bensham Lane - Chase drawings (2026-08-20)
+        showing
+
+    Round Silo - Call back Tuesday (2026-08-25)
+        hidden: project is "won" (tab lists open projects only)
+
+    Dwyer Road - Send quote (no date)
+        hidden: person filter is "James McVeigh", this is "nobody"
+
+It checks the rules in order - done, project status, person filter, customer filter - and
+reports the first one that excludes it. If it says "showing" and you still cannot see it in
+the table, that is a different problem entirely and I will know where to look.
+
+One screenshot of that panel ends this.
+
+
+WHAT IT TELLS US
+----------------
+  "showing"                       the rules are fine; the fault is in the table itself
+  "project is won/lost"           pkg336 restricted this tab to open projects at your
+                                  request, and that is what is catching them
+  "person filter is..."           a filter is set that your activity does not match
+  "marked done"                   it was saved as complete
+  "project is not in the CRM"     the deal it belongs to is not loaded
+
+
+ALSO IN HERE
+------------
+pkg338's single-request save, so a deal and its activities are always written together and
+neither can be stored without the other. That was a genuine fault and is worth having
+regardless of what the trace shows.

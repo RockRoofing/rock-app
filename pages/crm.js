@@ -1783,6 +1783,29 @@ function CRMPageInner() {
     (!!actCustomer && !activityRows.some((r) => r.company === actCustomer))
   ), [actPerson, actCustomer, activityRows]);
 
+  // Every CRM-created activity found anywhere, with the reason it is or is not on screen.
+  // Definitive - it checks each rule in turn rather than me guessing which one is biting.
+  const activityTrace = useMemo(() => {
+    const out = [];
+    for (const d of deals) {
+      for (const a of (d.activities || [])) {
+        if (a.imported) continue;
+        let verdict = 'showing';
+        if (a.done && !actShowDone) verdict = 'hidden: marked done (tick "Include completed")';
+        else if (d.status !== 'open') verdict = `hidden: project is "${d.status}" (tab lists open projects only)`;
+        else if (actPerson && a.assignee !== actPerson) verdict = `hidden: person filter is "${actPerson}", this is "${a.assignee || 'nobody'}"`;
+        else if (actCustomer && (d.fields?.organization || '') !== actCustomer) verdict = `hidden: customer filter is "${actCustomer}"`;
+        out.push({ deal: d.title, dealId: d.id, text: a.text, due: a.due || '(no date)', verdict });
+      }
+    }
+    for (const a of (openActivities || [])) {
+      if (out.some((o) => String(o.dealId) === String(a.dealId) && o.text === a.text)) continue;
+      const d = deals.find((x) => String(x.id) === String(a.dealId));
+      if (!d) { out.push({ deal: '(project not loaded)', dealId: a.dealId, text: a.text, due: a.due, verdict: 'hidden: its project is not in the CRM' }); continue; }
+    }
+    return out.slice(0, 25);
+  }, [deals, openActivities, actShowDone, actPerson, actCustomer]);
+
   const activityBreakdown = useMemo(() => {
     let inCrmTotal = 0, inCrmOpen = 0;
     for (const d of deals) {
@@ -2028,7 +2051,7 @@ function CRMPageInner() {
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
-            closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
+            closedCount={activityClosedCount} breakdown={activityBreakdown} trace={activityTrace} staleFilter={activityStaleFilter}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
@@ -2188,7 +2211,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2245,6 +2268,17 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                 <div>Imported and outstanding: <strong>{breakdown.imported}</strong></div>
                 <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
                 <div>On won/lost projects: <strong>{breakdown.onClosed}</strong></div>
+                {(trace || []).length > 0 && (
+                  <div style={{ marginTop: 10, borderTop: '1px solid ' + C.line, paddingTop: 8 }}>
+                    <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>Activities you have added, and where each one stands:</div>
+                    {trace.map((t, i) => (
+                      <div key={i} style={{ marginBottom: 4 }}>
+                        <span style={{ color: C.text }}>{t.deal}</span> &mdash; {t.text} ({t.due})
+                        <div style={{ color: t.verdict === 'showing' ? '#16a34a' : '#b45309' }}>{t.verdict}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ marginTop: 8 }}>
                   <button onClick={onRebuild} style={{ ...ghostBtn, fontSize: 11.5, padding: '5px 10px' }}>Recount from stored records</button>
                   <div style={{ marginTop: 5, color: '#999' }}>
