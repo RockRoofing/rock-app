@@ -220,6 +220,31 @@ export default async function handler(req, res) {
       return res.json({ ok: true, total: merged.length, open: mine.length })
     }
 
+    // ONE STORE FOR NOTES, same as activities.
+    //
+    // A note written in the CRM lives on the deal as a history entry of type 'note';
+    // imported ones live in crm:notes:<dealId>. Same two-stores problem activities had, so
+    // the same answer: everything goes to the per-deal store, imported ones preserved.
+    if (body.action === 'save-deal-notes') {
+      const dealId = String(body.dealId || '')
+      if (!dealId) return res.status(400).json({ error: 'dealId required' })
+      const supplied = (Array.isArray(body.notes) ? body.notes : []).map(n => ({ ...n, crm: true }))
+
+      const stored = (await get(SUB_KEY('notes', dealId))) || []
+      const keptImported = stored.filter(n => !n.crm)
+      const merged = [...keptImported, ...supplied]
+      await set(SUB_KEY('notes', dealId), merged)
+
+      const index = (await get(SUB_INDEX('notes'))) || []
+      if (!index.includes(dealId)) { index.push(dealId); await set(SUB_INDEX('notes'), index) }
+
+      const summary = (await get(SUB_SUMMARY('notes'))) || {}
+      summary[dealId] = summarise('notes', merged)
+      await set(SUB_SUMMARY('notes'), summary)
+
+      return res.json({ ok: true, total: merged.length })
+    }
+
     if (body.action === 'save-open-activities') {
       await set(OPEN_ACTIVITIES, Array.isArray(body.openList) ? body.openList : [])
       return res.json({ ok: true })

@@ -1,7 +1,7 @@
-pkg331 - Activities now live in ONE place
-==========================================
+pkg332 - Notes unified too: one store per type
+===============================================
 
-REPLACES pkg302 through pkg330. Deploy this one only.
+REPLACES pkg302 through pkg331. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,49 +10,48 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-YOU WERE RIGHT
----------------
-There was no good reason for two stores. The split existed because the import could not put
-36,824 activities onto the deals (crm:deals would have been 31MB, read on every page load) -
-but that was a constraint on the IMPORT, not a reason for activities created in the CRM to
-be filed somewhere else. Once Pipedrive is gone the distinction means nothing, and it has
-been the cause of nearly every fault in this run.
+WHERE EVERYTHING LIVES NOW
+---------------------------
+  Deals          crm:deals                  imported and CRM-created together
+  Organisations  crm:orgs                   together
+  Contacts       crm:contacts               together
+  Activities     crm:activities:<dealId>    together   (pkg331)
+  Notes          crm:notes:<dealId>         together   (this package)
 
-Now there is one store: crm:activities:<dealId>. Imported and CRM-created sit side by side
-in the same place, and the deal view and the Activities tab read the same records.
-
-
-WHAT CHANGED
-------------
-  - activities are no longer written onto the deal at all
-  - creating, editing or completing one writes to the shared per-deal store
-  - the kanban summary and the flat outstanding list are rebuilt on EVERY write path, so
-    the board, the deal and the tab cannot drift apart
-  - imported activities are preserved when CRM ones are saved - the server keeps them and
-    replaces only the CRM-created set
-
-Verified end to end: adding an activity keeps the imported ones, puts the new one in the
-tab's list, updates the kanban dot, and completing it removes it from both again.
+No type is split across two stores any more.
 
 
-MIGRATION - AUTOMATIC, NOTHING TO DO
--------------------------------------
-Activities already sitting on a deal are moved across the first time that deal is saved.
-Until then they still display, so nothing disappears and nothing is lost. It happens
-quietly as you work.
+ONE THING THAT WAS NOT AS I EXPECTED
+--------------------------------------
+A note written in the CRM was never in a "notes" list at all - it is a HISTORY entry of
+type 'note' on the deal. Imported notes were in their own store and got injected into the
+history for display. Same two-stores problem as activities, but wearing a different hat.
+
+So the fix had to move history entries of type 'note' - and only those. Stage moves, field
+edits and activity events stay on the deal, where they belong.
+
+CAREFULLY PRESERVED: a CRM note keeps its own id when it moves, so the comments on it and
+any edits still match up. Verified by round-tripping a note with a comment through the
+store and back - imported note preserved, CRM note returned with its comment intact.
 
 
-WHAT THIS FIXES
----------------
-The activity you have been chasing. It will now appear in the tab because there is only one
-list to appear in. It also removes the whole class of problem behind the last several
-packages - two lists that had to be stitched together, with every rule applied to the seam.
-
-Also in this package, from pkg330: the project scope dropdown (Open / Open + won / All,
-defaulting to Open + won), so a won job's activities are no longer hidden.
+MIGRATION - AUTOMATIC
+---------------------
+Existing notes move across the first time each deal is saved, exactly as activities did.
+Nothing disappears in the meantime.
 
 
-ONE THING I HAVE NOT DONE
---------------------------
-Notes are still on the deal. They are far smaller, and the same argument applies but with
-much less at stake. Worth doing eventually for consistency - say if you want it now.
+WHAT THIS BUYS YOU
+------------------
+Notes were not causing trouble yet only because there is no Notes tab to expose the seam.
+The moment you want one - or search across notes, which you will - it would have behaved
+exactly as activities did over the last dozen packages. This closes it before that.
+
+
+STILL ON THE LIST
+-----------------
+The remaining structural issue is SIZE, not splitting: crm:deals is 6.4MB and is read in
+full on every page load. Saving is fine now it only sends what changed, but load time will
+keep creeping up as projects are added. The fix is to stop sending every field of every
+deal to the board. Worth doing as its own piece before it becomes the next thing you are
+chasing.

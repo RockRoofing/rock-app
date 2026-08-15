@@ -103,17 +103,25 @@ const leanDeal = (d) => {
   const { _actSummary, _noteSummary, ...rest } = d;
   return {
     ...rest,
-    // Activities are NOT stored on the deal any more. They all live in one place -
-    // crm:activities:<dealId> - whether they were imported or created here. Keeping a
-    // second copy on the deal is what let the two views disagree.
+    // Activities and notes are NOT stored on the deal any more. Both live in one place per
+    // deal - crm:activities:<dealId> and crm:notes:<dealId> - whether they were imported
+    // or written here. A second copy on the deal is what let the views disagree.
     activities: [],
-    notes: (d.notes || []).filter((n) => !n.imported),
-    history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
+    notes: [],
+    // History keeps the real events (stage moves, field edits, activity events) but not
+    // the notes themselves, which are now records in their own right.
+    history: (d.history || []).filter((h) => h.type !== 'note' && !String(h.id || '').startsWith('h_pd_')),
   };
 };
 
 // The activities this deal owns that were created in the CRM (not imported).
 const crmActivities = (d) => (d.activities || []).filter((a) => !a.imported);
+
+// Notes written in the CRM. They live in the history as type 'note'; imported ones are
+// injected with an h_pd_ id and belong to the store already.
+const crmNotes = (d) => (d.history || [])
+  .filter((h) => h.type === 'note' && !String(h.id || '').startsWith('h_pd_'))
+  .map((h) => ({ id: h.id, body: h.body || h.text || '', ts: h.ts || null, author: h.author || null, comments: h.comments || [], edited: !!h.edited }));
 
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 // Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
@@ -899,6 +907,7 @@ function CRMPageInner() {
   const savedSnapshot = useRef(new Map());
   // id -> JSON of that deal's CRM-created activities as last written to the shared store.
   const prevActivities = useRef(new Map());
+  const prevNotes = useRef(new Map());
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState('');
@@ -992,6 +1001,7 @@ function CRMPageInner() {
           }
           savedSnapshot.current = seed;
           prevActivities.current = actSeed;
+          prevNotes.current = new Map(d.deals.map((x) => [String(x.id), JSON.stringify([])]));
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1063,7 +1073,18 @@ function CRMPageInner() {
             });
             if (r2.ok) prevActivities.current.set(String(d.id), now);
           }
-        } catch (e) { console.error('Could not save activities:', e); }
+          for (const d of changed) {
+            const mine = crmNotes(deals.find((x) => String(x.id) === String(d.id)) || {});
+            const before = prevNotes.current.get(String(d.id));
+            const now = JSON.stringify(mine);
+            if (before === now) continue;
+            const r3 = await fetch('/api/crm', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'save-deal-notes', dealId: String(d.id), notes: mine }),
+            });
+            if (r3.ok) prevNotes.current.set(String(d.id), now);
+          }
+        } catch (e) { console.error('Could not save activities/notes:', e); }
 
         let ok = true;
         for (let bi = 0; bi < batches.length; bi++) {
@@ -1109,11 +1130,11 @@ function CRMPageInner() {
         done: !!x.done, assignee: x.assignee || null, author: x.createdBy || null,
         type: x.type || '', imported: !x.crm,
       }));
-      const notes = (n.items || []).map((x) => ({
-        id: x.id, text: stripHtml(x.html || ''), author: x.author || null,
-        ts: x.createdAt ? new Date(x.createdAt).toISOString() : null,
-        comments: [], imported: true,
-      }));
+      // Both imported and CRM-written notes come back from the same store. A CRM one keeps
+      // its own id so its comments and edits still match up.
+      const notes = (n.items || []).map((x) => x.crm
+        ? { id: x.id, text: x.body || '', body: x.body || '', author: x.author || null, ts: x.ts || null, comments: x.comments || [], edited: !!x.edited, imported: false }
+        : { id: x.id, text: stripHtml(x.html || ''), body: stripHtml(x.html || ''), author: x.author || null, ts: x.createdAt ? new Date(x.createdAt).toISOString() : null, comments: [], imported: true });
       if (!acts.length && !notes.length) return;
       // Deliberately NOT setting skipSave here.
       //
@@ -1132,7 +1153,9 @@ function CRMPageInner() {
         history: [
           ...(d.history || []),
           ...acts.map((x) => ({ id: 'h_' + x.id, type: 'activity', ts: x.due ? new Date(x.due).toISOString() : null, text: `${x.done ? 'Activity completed' : 'Activity set'}: ${x.text}`, body: x.text })),
-          ...notes.map((x) => ({ id: 'h_' + x.id, type: 'note', ts: x.ts, text: x.text, body: x.text })),
+          ...notes.map((x) => x.imported
+            ? { id: 'h_' + x.id, type: 'note', ts: x.ts, text: x.text, body: x.body, comments: [] }
+            : { id: x.id, type: 'note', ts: x.ts, text: 'Note added', body: x.body, comments: x.comments, edited: x.edited, author: x.author }),
         ],
       }));
     } catch { /* leave the deal as-is if it fails */ }
