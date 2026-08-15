@@ -1,4 +1,4 @@
-import { get, set } from '../../lib/db'
+import { get, set, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
@@ -105,10 +105,10 @@ export default async function handler(req, res) {
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
   if (req.method === 'GET') {
-    const [deals, schema, orgs, contacts, actSum, noteSum, openActs, delOrgs, delContacts] = await Promise.all([
+    const [deals, schema, orgs, contacts, actSum, noteSum, openActs, delOrgs, delContacts, portal] = await Promise.all([
       loadDeals(), loadSchema(), get(ORGS_KEY), get(CONTACTS_KEY),
       get(SUB_SUMMARY('activities')), get(SUB_SUMMARY('notes')), get(OPEN_ACTIVITIES),
-      get(DELETED_KEY('orgs')), get(DELETED_KEY('contacts')),
+      get(DELETED_KEY('orgs')), get(DELETED_KEY('contacts')), getPortalUsers(),
     ])
     return res.json({
       deals, schema,
@@ -121,6 +121,18 @@ export default async function handler(req, res) {
       dealsAreSeed: LAST_DEALS_WERE_SEED,
       // Who is logged in. The page never knew, which is why "Assign to (current user)"
       // saved an activity with nobody on it.
+      // The real portal users - the single source of truth for who can own an activity.
+      // The CRM previously used a hard-coded list of five FIRST names, which is why
+      // "James" and "James McVeigh" both existed as separate people.
+      users: (portal || [])
+        .filter(u => u.active !== false)
+        .map(u => ({
+          name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.username || '',
+          first: u.firstName || (u.name || '').split(' ')[0] || '',
+          username: u.username || '',
+        }))
+        .filter(u => u.name)
+        .sort((a, b) => a.name.localeCompare(b.name)),
       me: {
         name: [acc.user.firstName, acc.user.lastName].filter(Boolean).join(' ') || acc.user.name || acc.user.username || '',
         username: acc.user.username || '',

@@ -1,47 +1,59 @@
-pkg344 - Change who is responsible, from either place
-======================================================
+pkg345 - Portal users are the source of truth for who owns an activity
+=======================================================================
 
-REPLACES pkg302 through pkg343. Deploy this one only.
+REPLACES pkg302 through pkg344. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        unchanged since pkg342
+  pages/api/crm.js        returns the portal user list
   lib/crmImportMap.js     unchanged since pkg305
 
 
-ON THE DEAL
------------
-Editing an activity now has a Person responsible dropdown next to the text and the date.
-Your own name is first and marked "(you)", then the others, then "Nobody".
+WHY YOU HAD TWO JAMESES
+------------------------
+The CRM's list of people was five hard-coded FIRST names, written when it was a prototype:
 
-The activity header also shows who it belongs to without having to open it:
+    Roman, Niall, James, Simon, Edita
 
-    ACTIVITY - James McVeigh
-    ACTIVITY - nobody assigned
-
-The second one is in grey, so an unassigned activity is obvious at a glance rather than
-something you find out later when a filter hides it.
+Pipedrive stores full names - "James McVeigh". So anything imported said James McVeigh and
+anything created in the CRM said James, and the Person Responsible filter listed both as if
+they were different people.
 
 
-ON THE ACTIVITIES TAB
----------------------
-Already there from pkg343 - click the Person responsible cell for the same dropdown, or use
-the bigger box behind the pencil. No change needed.
+HOW THEY ARE MERGED
+-------------------
+The portal user list is now the source of truth. Every name is resolved against it before
+being shown or filtered, in this order:
+
+    exact, ignoring case     "james mcveigh"  ->  James McVeigh
+    unique first name        "James"          ->  James McVeigh
+    unique last name         "McVeigh"        ->  James McVeigh
+
+So the old short names fold into the real ones and the filter lists each person once.
+
+IF TWO PORTAL USERS SHARE A FIRST NAME, a bare "James" is LEFT AS IT IS rather than guessed
+at. Picking one of two people would be worse than showing it unresolved - you would have no
+way of knowing it had chosen wrong. Verified with two Jameses on the list: full names
+resolve, the bare one does not move.
+
+A name that matches nobody - an old Pipedrive user who was never a portal user, say - is
+shown as written rather than dropped.
 
 
-A BUG THIS TURNED UP
----------------------
-The deal's edit handler was:
+THE DROPDOWNS NOW LIST REAL PEOPLE
+-----------------------------------
+Everywhere you pick a person - adding an activity on a deal, editing one there, or the
+Person responsible cell in the table - now lists your actual portal users, with you first
+and marked "(you)". The five prototype names are gone.
 
-    editActivity = (id, aid, text, due) => ...{ ...a, text, due }
 
-No assignee. So editing an activity from the deal - even just fixing a typo in the text -
-SILENTLY CLEARED whoever was responsible for it. Anything you had assigned would lose its
-owner the next time it was touched.
+ONE THING TO BE AWARE OF
+-------------------------
+This resolves names ON DISPLAY. The stored records still hold whatever was written at the
+time, and are only rewritten when you edit that activity. That is deliberate: it changes
+nothing in your data and cannot go wrong.
 
-Fixed: the assignee is kept when you do not change it, updated when you do, and only
-cleared if you deliberately pick "Nobody".
-
-Verified all four cases: kept on a text-only edit, reassigned, cleared on purpose, and the
-old behaviour reproduced to confirm it was really doing that.
+If you would rather the stored records were tidied for good, I can add a one-off pass that
+rewrites every activity's assignee to its resolved portal name. Worth doing before cutover,
+but not urgent - the display is correct either way.

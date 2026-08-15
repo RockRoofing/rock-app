@@ -114,6 +114,40 @@ const leanDeal = (d) => {
   };
 };
 
+// Resolve a name written anywhere - Pipedrive's "James McVeigh", the old CRM's "James" -
+// to the matching PORTAL USER, which is the source of truth.
+//
+// Matching, in order:
+//   1. exact, ignoring case      "james mcveigh" -> James McVeigh
+//   2. unique first name         "James"         -> James McVeigh
+//   3. unique last name          "McVeigh"       -> James McVeigh
+//
+// A first name shared by two portal users is NOT merged - guessing which of two people was
+// meant would be worse than leaving it alone.
+function buildNameResolver(users) {
+  const list = (users || []).filter((u) => u.name);
+  const exact = new Map();
+  const byFirst = new Map();
+  const byLast = new Map();
+  for (const u of list) {
+    exact.set(u.name.trim().toLowerCase(), u.name);
+    const parts = u.name.trim().split(/\s+/);
+    const first = (u.first || parts[0] || '').toLowerCase();
+    const last = (parts.length > 1 ? parts[parts.length - 1] : '').toLowerCase();
+    if (first) byFirst.set(first, byFirst.has(first) ? null : u.name);   // null = ambiguous
+    if (last) byLast.set(last, byLast.has(last) ? null : u.name);
+  }
+  return (raw) => {
+    const t = String(raw == null ? '' : raw).trim();
+    if (!t) return '';
+    const k = t.toLowerCase();
+    if (exact.has(k)) return exact.get(k);
+    if (byFirst.get(k)) return byFirst.get(k);
+    if (byLast.get(k)) return byLast.get(k);
+    return t;    // unknown name - shown as written rather than silently dropped
+  };
+}
+
 // The activities this deal owns that were created in the CRM (not imported).
 const crmActivities = (d) => (d.activities || []).filter((a) => !a.imported);
 
@@ -512,12 +546,12 @@ function ColumnChooser({ title, fields, columns, onToggle, onClose }) {
 // ===========================================================================
 // Activity row (editable text+date combined, complete, delete)
 // ===========================================================================
-function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me }) {
+function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, users }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(activity.text);
   const [due, setDue] = useState(activity.due);
   const [assignee, setAssignee] = useState(activity.assignee || '');
-  const people = ['', ...(me?.name ? [me.name] : []), ...MENTION_USERS.map((u) => u.name).filter((n) => n !== me?.name)];
+  const people = ['', ...(me?.name ? [me.name] : []), ...(users || []).map((u) => u.name).filter((n) => n !== me?.name)];
   return (
     <div style={{ border: `1px solid ${overdue ? C.red : C.activityBorder}`, background: '#fff', borderRadius: 6, padding: 10, marginBottom: 8 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
@@ -602,7 +636,7 @@ function HistoryFeed(props) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
+function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields }) {
   const [noteText, setNoteText] = useState('');
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
@@ -699,7 +733,7 @@ function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddN
                         the logged-in user's actual name. */}
                     {me?.name && <option value={me.name}>{me.name} (you)</option>}
                     <option value="">Nobody</option>
-                    {MENTION_USERS.filter((u) => u.name !== me?.name).map((u) => <option key={u.username} value={u.name}>{u.name}</option>)}
+                    {(users || []).filter((u) => u.name !== me?.name).map((u) => <option key={u.username || u.name} value={u.name}>{u.name}</option>)}
                   </select>
                   <button disabled={!newDue} onClick={() => { onAddActivity(deal.id, newText.trim() || 'Call', newDue, newAssignee); setNewText(''); setNewDue(''); setNewAssignee(''); setAdding(false); }} style={{ ...primaryBtn, opacity: newDue ? 1 : 0.5 }}>Save</button>
                   {openActs.length > 0 && <button onClick={() => setAdding(false)} style={ghostBtn}>Cancel</button>}
@@ -707,7 +741,7 @@ function DealView({ deal, today, schema, me, onBack, onMove, onSetStatus, onAddN
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} me={me} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} me={me} users={users} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -900,6 +934,8 @@ function CRMPageInner() {
   const [activitySummary, setActivitySummary] = useState({});
   const [dealsAreSeed, setDealsAreSeed] = useState(false);
   const [me, setMe] = useState({ name: '', username: '' });
+  const [users, setUsers] = useState([]);
+  const resolveName = useMemo(() => buildNameResolver(users), [users]);
   const [deletedOrgs, setDeletedOrgs] = useState([]);
   const [deletedContacts, setDeletedContacts] = useState([]);
   const [actLoading, setActLoading] = useState(false);
@@ -1003,6 +1039,7 @@ function CRMPageInner() {
           setActivitySummary(d.activitySummary || {});
           setDealsAreSeed(!!d.dealsAreSeed);
           if (d.me) setMe(d.me);
+          if (Array.isArray(d.users)) setUsers(d.users);
           setDeletedOrgs(d.deletedOrgs || []);
           setDeletedContacts(d.deletedContacts || []);
           const seed = new Map();
@@ -1772,7 +1809,7 @@ function CRMPageInner() {
         project: deal.title || '',
         text: a.text || 'Activity',
         due: a.due || '',
-        assignee: a.assignee || '',
+        assignee: resolveName(a.assignee || ''),
         company: deal.fields?.organization || '',
         customer: custName,
         email: contact?.contact_email || '',
@@ -1792,7 +1829,7 @@ function CRMPageInner() {
       }
     }
     return rows;
-  }, [deals, contactsData, openActivities, actShowDone]);
+  }, [deals, contactsData, openActivities, actShowDone, resolveName]);
 
   // Open projects only. Activities on won or lost jobs are counted but not listed - the
   // count line below still reports them, so they are never hidden silently.
@@ -1891,7 +1928,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} me={me} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
+        <DealView deal={live} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
       </div>
     );
   }
@@ -2087,7 +2124,7 @@ function CRMPageInner() {
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} trace={activityTrace} staleFilter={activityStaleFilter}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
-            search={actSearch} setSearch={setActSearch} me={me}
+            search={actSearch} setSearch={setActSearch} me={me} users={users}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2246,10 +2283,10 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch, me }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch, me, users }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
-  const assigneeOptions = ['', ...(me?.name ? [me.name] : []), ...MENTION_USERS.map((u) => u.name).filter((n) => n !== me?.name)];
+  const assigneeOptions = ['', ...(me?.name ? [me.name] : []), ...(users || []).map((u) => u.name).filter((n) => n !== me?.name)];
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
