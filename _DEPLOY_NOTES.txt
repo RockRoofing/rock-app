@@ -1,40 +1,66 @@
-pkg353 - Next due date is blank, and required
-==============================================
+pkg355 - Tender return becomes an activity
+===========================================
 
-REPLACES pkg302 through pkg352. Deploy this one only.
+REPLACES pkg302 through pkg354. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
+  lib/crmFieldSchema.js   <- NOTE: this file is in the package for the first time in a while
   pages/api/crm.js        unchanged since pkg346
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT CHANGED
-------------
-The Due box on "Set the next activity" now starts EMPTY. It used to default to today, which
-meant an activity could pick up today's date just because nobody looked at it.
-
-"Done & set next" now requires one. Press it without a date and you get, in red:
-
-    Next due date must be set.
-
-The date box outlines in red at the same time, and the message clears the moment you pick
-one.
+1. OUT OF THE SUMMARY
+----------------------
+Tender Return date is no longer a field in the deal summary. It was a date sitting there
+that nothing acted on.
 
 
-WHY A WARNING RATHER THAN A GREYED-OUT BUTTON
+2. IT CREATES AN ACTIVITY INSTEAD
+----------------------------------
+Setting a tender return date when adding a project creates an activity:
+
+    "Tender return", due that date, assigned to the Estimator Responsible
+
+So it appears on the Activities tab, drives the kanban dot, goes red when overdue, and is
+completed like anything else - rather than being a date nobody is accountable for.
+
+The Add Project form says so underneath the field, so it is not a surprise.
+
+
+3. WARNING ON THE CARD WHEN THERE IS NO ESTIMATOR
+---------------------------------------------------
+A deal with a tender return and no Estimator Responsible now shows an amber flag on its
+kanban card:
+
+    (!) No estimator assigned
+
+It appears whether or not the activity has been created yet - so a project added with a
+date but no estimator is flagged immediately. It disappears the moment an estimator is set.
+
+
+4. SETTING THE ESTIMATOR UPDATES THE ACTIVITY
 -----------------------------------------------
-A disabled button tells you nothing about why it will not work - you are left clicking at
-something dead, which is exactly the sort of thing that wastes five minutes. The button
-stays live and tells you what is missing.
-
-"Just mark done" is unaffected. If there is no follow-up, that is the button, and it needs
-no date.
+Set or change the Estimator Responsible and the open Tender return activity is reassigned
+to them automatically. A COMPLETED one is left alone - that is a record of who actually did
+it, and rewriting history would be wrong.
 
 
-BEFORE PACKAGING
-----------------
-Ran the used-but-undefined check on this file - clean - and confirmed the new state names
-resolve inside the window they belong to. That is the check that would have caught the two
-crashes in pkg346 and pkg349.
+5. ESTIMATOR LIST NOW MATCHES THE PORTAL
+------------------------------------------
+The Estimator Responsible dropdown was four hard-coded first names - Roman, Niall, James,
+Simon. It now lists the same portal users (pre-contract + admin) you can assign an activity
+to.
+
+That was the whole point of your request: the estimator on the deal and the person on the
+activity are now the same name from the same list, so they cannot drift the way "James" and
+"James McVeigh" did.
+
+
+EXISTING DEALS
+--------------
+Nothing is migrated. Deals that already carry a tender return date keep it in their data -
+it simply is not shown in the summary any more, and no activity is created retrospectively.
+Say if you want a one-off pass to create Tender return activities for open deals that have
+a date but no activity; it would need care over which ones are still live.

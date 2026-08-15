@@ -372,6 +372,10 @@ function CommentThread({ comments, onAdd }) {
 // ===========================================================================
 function BoardCard({ deal, onOpen, onDragStart, today }) {
   const st = dealDotState(deal, today);
+  // A tender return with nobody responsible for it is the thing most likely to be missed,
+  // so it is flagged on the card rather than only being visible inside the deal.
+  const needsEstimator = !deal.fields?.estimator_responsible
+    && ((deal.activities || []).some((a) => a.text === 'Tender return' && !a.done) || !!deal.fields?.expected_close_date);
   return (
     <div draggable onDragStart={(e) => onDragStart(e, deal.id)} onClick={() => onOpen(deal.id)} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 6, padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
@@ -385,6 +389,12 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
         <span style={{ fontWeight: 600, color: C.text }}>{money(deal.fields.value)}</span>
         {deal.status !== 'open' && <span style={pill(deal.status === 'won' ? C.won : C.lost)}>{deal.status === 'won' ? 'Won' : 'Lost'}</span>}
       </div>
+      {needsEstimator && (
+        <div title="Tender return with no estimator responsible"
+          style={{ marginTop: 6, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 5, padding: '3px 6px', fontSize: 10.5, fontWeight: 700 }}>
+          &#9888; No estimator assigned
+        </div>
+      )}
     </div>
   );
 }
@@ -1546,6 +1556,18 @@ function CRMPageInner() {
   const CONTACT_KEYS = ['contact_person', 'contact_phone', 'contact_email', 'contact_job_role'];
 
   const editField = (id, key, val) => {
+    // The Tender return activity follows the Estimator Responsible. Set or change the
+    // estimator and the activity is reassigned to them, so the two cannot disagree.
+    if (key === 'estimator_responsible') {
+      const d0 = deals.find((x) => x.id === id);
+      if (d0 && (d0.activities || []).some((a) => a.text === 'Tender return' && !a.done)) {
+        patch(id, (d) => ({
+          ...d,
+          activities: d.activities.map((a) => (a.text === 'Tender return' && !a.done) ? { ...a, assignee: val || null } : a),
+        }));
+      }
+    }
+
     // Editing any of these on the project keeps the Companies / Contacts pages in step,
     // so a detail added here is not stranded on the deal.
     if (ORG_KEYS.includes(key) || CONTACT_KEYS.includes(key)) {
@@ -1643,6 +1665,13 @@ function CRMPageInner() {
     const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
     const d = { id, title: data.title, stageId: data.stageId || 'stage_project_in', status: 'open', fields, link, activities: [], notes: [], history: [{ id: uid(), type: 'note', ts: nowIso(), text: 'Project created' }] };
     setDeals((prev) => [d, ...prev]); setShowAdd(false); openDealById(id);
+
+    // A tender return date becomes an ACTIVITY rather than a field sitting in the summary,
+    // so it turns up on the Activities tab and drives the kanban dot like any other date
+    // that has to be worked to.
+    if (fields.expected_close_date) {
+      addActivity(id, 'Tender return', fields.expected_close_date, fields.estimator_responsible || null);
+    }
 
     // Anything typed into the new-company / new-contact panels becomes a real record.
     // Wrapped: creating the project is the important part, and must not fail because
@@ -1999,7 +2028,9 @@ function CRMPageInner() {
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>
-        <button onClick={() => { setImportMsg(''); setImportOpen(true); }} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Import</button>
+        {/* Import button removed - the Pipedrive import is done, and it is wipe-and-replace,
+            so leaving it on the toolbar was a standing risk of wiping live data by
+            accident. The import itself still works; put this line back to expose it. */}
         <div style={{ display: 'flex', border: `1px solid #444`, borderRadius: 6, overflow: 'hidden' }}>
           <button onClick={() => setView('pipeline')} style={segBtn(view === 'pipeline')}>Pipeline</button>
           <button onClick={() => setView('list')} style={segBtn(view === 'list')}>List</button>
@@ -2093,7 +2124,7 @@ function CRMPageInner() {
         )}
       </div>
 
-      {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} />}
+      {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} users={users} />}
     </div>
   );
 }
@@ -2101,7 +2132,7 @@ function CRMPageInner() {
 // ===========================================================================
 // Add project modal
 // ===========================================================================
-function AddProjectModal({ onClose, onCreate }) {
+function AddProjectModal({ onClose, onCreate, users }) {
   const [f, setF] = useState({});
   const [org, setOrg] = useState('');
   const [contact, setContact] = useState('');
@@ -2120,7 +2151,12 @@ function AddProjectModal({ onClose, onCreate }) {
 
   const renderInput = (k) => {
     const def = schemaFor(k);
-    if (def.type === 'select') return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option>{(def.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+    if (def.type === 'select') {
+      // Estimator options come from the portal users, so the name on the deal matches the
+      // person an activity can be assigned to.
+      const opts = def.fromPortalUsers ? (users || []).map((u) => u.name) : (def.options || []);
+      return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option>{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+    }
     if (def.type === 'yesno') return <select value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}><option value="">-</option><option>Yes</option><option>No</option></select>;
     if (def.type === 'date') return <input type="date" value={f[k] || ''} onChange={(e) => set(k, e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }} />;
     if (def.type === 'multiselect') return <MultiSelect value={f[k] || ''} onChange={(v) => set(k, v)} options={def.options || []} placeholder="Select…" />;
@@ -2146,7 +2182,10 @@ function AddProjectModal({ onClose, onCreate }) {
           {fieldCell('value','Value (£)', false)}
           <div><label style={fLbl}>Stage</label><select value={stageId} onChange={(e) => setStageId(e.target.value)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box' }}>{STAGES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
           {fieldCell('project_score','Project Score', false)}
-          {fieldCell('expected_close_date','Tender Return date', false)}
+          {fieldCell('expected_close_date','Tender return date', false)}
+          <div style={{ gridColumn: '1 / -1', fontSize: 11.5, color: C.dim, marginTop: -4 }}>
+            Setting this creates a &quot;Tender return&quot; activity, due that date, assigned to the Estimator Responsible.
+          </div>
         </div>
 
         {/* DETAILS */}
