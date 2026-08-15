@@ -1,6 +1,6 @@
 import { get, set, getPortalUsers } from '../../lib/db'
 import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
-import { canAccessArea } from '../../lib/roles'
+import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
 
@@ -126,6 +126,10 @@ export default async function handler(req, res) {
       // "James" and "James McVeigh" both existed as separate people.
       users: (portal || [])
         .filter(u => u.active !== false)
+        // Only people who actually work in this area can own a CRM activity: pre-contract
+        // (estimators and sales) plus admin. A post-contract or management user has no
+        // business appearing in the assignee list.
+        .filter(u => ['pre-contract', 'admin'].includes(normRole(u.role)))
         .map(u => ({
           name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.username || '',
           first: u.firstName || (u.name || '').split(' ')[0] || '',

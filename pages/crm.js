@@ -554,7 +554,11 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
   const people = ['', ...(me?.name ? [me.name] : []), ...(users || []).map((u) => u.name).filter((n) => n !== me?.name)];
   return (
     <div style={{ border: `1px solid ${overdue ? C.red : C.activityBorder}`, background: '#fff', borderRadius: 6, padding: 10, marginBottom: 8 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>
+        Activity{activity.assignee
+          ? <span style={{ textTransform: 'none', fontWeight: 600, color: C.link }}> &middot; {activity.assignee}</span>
+          : <span style={{ textTransform: 'none', fontWeight: 400, color: '#bbb' }}> &middot; nobody assigned</span>}
+      </div>
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input value={text} onChange={(e) => setText(e.target.value)} style={miniInput} />
@@ -571,7 +575,7 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{ fontSize: 14 }}>{activity.text}</div>
-            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'current user'}</div>
+            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'nobody'}</div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button onClick={() => onComplete(activity.id)} style={miniBtn}>Done</button>
@@ -720,9 +724,7 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
             {(openActs.length > 0) && <div style={{ textAlign: 'right', marginBottom: 10 }}><button onClick={() => setAdding((v) => !v)} style={primaryBtn}>+ Add activity</button></div>}
             {(adding || openActs.length === 0) && (
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: openActs.length ? 10 : 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>
-          Activity{activity.assignee ? <span style={{ textTransform: 'none', fontWeight: 600, color: C.link }}> &middot; {activity.assignee}</span> : <span style={{ textTransform: 'none', fontWeight: 400, color: '#bbb' }}> &middot; nobody assigned</span>}
-        </div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
                 <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />

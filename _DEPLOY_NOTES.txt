@@ -1,59 +1,46 @@
-pkg345 - Portal users are the source of truth for who owns an activity
-=======================================================================
+pkg346 - Fixes the crash on opening a project + limits the assignee list
+=========================================================================
 
-REPLACES pkg302 through pkg344. Deploy this one only.
+REPLACES pkg302 through pkg345. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
-  pages/api/crm.js        returns the portal user list
+  pages/crm.js            THE CRASH FIX
+  pages/api/crm.js        assignee list limited by role
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHY YOU HAD TWO JAMESES
-------------------------
-The CRM's list of people was five hard-coded FIRST names, written when it was a prototype:
+1. "activity is not defined"
+-----------------------------
+My mistake in pkg344, and the error screen named it exactly.
 
-    Roman, Niall, James, Simon, Edita
+I added the "ACTIVITY - James McVeigh" heading so you could see who owns an activity
+without opening it. It was meant to go on an existing activity row. It landed in the
+NEW-activity box instead - a different component, where there is no activity to read a name
+from. So the page threw the moment a deal was opened.
 
-Pipedrive stores full names - "James McVeigh". So anything imported said James McVeigh and
-anything created in the CRM said James, and the Person Responsible filter listed both as if
-they were different people.
+Both places have an identical "Activity" heading, which is how I put it in the wrong one.
 
+FIXED: the heading with the person on it is now on the activity ROW, where it belongs, and
+the new-activity box has its plain heading back. Checked that every reference to that
+activity now sits inside the component that has one.
 
-HOW THEY ARE MERGED
--------------------
-The portal user list is now the source of truth. Every name is resolved against it before
-being shown or filtered, in this order:
-
-    exact, ignoring case     "james mcveigh"  ->  James McVeigh
-    unique first name        "James"          ->  James McVeigh
-    unique last name         "McVeigh"        ->  James McVeigh
-
-So the old short names fold into the real ones and the filter lists each person once.
-
-IF TWO PORTAL USERS SHARE A FIRST NAME, a bare "James" is LEFT AS IT IS rather than guessed
-at. Picking one of two people would be worse than showing it unresolved - you would have no
-way of knowing it had chosen wrong. Verified with two Jameses on the list: full names
-resolve, the bare one does not move.
-
-A name that matches nobody - an old Pipedrive user who was never a portal user, say - is
-shown as written rather than dropped.
+Also corrected while there: an existing row said "Assigned to current user" when nothing
+was assigned. It now says "nobody", which is what it means.
 
 
-THE DROPDOWNS NOW LIST REAL PEOPLE
------------------------------------
-Everywhere you pick a person - adding an activity on a deal, editing one there, or the
-Person responsible cell in the table - now lists your actual portal users, with you first
-and marked "(you)". The five prototype names are gone.
+2. ASSIGNEE LIST LIMITED TO PRE-CONTRACT AND ADMIN
+----------------------------------------------------
+Only portal users with a pre-contract or admin role can be given a CRM activity. Estimators,
+sales and admin - the people who actually work in here.
 
+Post-contract, management and legacy "standard" users are excluded. Verified against a
+sample of all five roles.
 
-ONE THING TO BE AWARE OF
--------------------------
-This resolves names ON DISPLAY. The stored records still hold whatever was written at the
-time, and are only rewritten when you edit that activity. That is deliberate: it changes
-nothing in your data and cannot go wrong.
+This applies everywhere you pick a person: adding an activity on a deal, editing one there,
+and the Person Responsible cell in the Activities table.
 
-If you would rather the stored records were tidied for good, I can add a one-off pass that
-rewrites every activity's assignee to its resolved portal name. Worth doing before cutover,
-but not urgent - the display is correct either way.
+WORTH KNOWING: this filters who you can CHOOSE. Historic activities already assigned to
+somebody outside that group still show their name, so nothing is rewritten or hidden - they
+simply cannot be picked for anything new. That is deliberate; silently reassigning
+somebody's past work would be worse.
