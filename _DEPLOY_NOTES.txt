@@ -1,7 +1,7 @@
-pkg317 - Activities: open projects only, and the table now scrolls
-===================================================================
+pkg318 - Make the CRM crash tell us what it is
+===============================================
 
-REPLACES pkg302 through pkg316. Deploy this one only.
+REPLACES pkg302 through pkg317. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,42 +10,39 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. OPEN PROJECTS AND OPEN ACTIVITIES ONLY
-------------------------------------------
-The table was listing activities against every deal regardless of status, so work on jobs
-won or lost months ago was sitting in the list and inflating the overdue count. It now
-skips any activity whose project is not open.
+WHY THIS RATHER THAN ANOTHER FIX
+---------------------------------
+I have been unable to find the Add Project crash by reading the code, and I have checked
+everything I introduced. Guessing again would just cost you another deploy.
 
-Completed activities were already excluded by default; that is unchanged, and the
-"Include completed" tick box still shows them for the open projects if you want the
-history.
+The blocker is the message itself. "Application error: a client-side exception has
+occurred" is Next.js's stand-in for a crashed page - the real error only exists in the
+browser console, so every attempt has been me working blind.
 
-So the list is now: outstanding activities, on live projects. Which is what makes it a
-usable to-do list rather than a nine-year archive.
+This puts the actual error ON SCREEN. Instead of that generic line you will get:
 
-Expect the overdue number to drop noticeably - that drop is the noise coming out, not
-activities going missing.
+  - the error message
+  - the component stack showing exactly which part failed
+  - a Reload button
+  - a "Reload and clear saved view" button, in case a remembered filter or column is
+    involved (that would also confirm it in one click)
+
+Screenshot that and I can fix it properly. It is one round trip instead of the several
+we have just had.
+
+Your data is not at risk either way - a crash on this page is a rendering fault, nothing
+is saved or lost by it.
 
 
-2. THE MISSING SCROLLBAR
--------------------------
-Real bug, and mine. The page body is a fixed-height flex container with overflow: hidden:
-
-    <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', ... }}>
-
-The existing List, Companies and Contacts views each handle their own scrolling inside
-that. My Activities table did not - it just grew tall, and everything past the bottom of
-the window was unreachable with no scrollbar to get to it.
-
-FIXED: the table now has its own scroll area, so it behaves like the other tabs.
-
-WHILE I WAS THERE: the header row is now sticky. Scroll down a long list and the column
-names stay visible, so you can still tell which column you are looking at - same as the
-H&S matrix.
+ALSO WORTH TRYING WHEN YOU DEPLOY
+----------------------------------
+Press "Reload and clear saved view" once even if the CRM looks fine. The remembered-view
+feature was behind the Activities bug in pkg315, and it is the most likely culprit here
+too - a saved column or filter referring to something that no longer exists would crash
+on render. If clearing it fixes Add Project, that tells us both the cause and the fix
+immediately.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Filtering verified: an activity on a won job and one on a lost job are both excluded, a
-completed one on a live job is excluded, and the outstanding one on the live job remains.

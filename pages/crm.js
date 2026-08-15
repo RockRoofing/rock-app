@@ -9,7 +9,7 @@
 // persistence land, they save per-user to KV.
 // -----------------------------------------------------------------------------
 
-import { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import * as XLSX from 'xlsx';
 import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, mapNoteRows, groupByDeal, detectExportType } from '../lib/crmImportMap';
@@ -779,7 +779,45 @@ function EntityTable({ rows, fields, columns, sort, onSort }) {
 // ===========================================================================
 // PAGE
 // ===========================================================================
-export default function CRMPage() {
+// Next.js replaces a crashed page with "Application error: a client-side exception has
+// occurred", which tells you nothing and means the actual message is only in the console.
+// This catches the error and shows it on screen instead, so it can be read or screenshotted
+// without opening dev tools.
+class CrmErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null, info: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { this.setState({ info }); console.error('CRM crashed:', err, info); }
+  render() {
+    if (!this.state.err) return this.props.children;
+    const e = this.state.err;
+    const stack = (this.state.info && this.state.info.componentStack) || e.stack || '';
+    return (
+      <div style={{ fontFamily: FONT, padding: 24, maxWidth: 900, margin: '0 auto', color: C.text }}>
+        <h2 style={{ color: C.lost, margin: '0 0 6px' }}>Something in the CRM crashed</h2>
+        <p style={{ fontSize: 13.5, color: C.dim, marginTop: 0 }}>
+          Your data is safe - nothing has been saved or lost. Send this to Claude and it can be
+          fixed from the detail below.
+        </p>
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 14, marginTop: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{String(e && e.message ? e.message : e)}</div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, color: '#666', marginTop: 10, maxHeight: 320, overflow: 'auto' }}>{stack}</pre>
+        </div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          <button onClick={() => window.location.reload()} style={primaryBtn}>Reload</button>
+          <button onClick={() => { try { window.localStorage.removeItem(PREFS_KEY); } catch {} window.location.href = '/crm'; }} style={ghostBtn}>
+            Reload and clear saved view
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
+export default function CRMPage(props) {
+  return <CrmErrorBoundary><CRMPageInner {...props} /></CrmErrorBoundary>;
+}
+
+function CRMPageInner() {
   // The REAL today, in UK local time, as YYYY-MM-DD so it compares directly with the
   // activity due dates. This was PREVIEW_TODAY - a date hard-coded into the preview seed
   // file when the demo data was generated. It never moved, so every activity due after
