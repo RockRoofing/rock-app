@@ -1,70 +1,60 @@
-pkg305 - CRM import: skip activities/notes for deals not in the CRM
-====================================================================
+pkg307 - CRM import: the reason it stalls at 120
+=================================================
 
-REPLACES pkg302, pkg303 and pkg304. Deploy this one only.
+REPLACES pkg302 through pkg306. Deploy this one only.
 
 CHANGED FILES
 -------------
-  lib/crmImportMap.js     both export formats + activities/notes mappers
-  pages/api/crm.js        per-deal storage, per-deal summary, get-sub
-  pages/crm.js            orphan guard + board summary + per-deal loading
+  lib/crmImportMap.js     unchanged from pkg305
+  pages/api/crm.js        parallel writes, smarter wipe, longer function timeout
+  pages/crm.js            300-project chunks, client-side summary, progress + ETA
 
 No new files. All straight replacements.
 
 
-WHY THIS MATTERS NOW YOU HAVE REMOVED THE OTHER PIPELINES
+WHY IT STOPS AT 120 - AND WHY IT IS NOT THE MISSING DEALS
 -----------------------------------------------------------
-The activities and notes exports still contain records for every pipeline. With your deals
-now Project-only, those records point at deals that no longer exist in the CRM.
+It is not the pipeline change. Records whose deal is not in the CRM are filtered out in
+your browser BEFORE anything is sent, so a missing deal just shortens the list. It cannot
+stall the import.
 
-Before this change they would still have been written - to keys nothing ever reads, because
-a note is only loaded by opening its deal. No error, nothing on screen, just several
-thousand dead records accumulating on every re-import.
+120 is the chunk size in the version you are running. So it fails on the FIRST request.
 
-Now anything whose deal is not in the CRM is skipped, and the import tells you how many.
+That first request does the wipe, and on the old code the wipe blanked every key left by
+the previous import - one at a time:
 
-Simulated against a Project-only deal set (6,860 deals):
+    6,261 keys x ~35ms  =  ~219 seconds, plus the 120 projects themselves
+    against a Vercel function limit of 10-60 seconds  ->  timeout
 
-  activities   36,824 mapped -> 32,564 kept across 5,415 projects
-                              4,260 skipped (deal not in the CRM)
-                              2,577 skipped (not linked to any deal)
-
-  notes        11,499 mapped -> 10,232 kept across 5,542 projects
-                              1,267 skipped (deal not in the CRM)
-                                869 skipped (not linked to any deal)
-
-Those numbers match the pipeline breakdown exactly, so nothing Project-related is being
-dropped by mistake.
+Your first activities import (pkg302) worked because there was nothing to wipe. It left
+6,261 keys behind, so every attempt since has died on that wipe. It worked once and has
+failed ever since - which matches what you have seen.
 
 
-IMPORT ORDER IS NOW ENFORCED
------------------------------
-Activities and notes are matched against the deals already in the CRM, so DEALS MUST GO IN
-FIRST. If you try it the other way round you get a clear message rather than a silent
-half-import:
+THE FIX
+-------
+  - The wipe now only clears keys that will NOT be rewritten by this import. Re-importing
+    the same file clears nothing at all, so the first request is no heavier than any other.
+  - Writes run 25 at a time instead of one after another.
+  - The index and board summary are computed in your browser and sent once at the end,
+    rather than read and rewritten on all ~45 chunks.
+  - maxDuration raised to 60s on the CRM endpoint as a safety net.
+  - Chunk size 120 -> 300 (19 requests instead of 46), largest payload 0.76MB against the
+    ~4.5MB limit.
 
-  "Import your Deals export first - activities and notes attach to deals, so there is
-   nothing to attach these to yet."
-
-And if a file turns out to match nothing at all, it says so instead of reporting success.
-
-If you re-import deals later, re-run activities and notes afterwards.
-
-
-EVERYTHING ELSE FROM THE EARLIER PACKAGES IS STILL HERE
---------------------------------------------------------
-  - Pipedrive's new unprefixed export format (this was why all five files were refused);
-    the old prefixed format still works too
-  - activities and notes import at all, stored per deal
-  - the board's activity dot reads a small per-deal summary (234KB, not 31MB)
-  - opening a deal loads its own activities and notes into the view and History
-
-STILL TRUE: every activity in your export is marked Done (39,401 of 39,401), so the kanban
-warning triangles are accurate and will remain after import. That is the export, not the
-CRM.
+Estimated database time for the activities import: ~196s down to ~8s.
 
 
-TESTED
-------
-npm run build - Compiled successfully.
-Import simulated end to end against a Project-only deal set using your real files.
+WHAT YOU SHOULD SEE
+--------------------
+Progress with a percentage and rough time remaining, moving in 300s:
+
+    "Saving 1200 of 5415 projects (22%) - about 40s left"
+
+If it still stops, the message now carries the actual error rather than just halting, so
+send me what it says.
+
+
+ORDER
+-----
+Deals first, then organizations and people, then activities and notes.

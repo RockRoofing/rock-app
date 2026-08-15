@@ -26,6 +26,22 @@ const SUB_INDEX = (kind) => `crm:${kind}:index`
 // full lists load when a deal is actually opened.
 const SUB_SUMMARY = (kind) => `crm:${kind}:summary`
 
+// Write many keys with a capped number in flight. Sequential awaits were the bottleneck
+// (one network round trip each); unbounded Promise.all risks rate-limiting on a few
+// thousand keys, so this sits between the two.
+async function writeMany(pairs, concurrency = 25) {
+  const list = pairs || []
+  let i = 0
+  async function worker() {
+    while (i < list.length) {
+      const n = i++
+      const [k, v] = list[n]
+      try { await set(k, v) } catch { /* one bad key must not fail the whole chunk */ }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, list.length) }, worker))
+}
+
 // What the board needs per deal: how many activities are still open, and the earliest
 // due date among them. Notes only need a count.
 function summarise(kind, items) {
@@ -60,6 +76,10 @@ async function loadSchema() {
   if (Array.isArray(saved) && saved.length) return saved
   return DEFAULT_FIELD_SCHEMA
 }
+
+// Import chunks write thousands of keys. The default function timeout is short enough
+// that one slow chunk kills the whole import mid-way, so give it room. (Vercel Pro.)
+export const config = { maxDuration: 60 }
 
 export default async function handler(req, res) {
   const acc = requireAccess(req)
@@ -139,27 +159,35 @@ export default async function handler(req, res) {
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown import kind' })
       const groups = Array.isArray(body.groups) ? body.groups : []
 
-      // First chunk wipes whatever the previous import left behind.
+      // First chunk: clear only the keys that will NOT be rewritten by this import.
+      // Previously this blanked EVERY key from the last import one at a time - on a
+      // re-import of the same data that was 5,000+ pointless sequential writes in a
+      // single request, which is most of why the import crawled.
       if (body.first) {
         const oldIds = (await get(SUB_INDEX(kind))) || []
-        for (const id of oldIds) { try { await set(SUB_KEY(kind, id), []) } catch {} }
-        await set(SUB_INDEX(kind), [])
+        const incoming = new Set((body.allDealIds || []).map(String))
+        const stale = oldIds.filter(id => !incoming.has(String(id)))
+        await writeMany(stale.map(id => [SUB_KEY(kind, id), []]))
       }
 
-      const index = (await get(SUB_INDEX(kind))) || []
-      const seen = new Set(index)
-      const summary = body.first ? {} : ((await get(SUB_SUMMARY(kind))) || {})
+      // Per-deal writes run in parallel batches rather than one after another.
+      const jobs = []
       let written = 0
       for (const g of groups) {
         if (!g || !g.dealId || !Array.isArray(g.items)) continue
-        await set(SUB_KEY(kind, g.dealId), g.items)
+        jobs.push([SUB_KEY(kind, g.dealId), g.items])
         written += g.items.length
-        if (!seen.has(String(g.dealId))) { seen.add(String(g.dealId)); index.push(String(g.dealId)) }
-        summary[String(g.dealId)] = summarise(kind, g.items)
       }
-      await set(SUB_INDEX(kind), index)
-      await set(SUB_SUMMARY(kind), summary)
-      return res.json({ ok: true, written, deals: index.length })
+      await writeMany(jobs)
+
+      // The index and summary are computed CLIENT-side and sent once with the final
+      // chunk. Reading and rewriting them on every chunk meant shifting a 234KB summary
+      // back and forth ~45 times per import for no benefit.
+      if (body.last) {
+        if (Array.isArray(body.index)) await set(SUB_INDEX(kind), body.index.map(String))
+        if (body.summary && typeof body.summary === 'object') await set(SUB_SUMMARY(kind), body.summary)
+      }
+      return res.json({ ok: true, written })
     }
 
     if (body.action === 'import-chunk') {

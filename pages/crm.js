@@ -1000,19 +1000,45 @@ export default function CRMPage() {
       }
 
       const groups = groupByDeal(items);
-      // Chunk by DEAL, not by row - each request writes one key per deal, so a big
-      // chunk means a lot of writes in one request and risks a timeout.
-      const DEAL_CHUNK = 120;
+
+      // The index and the board summary are computed here, once, and sent with the final
+      // chunk - rather than the server rebuilding them on every chunk.
+      const allDealIds = groups.map((g) => String(g.dealId));
+      const summary = {};
+      for (const g of groups) {
+        if (kind === 'notes') { summary[String(g.dealId)] = { total: g.items.length }; continue; }
+        const open = g.items.filter((a) => !a.done);
+        const dues = open.map((a) => a.dueDate).filter(Boolean).sort();
+        summary[String(g.dealId)] = { total: g.items.length, open: open.length, next: dues[0] || '' };
+      }
+
+      // Chunk by DEAL - each request writes one key per deal. 300 keeps the payload
+      // around 1MB, well inside the ~4.5MB limit, while cutting the number of round
+      // trips from ~46 to ~18.
+      const DEAL_CHUNK = 300;
       try {
         let written = 0;
+        const started = Date.now();
         for (let i = 0; i < groups.length; i += DEAL_CHUNK) {
           const slice = groups.slice(i, i + DEAL_CHUNK);
           const first = i === 0;
           const last = i + DEAL_CHUNK >= groups.length;
-          setImportMsg(`Saving ${Math.min(i + DEAL_CHUNK, groups.length)} of ${groups.length} projects...`);
+          const doneSoFar = Math.min(i + DEAL_CHUNK, groups.length);
+          const pct = Math.round((doneSoFar / groups.length) * 100);
+          let eta = '';
+          if (i > 0) {
+            const perProject = (Date.now() - started) / i;
+            const secs = Math.round((perProject * (groups.length - i)) / 1000);
+            if (secs > 5) eta = ` - about ${secs > 90 ? Math.round(secs / 60) + ' min' : secs + 's'} left`;
+          }
+          setImportMsg(`Saving ${doneSoFar} of ${groups.length} projects (${pct}%)${eta}`);
           const r = await fetch('/api/crm', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'import-sub', kind, groups: slice, first, last }),
+            body: JSON.stringify({
+              action: 'import-sub', kind, groups: slice, first, last,
+              ...(first ? { allDealIds } : {}),
+              ...(last ? { index: allDealIds, summary } : {}),
+            }),
           });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('server ' + r.status)); }
           const d = await r.json();
