@@ -139,10 +139,14 @@ export default function HSMatrixPage() {
       </div>
 
       <div style={{ border: '1px solid #ececec', borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-        <div style={{ overflowX: 'auto' }}>
+        {/* The matrix scrolls in BOTH directions inside this box. It needs its own scroll
+            container so the header row has something to stick to - sticky positions
+            against the nearest scrolling ancestor, and the page itself was that ancestor
+            before, which is why the header scrolled away. */}
+        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
           <div style={{ minWidth: NAME_W + META_W * 3 + columns.length * COL_W }}>
-            {/* header */}
-            <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', alignItems: 'flex-end' }}>
+            {/* header - frozen to the top of the scroll box */}
+            <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', alignItems: 'flex-end', position: 'sticky', top: 0, zIndex: 10, background: HEADER_ORANGE }}>
               <HeadFix w={NAME_W} left={0}>Employee</HeadFix>
               <HeadFix w={META_W} left={NAME_W}>Company</HeadFix>
               <HeadFix w={META_W} left={NAME_W + META_W}>Trade</HeadFix>
