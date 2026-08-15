@@ -1020,7 +1020,16 @@ function CRMPageInner() {
         comments: [], imported: true,
       }));
       if (!acts.length && !notes.length) return;
-      skipSave.current = true;
+      // Deliberately NOT setting skipSave here.
+      //
+      // It used to, to avoid a pointless save when imported records were merged in. But
+      // this runs asynchronously after you open a deal, so if you added an activity while
+      // it was still loading, the sequence was:
+      //   1. your activity  -> setDeals -> save scheduled (800ms debounce)
+      //   2. this resolves  -> skipSave = true -> setDeals -> the effect's cleanup
+      //      CANCELS your pending save, then skips this one too
+      // Your activity was never written. Since imported records are now stripped before
+      // saving anyway, letting this save is harmless - and it carries your change with it.
       setDeals((prev) => prev.map((d) => d.id !== id ? d : {
         ...d,
         activities: [...acts, ...(d.activities || [])],

@@ -1,64 +1,63 @@
-pkg324 - Activities: a breakdown so we can find where yours is going
-=====================================================================
+pkg325 - You were right: the activities were not saving
+========================================================
 
-REPLACES pkg302 through pkg323. Deploy this one only.
+REPLACES pkg302 through pkg324. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
+  pages/crm.js            THE FIX
   pages/api/crm.js        unchanged since pkg322
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHERE I HAVE GOT TO
---------------------
-I have verified the two ends and they are both correct:
+YOUR HUNCH WAS CORRECT
+-----------------------
+The activity was never being written to the deal. The Activities tab was innocent all
+along - I had been looking at the wrong end of it.
 
-  - addActivity() does add to the deal's own activity list, with done: false
-  - the Activities tab does read that list and merge it with the imported ones
-
-So the data goes in, and the reader looks in the right place. Something between the two is
-dropping it, and I have not been able to see what by reading the code. Rather than guess a
-fourth time, this makes the tab show its own workings.
+There were TWO separate save faults. pkg323 fixed the first (the payload growing past the
+request limit and failing silently). This is the second, and it is the one that would still
+have been biting you.
 
 
-"WHERE ARE MY ACTIVITIES?"
---------------------------
-A small expander next to the activity count. Open it and it shows:
+THE RACE
+--------
+Opening a deal kicks off a background fetch of that deal's imported activities and notes.
+When it returns, it merges them in - and it used to suppress the save that would otherwise
+follow, since there was nothing new worth writing.
 
-  Added in the CRM:            how many activities exist on deals that were NOT imported,
-                               and how many of those are still open
-  Imported and outstanding:    the count from the Pipedrive import
-  Rows built:                  how many rows the table actually assembled, and how many of
-                               those came from activities added in the CRM
-  On won/lost projects:        how many were set aside by the open-projects-only rule
+But saves are debounced by 800ms, and that suppression cancels anything already pending.
+So if you opened a deal and added an activity while the fetch was still in flight:
 
-That pins it down immediately:
+    1. your activity     -> save scheduled, 800ms
+    2. fetch resolves    -> merge suppresses saving, and in doing so CANCELS your
+                            pending save
+    3. nothing is ever written
 
-  - if "Added in the CRM" is 0 right after you add one, it never reached the deal
-  - if it counts yours but "of which N added in the CRM" is 0, the merge is dropping it
-  - if the row is built but not visible, a filter or the open-project rule is hiding it,
-    and the amber "Filtered by..." line and the won/lost line above say which
+Reproduced it in isolation: old behaviour saves nothing, new behaviour saves your change.
 
-Send me those numbers after adding an activity and I can name the cause rather than
-theorise about it.
+Adding an activity is exactly when this happens, because you open a deal and go straight
+to it - inside the window while the fetch is still running.
 
-
-TWO RULES THAT MAKE THE TWO VIEWS DIFFER LEGITIMATELY
--------------------------------------------------------
-Worth ruling out first, because both are working as designed and either would look like
-"it did not pull through":
-
-  1. The tab lists OPEN activities only unless you tick "Include completed". The deal shows
-     all of them.
-  2. The tab lists activities on OPEN projects only. The deal shows them whatever its
-     status. So an activity you set on a won or lost project will never appear on the tab.
-
-If your test project is won or lost, that is the whole explanation - the won/lost line will
-show a count. Tell me if you would rather won projects were included; you are still working
-those jobs, so there is a fair case for it.
+FIXED by letting that merge save normally. It is harmless now: pkg323 already strips
+imported records before saving, so the merge adds nothing to the payload - it just carries
+your change along with it.
 
 
-TESTED
-------
-npm run build - Compiled successfully.
+WHAT TO EXPECT
+--------------
+Add an activity inside a deal, wait a second for "Saved", then reload. It should still be
+there, and it should appear in the Activities tab.
+
+If a save ever does fail now, the badge in the header turns red and tells you, rather than
+claiming "Saved" - that came in with pkg323 and stays.
+
+The "Where are my activities?" breakdown from pkg324 is still there too. If anything is
+still missing, open it and send me the numbers - but I expect this was the cause.
+
+
+A NOTE ON THE LAST FEW PACKAGES
+--------------------------------
+This took far too many rounds. I kept examining the Activities tab because that is where
+the symptom appeared, when the fault was in how the deal was being saved. Your instinct
+that it was a saving problem is what turned it around.
