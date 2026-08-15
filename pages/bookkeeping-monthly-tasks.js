@@ -15,7 +15,6 @@ const MONTHLY = [
   { id: 'bm10', text: 'Ensure all Cost of Sales (COS) transactions have the correct tracking categories assigned.' },
   { id: 'bm11', text: 'Ensure all month-end journals have been posted before closing the period.' },
   { id: 'bm12', text: 'Confirm that all bookkeeping for the month is complete and ready for VAT preparation, and request Cotton to file VAT for the month.' },
-  { id: 'bm14', text: "Confirm that the month's VAT return has been filed no later than the 23rd of the month." },
 ]
 
 export default function BookkeepingMonthlyTasks() {

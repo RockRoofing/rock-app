@@ -1,77 +1,50 @@
-pkg286 - Ops project details now reach the Commercial Edit Project Details
-===========================================================================
+pkg287 - Monthly Bookkeeping: remove the VAT return confirmation task
+=====================================================================
 
 CHANGED FILES
 -------------
-  lib/projectPeople.js        Design Manager + Site Supervisor now resolve from Ops
-  pages/project/[id].js       "use Ops value" control; the two new roles in the Team list
+  pages/bookkeeping-monthly-tasks.js
 
-No new files. Both straight replacements. Independent of the other packages.
-
-FOLDER NOTE: pages/project/[id].js goes in the folder with LITERAL square brackets.
+No new files. Straight replacement. Independent of every other package.
 
 
-WHAT I FOUND
+WHAT CHANGED
 ------------
-The link between the two already existed and mostly worked. Commercial's Edit Project
-Details does NOT store its own copy of these fields - it reads the Ops project record live
-each time (lib/projectPeople.js), which is why the "from IHM" badges are there. So Ops
-changes were already meant to appear in Commercial without anything being copied.
+Removed the task added by pkg285:
 
-Two things were stopping it.
+  "Confirm that the month's VAT return has been filed no later than the 23rd of the month."
 
-1. ONCE OVERRIDDEN, ALWAYS OVERRIDDEN  <-- the main one
-   If anyone had ever changed a field in Commercial, that override won permanently and
-   later Ops changes could never show. There was no way to undo it: picking the blank
-   option wrote an empty override, which counts as "deliberately cleared" and still beats
-   the Ops value. So the field was stuck for good.
-
-   That is almost certainly what you are seeing - the fields that are not updating will be
-   ones that were edited in Commercial at some point.
-
-2. TWO ROLES HAD NO ROUTE AT ALL
-   Ops > Projects > Project Details captures Design Manager and Site Supervisor, but the
-   resolver only handled Estimator, CM, OM and QS. Those two were never going to appear in
-   Commercial no matter what you changed.
+Nothing else was touched. The remaining 13 tasks keep their existing ids, so all existing
+tick history is preserved.
 
 
-THE FIX
--------
-1. Every overridden field now shows a green "use Ops value" button next to the orange
-   "override" badge. Press it and the override is REMOVED (not blanked), so the field goes
-   back to following Ops and will keep tracking it from then on.
+*** CHECK THIS LIST BEFORE YOU DEPLOY ***
+------------------------------------------
+This is a WHOLE-FILE replacement built from the repo zip you sent me, which is at pkg264.
+If you have edited this file directly in GitHub since then, your changes are NOT in here
+and deploying this will remove them.
 
-   Available on: Contracts Manager, Operations Manager, Quantity Surveyor, Estimator,
-   Design Manager, Site Supervisor, Site address, Order reference, Customer company name,
-   Customer company address.
+The file in this package contains exactly these 13 tasks, in this order:
 
-2. Design Manager and Site Supervisor added to the Team list in Commercial, resolving from
-   Ops like the other roles, with the same badges and revert control.
+   1. [bm1] Reconcile supplier statements with supplier ledger balances.
+   2. [bm2] Post all required prepayment journals.
+   3. [bm3] Post inventory journals and reconcile inventory balances where applicable.
+   4. [bm4] Complete bank balance reconciliations for all bank accounts.
+   5. [bm13] Notify the Commercial Team that the WIP can now be completed.
+   6. [bm5] Obtain the WIP schedule from Nathan and post the required WIP journals.
+   7. [bm6] Update all Apps by uploading the month's invoices and ensuring they are processed correctly.
+   8. [bm7] Review and reconcile retention balances with the relevant Apps/contracts.
+   9. [bm8] Share the payroll timesheet with Cotton after the 21st of each month.
+  10. [bm9] Create the payroll payment batch by the 28th of each month.
+  11. [bm10] Ensure all Cost of Sales (COS) transactions have the correct tracking categories assigned.
+  12. [bm11] Ensure all month-end journals have been posted before closing the period.
+  13. [bm12] Confirm that all bookkeeping for the month is complete and ready for VAT preparation, and request Cotton to file VAT for the month.
 
-
-HOW TO CHECK IT WORKS
-----------------------
-On a project where a field is not updating, open Edit Project Details in Commercial. If
-that field shows an orange "override" badge, that is your answer - press "use Ops value",
-save, and it will show the Ops value and follow it from then on.
-
-If it shows a blue "from IHM" badge it is already following Ops. If it shows NEITHER, Ops
-has no value in that field for this project.
-
-
-ONE THING THAT IS UNCHANGED ON PURPOSE
----------------------------------------
-Overrides still exist and still win. Commercial can still deviate from Ops on a project
-where that is wanted - the difference is that it is now reversible and clearly labelled,
-rather than a one-way door.
-
-Note also that the project LISTS and dashboard cards read from the dashboard snapshot,
-which rebuilds every 4 hours (it is cleared on save, so your own edits show immediately).
-Edit Project Details itself always reads live.
+If anything you added is missing from that list, DO NOT deploy this file - tell me what is
+missing and I will add it, or just delete the one bm14 line directly in GitHub instead.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Override resolution verified: no override follows Ops, an override wins, a BLANKED
-override stays stuck (the old behaviour), and a DELETED override restores the Ops value.
+Confirmed 13 tasks remain and no duplicate ids.
