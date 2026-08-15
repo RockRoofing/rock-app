@@ -1,47 +1,77 @@
-pkg285 - Bookkeeping: extra monthly VAT task
-=============================================
+pkg286 - Ops project details now reach the Commercial Edit Project Details
+===========================================================================
 
 CHANGED FILES
 -------------
-  pages/bookkeeping-monthly-tasks.js
+  lib/projectPeople.js        Design Manager + Site Supervisor now resolve from Ops
+  pages/project/[id].js       "use Ops value" control; the two new roles in the Team list
 
-No new files. Straight replacement. Independent of every other package.
+No new files. Both straight replacements. Independent of the other packages.
+
+FOLDER NOTE: pages/project/[id].js goes in the folder with LITERAL square brackets.
 
 
-WHAT CHANGED
+WHAT I FOUND
 ------------
-One task added to the bottom of the monthly list:
+The link between the two already existed and mostly worked. Commercial's Edit Project
+Details does NOT store its own copy of these fields - it reads the Ops project record live
+each time (lib/projectPeople.js), which is why the "from IHM" badges are there. So Ops
+changes were already meant to appear in Commercial without anything being copied.
 
-  "Confirm that the month's VAT return has been filed no later than the 23rd of the month."
+Two things were stopping it.
 
-Placed last, directly after the existing task that asks Cotton to file the VAT - so the
-request and the confirmation of it sit together and read in order.
+1. ONCE OVERRIDDEN, ALWAYS OVERRIDDEN  <-- the main one
+   If anyone had ever changed a field in Commercial, that override won permanently and
+   later Ops changes could never show. There was no way to undo it: picking the blank
+   option wrote an empty override, which counts as "deliberately cleared" and still beats
+   the Ops value. So the field was stuck for good.
 
-Given the id bm14. Ids bm1 to bm13 were already used (bm13 sits mid-list, so the next free
-number is 14, not the position in the list). Ids are what the tick state is stored against,
-so re-using one would have made the new task inherit another task's history.
+   That is almost certainly what you are seeing - the fields that are not updating will be
+   ones that were edited in Commercial at some point.
 
-Existing ticks are unaffected - nothing else was renumbered or reordered.
+2. TWO ROLES HAD NO ROUTE AT ALL
+   Ops > Projects > Project Details captures Design Manager and Site Supervisor, but the
+   resolver only handled Estimator, CM, OM and QS. Those two were never going to appear in
+   Commercial no matter what you changed.
 
 
-ONE THING TO DECIDE
--------------------
-The page subtitle still reads:
+THE FIX
+-------
+1. Every overridden field now shows a green "use Ops value" button next to the orange
+   "override" badge. Press it and the override is REMOVED (not blanked), so the field goes
+   back to following Ops and will keep tracking it from then on.
 
-  "All monthly bookkeeping tasks to be completed no later than the 15th of each month."
+   Available on: Contracts Manager, Operations Manager, Quantity Surveyor, Estimator,
+   Design Manager, Site Supervisor, Site address, Order reference, Customer company name,
+   Customer company address.
 
-This new task is due the 23rd, so that blanket statement is now wrong for one of the rows.
-The same tension already exists for two others - the payroll timesheet (after the 21st)
-and the payroll batch (by the 28th) - so it predates this change, but this adds a third.
+2. Design Manager and Site Supervisor added to the Team list in Commercial, resolving from
+   Ops like the other roles, with the same badges and revert control.
 
-Options if you want it tidied:
-  - reword the subtitle to something like "...by the 15th unless a later date is stated"
-  - or leave it, since each task states its own deadline in its text
 
-Say which and it is a one-line change.
+HOW TO CHECK IT WORKS
+----------------------
+On a project where a field is not updating, open Edit Project Details in Commercial. If
+that field shows an orange "override" badge, that is your answer - press "use Ops value",
+save, and it will show the Ops value and follow it from then on.
+
+If it shows a blue "from IHM" badge it is already following Ops. If it shows NEITHER, Ops
+has no value in that field for this project.
+
+
+ONE THING THAT IS UNCHANGED ON PURPOSE
+---------------------------------------
+Overrides still exist and still win. Commercial can still deviate from Ops on a project
+where that is wanted - the difference is that it is now reversible and clearly labelled,
+rather than a one-way door.
+
+Note also that the project LISTS and dashboard cards read from the dashboard snapshot,
+which rebuilds every 4 hours (it is cleared on save, so your own edits show immediately).
+Edit Project Details itself always reads live.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Checked no duplicate task ids.
+Override resolution verified: no override follows Ops, an override wins, a BLANKED
+override stays stuck (the old behaviour), and a DELETED override restores the Ops value.

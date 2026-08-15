@@ -1397,6 +1397,18 @@ function RetentionTab({ p, settings, atDate }) {
   )
 }
 
+// "Use Ops value" - removes the commercial override for a field so it goes back to
+// following Ops > Projects > Project Details. Without this, once a field had been edited
+// here it was overridden FOREVER and later Ops changes could never appear.
+function UseOpsBtn({ onClick }) {
+  return (
+    <button type="button" onClick={onClick} title="Stop overriding and follow the Ops project details again"
+      style={{ marginLeft: 6, fontSize: 9, background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', borderRadius: 4, padding: '1px 5px', fontWeight: 600, cursor: 'pointer' }}>
+      use Ops value
+    </button>
+  )
+}
+
 function DetailsForm({ form, setForm, addVariation, updateVariation, removeVariation, afa, currentMargin, teamMembers, onAddMember, onRemoveMember, people, allUsers }) {
   const f = (field) => (e) => setForm({ ...form, [field]: e.target.value })
   // Open the monthly override table by default if the project already has any
@@ -1415,11 +1427,20 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const users = allUsers || []
   const ov = form.peopleOverride || {}
   const setOverride = (key, value) => setForm({ ...form, peopleOverride: { ...(form.peopleOverride || {}), [key]: value } })
+  // Delete the key entirely - an override that merely EXISTS wins, even when empty,
+  // so it has to be removed rather than blanked for the Ops value to come back.
+  const clearOverride = (key) => {
+    const next = { ...(form.peopleOverride || {}) }
+    delete next[key]
+    setForm({ ...form, peopleOverride: next })
+  }
   const TEAM_ROLES = [
     { key: 'contractsManager', label: 'Contracts Manager (CM)' },
     { key: 'operationsManager', label: 'Operations Manager (OM)' },
     { key: 'quantitySurveyor', label: 'Quantity Surveyor (QS)' },
     { key: 'estimator', label: 'Estimator' },
+    { key: 'designManager', label: 'Design Manager' },
+    { key: 'siteSupervisor', label: 'Site Supervisor' },
   ]
   const teamValue = (key) => (ov[key] !== undefined) ? (ov[key] || '') : (people?.team?.[key]?.name || '')
   const fromIhm = (key) => (ov[key] === undefined) && !!(people?.team?.[key]?.name)
@@ -1662,9 +1683,9 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
           Is this a high risk customer?
         </label>
         {form.highRiskCustomer && <div style={{ fontSize: 11, color: '#dc2626', marginBottom: 6 }}>⚠ Invoices for this customer will show a High Risk warning on the Outstanding Invoices page.</div>}
-        <label style={labelStyle}>Site address{addrFromIhm && <span style={ihmBadge}>from IHM</span>}{addrOverridden && <span style={ovBadge}>override</span>}</label>
+        <label style={labelStyle}>Site address{addrFromIhm && <span style={ihmBadge}>from IHM</span>}{addrOverridden && <><span style={ovBadge}>override</span><UseOpsBtn onClick={() => clearOverride('projectAddress')} /></>}</label>
         <input value={addressDisplay} onChange={e => setOverride('projectAddress', e.target.value)} style={inputStyle} />
-        <label style={labelStyle}>Order reference{orderFromIhm && <span style={ihmBadge}>from IHM</span>}{orderOverridden && <span style={ovBadge}>override</span>}</label>
+        <label style={labelStyle}>Order reference{orderFromIhm && <span style={ihmBadge}>from IHM</span>}{orderOverridden && <><span style={ovBadge}>override</span><UseOpsBtn onClick={() => clearOverride('orderRef')} /></>}</label>
         <input value={orderRefDisplay} onChange={e => setOverride('orderRef', e.target.value)} style={inputStyle} />
       </div>
       <div style={sectionStyle}>
@@ -1672,20 +1693,20 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
           {people?.hasIhm ? 'From the Internal Handover Minutes. Editing overrides for this project (the IHM is unchanged).' : 'No IHM found for this job number yet — enter manually.'}
         </div>
-        <label style={labelStyle}>Company name{compFromIhm && <span style={ihmBadge}>from IHM</span>}{compOverridden && <span style={ovBadge}>override</span>}</label>
+        <label style={labelStyle}>Company name{compFromIhm && <span style={ihmBadge}>from IHM</span>}{compOverridden && <><span style={ovBadge}>override</span><UseOpsBtn onClick={() => clearOverride('customerCompany')} /></>}</label>
         <input value={custCompanyDisplay} onChange={e => setOverride('customerCompany', e.target.value)} style={inputStyle} />
-        <label style={labelStyle}>Company address{custAddrFromIhm && <span style={ihmBadge}>from IHM</span>}{custAddrOverridden && <span style={ovBadge}>override</span>}</label>
+        <label style={labelStyle}>Company address{custAddrFromIhm && <span style={ihmBadge}>from IHM</span>}{custAddrOverridden && <><span style={ovBadge}>override</span><UseOpsBtn onClick={() => clearOverride('customerAddress')} /></>}</label>
         <textarea value={custAddressDisplay} onChange={e => setOverride('customerAddress', e.target.value)} rows={3}
           style={{ ...inputStyle, minHeight: 60, resize: 'vertical', fontFamily: 'inherit' }} />
       </div>
       <div style={sectionStyle}>
         <div style={headingStyle}>Team</div>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
-          Populated from the Internal Handover Minutes (matched by job number). Change any role here to override for this project — your change is remembered and does not affect the IHM.
+          Populated from Ops &gt; Projects &gt; Project Details (matched by job number) and kept in step with it. Change a role here to override it for this project only; press &quot;use Ops value&quot; to drop the override and follow Ops again.
         </div>
         {TEAM_ROLES.map(({ key, label }) => (
           <div key={key}>
-            <label style={labelStyle}>{label}{fromIhm(key) && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{ov[key] !== undefined && <span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span>}</label>
+            <label style={labelStyle}>{label}{fromIhm(key) && <span style={{ marginLeft: 6, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>from IHM</span>}{ov[key] !== undefined && <><span style={{ marginLeft: 6, fontSize: 9, background: '#fff7ed', color: '#c2410c', borderRadius: 4, padding: '1px 5px', fontWeight: 600 }}>override</span><UseOpsBtn onClick={() => clearOverride(key)} /></>}</label>
             <select value={teamValue(key)} onChange={e => setOverride(key, e.target.value)} style={inputStyle}>
               <option value="">— Select {label.replace(/\s*\(.*\)/, '')} —</option>
               {users.map(u => <option key={u.id || u.name} value={u.name}>{u.name}{u.role ? ` — ${u.role}` : ''}</option>)}
