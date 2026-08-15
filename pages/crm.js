@@ -95,6 +95,20 @@ function savePrefs(prefs) {
   try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode / full quota */ }
 }
 
+// The form a deal is SAVED in: imported activities/notes belong to their own per-deal
+// stores, and the kanban summaries are in-memory only. The baseline used for "what
+// changed" must be built with this same function, or every deal looks different from its
+// stored copy and the whole list gets resent.
+const leanDeal = (d) => {
+  const { _actSummary, _noteSummary, ...rest } = d;
+  return {
+    ...rest,
+    activities: (d.activities || []).filter((a) => !a.imported),
+    notes: (d.notes || []).filter((n) => !n.imported),
+    history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
+  };
+};
+
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 // Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
 // so convert rather than showing raw tags: breaks become newlines, entities decoded.
@@ -955,12 +969,7 @@ function CRMPageInner() {
           setDeletedOrgs(d.deletedOrgs || []);
           setDeletedContacts(d.deletedContacts || []);
           const seed = new Map();
-          for (const x of d.deals) {
-            seed.set(String(x.id), JSON.stringify({
-              ...x, fields: { ...x.fields }, history: [...(x.history || [])],
-              activities: [...(x.activities || [])], notes: [...(x.notes || [])],
-            }));
-          }
+          for (const x of d.deals) seed.set(String(x.id), JSON.stringify(leanDeal(x)));
           savedSnapshot.current = seed;
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
@@ -988,18 +997,7 @@ function CRMPageInner() {
         // Imported activities and notes are merged into a deal when you open it, so the
         // deal view can show them. They must not be written back - they already live in
         // their own per-deal stores.
-        const lean = deals.map((d) => {
-          // _actSummary / _noteSummary are attached in memory for the kanban dots. They
-          // must be dropped, or every deal would differ from its saved copy and the
-          // "only what changed" comparison would match nothing.
-          const { _actSummary, _noteSummary, ...rest } = d;
-          return {
-            ...rest,
-            activities: (d.activities || []).filter((a) => !a.imported),
-            notes: (d.notes || []).filter((n) => !n.imported),
-            history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
-          };
-        });
+        const lean = deals.map(leanDeal);
 
         // Send ONLY what changed. The full list is ~6.4MB and Vercel refuses any request
         // body over 4.5MB, so a whole-list save can never succeed at this size.
@@ -1016,13 +1014,38 @@ function CRMPageInner() {
 
         if (!changed.length && !removedIds.length) { setSaving(false); return; }
 
-        const r = await fetch('/api/crm', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'save-deals-partial', deals: changed, removedIds, schema }),
-        });
-        if (!r.ok) {
-          setSaveError(`Save failed (server ${r.status}). Your last change is not stored.`);
-        } else {
+        // Batch by MEASURED SIZE. Normally one deal changes and this is a single small
+        // request - but the first save after a cleanup can legitimately involve thousands,
+        // and that must not hit the 4.5MB ceiling in one go.
+        const MAX_BYTES = 3 * 1024 * 1024;
+        const batches = [];
+        let cur = [], curBytes = 0;
+        for (const d of changed) {
+          const b = JSON.stringify(d).length;
+          if (cur.length && curBytes + b > MAX_BYTES) { batches.push(cur); cur = []; curBytes = 0; }
+          cur.push(d); curBytes += b;
+        }
+        if (cur.length) batches.push(cur);
+        if (!batches.length) batches.push([]);          // removals only
+
+        let ok = true;
+        for (let bi = 0; bi < batches.length; bi++) {
+          if (batches.length > 1) setSaveError(`Saving ${bi + 1} of ${batches.length}...`);
+          const r = await fetch('/api/crm', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'save-deals-partial',
+              deals: batches[bi],
+              removedIds: bi === batches.length - 1 ? removedIds : [],
+              schema: bi === 0 ? schema : undefined,
+            }),
+          });
+          if (!r.ok) {
+            setSaveError(`Save failed (server ${r.status}). Your last change is not stored.`);
+            ok = false; break;
+          }
+        }
+        if (ok) {
           savedSnapshot.current = nextSnap;   // only advance the baseline on success
           setSaveError('');
         }
