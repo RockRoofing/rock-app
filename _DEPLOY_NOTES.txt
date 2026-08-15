@@ -1,7 +1,7 @@
-pkg348 - Mark done is instant now
-==================================
+pkg350 - "Call" prefilled when setting the next activity
+=========================================================
 
-REPLACES pkg302 through pkg347. Deploy this one only.
+REPLACES pkg302 through pkg349. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,32 +10,31 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHY IT WAS SLOW
----------------
-Completing an activity did the work first and updated the screen afterwards. For an
-imported activity that meant TWO round trips before the row moved:
+WHAT CHANGED
+------------
+Mark an activity done and the "What needs doing next?" box now starts with "Call" already
+in it. Leave it and you get a Call. Type over it for anything else.
 
-    fetch that deal's activities  ->  write them back  ->  only then remove the row
+Clicking into the box selects the word, so typing replaces it rather than you having to
+delete it first.
 
-Plus the window stayed open until both had finished. So a couple of hundred milliseconds
-each way felt like a hang.
-
-
-NOW
----
-The row disappears immediately and the window closes immediately. The saving happens behind
-it. Nothing waits on the network.
-
-If the save fails, the row is PUT BACK and the badge says "That activity could not be
-marked done - it has been put back." So a dropped connection cannot leave you thinking
-something was actioned when it was not.
+If it is emptied - or left as spaces - it still saves as "Call" rather than a blank
+activity. Checked all four cases: prefilled, typed over, cleared, and spaces only.
 
 
-ONE THING THIS NEEDED CARE WITH
---------------------------------
-The tab refreshes itself every 60 seconds. Without a guard, a refresh landing while a save
-was still in flight would fetch server data that did not yet include your change - and the
-row you had just completed would flicker back onto the list.
+THE BUTTON IS NO LONGER DISABLED
+---------------------------------
+"Done & set next" used to grey out until you typed something. With "Call" already there
+that made no sense, so it is always available. The quickest path is now: tick, Enter a due
+date if you want to change it, press the button.
 
-The refresh now stands aside while any write is in progress. Briefly stale is fine; a row
-reappearing after you have actioned it is not.
+"Just mark done" is still there for when there genuinely is no follow-up.
+
+The wording under the heading now says what it does rather than "leave blank to just mark
+this one done", which no longer applies.
+
+
+CONSISTENCY NOTE
+----------------
+This matches the deal's own add-activity box, which has always defaulted to "Call" when
+nothing was typed. The two behaved differently before, which was a small trap.

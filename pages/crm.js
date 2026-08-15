@@ -1687,18 +1687,6 @@ function CRMPageInner() {
   // server data that does not yet include a change being saved - that would make a row
   // you just completed flicker back.
   const pendingWrites = useRef(0);
-  async function rebuildActivityState() {
-    if (!window.confirm('Recount the activity list from stored records?\n\nThis only recounts what is already saved - nothing is added or removed.')) return;
-    setActLoading(true);
-    try {
-      await fetch('/api/crm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'rebuild-activity-state' }),
-      });
-      await refreshActivityState();
-    } catch { /* leave what we have */ }
-    setActLoading(false);
-  }
 
   async function refreshActivityState() {
     if (refreshingRef.current || pendingWrites.current > 0) return;
@@ -1813,6 +1801,7 @@ function CRMPageInner() {
         rawId: a.id,
         dealId,
         project: deal.title || '',
+        stage: (STAGES.find((x) => x.id === deal.stageId) || {}).label || '',
         text: a.text || 'Activity',
         due: a.due || '',
         assignee: resolveName(a.assignee || ''),
@@ -1842,62 +1831,7 @@ function CRMPageInner() {
   const activityRows = useMemo(() => activityRowsAll.filter((r) => r.dealStatus === 'open'), [activityRowsAll]);
   const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => r.dealStatus !== 'open').length, [activityRowsAll]);
 
-  // Where every activity ended up. Shown on the tab so a missing one can be traced to the
-  // rule that hid it, instead of it just not being there.
-  const activityStaleFilter = useMemo(() => (
-    (!!actPerson && !activityRows.some((r) => r.assignee === actPerson)) ||
-    (!!actCustomer && !activityRows.some((r) => r.company === actCustomer))
-  ), [actPerson, actCustomer, activityRows]);
 
-  // Every CRM-created activity found anywhere, with the reason it is or is not on screen.
-  // Definitive - it checks each rule in turn rather than me guessing which one is biting.
-  const activityTrace = useMemo(() => {
-    const out = [];
-    for (const d of deals) {
-      for (const a of (d.activities || [])) {
-        if (a.imported) continue;
-        let verdict = 'showing';
-        if (a.done && !actShowDone) verdict = 'hidden: marked done (tick "Include completed")';
-        else if (d.status !== 'open') verdict = `hidden: project is "${d.status}" (tab lists open projects only)`;
-        else if (actPerson && a.assignee !== actPerson) verdict = `hidden: person filter is "${actPerson}", this is "${a.assignee || 'nobody'}"`;
-        else if (actCustomer && (d.fields?.organization || '') !== actCustomer) verdict = `hidden: customer filter is "${actCustomer}"`;
-        out.push({ deal: d.title, dealId: d.id, text: a.text, due: a.due || '(no date)', verdict });
-      }
-    }
-    // Also trace the shared store. Since activities are no longer kept on the deal, this
-    // is where everything lives - so anything hidden has to be explained from here, not
-    // just from the deal. Only the ones being EXCLUDED are listed, otherwise this would
-    // print a thousand rows.
-    for (const a of (openActivities || [])) {
-      if (out.some((o) => String(o.dealId) === String(a.dealId) && o.text === a.text)) continue;
-      const d = deals.find((x) => String(x.id) === String(a.dealId));
-      if (!d) { out.push({ deal: '(project not in the CRM)', dealId: a.dealId, text: a.text, due: a.due, verdict: 'hidden: its project is not loaded' }); continue; }
-      let verdict = null;
-      if (d.status !== 'open') verdict = `hidden: project is "${d.status}" - this tab lists open projects only`;
-      else if (actPerson && (a.assignee || '') !== actPerson) verdict = `hidden: person filter is "${actPerson}", this is "${a.assignee || 'nobody'}"`;
-      else if (actCustomer && (d.fields?.organization || '') !== actCustomer) verdict = `hidden: customer filter is "${actCustomer}"`;
-      if (verdict) out.push({ deal: d.title, dealId: d.id, text: a.text, due: a.due || '(no date)', verdict });
-    }
-    return out.slice(0, 25);
-  }, [deals, openActivities, actShowDone, actPerson, actCustomer]);
-
-  const activityBreakdown = useMemo(() => {
-    let inCrmTotal = 0, inCrmOpen = 0;
-    for (const d of deals) {
-      for (const a of (d.activities || [])) {
-        if (a.imported) continue;
-        inCrmTotal++;
-        if (!a.done) inCrmOpen++;
-      }
-    }
-    return {
-      inCrmTotal, inCrmOpen,
-      imported: (openActivities || []).length,
-      builtRows: activityRowsAll.length,
-      fromCrm: activityRowsAll.filter((r) => r.source === 'crm').length,
-      onClosed: activityClosedCount,
-    };
-  }, [deals, openActivities, activityRowsAll, activityClosedCount]);
 
   const actPeople = useMemo(() => [...new Set(activityRows.map((r) => r.assignee).filter(Boolean))].sort(), [activityRows]);
   const actCustomers = useMemo(() => [...new Set(activityRows.map((r) => r.company).filter(Boolean))].sort(), [activityRows]);
@@ -2142,8 +2076,8 @@ function CRMPageInner() {
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
-            closedCount={activityClosedCount} breakdown={activityBreakdown} trace={activityTrace} staleFilter={activityStaleFilter}
-            refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
+            staleFilter={activityStaleFilter}
+            refreshedAt={actRefreshedAt} onRefresh={refreshActivityState}
             search={actSearch} setSearch={setActSearch} me={me} users={users}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
@@ -2290,6 +2224,7 @@ const fLbl = { display: 'block', fontSize: 12, color: C.dim, marginBottom: 4, fo
 // ---------------------------------------------------------------------------
 const ACT_COLS = [
   ['project', 'Project'],
+  ['stage', 'Stage'],
   ['text', 'Activity'],
   ['due', 'Due date'],
   ['assignee', 'Person responsible'],
@@ -2303,7 +2238,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch, me, users }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2351,37 +2286,6 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
               {' '}<button onClick={onClearFilters} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>clear</button>
             </div>
           )}
-          {closedCount > 0 && (
-            <div style={{ color: '#aaa', marginTop: 2 }}>{closedCount} more on won or lost projects (not listed here)</div>
-          )}
-          {breakdown && (
-            <details style={{ marginTop: 3 }}>
-              <summary style={{ cursor: 'pointer', color: C.link, fontSize: 11.5, listStyle: 'none' }}>Where are my activities?</summary>
-              <div style={{ textAlign: 'left', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '10px 12px', marginTop: 6, fontSize: 11.5, color: '#666', lineHeight: 1.7, minWidth: 320, maxHeight: '45vh', overflowY: 'auto' }}>
-                <div>Still held on a deal (pre-update): <strong>{breakdown.inCrmTotal}</strong></div>
-                <div>In the shared store and outstanding: <strong>{breakdown.imported}</strong> &mdash; imported and yours together</div>
-                <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
-                <div>On won/lost projects: <strong>{breakdown.onClosed}</strong></div>
-                {(trace || []).length > 0 && (
-                  <div style={{ marginTop: 10, borderTop: '1px solid ' + C.line, paddingTop: 8 }}>
-                    <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>Activities that exist but are not on screen:</div>
-                    {trace.map((t, i) => (
-                      <div key={i} style={{ marginBottom: 4 }}>
-                        <span style={{ color: C.text }}>{t.deal}</span> &mdash; {t.text} ({t.due})
-                        <div style={{ color: t.verdict === 'showing' ? '#16a34a' : '#b45309' }}>{t.verdict}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ marginTop: 8 }}>
-                  <button onClick={onRebuild} style={{ ...ghostBtn, fontSize: 11.5, padding: '5px 10px' }}>Recount from stored records</button>
-                  <div style={{ marginTop: 5, color: '#999' }}>
-                    Use if the list looks short. It recounts what is stored - it cannot add or remove anything.
-                  </div>
-                </div>
-              </div>
-            </details>
-          )}
         </div>
       </div>
 
@@ -2422,6 +2326,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                     <td style={td}>
                       <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
                     </td>
+                    <td style={{ ...td, whiteSpace: 'nowrap', color: C.dim }}>{r.stage || '\u2014'}</td>
                     <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>{r.text}</td>
                     <td style={{ ...td, whiteSpace: 'nowrap', color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }}>
                       {shortDate(r.due)}{isOverdue ? ' \u00b7 OVERDUE' : ''}
@@ -2458,7 +2363,10 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // booked - which is how deals go quiet.
 function CompleteActivityModal({ row, today, onClose, onDone }) {
   const [outcome, setOutcome] = useState('');
-  const [nextText, setNextText] = useState('');
+  // Prefilled with 'Call' - by far the most common follow-up. Leave it and you get a
+  // Call; overwrite it for anything else. Matches how the deal's own add-activity box
+  // already behaves.
+  const [nextText, setNextText] = useState('Call');
   const [nextDue, setNextDue] = useState(today);
   const [nextAssignee, setNextAssignee] = useState(row.assignee || '');
   const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
@@ -2477,9 +2385,10 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
         <div style={{ borderTop: '1px solid ' + C.line, margin: '18px 0 14px' }} />
 
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Set the next activity</div>
-        <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>Leave blank to just mark this one done.</div>
+        <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>Prefilled with &quot;Call&quot; - change it if it is something else, or use &quot;Just mark done&quot; to set nothing.</div>
         <label style={lbl}>What needs doing next?</label>
-        <input value={nextText} onChange={(e) => setNextText(e.target.value)} placeholder="e.g. Chase pricing" style={inp} />
+        <input value={nextText} onChange={(e) => setNextText(e.target.value)} onFocus={(e) => e.target.select()}
+          placeholder="e.g. Chase pricing" style={inp} />
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Due</label>
@@ -2494,8 +2403,8 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={ghostBtn}>Cancel</button>
           <button onClick={() => onDone(outcome, null)} style={ghostBtn}>Just mark done</button>
-          <button onClick={() => onDone(outcome, { text: nextText, due: nextDue, assignee: nextAssignee })}
-            disabled={!nextText.trim()} style={{ ...primaryBtn, opacity: nextText.trim() ? 1 : 0.5 }}>
+          <button onClick={() => onDone(outcome, { text: nextText.trim() || 'Call', due: nextDue, assignee: nextAssignee })}
+            style={primaryBtn}>
             Done &amp; set next
           </button>
         </div>
