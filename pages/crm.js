@@ -103,14 +103,22 @@ const leanDeal = (d) => {
   const { _actSummary, _noteSummary, ...rest } = d;
   return {
     ...rest,
-    // Activities and notes are NOT stored on the deal any more. Both live in one place per
-    // deal - crm:activities:<dealId> and crm:notes:<dealId> - whether they were imported
-    // or written here. A second copy on the deal is what let the views disagree.
-    activities: [],
-    notes: [],
-    // History keeps the real events (stage moves, field edits, activity events) but not
-    // the notes themselves, which are now records in their own right.
-    history: (d.history || []).filter((h) => h.type !== 'note' && !String(h.id || '').startsWith('h_pd_')),
+    // IMPORTED activities and notes are stripped - there are 36,824 of them and they have
+    // their own per-deal stores. Activities and notes CREATED HERE stay on the deal as
+    // well as going to that store.
+    //
+    // pkg331 stripped those too, which is what broke this: the deal came back from the
+    // server with no activities, so anything added in the CRM could only appear if the
+    // separate aggregate had been rebuilt correctly. Imported ones were in that aggregate
+    // already, which is exactly why they showed and yours did not.
+    //
+    // Keeping them costs almost nothing - a handful of records per deal against 36,824
+    // imported - and it means an activity you add is on the deal you added it to, which is
+    // where every view looks first.
+    activities: (d.activities || []).filter((a) => !a.imported),
+    notes: (d.notes || []).filter((n) => !n.imported),
+    // History keeps everything except the injected copies of IMPORTED notes/activities.
+    history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
   };
 };
 
@@ -996,11 +1004,11 @@ function CRMPageInner() {
             // Deliberately NOT seeded with the deal's own activities. Anything still held
             // on a deal from before this change therefore looks new, and gets written
             // across to the shared store on the next save - a quiet one-off migration.
-            actSeed.set(String(x.id), JSON.stringify([]));
+            actSeed.set(String(x.id), JSON.stringify(crmActivities(x)));
           }
           savedSnapshot.current = seed;
           prevActivities.current = actSeed;
-          prevNotes.current = new Map(d.deals.map((x) => [String(x.id), JSON.stringify([])]));
+          prevNotes.current = new Map(d.deals.map((x) => [String(x.id), JSON.stringify(crmNotes(x))]));
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],

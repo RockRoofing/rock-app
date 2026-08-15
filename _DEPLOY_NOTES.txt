@@ -1,45 +1,65 @@
-pkg336 - Activities tab: open projects only
-============================================
+pkg337 - Found it: pkg331 stopped storing your activities on the deal
+======================================================================
 
-REPLACES pkg302 through pkg335. Deploy this one only.
+REPLACES pkg302 through pkg336. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
+  pages/crm.js            THE FIX
   pages/api/crm.js        unchanged since pkg335
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT CHANGED
-------------
-The Activities tab lists activities on OPEN projects only. The Open / Open + won / All
-dropdown is gone - the filter bar is back to Person, Customer and Include completed.
+"IT IS STILL SHOWING THE PIPEDRIVE ONES" WAS THE ANSWER
+--------------------------------------------------------
+That one detail identified it. Imported activities showing while yours do not is only
+possible in one place.
 
-Won and lost projects are excluded. That is the right call for a to-do list: once a job is
-won or lost, chasing it here is not the job.
+When I unified the storage in pkg331, the deal started being saved with:
 
+    activities: []
 
-ONE THING I HAVE DELIBERATELY KEPT
------------------------------------
-The line under the count:
+So on every page load, deals came back with NO activities at all. Imported ones still
+appeared because they live in the separate outstanding list. Yours could only appear if
+that list had been rebuilt to include them - one extra step, on a different request, that
+had to succeed every time.
 
-    "660 more on won or lost projects (not listed here)"
+Before pkg331 your activities came straight off the deal and always showed. That is
+precisely the behaviour you described losing.
 
-It is informational only now - no button, nothing to click. But it stays, because this is
-exactly the rule that hid your activity for the last several rounds. An activity on a lost
-project will still not appear here, and that line is the only thing that says so.
-
-Without it the tab is silent about what it is holding back, and we would be straight back
-to "it saved but I cannot see it". With it, the answer is on screen.
-
-If you want it gone entirely, say so - but I would keep it.
+I did that to myself: pkg331 was meant to end this class of bug and instead caused the
+exact symptom you had been reporting all along.
 
 
-THE OTHER FIXES FROM pkg335 ARE STILL IN HERE
------------------------------------------------
-  - a deal is no longer saved if its activities or notes failed to write, so they cannot be
-    stripped from the deal without being safely stored (that was a genuine data-loss bug)
-  - "Recount from stored records" under "Where are my activities?", which rebuilds the list
-    and the kanban counts from what is stored - worth running once after deploying
-  - the tab refreshes every 60 seconds and on window focus, so an estimator's progress
-    reaches the salesperson without a reload
+THE FIX
+-------
+Activities and notes CREATED IN THE CRM are stored on the deal again. IMPORTED ones are
+still stripped - there are 36,824 of them, they have their own per-deal stores, and
+re-saving them is what caused the 413s.
+
+That distinction is the whole point:
+
+    imported (36,824)     -> per-deal stores only, never on the deal
+    created here (a few)  -> on the deal, and mirrored to the same store
+
+Keeping the handful you create costs nothing and means an activity you add is on the deal
+you added it to - which is where every view looks first. No aggregate has to be rebuilt for
+it to appear.
+
+Verified end to end: an activity added in a deal survives the save, the imported ones are
+still dropped from the deal record, and after a reload the table shows both.
+
+
+WHAT TO DO
+----------
+Deploy, then add an activity in a deal and check the Activities tab. It should be there.
+Anything you added earlier that is still on a deal will also reappear, because those
+records were never removed from the deals that failed to save - only from ones that saved
+successfully after pkg331.
+
+
+I AM SORRY THIS TOOK SO LONG
+-----------------------------
+Several real bugs came out of this - a crash, two genuine data-loss paths, the 413 - and
+they all needed fixing. But I introduced this one myself midway through and then kept
+looking for it elsewhere. Your last message pinned it in a sentence.
