@@ -1,57 +1,50 @@
-pkg332 - Notes unified too: one store per type
-===============================================
+pkg333 - Activities tab shows everything by default
+====================================================
 
-REPLACES pkg302 through pkg331. Deploy this one only.
+REPLACES pkg302 through pkg332. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
-  pages/api/crm.js
+  pages/crm.js            default project scope
+  pages/api/crm.js        unchanged since pkg332
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHERE EVERYTHING LIVES NOW
----------------------------
-  Deals          crm:deals                  imported and CRM-created together
-  Organisations  crm:orgs                   together
-  Contacts       crm:contacts               together
-  Activities     crm:activities:<dealId>    together   (pkg331)
-  Notes          crm:notes:<dealId>         together   (this package)
-
-No type is split across two stores any more.
-
-
-ONE THING THAT WAS NOT AS I EXPECTED
---------------------------------------
-A note written in the CRM was never in a "notes" list at all - it is a HISTORY entry of
-type 'note' on the deal. Imported notes were in their own store and got injected into the
-history for display. Same two-stores problem as activities, but wearing a different hat.
-
-So the fix had to move history entries of type 'note' - and only those. Stage moves, field
-edits and activity events stay on the deal, where they belong.
-
-CAREFULLY PRESERVED: a CRM note keeps its own id when it moves, so the comments on it and
-any edits still match up. Verified by round-tripping a note with a comment through the
-store and back - imported note preserved, CRM note returned with its comment intact.
-
-
-MIGRATION - AUTOMATIC
+WHAT IT ACTUALLY WAS
 ---------------------
-Existing notes move across the first time each deal is saved, exactly as activities did.
-Nothing disappears in the meantime.
+The project scope. Your activity was on a project marked lost, and the tab was only listing
+open projects (pkg317), then open + won (pkg330). It was saved, it was in the right store,
+the table built the row - and then a display rule dropped it before it reached the screen.
+
+The tab now defaults to ALL PROJECTS. Narrow it with the dropdown when you want to - Open,
+or Open + won - and the tab says which scope is active and how many rows that is holding
+back.
+
+The principle I got wrong: hiding rows by default cost far more than the noise it saved.
+An activity vanishing looks exactly like an activity that failed to save, and there is no
+way for the person looking at it to tell the difference.
 
 
-WHAT THIS BUYS YOU
-------------------
-Notes were not causing trouble yet only because there is no Notes tab to expose the seam.
-The moment you want one - or search across notes, which you will - it would have behaved
-exactly as activities did over the last dozen packages. This closes it before that.
+WHAT WAS WORTH KEEPING FROM THE LAST FEW PACKAGES
+---------------------------------------------------
+Several were real faults, found while chasing this one:
+
+  pkg321  hooks after an early return - crashed every deal and Add Project (React #300)
+  pkg323  imported records being written back into the deal, inflating every save
+  pkg325  a background load cancelling a pending save, losing the change outright
+  pkg326  the whole 6.4MB deals list being sent on every save, over Vercel's 4.5MB limit
+  pkg327  the baseline and payload disagreeing, so the first save still sent everything
+  pkg331  activities in two stores
+  pkg332  notes in two stores
+
+Those all needed fixing. But none of them was the reason your activity was invisible, and
+I should have separated "is it saved?" from "is it displayed?" much earlier. Your screenshot
+answered that in one line - "Rows built: 1024, of which 1 added in the CRM" - and I kept
+fixing the save path after it had already told us the save was fine.
 
 
-STILL ON THE LIST
------------------
-The remaining structural issue is SIZE, not splitting: crm:deals is 6.4MB and is read in
-full on every page load. Saving is fine now it only sends what changed, but load time will
-keep creeping up as projects are added. The fix is to stop sending every field of every
-deal to the board. Worth doing as its own piece before it becomes the next thing you are
-chasing.
+NOTHING ELSE OUTSTANDING ON THIS
+---------------------------------
+Add an activity anywhere, on any project, and it appears in the tab. The one remaining item
+on my list is the 6.4MB deals payload on page load, which is a speed matter, not a
+correctness one.

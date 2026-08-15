@@ -894,7 +894,11 @@ function CRMPageInner() {
   const [actCustomer, setActCustomer] = useState('');
   const [actShowDone, setActShowDone] = useState(false);
   // 'open' | 'openwon' | 'all' - which projects' activities to list.
-  const [actScope, setActScope] = useState('openwon');
+  // Defaults to ALL. Hiding rows by default cost far more than the noise it saved: an
+  // activity added to a won or lost project simply vanished, which looked identical to it
+  // failing to save. Narrowing is one click and is stated on screen; hiding silently is
+  // not recoverable by the person looking at it.
+  const [actScope, setActScope] = useState('all');
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
