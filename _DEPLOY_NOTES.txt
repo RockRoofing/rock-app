@@ -1,57 +1,55 @@
-pkg334 - Activities tab keeps itself up to date
-================================================
+pkg335 - Activities could be stripped from a deal without being stored
+=======================================================================
 
-REPLACES pkg302 through pkg333. Deploy this one only.
+REPLACES pkg302 through pkg334. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        lightweight activity-state endpoint
+  pages/api/crm.js        recount endpoint
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT IT DOES NOW
-----------------
-The Activities tab refreshes itself:
+A REAL FLAW I INTRODUCED IN pkg331
+------------------------------------
+Moving activities to their own store meant the deal is now saved WITHOUT them. The order
+was: write the activities to their store, then save the stripped deal.
 
-  - when you switch back to the CRM from another tab or window
-  - every 60 seconds while you are actually looking at the Activities tab
-  - whenever you press the new Refresh button
+But the deal was saved whether or not the activity write had succeeded. So a single failed
+request - a dropped connection, a slow moment - and the activities were removed from the
+deal and never written anywhere else. Gone.
 
-So an estimator setting or completing an activity shows up for the salesperson within a
-minute, without anyone reloading. A small "updated 14:32" sits next to the button so you
-can see how current it is.
+The error was logged to the console and nothing else, so it would have looked exactly like
+what you are seeing: activities that were there yesterday, missing today.
 
-Your OWN changes were always instant and still are - this is only about seeing other
-people's.
+FIXED: if a deal's activities or notes cannot be written, that deal is NOT saved at all.
+It keeps its old baseline and is retried on your next change, so nothing is stripped
+without being safely stored first. The badge tells you:
 
-
-WHY IT ONLY REFRESHES ACTIVITIES
----------------------------------
-It re-fetches the activity list and counts, not the deals:
-
-    full page load          ~6,400 KB
-    activity refresh only     ~354 KB
-
-Polling the whole thing would be far too heavy. This is small enough to do every minute
-without anyone noticing, and it covers the case you described - progress on activities
-moving between the estimator and sales.
-
-It also stops when it should: nothing polls while you are on another tab of the CRM, or
-while the browser window is in the background. Four people all sat on the tab is about
-83MB an hour across the team, which is nothing.
+    "1 project(s) could not be fully saved - retrying on your next change."
 
 
-WHAT THIS DOES NOT SOLVE
+RECOVERING WHAT LOOKS MISSING
+------------------------------
+Under "Where are my activities?" there is now a "Recount from stored records" button.
+
+It rebuilds the outstanding list and the kanban counts directly from the per-deal stores,
+which are the source of truth. If the list has drifted - a count that never updated, an
+activity stored but not listed - this puts it right.
+
+It CANNOT lose anything. It only recounts what is already saved; it does not add, remove
+or change a single activity.
+
+Run it once after deploying.
+
+BE AWARE: anything actually lost by the flaw above cannot be recovered by recounting - it
+was never written. If you find a project where activities have genuinely vanished, they
+will need re-entering, and I am sorry. The fix stops it happening again.
+
+
+WHY THIS KEEPS HAPPENING
 -------------------------
-Two people editing THE SAME DEAL at the same time will still overwrite one another - each
-browser saves its own copy of that deal, and the last save wins. With four people and
-little overlap that is unlikely, and it is now limited to the specific deal being edited
-rather than the whole list, because saves only send what changed.
-
-If it does start happening, the fix is per-deal conflict detection - checking the stored
-version before overwriting. Worth doing only if it actually bites.
-
-The rest of the CRM - the board, Companies, Contacts - still shows what was loaded when you
-opened the page. Say if you want the same treatment there; the deals payload work would
-want doing first.
+Splitting activities out of the deal was the right call and I still think so - but I made
+the change without protecting the moment between "remove from the deal" and "write to the
+store". That gap is exactly where data goes missing, and I should have closed it as part of
+pkg331 rather than after you noticed.

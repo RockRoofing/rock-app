@@ -1055,7 +1055,8 @@ function CRMPageInner() {
         const MAX_BYTES = 3 * 1024 * 1024;
         const batches = [];
         let cur = [], curBytes = 0;
-        for (const d of changed) {
+        const toSave = changed.filter((d) => !heldBack.has(String(d.id)));
+        for (const d of toSave) {
           const b = JSON.stringify(d).length;
           if (cur.length && curBytes + b > MAX_BYTES) { batches.push(cur); cur = []; curBytes = 0; }
           cur.push(d); curBytes += b;
@@ -1065,30 +1066,43 @@ function CRMPageInner() {
 
         // Activities go to the shared per-deal store, not into the deal record. Only for
         // deals that actually changed, so this is normally a single small request.
-        try {
-          for (const d of changed) {
-            const mine = crmActivities(deals.find((x) => String(x.id) === String(d.id)) || {});
-            const before = prevActivities.current.get(String(d.id));
+        // Activities and notes are written to their own stores BEFORE the deal is saved -
+        // and the deal is saved with them stripped out. So if one of these writes fails,
+        // the deal MUST NOT be saved, or the stripping would delete them for good.
+        // Any deal whose activities or notes could not be written is held back and
+        // retried on the next save instead.
+        const heldBack = new Set();
+        for (const d of changed) {
+          const src = deals.find((x) => String(x.id) === String(d.id)) || {};
+          try {
+            const mine = crmActivities(src);
             const now = JSON.stringify(mine);
-            if (before === now) continue;
-            const r2 = await fetch('/api/crm', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'save-deal-activities', dealId: String(d.id), activities: mine }),
-            });
-            if (r2.ok) prevActivities.current.set(String(d.id), now);
+            if (prevActivities.current.get(String(d.id)) !== now) {
+              const r2 = await fetch('/api/crm', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'save-deal-activities', dealId: String(d.id), activities: mine }),
+              });
+              if (!r2.ok) { heldBack.add(String(d.id)); continue; }
+              prevActivities.current.set(String(d.id), now);
+            }
+            const mineN = crmNotes(src);
+            const nowN = JSON.stringify(mineN);
+            if (prevNotes.current.get(String(d.id)) !== nowN) {
+              const r3 = await fetch('/api/crm', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'save-deal-notes', dealId: String(d.id), notes: mineN }),
+              });
+              if (!r3.ok) { heldBack.add(String(d.id)); continue; }
+              prevNotes.current.set(String(d.id), nowN);
+            }
+          } catch (e) {
+            console.error('Could not save activities/notes for deal', d.id, e);
+            heldBack.add(String(d.id));
           }
-          for (const d of changed) {
-            const mine = crmNotes(deals.find((x) => String(x.id) === String(d.id)) || {});
-            const before = prevNotes.current.get(String(d.id));
-            const now = JSON.stringify(mine);
-            if (before === now) continue;
-            const r3 = await fetch('/api/crm', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ action: 'save-deal-notes', dealId: String(d.id), notes: mine }),
-            });
-            if (r3.ok) prevNotes.current.set(String(d.id), now);
-          }
-        } catch (e) { console.error('Could not save activities/notes:', e); }
+        }
+        if (heldBack.size) {
+          setSaveError(`${heldBack.size} project(s) could not be fully saved - retrying on your next change.`);
+        }
 
         let ok = true;
         for (let bi = 0; bi < batches.length; bi++) {
@@ -1108,8 +1122,11 @@ function CRMPageInner() {
           }
         }
         if (ok) {
-          savedSnapshot.current = nextSnap;   // only advance the baseline on success
-          setSaveError('');
+          // Held-back deals keep their OLD baseline, so they are retried next time rather
+          // than being treated as saved.
+          for (const [id, json] of nextSnap) if (!heldBack.has(id)) savedSnapshot.current.set(id, json);
+          for (const id of Array.from(savedSnapshot.current.keys())) if (!nextSnap.has(id)) savedSnapshot.current.delete(id);
+          if (!heldBack.size) setSaveError('');
         }
       } catch (e) {
         setSaveError('Save failed - check your connection. Your last change is not stored.');
@@ -1637,6 +1654,19 @@ function CRMPageInner() {
   // 6.4MB and would make this too expensive to do often.
   const [actRefreshedAt, setActRefreshedAt] = useState(null);
   const refreshingRef = useRef(false);
+  async function rebuildActivityState() {
+    if (!window.confirm('Recount the activity list from stored records?\n\nThis only recounts what is already saved - nothing is added or removed.')) return;
+    setActLoading(true);
+    try {
+      await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'rebuild-activity-state' }),
+      });
+      await refreshActivityState();
+    } catch { /* leave what we have */ }
+    setActLoading(false);
+  }
+
   async function refreshActivityState() {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -2034,7 +2064,7 @@ function CRMPageInner() {
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
             scope={actScope} setScope={setActScope}
-            refreshedAt={actRefreshedAt} onRefresh={refreshActivityState}
+            refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2193,7 +2223,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope, refreshedAt, onRefresh }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope, refreshedAt, onRefresh, onRebuild }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2258,9 +2288,11 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                 <div>Imported and outstanding: <strong>{breakdown.imported}</strong></div>
                 <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
                 <div>On won/lost projects: <strong>{breakdown.onClosed}</strong></div>
-                <div style={{ marginTop: 6, color: '#999' }}>
-                  If &quot;added in the CRM&quot; counts an activity you cannot see in the table, tell me these
-                  numbers and I can pinpoint which rule dropped it.
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={onRebuild} style={{ ...ghostBtn, fontSize: 11.5, padding: '5px 10px' }}>Recount from stored records</button>
+                  <div style={{ marginTop: 5, color: '#999' }}>
+                    Use if the list looks short. It recounts what is stored - it cannot add or remove anything.
+                  </div>
                 </div>
               </div>
             </details>

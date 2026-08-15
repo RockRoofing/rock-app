@@ -253,6 +253,33 @@ export default async function handler(req, res) {
     // Just the activity state - the outstanding list and the per-deal counts. A few
     // hundred KB, against 6.4MB for the full load, so it is cheap enough to re-fetch
     // regularly and keep people in step without reloading the page.
+    // Rebuild the outstanding list and the per-deal counts from the per-deal stores, which
+    // are the source of truth. Use if the tab ever looks short - it cannot lose anything,
+    // it only recounts what is already stored.
+    if (body.action === 'rebuild-activity-state') {
+      const index = (await get(SUB_INDEX('activities'))) || []
+      const open = []
+      const summary = {}
+      for (let i = 0; i < index.length; i += 50) {
+        const slice = index.slice(i, i + 50)
+        const lists = await Promise.all(slice.map(id => get(SUB_KEY('activities', id)).catch(() => [])))
+        slice.forEach((id, j) => {
+          const items = lists[j] || []
+          summary[id] = summarise('activities', items)
+          for (const a of items) {
+            if (a.done) continue
+            open.push({
+              id: a.id, dealId: String(id), text: a.subject || a.text || 'Activity',
+              due: a.dueDate || a.due || '', assignee: a.assignee || '',
+            })
+          }
+        })
+      }
+      await set(OPEN_ACTIVITIES, open)
+      await set(SUB_SUMMARY('activities'), summary)
+      return res.json({ ok: true, deals: index.length, open: open.length })
+    }
+
     if (body.action === 'activity-state') {
       const [openActs, actSum] = await Promise.all([get(OPEN_ACTIVITIES), get(SUB_SUMMARY('activities'))])
       return res.json({
