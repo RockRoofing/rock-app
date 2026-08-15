@@ -1,7 +1,7 @@
-pkg360 - Daily activity email at 01:00 UK
-==========================================
+pkg361 - Two daily emails, both at 01:00 UK
+============================================
 
-REPLACES pkg302 through pkg359. Deploy this one only.
+REPLACES pkg302 through pkg360. Deploy this one only.
 
 
 NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
@@ -11,50 +11,50 @@ NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
 
 CHANGED FILES (straight replacements)
 --------------------------------------
+  lib/crmFieldSchema.js   adds STAGE_LABELS (used by the report)
   vercel.json             cron schedule
   pages/crm.js            unchanged since pkg358
   pages/api/crm.js        unchanged since pkg357
-  lib/crmFieldSchema.js   unchanged since pkg358
   lib/crmImportMap.js     unchanged since pkg305
 
 
-CAN IT BE 1:00AM EXACTLY? ALMOST
----------------------------------
-Vercel does not promise to-the-minute execution - a scheduled job can run a few minutes
-late under load. Nobody can give you exactly 01:00:00.
-
-What I can do is fire it at the TOP of the hour rather than anywhere within it, which is
-what it does now. Expect 01:00 give or take a few minutes.
-
-Previously it ran hourly and checked the time, so it could have gone at any point between
-07:00 and 07:59. Now the cron itself runs at minute 0 of UTC hours 0 and 1, and the handler
-sends on whichever of those is 01:00 in London:
-
-    August (BST):   00:00 UTC = 01:00 UK   <- sends       01:00 UTC = 02:00 UK   <- skips
-    January (GMT):  00:00 UTC = 00:00 UK   <- skips       01:00 UTC = 01:00 UK   <- sends
-
-So it stays at 01:00 through the clock change instead of drifting to 02:00 in summer, which
-is what a plain "0 1 * * *" would have done. Verified for both seasons.
+EMAIL 1 - YOUR OWN ACTIVITIES (per person)
+--------------------------------------------
+Goes only to people who have something due today or overdue, listing only their own.
+Nothing due, no email.
 
 
-FOR TESTING, DO NOT WAIT UNTIL 1AM
------------------------------------
-    ...api/cron/crm-daily-activities?dryRun=1
-        lists who would get an email and how many activities each. Sends nothing. Run this
-        first - it confirms the name matching is finding the right people.
+EMAIL 2 - PROJECTS WITH NO ACTIVITY SET (new)
+-----------------------------------------------
+Goes to EVERY pre-contract and admin user, all getting the same list. It leads with:
 
-    ...api/cron/crm-daily-activities?force=1
-        sends immediately, whatever the time.
+    All projects must have an activity set. Please check your projects and update
+    accordingly.
 
-Both ignore the hour gate entirely, so you can check it properly in the next two minutes
-rather than tomorrow morning.
+Then every OPEN project with nothing outstanding against it - project, customer, stage, and
+whoever owns it (estimator, or sales person if there is no estimator). Projects with nobody
+assigned show "nobody assigned" in amber, since those are the ones most likely to sit
+untouched.
+
+Won and lost projects are excluded. If every open project has an activity, NO EMAIL IS
+SENT - same principle as the first one.
+
+Verified against a worked example: projects with an outstanding activity are left out, the
+won job is left out, and an unowned project is flagged.
 
 
-CHANGING THE TIME LATER
-------------------------
-One line at the top of pages/api/cron/crm-daily-activities.js:
+BOTH AT 01:00 UK, FOR NOW
+--------------------------
+Both go out on the same run, at the top of the 01:00 hour UK, holding through the clock
+change. That is for your testing - say when you want the daily one moved back to the
+morning and I will change it. The projects report might reasonably stay overnight.
 
-    const SEND_HOUR = 1;      // UK local hour
+TESTING WITHOUT WAITING:
+  ?dryRun=1   both report what they WOULD send - who, and how many - and send nothing
+  ?force=1    both send immediately
 
-If you move it outside 00:00-01:00 UK, the cron schedule in vercel.json needs the matching
-UTC hours too - tell me the time and I will set both.
+The response comes back as { personal: {...}, noActivity: {...} } so you can see how each
+one got on separately.
+
+One is not allowed to break the other: if the projects report fails, the personal emails
+still go, and the error is reported alongside them.

@@ -1,4 +1,5 @@
-import { sendDailyActivityEmails } from '../../../lib/crmDailyActivityEmail'
+import { sendDailyActivityEmails, sendNoActivityEmail } from '../../../lib/crmDailyActivityEmail'
+import { STAGE_LABELS } from '../../../lib/crmFieldSchema'
 
 // Daily CRM activity email.
 //
@@ -29,8 +30,15 @@ export default async function handler(req, res) {
       return res.status(200).json({ skipped: `Sends at ${String(SEND_HOUR).padStart(2, '0')}:00 UK (now ${ukHour}:00)` })
     }
 
-    const result = await sendDailyActivityEmails({ dryRun })
-    return res.status(200).json(result)
+    // Two separate emails, both on the same schedule:
+    //   personal   - your own activities due today or overdue
+    //   team       - open projects with no activity set at all
+    const personal = await sendDailyActivityEmails({ dryRun })
+    let noActivity = {}
+    try { noActivity = await sendNoActivityEmail({ dryRun, stageLabels: STAGE_LABELS }) }
+    catch (e) { noActivity = { ok: false, error: e.message } }
+
+    return res.status(200).json({ personal, noActivity })
   } catch (e) {
     console.error('crm-daily-activities cron error:', e)
     return res.status(500).json({ error: e.message || 'Failed' })
