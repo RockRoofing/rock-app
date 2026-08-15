@@ -893,12 +893,7 @@ function CRMPageInner() {
   const [actPerson, setActPerson] = useState('');
   const [actCustomer, setActCustomer] = useState('');
   const [actShowDone, setActShowDone] = useState(false);
-  // 'open' | 'openwon' | 'all' - which projects' activities to list.
-  // Defaults to ALL. Hiding rows by default cost far more than the noise it saved: an
-  // activity added to a won or lost project simply vanished, which looked identical to it
-  // failing to save. Narrowing is one click and is stated on screen; hiding silently is
-  // not recoverable by the person looking at it.
-  const [actScope, setActScope] = useState('all');
+
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
@@ -1804,11 +1799,10 @@ function CRMPageInner() {
     return rows;
   }, [deals, contactsData, openActivities, actShowDone]);
 
-  const inScope = (r) => actScope === 'all' ? true
-    : actScope === 'openwon' ? (r.dealStatus === 'open' || r.dealStatus === 'won')
-      : r.dealStatus === 'open';
-  const activityRows = useMemo(() => activityRowsAll.filter(inScope), [activityRowsAll, actScope]);
-  const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => !inScope(r)).length, [activityRowsAll, actScope]);
+  // Open projects only. Activities on won or lost jobs are counted but not listed - the
+  // count line below still reports them, so they are never hidden silently.
+  const activityRows = useMemo(() => activityRowsAll.filter((r) => r.dealStatus === 'open'), [activityRowsAll]);
+  const activityClosedCount = useMemo(() => activityRowsAll.filter((r) => r.dealStatus !== 'open').length, [activityRowsAll]);
 
   // Where every activity ended up. Shown on the tab so a missing one can be traced to the
   // rule that hid it, instead of it just not being there.
@@ -2063,7 +2057,6 @@ function CRMPageInner() {
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
-            scope={actScope} setScope={setActScope}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
@@ -2223,7 +2216,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope, refreshedAt, onRefresh, onRebuild }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2243,11 +2236,6 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         <select value={customer} onChange={(e) => setCustomer(e.target.value)} style={sel}>
           <option value="">All customers</option>
           {customers.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={scope} onChange={(e) => setScope(e.target.value)} style={sel} title="Which projects to include">
-          <option value="open">Open projects</option>
-          <option value="openwon">Open + won projects</option>
-          <option value="all">All projects</option>
         </select>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: C.dim, cursor: 'pointer' }}>
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
@@ -2275,10 +2263,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             </div>
           )}
           {closedCount > 0 && (
-            <div style={{ color: '#aaa', marginTop: 2 }}>
-              {closedCount} more on projects outside &quot;{scope === 'open' ? 'Open projects' : 'Open + won projects'}&quot;
-              {' '}<button onClick={() => setScope('all')} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>show all</button>
-            </div>
+            <div style={{ color: '#aaa', marginTop: 2 }}>{closedCount} more on won or lost projects (not listed here)</div>
           )}
           {breakdown && (
             <details style={{ marginTop: 3 }}>

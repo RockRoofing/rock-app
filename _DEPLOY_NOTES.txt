@@ -1,55 +1,45 @@
-pkg335 - Activities could be stripped from a deal without being stored
-=======================================================================
+pkg336 - Activities tab: open projects only
+============================================
 
-REPLACES pkg302 through pkg334. Deploy this one only.
+REPLACES pkg302 through pkg335. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        recount endpoint
+  pages/api/crm.js        unchanged since pkg335
   lib/crmImportMap.js     unchanged since pkg305
 
 
-A REAL FLAW I INTRODUCED IN pkg331
-------------------------------------
-Moving activities to their own store meant the deal is now saved WITHOUT them. The order
-was: write the activities to their store, then save the stripped deal.
+WHAT CHANGED
+------------
+The Activities tab lists activities on OPEN projects only. The Open / Open + won / All
+dropdown is gone - the filter bar is back to Person, Customer and Include completed.
 
-But the deal was saved whether or not the activity write had succeeded. So a single failed
-request - a dropped connection, a slow moment - and the activities were removed from the
-deal and never written anywhere else. Gone.
-
-The error was logged to the console and nothing else, so it would have looked exactly like
-what you are seeing: activities that were there yesterday, missing today.
-
-FIXED: if a deal's activities or notes cannot be written, that deal is NOT saved at all.
-It keeps its old baseline and is retried on your next change, so nothing is stripped
-without being safely stored first. The badge tells you:
-
-    "1 project(s) could not be fully saved - retrying on your next change."
+Won and lost projects are excluded. That is the right call for a to-do list: once a job is
+won or lost, chasing it here is not the job.
 
 
-RECOVERING WHAT LOOKS MISSING
-------------------------------
-Under "Where are my activities?" there is now a "Recount from stored records" button.
+ONE THING I HAVE DELIBERATELY KEPT
+-----------------------------------
+The line under the count:
 
-It rebuilds the outstanding list and the kanban counts directly from the per-deal stores,
-which are the source of truth. If the list has drifted - a count that never updated, an
-activity stored but not listed - this puts it right.
+    "660 more on won or lost projects (not listed here)"
 
-It CANNOT lose anything. It only recounts what is already saved; it does not add, remove
-or change a single activity.
+It is informational only now - no button, nothing to click. But it stays, because this is
+exactly the rule that hid your activity for the last several rounds. An activity on a lost
+project will still not appear here, and that line is the only thing that says so.
 
-Run it once after deploying.
+Without it the tab is silent about what it is holding back, and we would be straight back
+to "it saved but I cannot see it". With it, the answer is on screen.
 
-BE AWARE: anything actually lost by the flaw above cannot be recovered by recounting - it
-was never written. If you find a project where activities have genuinely vanished, they
-will need re-entering, and I am sorry. The fix stops it happening again.
+If you want it gone entirely, say so - but I would keep it.
 
 
-WHY THIS KEEPS HAPPENING
--------------------------
-Splitting activities out of the deal was the right call and I still think so - but I made
-the change without protecting the moment between "remove from the deal" and "write to the
-store". That gap is exactly where data goes missing, and I should have closed it as part of
-pkg331 rather than after you noticed.
+THE OTHER FIXES FROM pkg335 ARE STILL IN HERE
+-----------------------------------------------
+  - a deal is no longer saved if its activities or notes failed to write, so they cannot be
+    stripped from the deal without being safely stored (that was a genuine data-loss bug)
+  - "Recount from stored records" under "Where are my activities?", which rebuilds the list
+    and the kanban counts from what is stored - worth running once after deploying
+  - the tab refreshes every 60 seconds and on window focus, so an estimator's progress
+    reaches the salesperson without a reload
