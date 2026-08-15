@@ -20,6 +20,21 @@ const CONTACTS_KEY = 'crm:contacts'
 // scanning every key in the database.
 const SUB_KEY = (kind, dealId) => `crm:${kind}:${dealId}`
 const SUB_INDEX = (kind) => `crm:${kind}:index`
+// A tiny per-deal SUMMARY so the kanban can show the activity dot without loading 36k
+// activity records. Merging the full lists onto crm:deals was measured at 31MB in a single
+// key - far too big to read on every page load - so the board gets counts only and the
+// full lists load when a deal is actually opened.
+const SUB_SUMMARY = (kind) => `crm:${kind}:summary`
+
+// What the board needs per deal: how many activities are still open, and the earliest
+// due date among them. Notes only need a count.
+function summarise(kind, items) {
+  const list = Array.isArray(items) ? items : []
+  if (kind === 'notes') return { total: list.length }
+  const open = list.filter(a => !a.done)
+  const dues = open.map(a => a.dueDate).filter(Boolean).sort()
+  return { total: list.length, open: open.length, next: dues[0] || '' }
+}
 
 function readCookie(req, name) {
   const raw = req.headers.cookie || ''
@@ -51,10 +66,18 @@ export default async function handler(req, res) {
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
   if (req.method === 'GET') {
-    const [deals, schema, orgs, contacts] = await Promise.all([
+    const [deals, schema, orgs, contacts, actSum, noteSum] = await Promise.all([
       loadDeals(), loadSchema(), get(ORGS_KEY), get(CONTACTS_KEY),
+      get(SUB_SUMMARY('activities')), get(SUB_SUMMARY('notes')),
     ])
-    return res.json({ deals, schema, orgs: Array.isArray(orgs) ? orgs : [], contacts: Array.isArray(contacts) ? contacts : [] })
+    return res.json({
+      deals, schema,
+      orgs: Array.isArray(orgs) ? orgs : [],
+      contacts: Array.isArray(contacts) ? contacts : [],
+      // Counts only - the full activity/note lists load per deal when one is opened.
+      activitySummary: actSum || {},
+      noteSummary: noteSum || {},
+    })
   }
 
   if (req.method === 'POST') {
@@ -125,14 +148,17 @@ export default async function handler(req, res) {
 
       const index = (await get(SUB_INDEX(kind))) || []
       const seen = new Set(index)
+      const summary = body.first ? {} : ((await get(SUB_SUMMARY(kind))) || {})
       let written = 0
       for (const g of groups) {
         if (!g || !g.dealId || !Array.isArray(g.items)) continue
         await set(SUB_KEY(kind, g.dealId), g.items)
         written += g.items.length
         if (!seen.has(String(g.dealId))) { seen.add(String(g.dealId)); index.push(String(g.dealId)) }
+        summary[String(g.dealId)] = summarise(kind, g.items)
       }
       await set(SUB_INDEX(kind), index)
+      await set(SUB_SUMMARY(kind), summary)
       return res.json({ ok: true, written, deals: index.length })
     }
 

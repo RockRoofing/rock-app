@@ -59,18 +59,49 @@ const nowIso = () => new Date().toISOString();
 const firstName = (n) => n ? String(n).trim().split(/\s+/)[0] : '';
 const lastName = (n) => { if (!n) return ''; const p = String(n).trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; };
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
+// Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
+// so convert rather than showing raw tags: breaks become newlines, entities decoded.
+const stripHtml = (h) => String(h == null ? '' : h)
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/p>/gi, '\n')
+  .replace(/<[^>]+>/g, '')
+  .replace(/&nbsp;/g, ' ')
+  .replace(/&amp;/g, '&')
+  .replace(/&lt;/g, '<')
+  .replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"')
+  .replace(/&#39;/g, "'")
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
 const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
 // dot state: warning=none, red=before today, green=today, grey=after today
+//
+// Imported activities are NOT held on the deal - 36k of them in crm:deals measured 31MB,
+// far too big to load on every page open. They live per deal and load when a deal is
+// opened. So the board falls back to the lightweight summary (_actSummary) the import
+// writes: how many are still open, and the earliest due date among them.
 function dealDotState(deal, today) {
   if (deal.status !== 'open') return null;
   const open = (deal.activities || []).filter((a) => !a.done);
-  if (open.length === 0) return 'none';
-  if (open.some((a) => a.due < today)) return 'overdue';
-  if (open.some((a) => a.due === today)) return 'today';
-  return 'future';
+  if (open.length) {
+    if (open.some((a) => a.due < today)) return 'overdue';
+    if (open.some((a) => a.due === today)) return 'today';
+    return 'future';
+  }
+  const sum = deal._actSummary;
+  if (sum && sum.open > 0) {
+    if (sum.next && sum.next < today) return 'overdue';
+    if (sum.next === today) return 'today';
+    return 'future';
+  }
+  return 'none';
 }
-function nextActivityDate(deal) { const open = (deal.activities || []).filter((a) => !a.done); if (!open.length) return ''; return open.map((a) => a.due).sort()[0]; }
+function nextActivityDate(deal) {
+  const open = (deal.activities || []).filter((a) => !a.done);
+  if (open.length) return open.map((a) => a.due).sort()[0];
+  return (deal._actSummary && deal._actSummary.next) || '';
+}
 function cellValue(deal, key) {
   if (key === 'stageId') return stageLabel(deal.stageId);
   if (key === 'title') return deal.title;
@@ -747,7 +778,7 @@ export default function CRMPage() {
   const dragId = useRef(null);
   const nextId = useRef(900000);
 
-  useEffect(() => { if (!router.isReady) return; const q = router.query.deal; if (q) setOpenId(Number(q)); }, [router.isReady, router.query.deal]);
+  useEffect(() => { if (!router.isReady) return; const q = router.query.deal; if (q) { setOpenId(Number(q)); loadDealSubs(Number(q)); } }, [router.isReady, router.query.deal]);
 
   // Load persisted CRM data (deals + schema) from the server on mount.
   useEffect(() => {
@@ -757,7 +788,16 @@ export default function CRMPage() {
         const r = await fetch('/api/crm');
         const d = await r.json();
         if (cancelled) return;
-        if (Array.isArray(d.deals)) setDeals(d.deals.map((x) => ({ ...x, fields: { ...x.fields }, history: [...(x.history || [])], activities: [...(x.activities || [])], notes: [...(x.notes || [])] })));
+        if (Array.isArray(d.deals)) {
+          const actSum = d.activitySummary || {};
+          const noteSum = d.noteSummary || {};
+          setDeals(d.deals.map((x) => ({
+            ...x, fields: { ...x.fields }, history: [...(x.history || [])],
+            activities: [...(x.activities || [])], notes: [...(x.notes || [])],
+            _actSummary: actSum[String(x.id)] || null,
+            _noteSummary: noteSum[String(x.id)] || null,
+          })));
+        }
         if (Array.isArray(d.schema) && d.schema.length) setSchema(d.schema);
         if (Array.isArray(d.orgs)) setOrgsData(d.orgs);
         if (Array.isArray(d.contacts)) setContactsData(d.contacts);
@@ -778,7 +818,43 @@ export default function CRMPage() {
     }, 800);
     return () => clearTimeout(t);
   }, [deals, schema, loaded]);
-  const openDealById = (id) => { setOpenId(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
+  // Pull this deal's imported activities and notes on demand, once. Converts them to the
+  // shape the deal view already uses (text/due) so nothing downstream needs to change.
+  const loadedSubs = useRef({});
+  async function loadDealSubs(id) {
+    if (!id || loadedSubs.current[id]) return;
+    loadedSubs.current[id] = true;
+    try {
+      const [a, n] = await Promise.all([
+        fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(id) }) }).then((r) => r.json()),
+        fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-sub', kind: 'notes', dealId: String(id) }) }).then((r) => r.json()),
+      ]);
+      const acts = (a.items || []).map((x) => ({
+        id: x.id, text: x.text || x.subject || 'Activity', due: x.dueDate || '',
+        done: !!x.done, assignee: x.assignee || null, author: x.createdBy || null,
+        type: x.type || '', imported: true,
+      }));
+      const notes = (n.items || []).map((x) => ({
+        id: x.id, text: stripHtml(x.html || ''), author: x.author || null,
+        ts: x.createdAt ? new Date(x.createdAt).toISOString() : null,
+        comments: [], imported: true,
+      }));
+      if (!acts.length && !notes.length) return;
+      skipSave.current = true;
+      setDeals((prev) => prev.map((d) => d.id !== id ? d : {
+        ...d,
+        activities: [...acts, ...(d.activities || [])],
+        notes: [...notes, ...(d.notes || [])],
+        history: [
+          ...(d.history || []),
+          ...acts.map((x) => ({ id: 'h_' + x.id, type: 'activity', ts: x.due ? new Date(x.due).toISOString() : null, text: `${x.done ? 'Activity completed' : 'Activity set'}: ${x.text}`, body: x.text })),
+          ...notes.map((x) => ({ id: 'h_' + x.id, type: 'note', ts: x.ts, text: x.text, body: x.text })),
+        ],
+      }));
+    } catch { /* leave the deal as-is if it fails */ }
+  }
+
+  const openDealById = (id) => { setOpenId(id); loadDealSubs(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
   const closeDeal = () => { setOpenId(null); router.push('/crm', undefined, { shallow: true }); };
   useEffect(() => { setVisibleStages(new Set(stageMode === 'estimator' ? ESTIMATOR_STAGES : STAGES.map((s) => s.id))); }, [stageMode]);
 

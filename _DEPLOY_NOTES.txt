@@ -1,79 +1,67 @@
-pkg303 - CRM import: all five Pipedrive exports now work
-=========================================================
+pkg304 - CRM: imported activities and notes now actually appear
+================================================================
 
-REPLACES pkg302. Deploy this one - it contains the activities/notes work as well.
+REPLACES pkg302 and pkg303. Deploy this one only.
 
 CHANGED FILES
 -------------
-  lib/crmImportMap.js     tolerant column lookup + detection for all five exports
-  pages/api/crm.js        per-deal storage for activities and notes
-  pages/crm.js            import screen accepts and routes all five
+  lib/crmImportMap.js     both export formats + activities/notes mappers
+  pages/api/crm.js        per-deal storage, per-deal summary, get-sub
+  pages/crm.js            board reads the summary; deal view loads its own records
 
 No new files. All straight replacements.
 
 
-ROOT CAUSE - PIPEDRIVE CHANGED THEIR EXPORT FORMAT
----------------------------------------------------
-The mappers were built in July against exports whose columns were PREFIXED with the
-entity name:
+MY MISTAKE - THE IMPORT WROTE SOMEWHERE NOTHING READS
+-------------------------------------------------------
+Your activities almost certainly DID upload. Nothing displayed them.
 
-    Deal - ID        Organization - Name        Person - Email - Work
+The CRM reads activities and notes from arrays ON the deal object - deal.activities and
+deal.notes. I wrote the import to the separate per-deal keys agreed in the earlier scoping
+(crm:activities:<dealId>) and never wired the read side, and I did not check how the board
+gets its data before shipping it. That is on me.
 
-Your current exports drop the prefix entirely:
+WHY NOT JUST PUT THEM ON THE DEAL? I measured it: deals + activities + notes merged into
+the single crm:deals key comes to 31.2MB, and that key is read in full every time the CRM
+page opens. That is not viable. So the split storage was right - the read side was missing.
 
-    ID               Name                       Email - Work
-
-So detectExportType() matched nothing and every file was refused. Not just activities and
-notes - deals, organizations and people had stopped working too, for the same reason. That
-is why all five failed at once when three of them imported fine in July.
-
-Nothing was wrong with your files. Every field still exists; they are simply named
-differently.
-
-
-THE FIX
--------
-Rather than swap to the new names and break the old ones, every column is now looked up by
-its full name FIRST and then by the name with the leading "<Entity> - " stripped. Both
-formats map identically, and it will keep working if Pipedrive changes back.
-
-Detection handles both too. The unprefixed exports all start with a bare "ID", so they are
-told apart on columns unique to each - deals checked first, because a deals export also
-contains an "Organization" column and would otherwise be mistaken for one.
+NOW:
+  - the import also writes a small per-deal SUMMARY (open count + next due date).
+    234KB for all 6,261 projects, loaded with the board.
+  - the kanban dot and the "next activity" column use that summary.
+  - opening a deal fetches THAT deal's activities and notes and merges them into the
+    view, including into the History feed. Note HTML is converted to plain text.
 
 
-VERIFIED AGAINST YOUR ACTUAL FILES
------------------------------------
-  deals-2641369-41.xlsx           8,219 rows -> 8,219 mapped, 0 skipped
-  organizations-2641369-42.xlsx   3,546 rows -> 3,546 mapped, 0 skipped
-  people-2641369-46.xlsx          4,717 rows -> 4,717 mapped, 0 skipped
-  activities-2641369-44.xlsx     39,401 rows -> 36,824 across 6,261 projects
-                                                (2,577 not linked to a deal)
-  notes-2641369-45.xlsx          12,368 rows -> 11,499 across 6,197 projects
-                                                  (869 not linked to a deal)
+*** THE WARNING TRIANGLES ARE CORRECT - PLEASE READ ***
+--------------------------------------------------------
+I checked the Done column across all 39,401 rows in your activities export:
 
-Spot-checked a deal end to end: stage, status, value, organisation, contact, dates and the
-custom fields all populate. Also re-tested the OLD prefixed format to confirm it still
-imports - it does.
+    Done column values: {'Done': 39401}
 
+EVERY activity in the file is marked Done. There is not a single outstanding one.
 
-IMPORT ORDER
-------------
-Do DEALS FIRST, then organizations and people in any order, then activities and notes last
-- those two attach to deals by Deal ID. If you re-import deals later, re-run activities and
-notes afterwards.
+The kanban triangle means "this open deal has no activity still to do". With every
+imported activity already complete, that warning is accurate and will REMAIN after this
+deploy. It is not an import failure.
 
-Each import is wipe-and-replace within its own type only.
+What changes: open a deal and you will now see its full activity history and notes, which
+is what was actually missing.
+
+If you expected outstanding activities to come across, the export is the place to look -
+Pipedrive can be set to export only completed activities, or scheduled ones may sit
+outside this export. Worth checking against a deal you know has a call booked.
 
 
-A HEADS-UP ON THE DEAL COUNT
------------------------------
-This export has 8,219 deals, against the 6,850 noted previously - it covers every pipeline,
-not just Projects. Worth a look after importing: if you only want the Project pipeline, the
-export carries a "Pipeline" column and I can filter on it. Say the word.
+ALSO STILL IN THIS PACKAGE
+---------------------------
+The export-format fix from pkg303: Pipedrive dropped the "Deal - " / "Organization - " /
+"Person - " column prefixes, which is why all five files were being refused. Both formats
+now import.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-All five files parsed, detected, mapped and counted; old format confirmed still working.
+All five exports parsed and mapped; summary size measured; merged-size risk measured
+before choosing the architecture.
