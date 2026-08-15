@@ -31,19 +31,40 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
         try {
           const liveSettings = await getAllProjectSettings()
+          // Also refresh the Contracts Manager live. Editing Project Details in the
+          // COMMERCIAL portal clears this cache, but editing them in the OPS portal does
+          // not - so without this an Ops change to the CM would not reach Project
+          // Financials until the cache expired (up to 4 hours). Resolved with the same
+          // resolver Edit Project Details uses, so they always agree.
+          let liveOps = [], livePortalUsers = [], resolvePeople = null
+          try {
+            liveOps = (await redis.get('ops:projects')) || []
+            const { getPortalUsers } = await import('../../lib/db')
+            livePortalUsers = await getPortalUsers()
+            resolvePeople = (await import('../../lib/projectPeople')).resolveProjectPeople
+          } catch {}
+
           const withLive = await Promise.all(cached.map(async (p) => {
             if (!p || !p.xeroId) return p
             const s = liveSettings[String(p.xeroId)] || {}
             let adj = p.wipAdjustments
             try { adj = (await redis.get(`wip:adjustments:${p.xeroId}`)) || [] } catch {}
+            let cm = p.contractsManager
+            if (resolvePeople) {
+              try {
+                const rp = resolvePeople({ jobNo: p.jobNo, opsProjects: liveOps, users: livePortalUsers, override: s.peopleOverride || {} })
+                cm = rp?.team?.contractsManager?.name || cm
+              } catch {}
+            }
             return {
               ...p,
+              contractsManager: cm,
               wipMarginOverride: (s.wipMarginOverride != null && s.wipMarginOverride !== '') ? s.wipMarginOverride : null,
               dateOverrides: s.dateOverrides || p.dateOverrides || {},
               wipAdjustments: adj,
@@ -266,7 +287,16 @@ export default async function handler(req, res) {
         status: stage,
         stageSource: 'retention',   // marker: stage now driven by Retention Tracker
         customer: settings.customerName || '',
-        contractsManager: (ihmByNo[String(cp.jobNo).trim()]?.contractsManager) || settings.contractsManager || '',
+        // Use the SAME resolver Edit Project Details uses, so the two always agree:
+        //   commercial override -> Ops/IHM -> blank.
+        // Previously this read ihmByNo directly, which (a) ignored a commercial override
+        // entirely, so an overridden CM showed here as the Ops value, and (b) matched the
+        // job number by exact string, where the resolver matches tolerantly ("J203"/"203").
+        contractsManager: resolvedPeople?.team?.contractsManager?.name
+          || (ihmByNo[String(cp.jobNo).trim()]?.contractsManager) || settings.contractsManager || '',
+        // Cache-validity marker: forces one rebuild so old snapshots don't keep serving
+        // the pre-resolver CM.
+        cmResolved: true,
         appliedForLatest,
         estimator: settings.estimator || '',
         qsName: settings.qsName || '',

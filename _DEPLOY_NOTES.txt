@@ -1,50 +1,74 @@
-pkg287 - Monthly Bookkeeping: remove the VAT return confirmation task
-=====================================================================
+pkg288 - Project Financials CM now matches Edit Project Details
+================================================================
 
 CHANGED FILES
 -------------
-  pages/bookkeeping-monthly-tasks.js
+  pages/api/dashboard.js
 
-No new files. Straight replacement. Independent of every other package.
+No new files. Straight replacement. Independent of the other packages.
 
-
-WHAT CHANGED
-------------
-Removed the task added by pkg285:
-
-  "Confirm that the month's VAT return has been filed no later than the 23rd of the month."
-
-Nothing else was touched. The remaining 13 tasks keep their existing ids, so all existing
-tick history is preserved.
+BEST DEPLOYED WITH pkg286 (the Ops -> Commercial project details work), since the two
+share the same resolver - but it works on its own.
 
 
-*** CHECK THIS LIST BEFORE YOU DEPLOY ***
-------------------------------------------
-This is a WHOLE-FILE replacement built from the repo zip you sent me, which is at pkg264.
-If you have edited this file directly in GitHub since then, your changes are NOT in here
-and deploying this will remove them.
+WHY THEY DISAGREED
+------------------
+Edit Project Details resolves the CM through lib/projectPeople.js:
 
-The file in this package contains exactly these 13 tasks, in this order:
+    commercial override  ->  Ops/IHM  ->  blank
 
-   1. [bm1] Reconcile supplier statements with supplier ledger balances.
-   2. [bm2] Post all required prepayment journals.
-   3. [bm3] Post inventory journals and reconcile inventory balances where applicable.
-   4. [bm4] Complete bank balance reconciliations for all bank accounts.
-   5. [bm13] Notify the Commercial Team that the WIP can now be completed.
-   6. [bm5] Obtain the WIP schedule from Nathan and post the required WIP journals.
-   7. [bm6] Update all Apps by uploading the month's invoices and ensuring they are processed correctly.
-   8. [bm7] Review and reconcile retention balances with the relevant Apps/contracts.
-   9. [bm8] Share the payroll timesheet with Cotton after the 21st of each month.
-  10. [bm9] Create the payroll payment batch by the 28th of each month.
-  11. [bm10] Ensure all Cost of Sales (COS) transactions have the correct tracking categories assigned.
-  12. [bm11] Ensure all month-end journals have been posted before closing the period.
-  13. [bm12] Confirm that all bookkeeping for the month is complete and ready for VAT preparation, and request Cotton to file VAT for the month.
+The dashboard, which feeds Project Financials, did its own thing instead:
 
-If anything you added is missing from that list, DO NOT deploy this file - tell me what is
-missing and I will add it, or just delete the one bm14 line directly in GitHub instead.
+    contractsManager: (ihmByNo[String(cp.jobNo).trim()]?.contractsManager)
+                      || settings.contractsManager || ''
+
+Two separate faults in that one line.
+
+1. IT IGNORED THE COMMERCIAL OVERRIDE ENTIRELY. If a CM had been changed in Edit Project
+   Details, that screen showed the new name and Project Financials carried on showing the
+   Ops one. This is the likely cause of what you are seeing.
+
+2. IT MATCHED THE JOB NUMBER BY EXACT STRING. ihmByNo is keyed on the Ops project number,
+   so "J203" only matched "J203". The resolver matches tolerantly - it strips a leading J,
+   collapses case and spaces - so "203" and "J203" are the same project to it but were two
+   different things here. Any project where the two systems spell the number differently
+   would show a blank or stale CM.
+
+The odd part is that the dashboard ALREADY calls the resolver two lines above (for the
+`people` field) - the CM line just was not using it.
+
+
+THE FIX
+-------
+contractsManager now comes from that same resolver result, with the old chain kept purely
+as a fallback. One source of truth, so the two screens cannot drift apart again.
+
+ALSO - AND THIS MATTERS FOR THE OPS SIDE:
+Saving in Commercial clears the dashboard cache, so commercial edits always showed up
+promptly. Saving in OPS does not clear it - so an Ops change to the CM would not have
+reached Project Financials for up to 4 hours even once the above was fixed.
+
+The cached path now refreshes the CM live on every read (using the same resolver), so an
+Ops change appears immediately. This deliberately does NOT force a full Xero rebuild - it
+is a cheap per-read overlay, the same trick already used for the WIP fields.
+
+A cache-validity marker (cmResolved) has been added, so existing snapshots rebuild once on
+the first load after deploy rather than serving the old CM.
+
+
+WHAT TO EXPECT
+--------------
+First load after deploying may be slower than usual - that is the one-off rebuild. After
+that, the CM column and filter on Project Financials should match Edit Project Details on
+every project, and follow changes made in either portal.
+
+If a project still disagrees, open Edit Project Details and look at the badge on the
+Contracts Manager field - "override" means Commercial is deliberately deviating from Ops
+(pkg286 adds a "use Ops value" button to undo that).
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Confirmed 13 tasks remain and no duplicate ids.
+Both faults reproduced and confirmed fixed: exact-key vs tolerant job-number matching, and
+override-vs-Ops precedence.
