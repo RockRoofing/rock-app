@@ -1674,6 +1674,11 @@ function CRMPageInner() {
 
   // Where every activity ended up. Shown on the tab so a missing one can be traced to the
   // rule that hid it, instead of it just not being there.
+  const activityStaleFilter = useMemo(() => (
+    (!!actPerson && !activityRows.some((r) => r.assignee === actPerson)) ||
+    (!!actCustomer && !activityRows.some((r) => r.company === actCustomer))
+  ), [actPerson, actCustomer, activityRows]);
+
   const activityBreakdown = useMemo(() => {
     let inCrmTotal = 0, inCrmOpen = 0;
     for (const d of deals) {
@@ -1697,8 +1702,14 @@ function CRMPageInner() {
 
   const activitiesShown = useMemo(() => {
     let rows = activityRows;
-    if (actPerson) rows = rows.filter((r) => r.assignee === actPerson);
-    if (actCustomer) rows = rows.filter((r) => r.company === actCustomer);
+    // A remembered filter that no longer matches ANYTHING is ignored rather than obeyed.
+    // Saved filters persist between visits, so a person who is no longer on any activity -
+    // or who never was, if you assigned nobody - would otherwise silently empty the table
+    // with no clue as to why.
+    const personLive = actPerson && activityRows.some((r) => r.assignee === actPerson);
+    const customerLive = actCustomer && activityRows.some((r) => r.company === actCustomer);
+    if (personLive) rows = rows.filter((r) => r.assignee === actPerson);
+    if (customerLive) rows = rows.filter((r) => r.company === actCustomer);
     const { key, dir } = actSort;
     const mul = dir === 'desc' ? -1 : 1;
     return [...rows].sort((a, b) => {
@@ -1913,7 +1924,7 @@ function CRMPageInner() {
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
             today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
-            closedCount={activityClosedCount} breakdown={activityBreakdown}
+            closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2072,7 +2083,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2103,7 +2114,13 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
             {rows.length}{rows.length !== total ? ` of ${total}` : ''} activit{rows.length === 1 ? 'y' : 'ies'}
             {overdue ? <span style={{ color: C.red, fontWeight: 700 }}> &middot; {overdue} overdue</span> : null}
           </div>
-          {(person || customer) && (
+          {staleFilter && (
+            <div style={{ color: '#b45309', marginTop: 2 }}>
+              A saved filter matched nothing and has been ignored.{' '}
+              <button onClick={onClearFilters} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>clear it</button>
+            </div>
+          )}
+          {(person || customer) && !staleFilter && (
             <div style={{ color: '#b45309', marginTop: 2 }}>
               Filtered by {[person && `person: ${person}`, customer && `customer: ${customer}`].filter(Boolean).join(', ')}
               {' '}<button onClick={onClearFilters} style={{ background: 'none', border: 'none', color: C.link, cursor: 'pointer', font: 'inherit', textDecoration: 'underline', padding: 0 }}>clear</button>

@@ -1,7 +1,7 @@
-pkg327 - The 413, properly this time
-=====================================
+pkg328 - Saved filters can no longer hide your new activity
+============================================================
 
-REPLACES pkg302 through pkg326. Deploy this one only.
+REPLACES pkg302 through pkg327. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,47 +10,39 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHY pkg326 DID NOT FIX IT
---------------------------
-pkg326 sends only the deals that changed - which is right, and would have worked if only
-one deal ever differed. But it decided what "changed" meant by comparing against the deals
-AS STORED, while sending the CLEANED version (imported activities and notes stripped out).
-
-crm:deals already contains those imported records, written by earlier saves that succeeded
-back when the list was small enough to fit. So for every one of those deals the stored copy
-and the cleaned copy differ - and the first save tried to send the lot. Straight back to
-6.4MB and straight back to 413.
-
-I introduced that mismatch in pkg323 when I started stripping imported records, and did not
-join it up with the comparison added in pkg326.
+GOOD - THE SAVE IS FIXED
+-------------------------
+Activities saving inside a deal means the 413 chain is done with. What is left is purely
+about what the table chooses to display.
 
 
-THE FIX - TWO PARTS
--------------------
-1. ONE SHARED DEFINITION. There is now a single leanDeal() function used both to build the
-   comparison baseline and to build what gets sent. They cannot drift apart again, which is
-   what caused this.
+THE MOST LIKELY CAUSE, NOW CLOSED OFF
+--------------------------------------
+The CRM remembers your Person responsible and Customer filters between visits. If a saved
+filter is set - say a person - and you then add an activity with NOBODY assigned, that
+activity cannot match it, so the table stays empty and gives no hint that a filter is even
+active.
 
-2. BATCHED BY MEASURED SIZE. A normal edit changes one deal and sends a few kilobytes. But
-   the first save after this deploy legitimately has to rewrite every deal that still holds
-   imported records, and that must not go in one request.
+A saved filter that matches nothing at all is now IGNORED rather than obeyed, and the tab
+says so:
 
-   Measured worst case - all 6,860 deals needing a rewrite:
+    "A saved filter matched nothing and has been ignored.  clear it"
 
-       3 requests, largest 3.00MB, against the 4.5MB Vercel ceiling
-
-   So even the full cleanup gets through. After it, the stored deals match the clean form
-   and normal saves are tiny again.
+That single rule covers the whole class of problem: a filter set weeks ago quietly hiding
+everything you add today.
 
 
-WHAT TO EXPECT
---------------
-On the first change you make after deploying, the badge may briefly read "Saving 1 of 3..."
-while it writes the cleanup through. That is a one-off. After that it should read "Saved"
-in green almost instantly on every change.
+IF IT IS STILL NOT THERE
+-------------------------
+Open "Where are my activities?" next to the activity count and send me the four numbers.
+They separate the remaining possibilities in one go:
 
-Then: add an activity in a deal, reload, and it should still be there and in the Activities
-tab.
+  "Added in the CRM"  is 0        -> it is not reaching the deal at all
+  counted, but "rows built" low   -> the merge is dropping it
+  rows built, nothing visible     -> a filter or the open-project rule
+  "On won/lost projects" > 0      -> your test project is not open, and the tab only lists
+                                     activities on open projects
 
-If it goes red again, send me the status code - but 413 should now be arithmetically
-impossible.
+That last one is worth checking first. If you are testing on a project marked won or lost,
+it will never appear, and that is by design from pkg317 - tell me if you would rather won
+projects were included, since you are still actively working those.
