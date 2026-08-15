@@ -12,6 +12,29 @@ import { IHM_SECTIONS } from '../../lib/ihmSchema'
 
 const DEFAULTS = { prestart: PRESTART_SECTIONS, ihm: IHM_SECTIONS }
 
+// Once a template has been edited in Admin > Templates, the STORED copy is used and the
+// code default is ignored completely. That means a question added in code would never
+// appear on any system where the template had ever been customised.
+//
+// Fields marked `syncFromCode: true` in the schema are therefore merged into a stored
+// template on read, if that template does not already have a field with the same id.
+// Only flagged fields are merged, so a question deliberately deleted in the editor is not
+// resurrected - deleting a flagged one would bring it back, which is why the flag is set
+// deliberately per field rather than applied to everything.
+function mergeCodeFields(storedSections, defaultSections) {
+  if (!Array.isArray(storedSections) || !Array.isArray(defaultSections)) return storedSections
+  const haveIds = new Set()
+  for (const sec of storedSections) for (const f of (sec.fields || [])) if (f && f.id) haveIds.add(f.id)
+
+  return storedSections.map(sec => {
+    const def = defaultSections.find(d => d.id === sec.id)
+    if (!def) return sec
+    const missing = (def.fields || []).filter(f => f && f.syncFromCode && f.id && !haveIds.has(f.id))
+    if (!missing.length) return sec
+    return { ...sec, fields: [...(sec.fields || []), ...missing] }
+  })
+}
+
 function readCookie(req, name) {
   const raw = req.headers.cookie || ''
   const m = raw.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))
@@ -24,7 +47,10 @@ export default async function handler(req, res) {
     const key = req.query.key
     if (!DEFAULTS[key]) return res.status(400).json({ error: 'Unknown template' })
     const stored = await getTemplate(key)
-    return res.json({ key, sections: stored?.sections || DEFAULTS[key], isCustom: !!stored })
+    const sections = stored?.sections
+      ? mergeCodeFields(stored.sections, DEFAULTS[key])
+      : DEFAULTS[key]
+    return res.json({ key, sections, isCustom: !!stored })
   }
   if (req.method === 'POST') {
     if (!requireRole(req, res, ['management', 'admin'])) return;

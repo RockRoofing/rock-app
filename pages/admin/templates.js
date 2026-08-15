@@ -14,6 +14,7 @@ const ADDABLE_TYPES = [
   { v: 'long', label: 'Long text' },
   { v: 'date', label: 'Date' },
   { v: 'note', label: 'Guidance note (read-only)' },
+  { v: 'checklist', label: 'Checklist (tick list of items)' },
 ]
 
 const uid = (p) => `${p}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
@@ -200,6 +201,15 @@ export default function TemplatesAdmin() {
                           )}
                           {(f.type === 'qrow') && (
                             <input value={f.default || ''} onChange={e => editField(si, fi, { default: e.target.value })} placeholder="Default guidance text (optional)" style={{ ...inp, flex: 1, minWidth: 200, fontSize: 12 }} />
+                          )}
+                          {(f.type === 'checklist') && (
+                            <div style={{ flex: 1, minWidth: 260 }}>
+                              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Checklist items - one per line. Each becomes a Yes / No / N/A row.</div>
+                              <textarea
+                                value={(f.items || []).join('\n')}
+                                onChange={e => editField(si, fi, { items: e.target.value.split('\n').map(x => x.trim()).filter(Boolean) })}
+                                style={{ ...inp, width: '100%', minHeight: 90, fontFamily: 'inherit', fontSize: 12 }} />
+                            </div>
                           )}
                         </div>
                       </div>

@@ -1,73 +1,68 @@
-pkg293 - IHM: Design Handover docs checklist
-=============================================
+pkg294 - IHM checklist: the reason pkg293 did nothing
+======================================================
+
+REPLACES pkg293. Deploy this instead.
 
 CHANGED FILES
 -------------
-  lib/ihmSchema.js              new checklist field in Design Handover Checklist
-  pages/handover/form.js        renders the new 'checklist' field type
-  pages/operations/projects.js  shows it read-only on the project record
-
-No new files. All straight replacements.
-
-pages/operations/projects.js also carries the pkg279 Drawings change (read-only, fed from
-the Design Portal). If you have not deployed pkg279, this file brings that with it - see
-the pkg279 warning about previously uploaded Ops drawings disappearing.
+  pages/api/templates.js        THE FIX - stored templates now pick up new code questions
+  lib/ihmSchema.js              the checklist, flagged to sync
+  pages/admin/templates.js      the editor can now create/edit checklists
+  pages/handover/form.js        renders the checklist (unchanged from pkg293)
+  pages/operations/projects.js  read-only view (unchanged from pkg293)
 
 
-1. DESIGN HANDOVER CHECKLIST - ADDED
--------------------------------------
-At the END of the Design Handover Checklist section, exactly as your screenshot:
+WHY pkg293 CHANGED NOTHING
+---------------------------
+The IHM form does not read lib/ihmSchema.js. It reads /api/templates, and that endpoint
+does this:
 
-  "ESTIMATOR - If available, has the following information been added to file
-   8. Design > 1. Design Handover Docs?"
+    const stored = await getTemplate(key)
+    sections: stored?.sections || DEFAULTS[key]
 
-     Latest Roof Plan / Elevation Mark-Up
-     Latest tapered drawing
-     U-Value Calcs
-     Wind Load Calcs
-     Rainwater Calcs
-     Mansafe Sketch
-     Latest Technical Submittal including separate docs
-     Contract Drawings          <- the extra one you asked for (the red row)
+Once the IHM template has been edited ONCE in Admin > Templates, a stored copy exists in
+the database and the code schema is ignored completely, for ever. Your template has been
+edited, so my change to the schema file could never appear no matter how many times you
+deployed it.
 
-  followed by "Anything else that needs adding?" as a free-text box.
-
-Each row ticks Yes / No / N/A. There is a "Mark all Yes" shortcut at the top, and pressing
-an already-selected answer clears it. Answers are stored against the item TEXT rather than
-a position, so re-ordering or inserting items later will not shuffle existing answers onto
-the wrong rows.
-
-This needed a new field type ('checklist') since the IHM had no fixed tick-list before. It
-is wired into the form and the read-only project view. Any future checklist can now be
-added to the schema alone.
+THIS ALSO EXPLAINS THE PROCUREMENT SAVINGS QUESTION. I said I could not find it in the
+code - because it is not in the code. You added it through Admin > Templates, so it lives
+in the stored template. That is also why my "this package will remove it" note in pkg293
+was wrong: replacing the schema file was never going to touch it. Apologies - I should
+have traced how the form actually loads its questions before telling you that.
 
 
-2. THE PROCUREMENT SAVINGS QUESTION - PLEASE READ
---------------------------------------------------
-I could not find it. There is no question about the Procurement Savings doc anywhere in
-lib/ihmSchema.js in the copy of the repo I have (which is at pkg264), Commercial section
-or otherwise. So you added it directly in GitHub after sending me that zip.
+THE FIX
+-------
+Fields in the code schema can now be marked `syncFromCode: true`. On read, any such field
+missing from a stored template is merged into its section. The new checklist and its
+"Anything else that needs adding?" box are both marked, so they will appear on your
+customised template as soon as this deploys.
 
-WHAT THAT MEANS: this package replaces lib/ihmSchema.js wholesale, so deploying it WILL
-remove that question - which is what you wanted. But it will equally remove ANY OTHER
-change you have made to that file since, and I cannot see those either.
+Only FLAGGED fields merge, so nothing else you have added or removed in the editor is
+disturbed. Verified: a custom field you added is kept, the flagged checklist is added, and
+an unflagged code field is NOT forced in.
 
-The Commercial section in the file I am sending contains exactly these fields:
 
-  Contract Value / Customer Credit Score / Customer Credit Limit / Credit Insured Limit /
-  Employer Credit Score / Employer Credit Limit / Retention / Discount /
-  Has discount been applied for timely payment? / VAT / Re-Measurable / Lump Sum /
-  Payment Terms / Application Date / Valuation Date /
-  Any long lead-in items? Insert lead-in period for procurement.
+REMOVING THE PROCUREMENT SAVINGS QUESTION - YOU DO THIS ONE
+------------------------------------------------------------
+Because it lives in the stored template, it has to be removed there:
 
-If that is the Commercial section you expect MINUS the procurement savings question, this
-is safe to deploy. If anything else of yours is missing from that list, tell me and I will
-add it back before you deploy.
+  Admin > Templates > Internal Handover Minutes > Commercial section > press the red X on
+  that question > Save.
 
-Existing IHM answers are not affected - removing a question leaves the stored answers
-alone, it just stops displaying that one.
+I cannot do it from a code package. If I forced it, the merge above would be the wrong
+tool - it adds, it does not delete, deliberately.
+
+
+ALSO: THE EDITOR CAN NOW BUILD CHECKLISTS
+------------------------------------------
+"Checklist (tick list of items)" is now an option when adding a question in
+Admin > Templates, with a box to type the items one per line. So you can add rows to the
+Design Handover list, or build a checklist anywhere else, without needing me.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+Merge behaviour verified against a customised template.
