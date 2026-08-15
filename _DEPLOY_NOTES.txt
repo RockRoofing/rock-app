@@ -1,60 +1,75 @@
-pkg307 - CRM import: the reason it stalls at 120
-=================================================
+pkg308 - CRM activities import: fixes the 413
+==============================================
 
-REPLACES pkg302 through pkg306. Deploy this one only.
+REPLACES pkg302 through pkg307. Deploy this one only.
 
 CHANGED FILES
 -------------
-  lib/crmImportMap.js     unchanged from pkg305
-  pages/api/crm.js        parallel writes, smarter wipe, longer function timeout
-  pages/crm.js            300-project chunks, client-side summary, progress + ETA
+  lib/crmImportMap.js     unchanged since pkg305
+  pages/api/crm.js        request body limit raised (this is the fix)
+  pages/crm.js            chunks sized by bytes rather than by project count
 
 No new files. All straight replacements.
 
 
-WHY IT STOPS AT 120 - AND WHY IT IS NOT THE MISSING DEALS
------------------------------------------------------------
-It is not the pipeline change. Records whose deal is not in the CRM are filtered out in
-your browser BEFORE anything is sent, so a missing deal just shortens the list. It cannot
-stall the import.
+WHY 413, AND WHY NOTES WORKED BUT ACTIVITIES DID NOT
+------------------------------------------------------
+413 means "payload too large". Next.js caps API request bodies at 1MB BY DEFAULT, and
+pages/api/crm.js never raised it. Every other bulk-import endpoint in the app does -
+import-bills-bulk uses 10mb, issues 8mb, pre-start 4mb - the CRM one was simply missed
+when the chunked import was built.
 
-120 is the chunk size in the version you are running. So it fails on the FIRST request.
+Measured against your real files at 300 projects per chunk:
 
-That first request does the wipe, and on the old code the wipe blanked every key left by
-the previous import - one at a time:
+    activities   largest request 1.18MB   ->  4 chunks over the 1MB limit  ->  413
+    notes        largest request 0.82MB   ->  0 chunks over the limit      ->  fine
 
-    6,261 keys x ~35ms  =  ~219 seconds, plus the 120 projects themselves
-    against a Vercel function limit of 10-60 seconds  ->  timeout
+That is exactly the behaviour you saw: notes uploaded, activities failed partway.
 
-Your first activities import (pkg302) worked because there was nothing to wipe. It left
-6,261 keys behind, so every attempt since has died on that wipe. It worked once and has
-failed ever since - which matches what you have seen.
-
-
-THE FIX
--------
-  - The wipe now only clears keys that will NOT be rewritten by this import. Re-importing
-    the same file clears nothing at all, so the first request is no heavier than any other.
-  - Writes run 25 at a time instead of one after another.
-  - The index and board summary are computed in your browser and sent once at the end,
-    rather than read and rewritten on all ~45 chunks.
-  - maxDuration raised to 60s on the CRM endpoint as a safety net.
-  - Chunk size 120 -> 300 (19 requests instead of 46), largest payload 0.76MB against the
-    ~4.5MB limit.
-
-Estimated database time for the activities import: ~196s down to ~8s.
+Activities are bigger per record than notes - subject, type, due date, assignee, creator,
+done flag - so they cross the line and notes do not.
 
 
-WHAT YOU SHOULD SEE
---------------------
-Progress with a percentage and rough time remaining, moving in 300s:
+THE FIX - TWO PARTS
+-------------------
+1. The CRM endpoint now allows an 8MB body, in line with the other import endpoints.
 
-    "Saving 1200 of 5415 projects (22%) - about 40s left"
+2. More importantly, chunks are now built by MEASURED SIZE rather than a fixed count of
+   projects. A fixed count was always a guess: one project with 96 activities is worth a
+   hundred projects with one each, so a busy run could blow the limit even when the
+   average looked comfortable. Each chunk now fills to a 3MB budget (against the 8MB
+   server limit), with a 400-project cap as a second guard.
 
-If it still stops, the message now carries the actual error rather than just halting, so
-send me what it says.
+   This is the part that stops it happening again - if a project accumulates a lot of
+   history in future, the chunker simply makes that chunk smaller.
+
+Re-measured with the new chunker:
+
+    activities   32,564 records / 5,415 projects  ->  14 requests, largest 1.26MB
+    notes        10,232 records / 5,542 projects  ->  14 requests, largest 0.82MB
+    every project accounted for in both cases
+
+There is now roughly 6x headroom between the largest request and the server limit.
 
 
-ORDER
------
-Deals first, then organizations and people, then activities and notes.
+RE-RUNNING THE ACTIVITIES IMPORT
+---------------------------------
+Just import the file again. It is wipe-and-replace, and the partial data from the failed
+run is overwritten - the wipe now only clears keys that will not be rewritten, so a re-run
+is quick rather than the 200-second stall that pkg307 fixed.
+
+Your notes import is unaffected; leave it alone.
+
+
+ALSO STILL IN THIS PACKAGE
+---------------------------
+Everything from pkg303-307: both Pipedrive export formats, records skipped when their deal
+is not in the CRM, deals-first ordering enforced, parallel writes, index and summary sent
+once at the end, 60s function timeout, progress with a time estimate.
+
+
+TESTED
+------
+npm run build - Compiled successfully.
+Chunk sizes measured against your real files, before and after, with every project
+confirmed present in the chunk set.

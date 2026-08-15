@@ -77,9 +77,15 @@ async function loadSchema() {
   return DEFAULT_FIELD_SCHEMA
 }
 
-// Import chunks write thousands of keys. The default function timeout is short enough
-// that one slow chunk kills the whole import mid-way, so give it room. (Vercel Pro.)
-export const config = { maxDuration: 60 }
+// Import chunks carry a lot of JSON. Next.js caps request bodies at 1MB BY DEFAULT, which
+// is what returned "server 413" - a single activities chunk reached 1.18MB. Every other
+// bulk-import endpoint in this app sets this explicitly; the CRM one never did.
+// maxDuration: chunks write thousands of keys, and the default timeout is short enough
+// that one slow chunk would kill the import mid-way. (Vercel Pro.)
+export const config = {
+  api: { bodyParser: { sizeLimit: '8mb' } },
+  maxDuration: 60,
+}
 
 export default async function handler(req, res) {
   const acc = requireAccess(req)

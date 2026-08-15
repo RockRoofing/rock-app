@@ -1012,18 +1012,37 @@ export default function CRMPage() {
         summary[String(g.dealId)] = { total: g.items.length, open: open.length, next: dues[0] || '' };
       }
 
-      // Chunk by DEAL - each request writes one key per deal. 300 keeps the payload
-      // around 1MB, well inside the ~4.5MB limit, while cutting the number of round
-      // trips from ~46 to ~18.
-      const DEAL_CHUNK = 300;
+      // Chunk by MEASURED SIZE, not by a fixed number of projects. A fixed count is a
+      // guess: one project with 96 activities is worth a hundred with one each, so a
+      // busy run of projects can blow the request-body limit even when the average is
+      // fine. That is what returned 413. Build each chunk up to a byte budget instead,
+      // with a project cap as a second guard.
+      const MAX_BYTES = 3 * 1024 * 1024;   // 3MB against an 8MB server limit
+      const MAX_GROUPS = 400;
+      const chunks = [];
+      {
+        let cur = [], curBytes = 0;
+        for (const g of groups) {
+          const gBytes = JSON.stringify(g).length;
+          if (cur.length && (curBytes + gBytes > MAX_BYTES || cur.length >= MAX_GROUPS)) {
+            chunks.push(cur); cur = []; curBytes = 0;
+          }
+          cur.push(g); curBytes += gBytes;
+        }
+        if (cur.length) chunks.push(cur);
+      }
+
       try {
         let written = 0;
         const started = Date.now();
-        for (let i = 0; i < groups.length; i += DEAL_CHUNK) {
-          const slice = groups.slice(i, i + DEAL_CHUNK);
-          const first = i === 0;
-          const last = i + DEAL_CHUNK >= groups.length;
-          const doneSoFar = Math.min(i + DEAL_CHUNK, groups.length);
+        let sentGroups = 0;
+        for (let ci = 0; ci < chunks.length; ci++) {
+          const slice = chunks[ci];
+          const i = sentGroups;
+          const first = ci === 0;
+          const last = ci === chunks.length - 1;
+          sentGroups += slice.length;
+          const doneSoFar = sentGroups;
           const pct = Math.round((doneSoFar / groups.length) * 100);
           let eta = '';
           if (i > 0) {
