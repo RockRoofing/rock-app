@@ -1,7 +1,7 @@
-pkg359 - Daily "your activities" email
-=======================================
+pkg360 - Daily activity email at 01:00 UK
+==========================================
 
-REPLACES pkg302 through pkg358. Deploy this one only.
+REPLACES pkg302 through pkg359. Deploy this one only.
 
 
 NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
@@ -11,57 +11,50 @@ NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
 
 CHANGED FILES (straight replacements)
 --------------------------------------
-  vercel.json             adds the hourly cron
+  vercel.json             cron schedule
   pages/crm.js            unchanged since pkg358
   pages/api/crm.js        unchanged since pkg357
   lib/crmFieldSchema.js   unchanged since pkg358
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT IT SENDS
--------------
-Each morning, everyone with activities DUE TODAY OR OVERDUE gets one email listing only
-their own. Overdue first, in red, with how many days late; then due today, in green. Each
-line shows the activity, the project and the customer, and there is a button through to the
-CRM.
+CAN IT BE 1:00AM EXACTLY? ALMOST
+---------------------------------
+Vercel does not promise to-the-minute execution - a scheduled job can run a few minutes
+late under load. Nobody can give you exactly 01:00:00.
 
-Nobody with nothing due gets an email. If nobody at all has anything, nothing is sent.
+What I can do is fire it at the TOP of the hour rather than anywhere within it, which is
+what it does now. Expect 01:00 give or take a few minutes.
 
+Previously it ran hourly and checked the time, so it could have gone at any point between
+07:00 and 07:59. Now the cron itself runs at minute 0 of UTC hours 0 and 1, and the handler
+sends on whichever of those is 01:00 in London:
 
-WHO GETS ONE
-------------
-Portal users with a pre-contract or admin role and an email address - the same people who
-can be assigned an activity in the first place.
+    August (BST):   00:00 UTC = 01:00 UK   <- sends       01:00 UTC = 02:00 UK   <- skips
+    January (GMT):  00:00 UTC = 00:00 UK   <- skips       01:00 UTC = 01:00 UK   <- sends
 
-Names are matched the same way the CRM screen does: exact, then a unique first name, then a
-unique surname. So an activity assigned to "James" still reaches James McVeigh. A first
-name shared by two people is NOT guessed at - that activity is left out rather than emailed
-to the wrong person.
+So it stays at 01:00 through the clock change instead of drifting to 02:00 in summer, which
+is what a plain "0 1 * * *" would have done. Verified for both seasons.
 
 
-WHAT IS EXCLUDED, AND WHY
---------------------------
-  future activities        not due yet
-  won or lost projects     matches the Activities tab; chasing a finished job is noise
-  unassigned activities    nobody to send them to (the kanban card already flags these)
+FOR TESTING, DO NOT WAIT UNTIL 1AM
+-----------------------------------
+    ...api/cron/crm-daily-activities?dryRun=1
+        lists who would get an email and how many activities each. Sends nothing. Run this
+        first - it confirms the name matching is finding the right people.
 
-Verified all four exclusions plus the short-name matching against a worked example.
+    ...api/cron/crm-daily-activities?force=1
+        sends immediately, whatever the time.
 
-
-WHEN IT RUNS
-------------
-Hourly cron, sending in the 07:00 UK hour. Hourly rather than a fixed daily time so it does
-not drift by an hour when the clocks change, which a UTC-pinned cron would.
-
-TESTING:
-  ...?dryRun=1   lists who WOULD get one and how many activities each, sends nothing
-  ...?force=1    sends immediately regardless of the hour
-
-Run the dryRun first - it is the quickest way to confirm the name matching is picking up
-the right people before anything lands in anyone's inbox.
+Both ignore the hour gate entirely, so you can check it properly in the next two minutes
+rather than tomorrow morning.
 
 
-NOTE
-----
-It reads the same outstanding-activity list the CRM uses, which is kept current on every
-write - so the email cannot disagree with what the Activities tab shows.
+CHANGING THE TIME LATER
+------------------------
+One line at the top of pages/api/cron/crm-daily-activities.js:
+
+    const SEND_HOUR = 1;      // UK local hour
+
+If you move it outside 00:00-01:00 UK, the cron schedule in vercel.json needs the matching
+UTC hours too - tell me the time and I will set both.
