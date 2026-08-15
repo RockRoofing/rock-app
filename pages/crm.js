@@ -2371,10 +2371,10 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // booked - which is how deals go quiet.
 function CompleteActivityModal({ row, today, onClose, onDone }) {
   const [outcome, setOutcome] = useState('');
-  // Prefilled with 'Call' - by far the most common follow-up. Leave it and you get a
-  // Call; overwrite it for anything else. Matches how the deal's own add-activity box
-  // already behaves.
-  const [nextText, setNextText] = useState('Call');
+  // Empty, with "Call" shown as grey placeholder text. So it reads as a prompt to write
+  // something rather than a value already filled in - but leaving it alone still saves the
+  // activity as "Call", which is the common case.
+  const [nextText, setNextText] = useState('');
   const [nextDue, setNextDue] = useState(today);
   const [nextAssignee, setNextAssignee] = useState(row.assignee || '');
   const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
@@ -2393,10 +2393,10 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
         <div style={{ borderTop: '1px solid ' + C.line, margin: '18px 0 14px' }} />
 
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Set the next activity</div>
-        <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>Prefilled with &quot;Call&quot; - change it if it is something else, or use &quot;Just mark done&quot; to set nothing.</div>
+        <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>Leave it and the next activity is set as a Call. Use &quot;Just mark done&quot; to set nothing at all.</div>
         <label style={lbl}>What needs doing next?</label>
-        <input value={nextText} onChange={(e) => setNextText(e.target.value)} onFocus={(e) => e.target.select()}
-          placeholder="e.g. Chase pricing" style={inp} />
+        <input value={nextText} onChange={(e) => setNextText(e.target.value)}
+          placeholder="Call" style={inp} />
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Due</label>

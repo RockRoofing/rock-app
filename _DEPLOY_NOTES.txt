@@ -1,43 +1,35 @@
-pkg351 - Fixes the Activities tab crash from pkg349
-====================================================
+pkg352 - "Call" as grey placeholder text
+=========================================
 
-REPLACES pkg302 through pkg350. Deploy this one only.
+REPLACES pkg302 through pkg351. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            THE FIX
+  pages/crm.js
   pages/api/crm.js        unchanged since pkg346
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT HAPPENED
--------------
-"activityStaleFilter is not defined" - my mistake in pkg349.
+WHAT CHANGED
+------------
+"What needs doing next?" now shows Call as GREY PLACEHOLDER text in an empty box, rather
+than the word Call sitting there as a real value.
 
-Taking the diagnostics out, I removed a block by line range and it took an adjacent
-definition with it. That one was still in use: it is the check that spots a saved filter
-matching nothing, so the filter can be ignored instead of silently emptying the table.
+So it reads as a prompt - something is expected here - while leaving it alone still sets
+the next activity as a Call.
 
-Used in one place, defined in none - so the tab threw the moment it rendered.
+  type nothing      -> activity is set as "Call"
+  type something    -> that is what you get
+  clear it again    -> back to "Call"
 
-It is back, with a comment saying what it does so it does not get swept up again.
+The click-to-select behaviour is gone, since there is no longer any text to select.
 
-
-WHY THE BUILD DID NOT CATCH IT
--------------------------------
-It compiles perfectly well. JavaScript only complains about a missing name when that line
-actually runs, which is when you open the tab - not when it is built. So "Compiled
-successfully" was never going to tell us.
-
-I have since scanned every value passed into the Activities table and the deal view for
-names that are used but never defined. Nothing else is missing.
-
-I am adding that check to what I do before packaging anything from this file - two crashes
-in a row (pkg346 and now this) have both been of exactly this kind, and both got past a
-clean build.
+Wording underneath updated to match: "Leave it and the next activity is set as a Call. Use
+'Just mark done' to set nothing at all."
 
 
-ALSO IN HERE FROM pkg350
--------------------------
-The next activity box is prefilled with "Call", selects on click so typing replaces it, and
-falls back to "Call" if emptied. "Done & set next" is no longer greyed out.
+ONE PROCESS NOTE
+----------------
+I ran the used-but-undefined check on this file before packaging, as I said I would after
+the last two crashes. It came back clean. That check takes seconds and would have caught
+both pkg346 and pkg349 before they reached you.
