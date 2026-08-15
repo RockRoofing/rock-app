@@ -1632,6 +1632,47 @@ function CRMPageInner() {
   // NOTE: these hooks MUST stay above the `if (live) return` below. React requires the
   // same hooks in the same order on every render; when they sat after the early return,
   // opening a deal rendered fewer hooks and threw React error #300.
+  // Re-fetch just the activity state, so an estimator's progress reaches the salesperson
+  // without either of them reloading. Deliberately does NOT re-fetch the deals - that is
+  // 6.4MB and would make this too expensive to do often.
+  const [actRefreshedAt, setActRefreshedAt] = useState(null);
+  const refreshingRef = useRef(false);
+  async function refreshActivityState() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'activity-state' }),
+      }).then((r) => r.json());
+      if (d && d.ok) {
+        setOpenActivities(d.openActivities || []);
+        setActivitySummary(d.activitySummary || {});
+        setActRefreshedAt(Date.now());
+      }
+    } catch { /* leave what we have */ }
+    refreshingRef.current = false;
+  }
+
+  // Refresh when you come back to the tab, and every 60s while the Activities tab is open.
+  // Nothing polls while you are elsewhere in the app or in another window.
+  useEffect(() => {
+    if (!loaded) return;
+    const onFocus = () => { if (!document.hidden) refreshActivityState(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    let t = null;
+    if (view === 'activities') {
+      refreshActivityState();
+      t = setInterval(() => { if (!document.hidden) refreshActivityState(); }, 60 * 1000);
+    }
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+      if (t) clearInterval(t);
+    };
+  }, [view, loaded]);
+
   // Activities imported BEFORE the flat open-list existed have no aggregate to read, so
   // the tab would sit empty until the next import. The per-deal summary still knows which
   // deals have outstanding activities, so fetch just those - usually a few hundred at
@@ -1993,6 +2034,7 @@ function CRMPageInner() {
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} staleFilter={activityStaleFilter}
             scope={actScope} setScope={setActScope}
+            refreshedAt={actRefreshedAt} onRefresh={refreshActivityState}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2151,7 +2193,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, scope, setScope, refreshedAt, onRefresh }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2181,6 +2223,8 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
           Include completed
         </label>
+        <button onClick={onRefresh} title="Check for activities added by other people" style={{ ...sel, cursor: 'pointer' }}>Refresh</button>
+        {refreshedAt && <span style={{ fontSize: 11, color: '#aaa' }}>updated {new Date(refreshedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12.5, color: C.dim, textAlign: 'right' }}>
           <div>

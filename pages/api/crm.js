@@ -250,6 +250,18 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
+    // Just the activity state - the outstanding list and the per-deal counts. A few
+    // hundred KB, against 6.4MB for the full load, so it is cheap enough to re-fetch
+    // regularly and keep people in step without reloading the page.
+    if (body.action === 'activity-state') {
+      const [openActs, actSum] = await Promise.all([get(OPEN_ACTIVITIES), get(SUB_SUMMARY('activities'))])
+      return res.json({
+        ok: true,
+        openActivities: Array.isArray(openActs) ? openActs : [],
+        activitySummary: actSum || {},
+      })
+    }
+
     if (body.action === 'get-sub-many') {
       const kind = body.kind
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
