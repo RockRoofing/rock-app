@@ -33,14 +33,21 @@ export default async function handler(req, res) {
   if (!who) return res.status(401).json({ error: 'Not identified' })
 
   // ---- Access: the caller must be the Contracts Manager on this project. ----
-  // Checked against the OPS project list, which is the same source the Site App uses to
-  // decide whose projects are whose - so the server and the app cannot disagree.
+  // Checked against the OPS project list, the same source the Site App uses to decide
+  // whose projects are whose.
+  //
+  // CAREFUL: getOpsProjects() returns the RAW records, where the fields live nested under
+  // .data - { projectNo, data: { contractsManager, ... } }. It is /api/ops-projects that
+  // flattens them for the app. Reading x.contractsManager off a raw record is always
+  // undefined, which is why a project could appear in the CM's list and then refuse to
+  // open. Read both shapes so it works either way.
   let opsProject = null
   try {
     const opsProjects = (await getOpsProjects()) || []
     opsProject = opsProjects.find(x => normJobNo(x.projectNo) === normJobNo(no)) || null
   } catch {}
-  let allowed = !!(opsProject && nameMatches(who, opsProject.contractsManager || ''))
+  const opsCM = (opsProject && (opsProject.data?.contractsManager || opsProject.contractsManager)) || ''
+  let allowed = !!(opsCM && nameMatches(who, opsCM))
 
   // ---- Resolve the project's financial record ----
   let p = null
@@ -52,8 +59,9 @@ export default async function handler(req, res) {
     p = {
       xeroId,
       jobNo: no,
-      name: (opsProject && opsProject.projectName) || settings.projectName || '',
+      name: (opsProject && (opsProject.data?.projectName || opsProject.projectName)) || settings.projectName || '',
       contractsManager: settings.contractsManager || '',
+      overrideCM: (settings.peopleOverride && settings.peopleOverride.contractsManager) || '',
       labourBudget: numOr0(settings.labourBudget) + instructed.reduce((s, v) => s + numOr0(v.labour), 0),
       materialsBudget: numOr0(settings.materialsBudget) + instructed.reduce((s, v) => s + numOr0(v.materials), 0),
       labourSpend: numOr0(costCache.labourSpend),
@@ -76,10 +84,18 @@ export default async function handler(req, res) {
     xeroId = p.xeroId
   }
 
-  // A CM named on the financial record counts too - covers projects where the Ops IHM has
-  // not been completed but Commercial have set the Contracts Manager.
+  // A CM named on the financial record counts too - covers projects where the Ops record
+  // has no CM but Commercial have set one, including a commercial override (which is what
+  // Edit Project Details shows and therefore what the person will expect).
   if (!allowed && p.contractsManager && nameMatches(who, p.contractsManager)) allowed = true
-  if (!allowed) return res.status(403).json({ error: 'You are not listed as the Contracts Manager on this project.' })
+  if (!allowed && p.overrideCM && nameMatches(who, p.overrideCM)) allowed = true
+  if (!allowed) {
+    return res.status(403).json({
+      error: `You are not listed as the Contracts Manager on ${no}.`
+        + (opsCM ? ` It is currently set to ${opsCM}.` : ' No Contracts Manager is set on this project.')
+        + ' Check the Contracts Manager in Ops > Projects > Project Details.',
+    })
+  }
 
   // ---- Margin on the EOM basis: last COMPLETED month's valuation date, inc WIP ----
   const nowD = new Date()

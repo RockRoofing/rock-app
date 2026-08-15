@@ -1,74 +1,62 @@
-pkg288 - Project Financials CM now matches Edit Project Details
-================================================================
+pkg289 - Site App Project Finance: fix the false "not the Contracts Manager" block
+===================================================================================
 
 CHANGED FILES
 -------------
-  pages/api/dashboard.js
+  pages/api/cm-project-financials.js
 
-No new files. Straight replacement. Independent of the other packages.
-
-BEST DEPLOYED WITH pkg286 (the Ops -> Commercial project details work), since the two
-share the same resolver - but it works on its own.
+No new files IF pkg284 is deployed - this is a straight replacement of that file.
+Nothing else changes. Independent of the other outstanding packages.
 
 
-WHY THEY DISAGREED
-------------------
-Edit Project Details resolves the CM through lib/projectPeople.js:
+ROOT CAUSE - MY MISTAKE
+------------------------
+The good news is the plumbing is now working: the request reached the API and the API
+answered. It just refused you, wrongly.
 
-    commercial override  ->  Ops/IHM  ->  blank
+getOpsProjects() returns the RAW project records, where the fields sit NESTED under .data:
 
-The dashboard, which feeds Project Financials, did its own thing instead:
+    { projectNo: 'J203', data: { contractsManager: 'Will Smith', ... } }
 
-    contractsManager: (ihmByNo[String(cp.jobNo).trim()]?.contractsManager)
-                      || settings.contractsManager || ''
+I read x.contractsManager off that record. On a raw record that is ALWAYS undefined - the
+CM lives at x.data.contractsManager. It is /api/ops-projects that flattens the records,
+and that is what the Site App itself calls, which is exactly why the project appears in
+your list (flattened, CM found) and then refuses to open (raw, CM undefined).
 
-Two separate faults in that one line.
+So the check was comparing your name against an empty string for every project, and
+nameMatches() returns false when either side is blank. It would have refused EVERY project
+for EVERY user - it was never going to let anyone in.
 
-1. IT IGNORED THE COMMERCIAL OVERRIDE ENTIRELY. If a CM had been changed in Edit Project
-   Details, that screen showed the new name and Project Financials carried on showing the
-   Ops one. This is the likely cause of what you are seeing.
-
-2. IT MATCHED THE JOB NUMBER BY EXACT STRING. ihmByNo is keyed on the Ops project number,
-   so "J203" only matched "J203". The resolver matches tolerantly - it strips a leading J,
-   collapses case and spaces - so "203" and "J203" are the same project to it but were two
-   different things here. Any project where the two systems spell the number differently
-   would show a blank or stale CM.
-
-The odd part is that the dashboard ALREADY calls the resolver two lines above (for the
-`people` field) - the CM line just was not using it.
+That is the same nested-vs-flattened trap as the dashboard:cache array bug earlier in this
+run. I should have checked the shape rather than assuming.
 
 
 THE FIX
 -------
-contractsManager now comes from that same resolver result, with the old chain kept purely
-as a fallback. One source of truth, so the two screens cannot drift apart again.
+Reads x.data.contractsManager, falling back to x.contractsManager, so it works whichever
+shape it is handed.
 
-ALSO - AND THIS MATTERS FOR THE OPS SIDE:
-Saving in Commercial clears the dashboard cache, so commercial edits always showed up
-promptly. Saving in OPS does not clear it - so an Ops change to the CM would not have
-reached Project Financials for up to 4 hours even once the above was fixed.
+Two other improvements while in there:
 
-The cached path now refreshes the CM live on every read (using the same resolver), so an
-Ops change appears immediately. This deliberately does NOT force a full Xero rebuild - it
-is a cheap per-read overlay, the same trick already used for the WIP fields.
+1. A commercial OVERRIDE of the CM now also grants access. If Edit Project Details shows
+   you as CM because of an override, the Site App agrees - previously only the Ops value
+   counted, so an overridden CM would have been locked out even after the fix above.
 
-A cache-validity marker (cmResolved) has been added, so existing snapshots rebuild once on
-the first load after deploy rather than serving the old CM.
+2. If it ever does refuse, the message now names the project and says who the CM actually
+   is - e.g. "You are not listed as the Contracts Manager on J203. It is currently set to
+   Will Smith." - instead of a flat denial with nothing to act on.
 
 
-WHAT TO EXPECT
---------------
-First load after deploying may be slower than usual - that is the one-off rebuild. After
-that, the CM column and filter on Project Financials should match Edit Project Details on
-every project, and follow changes made in either portal.
+WHAT YOU SHOULD SEE
+--------------------
+Pick a live project you are CM on and it should now open: margin, labour/materials/total
+budget vs spend vs remaining, and the costs table with Labour / Materials / All tabs.
 
-If a project still disagrees, open Edit Project Details and look at the badge on the
-Contracts Manager field - "override" means Commercial is deliberately deviating from Ops
-(pkg286 adds a "use Ops value" button to undo that).
+If it still refuses, the message will now tell us which name it is comparing against - send
+me that and it is a quick fix from there.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Both faults reproduced and confirmed fixed: exact-key vs tolerant job-number matching, and
-override-vs-Ops precedence.
+Verified the CM is now found on the raw nested record AND on the flattened shape.
