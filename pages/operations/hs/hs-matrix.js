@@ -164,7 +164,11 @@ export default function HSMatrixPage() {
             against the nearest scrolling ancestor, and the page itself was that ancestor
             before, which is why the header scrolled away. */}
         <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 300px)', minHeight: 320 }}>
-          <div style={{ minWidth: NAME_W + META_W * 3 + columns.length * COL_W }}>
+          {/* FIVE meta columns are rendered - Employee, Company, Trade, Phone, Email -
+              so the width must count NAME_W + META_W * 4. It counted only 3, leaving the
+              rows one column short: the cells overflowed past the row box, so the row
+              striping and bottom borders stopped before the last column. */}
+          <div style={{ minWidth: NAME_W + META_W * 4 + columns.length * COL_W }}>
             {/* header - frozen to the top of the scroll box */}
             <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', alignItems: 'flex-end', position: 'sticky', top: 0, zIndex: 10, background: HEADER_ORANGE }}>
               <HeadFix w={NAME_W} left={0} sortKey="name" sort={sort} onSort={toggleSort}>Employee</HeadFix>
@@ -215,14 +219,14 @@ export default function HSMatrixPage() {
                 <CellFix w={META_W} left={NAME_W + META_W} bg={rowBg}>{p.trade}</CellFix>
                 <CellFix w={META_W} left={NAME_W + META_W * 2} bg={rowBg}>{p.phone}</CellFix>
                 <div style={{ width: META_W, minWidth: META_W, padding: '6px 8px', fontSize: 11, color: '#555', borderRight: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</div>
-                {columns.map(c => {
+                {columns.map((c, ci) => {
                   const cell = (data[p.id] || {})[c.id]
                   const col = cellColour(cell)
                   const isEditing = edit && edit.personId === p.id && edit.colId === c.id
                   return (
                     <div key={c.id} style={{ width: COL_W, minWidth: COL_W, borderLeft: '1px solid #f5f5f5', position: 'relative' }}>
                       {isEditing ? (
-                        <CellEditor cell={cell} onSave={(v) => saveCell(p.id, c.id, v)} onCancel={() => setEdit(null)} />
+                        <CellEditor cell={cell} alignRight={ci >= columns.length - 2} onSave={(v) => saveCell(p.id, c.id, v)} onCancel={() => setEdit(null)} />
                       ) : (
                         <div onClick={() => setEdit({ personId: p.id, colId: c.id })} title={`${p.name} - ${c.label}`}
                           style={{ height: '100%', minHeight: 38, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: col ? col.bg : 'transparent', color: col ? col.fg : '#ddd', fontSize: 10.5, fontWeight: 600, textAlign: 'center', padding: '2px', position: 'relative' }}>
@@ -250,7 +254,7 @@ export default function HSMatrixPage() {
   )
 }
 
-function CellEditor({ cell, onSave, onCancel }) {
+function CellEditor({ cell, onSave, onCancel, alignRight }) {
   const [date, setDate] = useState(cell && cell.date ? cell.date : '')
   const [noExpiry, setNoExpiry] = useState(!!(cell && cell.noExpiry))
   const [attachment, setAttachment] = useState(cell && cell.attachment ? cell.attachment : null)
@@ -274,7 +278,7 @@ function CellEditor({ cell, onSave, onCancel }) {
   }
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, zIndex: 20, background: '#fff', border: `2px solid ${GOLD}`, borderRadius: 8, padding: 8, width: 210, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+    <div style={{ position: 'absolute', top: 0, ...(alignRight ? { right: 0 } : { left: 0 }), zIndex: 20, background: '#fff', border: `2px solid ${GOLD}`, borderRadius: 8, padding: 8, width: 210, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
       <input type="date" value={date} disabled={noExpiry} onChange={e => setDate(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', padding: '6px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 12, fontFamily: 'inherit', opacity: noExpiry ? 0.5 : 1 }} />
       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, marginTop: 6, cursor: 'pointer' }}>
         <input type="checkbox" checked={noExpiry} onChange={e => setNoExpiry(e.target.checked)} /> Does not expire

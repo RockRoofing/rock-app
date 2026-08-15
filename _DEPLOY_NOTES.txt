@@ -1,66 +1,58 @@
-pkg297 - H&S Matrix: columns can actually be deleted
-=====================================================
+pkg298 - H&S Matrix: rows now reach the last column
+====================================================
 
-REPLACES pkg295 and pkg296 - it carries the frozen header row and the click-to-sort
-headers as well. Deploy this one and skip those.
+REPLACES pkg295, pkg296 and pkg297 - it carries all of them. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/api/hs-matrix.js               THE FIX
-  pages/operations/hs/hs-matrix.js     frozen header + sorting (from pkg295/296)
+  pages/operations/hs/hs-matrix.js     THE FIX (+ frozen header, sorting)
+  pages/api/hs-matrix.js               column deletion fix (from pkg297)
 
 No new files. Both straight replacements.
 
 
 ROOT CAUSE
 ----------
-The delete itself was working perfectly. Something else was putting the column back.
+An off-by-one in the table's declared width.
 
-pages/api/hs-matrix.js holds a list of ~36 DEFAULT_COLS - the standard training columns.
-Every single read of the matrix ran ensureColumns(), which backfills any default column
-that is not currently present, matching on label:
+FIVE meta columns are drawn on every row - Employee, Company, Trade, Phone, Email - but
+the width was calculated as if there were four:
 
-    for (const label of DEFAULT_COLS) {
-      if (!have.has(label.toLowerCase().trim())) { cols.push({ id: ...new id..., label }) }
-    }
+    minWidth: NAME_W + META_W * 3 + columns.length * COL_W      (Employee + 3 metas)
 
-So deleting a built-in column removed it correctly - and then the very next load found it
-"missing" and re-created it with a brand new id, pushed onto the END of the list. Exactly
-the behaviour you described: it moves to the end and will not go away.
+With 36 training columns that declared 3,986px while the content actually needs 4,106px -
+short by exactly 120px, one meta column.
 
-That backfill exists for a good reason - it is how new standard columns reach an existing
-matrix without anyone re-adding them by hand. The problem was that it could not tell
-"never had this one" from "deliberately got rid of this one".
+The training cells still DREW past that point, because each cell has its own fixed width
+and simply overflowed. But the ROW element itself stopped at the declared width, and the
+row striping and bottom borders are painted by the row - so they stopped 120px early while
+the cells carried on. That is the ragged right-hand edge in your screenshot.
 
-Columns YOU added were always deletable - they are not in DEFAULT_COLS, so nothing put
-them back. Only the built-in ones were stuck.
+The header looked fine only because each header cell paints its own orange background, so
+the overflow still looked filled in. It was actually the same width all along.
+
+FIXED: the width now counts META_W * 4, so the rows are as wide as their contents and the
+striping, borders and hover area run to the final column.
 
 
-THE FIX
--------
-A deleted default column's label is now recorded in a new store,
-ops:hs-matrix-removed-defaults, and the backfill skips anything on that list. So:
+ALSO FIXED - THE CELL EDITOR WAS BEING CUT OFF
+-----------------------------------------------
+Visible on the right of your screenshot: the date / "Does not expire" / Attach file panel
+runs off the edge and the Save button is unreachable on the last columns.
 
-  - deleting a built-in column now sticks, permanently
-  - genuinely new default columns added in a future release still appear automatically
-  - re-adding a column with the same name clears it from the list, so the two can never
-    disagree about whether it should exist
-
-Deleting still removes all the dates held against that column, as it always did, and is
-still blocked on locked columns.
+It always opened to the RIGHT of the cell, which falls outside the scroll box on the last
+couple of columns. It now opens to the LEFT for the final two columns, so the whole panel
+and the Save button stay on screen.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-  Frozen header row (pkg295) - the matrix scrolls in its own box with the header stuck to
-  the top and Employee/Company/Trade/Phone stuck to the left.
-
-  Click-to-sort headers (pkg296) - Employee / Company / Trade / Phone / Email, A-Z then
-  Z-A, blanks last.
+  pkg297 - built-in columns can actually be deleted (the backfill was re-adding them)
+  pkg296 - click Employee / Company / Trade / Phone / Email to sort, A-Z then Z-A
+  pkg295 - frozen header row, with the four fixed columns still frozen left
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Reproduced the old behaviour (deleted column reappearing at the end) and confirmed it no
-longer happens.
+Width arithmetic checked: 3,986 declared vs 4,106 needed at 36 columns.
