@@ -1477,84 +1477,9 @@ function CRMPageInner() {
   const updateCustomFilter = (i, patch) => setCustomFilters((f) => f.map((cf, idx) => idx === i ? { ...cf, ...patch } : cf));
   const removeCustomFilter = (i) => setCustomFilters((f) => f.filter((_, idx) => idx !== i));
 
-  const live = deals.find((d) => d.id === openId) || null;
-  if (live) {
-    return (
-      <div style={{ fontFamily: FONT, color: C.text }}>
-        <FontLoader />
-        {confetti && <Confetti onDone={() => setConfetti(false)} />}
-        {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
-      </div>
-    );
-  }
-
-  // ---- Activities tab ------------------------------------------------------
-  // Two sources, both already in memory: the imported outstanding list, and any activity
-  // added by hand in the CRM (those live on the deal itself). Joined to the deal for the
-  // project and customer company, and to the contacts list for email / phone.
-  // ---- Acting on an activity from the Activities tab -----------------------
-  // An activity lives in one of two places: imported ones sit in their own per-deal
-  // store, manually-added ones sit on the deal. Both have to be handled, so these
-  // helpers work out which it is and take the right route.
-  const isManualActivity = (dealId, actId) => {
-    const d = deals.find((x) => String(x.id) === String(dealId));
-    return !!(d && (d.activities || []).some((a) => a.id === actId));
-  };
-
-  async function patchImportedActivity(dealId, actId, patch) {
-    const got = await fetch('/api/crm', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(dealId) }),
-    }).then((r) => r.json());
-    const items = (got.items || []).map((a) => a.id === actId ? { ...a, ...patch } : a);
-    await fetch('/api/crm', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save-sub', kind: 'activities', dealId: String(dealId), items }),
-    });
-  }
-
-  // Mark done, record what happened on the deal's history, and optionally set the next one.
-  async function completeActivityFromTable(row, outcome, next) {
-    const dealId = row.dealId;
-    try {
-      if (isManualActivity(dealId, row.rawId)) {
-        completeActivity(Number(dealId), row.rawId);
-      } else {
-        await patchImportedActivity(dealId, row.rawId, { done: true, doneAt: Date.now() });
-        setOpenActivities((prev) => prev.filter((a) => !(String(a.dealId) === String(dealId) && a.id === row.rawId)));
-      }
-
-      if (outcome && outcome.trim()) {
-        patch(Number(dealId), (d) => ({
-          ...d,
-          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim() }],
-        }));
-      }
-
-      if (next && next.text && next.text.trim()) {
-        addActivity(Number(dealId), next.text.trim(), next.due || today, next.assignee || null);
-      }
-    } catch (e) { console.error('Could not complete the activity:', e); }
-  }
-
-  // Edit the description (and due date / owner) from the table.
-  async function editActivityFromTable(row, text, due, assignee) {
-    const dealId = row.dealId;
-    try {
-      if (isManualActivity(dealId, row.rawId)) {
-        patch(Number(dealId), (d) => ({
-          ...d,
-          activities: d.activities.map((a) => a.id === row.rawId ? { ...a, text, due, assignee: assignee || a.assignee || null } : a),
-        }));
-      } else {
-        await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, assignee: assignee || '' });
-        setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
-          ? { ...a, text, due, assignee: assignee || a.assignee } : a));
-      }
-    } catch (e) { console.error('Could not update the activity:', e); }
-  }
-
+  // NOTE: these hooks MUST stay above the `if (live) return` below. React requires the
+  // same hooks in the same order on every render; when they sat after the early return,
+  // opening a deal rendered fewer hooks and threw React error #300.
   // Activities imported BEFORE the flat open-list existed have no aggregate to read, so
   // the tab would sit empty until the next import. The per-deal summary still knows which
   // deals have outstanding activities, so fetch just those - usually a few hundred at
@@ -1661,6 +1586,85 @@ function CRMPageInner() {
       return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true });
     });
   }, [activityRows, actPerson, actCustomer, actSort]);
+
+  const live = deals.find((d) => d.id === openId) || null;
+  if (live) {
+    return (
+      <div style={{ fontFamily: FONT, color: C.text }}>
+        <FontLoader />
+        {confetti && <Confetti onDone={() => setConfetti(false)} />}
+        {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
+        <DealView deal={live} today={today} schema={schema} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} />
+      </div>
+    );
+  }
+
+  // ---- Activities tab ------------------------------------------------------
+  // Two sources, both already in memory: the imported outstanding list, and any activity
+  // added by hand in the CRM (those live on the deal itself). Joined to the deal for the
+  // project and customer company, and to the contacts list for email / phone.
+  // ---- Acting on an activity from the Activities tab -----------------------
+  // An activity lives in one of two places: imported ones sit in their own per-deal
+  // store, manually-added ones sit on the deal. Both have to be handled, so these
+  // helpers work out which it is and take the right route.
+  const isManualActivity = (dealId, actId) => {
+    const d = deals.find((x) => String(x.id) === String(dealId));
+    return !!(d && (d.activities || []).some((a) => a.id === actId));
+  };
+
+  async function patchImportedActivity(dealId, actId, patch) {
+    const got = await fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(dealId) }),
+    }).then((r) => r.json());
+    const items = (got.items || []).map((a) => a.id === actId ? { ...a, ...patch } : a);
+    await fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'save-sub', kind: 'activities', dealId: String(dealId), items }),
+    });
+  }
+
+  // Mark done, record what happened on the deal's history, and optionally set the next one.
+  async function completeActivityFromTable(row, outcome, next) {
+    const dealId = row.dealId;
+    try {
+      if (isManualActivity(dealId, row.rawId)) {
+        completeActivity(Number(dealId), row.rawId);
+      } else {
+        await patchImportedActivity(dealId, row.rawId, { done: true, doneAt: Date.now() });
+        setOpenActivities((prev) => prev.filter((a) => !(String(a.dealId) === String(dealId) && a.id === row.rawId)));
+      }
+
+      if (outcome && outcome.trim()) {
+        patch(Number(dealId), (d) => ({
+          ...d,
+          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim() }],
+        }));
+      }
+
+      if (next && next.text && next.text.trim()) {
+        addActivity(Number(dealId), next.text.trim(), next.due || today, next.assignee || null);
+      }
+    } catch (e) { console.error('Could not complete the activity:', e); }
+  }
+
+  // Edit the description (and due date / owner) from the table.
+  async function editActivityFromTable(row, text, due, assignee) {
+    const dealId = row.dealId;
+    try {
+      if (isManualActivity(dealId, row.rawId)) {
+        patch(Number(dealId), (d) => ({
+          ...d,
+          activities: d.activities.map((a) => a.id === row.rawId ? { ...a, text, due, assignee: assignee || a.assignee || null } : a),
+        }));
+      } else {
+        await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, assignee: assignee || '' });
+        setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
+          ? { ...a, text, due, assignee: assignee || a.assignee } : a));
+      }
+    } catch (e) { console.error('Could not update the activity:', e); }
+  }
+
 
   const isDealView = view === 'pipeline' || view === 'list';
 

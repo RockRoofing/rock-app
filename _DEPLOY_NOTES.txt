@@ -1,51 +1,63 @@
-pkg320 - Delete companies / contacts, and a proper Mark Done column
-====================================================================
+pkg321 - Fixes the crash on opening a deal AND on adding a project
+===================================================================
 
-REPLACES pkg302 through pkg319. Deploy this one only.
+REPLACES pkg302 through pkg320. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js
-  pages/api/crm.js        delete actions + the deleted-names list
+  pages/crm.js            THE FIX
+  pages/api/crm.js        unchanged since pkg320
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. MARK DONE COLUMN
---------------------
-The tick box had a blank header, so it read as part of the Project column. It now has its
-own header, "Mark Done", sized to fit. Nothing else moved.
+THE ERROR SCREEN GAVE IT AWAY IMMEDIATELY
+-------------------------------------------
+React error #300 means "Rendered fewer hooks than expected". That is a specific, and
+entirely my, mistake - and it is ONE fault causing BOTH problems you have reported.
+
+When I built the Activities tab I added six hooks - a useRef, a useEffect and four
+useMemos - and they landed BELOW this line in the page component:
+
+    const live = deals.find((d) => d.id === openId) || null;
+    if (live) { return ( ...deal view... ); }
+
+On the board, every hook runs. Open a deal and that early return fires first, so those six
+never run. React sees the hook count drop between renders and refuses to continue, which
+is the screen you sent.
+
+AND THAT IS WHY ADD PROJECT CRASHED TOO. Creating a project calls openDealById() to show
+the new deal - the same path, the same crash. I spent three packages hunting the Add
+Project bug separately when it was this all along. The error boundary from pkg318 is what
+finally surfaced it; it was the right call and it paid for itself.
+
+FIXED: all six moved above the early return, so both paths declare the same hooks in the
+same order. Verified programmatically - there are now no hooks after the early return
+anywhere in the page component.
+
+I have left a comment at that spot explaining why they must stay there, so it does not get
+undone later. This is the same rule as the standing note about React hooks needing to come
+before any early return; I broke it and did not spot it.
 
 
-2. DELETE ON COMPANIES AND CONTACTS
-------------------------------------
-A Delete column on the right of both tables, with a confirm before anything happens.
+WHAT SHOULD WORK AGAIN
+-----------------------
+  - clicking any project on the kanban
+  - clicking a project from the List view or the Activities table
+  - adding a project
 
-Deleting removes the record from that page only. Projects referencing the name are NOT
-touched - no deal is changed, no history is lost, and nothing is orphaned. The confirm box
-says so, because "delete company" could reasonably be read as something far more drastic.
+The error boundary stays in place, so if anything else does crash you get the detail rather
+than "Application error" - that turned this from guesswork into a five-minute fix.
 
 
-THE PART THAT NEEDED CARE
---------------------------
-pkg314 made these pages also list any company or person found on a deal, so nothing added
-through a project is stranded. That feature directly fights deletion: remove a company that
-appears on any project and it would simply come back on the next load, looking like the
-delete had failed.
-
-So a deleted name is now recorded in its own list and filtered out of BOTH sources - the
-imported records and the deal-derived ones. Verified: a company still referenced by a live
-project stays deleted.
-
-Re-adding the same name later - through a new project, or a fresh import - lifts the
-deletion automatically, so the two cannot end up disagreeing.
-
-WORTH KNOWING: a company or contact import is still wipe-and-replace and will bring back
-everything in the file, including names you deleted, because the file is treated as the
-truth. Deletions made here are the right tool for tidying up after cutover, not for
-filtering an import.
+ALSO IN THIS PACKAGE (pkg320, not yet deployed)
+------------------------------------------------
+  - Delete on Companies and Contacts, with deleted names filtered from the deal-derived
+    listing so they cannot reappear
+  - the tick box has its own "Mark Done" column header
+  - complete an activity from the table, with call/email notes and a prompt to set the next
+  - the Activity column opens a large editable box
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Deletion verified against the deal-derived listing.
