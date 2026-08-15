@@ -353,6 +353,7 @@ const fInput = { padding: '7px 9px', borderRadius: 8, border: '1px solid #e0e0e0
 // email. Same idea as the Outstanding Invoices weekly report settings.
 function RenewalSettings({ onClose }) {
   const [list, setList] = useState([])
+  const [portalUsers, setPortalUsers] = useState([])
   const [entry, setEntry] = useState('')
   const [sched, setSched] = useState({ dayOfWeek: 5, hour: 17 })
   const [counts, setCounts] = useState({ dueCount: 0, overdueCount: 0 })
@@ -364,6 +365,7 @@ function RenewalSettings({ onClose }) {
     try {
       const d = await fetch('/api/hs-renewal-settings').then(r => r.json())
       setList(d.recipients || [])
+      setPortalUsers(d.portalUsers || [])
       if (d.schedule) setSched({ dayOfWeek: d.schedule.dayOfWeek, hour: d.schedule.hour })
       setCounts({ dueCount: d.dueCount || 0, overdueCount: d.overdueCount || 0 })
     } catch {}
@@ -409,6 +411,24 @@ function RenewalSettings({ onClose }) {
     setBusy(false)
   }
 
+  // Fire the operatives' own CSCS / Working at Height reminders on demand. This ignores
+  // the normal once-a-week throttle, so anyone reminded in the last few days gets another.
+  async function sendOperativesNow() {
+    if (!window.confirm('Email every operative whose CSCS or Working at Height is overdue or due within 6 weeks?\n\nThis ignores the weekly throttle, so anyone reminded in the last few days will be emailed again.')) return
+    setBusy(true); setMsg('')
+    try {
+      const d = await fetch('/api/hs-renewal-settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send-operative-now' }),
+      }).then(r => r.json())
+      if (d && d.ok) {
+        setMsg(`Sent ${d.sent} operative reminder${d.sent === 1 ? '' : 's'}.`
+          + (d.skippedNoEmail ? ` ${d.skippedNoEmail} skipped - no email address on their Site App user record.` : ''))
+      } else setMsg((d && d.error) || 'Could not send.')
+    } catch { setMsg('Could not send.') }
+    setBusy(false)
+  }
+
   const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   const inp = { padding: '8px 10px', border: '1px solid #e0e0e0', borderRadius: 8, fontSize: 13, fontFamily: 'inherit' }
 
@@ -446,6 +466,27 @@ function RenewalSettings({ onClose }) {
               <button onClick={add} style={ghostBtn}>Add</button>
             </div>
 
+            {portalUsers.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Or tick portal users to add them</div>
+                <div style={{ maxHeight: 190, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8, padding: '4px 0' }}>
+                  {portalUsers.map(u => {
+                    const on = list.some(x => x.toLowerCase() === u.email.toLowerCase())
+                    return (
+                      <label key={u.email} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 10px', fontSize: 13, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={on}
+                          onChange={() => setList(on
+                            ? list.filter(x => x.toLowerCase() !== u.email.toLowerCase())
+                            : [...list, u.email])} />
+                        <span style={{ flex: 1 }}>{u.name}{u.role ? <span style={{ color: '#aaa' }}> &middot; {u.role}</span> : null}</span>
+                        <span style={{ color: '#aaa', fontSize: 11.5 }}>{u.email}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div style={{ fontSize: 12.5, fontWeight: 600, color: INK, margin: '20px 0 6px' }}>When to send</div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <select value={sched.dayOfWeek} onChange={e => setSched(s => ({ ...s, dayOfWeek: parseInt(e.target.value) }))} style={inp}>
@@ -459,9 +500,10 @@ function RenewalSettings({ onClose }) {
 
             {msg && <div style={{ marginTop: 14, fontSize: 13, color: msg === 'Saved.' || msg === 'Sent.' ? '#16a34a' : '#b91c1c' }}>{msg}</div>}
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>{busy ? 'Working...' : 'Save'}</button>
-              <button onClick={sendNow} disabled={busy} style={ghostBtn}>Send now</button>
+              <button onClick={sendNow} disabled={busy} style={ghostBtn}>Send weekly list now</button>
+              <button onClick={sendOperativesNow} disabled={busy} style={ghostBtn}>Send operative reminders now</button>
               <div style={{ flex: 1 }} />
               <button onClick={onClose} style={ghostBtn}>Close</button>
             </div>

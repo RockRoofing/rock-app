@@ -1,8 +1,7 @@
-pkg300 - CSCS / Working at Height renewal notifications
-========================================================
+pkg301 - Renewal notifications: portal users as recipients + manual send
+=========================================================================
 
-REPLACES pkg295-pkg298 (it carries the frozen header, sorting, column-delete fix and the
-full-width fix). Deploy this one; those are all inside it.
+REPLACES pkg295-pkg300. Deploy this one; everything from those is inside it.
 
 
 NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
@@ -13,76 +12,53 @@ NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
 
 CHANGED FILES (straight replacements)
 --------------------------------------
-  vercel.json                          adds the hourly cron
-  pages/operations/hs/hs-matrix.js     "Renewal notifications" panel (+ earlier fixes)
-  pages/api/hs-matrix.js               column-delete fix (from pkg297)
+  vercel.json                          hourly cron
+  pages/operations/hs/hs-matrix.js     panel + frozen header + sorting + full-width fix
+  pages/api/hs-matrix.js               column-delete fix
 
 
-WHAT TRIGGERS - AND WHAT DOES NOT
-----------------------------------
-Only CSCS and Working at Height. Matched on the COLUMN LABEL, so it keeps working if a
-column is renamed, as long as it still contains "CSCS" or "Working at Height". Confirmed
-matching: "CSCS", "Working at Height", "Working at Height / H&S (office)". Not matched:
-SSSTS, First aid, IPAF and the rest.
+1. PORTAL USERS AS RECIPIENTS
+------------------------------
+The Renewal notifications panel now lists every active portal user who has an email
+address, with a tick box each. Tick someone and they are added to the weekly list; untick
+to remove. The typed-email box is still there for anyone outside the portal.
 
-Cells marked "No expiry" and cells with no date are ignored.
+Ticking stores the EMAIL, not a link to the user account. That is deliberate:
+
+  - if the person is later renamed in the portal, the email keeps working
+  - if they are removed from the portal, the notification does NOT silently stop - the
+    address stays on the list until you take it off, so nobody quietly falls out of the
+    loop without anyone noticing
+
+The tick boxes reflect the current list, so a portal user you added by typing their
+address shows as already ticked.
 
 
-1. THE OPERATIVE'S OWN REMINDER
+2. SEND NOW - THERE ARE NOW TWO
 --------------------------------
-From 6 weeks (42 days) before expiry the person is emailed directly, then again every 7
-days, stopping once the ticket is 2 weeks overdue. It stays on the management list after
-that - it just stops chasing the individual.
+  "Send weekly list now"           - the summary to the recipient list. This one already
+                                     existed in pkg300; it is just labelled more clearly
+                                     now that there are two.
 
-The email says their CSCS card / Working at Height training expires (or expired) on the
-date, and asks them to send the renewal to Rock Roofing to keep their training up to date
-and maintain their ability to work for Rock Roofing.
+  "Send operative reminders now"   - NEW. Emails every operative whose CSCS or Working at
+                                     Height is overdue or due within 6 weeks, immediately.
 
-Sent to the email on their Site App user record. Anyone without an email is skipped and
-counted in the cron response - worth checking, since a missing email means silent
-non-delivery.
+The operative one IGNORES the normal once-a-week throttle, so someone reminded two days
+ago will be emailed again. The confirm box says so before it sends.
 
-Throttling is per person PER TICKET, so somebody whose CSCS and Working at Height both
-lapse gets one email about each, not one merged one.
-
-
-2. THE WEEKLY LIST - RECIPIENTS ARE EDITABLE, AS ASKED
--------------------------------------------------------
-Nobody is hard-coded. On the H&S Training Matrix page there is a new
-"Renewal notifications" button next to "+ Add training column". It opens a panel where you
-can:
-
-  - add and remove recipients (any email, internal or external)
-  - set the day and hour (defaults to FRIDAY 17:00 UK, as requested)
-  - see how many tickets are currently due/overdue
-  - "Send now" to fire it immediately for testing
-
-So add Dori, Carl, Mike and Will there yourself, and change it later without me.
-
-*** THE WEEKLY EMAIL WILL NOT SEND UNTIL YOU ADD RECIPIENTS. *** That is deliberate - it
-will not guess. The panel warns you in orange when the list is empty.
-
-The email lists everything overdue and everything due within 6 weeks, split into two
-tables, with person, company, training and expiry date. In-date tickets beyond 6 weeks are
-never included.
+Afterwards it reports what happened - e.g. "Sent 7 operative reminders. 2 skipped - no
+email address on their Site App user record." That skipped count is worth watching: it is
+the only way to spot people who can never receive these.
 
 
-HOW IT RUNS
------------
-One hourly cron, /api/cron/hs-renewals, with both jobs self-gating - the same approach the
-Outstanding Invoices weekly report already uses. Hourly is needed because a 17:00 send
-cannot be guaranteed by a once-daily cron, and the gate is evaluated in UK time so it does
-not drift an hour when the clocks change.
-
-  Operative reminders: run once a day, in the 08:00 UK hour.
-  Weekly list:         runs on the configured day/hour, once per day.
-
-TESTING: append ?force=1 to run both immediately ignoring every gate, or ?dryRun=1 to see
-what the weekly list would do without sending. Both return a JSON summary of what happened.
+UNCHANGED FROM pkg300
+---------------------
+  - CSCS and Working at Height only, matched on column label
+  - operatives chased from 6 weeks before expiry, weekly, stopping 2 weeks overdue
+  - weekly list defaults to Friday 17:00 UK, day/hour editable
+  - the weekly email still will not send until at least one recipient is set
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Label matching and both windows verified (6 weeks before -> 2 weeks overdue for the
-individual; overdue-and-within-6-weeks for the list).
