@@ -103,20 +103,12 @@ const leanDeal = (d) => {
   const { _actSummary, _noteSummary, ...rest } = d;
   return {
     ...rest,
-    // IMPORTED activities and notes are stripped - there are 36,824 of them and they have
-    // their own per-deal stores. Activities and notes CREATED HERE stay on the deal as
-    // well as going to that store.
-    //
-    // pkg331 stripped those too, which is what broke this: the deal came back from the
-    // server with no activities, so anything added in the CRM could only appear if the
-    // separate aggregate had been rebuilt correctly. Imported ones were in that aggregate
-    // already, which is exactly why they showed and yours did not.
-    //
-    // Keeping them costs almost nothing - a handful of records per deal against 36,824
-    // imported - and it means an activity you add is on the deal you added it to, which is
-    // where every view looks first.
-    activities: (d.activities || []).filter((a) => !a.imported),
-    notes: (d.notes || []).filter((n) => !n.imported),
+    // ONE STORE. No activities or notes on the deal - imported and CRM-created alike all
+    // live in crm:activities:<dealId> / crm:notes:<dealId>. They are sent WITH this deal in
+    // the same request (see __activities / __notes below) and the server files them, so
+    // they cannot be stored without each other.
+    activities: [],
+    notes: [],
     // History keeps everything except the injected copies of IMPORTED notes/activities.
     history: (d.history || []).filter((h) => !String(h.id || '').startsWith('h_pd_')),
   };
@@ -1000,7 +992,7 @@ function CRMPageInner() {
           const seed = new Map();
           const actSeed = new Map();
           for (const x of d.deals) {
-            seed.set(String(x.id), JSON.stringify(leanDeal(x)));
+            seed.set(String(x.id), JSON.stringify({ ...leanDeal(x), __activities: crmActivities(x), __notes: crmNotes(x) }));
             // Deliberately NOT seeded with the deal's own activities. Anything still held
             // on a deal from before this change therefore looks new, and gets written
             // across to the shared store on the next save - a quiet one-off migration.
@@ -1037,11 +1029,22 @@ function CRMPageInner() {
         // their own per-deal stores.
         const lean = deals.map(leanDeal);
 
+        // Attach each deal's own activities and notes so they are saved in the same
+        // request as the deal itself.
+        for (const d of lean) {
+          const src = deals.find((x) => String(x.id) === String(d.id));
+          if (!src) continue;
+          d.__activities = crmActivities(src);
+          d.__notes = crmNotes(src);
+        }
+
         // Send ONLY what changed. The full list is ~6.4MB and Vercel refuses any request
         // body over 4.5MB, so a whole-list save can never succeed at this size.
         const prev = savedSnapshot.current;
         const changed = [];
         const nextSnap = new Map();
+        // The comparison INCLUDES the attached activities and notes, so adding one marks
+        // that deal as changed even if nothing else about it moved.
         for (const d of lean) {
           const json = JSON.stringify(d);
           nextSnap.set(String(d.id), json);
@@ -1058,8 +1061,7 @@ function CRMPageInner() {
         const MAX_BYTES = 3 * 1024 * 1024;
         const batches = [];
         let cur = [], curBytes = 0;
-        const toSave = changed.filter((d) => !heldBack.has(String(d.id)));
-        for (const d of toSave) {
+        for (const d of changed) {
           const b = JSON.stringify(d).length;
           if (cur.length && curBytes + b > MAX_BYTES) { batches.push(cur); cur = []; curBytes = 0; }
           cur.push(d); curBytes += b;
@@ -1071,41 +1073,6 @@ function CRMPageInner() {
         // deals that actually changed, so this is normally a single small request.
         // Activities and notes are written to their own stores BEFORE the deal is saved -
         // and the deal is saved with them stripped out. So if one of these writes fails,
-        // the deal MUST NOT be saved, or the stripping would delete them for good.
-        // Any deal whose activities or notes could not be written is held back and
-        // retried on the next save instead.
-        const heldBack = new Set();
-        for (const d of changed) {
-          const src = deals.find((x) => String(x.id) === String(d.id)) || {};
-          try {
-            const mine = crmActivities(src);
-            const now = JSON.stringify(mine);
-            if (prevActivities.current.get(String(d.id)) !== now) {
-              const r2 = await fetch('/api/crm', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'save-deal-activities', dealId: String(d.id), activities: mine }),
-              });
-              if (!r2.ok) { heldBack.add(String(d.id)); continue; }
-              prevActivities.current.set(String(d.id), now);
-            }
-            const mineN = crmNotes(src);
-            const nowN = JSON.stringify(mineN);
-            if (prevNotes.current.get(String(d.id)) !== nowN) {
-              const r3 = await fetch('/api/crm', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'save-deal-notes', dealId: String(d.id), notes: mineN }),
-              });
-              if (!r3.ok) { heldBack.add(String(d.id)); continue; }
-              prevNotes.current.set(String(d.id), nowN);
-            }
-          } catch (e) {
-            console.error('Could not save activities/notes for deal', d.id, e);
-            heldBack.add(String(d.id));
-          }
-        }
-        if (heldBack.size) {
-          setSaveError(`${heldBack.size} project(s) could not be fully saved - retrying on your next change.`);
-        }
 
         let ok = true;
         for (let bi = 0; bi < batches.length; bi++) {
@@ -1125,11 +1092,8 @@ function CRMPageInner() {
           }
         }
         if (ok) {
-          // Held-back deals keep their OLD baseline, so they are retried next time rather
-          // than being treated as saved.
-          for (const [id, json] of nextSnap) if (!heldBack.has(id)) savedSnapshot.current.set(id, json);
-          for (const id of Array.from(savedSnapshot.current.keys())) if (!nextSnap.has(id)) savedSnapshot.current.delete(id);
-          if (!heldBack.size) setSaveError('');
+          savedSnapshot.current = nextSnap;   // only advance the baseline on success
+          setSaveError('');
         }
       } catch (e) {
         setSaveError('Save failed - check your connection. Your last change is not stored.');

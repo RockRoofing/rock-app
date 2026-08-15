@@ -348,7 +348,47 @@ export default async function handler(req, res) {
 
       const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
       const byId = new Map(list.map(d => [String(d.id), d]))
-      for (const d of changed) if (d && d.id != null) byId.set(String(d.id), d)
+
+      // Activities and notes travel WITH the deal, in this one request, and the server
+      // files them. Doing it as a separate call was the mistake: the deal could be stored
+      // without them if that second call failed, and the cross-project list could drift
+      // out of step with what was actually saved.
+      for (const d of changed) {
+        if (!d || d.id == null) continue
+        const dealId = String(d.id)
+        const acts = Array.isArray(d.__activities) ? d.__activities : null
+        const nts = Array.isArray(d.__notes) ? d.__notes : null
+        delete d.__activities; delete d.__notes
+
+        if (acts) {
+          const stored = (await get(SUB_KEY('activities', dealId))) || []
+          const merged = [...stored.filter(a => !a.crm), ...acts.map(a => ({ ...a, crm: true }))]
+          await set(SUB_KEY('activities', dealId), merged)
+          const idx = (await get(SUB_INDEX('activities'))) || []
+          if (!idx.includes(dealId)) { idx.push(dealId); await set(SUB_INDEX('activities'), idx) }
+          const sum = (await get(SUB_SUMMARY('activities'))) || {}
+          sum[dealId] = summarise('activities', merged)
+          await set(SUB_SUMMARY('activities'), sum)
+          const open = (await get(OPEN_ACTIVITIES)) || []
+          await set(OPEN_ACTIVITIES, [
+            ...open.filter(a => String(a.dealId) !== dealId),
+            ...merged.filter(a => !a.done).map(a => ({
+              id: a.id, dealId, text: a.subject || a.text || 'Activity',
+              due: a.dueDate || a.due || '', assignee: a.assignee || '',
+            })),
+          ])
+        }
+
+        if (nts) {
+          const stored = (await get(SUB_KEY('notes', dealId))) || []
+          const merged = [...stored.filter(n => !n.crm), ...nts.map(n => ({ ...n, crm: true }))]
+          await set(SUB_KEY('notes', dealId), merged)
+          const idx = (await get(SUB_INDEX('notes'))) || []
+          if (!idx.includes(dealId)) { idx.push(dealId); await set(SUB_INDEX('notes'), idx) }
+        }
+
+        byId.set(dealId, d)
+      }
       for (const id of removed) byId.delete(id)
 
       await set(DEALS_KEY, Array.from(byId.values()))
