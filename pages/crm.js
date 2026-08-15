@@ -813,6 +813,7 @@ export default function CRMPage() {
   const [chooser, setChooser] = useState(null); // 'list' | 'companies' | 'contacts'
   const [openActivities, setOpenActivities] = useState([]);
   const [activitySummary, setActivitySummary] = useState({});
+  const [dealsAreSeed, setDealsAreSeed] = useState(false);
   const [actLoading, setActLoading] = useState(false);
   const [actSort, setActSort] = useState({ key: 'due', dir: 'asc' });
   const [actPerson, setActPerson] = useState('');
@@ -900,6 +901,7 @@ export default function CRMPage() {
           const noteSum = d.noteSummary || {};
           setOpenActivities(Array.isArray(d.openActivities) ? d.openActivities : []);
           setActivitySummary(d.activitySummary || {});
+          setDealsAreSeed(!!d.dealsAreSeed);
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1506,7 +1508,8 @@ export default function CRMPage() {
             customer={actCustomer} setCustomer={setActCustomer}
             showDone={actShowDone} setShowDone={setActShowDone}
             sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
-            today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary} />
+            today={today} onOpen={openDealById} loading={actLoading} summary={activitySummary}
+            deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed} />
         )}
       </div>
 
@@ -1658,7 +1661,7 @@ const ACT_COLS = [
   ['phone', 'Customer phone'],
 ];
 
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed }) {
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
   const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
   const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
@@ -1689,7 +1692,8 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       </div>
 
       {!rows.length ? (
-        <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)} />
+        <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)}
+          deals={deals} openList={openList} dealsAreSeed={dealsAreSeed} />
       ) : (
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
@@ -1732,7 +1736,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // An empty table is ambiguous - nothing imported, or nothing outstanding? This works it
 // out from the per-deal summary and says which, so nobody has to guess whether the import
 // failed.
-function EmptyActivities({ loading, summary, filtered }) {
+function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAreSeed }) {
   const box = { background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13.5, color: C.dim };
   if (loading) return <div style={box}>Loading activities...</div>;
 
@@ -1776,5 +1780,33 @@ function EmptyActivities({ loading, summary, filtered }) {
     );
   }
 
-  return <div style={box}>{openActs} outstanding activities found, but none could be matched to a project in the CRM.<div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>Re-import your Deals export, then the Activities export.</div></div>;
+  // Unmatched: show the evidence rather than guessing at the cause. Nine times out of ten
+  // the two lists of ids make the reason obvious at a glance.
+  const dealSample = (deals || []).slice(0, 5).map((d) => String(d.id));
+  const actSample = (openList || []).slice(0, 5).map((a) => String(a.dealId));
+  const code = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12, color: C.text };
+  return (
+    <div style={{ ...box, textAlign: 'left' }}>
+      <div style={{ color: C.text, fontWeight: 600, textAlign: 'center' }}>
+        {openActs.toLocaleString('en-GB')} outstanding activities found, but none of them match a project in the CRM.
+      </div>
+      {dealsAreSeed && (
+        <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8, padding: '10px 14px', margin: '14px 0', fontSize: 12.5, color: '#9a3412' }}>
+          <strong>The CRM is showing the built-in sample deals, not your imported ones.</strong> That is
+          the cause: the activities point at your real projects, which are not loaded. Import your
+          Deals export and this will resolve itself.
+        </div>
+      )}
+      <div style={{ fontSize: 12.5, color: '#888', marginTop: 14, lineHeight: 1.7 }}>
+        <div>Deals currently loaded: <strong style={code}>{(deals || []).length.toLocaleString('en-GB')}</strong></div>
+        <div>Their ids look like: <span style={code}>{dealSample.join(', ') || '(none)'}</span></div>
+        <div style={{ marginTop: 6 }}>The activities are attached to deal ids: <span style={code}>{actSample.join(', ') || '(none)'}</span></div>
+        <div style={{ marginTop: 10, color: '#aaa' }}>
+          If those two sets of numbers look like different things, the deals and the activities came
+          from different exports. Re-import the Deals export that matches, then the Activities export.
+          If they look the same, send me this screen and I will take it from there.
+        </div>
+      </div>
+    </div>
+  );
 }

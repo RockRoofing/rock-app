@@ -69,8 +69,13 @@ function requireAccess(req) {
   return { ok: true, user: u }
 }
 
+// True when the deals shown are the built-in preview sample rather than your imported
+// data. Surfaced to the page so a mismatch is obvious instead of looking like a bug.
+let LAST_DEALS_WERE_SEED = false
+
 async function loadDeals() {
   const saved = await get(DEALS_KEY)
+  LAST_DEALS_WERE_SEED = !Array.isArray(saved)
   if (Array.isArray(saved)) return saved
   // First run: seed from the sample deals (deep-ish copy).
   return (SEED_DEALS || []).map(d => ({ ...d, fields: { ...d.fields }, history: [...(d.history || [])], activities: [...(d.activities || [])], notes: [...(d.notes || [])] }))
@@ -108,6 +113,7 @@ export default async function handler(req, res) {
       activitySummary: actSum || {},
       noteSummary: noteSum || {},
       openActivities: Array.isArray(openActs) ? openActs : [],
+      dealsAreSeed: LAST_DEALS_WERE_SEED,
     })
   }
 

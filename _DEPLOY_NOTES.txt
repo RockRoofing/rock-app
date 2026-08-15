@@ -1,62 +1,65 @@
-pkg312 - Activities tab: works without a re-import, and says why it is empty
-=============================================================================
+pkg313 - Activities tab: show WHY nothing matches, instead of guessing
+=======================================================================
 
-REPLACES pkg302 through pkg311. Deploy this one only.
+REPLACES pkg302 through pkg312. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            self-healing tab + explanatory empty state
-  pages/api/crm.js        new batch fetch for per-deal activities
+  pages/crm.js            diagnostic empty state
+  pages/api/crm.js        reports whether the deals are your data or the sample
   lib/crmImportMap.js     unchanged since pkg305
 
-No new files. All straight replacements.
+
+FIRST - THE GOOD NEWS
+----------------------
+"1023 outstanding activities found" means your re-export worked. The activities are in,
+with the outstanding ones present, and the count matches Pipedrive's own figure exactly.
+That part is done.
 
 
-A GAP I LEFT IN pkg310
+YOU WERE RIGHT TO PUSH BACK
+----------------------------
+"Re-import your Deals export" was a guess dressed up as an instruction. I did not know why
+they were not matching, and telling you to redo a large import on a hunch was not good
+enough. Sorry.
+
+The join itself is sound - it matches an activity's Deal ID against the deal's id, both
+compared as text, so a number/text difference cannot be the cause.
+
+The most likely explanation is one I can now detect. pages/api/crm.js falls back to a
+built-in set of 378 SAMPLE deals whenever crm:deals is missing or unreadable:
+
+    const saved = await get(DEALS_KEY)
+    if (Array.isArray(saved)) return saved
+    return (SEED_DEALS || []).map(...)          // <- preview data
+
+If that fallback is in play, the board looks populated but those are demo projects with
+different ids, so nothing your activities point at can possibly match. The API now reports
+which of the two you are looking at.
+
+
+WHAT THE TAB NOW SHOWS
 -----------------------
-The Activities tab read a flat list of outstanding activities that is written DURING an
-import. Your activities were imported before that existed, so there was no list to read -
-the tab would have sat empty even if you did have outstanding activities. It would only
-have started working after your next import, which I did not make clear.
+Instead of a guess, it shows the evidence:
 
-FIXED: the tab now falls back to the per-deal summary, which already records how many
-activities each deal has outstanding, and fetches just those deals directly. Typically a
-few hundred, not the 5,000+ that hold only completed history. No re-import needed.
+  - how many deals are currently loaded
+  - the first few of THEIR ids
+  - the first few deal ids YOUR ACTIVITIES are attached to
+  - and, if the sample data is in play, a plain warning saying so
 
-
-THE EMPTY TABLE NOW EXPLAINS ITSELF
-------------------------------------
-"No activities" is ambiguous - did the import fail, or is there genuinely nothing to do?
-The tab now works it out from the data actually present and tells you which:
-
-  nothing imported     "No activities have been imported yet."
-  YOUR CURRENT DATA    "36,824 activities are imported across 6,261 projects - but every
-                        one is marked complete." plus how to fix the export
-  filters too narrow   "No activities match those filters."
-  imported but no deals "...none could be matched to a project in the CRM."
+Comparing those two lists of numbers should make the cause obvious in seconds. If the ids
+look like different things, the deals and activities came from different exports. If they
+look identical, it is something I have not thought of - send me that screen and I will
+work from the real numbers rather than guessing again.
 
 
-WHAT YOU WILL SEE AFTER DEPLOYING
-----------------------------------
-Almost certainly the second message. That is the honest answer: the import worked, and
-there is nothing outstanding in the file to show.
-
-I have said this a few times now without it being much use to you, so the tab itself now
-carries the explanation and the fix:
-
-  In Pipedrive, open the Activities list, set the filter to include activities that are
-  NOT done, and export again. Before uploading, open the file and check the Done column
-  has a MIX of values rather than saying "Done" on all 39,401 rows.
-
-Pipedrive's own counters on your deals export say there are 1,023 activities to do across
-357 open deals. Those are the rows missing from the file. Once they are in, this table
-fills up and the kanban dots start working too.
-
-Export everything in one go rather than just the outstanding ones - the import replaces
-what is there, so an outstanding-only file would wipe the history you have already loaded.
+WORTH CHECKING WHILE YOU ARE THERE
+-----------------------------------
+Open the Pipeline tab and see whether the projects shown are actually yours. If you see
+unfamiliar deals, the sample-data fallback is what you are looking at, and importing your
+Deals export will fix both that and this.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-All four empty-state cases checked, including your current data shape.
