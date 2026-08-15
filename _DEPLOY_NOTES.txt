@@ -1,7 +1,7 @@
-pkg340 - Your activity IS saved. The open-projects rule is hiding it.
-======================================================================
+pkg341 - It is in the table. Here is how to find it.
+=====================================================
 
-REPLACES pkg302 through pkg339. Deploy this one only.
+REPLACES pkg302 through pkg340. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -10,48 +10,39 @@ CHANGED FILES
   lib/crmImportMap.js     unchanged since pkg305
 
 
-WHAT YOUR NUMBERS PROVED
--------------------------
-    In the shared store and outstanding: 1024
+YOUR NUMBERS SAY IT IS THERE
+-----------------------------
+    In the shared store and outstanding: 1025    (it was 1024 - the extra one is yours)
+    On won/lost projects: 660                    (UNCHANGED - so yours is NOT one of them)
 
-It was 1023 before you added yours. That one extra IS your activity. It saved, it went to
-the shared store, and it is sitting alongside the Pipedrive ones exactly as you wanted.
+That combination is conclusive. Your activity saved, it is in the shared store, and its
+project is open - so it is one of the 365 rows the table is showing.
 
-    On won/lost projects: 660
+The trouble is finding it. The table sorts by due date, OLDEST FIRST, across 365 rows. An
+activity you set today with a due date next week sits right down at the bottom. It looks
+missing when it is just a long way down the list.
 
-And that is what is hiding it. The project you added it to is not open, and pkg336
-restricted this tab to open projects - at your request, and it is doing exactly that.
+
+WHAT I HAVE ADDED
+-----------------
+1. A SEARCH BOX on the Activities tab. Type any part of the project name, the activity
+   text, the person or the customer and the table narrows to it. Type a word from your
+   activity and it will be the only row on screen.
+
+2. THE DIAGNOSTIC PANEL NOW SCROLLS. It was running off the bottom of the window with no
+   way to reach the rest, which is why you could not read the trace - the part that would
+   have told you all this. Capped at 45% of the window height with its own scrollbar.
 
 
-TWO THINGS I HAD WRONG ON THAT PANEL
+THE QUICKEST WAY TO CHECK, RIGHT NOW
 -------------------------------------
-1. "Added in the CRM: 0" was misleading. It counted activities held ON a deal, and since
-   pkg338 nothing is held there - everything goes to the shared store, where yours and the
-   imported ones are indistinguishable. That is the single-store behaviour you asked for,
-   but the label made it look like nothing had saved. It now reads:
-
-       Still held on a deal (pre-update): 0
-       In the shared store and outstanding: 1024 - imported and yours together
-
-2. The per-activity trace only looked at activities held on a deal, so with nothing there
-   it printed nothing - just when it was most needed. It now traces the shared store too
-   and names the rule excluding each one:
-
-       Round Silo - Call back Tuesday (2026-08-25)
-           hidden: project is "won" - this tab lists open projects only
+Rather than scrolling 365 rows: click the "Due date" header once to sort newest first, and
+your activity will be at or near the top. Or type its text in the new search box.
 
 
-THE DECISION IS YOURS
-----------------------
-The tab lists open projects only because you asked for that in pkg336, and I have left it
-alone. But 660 outstanding activities are sitting behind that rule, and your test is one of
-them.
-
-Say which you want and it is a one-line change:
-
-  a) open projects only            - as now
-  b) open and won                  - excludes lost jobs only; my recommendation, since you
-                                     still chase variations and follow-ups after a win
-  c) everything
-
-Given how long this has taken I did not want to change it again without you saying so.
+WHAT THIS MEANS FOR EVERYTHING BEFORE IT
+------------------------------------------
+The saving has been working since pkg338. The last few rounds have been about display -
+first the open-projects rule, now sort order and the missing scrollbar. I should have
+spotted that a to-do list sorted oldest-first buries anything you have just created, and
+that a diagnostic panel you cannot scroll is no diagnostic at all.

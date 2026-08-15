@@ -893,6 +893,7 @@ function CRMPageInner() {
   const [actPerson, setActPerson] = useState('');
   const [actCustomer, setActCustomer] = useState('');
   const [actShowDone, setActShowDone] = useState(false);
+  const [actSearch, setActSearch] = useState('');
 
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
@@ -1838,6 +1839,8 @@ function CRMPageInner() {
 
   const activitiesShown = useMemo(() => {
     let rows = activityRows;
+    const q = actSearch.trim().toLowerCase();
+    if (q) rows = rows.filter((r) => `${r.project} ${r.text} ${r.assignee} ${r.company} ${r.customer}`.toLowerCase().includes(q));
     // A remembered filter that no longer matches ANYTHING is ignored rather than obeyed.
     // Saved filters persist between visits, so a person who is no longer on any activity -
     // or who never was, if you assigned nobody - would otherwise silently empty the table
@@ -1857,7 +1860,7 @@ function CRMPageInner() {
       if (!bv) return -1;
       return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true });
     });
-  }, [activityRows, actPerson, actCustomer, actSort]);
+  }, [activityRows, actPerson, actCustomer, actSort, actSearch]);
 
   const live = deals.find((d) => d.id === openId) || null;
   if (live) {
@@ -2062,6 +2065,7 @@ function CRMPageInner() {
             onComplete={completeActivityFromTable} onEdit={editActivityFromTable}
             closedCount={activityClosedCount} breakdown={activityBreakdown} trace={activityTrace} staleFilter={activityStaleFilter}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState} onRebuild={rebuildActivityState}
+            search={actSearch} setSearch={setActSearch}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -2220,7 +2224,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, closedCount, onClearFilters, breakdown, staleFilter, refreshedAt, onRefresh, onRebuild, trace, search, setSearch }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -2245,6 +2249,8 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
           Include completed
         </label>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities..."
+          style={{ ...sel, minWidth: 200 }} />
         <button onClick={onRefresh} title="Check for activities added by other people" style={{ ...sel, cursor: 'pointer' }}>Refresh</button>
         {refreshedAt && <span style={{ fontSize: 11, color: '#aaa' }}>updated {new Date(refreshedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
         <div style={{ flex: 1 }} />
@@ -2272,7 +2278,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           {breakdown && (
             <details style={{ marginTop: 3 }}>
               <summary style={{ cursor: 'pointer', color: C.link, fontSize: 11.5, listStyle: 'none' }}>Where are my activities?</summary>
-              <div style={{ textAlign: 'left', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '10px 12px', marginTop: 6, fontSize: 11.5, color: '#666', lineHeight: 1.7, minWidth: 320 }}>
+              <div style={{ textAlign: 'left', background: '#fff', border: '1px solid ' + C.line, borderRadius: 8, padding: '10px 12px', marginTop: 6, fontSize: 11.5, color: '#666', lineHeight: 1.7, minWidth: 320, maxHeight: '45vh', overflowY: 'auto' }}>
                 <div>Still held on a deal (pre-update): <strong>{breakdown.inCrmTotal}</strong></div>
                 <div>In the shared store and outstanding: <strong>{breakdown.imported}</strong> &mdash; imported and yours together</div>
                 <div>Rows built: <strong>{breakdown.builtRows}</strong> &mdash; of which {breakdown.fromCrm} added in the CRM</div>
