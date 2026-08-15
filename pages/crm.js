@@ -2375,7 +2375,9 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
   // something rather than a value already filled in - but leaving it alone still saves the
   // activity as "Call", which is the common case.
   const [nextText, setNextText] = useState('');
-  const [nextDue, setNextDue] = useState(today);
+  // Blank on purpose - a due date has to be a deliberate choice, not today by default.
+  const [nextDue, setNextDue] = useState('');
+  const [dueWarning, setDueWarning] = useState('');
   const [nextAssignee, setNextAssignee] = useState(row.assignee || '');
   const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
   const lbl = { fontSize: 12, fontWeight: 700, color: C.dim, display: 'block', marginBottom: 5 };
@@ -2400,7 +2402,8 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Due</label>
-            <input type="date" value={nextDue} onChange={(e) => setNextDue(e.target.value)} style={inp} />
+            <input type="date" value={nextDue} onChange={(e) => { setNextDue(e.target.value); if (e.target.value) setDueWarning(''); }}
+              style={{ ...inp, borderColor: dueWarning ? C.red : C.line }} />
           </div>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Person responsible</label>
@@ -2408,10 +2411,20 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
           </div>
         </div>
 
+        {dueWarning && (
+          <div style={{ marginTop: 12, color: C.red, fontSize: 13, fontWeight: 600 }}>{dueWarning}</div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={ghostBtn}>Cancel</button>
           <button onClick={() => onDone(outcome, null)} style={ghostBtn}>Just mark done</button>
-          <button onClick={() => onDone(outcome, { text: nextText.trim() || 'Call', due: nextDue, assignee: nextAssignee })}
+          <button
+            onClick={() => {
+              // Deliberately NOT disabled. A greyed-out button tells you nothing about why
+              // it will not work - this says what is missing.
+              if (!nextDue) { setDueWarning('Next due date must be set.'); return; }
+              onDone(outcome, { text: nextText.trim() || 'Call', due: nextDue, assignee: nextAssignee });
+            }}
             style={primaryBtn}>
             Done &amp; set next
           </button>

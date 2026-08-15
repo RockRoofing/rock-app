@@ -1,7 +1,7 @@
-pkg352 - "Call" as grey placeholder text
-=========================================
+pkg353 - Next due date is blank, and required
+==============================================
 
-REPLACES pkg302 through pkg351. Deploy this one only.
+REPLACES pkg302 through pkg352. Deploy this one only.
 
 CHANGED FILES
 -------------
@@ -12,24 +12,29 @@ CHANGED FILES
 
 WHAT CHANGED
 ------------
-"What needs doing next?" now shows Call as GREY PLACEHOLDER text in an empty box, rather
-than the word Call sitting there as a real value.
+The Due box on "Set the next activity" now starts EMPTY. It used to default to today, which
+meant an activity could pick up today's date just because nobody looked at it.
 
-So it reads as a prompt - something is expected here - while leaving it alone still sets
-the next activity as a Call.
+"Done & set next" now requires one. Press it without a date and you get, in red:
 
-  type nothing      -> activity is set as "Call"
-  type something    -> that is what you get
-  clear it again    -> back to "Call"
+    Next due date must be set.
 
-The click-to-select behaviour is gone, since there is no longer any text to select.
-
-Wording underneath updated to match: "Leave it and the next activity is set as a Call. Use
-'Just mark done' to set nothing at all."
+The date box outlines in red at the same time, and the message clears the moment you pick
+one.
 
 
-ONE PROCESS NOTE
+WHY A WARNING RATHER THAN A GREYED-OUT BUTTON
+-----------------------------------------------
+A disabled button tells you nothing about why it will not work - you are left clicking at
+something dead, which is exactly the sort of thing that wastes five minutes. The button
+stays live and tells you what is missing.
+
+"Just mark done" is unaffected. If there is no follow-up, that is the button, and it needs
+no date.
+
+
+BEFORE PACKAGING
 ----------------
-I ran the used-but-undefined check on this file before packaging, as I said I would after
-the last two crashes. It came back clean. That check takes seconds and would have caught
-both pkg346 and pkg349 before they reached you.
+Ran the used-but-undefined check on this file - clean - and confirmed the new state names
+resolve inside the window they belong to. That is the check that would have caught the two
+crashes in pkg346 and pkg349.
