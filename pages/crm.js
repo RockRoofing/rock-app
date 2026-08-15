@@ -782,6 +782,11 @@ export default function CRMPage() {
   const [companyCols, setCompanyCols] = useState(DEFAULT_COMPANY_COLUMNS);
   const [contactCols, setContactCols] = useState(DEFAULT_CONTACT_COLUMNS);
   const [chooser, setChooser] = useState(null); // 'list' | 'companies' | 'contacts'
+  const [openActivities, setOpenActivities] = useState([]);
+  const [actSort, setActSort] = useState({ key: 'due', dir: 'asc' });
+  const [actPerson, setActPerson] = useState('');
+  const [actCustomer, setActCustomer] = useState('');
+  const [actShowDone, setActShowDone] = useState(false);
   const [sort, setSort] = useState({ key: 'created', dir: 'desc' });
   const [entitySort, setEntitySort] = useState({ key: 'deals', dir: 'desc' });
   const [showAdd, setShowAdd] = useState(false);
@@ -809,6 +814,7 @@ export default function CRMPage() {
         if (Array.isArray(d.deals)) {
           const actSum = d.activitySummary || {};
           const noteSum = d.noteSummary || {};
+          setOpenActivities(Array.isArray(d.openActivities) ? d.openActivities : []);
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1022,6 +1028,11 @@ export default function CRMPage() {
       // The index and the board summary are computed here, once, and sent with the final
       // chunk - rather than the server rebuilding them on every chunk.
       const allDealIds = groups.map((g) => String(g.dealId));
+      // Flat list of everything still OUTSTANDING, for the Activities tab. Only open ones,
+      // so it stays around a thousand rows rather than the full 32k of history.
+      const openList = kind !== 'activities' ? [] : items
+        .filter((a) => !a.done)
+        .map((a) => ({ id: a.id, dealId: a.dealId, text: a.subject || a.text || 'Activity', due: a.dueDate || '', assignee: a.assignee || '' }));
       const summary = {};
       for (const g of groups) {
         if (kind === 'notes') { summary[String(g.dealId)] = { total: g.items.length }; continue; }
@@ -1074,7 +1085,7 @@ export default function CRMPage() {
             body: JSON.stringify({
               action: 'import-sub', kind, groups: slice, first, last,
               ...(first ? { allDealIds } : {}),
-              ...(last ? { index: allDealIds, summary } : {}),
+              ...(last ? { index: allDealIds, summary, openList } : {}),
             }),
           });
           if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('server ' + r.status)); }
@@ -1193,6 +1204,73 @@ export default function CRMPage() {
     );
   }
 
+  // ---- Activities tab ------------------------------------------------------
+  // Two sources, both already in memory: the imported outstanding list, and any activity
+  // added by hand in the CRM (those live on the deal itself). Joined to the deal for the
+  // project and customer company, and to the contacts list for email / phone.
+  const activityRows = useMemo(() => {
+    const dealById = new Map(deals.map((d) => [String(d.id), d]));
+    const contactByName = new Map();
+    for (const c of (contactsData || [])) {
+      const n = String(c.name || '').trim().toLowerCase();
+      if (n && !contactByName.has(n)) contactByName.set(n, c);
+    }
+
+    const seen = new Set();
+    const rows = [];
+    const push = (a, dealId, done) => {
+      const key = `${dealId}|${a.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const deal = dealById.get(String(dealId));
+      if (!deal) return;                                  // deal not in the CRM
+      const custName = deal.fields?.contact_person || '';
+      const contact = contactByName.get(String(custName).trim().toLowerCase());
+      rows.push({
+        id: key,
+        dealId,
+        project: deal.title || '',
+        text: a.text || 'Activity',
+        due: a.due || '',
+        assignee: a.assignee || '',
+        company: deal.fields?.organization || '',
+        customer: custName,
+        email: contact?.contact_email || '',
+        phone: contact?.contact_phone || '',
+        done: !!done,
+      });
+    };
+
+    for (const a of (openActivities || [])) push(a, a.dealId, false);
+    for (const d of deals) {
+      for (const a of (d.activities || [])) {
+        if (!actShowDone && a.done) continue;
+        push(a, d.id, a.done);
+      }
+    }
+    return rows;
+  }, [deals, contactsData, openActivities, actShowDone]);
+
+  const actPeople = useMemo(() => [...new Set(activityRows.map((r) => r.assignee).filter(Boolean))].sort(), [activityRows]);
+  const actCustomers = useMemo(() => [...new Set(activityRows.map((r) => r.company).filter(Boolean))].sort(), [activityRows]);
+
+  const activitiesShown = useMemo(() => {
+    let rows = activityRows;
+    if (actPerson) rows = rows.filter((r) => r.assignee === actPerson);
+    if (actCustomer) rows = rows.filter((r) => r.company === actCustomer);
+    const { key, dir } = actSort;
+    const mul = dir === 'desc' ? -1 : 1;
+    return [...rows].sort((a, b) => {
+      const av = String(a[key] ?? '').trim();
+      const bv = String(b[key] ?? '').trim();
+      // Blanks last whichever way it is sorted - a missing due date should not head the list.
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true });
+    });
+  }, [activityRows, actPerson, actCustomer, actSort]);
+
   const isDealView = view === 'pipeline' || view === 'list';
 
   return (
@@ -1236,6 +1314,7 @@ export default function CRMPage() {
         {/* Companies / Contacts buttons to the LEFT of search */}
         <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
         <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
+        <button onClick={() => setView('activities')} style={{ ...backBtn, background: view === 'activities' ? C.link : 'transparent', color: '#fff', borderColor: view === 'activities' ? C.link : '#444' }}>Activities</button>
         {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative', minWidth: 260 }}>
@@ -1301,6 +1380,16 @@ export default function CRMPage() {
         {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />}
         {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} />}
         {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} />}
+        {view === 'activities' && (
+          <ActivitiesTable
+            rows={activitiesShown} total={activityRows.length}
+            people={actPeople} customers={actCustomers}
+            person={actPerson} setPerson={setActPerson}
+            customer={actCustomer} setCustomer={setActCustomer}
+            showDone={actShowDone} setShowDone={setActShowDone}
+            sort={actSort} onSort={(k) => setActSort((p) => p.key === k ? { key: k, dir: p.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: 'asc' })}
+            today={today} onOpen={openDealById} />
+        )}
       </div>
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} />}
@@ -1435,3 +1524,94 @@ const fLbl = { display: 'block', fontSize: 12, color: C.dim, marginBottom: 4, fo
 //   return { props: {} };
 // }
 // -----------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Activities tab: every outstanding activity across the whole CRM, oldest due first.
+// Sort by clicking a header; filter by person responsible and by customer company.
+// ---------------------------------------------------------------------------
+const ACT_COLS = [
+  ['project', 'Project'],
+  ['text', 'Activity'],
+  ['due', 'Due date'],
+  ['assignee', 'Person responsible'],
+  ['company', 'Customer company'],
+  ['customer', 'Customer name'],
+  ['email', 'Customer email'],
+  ['phone', 'Customer phone'],
+];
+
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen }) {
+  const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
+  const th = { textAlign: 'left', padding: '8px 10px', fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' };
+  const td = { padding: '8px 10px', fontSize: 12.5, verticalAlign: 'top' };
+  const arrow = (k) => <span style={{ fontSize: 8, marginLeft: 4, opacity: sort.key === k ? 1 : 0.3 }}>{sort.key === k && sort.dir === 'desc' ? '\u25BC' : '\u25B2'}</span>;
+
+  const overdue = rows.filter((r) => r.due && r.due < today && !r.done).length;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+        <select value={person} onChange={(e) => setPerson(e.target.value)} style={sel}>
+          <option value="">All people</option>
+          {people.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <select value={customer} onChange={(e) => setCustomer(e.target.value)} style={sel}>
+          <option value="">All customers</option>
+          {customers.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: C.dim, cursor: 'pointer' }}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+          Include completed
+        </label>
+        <div style={{ flex: 1 }} />
+        <div style={{ fontSize: 12.5, color: C.dim }}>
+          {rows.length}{rows.length !== total ? ` of ${total}` : ''} activit{rows.length === 1 ? 'y' : 'ies'}
+          {overdue ? <span style={{ color: C.red, fontWeight: 700 }}> &middot; {overdue} overdue</span> : null}
+        </div>
+      </div>
+
+      {!rows.length ? (
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', color: C.dim, fontSize: 13.5 }}>
+          No outstanding activities.
+          <div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>
+            If you expected some, check the Done column in your Pipedrive activities export - if every row says &quot;Done&quot;, the outstanding ones were filtered out of the file.
+          </div>
+        </div>
+      ) : (
+        <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+            <thead>
+              <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
+                {ACT_COLS.map(([k, label]) => (
+                  <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const isOverdue = r.due && r.due < today && !r.done;
+                const isToday = r.due === today && !r.done;
+                return (
+                  <tr key={r.id} style={{ borderTop: '1px solid #f4f3f0', background: r.done ? '#fafafa' : '#fff' }}>
+                    <td style={td}>
+                      <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
+                    </td>
+                    <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>{r.text}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap', color: isOverdue ? C.red : isToday ? C.green : C.text, fontWeight: isOverdue || isToday ? 700 : 400 }}>
+                      {shortDate(r.due)}{isOverdue ? ' \u00b7 OVERDUE' : ''}
+                    </td>
+                    <td style={td}>{r.assignee || '\u2014'}</td>
+                    <td style={td}>{r.company || '\u2014'}</td>
+                    <td style={td}>{r.customer || '\u2014'}</td>
+                    <td style={td}>{r.email ? <a href={`mailto:${r.email}`} style={{ color: C.link }}>{r.email}</a> : '\u2014'}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{r.phone ? <a href={`tel:${r.phone}`} style={{ color: C.link }}>{r.phone}</a> : '\u2014'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -25,6 +25,10 @@ const SUB_INDEX = (kind) => `crm:${kind}:index`
 // key - far too big to read on every page load - so the board gets counts only and the
 // full lists load when a deal is actually opened.
 const SUB_SUMMARY = (kind) => `crm:${kind}:summary`
+// A flat list of the OUTSTANDING activities across every deal, so the Activities tab can
+// show a single to-do table without reading 5,000+ per-deal keys. Only open ones, so it
+// stays small (about 1,000 rows) rather than the 32k of completed history.
+const OPEN_ACTIVITIES = 'crm:activities:open'
 
 // Write many keys with a capped number in flight. Sequential awaits were the bottleneck
 // (one network round trip each); unbounded Promise.all risks rate-limiting on a few
@@ -92,9 +96,9 @@ export default async function handler(req, res) {
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
   if (req.method === 'GET') {
-    const [deals, schema, orgs, contacts, actSum, noteSum] = await Promise.all([
+    const [deals, schema, orgs, contacts, actSum, noteSum, openActs] = await Promise.all([
       loadDeals(), loadSchema(), get(ORGS_KEY), get(CONTACTS_KEY),
-      get(SUB_SUMMARY('activities')), get(SUB_SUMMARY('notes')),
+      get(SUB_SUMMARY('activities')), get(SUB_SUMMARY('notes')), get(OPEN_ACTIVITIES),
     ])
     return res.json({
       deals, schema,
@@ -103,6 +107,7 @@ export default async function handler(req, res) {
       // Counts only - the full activity/note lists load per deal when one is opened.
       activitySummary: actSum || {},
       noteSummary: noteSum || {},
+      openActivities: Array.isArray(openActs) ? openActs : [],
     })
   }
 
@@ -192,6 +197,7 @@ export default async function handler(req, res) {
       if (body.last) {
         if (Array.isArray(body.index)) await set(SUB_INDEX(kind), body.index.map(String))
         if (body.summary && typeof body.summary === 'object') await set(SUB_SUMMARY(kind), body.summary)
+        if (kind === 'activities' && Array.isArray(body.openList)) await set(OPEN_ACTIVITIES, body.openList)
       }
       return res.json({ ok: true, written })
     }

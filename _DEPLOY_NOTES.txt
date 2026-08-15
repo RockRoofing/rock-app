@@ -1,70 +1,76 @@
-pkg309 - CRM: the activity traffic lights were frozen on 9 July
-================================================================
+pkg310 - CRM: Activities tab
+=============================
 
-REPLACES pkg302 through pkg308. Deploy this one only.
+REPLACES pkg302 through pkg309. Deploy this one only.
 
 CHANGED FILES
 -------------
-  pages/crm.js            THE FIX (+ everything from the earlier packages)
-  pages/api/crm.js        unchanged since pkg308
+  pages/crm.js            new Activities tab (+ everything from the earlier packages)
+  pages/api/crm.js        stores and serves the outstanding-activity list
   lib/crmImportMap.js     unchanged since pkg305
 
 No new files. All straight replacements.
 
 
-ROOT CAUSE - "TODAY" WAS HARD-CODED
--------------------------------------
-The CRM was not working out today's date at all:
+THE TAB
+-------
+New "Activities" tab alongside Pipeline / List / Companies / Contacts. One table of every
+outstanding activity across the whole CRM, OLDEST DUE FIRST, with the columns you asked
+for:
 
-    const today = PREVIEW_TODAY;          // '2026-07-09'
+  Project | Activity | Due date | Person responsible | Customer company |
+  Customer name | Customer email | Customer phone
 
-PREVIEW_TODAY lives in lib/crmSeedDeals.js, the demo seed file, and was baked in when that
-preview data was generated back in July. It never moved. So for the last five weeks the
-whole board has been comparing every due date against 9 July.
+Click any header to sort by it; click again to reverse. Blank values always sort to the
+bottom either way, so a missing due date never heads the list.
 
-Anything due between 9 July and today looked like it was still in the future - grey -
-when it was actually overdue. That is exactly what you are seeing.
+Filters: Person responsible, and Customer company. They combine, and the count on the
+right shows how many you are looking at out of the total.
 
-    due 20 Jul   ->  was GREY,  should be RED
-    due 10 Aug   ->  was GREY,  should be RED
-    due 15 Aug   ->  was GREY,  should be GREEN (today)
+Due dates are colour-coded to match the board - red and marked OVERDUE if the date has
+passed, green if it is today. The overdue count is shown next to the filters.
 
-FIXED: it now uses the real date, and re-checks every minute so a screen left open
-overnight rolls over rather than sticking on yesterday.
-
-Deliberately NOT toISOString() - that converts to UTC and would show the previous day for
-anyone looking during a BST evening.
+Clicking a project name opens that deal.
 
 
-ABOUT THE COLOURS YOU SPECIFIED
---------------------------------
-You wrote:
+WHERE THE DATA COMES FROM
+--------------------------
+Two sources, merged and de-duplicated:
 
-    Grey: < Today        Green: Today        Red: > Today
+  1. Activities imported from Pipedrive
+  2. Activities added by hand inside the CRM
 
-Taken literally that means an activity due BEFORE today is grey and one due AFTER today is
-red - which is the opposite of your own point that overdue activities should be showing
-red. So I have left the logic as it stands, which is:
+Email and phone are not on the activity or the deal - they are looked up from the Contacts
+import, matched on the deal's contact person. So a customer will only show an email and
+phone if that person exists in your People export. Anything missing shows a dash rather
+than a blank cell, so you can see it is absent rather than broken.
 
-    RED    - due before today   (overdue)
-    GREEN  - due today
-    GREY   - due after today    (upcoming)
+Only OUTSTANDING activities are listed by default. There is an "Include completed" tick box
+if you want the history, but the default is a to-do list, which is what a due-date-ordered
+table is for. Completed rows appear greyed and struck through.
 
-That matches what you actually described wanting, and it is what the code already did.
-Nothing was wrong with the colour rules - only the date they were being compared against.
+PERFORMANCE NOTE: the import now also writes a small flat list of just the outstanding
+activities, so this tab does not have to read 5,000+ per-deal records to build the table.
+About a thousand rows rather than 32,000.
 
-If you did mean it the other way round, say so and it is a two-line change.
 
+*** EXPECT IT TO BE EMPTY UNTIL YOU RE-EXPORT ***
+--------------------------------------------------
+Every one of the 39,401 rows in your current activities export is marked Done, so there are
+no outstanding activities to list. The tab will show:
 
-ALSO STILL IN THIS PACKAGE
----------------------------
-Everything from pkg303-308: both Pipedrive export formats; activities and notes import;
-records skipped when their deal is not in the CRM; deals-first ordering enforced; parallel
-writes; 8MB body limit and size-based chunking (the 413 fix); progress with a time
-estimate.
+  "No outstanding activities."
+
+That is correct, not a fault. Pipedrive's own counters on the deals export say there are
+1,023 activities to do across 357 open deals - they were filtered out of the file.
+
+Re-export the activities with the outstanding ones included (check the Done column has a
+mix, not 39,401 rows of "Done"), re-import, and they will populate this table. Remember the
+import is wipe-and-replace, so export everything in one go rather than the to-dos alone.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Before/after checked across six due dates spanning the frozen date and today.
+Join verified end to end: imported and manually-added activities merged, deal and contact
+details resolved, oldest-first ordering confirmed.
