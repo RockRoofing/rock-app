@@ -756,18 +756,24 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
 // ===========================================================================
 // Companies / Contacts views (derived from deals)
 // ===========================================================================
-function EntityTable({ rows, fields, columns, sort, onSort }) {
+function EntityTable({ rows, fields, columns, sort, onSort, onDelete, noun }) {
   const { widths, startResize } = useColWidths(columns);
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
       <table style={{ borderCollapse: 'collapse', background: '#fff', fontSize: 13, tableLayout: 'fixed' }}>
         <thead><tr>{columns.map((k) => { const lbl = (fields.find((f) => f[0] === k) || [k, k])[1]; const active = sort.key === k; return (
           <th key={k} onClick={() => onSort(k)} style={{ ...th, cursor: 'pointer', whiteSpace: 'nowrap', width: widths[k], position: 'relative', borderRight: `1px solid ${C.line}` }}>{lbl}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}<ResizeHandle onMouseDown={(e) => startResize(k, e)} /></th>
-        ); })}</tr></thead>
+        ); })}{onDelete && <th style={{ ...th, width: 70, whiteSpace: 'nowrap' }}>Delete</th>}</tr></thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} style={{ borderBottom: `1px solid ${C.line}` }}>
               {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}</td>)}
+              {onDelete && (
+                <td style={{ ...td, width: 70, textAlign: 'center' }}>
+                  <button onClick={() => onDelete(r)} title={`Remove this ${noun || 'record'}`}
+                    style={{ background: 'none', border: 'none', color: C.lost, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -852,6 +858,8 @@ function CRMPageInner() {
   const [openActivities, setOpenActivities] = useState([]);
   const [activitySummary, setActivitySummary] = useState({});
   const [dealsAreSeed, setDealsAreSeed] = useState(false);
+  const [deletedOrgs, setDeletedOrgs] = useState([]);
+  const [deletedContacts, setDeletedContacts] = useState([]);
   const [actLoading, setActLoading] = useState(false);
   const [actSort, setActSort] = useState({ key: 'due', dir: 'asc' });
   const [actPerson, setActPerson] = useState('');
@@ -940,6 +948,8 @@ function CRMPageInner() {
           setOpenActivities(Array.isArray(d.openActivities) ? d.openActivities : []);
           setActivitySummary(d.activitySummary || {});
           setDealsAreSeed(!!d.dealsAreSeed);
+          setDeletedOrgs(d.deletedOrgs || []);
+          setDeletedContacts(d.deletedContacts || []);
           setDeals(d.deals.map((x) => ({
             ...x, fields: { ...x.fields }, history: [...(x.history || [])],
             activities: [...(x.activities || [])], notes: [...(x.notes || [])],
@@ -1088,10 +1098,13 @@ function CRMPageInner() {
       rows = Object.values(m);
     }
     rows = [...rows, ...extraOrgs];
+    // Anything deleted stays deleted, including if it still appears on a project.
+    const goneO = new Set((deletedOrgs || []).map((n) => String(n).trim().toLowerCase()));
+    if (goneO.size) rows = rows.filter((r) => !goneO.has(String(r.name || '').trim().toLowerCase()));
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
-  }, [deals, orgsData, query, entitySort]);
+  }, [deals, orgsData, query, entitySort, deletedOrgs]);
 
   const contactRows = useMemo(() => {
     // Live deal stats per contact name (from the CRM's own deals).
@@ -1136,10 +1149,12 @@ function CRMPageInner() {
       });
       rows = [...rows, ...extra];
     }
+    const goneC = new Set((deletedContacts || []).map((n) => String(n).trim().toLowerCase()));
+    if (goneC.size) rows = rows.filter((r) => !goneC.has(String(r.name || '').trim().toLowerCase()));
     const q = query.trim().toLowerCase(); if (q) rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.organization || '').toLowerCase().includes(q));
     const { key, dir } = entitySort; rows.sort((a, b) => { const av = a[key], bv = b[key]; if (av < bv) return dir === 'asc' ? -1 : 1; if (av > bv) return dir === 'asc' ? 1 : -1; return 0; });
     return rows;
-  }, [deals, contactsData, query, entitySort]);
+  }, [deals, contactsData, query, entitySort, deletedContacts]);
 
   const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
@@ -1369,6 +1384,30 @@ function CRMPageInner() {
   // Push a company / contact into the master lists so it appears on the Companies and
   // Contacts pages. Called when a project is created with a new one, and when the
   // organisation or contact details are edited on the deal itself.
+  // Deleting only removes the record from these pages. The projects that reference the
+  // name are untouched - nothing is orphaned and no history is lost.
+  async function deleteCompany(row) {
+    const name = String(row?.name || '').trim();
+    if (!name) return;
+    if (!window.confirm(`Remove "${name}" from Companies?\n\nProjects that reference this company are not affected.`)) return;
+    setDeletedOrgs((p) => [...p, name]);
+    setOrgsData((p) => p.filter((o) => String(o.name || '').trim().toLowerCase() !== name.toLowerCase()));
+    try {
+      await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-org', name }) });
+    } catch (e) { console.error('Could not delete the company:', e); }
+  }
+
+  async function deleteContact(row) {
+    const name = String(row?.name || '').trim();
+    if (!name) return;
+    if (!window.confirm(`Remove "${name}" from Contacts?\n\nProjects that reference this person are not affected.`)) return;
+    setDeletedContacts((p) => [...p, name]);
+    setContactsData((p) => p.filter((c) => String(c.name || '').trim().toLowerCase() !== name.toLowerCase()));
+    try {
+      await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete-contact', name }) });
+    } catch (e) { console.error('Could not delete the contact:', e); }
+  }
+
   async function upsertOrg(rec) {
     const name = String(rec?.name || '').trim();
     if (!name) return;
@@ -1731,8 +1770,8 @@ function CRMPageInner() {
           </div>
         )}
         {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />}
-        {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} />}
-        {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} />}
+        {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteCompany} noun="company" />}
+        {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteContact} noun="contact" />}
         {view === 'activities' && (
           <ActivitiesTable
             rows={activitiesShown} total={activityRows.length}
@@ -1940,7 +1979,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
-                <th style={{ ...th, cursor: 'default', width: 44 }}></th>
+                <th style={{ ...th, cursor: 'default', width: 78, whiteSpace: 'nowrap' }}>Mark Done</th>
                 {ACT_COLS.map(([k, label]) => (
                   <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
                 ))}

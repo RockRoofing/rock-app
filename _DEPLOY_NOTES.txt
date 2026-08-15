@@ -1,62 +1,51 @@
-pkg319 - Activities tab: complete and edit without leaving the page
+pkg320 - Delete companies / contacts, and a proper Mark Done column
 ====================================================================
 
-REPLACES pkg302 through pkg318. Deploy this one only.
+REPLACES pkg302 through pkg319. Deploy this one only.
 
 CHANGED FILES
 -------------
   pages/crm.js
-  pages/api/crm.js        unchanged since pkg314
+  pages/api/crm.js        delete actions + the deleted-names list
   lib/crmImportMap.js     unchanged since pkg305
 
 
-1. MARK DONE FROM THE TABLE
-----------------------------
-New tick box at the start of each row. Click it and a window opens:
-
-  WHAT HAPPENED?     a proper text box for call notes, email summary, outcome. Saved to
-                     the project's history against that activity, so the record of the
-                     conversation sits where anyone looking at the deal will find it.
-
-  SET THE NEXT ONE   description, due date and person responsible, pre-filled with today
-                     and the current owner.
-
-Three buttons: Cancel, "Just mark done", and "Done & set next".
-
-The follow-up prompt is deliberate. Marking something done is the moment you know what
-happens next, and a project with nothing booked is how deals go quiet - it is also exactly
-what puts the warning triangle on the kanban. You can still skip it with "Just mark done".
+1. MARK DONE COLUMN
+--------------------
+The tick box had a blank header, so it read as part of the Project column. It now has its
+own header, "Mark Done", sized to fit. Nothing else moved.
 
 
-2. THE ACTIVITY COLUMN IS EDITABLE
------------------------------------
-Click the activity text and a large window opens with a full-size box for the description -
-nine rows, resizable - plus due date and person responsible. Notes about a call or an email
-need room, not a single line squeezed into a table cell.
+2. DELETE ON COMPANIES AND CONTACTS
+------------------------------------
+A Delete column on the right of both tables, with a confirm before anything happens.
+
+Deleting removes the record from that page only. Projects referencing the name are NOT
+touched - no deal is changed, no history is lost, and nothing is orphaned. The confirm box
+says so, because "delete company" could reasonably be read as something far more drastic.
 
 
-HOW IT SAVES - THE FIDDLY BIT
-------------------------------
-An activity lives in one of two places depending on where it came from:
+THE PART THAT NEEDED CARE
+--------------------------
+pkg314 made these pages also list any company or person found on a deal, so nothing added
+through a project is stranded. That feature directly fights deletion: remove a company that
+appears on any project and it would simply come back on the next load, looking like the
+delete had failed.
 
-  imported from Pipedrive  ->  its own per-deal store
-  added inside the CRM     ->  on the deal itself
+So a deleted name is now recorded in its own list and filtered out of BOTH sources - the
+imported records and the deal-derived ones. Verified: a company still referenced by a live
+project stays deleted.
 
-Both are handled. The code works out which one it is and takes the right route, so it
-behaves identically whichever you are looking at. Verified both paths route correctly.
+Re-adding the same name later - through a new project, or a fresh import - lifts the
+deletion automatically, so the two cannot end up disagreeing.
 
-Activities you create through "Done & set next" are saved on the deal, so they appear in
-the table immediately and on the deal's own activity list.
+WORTH KNOWING: a company or contact import is still wipe-and-replace and will bring back
+everything in the file, including names you deleted, because the file is treated as the
+truth. Deletions made here are the right tool for tidying up after cutover, not for
+filtering an import.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Column counts checked after adding the tick box: 9 headers, 9 body cells.
-
-
-STILL OUTSTANDING
------------------
-The Add Project crash. pkg318 (included here) puts the real error on screen instead of
-"Application error" - please screenshot it, and press "Reload and clear saved view" once,
-which is my main suspect.
+Deletion verified against the deal-derived listing.

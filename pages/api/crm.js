@@ -29,6 +29,10 @@ const SUB_SUMMARY = (kind) => `crm:${kind}:summary`
 // show a single to-do table without reading 5,000+ per-deal keys. Only open ones, so it
 // stays small (about 1,000 rows) rather than the 32k of completed history.
 const OPEN_ACTIVITIES = 'crm:activities:open'
+// Names deliberately removed. Needed because the Companies / Contacts pages also list
+// anyone found on a deal - without this, deleting a company that appears on any project
+// would simply reappear on the next load.
+const DELETED_KEY = (kind) => `crm:${kind}:deleted`
 
 // Write many keys with a capped number in flight. Sequential awaits were the bottleneck
 // (one network round trip each); unbounded Promise.all risks rate-limiting on a few
@@ -101,9 +105,10 @@ export default async function handler(req, res) {
   if (!acc.ok) return res.status(acc.code).json({ error: acc.code === 401 ? 'Not logged in' : 'No access' })
 
   if (req.method === 'GET') {
-    const [deals, schema, orgs, contacts, actSum, noteSum, openActs] = await Promise.all([
+    const [deals, schema, orgs, contacts, actSum, noteSum, openActs, delOrgs, delContacts] = await Promise.all([
       loadDeals(), loadSchema(), get(ORGS_KEY), get(CONTACTS_KEY),
       get(SUB_SUMMARY('activities')), get(SUB_SUMMARY('notes')), get(OPEN_ACTIVITIES),
+      get(DELETED_KEY('orgs')), get(DELETED_KEY('contacts')),
     ])
     return res.json({
       deals, schema,
@@ -114,6 +119,8 @@ export default async function handler(req, res) {
       noteSummary: noteSum || {},
       openActivities: Array.isArray(openActs) ? openActs : [],
       dealsAreSeed: LAST_DEALS_WERE_SEED,
+      deletedOrgs: Array.isArray(delOrgs) ? delOrgs : [],
+      deletedContacts: Array.isArray(delContacts) ? delContacts : [],
     })
   }
 
@@ -125,6 +132,23 @@ export default async function handler(req, res) {
     // Used when a project is created or edited with a company or person the CRM has not
     // seen before, so they reach the Companies and Contacts pages instead of existing
     // only as text on the deal.
+    if (body.action === 'delete-org' || body.action === 'delete-contact') {
+      const isOrg = body.action === 'delete-org'
+      const key = isOrg ? ORGS_KEY : CONTACTS_KEY
+      const dkey = DELETED_KEY(isOrg ? 'orgs' : 'contacts')
+      const name = String(body.name || '').trim()
+      if (!name) return res.status(400).json({ error: 'Name required' })
+      const lower = name.toLowerCase()
+
+      const list = (Array.isArray(await get(key)) ? await get(key) : []).filter(x => String(x?.name || '').trim().toLowerCase() !== lower)
+      await set(key, list)
+
+      const gone = Array.isArray(await get(dkey)) ? await get(dkey) : []
+      if (!gone.some(n => String(n).trim().toLowerCase() === lower)) gone.push(name)
+      await set(dkey, gone)
+      return res.json({ ok: true, list, deleted: gone })
+    }
+
     if (body.action === 'upsert-org' || body.action === 'upsert-contact') {
       const isOrg = body.action === 'upsert-org'
       const key = isOrg ? ORGS_KEY : CONTACTS_KEY
@@ -147,6 +171,13 @@ export default async function handler(req, res) {
         list[i] = merged
       }
       await set(key, list)
+      // Adding it back by name lifts a previous deletion, so the two cannot disagree.
+      const dkey = DELETED_KEY(isOrg ? 'orgs' : 'contacts')
+      const gone = Array.isArray(await get(dkey)) ? await get(dkey) : []
+      const lower = name.toLowerCase()
+      if (gone.some(n => String(n).trim().toLowerCase() === lower)) {
+        await set(dkey, gone.filter(n => String(n).trim().toLowerCase() !== lower))
+      }
       return res.json({ ok: true, list })
     }
 
