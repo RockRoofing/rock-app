@@ -982,6 +982,23 @@ export default function CRMPage() {
       }
       if (!items.length) { setImportMsg('No rows in that file are linked to a deal, so there is nothing to import.'); setImporting(false); return; }
 
+      // Only keep records whose deal is actually IN the CRM. Without this, anything
+      // belonging to a deal you did not import (another pipeline, or one deleted in
+      // Pipedrive) is written to a key nothing will ever read - invisible clutter that
+      // grows with every import.
+      const dealIds = new Set((deals || []).map((d) => String(d.id)));
+      if (!dealIds.size) {
+        setImportMsg('Import your Deals export first - activities and notes attach to deals, so there is nothing to attach these to yet.');
+        setImporting(false); return;
+      }
+      const before = items.length;
+      items = items.filter((x) => dealIds.has(String(x.dealId)));
+      const orphaned = before - items.length;
+      if (!items.length) {
+        setImportMsg(`None of the ${before} records in that file belong to a deal in the CRM. Check you have imported the matching Deals export.`);
+        setImporting(false); return;
+      }
+
       const groups = groupByDeal(items);
       // Chunk by DEAL, not by row - each request writes one key per deal, so a big
       // chunk means a lot of writes in one request and risks a timeout.
@@ -1002,8 +1019,11 @@ export default function CRMPage() {
           written += d.written || 0;
         }
         const noun = kind === 'activities' ? 'activities' : 'notes';
+        const extra = [];
+        if (skipped) extra.push(`${skipped} not linked to a deal`);
+        if (orphaned) extra.push(`${orphaned} for deals not in the CRM`);
         setImportMsg(`Imported ${written} ${noun} across ${groups.length} projects`
-          + (skipped ? ` (${skipped} skipped - not linked to a deal).` : '.'));
+          + (extra.length ? ` (skipped: ${extra.join('; ')}).` : '.'));
         if (importFileRef.current) importFileRef.current.value = '';
       } catch (e) {
         setImportMsg('Saving failed (' + (e && e.message ? e.message : 'unknown') + '). Re-run the import to retry.');

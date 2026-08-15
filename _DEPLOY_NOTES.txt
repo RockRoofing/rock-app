@@ -1,67 +1,70 @@
-pkg304 - CRM: imported activities and notes now actually appear
-================================================================
+pkg305 - CRM import: skip activities/notes for deals not in the CRM
+====================================================================
 
-REPLACES pkg302 and pkg303. Deploy this one only.
+REPLACES pkg302, pkg303 and pkg304. Deploy this one only.
 
 CHANGED FILES
 -------------
   lib/crmImportMap.js     both export formats + activities/notes mappers
   pages/api/crm.js        per-deal storage, per-deal summary, get-sub
-  pages/crm.js            board reads the summary; deal view loads its own records
+  pages/crm.js            orphan guard + board summary + per-deal loading
 
 No new files. All straight replacements.
 
 
-MY MISTAKE - THE IMPORT WROTE SOMEWHERE NOTHING READS
--------------------------------------------------------
-Your activities almost certainly DID upload. Nothing displayed them.
+WHY THIS MATTERS NOW YOU HAVE REMOVED THE OTHER PIPELINES
+-----------------------------------------------------------
+The activities and notes exports still contain records for every pipeline. With your deals
+now Project-only, those records point at deals that no longer exist in the CRM.
 
-The CRM reads activities and notes from arrays ON the deal object - deal.activities and
-deal.notes. I wrote the import to the separate per-deal keys agreed in the earlier scoping
-(crm:activities:<dealId>) and never wired the read side, and I did not check how the board
-gets its data before shipping it. That is on me.
+Before this change they would still have been written - to keys nothing ever reads, because
+a note is only loaded by opening its deal. No error, nothing on screen, just several
+thousand dead records accumulating on every re-import.
 
-WHY NOT JUST PUT THEM ON THE DEAL? I measured it: deals + activities + notes merged into
-the single crm:deals key comes to 31.2MB, and that key is read in full every time the CRM
-page opens. That is not viable. So the split storage was right - the read side was missing.
+Now anything whose deal is not in the CRM is skipped, and the import tells you how many.
 
-NOW:
-  - the import also writes a small per-deal SUMMARY (open count + next due date).
-    234KB for all 6,261 projects, loaded with the board.
-  - the kanban dot and the "next activity" column use that summary.
-  - opening a deal fetches THAT deal's activities and notes and merges them into the
-    view, including into the History feed. Note HTML is converted to plain text.
+Simulated against a Project-only deal set (6,860 deals):
+
+  activities   36,824 mapped -> 32,564 kept across 5,415 projects
+                              4,260 skipped (deal not in the CRM)
+                              2,577 skipped (not linked to any deal)
+
+  notes        11,499 mapped -> 10,232 kept across 5,542 projects
+                              1,267 skipped (deal not in the CRM)
+                                869 skipped (not linked to any deal)
+
+Those numbers match the pipeline breakdown exactly, so nothing Project-related is being
+dropped by mistake.
 
 
-*** THE WARNING TRIANGLES ARE CORRECT - PLEASE READ ***
+IMPORT ORDER IS NOW ENFORCED
+-----------------------------
+Activities and notes are matched against the deals already in the CRM, so DEALS MUST GO IN
+FIRST. If you try it the other way round you get a clear message rather than a silent
+half-import:
+
+  "Import your Deals export first - activities and notes attach to deals, so there is
+   nothing to attach these to yet."
+
+And if a file turns out to match nothing at all, it says so instead of reporting success.
+
+If you re-import deals later, re-run activities and notes afterwards.
+
+
+EVERYTHING ELSE FROM THE EARLIER PACKAGES IS STILL HERE
 --------------------------------------------------------
-I checked the Done column across all 39,401 rows in your activities export:
+  - Pipedrive's new unprefixed export format (this was why all five files were refused);
+    the old prefixed format still works too
+  - activities and notes import at all, stored per deal
+  - the board's activity dot reads a small per-deal summary (234KB, not 31MB)
+  - opening a deal loads its own activities and notes into the view and History
 
-    Done column values: {'Done': 39401}
-
-EVERY activity in the file is marked Done. There is not a single outstanding one.
-
-The kanban triangle means "this open deal has no activity still to do". With every
-imported activity already complete, that warning is accurate and will REMAIN after this
-deploy. It is not an import failure.
-
-What changes: open a deal and you will now see its full activity history and notes, which
-is what was actually missing.
-
-If you expected outstanding activities to come across, the export is the place to look -
-Pipedrive can be set to export only completed activities, or scheduled ones may sit
-outside this export. Worth checking against a deal you know has a call booked.
-
-
-ALSO STILL IN THIS PACKAGE
----------------------------
-The export-format fix from pkg303: Pipedrive dropped the "Deal - " / "Organization - " /
-"Person - " column prefixes, which is why all five files were being refused. Both formats
-now import.
+STILL TRUE: every activity in your export is marked Done (39,401 of 39,401), so the kanban
+warning triangles are accurate and will remain after import. That is the export, not the
+CRM.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-All five exports parsed and mapped; summary size measured; merged-size risk measured
-before choosing the architecture.
+Import simulated end to end against a Project-only deal set using your real files.
