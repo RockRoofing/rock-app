@@ -30,6 +30,7 @@ export default function HSMatrixPage() {
   const [columns, setColumns] = useState([])
   const [data, setData] = useState({})
   const [people, setPeople] = useState([])
+  const [sort, setSort] = useState({ key: 'name', dir: 'asc' })
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({ person: '', company: '', trade: '' })
   const [edit, setEdit] = useState(null)       // { personId, colId } cell editor
@@ -49,12 +50,31 @@ export default function HSMatrixPage() {
   const companies = useMemo(() => [...new Set(people.map(p => p.company).filter(Boolean))].sort(), [people])
   const trades = useMemo(() => [...new Set(people.flatMap(p => (p.trade || '').split(',').map(s => s.trim()).filter(Boolean)))].sort(), [people])
 
-  const shown = useMemo(() => people.filter(p => {
-    if (filters.person && p.id !== filters.person) return false
-    if (filters.company && p.company !== filters.company) return false
-    if (filters.trade && !(p.trade || '').split(',').map(s => s.trim()).includes(filters.trade)) return false
-    return true
-  }), [people, filters])
+  // Click a fixed header to sort by it. Blanks always sort last, whichever direction,
+  // so people missing a company or trade do not sit at the top of the list.
+  function toggleSort(key) {
+    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
+  }
+
+  const shown = useMemo(() => {
+    const list = people.filter(p => {
+      if (filters.person && p.id !== filters.person) return false
+      if (filters.company && p.company !== filters.company) return false
+      if (filters.trade && !(p.trade || '').split(',').map(s => s.trim()).includes(filters.trade)) return false
+      return true
+    })
+    const { key, dir } = sort || {}
+    if (!key) return list
+    const mul = dir === 'desc' ? -1 : 1
+    return [...list].sort((a, b) => {
+      const av = String(a[key] == null ? '' : a[key]).trim()
+      const bv = String(b[key] == null ? '' : b[key]).trim()
+      if (!av && !bv) return 0
+      if (!av) return 1          // blanks last regardless of direction
+      if (!bv) return -1
+      return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true })
+    })
+  }, [people, filters, sort])
 
   async function addColumn() {
     const label = window.prompt('New training column name:')
@@ -147,11 +167,11 @@ export default function HSMatrixPage() {
           <div style={{ minWidth: NAME_W + META_W * 3 + columns.length * COL_W }}>
             {/* header - frozen to the top of the scroll box */}
             <div style={{ display: 'flex', borderBottom: '2px solid #e6b567', alignItems: 'flex-end', position: 'sticky', top: 0, zIndex: 10, background: HEADER_ORANGE }}>
-              <HeadFix w={NAME_W} left={0}>Employee</HeadFix>
-              <HeadFix w={META_W} left={NAME_W}>Company</HeadFix>
-              <HeadFix w={META_W} left={NAME_W + META_W}>Trade</HeadFix>
-              <HeadFix w={META_W} left={NAME_W + META_W * 2}>Phone</HeadFix>
-              <HeadPlain w={META_W}>Email</HeadPlain>
+              <HeadFix w={NAME_W} left={0} sortKey="name" sort={sort} onSort={toggleSort}>Employee</HeadFix>
+              <HeadFix w={META_W} left={NAME_W} sortKey="company" sort={sort} onSort={toggleSort}>Company</HeadFix>
+              <HeadFix w={META_W} left={NAME_W + META_W} sortKey="trade" sort={sort} onSort={toggleSort}>Trade</HeadFix>
+              <HeadFix w={META_W} left={NAME_W + META_W * 2} sortKey="phone" sort={sort} onSort={toggleSort}>Phone</HeadFix>
+              <HeadPlain w={META_W} sortKey="email" sort={sort} onSort={toggleSort}>Email</HeadPlain>
               {columns.map(c => (
                 <div key={c.id}
                   draggable
@@ -285,11 +305,30 @@ function CellEditor({ cell, onSave, onCancel }) {
   )
 }
 
-const HeadFix = ({ w, left, children }) => (
-  <div style={{ width: w, minWidth: w, position: 'sticky', left, zIndex: 4, background: HEADER_ORANGE, padding: '8px', fontSize: 11, fontWeight: 700, color: '#3a2e12', alignSelf: 'stretch', display: 'flex', alignItems: 'flex-end', borderRight: '1px solid #eab968' }}>{children}</div>
+// Sort indicator + click target shared by the fixed headers.
+const SortLabel = ({ sortKey, sort, onSort, children }) => {
+  if (!sortKey || !onSort) return <span>{children}</span>
+  const active = sort && sort.key === sortKey
+  return (
+    <button type="button" onClick={() => onSort(sortKey)} title={`Sort by ${children}`}
+      style={{ background: 'none', border: 'none', padding: 0, margin: 0, font: 'inherit', color: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, textAlign: 'left' }}>
+      {children}
+      <span style={{ fontSize: 8, opacity: active ? 1 : 0.35 }}>
+        {active ? (sort.dir === 'asc' ? '\u25B2' : '\u25BC') : '\u25B2'}
+      </span>
+    </button>
+  )
+}
+
+const HeadFix = ({ w, left, children, sortKey, sort, onSort }) => (
+  <div style={{ width: w, minWidth: w, position: 'sticky', left, zIndex: 4, background: HEADER_ORANGE, padding: '8px', fontSize: 11, fontWeight: 700, color: '#3a2e12', alignSelf: 'stretch', display: 'flex', alignItems: 'flex-end', borderRight: '1px solid #eab968' }}>
+    <SortLabel sortKey={sortKey} sort={sort} onSort={onSort}>{children}</SortLabel>
+  </div>
 )
-const HeadPlain = ({ w, children }) => (
-  <div style={{ width: w, minWidth: w, padding: '8px', fontSize: 11, fontWeight: 700, color: '#3a2e12', alignSelf: 'stretch', display: 'flex', alignItems: 'flex-end', background: HEADER_ORANGE, borderRight: '1px solid #eab968' }}>{children}</div>
+const HeadPlain = ({ w, children, sortKey, sort, onSort }) => (
+  <div style={{ width: w, minWidth: w, padding: '8px', fontSize: 11, fontWeight: 700, color: '#3a2e12', alignSelf: 'stretch', display: 'flex', alignItems: 'flex-end', background: HEADER_ORANGE, borderRight: '1px solid #eab968' }}>
+    <SortLabel sortKey={sortKey} sort={sort} onSort={onSort}>{children}</SortLabel>
+  </div>
 )
 const CellFix = ({ w, left, bold, bg, children }) => (
   <div style={{ width: w, minWidth: w, position: 'sticky', left, zIndex: 2, background: bg || '#fff', padding: '6px 8px', fontSize: 11.5, fontWeight: bold ? 600 : 400, color: bold ? INK : '#555', borderRight: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</div>

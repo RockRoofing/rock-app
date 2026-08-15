@@ -1,58 +1,66 @@
-pkg295 - H&S Matrix: freeze the header row
-===========================================
+pkg297 - H&S Matrix: columns can actually be deleted
+=====================================================
+
+REPLACES pkg295 and pkg296 - it carries the frozen header row and the click-to-sort
+headers as well. Deploy this one and skip those.
 
 CHANGED FILES
 -------------
-  pages/operations/hs/hs-matrix.js
+  pages/api/hs-matrix.js               THE FIX
+  pages/operations/hs/hs-matrix.js     frozen header + sorting (from pkg295/296)
 
-No new files. Straight replacement. Independent of every other package.
+No new files. Both straight replacements.
 
 
-WHAT WAS WRONG
---------------
-The first four columns (Employee, Company, Trade, Phone) were already frozen horizontally
-- they use position:sticky with a left offset. The header ROW had no sticky positioning at
-all, so scrolling down lost the training column names and left you looking at coloured
-cells with nothing to identify them by. With the header being 150px tall and the labels
-rotated at -60 degrees, there was nothing to orient by once it went.
+ROOT CAUSE
+----------
+The delete itself was working perfectly. Something else was putting the column back.
+
+pages/api/hs-matrix.js holds a list of ~36 DEFAULT_COLS - the standard training columns.
+Every single read of the matrix ran ensureColumns(), which backfills any default column
+that is not currently present, matching on label:
+
+    for (const label of DEFAULT_COLS) {
+      if (!have.has(label.toLowerCase().trim())) { cols.push({ id: ...new id..., label }) }
+    }
+
+So deleting a built-in column removed it correctly - and then the very next load found it
+"missing" and re-created it with a brand new id, pushed onto the END of the list. Exactly
+the behaviour you described: it moves to the end and will not go away.
+
+That backfill exists for a good reason - it is how new standard columns reach an existing
+matrix without anyone re-adding them by hand. The problem was that it could not tell
+"never had this one" from "deliberately got rid of this one".
+
+Columns YOU added were always deletable - they are not in DEFAULT_COLS, so nothing put
+them back. Only the built-in ones were stuck.
 
 
 THE FIX
 -------
-Sticky positioning sticks to the nearest SCROLLING ancestor. The matrix only scrolled
-horizontally in its own box - vertical scrolling belonged to the page - so a sticky header
-had nothing local to stick to. Adding top:0 alone would not have worked.
+A deleted default column's label is now recorded in a new store,
+ops:hs-matrix-removed-defaults, and the backfill skips anything on that list. So:
 
-So the matrix box now scrolls in BOTH directions itself:
+  - deleting a built-in column now sticks, permanently
+  - genuinely new default columns added in a future release still appear automatically
+  - re-adding a column with the same name clears it from the list, so the two can never
+    disagree about whether it should exist
 
-    overflow: auto, maxHeight: calc(100vh - 300px), minHeight: 320
-
-and the header row is sticky at top:0 within it. Scroll down and the column names stay
-put; scroll sideways and Employee/Company/Trade/Phone still stay put. Both at once works -
-the four fixed headers hold the top-left corner.
-
-The header row also got a solid background, so body rows cannot show through it as they
-pass underneath.
+Deleting still removes all the dates held against that column, as it always did, and is
+still blocked on locked columns.
 
 
-TWO THINGS YOU WILL NOTICE
----------------------------
-1. THE MATRIX NOW SCROLLS INSIDE ITS OWN BOX rather than with the page. That is what makes
-   the freeze possible. The box is sized to the window (roughly the full height below the
-   filters), with a floor of 320px so it never collapses to nothing on a short window.
+ALSO IN THIS PACKAGE
+--------------------
+  Frozen header row (pkg295) - the matrix scrolls in its own box with the header stuck to
+  the top and Employee/Company/Trade/Phone stuck to the left.
 
-   If it feels too short or too tall on your screen, the number to change is the 300 in
-   calc(100vh - 300px) - larger number, shorter box. Tell me how it looks and I will tune
-   it.
-
-2. THE DATE EDITOR POPUP still opens above the frozen header when you click a cell near
-   the top. I left it that way deliberately so the editor is never partly hidden behind
-   the header - but if you would rather the header always stayed on top, that is a
-   one-line z-index change.
+  Click-to-sort headers (pkg296) - Employee / Company / Trade / Phone / Email, A-Z then
+  Z-A, blanks last.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
-Layering checked: header above body cells, the four fixed columns above the scrolling
-header cells, column-options menu still on top within the header.
+Reproduced the old behaviour (deleted column reappearing at the end) and confirmed it no
+longer happens.

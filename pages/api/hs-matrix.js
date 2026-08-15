@@ -12,6 +12,11 @@ import { get, set, getPortalUsers, getOpsUsers } from '../../lib/db'
 
 const COLS_KEY = 'ops:hs-matrix-columns'
 const DATA_KEY = 'ops:hs-matrix-data'
+// Labels from DEFAULT_COLS that have been deliberately deleted. ensureColumns() backfills
+// any default column that is missing, which meant deleting one of the built-in columns
+// removed it and then the very next read added it straight back on the end - so they
+// could never actually be deleted. This list is the memory of that intent.
+const REMOVED_KEY = 'ops:hs-matrix-removed-defaults'
 const parseISO = (s) => { if (!s) return null; const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1) }
 
 // Default training columns (from the company's live tracker).
@@ -35,11 +40,16 @@ async function ensureColumns() {
     await set(COLS_KEY, cols)
     return cols
   }
-  // Backfill any newly-added default columns that aren't present yet (match by label, case-insensitive).
+  // Backfill any newly-added default columns that aren't present yet (match by label,
+  // case-insensitive) - but NEVER re-add one that has been deliberately deleted.
   const have = new Set(cols.map(c => (c.label || '').toLowerCase().trim()))
+  const removed = new Set(((await get(REMOVED_KEY)) || []).map(l => String(l).toLowerCase().trim()))
   let added = false
   for (const label of DEFAULT_COLS) {
-    if (!have.has(label.toLowerCase().trim())) { cols.push({ id: `${slug(label)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label }); added = true }
+    const key = label.toLowerCase().trim()
+    if (have.has(key) || removed.has(key)) continue
+    cols.push({ id: `${slug(label)}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, label })
+    added = true
   }
   if (added) await set(COLS_KEY, cols)
   return cols
@@ -152,13 +162,33 @@ export default async function handler(req, res) {
         const cols = await ensureColumns()
         cols.push({ id: `${slug(label)}-${Date.now()}`, label })
         await set(COLS_KEY, cols)
+        // Adding a column back by name clears it from the deleted-defaults list, so the
+        // two never disagree about whether it should exist.
+        const key = label.toLowerCase()
+        const removed = (await get(REMOVED_KEY)) || []
+        if (removed.some(l => String(l).toLowerCase().trim() === key)) {
+          await set(REMOVED_KEY, removed.filter(l => String(l).toLowerCase().trim() !== key))
+        }
         return res.json({ ok: true, columns: cols })
       }
       if (action === 'del-col') {
         const { colId } = req.body
         let cols = await ensureColumns()
+        const gone = cols.find(c => c.id === colId)
         cols = cols.filter(c => c.id !== colId)
         await set(COLS_KEY, cols)
+        // If it was one of the built-in defaults, remember that it was deleted so the
+        // backfill above does not put it straight back.
+        if (gone && gone.label) {
+          const key = String(gone.label).toLowerCase().trim()
+          if (DEFAULT_COLS.some(l => l.toLowerCase().trim() === key)) {
+            const removed = (await get(REMOVED_KEY)) || []
+            if (!removed.some(l => String(l).toLowerCase().trim() === key)) {
+              removed.push(gone.label)
+              await set(REMOVED_KEY, removed)
+            }
+          }
+        }
         // clean the data for that column
         const data = (await get(DATA_KEY)) || {}
         for (const pid of Object.keys(data)) if (data[pid]) delete data[pid][colId]
