@@ -1,64 +1,79 @@
-pkg301 - Renewal notifications: portal users as recipients + manual send
-=========================================================================
+pkg302 - CRM: Activities and Notes import
+==========================================
 
-REPLACES pkg295-pkg300. Deploy this one; everything from those is inside it.
+CHANGED FILES
+-------------
+  lib/crmImportMap.js     mappers + detection for the two new exports
+  pages/api/crm.js        per-deal storage for activities and notes
+  pages/crm.js            import screen accepts and routes them
 
-
-NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
------------------------------------------------------------------------
-  lib/hsRenewalNotify.js
-  pages/api/cron/hs-renewals.js
-  pages/api/hs-renewal-settings.js
-
-CHANGED FILES (straight replacements)
---------------------------------------
-  vercel.json                          hourly cron
-  pages/operations/hs/hs-matrix.js     panel + frozen header + sorting + full-width fix
-  pages/api/hs-matrix.js               column-delete fix
+No new files. All straight replacements. Independent of every other package.
 
 
-1. PORTAL USERS AS RECIPIENTS
-------------------------------
-The Renewal notifications panel now lists every active portal user who has an email
-address, with a tick box each. Tick someone and they are added to the weekly list; untick
-to remove. The typed-email box is still there for anyone outside the portal.
-
-Ticking stores the EMAIL, not a link to the user account. That is deliberate:
-
-  - if the person is later renamed in the portal, the email keeps working
-  - if they are removed from the portal, the notification does NOT silently stop - the
-    address stays on the list until you take it off, so nobody quietly falls out of the
-    loop without anyone noticing
-
-The tick boxes reflect the current list, so a portal user you added by typing their
-address shows as already ticked.
-
-
-2. SEND NOW - THERE ARE NOW TWO
+WHY IT SAID "UNRECOGNISED FILE"
 --------------------------------
-  "Send weekly list now"           - the summary to the recipient list. This one already
-                                     existed in pkg300; it is just labelled more clearly
-                                     now that there are two.
+detectExportType() only knew three exports. It looks for 'Deal - ID', 'Organization - ID'
+or 'Person - ID' - the hyphenated style the deals/orgs/people exports use.
 
-  "Send operative reminders now"   - NEW. Emails every operative whose CSCS or Working at
-                                     Height is overdue or due within 6 weeks, immediately.
+The activities and notes exports use PLAIN headers: 'ID', 'Subject', 'Deal ID', 'Content'.
+Nothing matched, so it refused the file rather than importing it wrongly - which is the
+right failure, just not a helpful one.
 
-The operative one IGNORES the normal once-a-week throttle, so someone reminded two days
-ago will be emailed again. The confirm box says so before it sends.
-
-Afterwards it reports what happened - e.g. "Sent 7 operative reminders. 2 skipped - no
-email address on their Site App user record." That skipped count is worth watching: it is
-the only way to spot people who can never receive these.
+Both are now detected. They share a plain 'Deal ID' column, so they are told apart on
+their own distinctive ones: 'Subject'/'Marked as done time' for activities, 'Content' for
+notes.
 
 
-UNCHANGED FROM pkg300
----------------------
-  - CSCS and Working at Height only, matched on column label
-  - operatives chased from 6 weeks before expiry, weekly, stopping 2 weeks overdue
-  - weekly list defaults to Friday 17:00 UK, day/hour editable
-  - the weekly email still will not send until at least one recipient is set
+TESTED AGAINST YOUR ACTUAL FILES
+---------------------------------
+  activities-2641369-44.xlsx   39,401 rows -> 36,824 imported across 6,261 projects
+                                              2,577 skipped (no Deal ID)
+  notes-2641369-45.xlsx        12,368 rows -> 11,499 imported across 6,197 projects
+                                                869 skipped (no Deal ID)
+
+The skipped rows are activities and notes attached to an organisation, person or lead
+rather than a deal. There is nowhere to hang them in the CRM, so they are counted and
+reported rather than silently dropped - the message tells you how many.
+
+Dates, the Done flag and assignee all verified against real rows.
+
+
+HOW IT STORES THEM
+------------------
+One key per project - crm:activities:<dealId> and crm:notes:<dealId> - as agreed. Opening
+a deal reads only that deal's records instead of pulling 36k rows to show five.
+
+Grouping happens in your browser BEFORE sending, so each project arrives in exactly one
+request and each key is written outright. No read-modify-write, and re-running a failed
+import is safe.
+
+Chunked by PROJECT (120 per request), not by row. Writing one key per project means a
+large chunk is a lot of database writes in a single request, which is what would time out.
+53 requests for activities, 52 for notes. Largest payload measured: 0.30MB against the
+~4.5MB limit, so there is plenty of headroom.
+
+An index key (crm:activities:index) records which projects have records, so the next
+wipe-and-replace import can clear the old ones without scanning the whole database.
+
+
+IMPORT ORDER MATTERS
+--------------------
+Activities and notes attach to deals by Deal ID, so import DEALS FIRST. If you re-import
+deals later, re-import these two afterwards as well.
+
+Each import is still wipe-and-replace within its own type: importing activities replaces
+all activities and leaves deals, companies, contacts and notes alone.
+
+
+NOTE ON WHAT IS IMPORTED
+------------------------
+This brings in EVERYTHING, not the open-deals-only subset scoped previously (which would
+have been ~2,541 activities and ~662 notes). You said you were uploading all the data, so
+the full history comes across. If it turns out to be too much, filtering later is easy -
+but importing it now means nothing is lost.
 
 
 TESTED
 ------
 npm run build - Compiled successfully.
+Both files parsed, mapped, grouped and payload-sized against the real exports.

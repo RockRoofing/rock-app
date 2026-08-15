@@ -14,6 +14,12 @@ const DEALS_KEY = 'crm:deals'
 const SCHEMA_KEY = 'crm:field-schema'
 const ORGS_KEY = 'crm:orgs'
 const CONTACTS_KEY = 'crm:contacts'
+// Activities and notes are stored PER DEAL - crm:activities:<dealId> - so opening a deal
+// reads only its own, rather than pulling 39k rows to show five. An index key remembers
+// which deals have records, so a wipe-and-replace import can clear the old ones without
+// scanning every key in the database.
+const SUB_KEY = (kind, dealId) => `crm:${kind}:${dealId}`
+const SUB_INDEX = (kind) => `crm:${kind}:index`
 
 function readCookie(req, name) {
   const raw = req.headers.cookie || ''
@@ -53,6 +59,24 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = req.body || {}
+    if (body.action === 'get-sub') {
+      const kind = body.kind
+      if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
+      const items = (await get(SUB_KEY(kind, String(body.dealId || '')))) || []
+      return res.json({ ok: true, items })
+    }
+
+    if (body.action === 'save-sub') {
+      const kind = body.kind
+      if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
+      const dealId = String(body.dealId || '')
+      if (!dealId) return res.status(400).json({ error: 'dealId required' })
+      await set(SUB_KEY(kind, dealId), Array.isArray(body.items) ? body.items : [])
+      const index = (await get(SUB_INDEX(kind))) || []
+      if (!index.includes(dealId)) { index.push(dealId); await set(SUB_INDEX(kind), index) }
+      return res.json({ ok: true })
+    }
+
     if (body.action === 'save') {
       if (Array.isArray(body.deals)) await set(DEALS_KEY, body.deals)
       if (Array.isArray(body.schema) && body.schema.length) await set(SCHEMA_KEY, body.schema)
@@ -82,6 +106,36 @@ export default async function handler(req, res) {
     // Chunked import - avoids the ~4.5MB serverless body limit on large sets.
     //   { action:'import-chunk', kind:'deals'|'orgs'|'contacts', rows:[...], first:bool, last:bool }
     // first=true starts a fresh set (wipe); subsequent chunks append; last=true finalises.
+    // Per-deal import for activities / notes.
+    //   { action:'import-sub', kind:'activities'|'notes',
+    //     groups:[{ dealId, items:[...] }], first, last }
+    // Grouping happens client-side, so each deal arrives in exactly one chunk and each
+    // key can be written outright - no read-modify-write, and re-running a chunk is safe.
+    if (body.action === 'import-sub') {
+      const kind = body.kind
+      if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown import kind' })
+      const groups = Array.isArray(body.groups) ? body.groups : []
+
+      // First chunk wipes whatever the previous import left behind.
+      if (body.first) {
+        const oldIds = (await get(SUB_INDEX(kind))) || []
+        for (const id of oldIds) { try { await set(SUB_KEY(kind, id), []) } catch {} }
+        await set(SUB_INDEX(kind), [])
+      }
+
+      const index = (await get(SUB_INDEX(kind))) || []
+      const seen = new Set(index)
+      let written = 0
+      for (const g of groups) {
+        if (!g || !g.dealId || !Array.isArray(g.items)) continue
+        await set(SUB_KEY(kind, g.dealId), g.items)
+        written += g.items.length
+        if (!seen.has(String(g.dealId))) { seen.add(String(g.dealId)); index.push(String(g.dealId)) }
+      }
+      await set(SUB_INDEX(kind), index)
+      return res.json({ ok: true, written, deals: index.length })
+    }
+
     if (body.action === 'import-chunk') {
       const kind = body.kind
       const key = kind === 'deals' ? DEALS_KEY : kind === 'orgs' ? ORGS_KEY : kind === 'contacts' ? CONTACTS_KEY : null

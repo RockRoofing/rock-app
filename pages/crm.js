@@ -12,7 +12,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import * as XLSX from 'xlsx';
-import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, detectExportType } from '../lib/crmImportMap';
+import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, mapNoteRows, groupByDeal, detectExportType } from '../lib/crmImportMap';
 import { SEED_DEALS, PREVIEW_TODAY } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
@@ -892,7 +892,48 @@ export default function CRMPage() {
     if (!rows || !rows.length) { setImportMsg('That file has no rows.'); setImporting(false); return; }
     const headers = Object.keys(rows[0]);
     kind = detectExportType(headers);
-    if (!kind) { setImportMsg('Unrecognised file. Upload a Pipedrive Deals, Organizations, or People export.'); setImporting(false); return; }
+    if (!kind) { setImportMsg('Unrecognised file. Upload a Pipedrive Deals, Organizations, People, Activities or Notes export.'); setImporting(false); return; }
+
+    // --- Activities / Notes take their own path: grouped per deal, not one flat list ---
+    if (kind === 'activities' || kind === 'notes') {
+      let items, skipped;
+      try {
+        if (kind === 'activities') { const r = mapActivityRows(rows); items = r.activities; skipped = r.skipped; }
+        else { const r = mapNoteRows(rows); items = r.notes; skipped = r.skipped; }
+      } catch (e) {
+        setImportMsg('Could not map that file (' + (e && e.message ? e.message : 'unexpected format') + ').');
+        setImporting(false); return;
+      }
+      if (!items.length) { setImportMsg('No rows in that file are linked to a deal, so there is nothing to import.'); setImporting(false); return; }
+
+      const groups = groupByDeal(items);
+      // Chunk by DEAL, not by row - each request writes one key per deal, so a big
+      // chunk means a lot of writes in one request and risks a timeout.
+      const DEAL_CHUNK = 120;
+      try {
+        let written = 0;
+        for (let i = 0; i < groups.length; i += DEAL_CHUNK) {
+          const slice = groups.slice(i, i + DEAL_CHUNK);
+          const first = i === 0;
+          const last = i + DEAL_CHUNK >= groups.length;
+          setImportMsg(`Saving ${Math.min(i + DEAL_CHUNK, groups.length)} of ${groups.length} projects...`);
+          const r = await fetch('/api/crm', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'import-sub', kind, groups: slice, first, last }),
+          });
+          if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || ('server ' + r.status)); }
+          const d = await r.json();
+          written += d.written || 0;
+        }
+        const noun = kind === 'activities' ? 'activities' : 'notes';
+        setImportMsg(`Imported ${written} ${noun} across ${groups.length} projects`
+          + (skipped ? ` (${skipped} skipped - not linked to a deal).` : '.'));
+        if (importFileRef.current) importFileRef.current.value = '';
+      } catch (e) {
+        setImportMsg('Saving failed (' + (e && e.message ? e.message : 'unknown') + '). Re-run the import to retry.');
+      }
+      setImporting(false); return;
+    }
 
     // --- Step 2: map to CRM shape ---
     let mapped, skipped, chunkKind;
