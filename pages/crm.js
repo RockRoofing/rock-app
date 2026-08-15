@@ -66,6 +66,35 @@ const todayISO = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 
+// ---------------------------------------------------------------------------
+// Remembered view preferences - which tab you were on, your filters, your chosen
+// columns and your sort order. Stored in this browser, so it survives a refresh or
+// closing the tab and picks up exactly where you left off.
+//
+// Kept out of the database on purpose: these are per-person display choices, they
+// change constantly, and writing them server-side would mean a save on every click.
+// The trade-off is that they do not follow you to a different computer.
+//
+// The version suffix means that if the shape ever changes, old saved preferences are
+// ignored rather than restored into fields that no longer exist.
+// ---------------------------------------------------------------------------
+const PREFS_KEY = 'crm:prefs:v1';
+
+function loadPrefs() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    return (p && typeof p === 'object') ? p : null;
+  } catch { return null; }
+}
+
+function savePrefs(prefs) {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* private mode / full quota */ }
+}
+
 const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
 // Pipedrive note content comes through as HTML. The CRM's note boxes render plain text,
 // so convert rather than showing raw tags: breaks become newlines, entities decoded.
@@ -798,6 +827,59 @@ export default function CRMPage() {
   const [importMsg, setImportMsg] = useState('');
   const importFileRef = useRef(null);
   const [showFieldMgr, setShowFieldMgr] = useState(false);
+
+  // Restore remembered preferences once, on mount. Done in an effect rather than in the
+  // useState initialisers so the server and the first client render agree - reading
+  // localStorage during render would cause a hydration mismatch.
+  // Escape hatch: if a remembered filter set leaves the CRM looking empty, this puts
+  // everything back to how it opens out of the box.
+  function resetView() {
+    setView('pipeline'); setStatusFilter('open'); setMcsnEstimator('all');
+    setCustomFilters([]); setStageMode('all'); setVisibleStages(new Set(STAGES.map((x) => x.id)));
+    setColumns(DEFAULT_COLUMNS); setCompanyCols(DEFAULT_COMPANY_COLUMNS); setContactCols(DEFAULT_CONTACT_COLUMNS);
+    setSort({ key: 'created', dir: 'desc' }); setEntitySort({ key: 'deals', dir: 'desc' });
+    setActSort({ key: 'due', dir: 'asc' }); setActPerson(''); setActCustomer(''); setActShowDone(false);
+    setQuery('');
+    try { window.localStorage.removeItem(PREFS_KEY); } catch {}
+  }
+
+  const prefsReady = useRef(false);
+  useEffect(() => {
+    const p = loadPrefs();
+    if (p) {
+      if (p.view) setView(p.view);
+      if (typeof p.statusFilter === 'string') setStatusFilter(p.statusFilter);
+      if (typeof p.mcsnEstimator === 'string') setMcsnEstimator(p.mcsnEstimator);
+      if (Array.isArray(p.customFilters)) setCustomFilters(p.customFilters);
+      if (typeof p.stageMode === 'string') setStageMode(p.stageMode);
+      if (Array.isArray(p.visibleStages)) setVisibleStages(new Set(p.visibleStages));
+      if (Array.isArray(p.columns)) setColumns(p.columns);
+      if (Array.isArray(p.companyCols)) setCompanyCols(p.companyCols);
+      if (Array.isArray(p.contactCols)) setContactCols(p.contactCols);
+      if (p.sort && p.sort.key) setSort(p.sort);
+      if (p.entitySort && p.entitySort.key) setEntitySort(p.entitySort);
+      if (p.actSort && p.actSort.key) setActSort(p.actSort);
+      if (typeof p.actPerson === 'string') setActPerson(p.actPerson);
+      if (typeof p.actCustomer === 'string') setActCustomer(p.actCustomer);
+      if (typeof p.actShowDone === 'boolean') setActShowDone(p.actShowDone);
+    }
+    prefsReady.current = true;
+  }, []);
+
+  // Save whenever any of them change. Guarded by prefsReady so the defaults do not
+  // overwrite the saved set before it has been restored.
+  useEffect(() => {
+    if (!prefsReady.current) return;
+    savePrefs({
+      view, statusFilter, mcsnEstimator, customFilters, stageMode,
+      visibleStages: Array.from(visibleStages),
+      columns, companyCols, contactCols,
+      sort, entitySort,
+      actSort, actPerson, actCustomer, actShowDone,
+    });
+  }, [view, statusFilter, mcsnEstimator, customFilters, stageMode, visibleStages,
+      columns, companyCols, contactCols, sort, entitySort,
+      actSort, actPerson, actCustomer, actShowDone]);
   const dragId = useRef(null);
   const nextId = useRef(900000);
 
@@ -1315,6 +1397,7 @@ export default function CRMPage() {
         <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
         <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <button onClick={() => setView('activities')} style={{ ...backBtn, background: view === 'activities' ? C.link : 'transparent', color: '#fff', borderColor: view === 'activities' ? C.link : '#444' }}>Activities</button>
+        <button onClick={resetView} title="Clear remembered filters, columns and sort" style={{ ...backBtn, color: '#aaa', borderColor: '#444', background: 'transparent' }}>Reset view</button>
         {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative', minWidth: 260 }}>
