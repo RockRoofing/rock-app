@@ -1,9 +1,11 @@
-pkg367 - email sync every 15 minutes
-====================================
+pkg368 - one click copy on the project title
+============================================
+
+DEPLOY pkg366 FIRST if you have not already. This file builds on it.
 
 CHANGED FILES (already exists - replace it)
 -------------------------------------------
-  vercel.json
+  pages/crm.js
 
 NEW FILES
 ---------
@@ -12,34 +14,21 @@ NEW FILES
 
 WHAT CHANGED
 ------------
-One line. The CRM email sync moves from hourly to every 15 minutes:
+Inside a project, the title in the black header is now a copy button. Click it and the
+project title goes to your clipboard. A small grey "copy" hint sits next to it so it is
+obvious it does something, and it says "Copied" for a second and a half afterwards.
 
-    "schedule": "0 * * * *"      ->   "schedule": "*/15 * * * *"
+The [CRM-nnn] chip next to Won/Lost now uses the same button, so both behave identically.
+Previously it copied silently - you clicked and nothing happened on screen, so there was
+no way to tell whether it had worked.
 
-Worst case an email now takes 15 minutes to appear in the CRM instead of 60. Average wait
-drops from about 30 minutes to about 7.
-
-Nothing else in the file is touched - the other 11 crons are exactly as they were.
-
-
-BEFORE YOU PASTE
-----------------
-vercel.json is a whole-file replacement. If you have edited it directly in GitHub since
-you sent me the repo, that edit will be lost. Worth a glance at the file in GitHub first -
-it should have 12 crons, ending with crm-email-sync.
+If the copy fails it says "Copy failed" rather than pretending. There is a fallback for
+browsers where the clipboard API is unavailable, which covers older phones and anything
+not on https.
 
 
-COST
-----
-Each run is one Microsoft Graph call per mailbox and returns fetched:0 when there is
-nothing new. Four mailboxes, four times an hour, is about 380 calls a day. Well inside
-Graph's limits and negligible on Vercel Pro.
-
-
-STILL OUTSTANDING FROM THE LAST CONVERSATION
---------------------------------------------
-The "last run" timestamp race - the sync remembers the clock time of the run rather than
-the newest message it saw, so an email landing mid-run can fall through the gap. Rare, and
-it existed at hourly too, but running four times as often means four times as many
-windows. The fix is small and lives in lib/crmEmailSync.js. Not included here because you
-asked for the schedule on its own - say the word and it is a five minute job.
+WHY A SHARED COMPONENT
+----------------------
+Both copy buttons now run through one CopyButton component rather than each having its own
+handler. Anywhere else you want a copy button, it is one line and it will look and behave
+the same as these two.

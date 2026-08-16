@@ -656,6 +656,47 @@ function HistoryFeed(props) {
 }
 
 // ===========================================================================
+// Copy to clipboard
+// ===========================================================================
+// One component for every copy button, so they all behave the same way and all confirm
+// they worked. navigator.clipboard is missing on some older mobile browsers and refuses
+// to run outside a secure context, so there is a textarea fallback behind it.
+function copyText(s) {
+  const text = String(s == null ? '' : s);
+  try {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  } catch { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  } catch { return Promise.reject(new Error('copy failed')); }
+}
+
+function CopyButton({ text, title, style, children, copiedLabel = 'Copied' }) {
+  const [state, setState] = useState('');   // '' | 'ok' | 'fail'
+  useEffect(() => { if (!state) return; const t = setTimeout(() => setState(''), 1400); return () => clearTimeout(t); }, [state]);
+  return (
+    <button
+      onClick={() => copyText(text).then(() => setState('ok')).catch(() => setState('fail'))}
+      title={title}
+      style={{ ...style, cursor: 'pointer', position: 'relative' }}>
+      {children}
+      {state && (
+        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: state === 'ok' ? C.green : C.lost }}>
+          {state === 'ok' ? copiedLabel : 'Copy failed'}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ===========================================================================
 // Email (Outlook sync)
 // ===========================================================================
 // These are all MODULE-SCOPE components with their own hooks, deliberately. Nothing here
@@ -950,18 +991,26 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
       <div style={{ background: C.nav, color: '#fff', padding: '10px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={guardedBack} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>← Deals</button>
-          <span style={{ fontSize: 17, fontWeight: 700 }}>{deal.title}</span>
+          <CopyButton
+            text={deal.title || ''}
+            title="Click to copy the project title"
+            copiedLabel="Copied"
+            style={{ background: 'transparent', border: '1px solid transparent', color: '#fff', fontSize: 17, fontWeight: 700, fontFamily: 'inherit', padding: '2px 8px', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6, textAlign: 'left' }}>
+            {deal.title}
+            <span style={{ fontSize: 11, color: '#8a8a8a', fontWeight: 600 }}>copy</span>
+          </CopyButton>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
           <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}
-          <button
-            onClick={() => { try { navigator.clipboard.writeText(`[CRM-${deal.id}]`); } catch {} }}
+          <CopyButton
+            text={`[CRM-${deal.id}]`}
             title={`BCC crm@rockroofing.co.uk and put [CRM-${deal.id}] in the subject to file an email against this project. Click to copy.`}
-            style={{ background: 'transparent', border: '1px solid #444', color: '#aaa', fontSize: 11, cursor: 'pointer', fontFamily: 'ui-monospace, Menlo, monospace', padding: '4px 8px', borderRadius: 6, marginLeft: 4 }}>
+            copiedLabel="Copied"
+            style={{ background: 'transparent', border: '1px solid #444', color: '#aaa', fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace', padding: '4px 8px', borderRadius: 6, marginLeft: 4, display: 'flex', alignItems: 'center' }}>
             [CRM-{deal.id}]
-          </button>
+          </CopyButton>
           <button onClick={() => onDeleteDeal(deal.id)} title="Delete this project permanently"
             style={{ background: 'none', border: 'none', color: '#ff6b6b', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: '0 2px', marginLeft: 2 }}>
             Delete
