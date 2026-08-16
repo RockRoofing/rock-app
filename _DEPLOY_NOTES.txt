@@ -1,58 +1,58 @@
-pkg382 - put the 415 project scores back, without a re-import
-=============================================================
+pkg383 - deals won or lost IN the CRM had no close date
+=======================================================
 
-Deploy after pkg381.
+Deploy after pkg382. If you have not deployed pkg382 yet, deploy this instead - it
+contains the scores page too.
 
-NEW FILE - create with "Add file"
-----------------------------------
-  pages/crm-scores.js
-
-CHANGED FILE (replace)
-----------------------
+CHANGED FILES (replace)
+-----------------------
+  pages/crm.js
   pages/api/crm.js
+  pages/crm-scores.js     (NEW file if pkg382 not yet deployed)
 
 
-HOW TO USE IT
--------------
-1. Go to  app.rockroofing.co.uk/crm-scores
-2. Upload the same Pipedrive Deals export (deals-2641369-41.xlsx)
-3. It shows you what it found before writing anything:
+THE BUG YOU JUST FOUND
+----------------------
+You reopened J243, moved it, marked it Won - and it did not appear. That is not the data.
+That is a fault in the CRM.
 
-       6,860 rows, 415 carrying a score
-       scored 1: 12   scored 2: 42   scored 3: 60   scored 4: 86
-       scored 5: 92   scored 6: 47   scored 7: 39   scored 8: 21   scored 9: 16
+Marking a deal Won or Lost set the status and wrote a history line. It never stamped
+WHEN. The dashboard and scorecards build their close date from won_time / lost_time, so a
+deal decided in the CRM had no close date at all, and every date-filtered view dropped it.
 
-4. Press the button. It reports how many were written, how many already had a score,
-   and how many were not found.
+Imported deals were unaffected - they carry the date from Pipedrive. So ONLY deals decided
+in the CRM went missing, which is the hardest kind of gap to spot: the numbers look
+plausible, they are just quietly short.
 
-No link in the nav - it is a one-off, and a permanent button labelled "import" next to a
-CRM full of live data is an accident waiting to happen. Bookmark it if you need it again.
-
-
-WHAT IT TOUCHES
----------------
-fields.project_score. Nothing else. Not the stage, not the value, not history, not filed
-email, not activities, not notes.
-
-This is NOT a re-import, deliberately. A full import is wipe-and-replace, and the CRM now
-holds plenty the export never had. Losing that to recover one dropped column would be a
-bad trade.
-
-Safe to run twice: a score already in the CRM is never overwritten, because the export is
-older than the CRM, so what is in the CRM is the newer fact. Re-running only fills gaps.
-If it fails partway, everything already written stays written - run it again and it picks
-up the rest.
+Every deal you have marked won or lost in the CRM since it went live is affected.
 
 
-WHAT IT DOES AND DOES NOT GET YOU
----------------------------------
-DOES:  the score visible on each project, under Project Score
-DOES:  any Glenigan project entering Received from now on already carries its score, so
-       the metric works immediately instead of waiting for somebody to type 415 numbers
+FIXED
+-----
+Won now stamps won_time. Lost stamps lost_time. Reopening clears both, so a deal that goes
+won -> reopened -> lost does not keep a stale won date hanging off it.
 
-DOES NOT: move the "Glenigan scored 5 or more" card for past months. That counts projects
-       that entered Received in a given month, and the export has no record of when that
-       happened. As agreed - forward only.
 
-Expect a fair number of "not found". The export has all 6,860 rows including deals from
-non-Project pipelines you removed, and anything deleted since. That is normal.
+AND THE ONES ALREADY BROKEN
+---------------------------
+The history recorded the date at the time, so it is recoverable.
+
+    Go to /crm-scores  ->  "Repair close dates"  ->  press the button
+
+No file needed. It reports how many were recovered, how many already had a date, and how
+many were decided with no history entry to date them from. Only fills blanks - it never
+changes a date that is already there. Safe to run twice.
+
+A deal won, reopened and then lost takes the LOST date, not the stale won one. Tested.
+
+Do this before you compare against Pipedrive again, or the comparison will still be short.
+
+
+ON J243 SPECIFICALLY
+--------------------
+Worth knowing separately: J243 - Christchurch School - V01 Therapy Building sits in the
+Review stage with Variation = No, at 12,421. Every one of its nineteen siblings - the
+J-numbered V01, V02, V03 variations - sits in Variations with Variation = Yes. That looks
+like a mis-set stage rather than anything the system did.
+
+Once the close date is repaired it will appear in whichever stage it is actually in.

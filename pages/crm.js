@@ -2072,7 +2072,28 @@ function CRMPageInner() {
   };
 
   const moveDealStage = (id, stageId) => patch(id, (d) => d.stageId === stageId ? d : { ...d, stageId, history: [...d.history, { id: uid(), type: 'stage', ts: nowIso(), text: `Stage: ${stageLabel(d.stageId)} → ${stageLabel(stageId)}`, stageFrom: stageLabel(d.stageId), stageTo: stageLabel(stageId), value: Number(d.fields?.value) || 0 }] });
-  const setStatus = (id, status) => { patch(id, (d) => { const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened'; return { ...d, status, history: [...d.history, { id: uid(), type: status === 'open' ? 'note' : status, ts: nowIso(), text }] }; }); if (status === 'won') setConfetti(true); };
+  // Marking a deal won or lost must ALSO stamp the date it happened.
+  //
+  // It did not, and the consequence was invisible: the dashboard and scorecards build
+  // closeTime from won_time / lost_time, so a deal decided in the CRM had no close date
+  // and dropped out of every date-filtered view. Imported deals were fine - they carried
+  // the date from Pipedrive - so only deals decided HERE went missing, which is the
+  // hardest kind of gap to notice.
+  //
+  // Reopening clears both, so a deal that goes won -> open -> lost does not keep a stale
+  // won date hanging off it.
+  const setStatus = (id, status) => {
+    patch(id, (d) => {
+      const text = status === 'won' ? 'Deal marked Won' : status === 'lost' ? 'Deal marked Lost' : 'Deal reopened';
+      const ts = nowIso();
+      const fields = { ...d.fields };
+      if (status === 'won') { fields.won_time = ts; fields.lost_time = null; }
+      else if (status === 'lost') { fields.lost_time = ts; fields.won_time = null; }
+      else { fields.won_time = null; fields.lost_time = null; }
+      return { ...d, status, fields, history: [...d.history, { id: uid(), type: status === 'open' ? 'note' : status, ts, text }] };
+    });
+    if (status === 'won') setConfetti(true);
+  };
   const addNote = (id, body) => { const m = extractMentions(body); patch(id, (d) => { const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, history: [...d.history, ...ev] }; }); };
   const commentNote = (id, hid, body) => { const m = extractMentions(body); patch(id, (d) => { const withComment = d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso() }] } : h); const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }] : []; return { ...d, history: [...withComment, ...extra] }; }); };
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));

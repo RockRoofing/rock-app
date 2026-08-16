@@ -31,6 +31,7 @@ export default function CrmScoreImport() {
   const [msg, setMsg] = useState('')
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState(null)
+  const [repaired, setRepaired] = useState(null)
 
   async function readFile(file) {
     if (!file) return
@@ -95,6 +96,21 @@ export default function CrmScoreImport() {
     setBusy(false)
   }
 
+  async function repair() {
+    setBusy(true); setRepaired(null); setMsg('Checking every won and lost deal...')
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'repair-close-dates' }),
+      }).then((r) => r.json())
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed')
+      setRepaired(d); setMsg('')
+    } catch (e) {
+      setMsg(`Could not repair: ${e.message || 'that did not work'}`)
+    }
+    setBusy(false)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f7f6f2', fontFamily: 'ui-sans-serif, system-ui, sans-serif', color: INK }}>
       <Head><title>Rock Roofing — Project Scores</title></Head>
@@ -145,6 +161,27 @@ export default function CrmScoreImport() {
             </button>
           </div>
         )}
+
+        <div style={{ background: '#fff', border: '1px solid #e1e0d9', borderRadius: 10, padding: 18, marginTop: 24 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Repair missing close dates</div>
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, marginTop: 0 }}>
+            Separate job, no file needed. Marking a deal Won or Lost in the CRM did not stamp the date
+            it happened, so those deals had no close date and dropped out of every date-filtered view on
+            the dashboard and scorecards. The history recorded the date at the time, so this recovers it.
+            Only fills blanks &mdash; never changes a date that is already there. Safe to run twice.
+          </p>
+          <button onClick={repair} disabled={busy}
+            style={{ background: '#1a1a19', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+            {busy ? 'Working...' : 'Repair close dates'}
+          </button>
+          {repaired && (
+            <div style={{ fontSize: 13.5, lineHeight: 1.7, marginTop: 12 }}>
+              <div><strong>{repaired.fixed}</strong> close dates recovered</div>
+              <div><strong>{repaired.alreadyOk}</strong> already had one</div>
+              <div><strong>{repaired.noHistory}</strong> decided with no history entry to date them from</div>
+            </div>
+          )}
+        </div>
 
         {result && (
           <div style={{ background: '#e8f5ee', border: `1px solid ${BRAND}`, borderRadius: 10, padding: 18, marginTop: 16 }}>

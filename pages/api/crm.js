@@ -481,6 +481,31 @@ export default async function handler(req, res) {
     // holds things the Pipedrive export never had: filed email, thread links, activities
     // and notes created here, corrections made by hand. Re-importing to recover a single
     // column would take all of that with it.
+    // REPAIR. Deals marked won or lost in the CRM before this was fixed carry no
+    // won_time / lost_time, so they had no close date and fell out of every
+    // date-filtered view. The history knows when it happened - it wrote a 'won' or
+    // 'lost' entry at the time - so the date is recoverable from that.
+    //
+    // Only fills a blank. Never touches a date that is already there.
+    if (body.action === 'repair-close-dates') {
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      let fixed = 0, alreadyOk = 0, noHistory = 0
+      for (const d of list) {
+        if (!d || (d.status !== 'won' && d.status !== 'lost')) continue
+        const f = d.fields || {}
+        if (f.won_time || f.lost_time) { alreadyOk++; continue }
+        const hist = Array.isArray(d.history) ? d.history : []
+        // Latest matching entry: a deal reopened and re-decided should carry the date of
+        // the decision that stands, not the one that was undone.
+        const entry = [...hist].reverse().find((h) => h && h.type === d.status)
+        if (!entry || !entry.ts) { noHistory++; continue }
+        d.fields = { ...f, [d.status === 'won' ? 'won_time' : 'lost_time']: entry.ts }
+        fixed++
+      }
+      if (fixed) await set(DEALS_KEY, list)
+      return res.json({ ok: true, fixed, alreadyOk, noHistory })
+    }
+
     if (body.action === 'patch-project-scores') {
       const pairs = Array.isArray(body.scores) ? body.scores : []
       if (!pairs.length) return res.status(400).json({ error: 'scores required' })
