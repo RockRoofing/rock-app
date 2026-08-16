@@ -10,10 +10,17 @@ import { runEmailSync } from '../../../lib/crmEmailSync'
 //
 // BACKFILL
 //   ?since=2024-08-01      look at a window you choose, whatever the sync state says.
-//                          Nothing is discarded on a `since` run - unmatched mail goes to
-//                          the review queue - and the incremental watermark is NOT moved,
-//                          so ordinary syncing carries on untouched and the run can be
-//                          repeated safely (writes de-duplicate on message id).
+//   ?until=2024-11-01      and bound the far end, so a long backfill runs a quarter at a
+//                          time without re-fetching everything before it each go.
+//   ?queue=0               file the matches, COUNT the rest rather than queueing them.
+//                          Use this for any real backfill - two years of unmatched
+//                          newsletters is not a review job anybody will ever do, and the
+//                          queue caps at 1,000 anyway.
+//
+//                          On a `since` run nothing is discarded silently: the counts are
+//                          reported, and ?detail=1 lists every subject either way.
+//                          The incremental watermark is NOT moved, so ordinary syncing
+//                          carries on and the run can be repeated safely.
 //
 //   ?backfillMonths=24     legacy: only applies to a mailbox that has never synced.
 
@@ -28,16 +35,26 @@ export default async function handler(req, res) {
     const backfillMonths = parseInt(req.query.backfillMonths || '0', 10) || 0
     const max = parseInt(req.query.max || '2000', 10) || 2000
     const mailbox = String(req.query.mailbox || '').trim()
+    const queue = req.query.queue !== '0'
 
     // Accept a plain date as well as a full timestamp - Graph needs the latter.
-    let since = String(req.query.since || '').trim()
-    if (since) {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(since)) since = `${since}T00:00:00Z`
-      if (isNaN(new Date(since))) return res.status(400).json({ error: `Could not read since=${req.query.since}. Use YYYY-MM-DD.` })
-      since = new Date(since).toISOString()
+    const readDate = (v, name) => {
+      let d = String(v || '').trim()
+      if (!d) return ''
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) d = `${d}T00:00:00Z`
+      if (isNaN(new Date(d))) throw new Error(`Could not read ${name}=${v}. Use YYYY-MM-DD.`)
+      return new Date(d).toISOString()
+    }
+    let since, until
+    try {
+      since = readDate(req.query.since, 'since')
+      until = readDate(req.query.until, 'until')
+    } catch (e) { return res.status(400).json({ error: e.message }) }
+    if (since && until && since >= until) {
+      return res.status(400).json({ error: 'since must be earlier than until' })
     }
 
-    const result = await runEmailSync({ dryRun, backfillMonths, max, detail, since, mailbox })
+    const result = await runEmailSync({ dryRun, backfillMonths, max, detail, since, until, mailbox, queue })
     return res.status(200).json(result)
   } catch (e) {
     console.error('crm-email-sync error:', e)

@@ -1,78 +1,76 @@
-pkg373 - one word can ask, but it cannot decide
-===============================================
+pkg374 - the backfill tool. Matching is signed off.
+===================================================
 
-Deploy after pkg372. One changed file: lib/crmEmailSync.js. No new files.
+Deploy after pkg373.
 
+CHANGED FILES (all already exist - replace them)
+------------------------------------------------
+  lib/crmEmailSync.js
+  lib/msGraph.js
+  pages/api/cron/crm-email-sync.js
 
-THE SECOND RUN WAS A BIG IMPROVEMENT
-------------------------------------
-West One is clean. Every one of the dozen junk emails it was claiming is now NO MATCH:
-
-    "TMHCC Portal - One-time verification code"     NO MATCH
-    "Arbosil ONE: The ONE Silicone..."              NO MATCH
-    "Building Safety Regulator Updates"             NO MATCH
-    "The #1 mistake most job ads make"              NO MATCH
-
-West One now holds only its real tender thread. Junk filtering took 585 of 1,462 messages
-out before matching, and the review queue dropped from 1,266 to 713.
+NEW FILES: none.
 
 
-BUT IT LEFT ONE FALSE POSITIVE, AND COST THREE REAL ONES
---------------------------------------------------------
-FALSE POSITIVE
-    "Bellway Barking: Gran Paradiso and Mont Blanc"  -> FILED to
-    "Barking sites flat roofing works" at 83%, and it dragged two more in on the thread.
+THE MATCHING IS DONE
+--------------------
+I read every FILED line in your last run. All 160 are correct - I could not find a single
+wrong one. Bellway Barking is now a suggestion and helpfully names "Bellway Wales Projects"
+as its runner-up. Maelfa, Ty Menyn and DWP Hoxton are back as suggestions. The Baker Street
+tie (3091 vs 4097, 45% each) is still correctly held for review rather than guessed.
 
-    Cause: damping the common words worked almost too well. In that title, "sites",
-    "flat", "roofing" and "works" now carry near-zero weight - so the title is effectively
-    just the word "barking", and any email mentioning Barking scores 83% against it.
+Final shape of six weeks, one mailbox:
+    1,462 fetched -> 585 junk filtered -> 160 filed -> 717 queued
 
-REAL MATCHES LOST
-    "Fw: Maelfa Roofing Package tender"     was suggested, became NO MATCH
-    "RE: Ty Menyn - Waterproofing Options"  was suggested, became NO MATCH
-    "1371 - DWP Hoxton jobcentre roofing"   was suggested, became NO MATCH
-
-    Cause: the rule allowed a single word to carry a match only if it was 7+ letters.
-    "maelfa" is 6, "menyn" is 5, "hoxton" is 6. Good project names, wrongly excluded.
+No more matching changes needed. This package is the tool to run the backfill.
 
 
-THE FIX - ONE RULE COVERS BOTH
-------------------------------
-A single distinctive word is now enough to SUGGEST, but never enough to FILE. Two or more
-distinctive words are required before anything files itself.
+?queue=0  - THE ONE THAT MATTERS
+--------------------------------
+Files the matches. COUNTS the rest instead of queueing them.
 
-That is the honest line. One word is a good enough reason to ask you. It is not a good
-enough reason to decide on your behalf. The length limit came down from 7 to 5 at the
-same time, since it is no longer doing the safety work.
+Without it, a 24-month backfill across four mailboxes would push roughly 10,000 rows at a
+queue that caps at 1,000 - so most would fall off the end anyway, and the ones that stayed
+would bury the genuine suggestions from your day-to-day mail.
 
-Result:
-    Bellway Barking                -> now a SUGGESTION, not filed
-    Maelfa / Ty Menyn / DWP Hoxton -> back as suggestions
-    All 16 genuine auto-files      -> unchanged, same scores
+Nothing is lost silently. The counts come back in the response, and ?detail=1 still lists
+every subject line with its outcome whether you queue or not.
 
 
-WHAT TO EXPECT ON THE NEXT RUN
-------------------------------
-Roughly the same FILED count, minus the three Barking rows. A few more suggestions in the
-queue, all of them worth a glance. Nothing else moves.
+?until=  - RUN IT IN CHUNKS
+---------------------------
+    ?since=2025-01-01&until=2025-04-01
 
-Run the same dry run once more:
-
-    /api/cron/crm-email-sync?dryRun=1&detail=1&since=2026-07-01&mailbox=edita@rockroofing.co.uk
-
-Scan the FILED lines only - there should be about 160 and every one should be a project
-name you recognise in the subject. If that reads clean, the matching is done and you can
-run the month for real.
+Bounds the far end of the window as well as the near one, so you can work through two years
+a quarter at a time without re-fetching everything before it on each run. Graph does the
+filtering, so each chunk is quick.
 
 
-REMAINING, FOR WHEN YOU ARE READY
----------------------------------
-* 713 queued from six weeks of one mailbox. Over 24 months and four mailboxes that is
-  still far more than the 1,000 cap. Before a full backfill I would add ?queue=0 so it
-  files the matches and reports the rest without filling the queue.
+THE SEQUENCE I WOULD USE
+------------------------
+Per mailbox, oldest quarter first. Dry run, glance at it, then run it for real:
 
-* A lot of the remaining queue is repeated internal noise - "Updates on items you follow",
-  "James McVeigh sent a message", "ROCK - Commercial Roofing Specialists", Pipedrive and
-  Aconex notifications. Those are ordinary emails, not bounces, so the junk filter leaves
-  them alone. If you want them gone too it is a sender-based rule, and I would want your
-  say-so on the list first.
+    ...crm-email-sync?dryRun=1&detail=1&queue=0&since=2024-09-01&until=2024-12-01&mailbox=edita@rockroofing.co.uk
+    ...crm-email-sync?detail=1&queue=0&since=2024-09-01&until=2024-12-01&mailbox=edita@rockroofing.co.uk
+
+Then move the dates on a quarter and repeat. Eight windows per mailbox for two years, four
+mailboxes - about thirty URLs. Tedious, but each one takes seconds and you can stop and
+look at any point.
+
+If a chunk comes back with fetched at or near your max, narrow the window and re-run it -
+that is the one sign a chunk did not see everything.
+
+Re-running any window is harmless. Writes de-duplicate on message id, the watermark is
+never moved by a `since` run, and the 15-minute sync carries on throughout.
+
+
+AFTER THE BACKFILL
+------------------
+The queue will still be filling from day-to-day mail - about 700 per six weeks per mailbox
+on current evidence, and much of that is repeated internal noise: "Updates on items you
+follow", "James McVeigh sent a message", "ROCK - Commercial Roofing Specialists", Pipedrive
+and Aconex notifications, recruiter mail.
+
+Those are ordinary emails rather than bounces, so the junk filter deliberately leaves them
+alone. Cutting them is a sender-based rule and I want your list before writing it - one
+wrong sender in that list and you silently stop filing a real customer.
