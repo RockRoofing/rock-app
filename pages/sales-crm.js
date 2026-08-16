@@ -104,7 +104,7 @@ export default function Dashboard() {
   async function loadData() {
     setLoading(true)
     try {
-      const [dr, vc] = await Promise.all([fetch('/api/deals-crm'), fetch('/api/value-changes')])
+      const [dr, vc] = await Promise.all([fetch('/api/deals-crm'), fetch('/api/value-changes-crm')])
       const dd = await dr.json()
       const vd = await vc.json()
       setDeals(dd.deals || [])
@@ -126,7 +126,7 @@ export default function Dashboard() {
   async function saveValueChange() {
     if (!vcForm.dealTitle || !vcForm.newValue) return
     setSavingVc(true)
-    await fetch('/api/value-changes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...vcForm, oldValue: parseFloat(vcForm.oldValue) || 0, newValue: parseFloat(vcForm.newValue) }) })
+    await fetch('/api/value-changes-crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...vcForm, oldValue: parseFloat(vcForm.oldValue) || 0, newValue: parseFloat(vcForm.newValue) }) })
     await loadData()
     setShowValueForm(false)
     setVcForm({ dealId: '', dealTitle: '', organizationName: '', oldValue: '', newValue: '', changeDate: new Date().toISOString().split('T')[0], estimator: '', notes: '' })
@@ -135,7 +135,7 @@ export default function Dashboard() {
 
   async function deleteValueChange(id) {
     if (!confirm('Delete this entry?')) return
-    await fetch('/api/value-changes', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    await fetch('/api/value-changes-crm', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     await loadData()
   }
 

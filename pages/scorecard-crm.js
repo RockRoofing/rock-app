@@ -246,7 +246,7 @@ export default function Scorecard() {
     try {
       const [dr, vc, tr] = await Promise.all([
         fetch('/api/deals-crm'),
-        fetch('/api/value-changes'),
+        fetch('/api/value-changes-crm'),
         fetch('/api/targets')
       ])
       const dd = await dr.json()
@@ -590,8 +590,8 @@ export default function Scorecard() {
         </PreContractNav>
 
         <div style={{ background: '#1c704f', color: '#fff', padding: '8px 24px', fontSize: 13, fontWeight: 600 }}>
-          CRM comparison view &mdash; deal data sourced from the CRM. Compare against the live Scorecards page.
-          <span style={{ fontWeight: 400, opacity: 0.85 }}> Value-change metrics still come from the Pipedrive sync and will read the same on both pages.</span>
+          CRM comparison view &mdash; every figure below comes from the CRM. Nothing on this page reads Pipedrive.
+          <span style={{ fontWeight: 400, opacity: 0.85 }}> GP margin comes from Xero, as it does on the live page.</span>
         </div>
 
         <div style={{ borderBottom: '0.5px solid #e1e0d9', background: '#fff', padding: '0 24px', display: 'flex' }}>

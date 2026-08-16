@@ -1,55 +1,87 @@
-pkg376 - Scorecards (CRM) comparison page
-=========================================
+pkg377 - the (CRM) pages now read nothing from Pipedrive
+========================================================
 
-NEW FILE - create this one with "Add file" in GitHub
-----------------------------------------------------
-  pages/scorecard-crm.js
+REPLACES pkg376. Deploy this one instead - it contains everything pkg376 had.
 
-CHANGED FILE (already exists - replace it)
--------------------------------------------
-  components/PreContractNav.js     adds the new tab
+NEW FILES - create these two with "Add file" in GitHub
+------------------------------------------------------
+  lib/crmValueChanges.js
+  pages/api/value-changes-crm.js
+  pages/scorecard-crm.js          (new if you have not already added pkg376)
 
-
-WHAT IT IS
-----------
-An exact copy of the Scorecards page reading from the CRM instead of the Pipedrive sync.
-Same pattern as Sales (CRM): both pages sit side by side, you compare, and when you trust
-the numbers the old one goes.
-
-New tab in the Pre-Contract nav: Scorecards (CRM), right after Scorecards.
-
-It is byte-identical to pages/scorecard.js apart from four things:
-  - reads /api/deals-crm instead of /api/deals
-  - green comparison banner at the top
-  - page title says (CRM)
-  - no "Sync now" button, because there is nothing to sync - the CRM is the source
-
-No API work was needed. /api/deals-crm already existed and already returns exactly the
-same shape as /api/deals, via lib/crmDashboardAdapter. Nothing on the live Scorecards page
-is touched.
+CHANGED FILES (already exist - replace them)
+---------------------------------------------
+  pages/sales-crm.js
+  pages/crm.js
+  components/PreContractNav.js
 
 
-ONE HONEST CAVEAT - READ THIS BEFORE COMPARING
------------------------------------------------
-Only the DEAL data comes from the CRM. Three of the metrics are built from
-/api/value-changes, which is Pipedrive sync data and has no CRM equivalent:
+THE PROBLEM
+-----------
+You asked whether the (CRM) pages were free of Pipedrive. They were not, and it mattered
+more than a labelling point.
+
+Three metrics are built from VALUE-CHANGE records:
 
     Total value of work priced
     Value priced - existing customers
     Projects priced over 200K
 
-Those will read IDENTICALLY on both pages. That is not the comparison working - it is the
-same number twice. Ignore them when you are checking.
+Those records were only ever written by pages/api/webhook.js, when Pipedrive fired an
+event. Switch Pipedrive off and they stop being written - on the live pages AND the (CRM)
+ones. Those three metrics would have silently flatlined and nobody would have seen why for
+a month.
 
-The metrics genuinely worth comparing are the ones built from deals:
 
-    Strike rate (overall)                    Glenigan enquiries received
-    Strike rate (MC Secured/Negotiating)     Glenigan enquiries priced
-    Total value of work secured              Glenigan scored 5+
-    Deals secured over 200K                  Projects secured over 200K
+THE FIX
+-------
+The same records are now derived from the CRM's own deal history:
 
-If those match across both pages, the CRM is a sound replacement for the Pipedrive feed.
-If they do not, the difference will be in the adapter or in what got imported, and the
-detail is in the drill-downs on each card.
+    a value edit on a deal        -> value change record
+    a deal entering a priced stage -> stage entry record
+    (priced stages: MC Unsecured, MC Secured, Negotiating, Variations)
 
-GP margin is unaffected either way - it comes from Xero via /api/dashboard on both pages.
+That history is already being kept, so this works on changes made BEFORE today as well as
+after. Older entries hold the numbers only inside the text ("Value: £180,000 -> £250,000")
+so those are parsed; from now on the numbers are also stored outright on the entry, which
+is the change to pages/crm.js.
+
+Tested against both shapes, and against the awkward cases:
+  - a deal moving in, out, and back into Negotiating counts ONCE, not twice
+  - a value already counted by an edit is not counted again by the stage move
+  - a deal entering a priced stage with no value is recorded as zero, not skipped
+That matches how the old webhook behaved, so the numbers are comparable.
+
+Derived records are computed on read, never stored, so they cannot drift out of step with
+the deals they came from.
+
+
+BEFORE YOU COMPARE - RUN THIS ONCE
+-----------------------------------
+The CRM only has history from when the CRM started. Everything before that lives in the
+old Pipedrive-era store. Copy it across:
+
+    Open /sales-crm, or just hit the endpoint - it is a one-line POST. Easiest way:
+    ask me and I will add a button, or run it from the browser console on any portal page:
+
+        fetch('/api/value-changes-crm',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'seed'})}).then(r=>r.json()).then(console.log)
+
+    It returns { copied: n }. Safe to run twice - it skips anything already copied.
+
+Those are your records; only the collection method was Pipedrive's. Without this, the
+three metrics above will read near-zero for any month before the CRM existed, and the
+comparison against the live page will look alarming for no good reason.
+
+Say the word and I will put a proper button on the page instead of a console command.
+
+
+WHAT EACH PAGE READS NOW
+------------------------
+  /sales-crm        deals: CRM      value changes: CRM
+  /scorecard-crm    deals: CRM      value changes: CRM     targets: yours    GP margin: Xero
+  /sales            deals: Pipedrive sync    value changes: Pipedrive webhook
+  /scorecard        deals: Pipedrive sync    value changes: Pipedrive webhook
+
+Xero is not a Pipedrive dependency and stays on both. Nothing on the live pages is
+touched - they carry on exactly as they are until you decide to retire them.
