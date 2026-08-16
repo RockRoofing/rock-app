@@ -1,61 +1,42 @@
-pkg406 - red flag for missing information
-=========================================
+pkg407 - fixes the crash on Edita's scorecard
+=============================================
 
-Deploy after pkg405. One changed file: pages/crm.js. No new files.
+Deploy after pkg406. One changed file: pages/scorecard-crm.js. No new files.
+
+URGENT - pkg404 broke that page. This is the fix.
 
 
-WHAT YOU GET
+WHAT I DID
+----------
+The Deals researched card I added in pkg404 read a variable called `measured` that is not
+declared until 30 lines further down:
+
+    line 465   const dealsResearched = measured ? ... : null
+    line 494   const measured = monthKey(GLENIGAN_TRACKING_FROM) <= m
+
+In JavaScript that is not "undefined" - it throws:
+
+    ReferenceError: Cannot access 'measured' before initialization
+
+Thrown during render, so React unmounts the whole page and you get the generic
+"Application error: a client-side exception has occurred". Nothing else on that page was
+wrong; one line took all of it down.
+
+`npm run build` compiles this happily - it is a runtime ordering fault, not a syntax one.
+The same class of thing as the undefined-identifier crashes we have had before, which is
+why the check script exists. I have added this pattern to what I scan for.
+
+
+THE FIX
+-------
+Deals researched does not need that gate at all. `measured` is the GLENIGAN tracking cut
+off - those three metrics have no data before the CRM went live, so they show a dash. Deals
+researched is dated by created date, which every deal has, so there is no month we could
+not measure. The gate was wrong as well as misplaced.
+
+
+ALSO CHECKED
 ------------
-A red flag on the deal card in Kanban and on the row in List view, whenever a project has
-reached a stage where something should be filled in and is not.
-
-Hover it and it names exactly what is missing:
-
-    Missing before this can progress:
-
-    - Credit Limit
-    - Project Score
-    - Lead Source
-
-On the kanban card it sits beside the activity dot, top right. In List it shares the dot
-column - adding a new column would have pushed everyone's chosen layout about.
-
-
-THE RULES
----------
-FROM RECEIVED ONWARDS (the yellow ones):
-    Value, Organization, Contact, Project Score, Site Location, Region, Credit Score,
-    Credit Limit, Project Stage, Sales Person, Project Type, Lead Source
-
-FROM NEGOTIATING (the pink ones, on top of all the above):
-    Insured Credit Limit, Roofing Works On-Site, Description of Project Scope of Works
-
-"Received onwards" is by pipeline order, so it covers Received, Stage 1, Stage 2, Review,
-MC Unsecured, Variations, MC Secured and Negotiating. Anything earlier is never flagged -
-a project that has just come in is not supposed to be complete yet.
-
-CLOSED DEALS ARE NEVER FLAGGED. Won and lost projects are history, not work outstanding,
-and a board covered in flags on finished jobs would train people to ignore them.
-
-
-ONE JUDGEMENT WORTH KNOWING
----------------------------
-A VALUE of zero counts as missing - no job is worth nothing, so a zero there means nobody
-has priced it yet.
-
-A CREDIT LIMIT of zero does NOT. Zero is a real answer for a customer with no credit, and
-flagging it would be telling you to go and fill in something already filled in.
-
-Tested: 12 flags on an empty Received project, 3 on a Negotiating project with only the
-pink ones missing, none on the same project once complete, none on anything won or lost.
-
-
-CHECK MY READING OF THE SCREENSHOT
-----------------------------------
-From your markup I read the yellow as the twelve listed above. OWNER sits between Contact
-and Project Score and I read it as NOT highlighted, so it is not required - and Tender
-Return date, Glenigan Project ID, Size m2, Estimator Responsible, Systems Priced, General
-Information and Project Start Date are all excluded too.
-
-If I have any of those wrong they are one line each at the top of pages/crm.js -
-REQUIRED_FROM_RECEIVED and REQUIRED_FROM_NEGOTIATING. Tell me which and I will move them.
+Swept both metric functions for any other use-before-declaration. One more hit came back
+and it was a false positive - the string 'won' rather than the variable. Everything else
+is clean.

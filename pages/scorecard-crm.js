@@ -462,7 +462,11 @@ export default function Scorecard() {
     // Same source as the Deals Researched dashboard, so the two cannot disagree.
     const dealsResearchedList = deals.filter(d =>
       d.everIn1stContact && d.firstContactDate && monthKey(d.firstContactDate) === m)
-    const dealsResearched = measured ? dealsResearchedList.length : null
+    // NOT gated on `measured` - that is the Glenigan tracking date and it is declared
+    // further down, so reading it here threw a ReferenceError and took the whole page
+    // with it. Deals researched has real history anyway: it is dated by created date,
+    // which every deal has, so there is no month we could not measure.
+    const dealsResearched = dealsResearchedList.length
 
     // AVERAGE VALUE OF PROJECTS SECURED - rolling 6 months ending with month m, and the
     // 6 months before that, so the card can show which way it is going. Average per WON
