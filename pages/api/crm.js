@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
+import { getDealEmails, getUnallocated, allocateEmail, dismissEmail } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
 //   GET                    -> { deals, schema }
@@ -327,6 +328,44 @@ export default async function handler(req, res) {
       if (kind !== 'activities' && kind !== 'notes') return res.status(400).json({ error: 'Unknown kind' })
       const items = (await get(SUB_KEY(kind, String(body.dealId || '')))) || []
       return res.json({ ok: true, items })
+    }
+
+    // ---- Email (Outlook sync) ------------------------------------------------
+    // Mail is filed per project in crm:emails:<dealId> by the hourly sync. Anything it
+    // could not place with confidence sits in crm:emails:unallocated to be filed by hand -
+    // deliberately NOT auto-guessed, because the wrong project is worse than no project.
+    if (body.action === 'emails') {
+      const dealId = String(body.dealId || '')
+      if (!dealId) return res.status(400).json({ error: 'dealId required' })
+      const items = await getDealEmails(dealId)
+      return res.json({ ok: true, items: Array.isArray(items) ? items : [] })
+    }
+
+    // Count only, for the nav badge. The queue itself can be a few hundred rows, and the
+    // badge is polled - no point shifting the whole list to show a number.
+    if (body.action === 'emails-queue-count') {
+      const items = await getUnallocated()
+      return res.json({ ok: true, count: Array.isArray(items) ? items.length : 0 })
+    }
+
+    if (body.action === 'emails-unallocated') {
+      const items = await getUnallocated()
+      return res.json({ ok: true, items: Array.isArray(items) ? items : [] })
+    }
+
+    if (body.action === 'allocate-email') {
+      const messageId = String(body.messageId || '')
+      const dealId = String(body.dealId || '')
+      if (!messageId || !dealId) return res.status(400).json({ error: 'messageId and dealId required' })
+      const out = await allocateEmail(messageId, dealId)
+      return res.json(out)
+    }
+
+    if (body.action === 'dismiss-email') {
+      const messageId = String(body.messageId || '')
+      if (!messageId) return res.status(400).json({ error: 'messageId required' })
+      const out = await dismissEmail(messageId)
+      return res.json(out)
     }
 
     if (body.action === 'save-sub') {

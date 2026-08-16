@@ -656,6 +656,259 @@ function HistoryFeed(props) {
 }
 
 // ===========================================================================
+// Email (Outlook sync)
+// ===========================================================================
+// These are all MODULE-SCOPE components with their own hooks, deliberately. Nothing here
+// adds a hook to CRMPageInner, which is where the early `if (live) return` sits - putting
+// a hook below that line is what threw React error #300 before.
+
+const emailPerson = (addr, name) => {
+  const a = String(addr || '').trim();
+  const n = String(name || '').trim();
+  if (n && a && n.toLowerCase() !== a.toLowerCase()) return `${n} <${a}>`;
+  return a || n || 'Unknown sender';
+};
+
+// Who it went to, trimmed - a circulation list of fifteen people is noise in a history.
+function recipientLine(m) {
+  const all = [...(m.to || []), ...(m.cc || [])].filter(Boolean);
+  if (!all.length) return '';
+  if (all.length <= 3) return `To: ${all.join(', ')}`;
+  return `To: ${all.slice(0, 3).join(', ')} +${all.length - 3} more`;
+}
+
+function EmailCard({ m, children }) {
+  const [open, setOpen] = useState(false);
+  const preview = String(m.preview || '').trim();
+  const long = preview.length > 180;
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 0, wordBreak: 'break-word' }}>{m.subject || '(no subject)'}</div>
+        <div style={{ fontSize: 11, color: C.dim, whiteSpace: 'nowrap' }}>{dateTime(m.date)}</div>
+      </div>
+      <div style={{ fontSize: 12, color: C.dim, marginTop: 3 }}>{emailPerson(m.from, m.fromName)}</div>
+      {recipientLine(m) && <div style={{ fontSize: 11, color: C.dim, marginTop: 2, wordBreak: 'break-word' }}>{recipientLine(m)}</div>}
+      {preview && (
+        <div style={{ fontSize: 12.5, color: C.text, marginTop: 6, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
+          {open || !long ? preview : preview.slice(0, 180) + '\u2026'}
+          {long && <button onClick={() => setOpen((v) => !v)} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>{open ? 'less' : 'more'}</button>}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        {m.webLink && <a href={m.webLink} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: C.link, fontWeight: 600, textDecoration: 'none' }}>Open in Outlook &rarr;</a>}
+        {m.mailbox && <span style={{ fontSize: 10.5, color: C.dim, background: C.faint, borderRadius: 3, padding: '2px 6px' }}>{m.mailbox}</span>}
+        {m.matchedBy && <span style={{ fontSize: 10.5, color: C.dim, background: C.faint, borderRadius: 3, padding: '2px 6px' }}>matched by {m.matchedBy}</span>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Emails filed against one project. Loads its own data - the deals list is already 6.4MB
+// and email must not ride along with it.
+function DealEmails({ dealId }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    let dead = false;
+    setLoading(true); setErr('');
+    fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'emails', dealId: String(dealId) }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (dead) return; if (d && d.ok) setItems(d.items || []); else setErr(d?.error || 'Could not load email'); })
+      .catch(() => { if (!dead) setErr('Could not load email'); })
+      .finally(() => { if (!dead) setLoading(false); });
+    return () => { dead = true; };
+  }, [dealId]);
+
+  return (
+    <div>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Email</div>
+      <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>
+        Filed automatically from the synced mailboxes. To file one by hand, BCC crm@rockroofing.co.uk with <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>[CRM-{dealId}]</span> in the subject.
+      </div>
+      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12 }}>
+        {loading && <div style={{ fontSize: 13, color: C.dim }}>Loading&#8230;</div>}
+        {!loading && err && <div style={{ fontSize: 13, color: C.lost }}>{err}</div>}
+        {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>No email filed against this project yet.</div>}
+        {!loading && !err && items.map((m) => <EmailCard key={m.id} m={m} />)}
+      </div>
+    </div>
+  );
+}
+
+// Pick a project for an email that could not be matched. Searches title, company and
+// contact, because you will remember any one of the three.
+function ProjectPicker({ deals, onPick, onCancel }) {
+  const [q, setQ] = useState('');
+  const matches = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    const open = (deals || []).filter((d) => d.status === 'open');
+    if (!s) return open.slice(0, 25);
+    return open.filter((d) => (
+      String(d.title || '').toLowerCase().includes(s)
+      || String(d.fields?.organization || '').toLowerCase().includes(s)
+      || String(d.fields?.contact_person || '').toLowerCase().includes(s)
+      || String(d.id) === s
+    )).slice(0, 25);
+  }, [q, deals]);
+
+  return (
+    <div style={{ marginTop: 8, border: `1px solid ${C.link}`, borderRadius: 8, padding: 10, background: C.activityBg }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input autoFocus placeholder="Search open projects&#8230;" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...miniInput, flex: 1 }} />
+        <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+      </div>
+      <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 8, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6 }}>
+        {!matches.length && <div style={{ fontSize: 12.5, color: C.dim, padding: 10 }}>No open project matches that.</div>}
+        {matches.map((d) => (
+          <div key={d.id} onClick={() => onPick(d)} style={{ padding: '8px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${C.faint}`, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>{d.title || '(untitled)'}</span>
+            <span style={{ fontSize: 11, color: C.dim, whiteSpace: 'nowrap' }}>{d.fields?.organization || ''}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// The review queue. Everything the sync could not place, newest first.
+function EmailQueue({ deals, onOpenDeal }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
+  const [noteDeal, setNoteDeal] = useState(null);
+  const [search, setSearch] = useState('');
+  const [pickerFor, setPickerFor] = useState(null);
+  const [busy, setBusy] = useState('');
+
+  const load = async () => {
+    setLoading(true); setErr('');
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'emails-unallocated' }),
+      }).then((r) => r.json());
+      if (d && d.ok) setItems(d.items || []);
+      else setErr(d?.error || 'Could not load the queue');
+    } catch { setErr('Could not load the queue'); }
+    setLoading(false);
+  };
+  useEffect(() => { load(); }, []);
+
+  // Optimistic, with the row put back if the write fails - the same pattern the
+  // Activities tab uses for mark-done.
+  const act = async (m, payload, doneMsg, deal) => {
+    setBusy(m.id); setPickerFor(null); setNote(''); setNoteDeal(null);
+    const before = items;
+    setItems((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+      setNote(doneMsg); setNoteDeal(deal || null);
+    } catch (e) {
+      setItems(before);
+      setNote(`That did not save - the email has been put back. ${e.message || ''}`.trim());
+    }
+    setBusy('');
+  };
+
+  const allocate = (m, deal) => act(m, { action: 'allocate-email', messageId: m.id, dealId: String(deal.id) }, `Filed against ${deal.title || deal.id}.`, deal);
+  const dismiss = (m) => {
+    const ok = window.confirm('Remove this email from the review queue? It stays in Outlook - it just will not be filed against a project, and it will not come back here.');
+    if (!ok) return;
+    act(m, { action: 'dismiss-email', messageId: m.id }, 'Dismissed.');
+  };
+
+  const shown = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter((m) => `${m.subject} ${m.from} ${m.fromName} ${m.preview} ${m.mailbox}`.toLowerCase().includes(s));
+  }, [items, search]);
+
+  return (
+    <div style={{ height: '100%', overflowY: 'auto', padding: 16, boxSizing: 'border-box', background: C.feedBg }}>
+      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>Email review queue ({items.length})</span>
+          <div style={{ flex: 1 }} />
+          <input placeholder="Search&#8230;" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...miniInput, width: 220 }} />
+          <button onClick={load} style={ghostBtn}>Refresh</button>
+        </div>
+        <div style={{ fontSize: 12, color: C.dim, marginBottom: 12 }}>
+          Mail the sync could not place against a project on its own. File it here, or dismiss it. Nothing is deleted from Outlook either way.
+        </div>
+
+        {note && (
+          <div style={{ fontSize: 13, padding: '8px 11px', borderRadius: 8, background: C.mention, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span>{note}</span>
+            {noteDeal && onOpenDeal && <button onClick={() => onOpenDeal(noteDeal.id)} style={{ background: 'none', border: 'none', color: C.link, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Open project &rarr;</button>}
+          </div>
+        )}
+        {loading && <div style={{ fontSize: 13, color: C.dim }}>Loading&#8230;</div>}
+        {!loading && err && <div style={{ fontSize: 13, color: C.lost }}>{err}</div>}
+        {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>Nothing waiting. Every synced email has found a project.</div>}
+        {!loading && !err && !!items.length && !shown.length && <div style={{ fontSize: 13, color: C.dim }}>Nothing matches that search.</div>}
+
+        {!loading && !err && shown.map((m) => (
+          <div key={m.id}>
+            <EmailCard m={m}>
+              <div style={{ flex: 1 }} />
+              <button disabled={busy === m.id} onClick={() => setPickerFor((v) => v === m.id ? null : m.id)} style={{ ...primaryBtn, opacity: busy === m.id ? 0.5 : 1 }}>Allocate to project</button>
+              <button disabled={busy === m.id} onClick={() => dismiss(m)} style={{ ...ghostBtn, color: C.dim }}>Dismiss</button>
+            </EmailCard>
+            {pickerFor === m.id && (
+              <div style={{ marginTop: -4, marginBottom: 10 }}>
+                <ProjectPicker deals={deals} onPick={(d) => allocate(m, d)} onCancel={() => setPickerFor(null)} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Nav button carrying the queue count. Its own component so the count can poll without
+// a hook anywhere near CRMPageInner's early return. refreshKey re-counts when you leave
+// the tab, so allocating something updates the badge.
+function EmailsNavButton({ active, onClick, refreshKey }) {
+  const [count, setCount] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    const tick = () => {
+      if (document.hidden) return;
+      fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'emails-queue-count' }),
+      })
+        .then((r) => r.json())
+        .then((d) => { if (!dead && d && d.ok) setCount(d.count); })
+        .catch(() => {});
+    };
+    tick();
+    const t = setInterval(tick, 60 * 1000);
+    return () => { dead = true; clearInterval(t); };
+  }, [refreshKey]);
+
+  return (
+    <button onClick={onClick} style={{ ...backBtn, background: active ? C.link : 'transparent', color: '#fff', borderColor: active ? C.link : '#444', display: 'flex', alignItems: 'center', gap: 6 }}>
+      Emails
+      {count > 0 && <span style={{ background: C.amber, color: '#1c1c1c', borderRadius: 9, fontSize: 11, fontWeight: 800, padding: '1px 6px' }}>{count}</span>}
+    </button>
+  );
+}
+
+// ===========================================================================
 // Deal view
 // ===========================================================================
 function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
@@ -794,6 +1047,11 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
               ))}
             </div>
           )}
+
+          <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
+
+          {/* Email - loads on its own, keyed to the deal */}
+          <DealEmails dealId={deal.id} />
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
@@ -2126,6 +2384,7 @@ function CRMPageInner() {
         <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
         <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <button onClick={() => setView('activities')} style={{ ...backBtn, background: view === 'activities' ? C.link : 'transparent', color: '#fff', borderColor: view === 'activities' ? C.link : '#444' }}>Activities</button>
+        <EmailsNavButton active={view === 'emails'} onClick={() => setView('emails')} refreshKey={view} />
         <button onClick={resetView} title="Clear remembered filters, columns and sort" style={{ ...backBtn, color: '#aaa', borderColor: '#444', background: 'transparent' }}>Reset view</button>
         {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
@@ -2174,8 +2433,11 @@ function CRMPageInner() {
         </div>
       )}
 
-      {/* Companies/Contacts: a thin bar with Choose Columns on the right */}
-      {!isDealView && (
+      {/* Companies/Contacts: a thin bar with Choose Columns on the right.
+          Was `!isDealView`, so it also appeared on the Activities tab labelled
+          "Contacts (4,717)" with a Choose Columns button that opened the contacts
+          chooser. Now it shows only where it means something. */}
+      {(view === 'companies' || view === 'contacts') && (
         <div style={{ background: C.card, borderBottom: `1px solid ${C.line}`, padding: '10px 16px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 14, fontWeight: 700 }}>{view === 'companies' ? `Companies (${companyRows.length})` : `Contacts (${contactRows.length})`}</span>
           <button onClick={() => setChooser(view)} style={ghostBtn}>Choose Columns</button>
@@ -2209,6 +2471,7 @@ function CRMPageInner() {
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
+        {view === 'emails' && <EmailQueue deals={deals} onOpenDeal={openDealById} />}
       </div>
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} users={users} />}

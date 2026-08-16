@@ -1,69 +1,93 @@
-pkg365 - BCC drop-box with a project reference
-===============================================
+pkg366 - CRM email screens
+==========================
 
-REPLACES pkg302 through pkg364. Deploy this one only.
+CHANGED FILES (both already exist - replace them)
+-------------------------------------------------
+  pages/api/crm.js     four new actions for reading and filing email
+  pages/crm.js         Email section on the deal, plus the review queue tab
 
-CHANGED FILES
--------------
-  lib/crmEmailSync.js     reference matching + BCC mailbox handling
-  pages/crm.js            the reference is shown on each deal
-  everything else unchanged since pkg364
+NEW FILES
+---------
+  NONE. Nothing to create with "Add file" this time.
 
 
-HOW IT WORKS
+WHAT YOU GET
 ------------
-BCC crm@rockroofing.co.uk and put the project's reference in the subject:
 
-    RE: Bensham Lane drawings [CRM-972]
+1. EMAIL ON THE DEAL
+   Open any project. Below Notes, above History, there is now an "Email" section listing
+   everything filed against that project - subject, who it was from, who it went to, the
+   date, a preview, and "Open in Outlook".
 
-The reference beats every other rule, because you have said outright which project it
-belongs to. Case and spacing do not matter - [crm-972], [CRM - 972] and #crm972 all work.
+   Long previews are cut at 180 characters with a "more" link, so a deal with forty emails
+   is still readable.
 
-Verified it does NOT match ordinary prose: "Invoice CRM 2024 budget" is ignored, rather
-than filing the email against deal 2024.
+   Each card shows the mailbox it came from and HOW it was matched (reference in subject,
+   project name in subject, known contact, company domain, allocated by hand). That last
+   bit matters: it is how you will judge whether the matching rules are pulling their
+   weight before you commit to the backfill.
+
+2. REVIEW QUEUE
+   New "Emails" button in the black nav, next to Activities. It carries an amber count
+   badge when there is anything waiting, so you do not have to go looking.
+
+   Each row has:
+     Allocate to project - opens a search box over your OPEN projects. Searches title,
+                           company and contact name, so any one of the three will find it.
+     Dismiss             - takes it off the queue. Asks first, because there is no undo.
+                           The email itself stays in Outlook untouched.
+
+   After allocating you get a confirmation with an "Open project" link, so you can check
+   it landed where you meant.
+
+   Both actions remove the row immediately and put it back if the save fails - the same
+   pattern as Mark Done on the Activities tab.
 
 
-FINDING THE REFERENCE
----------------------
-Every deal now shows its reference as a small chip in the header, next to Won/Lost/Delete:
-
-    [CRM-972]
-
-Click it and it copies to your clipboard, ready to paste into a subject line.
-
-
-NO REFERENCE? STILL FINE
+A SMALL FIX ALONG THE WAY
 -------------------------
-Anything arriving at the BCC mailbox goes through the normal matching afterwards - project
-title in the subject, known contact, company domain. So a reference is the reliable way,
-not the only way.
-
-And if nothing matches, it goes to the REVIEW QUEUE rather than being discarded. That is
-deliberate and different from the other mailboxes: you BCC'd it, so you have already said
-it belongs in the CRM. Throwing it away for want of a reference would be wrong.
+The Activities tab was drawing a bar reading "Contacts (4,717)" with a Choose Columns
+button that opened the CONTACTS column chooser. The bar was showing on every tab that was
+not Pipeline or List. It now shows only on Companies and Contacts, where it means
+something.
 
 
-SETTING IT UP
--------------
-1. Create a shared mailbox crm@rockroofing.co.uk (admin.microsoft.com -> Teams & groups ->
-   Shared mailboxes). A shared mailbox is not an admin account, so the restriction that
-   blocked your own mailbox does not apply.
+ON THE 24-MONTH BACKFILL - DO NOT RUN IT YET
+--------------------------------------------
+The dry run matched 22 of 394 (~6%), and on the other mailboxes unmatched historical mail
+is DISCARDED rather than queued. Run it now and roughly 370 emails are silently thrown
+away, and you have no way of knowing whether they should have filed.
 
-2. Add it to the sync group:
-       Add-DistributionGroupMember -Identity "CRM Sync Mailboxes" -Member crm@rockroofing.co.uk
+Now that the screens exist, the sensible order is:
 
-3. In Vercel, add it to MS_MAILBOXES and drop your own address:
-       crm@rockroofing.co.uk,edita@rockroofing.co.uk,Niall@rockroofing.co.uk,roman@rockroofing.co.uk
+  1. Let the hourly sync run normally for a few days. New mail that does not match goes to
+     the review queue (it is not a backfill), so you will SEE the misses rather than
+     guessing at them.
+  2. Look at what is sitting in the queue. That tells you which rule is missing - most
+     likely subject lines that name the site but not in the exact project title.
+  3. Loosen the rules on that evidence, then backfill.
 
-4. Redeploy, then dry run.
+If you would rather not wait, I can change the backfill so unmatched historical mail is
+queued rather than discarded, capped at a few hundred, so nothing is lost. Say the word.
+It is a small change to lib/crmEmailSync.js.
 
-MS_BCC_MAILBOX defaults to crm@rockroofing.co.uk - set it if you use a different address.
+
+TESTING IT
+----------
+Fastest proof it works end to end:
+
+  1. Open any project, click the [CRM-nnn] chip in the header to copy the reference.
+  2. Send yourself an email with that reference in the subject, BCC crm@rockroofing.co.uk.
+  3. Hit /api/cron/crm-email-sync (no dryRun) - or wait for the hour.
+  4. Reopen the project. It should be in the Email section, matched by "reference in
+     subject".
+
+For the queue: send a BCC with NO reference and nothing recognisable in the subject. After
+a sync it should appear under the Emails tab.
 
 
-STILL OUTSTANDING
------------------
-The screens. Emails are being stored and queued but there is nothing to view them in yet.
-That is the next package: emails on the deal, and the review queue with allocate/dismiss.
-
-Also still worth looking at: only 22 of 394 emails matched on the dry run. Once you can see
-which ones, we will know whether the rules need loosening.
+SEPARATELY - pkg265 STILL LOOKS UNDEPLOYED
+------------------------------------------
+The repo you sent has no hideDownload in components/DrawingMarkup.js, so the O&M
+untracked-download fix from pkg265 is not in main. Worth checking whether that package was
+ever pushed - if not, the bug is still live. Nothing in pkg366 touches it.
