@@ -1,47 +1,84 @@
-pkg362 - Both daily emails back to 07:00 UK
-============================================
+pkg363 - Outlook email sync: the engine
+========================================
 
-REPLACES pkg302 through pkg361. Deploy this one only.
+REPLACES pkg302 through pkg362. Deploy this one only.
 
 
 NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
 -----------------------------------------------------------------------
-  lib/crmDailyActivityEmail.js
-  pages/api/cron/crm-daily-activities.js
+  lib/msGraph.js
+  lib/crmEmailSync.js
+  pages/api/cron/crm-email-sync.js
+  lib/crmDailyActivityEmail.js          (if not already deployed)
+  pages/api/cron/crm-daily-activities.js (if not already deployed)
 
-  (Still new if you have not yet deployed pkg359/360/361. If you have, they are
-   replacements.)
-
-CHANGED FILES (straight replacements)
---------------------------------------
-  vercel.json             cron schedule 01:00 -> 07:00
-  lib/crmFieldSchema.js   unchanged since pkg361
-  pages/crm.js            unchanged since pkg358
-  pages/api/crm.js        unchanged since pkg357
-  lib/crmImportMap.js     unchanged since pkg305
+CHANGED FILES
+-------------
+  vercel.json             adds the hourly email sync cron
+  everything else unchanged since pkg362
 
 
-WHAT CHANGED
+WHAT THIS DOES
+--------------
+Reads the four mailboxes in your CRM Sync Mailboxes group, matches each email to a project,
+and files it. Runs hourly.
+
+MATCHING, in order:
+  1. project title appears in the subject
+  2. sender or recipient is a known contact on a project
+  3. sender or recipient domain matches exactly ONE project's company
+
+Rule 3 only fires when the domain points at a single project. Two projects with the same
+customer means no match, because a wrong project is worse than none. Free domains -
+gmail, hotmail, outlook and so on - never match by domain.
+
+Project titles shorter than 8 characters do NOT match by subject. Your "Tesco" project
+would otherwise claim every email with Tesco in the subject. Tested: it does not.
+
+Only OPEN projects claim email.
+
+
+YOUR MAILBOX
 ------------
-Both emails - your own due/overdue activities, and the projects-with-no-activity list -
-now go at 07:00 UK instead of 01:00.
+james@rockroofing.co.uk matches on RULE 1 ONLY - the project title in the subject. Never on
+who the email is with.
 
-The cron fires at minute 0 of UTC hours 6 and 7, and sends on whichever is 07:00 in London:
+Anything else from your mailbox is DISCARDED, not queued. It is never stored and never
+appears in the review list. Tested both ways: an email to a known contact with a project
+name in the subject is filed; the same contact without one is ignored entirely.
 
-    August (BST):   06:00 UTC = 07:00 UK  <- sends     07:00 UTC = 08:00 UK  <- skips
-    January (GMT):  06:00 UTC = 06:00 UK  <- skips     07:00 UTC = 07:00 UK  <- sends
-
-So it holds at 07:00 through the clock change rather than drifting an hour twice a year.
-Verified for both seasons.
-
-Expect 07:00 give or take a few minutes - Vercel does not guarantee to-the-minute
-execution.
+Set by MS_PRIVATE_MAILBOXES if you want to change who this applies to.
 
 
-STILL AVAILABLE FOR TESTING
+THE BACKFILL - IMPORTANT
+-------------------------
+The first run for each mailbox does the history. It is NOT automatic - you trigger it:
+
+    /api/cron/crm-email-sync?backfillMonths=24&max=500
+
+Unmatched historical email is DISCARDED rather than queued, as agreed - 79,000 unallocated
+emails would have made the review queue useless. Only matched history is kept.
+
+Start with max=500 to see it work on a small slice before running the full 24 months.
+
+From then on the hourly run only asks for mail newer than its last run, and unmatched mail
+DOES go to the review queue - a handful a day, which is workable.
+
+
+TESTING FIRST
+-------------
+    /api/cron/crm-email-sync?dryRun=1&max=100
+
+Reports per mailbox how many were fetched, matched, queued and discarded, and writes
+nothing at all. Run that before anything else - it is also the quickest confirmation that
+the Azure app, the secret and the access policy are all working.
+
+
+WHAT IS NOT IN THIS PACKAGE
 ----------------------------
-  ?dryRun=1   reports what both emails WOULD send, sends nothing
-  ?force=1    sends both immediately, whatever the time
+The screens. Emails are being stored against projects and queued, but there is nothing in
+the CRM to look at them yet - that is the next package: emails in the deal history, and the
+unallocated queue with allocate/dismiss.
 
-Both bypass the hour gate, so you can still check either one at any point in the day
-without waiting for tomorrow morning.
+I have split it deliberately: this half is the risky part and is worth confirming against
+your real mailboxes before I build screens on top of it.
