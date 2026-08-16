@@ -2904,6 +2904,11 @@ function CRMPageInner() {
         {/* Area toggle replaces the old back arrow. Same control as the one on the
             Pre-Contract nav, so it reads the same from either side. */}
         <AreaToggle active="crm" />
+        {/* Same Portal link as the Pre-Contract nav, in the same place relative to the
+            toggle, so the two bars read identically. Styled to match that one rather than
+            the CRM's own buttons - it is the same control doing the same job. */}
+        <a href="/" style={{ color: '#888', fontSize: 13, textDecoration: 'none', padding: '4px 12px', borderRadius: 6, whiteSpace: 'nowrap' }}>&larr; Portal</a>
+        <span style={{ color: '#3a3a38', fontSize: 14, padding: '0 2px' }}>|</span>
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>

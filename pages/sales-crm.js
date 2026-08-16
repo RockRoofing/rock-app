@@ -178,13 +178,21 @@ export default function Dashboard() {
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', verticalAlign: 'middle', fontSize: 13 }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #e1e0d9', fontSize: 13 }
 
+  // Deals Researched counts one thing: a project added to Project In. Customer type,
+  // estimator, status, stage and score all describe what happened to it LATER, so they
+  // cannot narrow a count of what was added - they can only make it wrong. Hidden here,
+  // untouched everywhere else.
+  const isDR = page === 'Deals Researched'
+
   const filterBar = (
     <div style={{ marginBottom: 20, padding: '12px 16px', background: '#f8f8f7', borderRadius: 8, border: '0.5px solid #e1e0d9' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         {[
-          { label: 'Customer type', key: 'customerType', opts: uniq(deals, 'customerType') },
-          { label: 'Estimator', key: 'estimator', opts: uniq(deals, 'estimator') },
-          { label: 'Status', key: 'status', opts: ['All','won','lost','open'] },
+          ...(isDR ? [] : [
+            { label: 'Customer type', key: 'customerType', opts: uniq(deals, 'customerType') },
+            { label: 'Estimator', key: 'estimator', opts: uniq(deals, 'estimator') },
+            { label: 'Status', key: 'status', opts: ['All','won','lost','open'] },
+          ]),
           { label: 'Lead source', key: 'leadSource', opts: uniq(deals, 'leadSource') },
           { label: 'Region', key: 'region', opts: uniq(deals, 'region') },
         ].map(f => (
@@ -208,7 +216,7 @@ export default function Dashboard() {
           </select>
         </div>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+      {!isDR && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         <div>
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>Project stage</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -217,22 +225,22 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-      </div>
+      </div>}
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-        <div>
+        {!isDR && <div>
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>Project score</label>
           <div style={{ display: 'flex', gap: 4 }}>
             {[['All','All'],['gte5','≥ 5'],['lt5','< 5']].map(([val, lbl]) => (
               <button key={val} onClick={() => setTrLabelFilter(val)} style={{ fontSize: 12, padding: '4px 8px', border: '0.5px solid #d0d0cc', borderRadius: 6, background: trLabelFilter === val ? '#1a1a19' : '#fff', color: trLabelFilter === val ? '#fff' : '#555', cursor: 'pointer', fontFamily: 'inherit' }}>{lbl}</button>
             ))}
           </div>
-        </div>
+        </div>}
         <div>
-          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>From</label>
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>{isDR ? 'Date added from' : 'From'}</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: 12, padding: '4px 6px', border: '0.5px solid #d0d0cc', borderRadius: 6, fontFamily: 'inherit' }} />
         </div>
         <div>
-          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>To</label>
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>{isDR ? 'Date added to' : 'To'}</label>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ fontSize: 12, padding: '4px 6px', border: '0.5px solid #d0d0cc', borderRadius: 6, fontFamily: 'inherit' }} />
         </div>
         <button onClick={() => { setFilters({ customerType:'All', estimator:'All', salesPerson:'All', leadSource:'All', status:'All', region:'All' }); setGlobalStages([]); const _r = new Date(); const _rf = new Date(_r.getFullYear()-1, _r.getMonth(), _r.getDate()); setDateFrom(_rf.toISOString().split('T')[0]); setDateTo(_r.toISOString().split('T')[0]); setDrCustName('All'); setDrSalesPerson('All'); setTrLabelFilter('All') }} style={{ fontSize: 12, padding: '4px 10px', border: '0.5px solid #d0d0cc', borderRadius: 6, background: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Reset</button>
@@ -311,20 +319,25 @@ export default function Dashboard() {
   const pages = {
 
     'Deals Researched': () => {
-      // Only deals that have ever been in 1st Contact, filtered by firstContactDate
+      // One project added to Project In = one deal researched, dated by the day it was
+      // added. firstContactDate now carries that date (see lib/crmMilestones) - it used
+      // to be hard-coded null in the adapter, which is why nothing ever appeared here
+      // however many projects you added.
       const base = deals.filter(d => d.everIn1stContact)
-      
-      const filtered = applyFilters(base.filter(d => {
+
+      // NOT applyFilters. That applies customer type, estimator, status and stage, which
+      // are hidden on this page - but a value left set from another page would still have
+      // been applied invisibly. Only the filters actually shown here are used.
+      const filtered = base.filter(d => {
         if (!d.firstContactDate) return false
         if (dateFrom && d.firstContactDate < dateFrom) return false
         if (dateTo && d.firstContactDate > dateTo) return false
         if (drCustName !== 'All' && d.organizationName !== drCustName) return false
         if (drSalesPerson !== 'All' && d.salesPerson !== drSalesPerson) return false
+        if (!matchFilter(d.leadSource, filters.leadSource)) return false
+        if (!matchFilter(d.region, filters.region)) return false
         return true
-      }))
-
-      const existing = filtered.filter(d => d.customerType === 'Existing Customer').length
-      const prospects = filtered.filter(d => d.customerType === 'Prospect' || d.customerType === 'New Customer').length
+      })
 
       // Build months from the date filter range directly
       function getMonthsBetween(fromStr, toStr) {
@@ -360,10 +373,12 @@ export default function Dashboard() {
         <div>
           <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Shows deals by the date they first entered 1st Contact stage. Captured via webhook from 29 Jun 2026 — historical data prior to this date is not available. Variations are excluded.</p>
           {filterBar}
+          {/* Existing / Prospect cards removed. customerType is not captured in the CRM -
+              the adapter leaves it blank - so both read zero for every project, for ever.
+              Two permanent zeroes beside a real number invite the reader to distrust the
+              real number too. */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-            {statCard('Total deals', filtered.length)}
-            {statCard('Existing customers', existing)}
-            {statCard('Prospects', prospects)}
+            {statCard('Deals researched', filtered.length)}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
             <div style={{ overflowX: 'auto' }}>
@@ -393,16 +408,13 @@ export default function Dashboard() {
           <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 8 }}>Detail</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['Title','Organisation','Sales person','Estimator','1st Contact date','Customer type','Status','Value'].map(c => <th key={c} style={thS}>{c}</th>)}</tr></thead>
+              <thead><tr>{['Title','Organisation','Sales person','Date added','Value'].map(c => <th key={c} style={thS}>{c}</th>)}</tr></thead>
               <tbody>{filtered.map((d,i) => (
                 <tr key={d.id || i} style={{ background: d.status === 'won' ? '#f0fdf4' : d.status === 'lost' ? '#fef2f2' : '#fff' }}>
                   <td style={tdS}>{d.title}</td>
                   <td style={tdS}>{d.organizationName}</td>
                   <td style={tdS}>{d.salesPerson}</td>
-                  <td style={tdS}>{d.estimator || '—'}</td>
-                  <td style={tdS}>{d.firstContactDate ? <span>{d.firstContactDate}{d.firstContactApproximate ? <span title="Approximate — based on created date" style={{color:'#aaa',fontSize:10,marginLeft:4}}>~</span> : ''}</span> : '—'}</td>
-                  <td style={tdS}>{d.customerType || '—'}</td>
-                  <td style={tdS}><span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: (STATUS_COLORS[d.status] || '#888') + '22', color: STATUS_COLORS[d.status] || '#888' }}>{d.status}</span></td>
+                  <td style={tdS}>{d.firstContactDate || '—'}</td>
                   <td style={{ ...tdS, textAlign: 'right' }}>{fmt(d.value)}</td>
                 </tr>
               ))}</tbody>

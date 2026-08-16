@@ -1,49 +1,12 @@
-pkg399 - CRM / Pre-Contract toggle, and the CRM as the landing page
-===================================================================
+pkg401 - Portal link in the CRM toolbar
+=======================================
 
-Deploy after pkg398.
+Deploy after pkg400. One changed file: pages/crm.js. No new files.
 
-NEW FILE - create with "Add file"
-----------------------------------
-  components/AreaToggle.js
+The CRM toolbar now reads, left to right:
 
-CHANGED FILES (replace)
------------------------
-  components/PreContractNav.js
-  pages/crm.js
-  pages/index.js
+    [logo]  [ CRM | Pre-Contract ]  <- Portal  |  Saved  |  Pipeline/List  ...
 
-
-WHAT CHANGES
-------------
-1. The Pre-Contract tile on the portal now opens the CRM.
-
-2. The "<- Pre-Contract" back button in the CRM is gone. In its place, left-most in the
-   toolbar, a two-part toggle:
-
-       [ CRM ][ Pre-Contract ]
-
-   Green when on, 14px bold - a size up from the Pipeline/List toggle beside it.
-   Deliberately: that one switches VIEW, this one switches AREA, and they should not look
-   like the same weight of decision.
-
-3. The identical toggle sits left-most on the Pre-Contract nav, before "<- Portal", so it
-   reads the same from either side. One shared component, so the two cannot drift apart.
-
-4. "<- Deals" inside a project is untouched. That is navigation within the CRM, a
-   different thing from switching area.
-
-
-ONE JUDGEMENT CALL - TELL ME IF YOU DISAGREE
----------------------------------------------
-I removed CRM as a TAB from the Pre-Contract nav. With the toggle sitting immediately to
-its left, the same destination appeared twice, one click apart, with two different styles -
-which invites the question "is the tab different from the toggle?".
-
-The bar now reads:
-
-    [logo] [CRM|Pre-Contract]  <- Portal | Sales Dashboard | Scorecards | Negotiating
-           | Project Financials | Internal Handover Minutes | Handover Docs
-
-If you would rather keep the tab as well, it is one line in PreContractNav.js and I will
-put it back.
+Same position relative to the toggle as on the Pre-Contract nav, and styled to match that
+one - grey 13px with the divider after it - rather than the CRM's own bordered buttons.
+It is the same control doing the same job, so it should not look like a different one.
