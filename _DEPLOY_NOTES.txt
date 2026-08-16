@@ -1,90 +1,78 @@
-pkg410 - Calls made, teed up for 8x8 Work
-=========================================
+pkg411 - 8x8 auth corrected against the real documentation
+==========================================================
 
-Deploy after pkg409.
-
-NEW FILES - create these three with "Add file"
------------------------------------------------
-  lib/crm8x8.js
-  pages/api/call-volume.js
-  pages/api/cron/crm-call-volume.js
+Deploy after pkg410. Replaces two files from it.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/scorecard-crm.js
-  pages/api/targets.js
-  vercel.json                  (nightly cron at 02:30 - now 14)
+  lib/crm8x8.js
+  pages/api/cron/crm-call-volume.js
+
+NEW FILES: none.
 
 
-READ THIS FIRST - IT WILL NOT WORK ON THE FIRST TRY
------------------------------------------------------
-I could not open 8x8's API documentation while building this. The endpoint, the auth flow
-and the field names are my best understanding and are quite likely wrong or out of date.
+I HAD THE AUTHENTICATION WRONG
+------------------------------
+I guessed OAuth2 with a client id and secret. It is not that.
 
-I have NOT written it as though I know. Everything that reads their response is tolerant -
-it tries several plausible names for each field rather than one - and there is a
-diagnostic that returns one untouched record so we can see the truth and correct it.
+8x8 Work Analytics wants an API KEY HEADER plus the USERNAME AND PASSWORD of a real 8x8
+user who has Work Analytics access. Corrected.
 
-Building it any other way would have produced a number that looked right and was not.
+    POST https://api.8x8.com/analytics/work/v1/oauth/token
+    header  8x8-apikey: {key}
+    body    username={8x8 user}&password={their password}
 
-
-STEP 1 - SET THE CREDENTIALS IN VERCEL
---------------------------------------
-    EIGHTX8_CLIENT_ID
-    EIGHTX8_CLIENT_SECRET
-
-Optional, only if my guesses are wrong:
-    EIGHTX8_TOKEN_URL        default https://api.8x8.com/oauth/v2/token
-    EIGHTX8_RECORDS_URL      default https://api.8x8.com/analytics/work/v2/call-records
-    EIGHTX8_EXTENSION_MAP    "1234=edita@rockroofing.co.uk,1235=niall@rockroofing.co.uk"
-    EIGHTX8_MIN_SECONDS      default 0
+Every report request then sends BOTH the 8x8-apikey header and Authorization: Bearer.
+Token lasts 1800 seconds and is cached.
 
 
-STEP 2 - SHOW ME ONE REAL RECORD
---------------------------------
-    /api/cron/crm-call-volume?sample=1
-
-Writes nothing. Returns one raw call record and its field names. Send me that response and
-I will correct lib/crm8x8.js in one small package. That is the round trip I expect.
-
-If it returns an auth error instead, that is still useful - it tells us the token URL or
-the credentials need changing rather than the field names.
-
-
-STEP 3 - ONCE THE SAMPLE LOOKS RIGHT
-------------------------------------
-    /api/cron/crm-call-volume?months=13
-
-Backfills a year. Nightly cron then recounts the last two months, overwriting rather than
-adding, so it cannot double-count. Same design as the email volume job, including the
-lesson from it: a run that stops at the record cap does NOT write zeros for the months it
-never reached, and says so in the response.
-
-
-WHAT IT COUNTS
---------------
-Outbound calls only, as you asked. Every one of them - answered or not, however short.
-
-Worth saying plainly once: that means a four-second misdial counts the same as a
-twenty-minute conversation with a main contractor. If the number ever looks inflated,
-EIGHTX8_MIN_SECONDS is a Vercel setting, not a code change - set it to 30 and short calls
-drop out.
-
-
-THE MAPPING PROBLEM
+SET THESE IN VERCEL
 -------------------
-8x8 knows people by extension; the scorecard knows them by name; the two are joined
-through the portal user's email address. If 8x8 returns an email on each record this works
-by itself. If it returns extensions, set EIGHTX8_EXTENSION_MAP and it will resolve them.
+    EIGHTX8_API_KEY     from Admin Console. For Work Analytics the SECRET is NOT needed.
+    EIGHTX8_USERNAME    an 8x8 user with Work Analytics access
+    EIGHTX8_PASSWORD    that user's password
+    EIGHTX8_PBX_ID      the opaque PBX id - NOT the PBX name
 
-The response reports "unresolvedCaller" - calls that matched nobody. If that number is
-high, it is the mapping, not the API.
+Two things from their docs worth knowing before you waste an afternoon:
+
+  - The user whose credentials you use MUST have opened Analytics for Work in a browser
+    at least once. Until they have, the API will reject them. If you get a 401, that is
+    the first thing to check - the error message now says so.
+  - It does not have to be the same person who generated the API key.
+
+I do not know your PBX_ID. It is an opaque string rather than a name, and their docs do
+not show a way to list it - it will be in Admin Console or 8x8 can tell you.
 
 
-ON THE SCORECARD
-----------------
-A "Calls made" card sits under "Emails sent externally". Default target 100/month, which is
-a placeholder - set the real one with the pencil once there is data to judge.
+THE GOOD NEWS - 8x8 ALREADY DOES "UNRETURNED CALLS"
+-----------------------------------------------------
+Their docs list it as its own report:
 
-Months with no figure show a dash, not a zero. Until step 2 is done the whole card will be
-dashes, which is correct rather than broken.
+    GET /v2/pbxes/{pbxId}/calls/unreturned
+
+That is very close to what you asked for. It means we do not have to stitch missed inbound
+calls to later outbound ones ourselves and guess at matching phone numbers - which would
+have been fragile and probably wrong.
+
+Whether it can distinguish "not returned within an hour" from "not returned at all"
+depends on what fields it carries. There is a probe for it below.
+
+
+RUN THESE TWO ONCE THE CREDENTIALS ARE IN
+-------------------------------------------
+    /api/cron/crm-call-volume?sample=1        one raw call record + its field names
+    /api/cron/crm-call-volume?unreturned=1    same, for the Unreturned Calls report
+
+Both write nothing. Send me the responses and I will finish the integration properly
+rather than guessing at field names.
+
+
+STILL OPEN
+----------
+The docs page you sent covers the queue and agent reports. It refers to CALL DETAIL
+RECORDS and EXTENSION SUMMARY on other pages, and one of those is probably the better
+source for "outbound calls per person" than the /calls endpoint I am currently pointing at.
+
+If you can send those two doc pages the same way you sent this one - Word document worked
+where the text attachments did not - I can pick the right endpoint rather than the first
+plausible one.
