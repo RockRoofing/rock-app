@@ -16,6 +16,7 @@ import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, 
 import { SEED_DEALS } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA } from '../lib/crmFieldSchema';
+import ReportImprovementLink from '../components/ReportImprovementLink';
 
 const STAGES = [
   { id: 'stage_project_in', label: 'Project In' }, { id: 'stage_1st_contact', label: '1st Contact' },
@@ -284,8 +285,10 @@ function MentionInput({ value, onChange, placeholder, rows, users }) {
   // unmentionable.
   const pool = (users && users.length) ? users : [];
   const matches = pool.filter((u) => (u.name || '').toLowerCase().includes(q.toLowerCase()) || (u.username || '').includes(q.toLowerCase())).slice(0, 6);
-  const onInput = (e) => { const val = e.target.value; onChange(val); const m = /@(\w*)$/.exec(val.slice(0, e.target.selectionStart)); if (m) { setQ(m[1]); setShowList(true); } else setShowList(false); };
-  const pick = (u) => { const el = ref.current; const pos = el.selectionStart; const before = value.slice(0, pos).replace(/@(\w*)$/, `@${u.name} `); const after = value.slice(pos); onChange(before + after); setShowList(false); setTimeout(() => el.focus(), 0); };
+  // Allows ONE space after the @, so typing "@Edita Dur" keeps suggesting instead of
+  // giving up at the space - full names are the point now.
+  const onInput = (e) => { const val = e.target.value; onChange(val); const m = /@(\w*(?: \w*)?)$/.exec(val.slice(0, e.target.selectionStart)); if (m) { setQ(m[1]); setShowList(true); } else setShowList(false); };
+  const pick = (u) => { const el = ref.current; const pos = el.selectionStart; const before = value.slice(0, pos).replace(/@(\w*(?: \w*)?)$/, `@${u.name} `); const after = value.slice(pos); onChange(before + after); setShowList(false); setTimeout(() => el.focus(), 0); };
   return (
     <div style={{ position: 'relative' }}>
       <textarea ref={ref} value={value} onChange={onInput} placeholder={placeholder} rows={rows || 2} style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }} />
@@ -304,8 +307,13 @@ function extractMentions(text, users) {
   const body = String(text || '');
   const out = [];
   const pool = [...(users || [])].sort((a, b) => (b.name || '').length - (a.name || '').length);
+  // A first name counts only when exactly ONE person has it. Two Jameses and "@James"
+  // is a guess, and guessing who to email is worse than not emailing.
+  const firstCounts = {};
+  for (const u of (users || [])) { const f = (u.first || '').toLowerCase(); if (f) firstCounts[f] = (firstCounts[f] || 0) + 1; }
   for (const u of pool) {
-    for (const h of [u.name, u.first, u.username].filter(Boolean)) {
+    const unique = firstCounts[(u.first || '').toLowerCase()] === 1;
+    for (const h of [u.name, u.username, unique ? u.first : null].filter(Boolean)) {
       const re = new RegExp(`(^|[^\\w@])@${h.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i');
       if (re.test(body)) { if (!out.includes(u.name)) out.push(u.name); break; }
     }
@@ -1837,22 +1845,52 @@ function CRMPageInner() {
       //      CANCELS your pending save, then skips this one too
       // Your activity was never written. Since imported records are now stripped before
       // saving anyway, letting this save is harmless - and it carries your change with it.
-      setDeals((prev) => prev.map((d) => d.id !== id ? d : {
-        ...d,
-        activities: [...acts, ...(d.activities || [])],
-        notes: [...notes, ...(d.notes || [])],
-        history: [
-          ...(d.history || []),
-          ...acts.map((x) => ({ id: 'h_' + x.id, type: 'activity', ts: x.due ? new Date(x.due).toISOString() : null, text: `${x.done ? 'Activity completed' : 'Activity set'}: ${x.text}`, body: x.text })),
-          ...notes.map((x) => x.imported
+      // MERGED BY ID, NOT APPENDED.
+      //
+      // This runs TWICE on every deal open: openDealById calls it, then pushes ?deal=<id>,
+      // which fires the router effect that calls it again. Appending blindly meant every
+      // imported note and activity was added twice, with the SAME id both times.
+      //
+      // Duplicate React keys make sibling components share state - which is why some
+      // comment boxes under a note would not accept typing while others would. It looked
+      // random; it was two elements fighting over one key.
+      //
+      // Keeping the EXISTING entry also protects comments: the imported branch below
+      // hard-codes comments:[], so a second merge would otherwise wipe any comment added
+      // to an imported note.
+      setDeals((prev) => prev.map((d) => {
+        if (d.id !== id) return d;
+
+        const haveAct = new Set((d.activities || []).map((a) => String(a.id)));
+        const haveNote = new Set((d.notes || []).map((n) => String(n.id)));
+        const haveHist = new Set((d.history || []).map((h) => String(h.id)));
+
+        const newActs = acts.filter((a) => !haveAct.has(String(a.id)));
+        const newNotes = notes.filter((n) => !haveNote.has(String(n.id)));
+
+        const histAdds = [
+          ...newActs.map((x) => ({ id: 'h_' + x.id, type: 'activity', ts: x.due ? new Date(x.due).toISOString() : null, text: `${x.done ? 'Activity completed' : 'Activity set'}: ${x.text}`, body: x.text })),
+          ...newNotes.map((x) => x.imported
             ? { id: 'h_' + x.id, type: 'note', ts: x.ts, text: x.text, body: x.body, comments: [] }
             : { id: x.id, type: 'note', ts: x.ts, text: 'Note added', body: x.body, comments: x.comments, edited: x.edited, author: x.author }),
-        ],
+        ].filter((h) => !haveHist.has(String(h.id)));
+
+        if (!newActs.length && !newNotes.length && !histAdds.length) return d;
+
+        return {
+          ...d,
+          activities: [...newActs, ...(d.activities || [])],
+          notes: [...newNotes, ...(d.notes || [])],
+          history: [...(d.history || []), ...histAdds],
+        };
       }));
     } catch { /* leave the deal as-is if it fails */ }
   }
 
-  const openDealById = (id) => { setOpenId(id); loadDealSubs(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
+  // No loadDealSubs here. The router effect below fires on ?deal= changing and does it -
+  // calling it here as well was the second of the two merges. The merge is idempotent
+  // now, but one call is still one call.
+  const openDealById = (id) => { setOpenId(id); router.push({ pathname: '/crm', query: { deal: id } }, undefined, { shallow: true }); };
   const closeDeal = () => { setOpenId(null); router.push('/crm', undefined, { shallow: true }); };
   useEffect(() => { setVisibleStages(new Set(stageMode === 'estimator' ? ESTIMATOR_STAGES : STAGES.map((s) => s.id))); }, [stageMode]);
 
@@ -2855,6 +2893,10 @@ function CRMPageInner() {
           )}
         </div>
         {isDealView && <span style={{ fontSize: 13, color: '#cfd6dd' }}>{finalList.length} deals · {money0(totalValue)} open</span>}
+        {/* Far right of the toolbar. Shared component, so it looks and behaves exactly
+            as it does on every other portal page - the modal itself is mounted globally
+            in _app.js, so nothing else is needed here. */}
+        <ReportImprovementLink style={{ fontSize: 13, color: '#ca8a04', padding: '4px 10px' }} />
       </div>
 
       {/* filter bar (only for deal views) */}
