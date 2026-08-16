@@ -1,66 +1,63 @@
-pkg396 - find out WHY the mention email is not arriving
-=======================================================
+pkg397 - the React errors in your screenshot were the actual problem
+====================================================================
 
-Deploy after pkg395.
+Deploy after pkg396.
 
 CHANGED FILES (replace)
 -----------------------
   pages/crm.js
-  pages/api/crm.js
-  lib/crmMentions.js
+  pages/crm-scores.js
 
 NEW FILES: none.
 
 
-I CANNOT SEE YOUR SERVER, SO THIS MAKES THE FAILURE VISIBLE
-------------------------------------------------------------
-The send was fire-and-forget: if it failed, nothing was reported and the history line
-still said "Emailed: Roman". That was my mistake - it made a silent failure look like a
-success. Three changes:
+WHAT YOUR SCREENSHOT SHOWED
+---------------------------
+React errors #425, #418 and #423 on the CRM page. Those are hydration failures, and they
+are not cosmetic.
 
-1. The toolbar now REPORTS the outcome next to Saved:
-       "Emailed Roman Jarosz."                       - it went
-       "Mention email not sent - 403 <reason>"        - it did not, and why
-   Shows for 8 seconds. The note itself still saves either way.
+#425 is "text content does not match server-rendered HTML". The cause:
 
-2. Whatever Resend says back is now kept instead of discarded. The status code and the
-   first 300 characters of its reply come through to that message.
+    dateTime()  used  toLocaleString('en-GB')  with no timezone.
 
-3. The history line says "Mentioned: Roman" rather than "Emailed: Roman", because the
-   history should not claim something that may not have happened.
+Vercel runs in UTC. Your browser runs in London time. Same instant, different text:
+
+    UTC     16 Aug 2026, 23:30
+    London  17 Aug 2026, 00:30
+
+Every date on the page disagreed with itself. React then abandons hydration (#418/#423),
+and a page that fails to hydrate keeps its HTML but LOSES EVENT HANDLERS in parts of the
+tree. Inputs look normal and do nothing.
+
+That is the real reason some comment boxes would not accept typing - the duplicate-key
+fix in pkg395 was worth doing, but this was underneath it. It is very likely why the
+mention email never fires either: if the handler that calls it was never attached, no
+request is made and nothing appears anywhere, which matches exactly what you are seeing.
+
+FIXED:
+  - every date is now formatted with timeZone: 'Europe/London', so both sides agree
+  - todayISO() is UK date, not the server's. On UTC it was a day behind for an hour every
+    evening during BST, so "overdue" was wrong too
+  - the CRM page no longer server-renders at all. It reads localStorage, the URL, xlsx and
+    the clock - none of which mean anything on a server - so there is nothing left to
+    disagree about. This removes the whole class of fault, not just the known instance.
+
+After deploying, reload the CRM and check the console. Those three React errors should be
+gone. If they are, try the @mention again before anything else - I expect it to work.
 
 
-RUN THIS FIRST - IT ANSWERS THE QUESTION WITHOUT SENDING ANYTHING
-------------------------------------------------------------------
-On any portal page, F12 -> Console. Type  allow pasting  and Enter if Chrome asks. Then:
+NO MORE CONSOLE COMMANDS
+------------------------
+Chrome kept blocking the paste, so the diagnostic is now a button.
 
-    fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'mention-diagnose',body:'@Roman test'})})
-      .then(r=>r.json()).then(console.log)
+    Go to /crm-scores  ->  "Check @mention email"
 
-It sends no email. It returns:
+It sends nothing and tells you in plain words:
+  - whether RESEND_API_KEY is set
+  - which address it would send FROM, and warns you outright if that is Resend's test
+    sender (onboarding@resend.dev), which only ever delivers to the Resend account owner
+  - every person who can be mentioned, with their email address, or says plainly that
+    nobody can and why
 
-    mentionableUsers   everyone who CAN be mentioned, with their email address
-    resolved           who "@Roman test" actually matched
-    resendConfigured   true/false - is RESEND_API_KEY set
-    from               the address it would send FROM
-
-WHAT THE ANSWER WILL PROBABLY BE
---------------------------------
-My strongest suspicion, in order:
-
-  a) mentionableUsers is EMPTY or missing people.
-     Users are only mentionable if they have an email address on their portal account AND
-     a pre-contract or admin role. A user with no email set is silently skipped - there is
-     nowhere to send to. Check Admin -> Users.
-
-  b) "from" reads  Rock Roofing <onboarding@resend.dev>
-     That is Resend's test sender. It is only allowed to deliver to the address that owns
-     the Resend account - everyone else is rejected. If that is what you see, set
-     FORMS_FROM_EMAIL in Vercel to a verified rockroofing.co.uk sender and it will work.
-     This would also explain why the daily activity email may only ever have reached you.
-
-  c) resendConfigured is false - the key is missing on this deployment.
-
-Send me what it returns and I will know which. If it is (b) it is a Vercel setting, not a
-code change.
+If the mention still does not send after this deploy, press that button and send me what
+it says. That will be the answer.

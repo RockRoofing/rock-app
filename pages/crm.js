@@ -54,17 +54,25 @@ const DEFAULT_CONTACT_COLUMNS = CONTACT_FIELDS.map((f) => f[0]);
 // ---- helpers --------------------------------------------------------------
 const money = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 2 }); };
 const money0 = (v) => { const n = Number(v); return isNaN(n) ? '£0' : '£' + n.toLocaleString('en-GB', { maximumFractionDigits: 0 }); };
-const shortDate = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
-const dateTime = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+// TIMEZONE PINNED. Without it the server formats in UTC and the browser in London time,
+// so the two render different text - which is React error #425, and it takes hydration
+// down with it (#418/#423). A page that fails to hydrate keeps its markup but loses event
+// handlers in parts of the tree, which is why some comment boxes would not accept typing
+// while identical ones would.
+const UK_TZ = 'Europe/London';
+const shortDate = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: UK_TZ }); };
+const dateTime = (v) => { if (!v) return ''; const d = new Date(v); return isNaN(d) ? String(v) : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: UK_TZ }); };
 const nowIso = () => new Date().toISOString();
 const firstName = (n) => n ? String(n).trim().split(/\s+/)[0] : '';
 const lastName = (n) => { if (!n) return ''; const p = String(n).trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : ''; };
 // Local-date YYYY-MM-DD. Deliberately NOT toISOString(), which converts to UTC and would
 // show the previous day for anyone in BST during the evening.
 const todayISO = () => {
-  const d = new Date();
-  const p = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  // UK date, not the server's. On Vercel (UTC) this was a day behind for an hour every
+  // evening during BST, so "overdue" was wrong and the value differed between server and
+  // browser - another hydration mismatch.
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: UK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return parts;
 };
 
 // ---------------------------------------------------------------------------
@@ -1553,6 +1561,18 @@ class CrmErrorBoundary extends React.Component {
 }
 
 export default function CRMPage(props) {
+  // CLIENT ONLY, DELIBERATELY.
+  //
+  // The CRM reads localStorage, the URL, xlsx and the clock, none of which mean anything
+  // on the server. Rendering it server-side produced HTML that could never match what the
+  // browser then produced, and a failed hydration silently leaves parts of the tree
+  // without event handlers - inputs that look fine and do nothing.
+  //
+  // The timezone fixes above remove the known mismatch. This removes the whole class of
+  // it: nothing is server-rendered, so there is nothing to disagree with.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return <div style={{ minHeight: '100vh', background: C.feedBg }} />;
   return <CrmErrorBoundary><CRMPageInner {...props} /></CrmErrorBoundary>;
 }
 
@@ -3184,7 +3204,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities..."
           style={{ ...sel, minWidth: 200 }} />
         <button onClick={onRefresh} title="Check for activities added by other people" style={{ ...sel, cursor: 'pointer' }}>Refresh</button>
-        {refreshedAt && <span style={{ fontSize: 11, color: '#aaa' }}>updated {new Date(refreshedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
+        {refreshedAt && <span style={{ fontSize: 11, color: '#aaa' }}>updated {new Date(refreshedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: UK_TZ })}</span>}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12.5, color: C.dim, textAlign: 'right' }}>
           <div>

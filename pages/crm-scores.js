@@ -32,6 +32,7 @@ export default function CrmScoreImport() {
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState(null)
   const [repaired, setRepaired] = useState(null)
+  const [mention, setMention] = useState(null)
 
   async function readFile(file) {
     if (!file) return
@@ -111,6 +112,19 @@ export default function CrmScoreImport() {
     setBusy(false)
   }
 
+  // Reports why an @mention email did or did not go, without sending one.
+  async function checkMentions() {
+    setBusy(true); setMention(null); setMsg('Checking...')
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mention-diagnose', body: '@' }),
+      }).then((r) => r.json())
+      setMention(d); setMsg('')
+    } catch (e) { setMsg(`Could not check: ${e.message || 'failed'}`) }
+    setBusy(false)
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f7f6f2', fontFamily: 'ui-sans-serif, system-ui, sans-serif', color: INK }}>
       <Head><title>Rock Roofing — Project Scores</title></Head>
@@ -179,6 +193,41 @@ export default function CrmScoreImport() {
               <div><strong>{repaired.fixed}</strong> close dates recovered</div>
               <div><strong>{repaired.alreadyOk}</strong> already had one</div>
               <div><strong>{repaired.noHistory}</strong> decided with no history entry to date them from</div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e1e0d9', borderRadius: 10, padding: 18, marginTop: 24 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Check @mention email</div>
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, marginTop: 0 }}>
+            Sends nothing. Reports who can be mentioned, whether the mail service is configured, and
+            which address it would send from &mdash; which is usually where the answer is.
+          </p>
+          <button onClick={checkMentions} disabled={busy}
+            style={{ background: '#1a1a19', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+            {busy ? 'Checking...' : 'Check mention email'}
+          </button>
+          {mention && (
+            <div style={{ fontSize: 13, lineHeight: 1.8, marginTop: 12 }}>
+              <div>Email service configured: <strong style={{ color: mention.resendConfigured ? '#15803d' : '#b91c1c' }}>{mention.resendConfigured ? 'yes' : 'NO - RESEND_API_KEY is missing'}</strong></div>
+              <div>Sending from: <strong style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{mention.from}</strong></div>
+              {String(mention.from || '').includes('resend.dev') && (
+                <div style={{ color: '#b45309', marginTop: 6 }}>
+                  That is Resend&rsquo;s test sender. It only delivers to the address that owns the Resend
+                  account &mdash; everyone else is rejected, silently as far as the CRM is concerned.
+                  Set <strong>FORMS_FROM_EMAIL</strong> in Vercel to a verified rockroofing.co.uk address.
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>People who can be mentioned: <strong>{(mention.mentionableUsers || []).length}</strong></div>
+              {!(mention.mentionableUsers || []).length && (
+                <div style={{ color: '#b91c1c' }}>
+                  Nobody. A user needs an email address on their portal account AND a pre-contract or
+                  admin role. Without an address there is nowhere to send.
+                </div>
+              )}
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#555' }}>
+                {(mention.mentionableUsers || []).map((u) => <li key={u.email}>{u.name} &mdash; {u.email}</li>)}
+              </ul>
             </div>
           )}
         </div>
