@@ -5,8 +5,8 @@ import ReportImprovementLink from './ReportImprovementLink'
 
 export default function PreContractNav({ active, children }) {
   const tabs = [
-    { key: 'sales-crm', label: 'Sales Dashboard', href: '/sales-crm' },
     { key: 'crm', label: 'CRM', href: '/crm' },
+    { key: 'sales-crm', label: 'Sales Dashboard', href: '/sales-crm' },
     { key: 'scorecard-crm', label: 'Scorecards', href: '/scorecard-crm' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },

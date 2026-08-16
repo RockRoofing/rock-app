@@ -1,53 +1,22 @@
-pkg387 - Estimator blank on Project Financials
+pkg388 - CRM before Sales Dashboard in the nav
 ==============================================
 
-Deploy after pkg386. One changed file: pages/api/dashboard.js. No new files.
+Deploy after pkg387. One changed file: components/PreContractNav.js. No new files.
+
+The Pre-Contract nav order is now:
+
+    CRM  |  Sales Dashboard  |  Scorecards  |  Negotiating  |  Project Financials
+    |  Internal Handover Minutes  |  Handover Docs
+
+Only those two swapped. Everything else is where it was.
 
 
-THE CAUSE
----------
-Project Financials read the estimator from ONE place:
+ONE THING TO DECIDE
+-------------------
+The Pre-Contract tile on the portal home page still opens the Sales Dashboard
+(/sales-crm), because that is where it has always pointed.
 
-    estimator: settings.estimator
-
-That is a legacy flat field that almost nothing writes any more. Edit Project Details
-writes to settings.peopleOverride.estimator, and falls back to the IHM if there is no
-override. So the two screens were reading different places and disagreeing - the name on
-Project Details, blank on Project Financials.
-
-This is the SAME fault that was found and fixed for Contracts Manager. The comment above
-that line still explains it:
-
-    "Use the SAME resolver Edit Project Details uses, so the two always agree:
-     commercial override -> Ops/IHM -> blank."
-
-Estimator was left on the old path when CM was moved across.
-
-Now:
-
-    estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || ''
-
-resolveProjectPeople is already being called on that line - it was just not being used for
-this field. Same order as everywhere else: override, then IHM, then the legacy field, then
-blank. Nothing else in the resolver changes.
-
-
-AND THE PART THAT WOULD HAVE MADE IT LOOK LIKE NOTHING HAPPENED
-----------------------------------------------------------------
-/api/dashboard serves a CACHED snapshot, and only rebuilds when the cache fails a list of
-shape checks. The existing snapshot passes every one of them, so the fix would have gone
-in, deployed cleanly, and changed nothing on screen - and the obvious conclusion would
-have been that the fix did not work.
-
-Added estimatorResolved as a new marker, so the cache is judged stale exactly once and
-rebuilds. Same trick as cmResolved, which is there for the same reason.
-
-
-AFTER DEPLOYING
----------------
-The first load of Project Financials will be slower than usual - it is rebuilding the
-snapshot. After that it is back to normal, with the estimator matching Edit Project
-Details on every row.
-
-If a row is STILL blank after that, the estimator genuinely is not set for that project in
-either the override or the IHM - open Edit Project Details and it will be empty there too.
+If the CRM is now the first thing you want people in, that tile should probably open /crm
+instead. Not changed - it is a judgement about how people work rather than a bug, and I
+did not want to move a landing page without asking. One line in pages/index.js whenever
+you decide.
