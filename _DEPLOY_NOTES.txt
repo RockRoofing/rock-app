@@ -1,7 +1,7 @@
-pkg361 - Two daily emails, both at 01:00 UK
+pkg362 - Both daily emails back to 07:00 UK
 ============================================
 
-REPLACES pkg302 through pkg360. Deploy this one only.
+REPLACES pkg302 through pkg361. Deploy this one only.
 
 
 NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
@@ -9,52 +9,39 @@ NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
   lib/crmDailyActivityEmail.js
   pages/api/cron/crm-daily-activities.js
 
+  (Still new if you have not yet deployed pkg359/360/361. If you have, they are
+   replacements.)
+
 CHANGED FILES (straight replacements)
 --------------------------------------
-  lib/crmFieldSchema.js   adds STAGE_LABELS (used by the report)
-  vercel.json             cron schedule
+  vercel.json             cron schedule 01:00 -> 07:00
+  lib/crmFieldSchema.js   unchanged since pkg361
   pages/crm.js            unchanged since pkg358
   pages/api/crm.js        unchanged since pkg357
   lib/crmImportMap.js     unchanged since pkg305
 
 
-EMAIL 1 - YOUR OWN ACTIVITIES (per person)
---------------------------------------------
-Goes only to people who have something due today or overdue, listing only their own.
-Nothing due, no email.
+WHAT CHANGED
+------------
+Both emails - your own due/overdue activities, and the projects-with-no-activity list -
+now go at 07:00 UK instead of 01:00.
+
+The cron fires at minute 0 of UTC hours 6 and 7, and sends on whichever is 07:00 in London:
+
+    August (BST):   06:00 UTC = 07:00 UK  <- sends     07:00 UTC = 08:00 UK  <- skips
+    January (GMT):  06:00 UTC = 06:00 UK  <- skips     07:00 UTC = 07:00 UK  <- sends
+
+So it holds at 07:00 through the clock change rather than drifting an hour twice a year.
+Verified for both seasons.
+
+Expect 07:00 give or take a few minutes - Vercel does not guarantee to-the-minute
+execution.
 
 
-EMAIL 2 - PROJECTS WITH NO ACTIVITY SET (new)
------------------------------------------------
-Goes to EVERY pre-contract and admin user, all getting the same list. It leads with:
+STILL AVAILABLE FOR TESTING
+----------------------------
+  ?dryRun=1   reports what both emails WOULD send, sends nothing
+  ?force=1    sends both immediately, whatever the time
 
-    All projects must have an activity set. Please check your projects and update
-    accordingly.
-
-Then every OPEN project with nothing outstanding against it - project, customer, stage, and
-whoever owns it (estimator, or sales person if there is no estimator). Projects with nobody
-assigned show "nobody assigned" in amber, since those are the ones most likely to sit
-untouched.
-
-Won and lost projects are excluded. If every open project has an activity, NO EMAIL IS
-SENT - same principle as the first one.
-
-Verified against a worked example: projects with an outstanding activity are left out, the
-won job is left out, and an unowned project is flagged.
-
-
-BOTH AT 01:00 UK, FOR NOW
---------------------------
-Both go out on the same run, at the top of the 01:00 hour UK, holding through the clock
-change. That is for your testing - say when you want the daily one moved back to the
-morning and I will change it. The projects report might reasonably stay overnight.
-
-TESTING WITHOUT WAITING:
-  ?dryRun=1   both report what they WOULD send - who, and how many - and send nothing
-  ?force=1    both send immediately
-
-The response comes back as { personal: {...}, noActivity: {...} } so you can see how each
-one got on separately.
-
-One is not allowed to break the other: if the projects report fails, the personal emails
-still go, and the error is reported alongside them.
+Both bypass the hour gate, so you can still check either one at any point in the day
+without waiting for tomorrow morning.

@@ -3,14 +3,14 @@ import { STAGE_LABELS } from '../../../lib/crmFieldSchema'
 
 // Daily CRM activity email.
 //
-// SEND_HOUR is UK local. The cron fires at minute 0 of UTC hours 0 and 1 - one of which is
-// 01:00 in London whatever the season (00:00 UTC during BST, 01:00 UTC during GMT) - and
+// SEND_HOUR is UK local. The cron fires at minute 0 of UTC hours 6 and 7 - one of which is
+// 07:00 in London whatever the season (06:00 UTC during BST, 07:00 UTC during GMT) - and
 // this gate picks the right one. So it goes at the top of the hour rather than anywhere
 // within it, and does not drift when the clocks change.
 //
 // Vercel does not promise to-the-minute execution, so expect 01:00 give or take a few
 // minutes. Use ?force=1 to send right now instead of waiting.
-const SEND_HOUR = 1;
+const SEND_HOUR = 7;
 //
 // ?force=1   send now, whatever the time (testing)
 // ?dryRun=1  report who WOULD get one, and how many activities each, without sending
