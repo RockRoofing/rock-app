@@ -1,88 +1,111 @@
-pkg370 - close matching
-=======================
+pkg371 - email threads, and a backfill that is safe to run
+==========================================================
 
-DEPLOY pkg366, pkg368 AND pkg369 FIRST. This builds on all three.
+DEPLOY pkg366, pkg368, pkg369 AND pkg370 FIRST.
 
-CHANGED FILES (all already exist - replace them)
-------------------------------------------------
-  lib/crmEmailSync.js               the scoring
-  pages/api/cron/crm-email-sync.js  ?detail=1
-  pages/crm.js                      the suggestion row
+CHANGED FILES (both already exist - replace them)
+--------------------------------------------------
+  lib/crmEmailSync.js
+  pages/api/cron/crm-email-sync.js
 
 NEW FILES
 ---------
   NONE.
 
 
-WHY THE OLD RULE MISSED SO MUCH
--------------------------------
-It looked for the WHOLE project title as one unbroken run of characters in the subject.
-For "Bensham Lane Phase 2":
+PART 1 - EMAIL THREADS
+======================
 
-    RE: Bensham Lane Phase 2 drawings          matched
-    RE: Bensham Lane - drawings for phase 2    MISSED - not contiguous
-    Bensham Ln Ph2                             MISSED - abbreviated
+Every message used to be matched on its own. Once any message in a conversation is filed,
+the whole thread now follows it - including replies whose subject has been shortened to
+"RE: drawings" and no longer names anything.
 
-That is almost certainly most of your 94%.
+This matters most where you would have noticed it: allocating an email by hand in the
+review queue now covers the rest of that thread. Previously the next three replies came
+straight back to the queue and you filed the same conversation four times.
 
+ORDER OF PRECEDENCE - the thread sits BELOW the subject rules:
 
-WHAT IT DOES NOW
-----------------
-Words are scored instead of characters, and each word is weighted by how RARE it is across
-your project titles. "bensham" is on one project and carries a match on its own. "lane",
-"house", "roofing", "works" are on hundreds and barely move the needle. So a subject full
-of common construction words does not score - which is the behaviour you want.
+    1. [CRM-nnn] reference in the subject
+    2. exact project name in the subject
+    3. same email thread              <- new
+    4. close match over 70%
+    5. known contact
+    6. company domain, if unique
 
-Above 70% it files itself, as you asked.
+So if a reply names a DIFFERENT project outright, that wins. Somebody saying which project
+it is beats the thread it happens to be sitting in. Tested.
 
-
-THE ONE THING I ADDED TO YOUR SPEC
-----------------------------------
-Auto-filing at 70% on score alone is not safe, and it is worth knowing why.
-
-You have "Bensham Lane Phase 1" and "Bensham Lane Phase 2". A subject saying only "Bensham
-Lane" scores about the same against BOTH. At a bare 70% threshold it would file into
-whichever sorted first - silently, into the wrong job.
-
-So it now files only when the best match is also CLEARLY AHEAD of the runner-up. If two
-projects score close together it goes to review instead, however high the score. That is
-what makes 70% mean "confident" rather than just "high".
-
-Tested against exactly this case:
-
-    RE: Bensham Lane - drawings for phase 2   -> FILED, Phase 2, 100%
-    RE: Bensham Lane drawings phase 1         -> FILED, Phase 1, 100%
-    Bensham Lane phase                        -> NOT filed, suggested only
-    Roofing works                             -> no match
-    Invoice for roofing works ltd             -> no match
-    Tesco                                     -> no match
-
-Both numbers are tunable from Vercel without a deploy:
-
-    MS_MATCH_THRESHOLD   default 0.70   score needed to file itself
-    MS_MATCH_MARGIN      default 0.12   how far clear of the runner-up it must be
-
-Raise the threshold if you see anything file wrongly. Raise the margin if the wrong ones
-are near-identical project names.
+Removing an email from a project also drops the thread link, if that was the only message
+holding it. Without that, the next reply would file straight back into the project you
+just took it off.
 
 
-SUGGESTIONS IN THE REVIEW QUEUE
--------------------------------
-Anything scoring over 45% but not confident enough to file now shows a blue bar on its
-queue row:
+A BUG THIS TURNED UP
+--------------------
+Graph returns mail NEWEST FIRST, so replies were being matched BEFORE the message that
+names the project - meaning the thread was learned too late and every reply was queued
+anyway. Caught it on the test bench, not in production.
 
-    Looks like Bensham Lane Phase 2 (63%, next closest Bensham Lane Phase 1)   [Accept]
+Messages are now matched oldest-first, and there is a second sweep that pulls anything
+already queued across if its thread turns out to be known by the end of the run. On a
+three-message thread that is the difference between 1 filed / 2 queued and 3 filed / 0
+queued.
 
-One click files it. The runner-up is named deliberately - if the two are near-identical
-you want to see that before you accept.
+
+PART 2 - SENT MAIL
+==================
+Already working, no change needed. The Graph call covers the whole mailbox rather than the
+Inbox, so Sent Items is included, and matching looks at from / to / cc together. Worth
+confirming on your own data with the detail dry run below - look for subjects you know you
+SENT rather than received.
 
 
-SEE EXACTLY WHAT IT WOULD DO - BEFORE THE BACKFILL
----------------------------------------------------
-    /api/cron/crm-email-sync?dryRun=1&detail=1&max=200
+PART 3 - BACKFILL YOU CAN ACTUALLY RUN
+======================================
 
-Writes nothing. Returns every subject line with its outcome - FILED, SUGGESTED or NO
-MATCH - plus the project, the score and the runner-up. That is how you judge whether 70%
-is the right number, on your real mail, before committing to anything.
+WHY YOU COULD NOT BEFORE
+    backfillMonths was only ever consulted for a mailbox with NO sync state. All four have
+    state now, so ?backfillMonths=24 was being ignored - it would have reported a handful
+    of new emails and looked like it had worked.
 
-Do that first. Then decide the backfill.
+    The only way to trigger it was to clear the sync state, and that ALSO switched on the
+    branch that DISCARDS unmatched mail. The one route in was the route that lost mail.
+
+NOW
+    ?since=2024-08-01
+
+    Looks at the window you name, whatever the sync state says. On a `since` run:
+      - nothing is discarded; unmatched mail goes to the review queue
+      - the incremental watermark is NOT moved, so ordinary 15-minute syncing carries on
+        untouched
+      - it is repeatable; writes de-duplicate on message id, so running it twice is
+        harmless
+
+    ?mailbox=edita@rockroofing.co.uk    one mailbox at a time
+    ?max=500                            cap per mailbox
+
+    maxDuration raised to 300s. The default would have killed a big run part-way and left
+    something that looked finished but was not.
+
+The review queue cap is now 1,000 and the run REPORTS how many rows went over it
+("queueTruncated") instead of dropping them in silence.
+
+
+THE ORDER I WOULD DO IT IN
+--------------------------
+1. Deploy. Let the 15-minute sync run once so threads start building.
+
+2. Dry run one month, one mailbox, with detail:
+
+     /api/cron/crm-email-sync?dryRun=1&detail=1&since=2026-07-01&mailbox=edita@rockroofing.co.uk
+
+   Writes NOTHING. Read the FILED rows. Are they on the right projects? Read the NO MATCH
+   rows - is there a pattern the rules should be catching?
+
+3. If it reads well, run the same window for real (drop dryRun). Check the queue.
+
+4. Widen a quarter at a time: since=2026-04-01, then 2026-01-01, and so on.
+
+Do not go straight to 24 months. Not because it would break, but because if the rules are
+wrong you want to find that out over 200 emails rather than 20,000.
