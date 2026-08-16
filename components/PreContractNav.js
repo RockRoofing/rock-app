@@ -1,11 +1,11 @@
 // Shared top navigation for all Pre-Contract pages.
 // Fixed order, a divider between every tab, and the current page highlighted.
-// Order: Portal | Sales Dashboard | Scorecards | Negotiating | Project Financials
+// Order: [CRM|Pre-Contract] Portal | Sales Dashboard | Scorecards | Negotiating | ...
 import ReportImprovementLink from './ReportImprovementLink'
+import AreaToggle from './AreaToggle'
 
 export default function PreContractNav({ active, children }) {
   const tabs = [
-    { key: 'crm', label: 'CRM', href: '/crm' },
     { key: 'sales-crm', label: 'Sales Dashboard', href: '/sales-crm' },
     { key: 'scorecard-crm', label: 'Scorecards', href: '/scorecard-crm' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
@@ -16,6 +16,9 @@ export default function PreContractNav({ active, children }) {
   return (
     <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 52, overflowX: 'auto' }}>
       <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4, marginRight: 8 }} />
+      {/* Area toggle, left-most. CRM is no longer also a tab below - it would have been
+          the same destination twice, one click apart. */}
+      <AreaToggle active="pre-contract" />
       <a href="/" style={linkStyle}>← Portal</a>
       <Divider />
       {tabs.map((t, i) => (

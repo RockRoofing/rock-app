@@ -17,6 +17,7 @@ import { SEED_DEALS } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
 import { DEFAULT_FIELD_SCHEMA } from '../lib/crmFieldSchema';
 import ReportImprovementLink from '../components/ReportImprovementLink';
+import AreaToggle from '../components/AreaToggle';
 
 const STAGES = [
   { id: 'stage_project_in', label: 'Project In' }, { id: 'stage_1st_contact', label: '1st Contact' },
@@ -2900,7 +2901,9 @@ function CRMPageInner() {
         {/* Logo only - the wordmark is in the logo itself, and the Pre-Contract nav
             above does the same, so repeating the name here was redundant. */}
         <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4, marginRight: 8 }} />
-        <a href="/sales-crm" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Pre-Contract</a>
+        {/* Area toggle replaces the old back arrow. Same control as the one on the
+            Pre-Contract nav, so it reads the same from either side. */}
+        <AreaToggle active="crm" />
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>

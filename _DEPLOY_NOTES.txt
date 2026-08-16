@@ -1,63 +1,49 @@
-pkg397 - the React errors in your screenshot were the actual problem
-====================================================================
+pkg399 - CRM / Pre-Contract toggle, and the CRM as the landing page
+===================================================================
 
-Deploy after pkg396.
+Deploy after pkg398.
+
+NEW FILE - create with "Add file"
+----------------------------------
+  components/AreaToggle.js
 
 CHANGED FILES (replace)
 -----------------------
+  components/PreContractNav.js
   pages/crm.js
-  pages/crm-scores.js
-
-NEW FILES: none.
+  pages/index.js
 
 
-WHAT YOUR SCREENSHOT SHOWED
----------------------------
-React errors #425, #418 and #423 on the CRM page. Those are hydration failures, and they
-are not cosmetic.
+WHAT CHANGES
+------------
+1. The Pre-Contract tile on the portal now opens the CRM.
 
-#425 is "text content does not match server-rendered HTML". The cause:
+2. The "<- Pre-Contract" back button in the CRM is gone. In its place, left-most in the
+   toolbar, a two-part toggle:
 
-    dateTime()  used  toLocaleString('en-GB')  with no timezone.
+       [ CRM ][ Pre-Contract ]
 
-Vercel runs in UTC. Your browser runs in London time. Same instant, different text:
+   Green when on, 14px bold - a size up from the Pipeline/List toggle beside it.
+   Deliberately: that one switches VIEW, this one switches AREA, and they should not look
+   like the same weight of decision.
 
-    UTC     16 Aug 2026, 23:30
-    London  17 Aug 2026, 00:30
+3. The identical toggle sits left-most on the Pre-Contract nav, before "<- Portal", so it
+   reads the same from either side. One shared component, so the two cannot drift apart.
 
-Every date on the page disagreed with itself. React then abandons hydration (#418/#423),
-and a page that fails to hydrate keeps its HTML but LOSES EVENT HANDLERS in parts of the
-tree. Inputs look normal and do nothing.
-
-That is the real reason some comment boxes would not accept typing - the duplicate-key
-fix in pkg395 was worth doing, but this was underneath it. It is very likely why the
-mention email never fires either: if the handler that calls it was never attached, no
-request is made and nothing appears anywhere, which matches exactly what you are seeing.
-
-FIXED:
-  - every date is now formatted with timeZone: 'Europe/London', so both sides agree
-  - todayISO() is UK date, not the server's. On UTC it was a day behind for an hour every
-    evening during BST, so "overdue" was wrong too
-  - the CRM page no longer server-renders at all. It reads localStorage, the URL, xlsx and
-    the clock - none of which mean anything on a server - so there is nothing left to
-    disagree about. This removes the whole class of fault, not just the known instance.
-
-After deploying, reload the CRM and check the console. Those three React errors should be
-gone. If they are, try the @mention again before anything else - I expect it to work.
+4. "<- Deals" inside a project is untouched. That is navigation within the CRM, a
+   different thing from switching area.
 
 
-NO MORE CONSOLE COMMANDS
-------------------------
-Chrome kept blocking the paste, so the diagnostic is now a button.
+ONE JUDGEMENT CALL - TELL ME IF YOU DISAGREE
+---------------------------------------------
+I removed CRM as a TAB from the Pre-Contract nav. With the toggle sitting immediately to
+its left, the same destination appeared twice, one click apart, with two different styles -
+which invites the question "is the tab different from the toggle?".
 
-    Go to /crm-scores  ->  "Check @mention email"
+The bar now reads:
 
-It sends nothing and tells you in plain words:
-  - whether RESEND_API_KEY is set
-  - which address it would send FROM, and warns you outright if that is Resend's test
-    sender (onboarding@resend.dev), which only ever delivers to the Resend account owner
-  - every person who can be mentioned, with their email address, or says plainly that
-    nobody can and why
+    [logo] [CRM|Pre-Contract]  <- Portal | Sales Dashboard | Scorecards | Negotiating
+           | Project Financials | Internal Handover Minutes | Handover Docs
 
-If the mention still does not send after this deploy, press that button and send me what
-it says. That will be the answer.
+If you would rather keep the tab as well, it is one line in PreContractNav.js and I will
+put it back.

@@ -9,7 +9,7 @@ const departments = [
     key: 'pre-contract',
     label: 'Pre-Contract',
     description: 'Sales dashboard, scorecards, pipeline & strike rates',
-    href: '/sales-crm',
+    href: '/crm',
     color: '#2a78d6',
     lightColor: '#eff6ff',
     borderColor: '#bfdbfe',
