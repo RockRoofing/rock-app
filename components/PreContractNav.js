@@ -9,6 +9,7 @@ export default function PreContractNav({ active, children }) {
     { key: 'sales-crm', label: 'Sales (CRM)', href: '/sales-crm' },
     { key: 'crm', label: 'CRM', href: '/crm' },
     { key: 'scorecard', label: 'Scorecards', href: '/scorecard' },
+    { key: 'scorecard-crm', label: 'Scorecards (CRM)', href: '/scorecard-crm' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },
     { key: 'handover', label: 'Internal Handover Minutes', href: '/handover' },

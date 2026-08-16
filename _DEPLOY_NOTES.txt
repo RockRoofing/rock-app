@@ -1,25 +1,55 @@
-pkg375 - repeated word in a project title
+pkg376 - Scorecards (CRM) comparison page
 =========================================
 
-Deploy after pkg374. One changed file: lib/crmEmailSync.js. No new files.
+NEW FILE - create this one with "Add file" in GitHub
+----------------------------------------------------
+  pages/scorecard-crm.js
+
+CHANGED FILE (already exists - replace it)
+-------------------------------------------
+  components/PreContractNav.js     adds the new tab
 
 
-THE BUG
--------
-From your 2024 run:
+WHAT IT IS
+----------
+An exact copy of the Scorecards page reading from the CRM instead of the Pipedrive sync.
+Same pattern as Sales (CRM): both pages sit side by side, you compare, and when you trust
+the numbers the old one goes.
 
-    "Wembley Park Masterplan - Plot NE01"  ->  FILED to "Wembley Hill Road, Wembley", 81%
+New tab in the Pre-Contract nav: Scorecards (CRM), right after Scorecards.
 
-Two different Wembley projects. It should not have filed.
+It is byte-identical to pages/scorecard.js apart from four things:
+  - reads /api/deals-crm instead of /api/deals
+  - green comparison banner at the top
+  - page title says (CRM)
+  - no "Sync now" button, because there is nothing to sync - the CRM is the source
 
-Cause: the title "Wembley Hill Road, Wembley" contains the word Wembley TWICE. The word
-list was not de-duplicated, so matching that one word counted as TWO distinct words -
-enough to clear the two-word bar that is supposed to stop exactly this - and its weight
-was counted twice, pushing the score from 46% to 81%.
+No API work was needed. /api/deals-crm already existed and already returns exactly the
+same shape as /api/deals, via lib/crmDashboardAdapter. Nothing on the live Scorecards page
+is touched.
 
-Fixed by de-duplicating each title's word list. Same subject now scores 46% on one word,
-so it suggests rather than files. All 16 regression matches and the threading tests still
-pass unchanged.
 
-Any project whose title repeats a word was exposed to this. Worth a look at the Wembley
-project in the CRM - one email will be on it that should not be.
+ONE HONEST CAVEAT - READ THIS BEFORE COMPARING
+-----------------------------------------------
+Only the DEAL data comes from the CRM. Three of the metrics are built from
+/api/value-changes, which is Pipedrive sync data and has no CRM equivalent:
+
+    Total value of work priced
+    Value priced - existing customers
+    Projects priced over 200K
+
+Those will read IDENTICALLY on both pages. That is not the comparison working - it is the
+same number twice. Ignore them when you are checking.
+
+The metrics genuinely worth comparing are the ones built from deals:
+
+    Strike rate (overall)                    Glenigan enquiries received
+    Strike rate (MC Secured/Negotiating)     Glenigan enquiries priced
+    Total value of work secured              Glenigan scored 5+
+    Deals secured over 200K                  Projects secured over 200K
+
+If those match across both pages, the CRM is a sound replacement for the Pipedrive feed.
+If they do not, the difference will be in the adapter or in what got imported, and the
+detail is in the drill-downs on each card.
+
+GP margin is unaffected either way - it comes from Xero via /api/dashboard on both pages.
