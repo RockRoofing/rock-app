@@ -365,14 +365,49 @@ function Dot({ state, size = 14 }) {
 // ===========================================================================
 // Comment thread (used under notes, both in Notes section & History)
 // ===========================================================================
-function CommentThread({ comments, onAdd, users }) {
+const cmtLink = { background: 'none', border: 'none', color: C.link, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' };
+
+function CommentThread({ comments, onAdd, onEdit, onDelete, users }) {
   const [text, setText] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState('');
+
+  const startEdit = (c) => { setEditingId(c.id); setDraft(c.body || ''); };
+  const saveEdit = (c) => {
+    const body = draft.trim();
+    // An empty edit is a deletion by another name. Better to ask than to silently keep
+    // the old text, which is what a bare "if empty, do nothing" would do.
+    if (!body) { setEditingId(null); return; }
+    if (body !== (c.body || '')) onEdit(c.id, body);
+    setEditingId(null);
+  };
+
   return (
     <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: `2px solid ${C.line}` }}>
       {(comments || []).map((c) => (
         <div key={c.id} style={{ marginBottom: 6 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{c.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(c.ts)}</span></div>
-          <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{c.body}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{c.author || 'Unassigned user'}</span>
+            <span style={{ fontWeight: 400, color: C.dim }}>&middot; {dateTime(c.ts)}{c.edited ? ' (edited)' : ''}</span>
+            {editingId !== c.id && (
+              <>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => startEdit(c)} style={cmtLink}>Edit</button>
+                <button onClick={() => { if (window.confirm('Delete this comment?')) onDelete(c.id); }} style={{ ...cmtLink, color: C.dim }}>Delete</button>
+              </>
+            )}
+          </div>
+          {editingId === c.id ? (
+            <div style={{ marginTop: 3, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: '4px 8px' }}>
+              <MentionInput value={draft} onChange={setDraft} users={users} placeholder="Edit comment&#8230;" rows={2} />
+              <div style={{ textAlign: 'right', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                <button onClick={() => setEditingId(null)} style={{ ...miniBtn, background: 'transparent', color: C.dim }}>Cancel</button>
+                <button disabled={!draft.trim()} onClick={() => saveEdit(c)} style={{ ...miniBtn, opacity: draft.trim() ? 1 : 0.5 }}>Save</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap' }}>{c.body}</div>
+          )}
         </div>
       ))}
       <div style={{ marginTop: 4, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: '4px 8px' }}>
@@ -636,7 +671,7 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
 // History feed (combined edit for activities incl date + reopen; comments on notes)
 // ===========================================================================
 function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇', mention: '@' })[t] || '•'; }
-function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment, users }) {
+function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment, onEditComment, onDeleteComment, users }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(h.body || '');
   const [date, setDate] = useState(h.ts ? new Date(h.ts).toISOString().slice(0, 16) : '');
@@ -666,7 +701,7 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
           {(isNote || isActivity) && <span onClick={() => onDelete(h.id)} style={{ color: C.lost, cursor: 'pointer' }}>Delete</span>}
           {isNote && <span onClick={() => setShowComments((v) => !v)} style={{ color: C.link, cursor: 'pointer' }}>{showComments ? 'Hide' : 'Comment'} ({(h.comments || []).length})</span>}
         </div>
-        {isNote && showComments && <CommentThread comments={h.comments} onAdd={(body) => onComment(h.id, body)} users={users} />}
+        {isNote && showComments && <CommentThread comments={h.comments} onAdd={(body) => onComment(h.id, body)} onEdit={(cid, body) => onEditComment(h.id, cid, body)} onDelete={(cid) => onDeleteComment(h.id, cid)} users={users} />}
       </div>
     </div>
   );
@@ -1220,7 +1255,7 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
   const [adding, setAdding] = useState(false);
@@ -1360,7 +1395,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
                 <div key={h.id} style={{ background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{h.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span></div>
                   <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap', marginTop: 3 }}>{h.body}</div>
-                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} users={users} />
+                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} onEdit={(cid, body) => onEditComment(deal.id, h.id, cid, body)} onDelete={(cid) => onDeleteComment(deal.id, h.id, cid)} users={users} />
                 </div>
               ))}
             </div>
@@ -1388,7 +1423,9 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
             onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
             onDelete={(hid) => onDeleteHistory(deal.id, hid)}
             onReopen={(hid) => onReopenActivity(deal.id, hid)}
-            onComment={(hid, body) => onCommentNote(deal.id, hid, body)} />
+            onComment={(hid, body) => onCommentNote(deal.id, hid, body)}
+            onEditComment={(hid, cid, body) => onEditComment(deal.id, hid, cid, body)}
+            onDeleteComment={(hid, cid) => onDeleteComment(deal.id, hid, cid)} />
         </div>
       </div>
     </div>
@@ -2215,6 +2252,35 @@ function CRMPageInner() {
     });
     notifyMentions(id, body, 'comment');
   };
+  // Edit / delete a comment on a note. Comments live inside the note's history entry, so
+  // both walk history -> the note -> its comments rather than touching history directly.
+  const editComment = (id, hid, cid, body) => {
+    // Only notify people who were NOT already mentioned before the edit. Re-emailing
+    // everyone every time a typo is fixed would train people to ignore the alerts.
+    const deal = deals.find((x) => String(x.id) === String(id));
+    const prev = deal?.history?.find((h) => h.id === hid)?.comments?.find((c) => c.id === cid)?.body || '';
+    const already = new Set(extractMentions(prev, users));
+    const fresh = extractMentions(body, users).filter((n) => !already.has(n));
+    if (fresh.length) notifyMentions(id, body, 'comment');
+    return editCommentPatch(id, hid, cid, body);
+  };
+
+  const editCommentPatch = (id, hid, cid, body) => patch(id, (d) => ({
+    ...d,
+    history: d.history.map((h) => h.id !== hid ? h : {
+      ...h,
+      comments: (h.comments || []).map((c) => c.id === cid ? { ...c, body, edited: true } : c),
+    }),
+  }));
+
+  const deleteComment = (id, hid, cid) => patch(id, (d) => ({
+    ...d,
+    history: d.history.map((h) => h.id !== hid ? h : {
+      ...h,
+      comments: (h.comments || []).filter((c) => c.id !== cid),
+    }),
+  }));
+
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));
   const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
@@ -2640,7 +2706,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }
