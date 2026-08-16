@@ -1,12 +1,13 @@
-pkg401 - Portal link in the CRM toolbar
-=======================================
+pkg402 - remove the deal count and total from the CRM toolbar
+=============================================================
 
-Deploy after pkg400. One changed file: pages/crm.js. No new files.
+Deploy after pkg401. One changed file: pages/crm.js. No new files.
 
-The CRM toolbar now reads, left to right:
+"471 deals - £35,160,191 open" is gone from the right-hand end of the black toolbar.
 
-    [logo]  [ CRM | Pre-Contract ]  <- Portal  |  Saved  |  Pipeline/List  ...
+The calculation behind it was removed too, not just the display - it summed the value of
+every open deal on every render, and leaving that running to produce a number nobody sees
+would be waste.
 
-Same position relative to the toggle as on the Pre-Contract nav, and styled to match that
-one - grey 13px with the divider after it - rather than the CRM's own bordered buttons.
-It is the same control doing the same job, so it should not look like a different one.
+The per-stage counts and totals on the kanban column headers are untouched. Those are the
+ones that tell you something.

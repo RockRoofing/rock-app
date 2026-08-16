@@ -2058,7 +2058,6 @@ function CRMPageInner() {
     return rows;
   }, [deals, contactsData, query, entitySort, deletedContacts]);
 
-  const totalValue = finalList.filter((d) => d.status === 'open').reduce((s, d) => s + (Number(d.fields.value) || 0), 0);
 
   // mutations
   async function handleImportFile(file) {
@@ -2942,7 +2941,6 @@ function CRMPageInner() {
             </div>
           )}
         </div>
-        {isDealView && <span style={{ fontSize: 13, color: '#cfd6dd' }}>{finalList.length} deals · {money0(totalValue)} open</span>}
         {/* Far right of the toolbar. Shared component, so it looks and behaves exactly
             as it does on every other portal page - the modal itself is mounted globally
             in _app.js, so nothing else is needed here. */}
