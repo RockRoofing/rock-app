@@ -1,44 +1,69 @@
-pkg364 - Name the mailboxes directly
-=====================================
+pkg365 - BCC drop-box with a project reference
+===============================================
 
-REPLACES pkg302 through pkg363. Deploy this one only.
+REPLACES pkg302 through pkg364. Deploy this one only.
 
 CHANGED FILES
 -------------
-  lib/msGraph.js          the fix
-  everything else unchanged since pkg363
-
-If pkg363 is already deployed, lib/msGraph.js is the ONLY file that has changed.
-
-
-WHAT THE EMPTY RESULT MEANT
-----------------------------
-    {"ok":true,"mailboxes":[], ...}
-
-Not an error - it found the group and the group reported no members. A mail-enabled
-security group created through Exchange PowerShell does not reliably expose its membership
-through Graph, even with GroupMember.Read.All granted. The two systems keep group
-membership in slightly different places.
+  lib/crmEmailSync.js     reference matching + BCC mailbox handling
+  pages/crm.js            the reference is shown on each deal
+  everything else unchanged since pkg364
 
 
-THE FIX - ADD ONE MORE VERCEL VARIABLE
-----------------------------------------
-    MS_MAILBOXES = james@rockroofing.co.uk,edita@rockroofing.co.uk,Niall@rockroofing.co.uk,roman@rockroofing.co.uk
+HOW IT WORKS
+------------
+BCC crm@rockroofing.co.uk and put the project's reference in the subject:
 
-Comma separated, no spaces needed. When this is set the group is not consulted at all -
-the app syncs exactly those mailboxes and nothing else.
+    RE: Bensham Lane drawings [CRM-972]
 
-Add it, REDEPLOY, then run the dry run again.
+The reference beats every other rule, because you have said outright which project it
+belongs to. Case and spacing do not matter - [crm-972], [CRM - 972] and #crm972 all work.
 
-This is arguably the better arrangement anyway: the app no longer needs to read your
-directory to work out who to sync, and the list is visible in one place rather than
-inferred. You can even remove GroupMember.Read.All from the app registration afterwards if
-you want it tighter still.
+Verified it does NOT match ordinary prose: "Invoice CRM 2024 budget" is ignored, rather
+than filing the email against deal 2024.
 
-KEEP THE GROUP AND THE ACCESS POLICY. They are what stop the app reaching anyone else's
-mailbox - MS_MAILBOXES only says who to ASK for. If the two ever disagree, Exchange wins
-and refuses. Both together means a mistake in either one cannot expose a mailbox it should
-not.
 
-The group lookup is still there as a fallback, and now says plainly what to do if it comes
-back empty rather than reporting success with nothing.
+FINDING THE REFERENCE
+---------------------
+Every deal now shows its reference as a small chip in the header, next to Won/Lost/Delete:
+
+    [CRM-972]
+
+Click it and it copies to your clipboard, ready to paste into a subject line.
+
+
+NO REFERENCE? STILL FINE
+-------------------------
+Anything arriving at the BCC mailbox goes through the normal matching afterwards - project
+title in the subject, known contact, company domain. So a reference is the reliable way,
+not the only way.
+
+And if nothing matches, it goes to the REVIEW QUEUE rather than being discarded. That is
+deliberate and different from the other mailboxes: you BCC'd it, so you have already said
+it belongs in the CRM. Throwing it away for want of a reference would be wrong.
+
+
+SETTING IT UP
+-------------
+1. Create a shared mailbox crm@rockroofing.co.uk (admin.microsoft.com -> Teams & groups ->
+   Shared mailboxes). A shared mailbox is not an admin account, so the restriction that
+   blocked your own mailbox does not apply.
+
+2. Add it to the sync group:
+       Add-DistributionGroupMember -Identity "CRM Sync Mailboxes" -Member crm@rockroofing.co.uk
+
+3. In Vercel, add it to MS_MAILBOXES and drop your own address:
+       crm@rockroofing.co.uk,edita@rockroofing.co.uk,Niall@rockroofing.co.uk,roman@rockroofing.co.uk
+
+4. Redeploy, then dry run.
+
+MS_BCC_MAILBOX defaults to crm@rockroofing.co.uk - set it if you use a different address.
+
+
+STILL OUTSTANDING
+-----------------
+The screens. Emails are being stored and queued but there is nothing to view them in yet.
+That is the next package: emails on the deal, and the review queue with allocate/dismiss.
+
+Also still worth looking at: only 22 of 394 emails matched on the dry run. Once you can see
+which ones, we will know whether the rules need loosening.

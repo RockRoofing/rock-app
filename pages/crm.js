@@ -703,6 +703,12 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
           <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}
+          <button
+            onClick={() => { try { navigator.clipboard.writeText(`[CRM-${deal.id}]`); } catch {} }}
+            title={`BCC crm@rockroofing.co.uk and put [CRM-${deal.id}] in the subject to file an email against this project. Click to copy.`}
+            style={{ background: 'transparent', border: '1px solid #444', color: '#aaa', fontSize: 11, cursor: 'pointer', fontFamily: 'ui-monospace, Menlo, monospace', padding: '4px 8px', borderRadius: 6, marginLeft: 4 }}>
+            [CRM-{deal.id}]
+          </button>
           <button onClick={() => onDeleteDeal(deal.id)} title="Delete this project permanently"
             style={{ background: 'none', border: 'none', color: '#ff6b6b', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', padding: '0 2px', marginLeft: 2 }}>
             Delete
