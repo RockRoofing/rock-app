@@ -2711,14 +2711,15 @@ function CRMPageInner() {
           <button onClick={() => setView('pipeline')} style={segBtn(view === 'pipeline')}>Pipeline</button>
           <button onClick={() => setView('list')} style={segBtn(view === 'list')}>List</button>
         </div>
-        {/* Companies / Contacts buttons to the LEFT of search */}
-        <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
-        <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <button onClick={() => setView('activities')} style={{ ...backBtn, background: view === 'activities' ? C.link : 'transparent', color: '#fff', borderColor: view === 'activities' ? C.link : '#444' }}>Activities</button>
         <EmailsNavButton active={view === 'emails'} onClick={() => setView('emails')} refreshKey={view} />
         <button onClick={resetView} title="Clear remembered filters, columns and sort" style={{ ...backBtn, color: '#aaa', borderColor: '#444', background: 'transparent' }}>Clear Filters</button>
         {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
+        {/* Companies / Contacts sit at the right-hand end, immediately left of the search
+            box - they are a different kind of thing from the deal views to their left. */}
+        <button onClick={() => setView('companies')} style={{ ...backBtn, background: view === 'companies' ? C.link : 'transparent', color: '#fff', borderColor: view === 'companies' ? C.link : '#444' }}>Companies</button>
+        <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <div style={{ position: 'relative', minWidth: 260 }}>
           <input placeholder="Search…" value={query} onChange={(e) => { setQuery(e.target.value); setShowSuggest(true); }} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} style={{ ...miniInput, width: '100%', boxSizing: 'border-box', paddingRight: 26 }} />
           {query && <span onClick={() => setQuery('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: C.dim, fontSize: 14 }}>✕</span>}

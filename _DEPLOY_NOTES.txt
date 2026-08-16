@@ -1,50 +1,17 @@
-pkg389 - mailbox filter on the CRM Emails tab
-=============================================
+pkg390 - Companies and Contacts moved right
+===========================================
 
-Deploy after pkg388.
+Deploy after pkg389. One changed file: pages/crm.js. No new files.
 
-CHANGED FILES (replace)
------------------------
-  pages/crm.js
-  pages/api/crm.js
+The CRM toolbar now reads:
 
-NEW FILES: none.
+  [logo] Rock Roofing | <- Pre-Contract | Saved | Pipeline/List | Activities | Emails
+  | Clear Filters | + Add project .............. Companies | Contacts | [Search]
 
+Companies and Contacts have moved from the middle of the left-hand group to the right-hand
+end, immediately left of the search box. Nothing else moved and nothing about how they
+work has changed.
 
-WHAT YOU GET
-------------
-A dropdown next to the search box on the Emails review queue:
-
-    All mailboxes  |  Edita Durikova  |  Niall ...  |  Roman ...  |  crm@rockroofing.co.uk
-
-Pick one and the queue shows only mail from that person's mailbox.
-
-It lists PEOPLE, not addresses - the mailbox on each email is matched back to the portal
-user who owns it, so you see "Edita Durikova" rather than "edita@rockroofing.co.uk". Any
-mailbox with no matching portal user (the crm@ drop-box) falls back to showing the
-address, which is the honest thing to do rather than hiding it.
-
-Only PRE-CONTRACT users appear, as you asked. That comes free: the CRM's user list is
-already filtered to pre-contract plus admin - it is the same list that decides who can own
-an activity.
-
-The dropdown also only offers mailboxes that ACTUALLY HAVE mail waiting. A list of four
-people where three have nothing is just noise, and it would leave you picking a name and
-getting an empty screen with no explanation.
-
-
-IT WORKS WITH SELECT ALL
-------------------------
-Filtering by mailbox narrows what Select All ticks, exactly as the search box does. Pick
-Edita, tick Select all, and the bar reads "Select all 43 shown" - you are acting on her
-43, not the whole queue.
-
-Changing the filter clears the current selection. Without that you could tick 40 of
-Edita's, switch to Roman, and bulk-file a selection you could no longer see.
-
-
-THE ONE SUPPORTING CHANGE
--------------------------
-pages/api/crm.js now includes the email address on each portal user. It was sending name,
-first name and username only - and the mailbox is the only thing tying a portal user to
-their mail, so without the address there was no way to make the match.
+The old comment in the code said "Companies / Contacts buttons to the LEFT of search",
+which was already true and about to become confusing. Rewritten to say where they sit and
+why.
