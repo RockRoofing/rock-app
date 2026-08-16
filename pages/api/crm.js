@@ -135,6 +135,10 @@ export default async function handler(req, res) {
           name: [u.firstName, u.lastName].filter(Boolean).join(' ') || u.name || u.username || '',
           first: u.firstName || (u.name || '').split(' ')[0] || '',
           username: u.username || '',
+          // Needed by the email review queue, which tags every message with the mailbox
+          // it came from. Without the address there is no way to tie a portal user to
+          // their mail.
+          email: (u.email || '').toLowerCase(),
         }))
         .filter(u => u.name)
         .sort((a, b) => a.name.localeCompare(b.name)),

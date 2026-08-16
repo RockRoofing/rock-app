@@ -885,7 +885,7 @@ function ProjectPicker({ deals, onPick, onCancel }) {
 }
 
 // The review queue. Everything the sync could not place, newest first.
-function EmailQueue({ deals, onOpenDeal }) {
+function EmailQueue({ deals, users, onOpenDeal }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -893,6 +893,7 @@ function EmailQueue({ deals, onOpenDeal }) {
   const [noteDeal, setNoteDeal] = useState(null);
   const [noteUndo, setNoteUndo] = useState('');
   const [search, setSearch] = useState('');
+  const [mailboxFilter, setMailboxFilter] = useState('');
   const [pickerFor, setPickerFor] = useState(null);
   const [busy, setBusy] = useState('');
   const [sel, setSel] = useState(() => new Set());
@@ -997,11 +998,22 @@ function EmailQueue({ deals, onOpenDeal }) {
     setBulkBusy(false);
   };
 
+  // Which mailboxes are actually represented in the queue, tied back to portal users.
+  // Only pre-contract users have mailboxes on the sync, and only those with mail waiting
+  // are worth offering - a dropdown full of people with nothing in it is just noise.
+  const mailboxOptions = useMemo(() => {
+    const present = new Set(items.map((m) => String(m.mailbox || '').toLowerCase()).filter(Boolean));
+    const byEmail = new Map((users || []).filter((u) => u.email).map((u) => [u.email.toLowerCase(), u.name]));
+    return [...present].sort().map((mb) => ({ mailbox: mb, label: byEmail.get(mb) || mb }));
+  }, [items, users]);
+
   const shown = useMemo(() => {
+    let out = items;
+    if (mailboxFilter) out = out.filter((m) => String(m.mailbox || '').toLowerCase() === mailboxFilter);
     const s = search.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter((m) => `${m.subject} ${m.from} ${m.fromName} ${m.preview} ${m.mailbox}`.toLowerCase().includes(s));
-  }, [items, search]);
+    if (s) out = out.filter((m) => `${m.subject} ${m.from} ${m.fromName} ${m.preview} ${m.mailbox}`.toLowerCase().includes(s));
+    return out;
+  }, [items, search, mailboxFilter]);
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 16, boxSizing: 'border-box', background: C.feedBg }}>
@@ -1009,6 +1021,10 @@ function EmailQueue({ deals, onOpenDeal }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
           <span style={{ fontSize: 16, fontWeight: 700 }}>Email review queue ({items.length})</span>
           <div style={{ flex: 1 }} />
+          <select value={mailboxFilter} onChange={(e) => { setMailboxFilter(e.target.value); setSel(new Set()); }} style={{ ...miniInput, width: 190 }}>
+            <option value="">All mailboxes</option>
+            {mailboxOptions.map((o) => <option key={o.mailbox} value={o.mailbox}>{o.label}</option>)}
+          </select>
           <input placeholder="Search&#8230;" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...miniInput, width: 220 }} />
           <button onClick={load} style={ghostBtn}>Refresh</button>
         </div>
@@ -1058,7 +1074,7 @@ function EmailQueue({ deals, onOpenDeal }) {
                   });
                 }}
                 style={{ width: 15, height: 15, cursor: 'pointer' }} />
-              Select all {search.trim() ? `${shown.length} shown` : `${shown.length}`}
+              Select all {(search.trim() || mailboxFilter) ? `${shown.length} shown` : `${shown.length}`}
             </label>
 
             {sel.size > 0 && <>
@@ -2786,7 +2802,7 @@ function CRMPageInner() {
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
         )}
-        {view === 'emails' && <EmailQueue deals={deals} onOpenDeal={openDealById} />}
+        {view === 'emails' && <EmailQueue deals={deals} users={users} onOpenDeal={openDealById} />}
       </div>
 
       {showAdd && <AddProjectModal onClose={() => setShowAdd(false)} onCreate={createProject} users={users} />}
