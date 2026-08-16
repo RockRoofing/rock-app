@@ -474,6 +474,40 @@ export default async function handler(req, res) {
       return res.json({ ok: true })
     }
 
+    // PROJECT SCORES ONLY. Writes fields.project_score onto deals that already exist and
+    // touches nothing else - not the title, not the stage, not history, not activities.
+    //
+    // Deliberately NOT a re-import. A full import is wipe-and-replace, and the CRM now
+    // holds things the Pipedrive export never had: filed email, thread links, activities
+    // and notes created here, corrections made by hand. Re-importing to recover a single
+    // column would take all of that with it.
+    if (body.action === 'patch-project-scores') {
+      const pairs = Array.isArray(body.scores) ? body.scores : []
+      if (!pairs.length) return res.status(400).json({ error: 'scores required' })
+
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      const byId = new Map(list.map((d) => [String(d.id), d]))
+
+      let updated = 0, unchanged = 0, notFound = 0
+      for (const p of pairs) {
+        if (!p || p.id == null) continue
+        const d = byId.get(String(p.id))
+        if (!d) { notFound++; continue }
+        const score = String(p.score == null ? '' : p.score).trim()
+        if (!score) continue
+        const current = String(d.fields?.project_score ?? '').trim()
+        if (current === score) { unchanged++; continue }
+        // Never blank a score somebody has typed in here. The export is older than the
+        // CRM, so what is in the CRM is the newer fact.
+        if (current) { unchanged++; continue }
+        d.fields = { ...(d.fields || {}), project_score: score }
+        updated++
+      }
+
+      if (updated) await set(DEALS_KEY, list)
+      return res.json({ ok: true, updated, unchanged, notFound, seen: pairs.length })
+    }
+
     if (body.action === 'save-deals-partial') {
       const changed = Array.isArray(body.deals) ? body.deals : []
       const removed = new Set((Array.isArray(body.removedIds) ? body.removedIds : []).map(String))
