@@ -1,60 +1,37 @@
-pkg413 - average secured project value for the estimators
-=========================================================
+pkg414 - the two "priced" cards had no drill-down
+=================================================
 
-Deploy after pkg412.
-
-CHANGED FILES (replace)
------------------------
-  pages/scorecard-crm.js
-  pages/api/targets.js
-
-NEW FILES: none.
+Deploy after pkg413. One changed file: pages/scorecard-crm.js. No new files.
 
 
-WHAT CHANGED
-------------
-On Roman's, Niall's and James's scorecards:
+THE CAUSE
+---------
+On the estimator scorecards, "Value priced - existing customers" and "Total value of work
+priced" had no drillKey at all. Clicking them did nothing because there was nothing
+wired up to open.
 
-    REMOVED   Deals secured >=£200K
-    ADDED     Average secured project value
+The data was there the whole time. Both figures are computed from lists of value-change
+events - monthChanges and existingChanges - and both lists were built, summed, and then
+thrown away rather than returned. The equivalent card on Edita's page had its drill-down
+because it happened to be written later.
 
-Rolling 6 months to the month shown, with the previous 6 months and the direction of
-travel underneath, exactly like Edita's:
-
-    Average secured project value
-    £200,000
-    Previous 6 months: £50,000   ▲ £150,000 (300%)   from 2 won deals
-
-THIS ONE IS PER PERSON. It uses only that estimator's own won deals - the same personDeals
-set that drives their strike rate and GP margin. Edita's card is deliberately different:
-hers is the whole business, because she is not an estimator and the figure on her card is
-a company number, like the strike rate beside it.
-
-So the two cards share a shape and a name but answer different questions, which is right:
-"what is a job worth to Roman" and "what is a job worth to us".
+Both now open the same event list the sales page uses: date, project, old value, new
+value, and the change.
 
 
-THE RULES, SAME AS EDITA'S
---------------------------
-Per WON DEAL, not per month. "What is a job worth" rather than "how much did they win" -
-Total value of work secured already answers the second one, directly above it.
+WHILE I WAS IN THERE
+--------------------
+I checked every card on both scorecards rather than just the two you reported. One more
+was missing: "Average value of projects priced" on Edita's page - added in pkg412, and I
+had computed the list of projects behind it and not returned it. Same fault, one package
+old. Now wired.
 
-Won deals with NO VALUE are excluded. A won deal worth zero is a data gap, not a cheap
-job, and leaving it in drags the average down for nothing.
+Every card on both pages now opens its detail except two:
 
-Windows are exactly 6 months and do not overlap. Checked on the bench: Feb-Jul against
-Aug-Jan, with a zero-value win and a lost deal correctly left out of both.
+    Emails sent externally
+    Calls made
 
-
-WHY THE OLD CARD WAS AWKWARD ANYWAY
------------------------------------
-"Deals secured >=£200K" was a monthly card with a quarterly target, rated on a rolling
-three-month count through a special binary mode. It worked, but it was the only metric on
-the page that needed its own rating rules. This one behaves like everything else.
-
-
-TARGET
-------
-Default £150,000 per estimator - a placeholder. Set the real one with the pencil on each
-card; it can differ per person, since the targets are stored per role rather than per
-metric-per-person.
+Those are stored as monthly TALLIES, not as the underlying messages or calls - a
+deliberate decision, so there is genuinely no detail to show. If you ever want to click
+into them, that is a different job: it would mean storing every message and call record
+rather than a count, which is a lot of data to keep to answer a question nobody may ask.

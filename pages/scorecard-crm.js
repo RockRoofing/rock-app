@@ -388,6 +388,11 @@ export default function Scorecard() {
 
     return {
       strikeRateOverall, strikeRateMCSecured, valuePricedExisting, totalValuePriced,
+      // The value-change events behind the two "priced" cards. They were computed and
+      // then thrown away, so clicking those cards opened nothing - the only two on the
+      // estimator page with no drill-down.
+      _monthChanges: monthChanges,
+      _existingChanges: existingChanges,
       totalValueSecured, dealsSecuredOver200k: dealsOver200kMonth,
       avgValueSecured: avgSecNow.avg,
       _avgValueSecuredPrior: avgSecPrior.avg,
@@ -546,8 +551,11 @@ export default function Scorecard() {
         const prev = latest.get(String(v.dealId))
         if (!prev || String(v.changeDate) > String(prev.changeDate)) latest.set(String(v.dealId), v)
       }
-      const vals = [...latest.values()].map(v => Number(v.newValue))
-      return vals.length ? { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length } : { avg: null, count: 0 }
+      const rows = [...latest.values()]
+      const vals = rows.map(v => Number(v.newValue))
+      return vals.length
+        ? { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length, list: rows }
+        : { avg: null, count: 0, list: [] }
     }
     const avgPricedNow = avgPricedWindow(m, 6)
     const avgPricedPrior = avgPricedWindow(priorEnd, 6)
@@ -572,6 +580,7 @@ export default function Scorecard() {
       avgValuePriced: avgPricedNow.avg,
       _avgValuePricedPrior: avgPricedPrior.avg,
       _avgValuePricedCount: avgPricedNow.count,
+      _avgValuePricedList: avgPricedNow.list,
       // Outbound external email for this person's mailbox in this month. null rather than
       // 0 when there is no figure at all - a month we never counted is not a month with
       // no emails, and a red zero against target would be a lie.
@@ -604,8 +613,8 @@ export default function Scorecard() {
   const estimatorMetricDefs = [
     { key: 'strikeRateOverall', label: 'Strike rate (overall)', sub: 'Rolling 6 months', format: pct, targetKey: 'strikeRateOverall', drillKey: '_rolling6Projects' },
     { key: 'strikeRateMCSecured', label: 'Strike rate (MC Secured/Negotiating)', sub: 'Rolling 6 months', format: pct, targetKey: 'strikeRateMCSecured', drillKey: '_mcRollingProjects' },
-    { key: 'valuePricedExisting', label: 'Value priced — existing customers', format: fmt, targetKey: 'valuePricedExisting', showAvg: true },
-    { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'Value change data', format: fmt, targetKey: 'totalValuePriced', showAvg: true },
+    { key: 'valuePricedExisting', label: 'Value priced — existing customers', format: fmt, targetKey: 'valuePricedExisting', drillKey: '_existingChanges', isValueChange: true, showAvg: true },
+    { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'Value change data', format: fmt, targetKey: 'totalValuePriced', drillKey: '_monthChanges', isValueChange: true, showAvg: true },
     { key: 'totalValueSecured', label: 'Total value of work secured', format: fmt, targetKey: 'totalValueSecured', drillKey: '_monthWonProjects', showAvg: true },
     { key: 'avgValueSecured', label: 'Average secured project value', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
     { key: 'gpMargin', label: 'GP margin — own projects', sub: 'Live & in-progress projects only', format: pct, targetKey: 'gpMargin', drillKey: '_gpMarginProjects', isGpMargin: true },
@@ -619,7 +628,7 @@ export default function Scorecard() {
     { key: 'chasedScored5', label: 'Actively Chased scored ≥5', sub: 'Received in month, scored 5 or more', format: v => v, targetKey: 'chasedScored5', drillKey: '_chasedScored5Projects' },
     { key: 'strikeRateValue', label: 'Strike rate (value) — all estimators', sub: 'Rolling 6 months', format: pct, targetKey: 'strikeRateValue', drillKey: '_rolling6AllProjects' },
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'All estimators, value change data', format: fmt, targetKey: 'totalValuePriced', drillKey: '_allMonthChanges', isValueChange: true, showAvg: true },
-    { key: 'avgValuePriced', label: 'Average value of projects priced', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValuePriced', comparePriorKey: '_avgValuePricedPrior' },
+    { key: 'avgValuePriced', label: 'Average value of projects priced', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValuePriced', drillKey: '_avgValuePricedList', isValueChange: true, comparePriorKey: '_avgValuePricedPrior' },
     { key: 'totalValueSecured', label: 'Total value of work secured', sub: 'All estimators', format: fmt, targetKey: 'totalValueSecured', drillKey: '_allWonProjects', showAvg: true },
     { key: 'avgValueSecured', label: 'Average value of projects secured', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
   ]
