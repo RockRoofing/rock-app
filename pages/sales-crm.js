@@ -113,10 +113,8 @@ export default function Dashboard() {
     setLoading(false)
   }
 
-  // No sync function here on purpose. This page reads the CRM, which needs no syncing,
-  // and the old one called /api/sync - a Pipedrive pull. It was already unreachable with
-  // the button gone, but leaving it in a page labelled CRM-only was one careless edit
-  // away from being live again.
+  // No sync function here. This page reads the CRM, which is edited live and needs no
+  // syncing. Pipedrive has been removed from the app entirely.
 
   async function saveValueChange() {
     if (!vcForm.dealTitle || !vcForm.newValue) return

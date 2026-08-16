@@ -1,77 +1,106 @@
-pkg385 - retire the Pipedrive dashboards
-========================================
+pkg386 - Pipedrive removed completely
+=====================================
 
-Deploy after pkg384.
+REPLACES pkg385. Deploy this one instead - it contains everything pkg385 had.
 
-DELETE THESE TWO FILES IN GITHUB
---------------------------------
+
+DELETE THESE FILES IN GITHUB
+----------------------------
   pages/sales.js
   pages/scorecard.js
+  pages/api/sync.js
+  pages/api/webhook.js
+  pages/api/deals.js
+  pages/api/value-changes/index.js        (then the empty value-changes folder)
+  pages/api/cron/pipedrive-sync.js
+  pages/api/allfields.js
+  pages/api/deal-raw.js
+  pages/api/stages.js
+  lib/pipedrive.js
 
-(In GitHub: open the file, the three-dot menu at the top right, Delete file, commit.)
+(In GitHub: open the file, three-dot menu top right, Delete file, commit.)
 
 CHANGED FILES (replace)
 -----------------------
   components/PreContractNav.js
+  lib/db.js
   pages/index.js
   pages/crm.js
   pages/sales-crm.js
   pages/scorecard-crm.js
   pages/negotiating.js
+  pages/operations/negotiating.js
   pages/api/negotiating.js
+  pages/api/planning.js
+  pages/api/planning-week.js
+  pages/api/health-check.js
+  pages/api/test-storage.js
 
-NEW FILES: none.
+NEW FILES: none.  vercel.json NOT changed - the pipedrive-sync cron was never
+actually scheduled in it, only the file existed.
 
 
-WHAT CHANGES ON SCREEN
-----------------------
-The Pre-Contract nav goes from nine tabs to seven. "(CRM)" is dropped from the two that
-remain, because there is nothing left to distinguish them from:
+NEGOTIATING - DONE THE WAY YOU ASKED
+------------------------------------
+Only the DATA SOURCE changed. pages/api/negotiating.js now reads the CRM instead of the
+Pipedrive cache.
+
+Untouched: components/NegotiatingTable.js, pages/negotiating.js and
+pages/operations/negotiating.js. Both pages share the one table component and the one
+endpoint, so the ops mirror picks up the CRM data automatically. Nothing about the layout,
+columns or behaviour of either page moved. Only the subtitle now says "Live from the CRM"
+instead of "Live from Pipedrive".
+
+
+TWO THINGS I FOUND WHILE REMOVING IT
+------------------------------------
+1. THE PLANNING GANTT WAS READING PIPEDRIVE.
+   pages/api/planning.js and planning-week.js pulled negotiated projects from the
+   Pipedrive cache - the "N:<dealId>" rows on the Gantt and on the Weekly Labour
+   Allocation. Deleting the sync would have frozen those, and eventually emptied them.
+   Both now read the CRM.
+
+   IMPORTANT AND CHECKED: CRM deals keep Pipedrive's original ID (the import maps
+   "Deal - ID" straight through). So every existing N:<dealId> allocation still resolves
+   to the same project. No planning data is lost.
+
+2. HEALTH-CHECK WOULD HAVE EMAILED YOU A FALSE ALARM.
+   It checked the Pipedrive sync had run in the last 25 hours and emailed an alert if not.
+   With the sync gone it would have judged itself unhealthy on EVERY call and mailed
+   ALERT_EMAIL each time. Rewritten as a plain liveness endpoint.
+
+
+ALSO REMOVED
+------------
+  the webhook                     as you asked - Pipedrive no longer writes anything here
+  /api/sync, /api/deals           the old dashboards were the only callers
+  the old /api/value-changes      (the -crm one is separate and stays)
+  /api/allfields, /api/deal-raw, /api/stages
+                                  orphaned debug endpoints calling the Pipedrive API
+                                  directly - nothing in the app referenced them
+  saveCachedDeals, saveLastSync, getFieldMap, saveFieldMap in lib/db.js
+                                  dead writers to keys nothing reads
+  the Pipedrive probes in /api/test-storage
+                                  now reports the CRM stores instead
+
+VERIFIED: zero references to api.pipedrive.com or PIPEDRIVE_API_KEY anywhere in the app.
+You can delete that environment variable from Vercel whenever you like.
+
+The Pipedrive IMPORT tooling in the CRM is kept on purpose - lib/crmImportMap.js and the
+import screen - so you can still bring in an export if you ever need to. It reads files
+you upload; it never contacts Pipedrive.
+
+
+WHAT THE NAV LOOKS LIKE NOW
+---------------------------
+Nine tabs down to seven, and "(CRM)" dropped since there is nothing left to distinguish
+them from:
 
     Sales Dashboard  ->  /sales-crm
     Scorecards       ->  /scorecard-crm
 
-The green comparison banners are gone from both - there is no longer anything to compare
-against.
+Green comparison banners removed from both. Portal tile and the CRM back button repointed.
+No dangling links anywhere - checked.
 
-The portal tile and the CRM back button both now point at the new Sales Dashboard. I
-checked for anything else linking to the old pages: nothing.
-
-The URLs keep the -crm suffix. Renaming the files as well would have meant deleting and
-recreating two large pages in the GitHub editor for a cosmetic gain, and would break any
-bookmarks people have already made to /sales-crm.
-
-
-ONE THING I FOUND WHILE DOING THIS - AND IT MATTERED
------------------------------------------------------
-The NEGOTIATING page was still running on Pipedrive.
-
-/api/negotiating read getCachedDeals(), which is pipedrive:deals, kept current by the
-sync cron. Deleting the two dashboards would not have broken it - but the day you switch
-Pipedrive off it would have silently gone stale, showing a frozen list of deals that were
-in Negotiating whenever the last sync ran. Exactly the failure we have spent the last
-three packages removing everywhere else.
-
-It now reads the CRM through the same adapter as everything else. The page subtitle said
-"Live from Pipedrive"; it now says "Live from the CRM".
-
-That was the last one. I searched every page: nothing in Pre-Contract reads
-/api/deals, /api/value-changes, /api/sync or the Pipedrive cache any more.
-
-
-WHAT IS STILL RUNNING THAT YOU MAY WANT TO STOP
------------------------------------------------
-Deliberately left alone - tell me and I will remove them:
-
-  pages/api/sync.js            the Pipedrive pull
-  pages/api/webhook.js         still records value changes to the old store
-  pages/api/deals.js           now unused
-  pages/api/value-changes/     now unused (the -crm one is separate and stays)
-  the pipedrive-sync cron in vercel.json
-
-None of it does any harm - it writes to keys nothing reads now. But it is dead weight, and
-the crons cost you a run every hour for nothing. I have left them because removing the
-webhook is irreversible without reconfiguring Pipedrive, and you may want a period where
-the old data keeps updating in case you need to go back.
-
-Say when, and it is a five minute package.
+URLs keep the -crm suffix: renaming the files too would mean deleting and recreating two
+large pages in the GitHub editor for a cosmetic gain, and would break bookmarks.

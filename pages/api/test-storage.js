@@ -1,22 +1,35 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
 
+// Admin probe: reports what is actually in the CRM's stores.
+// It used to probe the Pipedrive keys as well; those are gone.
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['admin'])) return;
+
+  const describe = (v) => {
+    if (v == null) return 'empty'
+    if (Array.isArray(v)) return `found (${v.length} items)`
+    if (typeof v === 'object') return `found (${Object.keys(v).length} keys)`
+    return 'found'
+  }
+
   try {
-    // Try both key formats
-    const withUnderscore = await get('value_changes_all')
-    const withColon = await get('value_changes:all')
-    const pipedrive = await get('pipedrive_deals')
-    const pipedriveColon = await get('pipedrive:deals')
-    
-    return res.status(200).json({
-      value_changes_all: withUnderscore ? `found (${Array.isArray(withUnderscore) ? withUnderscore.length : 'not array'} items)` : 'empty',
-      'value_changes:all': withColon ? `found (${Array.isArray(withColon) ? withColon.length : 'not array'} items)` : 'empty',
-      pipedrive_deals: pipedrive ? `found (${Array.isArray(pipedrive) ? pipedrive.length : 'not array'} items)` : 'empty',
-      'pipedrive:deals': pipedriveColon ? `found (${Array.isArray(pipedriveColon) ? pipedriveColon.length : 'not array'} items)` : 'empty',
-    })
-  } catch(e) {
+    const keys = [
+      'crm:deals',
+      'crm:value-changes',
+      'crm:deal-milestones',
+      'crm:emails:unallocated',
+      'crm:emails:threads',
+      'crm:emails:never',
+      'crm:emails:sync-state',
+      'scorecard:targets',
+      // Kept so the one-off seeds can still find the historical archive.
+      'value_changes:all',
+    ]
+    const out = {}
+    for (const k of keys) out[k] = describe(await get(k))
+    return res.status(200).json(out)
+  } catch (e) {
     return res.status(200).json({ error: e.message })
   }
 }

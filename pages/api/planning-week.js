@@ -1,4 +1,5 @@
-import { get, getOpsProjects, getCachedDeals, getOpsUsers } from '../../lib/db'
+import { get, getOpsProjects, getOpsUsers } from '../../lib/db'
+import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 
 // Assembles one week's labour allocation BY OPERATIVE (the Weekly Labour Allocation view).
 //
@@ -21,7 +22,8 @@ async function projectNameMap() {
     for (const p of (ops || [])) map[`L:${p.projectNo}`] = { name: p.data?.projectName || p.projectNo, address: p.data?.projectAddress || p.data?.siteLocation || '' }
   } catch {}
   try {
-    const deals = (await getCachedDeals()) || []
+    // From the CRM, not the Pipedrive cache - same reason as planning.js.
+    const deals = crmDealsToFlat(await get('crm:deals') || [])
     for (const d of deals) if (d.stageName === 'Negotiating') map[`N:${d.id}`] = { name: (d.title || `Deal ${d.id}`) + ' (neg.)', address: d.siteLocation || d.organizationName || '' }
   } catch {}
   return map

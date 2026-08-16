@@ -1,4 +1,5 @@
-import { get, set, getOpsProjects, getCachedDeals } from '../../lib/db'
+import { get, set, getOpsProjects } from '../../lib/db'
+import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 
 // Planning — the data engine behind the Gantt.
 //
@@ -90,10 +91,12 @@ async function buildProjects() {
       siteSupervisor: p.data?.siteSupervisor || '',
     }))
 
-  // Negotiated projects (from cached Pipedrive deals at Negotiating stage)
+  // Negotiated projects, from the CRM at the Negotiating stage.
+  // Read the Pipedrive sync cache until now, which meant the Gantt's negotiated jobs
+  // would have frozen the day Pipedrive was switched off.
   let negotiated = []
   try {
-    const deals = (await getCachedDeals()) || []
+    const deals = crmDealsToFlat(await get('crm:deals') || [])
     negotiated = (Array.isArray(deals) ? deals : [])
       .filter(d => d.stageName === 'Negotiating' && d.status === 'open')
       .map(d => ({
