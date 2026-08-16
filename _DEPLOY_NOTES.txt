@@ -1,84 +1,44 @@
-pkg363 - Outlook email sync: the engine
-========================================
+pkg364 - Name the mailboxes directly
+=====================================
 
-REPLACES pkg302 through pkg362. Deploy this one only.
-
-
-NEW FILES - create manually in GitHub ("Add file" -> "Create new file")
------------------------------------------------------------------------
-  lib/msGraph.js
-  lib/crmEmailSync.js
-  pages/api/cron/crm-email-sync.js
-  lib/crmDailyActivityEmail.js          (if not already deployed)
-  pages/api/cron/crm-daily-activities.js (if not already deployed)
+REPLACES pkg302 through pkg363. Deploy this one only.
 
 CHANGED FILES
 -------------
-  vercel.json             adds the hourly email sync cron
-  everything else unchanged since pkg362
+  lib/msGraph.js          the fix
+  everything else unchanged since pkg363
+
+If pkg363 is already deployed, lib/msGraph.js is the ONLY file that has changed.
 
 
-WHAT THIS DOES
---------------
-Reads the four mailboxes in your CRM Sync Mailboxes group, matches each email to a project,
-and files it. Runs hourly.
-
-MATCHING, in order:
-  1. project title appears in the subject
-  2. sender or recipient is a known contact on a project
-  3. sender or recipient domain matches exactly ONE project's company
-
-Rule 3 only fires when the domain points at a single project. Two projects with the same
-customer means no match, because a wrong project is worse than none. Free domains -
-gmail, hotmail, outlook and so on - never match by domain.
-
-Project titles shorter than 8 characters do NOT match by subject. Your "Tesco" project
-would otherwise claim every email with Tesco in the subject. Tested: it does not.
-
-Only OPEN projects claim email.
-
-
-YOUR MAILBOX
-------------
-james@rockroofing.co.uk matches on RULE 1 ONLY - the project title in the subject. Never on
-who the email is with.
-
-Anything else from your mailbox is DISCARDED, not queued. It is never stored and never
-appears in the review list. Tested both ways: an email to a known contact with a project
-name in the subject is filed; the same contact without one is ignored entirely.
-
-Set by MS_PRIVATE_MAILBOXES if you want to change who this applies to.
-
-
-THE BACKFILL - IMPORTANT
--------------------------
-The first run for each mailbox does the history. It is NOT automatic - you trigger it:
-
-    /api/cron/crm-email-sync?backfillMonths=24&max=500
-
-Unmatched historical email is DISCARDED rather than queued, as agreed - 79,000 unallocated
-emails would have made the review queue useless. Only matched history is kept.
-
-Start with max=500 to see it work on a small slice before running the full 24 months.
-
-From then on the hourly run only asks for mail newer than its last run, and unmatched mail
-DOES go to the review queue - a handful a day, which is workable.
-
-
-TESTING FIRST
--------------
-    /api/cron/crm-email-sync?dryRun=1&max=100
-
-Reports per mailbox how many were fetched, matched, queued and discarded, and writes
-nothing at all. Run that before anything else - it is also the quickest confirmation that
-the Azure app, the secret and the access policy are all working.
-
-
-WHAT IS NOT IN THIS PACKAGE
+WHAT THE EMPTY RESULT MEANT
 ----------------------------
-The screens. Emails are being stored against projects and queued, but there is nothing in
-the CRM to look at them yet - that is the next package: emails in the deal history, and the
-unallocated queue with allocate/dismiss.
+    {"ok":true,"mailboxes":[], ...}
 
-I have split it deliberately: this half is the risky part and is worth confirming against
-your real mailboxes before I build screens on top of it.
+Not an error - it found the group and the group reported no members. A mail-enabled
+security group created through Exchange PowerShell does not reliably expose its membership
+through Graph, even with GroupMember.Read.All granted. The two systems keep group
+membership in slightly different places.
+
+
+THE FIX - ADD ONE MORE VERCEL VARIABLE
+----------------------------------------
+    MS_MAILBOXES = james@rockroofing.co.uk,edita@rockroofing.co.uk,Niall@rockroofing.co.uk,roman@rockroofing.co.uk
+
+Comma separated, no spaces needed. When this is set the group is not consulted at all -
+the app syncs exactly those mailboxes and nothing else.
+
+Add it, REDEPLOY, then run the dry run again.
+
+This is arguably the better arrangement anyway: the app no longer needs to read your
+directory to work out who to sync, and the list is visible in one place rather than
+inferred. You can even remove GroupMember.Read.All from the app registration afterwards if
+you want it tighter still.
+
+KEEP THE GROUP AND THE ACCESS POLICY. They are what stop the app reaching anyone else's
+mailbox - MS_MAILBOXES only says who to ASK for. If the two ever disagree, Exchange wins
+and refuses. Both together means a mistake in either one cannot expose a mailbox it should
+not.
+
+The group lookup is still there as a fallback, and now says plainly what to do if it comes
+back empty rather than reporting success with nothing.
