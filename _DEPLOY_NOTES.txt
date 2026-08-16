@@ -1,17 +1,11 @@
-pkg390 - Companies and Contacts moved right
-===========================================
+pkg391 - logo only in the CRM nav
+=================================
 
-Deploy after pkg389. One changed file: pages/crm.js. No new files.
+Deploy after pkg390. One changed file: pages/crm.js. No new files.
 
-The CRM toolbar now reads:
+The words "Rock Roofing" are gone from the left of the CRM toolbar. The logo stays, same
+size and position, with the same spacing to the Pre-Contract button beside it.
 
-  [logo] Rock Roofing | <- Pre-Contract | Saved | Pipeline/List | Activities | Emails
-  | Clear Filters | + Add project .............. Companies | Contacts | [Search]
-
-Companies and Contacts have moved from the middle of the left-hand group to the right-hand
-end, immediately left of the search box. Nothing else moved and nothing about how they
-work has changed.
-
-The old comment in the code said "Companies / Contacts buttons to the LEFT of search",
-which was already true and about to become confusing. Rewritten to say where they sit and
-why.
+Note the /crm-scores page (the one-off project scores tool) still shows the logo with the
+name next to it. Left as it is - it is a standalone admin page rather than part of the CRM
+toolbar. Say the word if you want that matching too.
