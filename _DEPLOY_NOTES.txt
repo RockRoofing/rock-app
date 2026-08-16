@@ -1,42 +1,16 @@
-pkg407 - fixes the crash on Edita's scorecard
-=============================================
+pkg408 - Scorecards before Sales Dashboard
+==========================================
 
-Deploy after pkg406. One changed file: pages/scorecard-crm.js. No new files.
+Deploy after pkg407. One changed file: components/PreContractNav.js. No new files.
 
-URGENT - pkg404 broke that page. This is the fix.
+The Pre-Contract nav now reads:
 
+    [CRM|Pre-Contract]  <- Portal | Scorecards | Sales Dashboard | Negotiating
+    | Project Financials | Internal Handover Minutes | Handover Docs
 
-WHAT I DID
-----------
-The Deals researched card I added in pkg404 read a variable called `measured` that is not
-declared until 30 lines further down:
+Only those two swapped.
 
-    line 465   const dealsResearched = measured ? ... : null
-    line 494   const measured = monthKey(GLENIGAN_TRACKING_FROM) <= m
-
-In JavaScript that is not "undefined" - it throws:
-
-    ReferenceError: Cannot access 'measured' before initialization
-
-Thrown during render, so React unmounts the whole page and you get the generic
-"Application error: a client-side exception has occurred". Nothing else on that page was
-wrong; one line took all of it down.
-
-`npm run build` compiles this happily - it is a runtime ordering fault, not a syntax one.
-The same class of thing as the undefined-identifier crashes we have had before, which is
-why the check script exists. I have added this pattern to what I scan for.
-
-
-THE FIX
--------
-Deals researched does not need that gate at all. `measured` is the GLENIGAN tracking cut
-off - those three metrics have no data before the CRM went live, so they show a dash. Deals
-researched is dated by created date, which every deal has, so there is no month we could
-not measure. The gate was wrong as well as misplaced.
-
-
-ALSO CHECKED
-------------
-Swept both metric functions for any other use-before-declaration. One more hit came back
-and it was a false positive - the string 'won' rather than the variable. Everything else
-is clean.
+NOTE: the AreaToggle still sends "Pre-Contract" to /sales-crm, so clicking it from the CRM
+lands on the Sales Dashboard rather than Scorecards - which is now the second tab, not the
+first. If you would rather it landed on Scorecards, that is one line in
+components/AreaToggle.js. Say the word.

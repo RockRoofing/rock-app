@@ -6,8 +6,8 @@ import AreaToggle from './AreaToggle'
 
 export default function PreContractNav({ active, children }) {
   const tabs = [
-    { key: 'sales-crm', label: 'Sales Dashboard', href: '/sales-crm' },
     { key: 'scorecard-crm', label: 'Scorecards', href: '/scorecard-crm' },
+    { key: 'sales-crm', label: 'Sales Dashboard', href: '/sales-crm' },
     { key: 'negotiating', label: 'Negotiating', href: '/negotiating' },
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },
     { key: 'handover', label: 'Internal Handover Minutes', href: '/handover' },
