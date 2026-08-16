@@ -752,6 +752,7 @@ function DealEmails({ dealId }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     let dead = false;
@@ -767,6 +768,28 @@ function DealEmails({ dealId }) {
     return () => { dead = true; };
   }, [dealId]);
 
+  // Filed against the wrong project, or should not be on a project at all. Removing it
+  // also tells the sync to leave it alone - without that it would simply be re-filed on
+  // the next run and the removal would look like it had not worked.
+  const unfile = async (m) => {
+    const ok = window.confirm('Take this email off the project?\n\nIt stays in Outlook. The sync will not file it again, here or anywhere else, until you undo it.');
+    if (!ok) return;
+    const before = items;
+    setItems((prev) => prev.filter((x) => x.id !== m.id));
+    setNote('');
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unfile-email', messageId: m.id, dealId: String(dealId) }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+      setNote('Removed.');
+    } catch {
+      setItems(before);
+      setNote('That did not save - the email has been put back.');
+    }
+  };
+
   return (
     <div>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Email</div>
@@ -774,10 +797,16 @@ function DealEmails({ dealId }) {
         Filed automatically from the synced mailboxes. To file one by hand, BCC crm@rockroofing.co.uk with <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>[CRM-{dealId}]</span> in the subject.
       </div>
       <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12 }}>
+        {note && <div style={{ fontSize: 12.5, color: C.dim, marginBottom: 8 }}>{note}</div>}
         {loading && <div style={{ fontSize: 13, color: C.dim }}>Loading&#8230;</div>}
         {!loading && err && <div style={{ fontSize: 13, color: C.lost }}>{err}</div>}
         {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>No email filed against this project yet.</div>}
-        {!loading && !err && items.map((m) => <EmailCard key={m.id} m={m} />)}
+        {!loading && !err && items.map((m) => (
+          <EmailCard key={m.id} m={m}>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => unfile(m)} title="Take this email off the project" style={{ background: 'none', border: 'none', color: C.dim, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
+          </EmailCard>
+        ))}
       </div>
     </div>
   );
@@ -825,6 +854,7 @@ function EmailQueue({ deals, onOpenDeal }) {
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [noteDeal, setNoteDeal] = useState(null);
+  const [noteUndo, setNoteUndo] = useState('');
   const [search, setSearch] = useState('');
   const [pickerFor, setPickerFor] = useState(null);
   const [busy, setBusy] = useState('');
@@ -845,8 +875,8 @@ function EmailQueue({ deals, onOpenDeal }) {
 
   // Optimistic, with the row put back if the write fails - the same pattern the
   // Activities tab uses for mark-done.
-  const act = async (m, payload, doneMsg, deal) => {
-    setBusy(m.id); setPickerFor(null); setNote(''); setNoteDeal(null);
+  const act = async (m, payload, doneMsg, deal, undoId) => {
+    setBusy(m.id); setPickerFor(null); setNote(''); setNoteDeal(null); setNoteUndo('');
     const before = items;
     setItems((prev) => prev.filter((x) => x.id !== m.id));
     try {
@@ -855,7 +885,7 @@ function EmailQueue({ deals, onOpenDeal }) {
         body: JSON.stringify(payload),
       }).then((r) => r.json());
       if (!d || !d.ok) throw new Error(d?.error || 'Failed');
-      setNote(doneMsg); setNoteDeal(deal || null);
+      setNote(doneMsg); setNoteDeal(deal || null); setNoteUndo(undoId || '');
     } catch (e) {
       setItems(before);
       setNote(`That did not save - the email has been put back. ${e.message || ''}`.trim());
@@ -865,9 +895,9 @@ function EmailQueue({ deals, onOpenDeal }) {
 
   const allocate = (m, deal) => act(m, { action: 'allocate-email', messageId: m.id, dealId: String(deal.id) }, `Filed against ${deal.title || deal.id}.`, deal);
   const dismiss = (m) => {
-    const ok = window.confirm('Remove this email from the review queue? It stays in Outlook - it just will not be filed against a project, and it will not come back here.');
+    const ok = window.confirm('Do not assign this email to a project?\n\nIt stays in Outlook untouched. The sync will leave it alone from now on, so it will not come back to this queue.');
     if (!ok) return;
-    act(m, { action: 'dismiss-email', messageId: m.id }, 'Dismissed.');
+    act(m, { action: 'dismiss-email', messageId: m.id }, 'Marked do not assign.', null, m.id);
   };
 
   const shown = useMemo(() => {
@@ -893,6 +923,18 @@ function EmailQueue({ deals, onOpenDeal }) {
           <div style={{ fontSize: 13, padding: '8px 11px', borderRadius: 8, background: C.mention, color: C.text, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <span>{note}</span>
             {noteDeal && onOpenDeal && <button onClick={() => onOpenDeal(noteDeal.id)} style={{ background: 'none', border: 'none', color: C.link, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Open project &rarr;</button>}
+            {noteUndo && (
+              <button
+                onClick={async () => {
+                  const id = noteUndo;
+                  setNoteUndo('');
+                  try {
+                    await fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'allow-email-again', messageId: id }) });
+                    setNote('Undone. It will be picked up again on the next sync.');
+                  } catch { setNote('Could not undo that.'); }
+                }}
+                style={{ background: 'none', border: 'none', color: C.link, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>Undo</button>
+            )}
           </div>
         )}
         {loading && <div style={{ fontSize: 13, color: C.dim }}>Loading&#8230;</div>}
@@ -905,7 +947,7 @@ function EmailQueue({ deals, onOpenDeal }) {
             <EmailCard m={m}>
               <div style={{ flex: 1 }} />
               <button disabled={busy === m.id} onClick={() => setPickerFor((v) => v === m.id ? null : m.id)} style={{ ...primaryBtn, opacity: busy === m.id ? 0.5 : 1 }}>Allocate to project</button>
-              <button disabled={busy === m.id} onClick={() => dismiss(m)} style={{ ...ghostBtn, color: C.dim }}>Dismiss</button>
+              <button disabled={busy === m.id} onClick={() => dismiss(m)} style={{ ...ghostBtn, color: C.dim }}>Do not assign</button>
             </EmailCard>
             {pickerFor === m.id && (
               <div style={{ marginTop: -4, marginBottom: 10 }}>

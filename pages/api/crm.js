@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
-import { getDealEmails, getUnallocated, allocateEmail, dismissEmail } from '../../lib/crmEmailSync'
+import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
 //   GET                    -> { deals, schema }
@@ -365,6 +365,24 @@ export default async function handler(req, res) {
       const messageId = String(body.messageId || '')
       if (!messageId) return res.status(400).json({ error: 'messageId required' })
       const out = await dismissEmail(messageId)
+      return res.json(out)
+    }
+
+    // Take an email back off a project. Also marks it do-not-assign, otherwise the next
+    // sync would simply file it again and it would look like the removal never happened.
+    if (body.action === 'unfile-email') {
+      const messageId = String(body.messageId || '')
+      const dealId = String(body.dealId || '')
+      if (!messageId || !dealId) return res.status(400).json({ error: 'messageId and dealId required' })
+      const out = await unfileEmail(dealId, messageId)
+      return res.json(out)
+    }
+
+    // The way back from a mis-click on Do not assign.
+    if (body.action === 'allow-email-again') {
+      const messageId = String(body.messageId || '')
+      if (!messageId) return res.status(400).json({ error: 'messageId required' })
+      const out = await allowEmailAgain(messageId)
       return res.json(out)
     }
 

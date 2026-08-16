@@ -1,34 +1,79 @@
-pkg368 - one click copy on the project title
-============================================
+pkg369 - Do not assign to a project
+===================================
 
-DEPLOY pkg366 FIRST if you have not already. This file builds on it.
+DEPLOY pkg366 AND pkg368 FIRST. This builds on both.
 
-CHANGED FILES (already exists - replace it)
--------------------------------------------
-  pages/crm.js
+CHANGED FILES (all already exist - replace them)
+------------------------------------------------
+  lib/crmEmailSync.js    remembers what must never be filed
+  pages/api/crm.js       two new actions
+  pages/crm.js           the buttons
 
 NEW FILES
 ---------
   NONE.
 
 
-WHAT CHANGED
-------------
-Inside a project, the title in the black header is now a copy button. Click it and the
-project title goes to your clipboard. A small grey "copy" hint sits next to it so it is
-obvious it does something, and it says "Copied" for a second and a half afterwards.
-
-The [CRM-nnn] chip next to Won/Lost now uses the same button, so both behave identically.
-Previously it copied silently - you clicked and nothing happened on screen, so there was
-no way to tell whether it had worked.
-
-If the copy fails it says "Copy failed" rather than pretending. There is a fallback for
-browsers where the clipboard API is unavailable, which covers older phones and anything
-not on https.
-
-
-WHY A SHARED COMPONENT
+THE PROBLEM THIS FIXES
 ----------------------
-Both copy buttons now run through one CopyButton component rather than each having its own
-handler. Anywhere else you want a copy button, it is one line and it will look and behave
-the same as these two.
+Dismiss only emptied the row out of the queue. It did not record anything. So the moment
+the sync state was cleared, or a backfill was run, the same personal email came straight
+back and had to be dismissed all over again. There was no way to say "leave this alone".
+
+
+WHAT YOU GET
+------------
+
+1. DO NOT ASSIGN  (review queue)
+   The Dismiss button is now "Do not assign". It asks first, then records the message as
+   one that must never go on a project. The sync skips it before it even tries to match -
+   so not even a [CRM-nnn] reference in the subject will file it. A person overrules a
+   rule.
+
+   It stays in Outlook. Nothing is deleted, ever.
+
+2. REMOVE  (on the project)
+   Every email in a project's Email section now has a small "Remove" link. Use it when
+   something has filed against the wrong job, or should not be on a project at all.
+
+   Removing also marks it do-not-assign. That is deliberate: without it the next sync
+   would re-file the same email within fifteen minutes and it would look as though the
+   removal had not worked.
+
+3. UNDO
+   After Do not assign you get an Undo link in the confirmation bar. It lifts the block so
+   the email is picked up again on the next sync. Worth knowing it is there before anybody
+   clicks the button in anger.
+
+   Undo is offered on the queue action only. To bring back something you removed from a
+   project, tell me the subject and I can lift it - or say the word and I will add a small
+   "do not assign" list you can manage yourself.
+
+
+THE SYNC OUTPUT GAINS A FIELD
+-----------------------------
+Each mailbox now reports "skipped" alongside fetched / matched / queued / discarded. That
+is how many were passed over because you had said do not assign. Handy as a sanity check
+that the list is doing what you think.
+
+
+HOW IT IS STORED
+----------------
+  crm:emails:never    message ids, newest first, capped at 2,000
+
+Capped so it cannot grow without limit. Dismissals should be rare; if you ever get near
+2,000 the oldest fall off and could in principle be re-queued once, which is worth knowing
+but very unlikely to matter.
+
+
+ON WHO CAN SEE WHAT
+-------------------
+Not a change, just so it is written down: every CRM user (pre-contract, management, admin)
+sees every email filed against a project, whichever mailbox it came from. There is no
+per-person restriction once mail is filed. If that needs to change it is a real piece of
+work and a policy decision first.
+
+The lever that does exist is MS_PRIVATE_MAILBOXES. Any mailbox on that list only files
+mail with a project name in the subject - nothing matched on who the email is with, and
+nothing queued for review. That is the setting to use if somebody wants their mailbox
+synced for job mail only.
