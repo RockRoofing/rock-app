@@ -7,14 +7,15 @@ import { refreshEmailVolume } from '../../../lib/crmEmailVolume'
 //
 //   ?months=13   widen the window, for a one-off backfill
 //   ?mailbox=x   one mailbox only
-//   ?max=5000    cap messages scanned per mailbox
+//   ?max=5000    cap messages scanned per mailbox. Defaults high: too low a cap stops
+//                the scan part-way, and the months it never reached would look empty.
 export const config = { maxDuration: 300 }
 
 export default async function handler(req, res) {
   try {
     const months = Math.min(24, parseInt(req.query.months || '2', 10) || 2)
     const mailbox = String(req.query.mailbox || '').trim()
-    const max = parseInt(req.query.max || '2000', 10) || 2000
+    const max = parseInt(req.query.max || '20000', 10) || 20000
     const out = await refreshEmailVolume({ months, mailbox, max })
     return res.status(200).json(out)
   } catch (e) {

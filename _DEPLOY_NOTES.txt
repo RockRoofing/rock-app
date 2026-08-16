@@ -1,16 +1,90 @@
-pkg408 - Scorecards before Sales Dashboard
-==========================================
+pkg410 - Calls made, teed up for 8x8 Work
+=========================================
 
-Deploy after pkg407. One changed file: components/PreContractNav.js. No new files.
+Deploy after pkg409.
 
-The Pre-Contract nav now reads:
+NEW FILES - create these three with "Add file"
+-----------------------------------------------
+  lib/crm8x8.js
+  pages/api/call-volume.js
+  pages/api/cron/crm-call-volume.js
 
-    [CRM|Pre-Contract]  <- Portal | Scorecards | Sales Dashboard | Negotiating
-    | Project Financials | Internal Handover Minutes | Handover Docs
+CHANGED FILES (replace)
+-----------------------
+  pages/scorecard-crm.js
+  pages/api/targets.js
+  vercel.json                  (nightly cron at 02:30 - now 14)
 
-Only those two swapped.
 
-NOTE: the AreaToggle still sends "Pre-Contract" to /sales-crm, so clicking it from the CRM
-lands on the Sales Dashboard rather than Scorecards - which is now the second tab, not the
-first. If you would rather it landed on Scorecards, that is one line in
-components/AreaToggle.js. Say the word.
+READ THIS FIRST - IT WILL NOT WORK ON THE FIRST TRY
+-----------------------------------------------------
+I could not open 8x8's API documentation while building this. The endpoint, the auth flow
+and the field names are my best understanding and are quite likely wrong or out of date.
+
+I have NOT written it as though I know. Everything that reads their response is tolerant -
+it tries several plausible names for each field rather than one - and there is a
+diagnostic that returns one untouched record so we can see the truth and correct it.
+
+Building it any other way would have produced a number that looked right and was not.
+
+
+STEP 1 - SET THE CREDENTIALS IN VERCEL
+--------------------------------------
+    EIGHTX8_CLIENT_ID
+    EIGHTX8_CLIENT_SECRET
+
+Optional, only if my guesses are wrong:
+    EIGHTX8_TOKEN_URL        default https://api.8x8.com/oauth/v2/token
+    EIGHTX8_RECORDS_URL      default https://api.8x8.com/analytics/work/v2/call-records
+    EIGHTX8_EXTENSION_MAP    "1234=edita@rockroofing.co.uk,1235=niall@rockroofing.co.uk"
+    EIGHTX8_MIN_SECONDS      default 0
+
+
+STEP 2 - SHOW ME ONE REAL RECORD
+--------------------------------
+    /api/cron/crm-call-volume?sample=1
+
+Writes nothing. Returns one raw call record and its field names. Send me that response and
+I will correct lib/crm8x8.js in one small package. That is the round trip I expect.
+
+If it returns an auth error instead, that is still useful - it tells us the token URL or
+the credentials need changing rather than the field names.
+
+
+STEP 3 - ONCE THE SAMPLE LOOKS RIGHT
+------------------------------------
+    /api/cron/crm-call-volume?months=13
+
+Backfills a year. Nightly cron then recounts the last two months, overwriting rather than
+adding, so it cannot double-count. Same design as the email volume job, including the
+lesson from it: a run that stops at the record cap does NOT write zeros for the months it
+never reached, and says so in the response.
+
+
+WHAT IT COUNTS
+--------------
+Outbound calls only, as you asked. Every one of them - answered or not, however short.
+
+Worth saying plainly once: that means a four-second misdial counts the same as a
+twenty-minute conversation with a main contractor. If the number ever looks inflated,
+EIGHTX8_MIN_SECONDS is a Vercel setting, not a code change - set it to 30 and short calls
+drop out.
+
+
+THE MAPPING PROBLEM
+-------------------
+8x8 knows people by extension; the scorecard knows them by name; the two are joined
+through the portal user's email address. If 8x8 returns an email on each record this works
+by itself. If it returns extensions, set EIGHTX8_EXTENSION_MAP and it will resolve them.
+
+The response reports "unresolvedCaller" - calls that matched nobody. If that number is
+high, it is the mapping, not the API.
+
+
+ON THE SCORECARD
+----------------
+A "Calls made" card sits under "Emails sent externally". Default target 100/month, which is
+a placeholder - set the real one with the pencil once there is data to judge.
+
+Months with no figure show a dash, not a zero. Until step 2 is done the whole card will be
+dashes, which is correct rather than broken.

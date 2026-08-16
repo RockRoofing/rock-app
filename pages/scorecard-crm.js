@@ -223,6 +223,7 @@ export default function Scorecard() {
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState(null)
   const [emailVolume, setEmailVolume] = useState({})
+  const [callVolume, setCallVolume] = useState({})
   const [targets, setTargets] = useState(null)
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -249,10 +250,11 @@ export default function Scorecard() {
   async function loadData() {
     setLoading(true)
     try {
-      const [dr, vc, ev, tr] = await Promise.all([
+      const [dr, vc, ev, cv, tr] = await Promise.all([
         fetch('/api/deals-crm'),
         fetch('/api/value-changes-crm'),
         fetch('/api/email-volume'),
+        fetch('/api/call-volume'),
         fetch('/api/targets')
       ])
       const dd = await dr.json()
@@ -263,6 +265,7 @@ export default function Scorecard() {
       // Email volume is a nice-to-have on this page; a failure here must not stop the
       // scorecard loading.
       try { setEmailVolume((await ev.json()).volume || {}) } catch { setEmailVolume({}) }
+      try { setCallVolume((await cv.json()).volume || {}) } catch { setCallVolume({}) }
       const td = await tr.json()
       setTargets(td.targets || DEFAULT_TARGETS)
       // Load Xero project data for GP margin cards
@@ -507,6 +510,8 @@ export default function Scorecard() {
       // 0 when there is no figure at all - a month we never counted is not a month with
       // no emails, and a red zero against target would be a lie.
       emailsSentExternal: personMailbox ? (emailVolume[personMailbox]?.[m] ?? null) : null,
+      // Outbound calls from 8x8. Same rule: null, not zero, for a month never counted.
+      callsMade: personMailbox ? (callVolume[personMailbox]?.[m] ?? null) : null,
       avgValueSecured: avgNow.avg,
       _avgValueSecuredPrior: avgPrior.avg,
       _avgValueSecuredCount: avgNow.count,
@@ -543,6 +548,7 @@ export default function Scorecard() {
   const salesMetricDefs = [
     { key: 'dealsResearched', label: 'Deals researched', sub: 'Projects added to Project In', format: v => v, targetKey: 'dealsResearched', drillKey: '_dealsResearchedList' },
     { key: 'emailsSentExternal', label: 'Emails sent externally', sub: 'To at least one address outside Rock Roofing', format: v => v, targetKey: 'emailsSentExternal' },
+    { key: 'callsMade', label: 'Calls made', sub: 'Outbound calls, from 8x8', format: v => v, targetKey: 'callsMade' },
     { key: 'gleniganReceived', label: 'Glenigan enquiries received', format: v => v, targetKey: 'gleniganReceived', drillKey: '_gleniganReceivedProjects' },
     { key: 'gleniganPriced', label: 'Glenigan enquiries priced', format: v => v, targetKey: 'gleniganPriced', drillKey: '_gleniganPricedProjects' },
     { key: 'gleniganScored5', label: 'Glenigan scored ≥5', format: v => v, targetKey: 'gleniganScored5', drillKey: '_gleniganScored5Projects' },
