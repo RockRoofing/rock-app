@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
-import { sendMentionEmails, getMentionableUsers } from '../../lib/crmMentions'
+import { sendMentionEmails, getMentionableUsers, diagnoseMentions } from '../../lib/crmMentions'
 import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
@@ -350,6 +350,13 @@ export default async function handler(req, res) {
         author: body.author || '',
         kind: body.kind === 'comment' ? 'comment' : 'note',
       })
+      return res.json(out)
+    }
+
+    // Diagnostic for @mention email. Sends nothing; says who it resolves to and how the
+    // mail service is configured.
+    if (body.action === 'mention-diagnose') {
+      const out = await diagnoseMentions(String(body.body || '@'))
       return res.json(out)
     }
 

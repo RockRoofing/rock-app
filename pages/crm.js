@@ -1610,6 +1610,10 @@ function CRMPageInner() {
   const [schema, setSchema] = useState(DEFAULT_FIELD_SCHEMA);
   const skipSave = useRef(true);
   const [saveError, setSaveError] = useState('');
+  // Outcome of the last @mention email. Shown next to the save status in the toolbar,
+  // because a mention that silently failed to send is worse than no mention at all.
+  const [mentionMsg, setMentionMsg] = useState('');
+  useEffect(() => { if (!mentionMsg) return; const t = setTimeout(() => setMentionMsg(''), 8000); return () => clearTimeout(t); }, [mentionMsg]);
   // id -> JSON of the deal as last successfully saved, so each save can send just the
   // deals that actually differ.
   const savedSnapshot = useRef(new Map());
@@ -2268,7 +2272,20 @@ function CRMPageInner() {
     fetch('/api/crm', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'notify-mentions', dealId: id, dealTitle: d?.title || '', body, author: me?.name || '', kind }),
-    }).catch(() => {});
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        // Say when the email did NOT go. Swallowing this is why a mention could look like
+        // it had notified somebody when nothing had been sent - the history line said
+        // "Emailed: Roman" regardless.
+        if (!res || res.ok === false) { setMentionMsg(res?.error || 'Mention email could not be sent.'); return; }
+        if (res.sent > 0) { setMentionMsg(`Emailed ${res.names.join(', ')}.`); return; }
+        const why = Array.isArray(res.failed) && res.failed.length
+          ? `${res.failed[0].status || ''} ${res.failed[0].detail || ''}`.trim()
+          : (res.note || 'nobody matched');
+        setMentionMsg(`Mention email not sent - ${why}`);
+      })
+      .catch(() => setMentionMsg('Mention email could not be sent.'));
     return names;
   };
 
@@ -2276,7 +2293,7 @@ function CRMPageInner() {
     const m = extractMentions(body, users);
     patch(id, (d) => {
       const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }];
-      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` });
+      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Mentioned: ${m.join(', ')}` });
       return { ...d, history: [...d.history, ...ev] };
     });
     notifyMentions(id, body, 'note');
@@ -2285,7 +2302,7 @@ function CRMPageInner() {
     const m = extractMentions(body, users);
     patch(id, (d) => {
       const withComment = d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso(), author: me?.name || '' }] } : h);
-      const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` }] : [];
+      const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Mentioned: ${m.join(', ')}` }] : [];
       return { ...d, history: [...withComment, ...extra] };
     });
     notifyMentions(id, body, 'comment');
@@ -2328,7 +2345,7 @@ function CRMPageInner() {
     patch(id, (d) => {
       const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null };
       const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }];
-      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` });
+      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Mentioned: ${m.join(', ')}` });
       return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] };
     });
     // Assignment notification is a separate thing and is NOT sent here - the daily
@@ -2867,6 +2884,11 @@ function CRMPageInner() {
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>
+        {mentionMsg && (
+          <span title={mentionMsg} style={{ fontSize: 11.5, color: mentionMsg.startsWith('Emailed') ? '#7ac57a' : '#ffb454', maxWidth: 340, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {mentionMsg}
+          </span>
+        )}
         {/* Import button removed - the Pipedrive import is done, and it is wipe-and-replace,
             so leaving it on the toolbar was a standing risk of wiping live data by
             accident. The import itself still works; put this line back to expose it. */}

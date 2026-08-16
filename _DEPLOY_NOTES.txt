@@ -1,69 +1,66 @@
-pkg395 - the dead comment boxes, and full-name mentions
+pkg396 - find out WHY the mention email is not arriving
 =======================================================
 
-Deploy after pkg394.
+Deploy after pkg395.
 
 CHANGED FILES (replace)
 -----------------------
   pages/crm.js
+  pages/api/crm.js
   lib/crmMentions.js
 
 NEW FILES: none.
 
 
-1. WHY SOME COMMENT BOXES WOULD NOT ACCEPT TYPING
---------------------------------------------------
-Nothing was wrong with the boxes. Every note was in the deal TWICE.
+I CANNOT SEE YOUR SERVER, SO THIS MAKES THE FAILURE VISIBLE
+------------------------------------------------------------
+The send was fire-and-forget: if it failed, nothing was reported and the history line
+still said "Emailed: Roman". That was my mistake - it made a silent failure look like a
+success. Three changes:
 
-Opening a deal ran the sub-record load twice:
+1. The toolbar now REPORTS the outcome next to Saved:
+       "Emailed Roman Jarosz."                       - it went
+       "Mention email not sent - 403 <reason>"        - it did not, and why
+   Shows for 8 seconds. The note itself still saves either way.
 
-    openDealById  ->  loadDealSubs(id)                      (first merge)
-                  ->  router.push(?deal=id)
-                          -> the router effect fires
-                          -> loadDealSubs(id) again          (second merge)
+2. Whatever Resend says back is now kept instead of discarded. The status code and the
+   first 300 characters of its reply come through to that message.
 
-The merge appended blindly, so every imported note and activity went in twice - with the
-SAME id both times. React uses those ids as keys, and duplicate keys make sibling
-components share state. That is why one comment box would take typing and the identical
-one below it would not: two elements fighting over one key.
-
-It looked random because it depended on which note you happened to click, and it varied
-between sessions.
-
-FIXED TWO WAYS:
-  - the merge is now by id, so running it twice changes nothing (proven on the bench:
-    merge once, twice, three times - same 2 history entries, no duplicate ids)
-  - openDealById no longer calls it at all, since the router effect already does
-
-Nothing was corrupted in the database. Imported records are stripped before saving
-(the h_pd_ filter in leanDeal), so this only ever existed in the browser. Reloading the
-page was, unknowingly, the workaround.
-
-Keeping the existing entry on merge also protects comments: the imported branch hard-codes
-comments:[], so a second merge would have wiped any comment added to an imported note.
+3. The history line says "Mentioned: Roman" rather than "Emailed: Roman", because the
+   history should not claim something that may not have happened.
 
 
-2. MENTIONS USE FULL PORTAL USER NAMES
---------------------------------------
-The pool is pre-contract plus admin portal users - the same list that decides who can own
-a CRM activity. Full names throughout: the autocomplete lists them, and picking one
-inserts "@Edita Durikova", not "@Edita".
+RUN THIS FIRST - IT ANSWERS THE QUESTION WITHOUT SENDING ANYTHING
+------------------------------------------------------------------
+On any portal page, F12 -> Console. Type  allow pasting  and Enter if Chrome asks. Then:
 
-Typing a full name by hand now works too. The suggestion box used to give up at the space,
-so "@Edita Dur" stopped suggesting; it now allows one space after the @.
+    fetch('/api/crm',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'mention-diagnose',body:'@Roman test'})})
+      .then(r=>r.json()).then(console.log)
 
-A FIRST NAME still resolves, but ONLY where exactly one person has it. If you ever have
-two Jameses, "@James" on its own notifies nobody rather than picking one - guessing who to
-email is worse than not emailing. "@James McVeigh" and "@James Bell" both work. Usernames
-work too.
+It sends no email. It returns:
 
-Tested:
-    "@Edita Durikova please look"      -> Edita Durikova
-    "@Edita"                           -> Edita Durikova   (only one Edita)
-    "@James"  with two Jameses         -> nobody
-    "@James McVeigh"                   -> James McVeigh
-    "@jamesb"                          -> James Bell
-    "mail me at jm@rockroofing.co.uk"  -> nobody           (an address is not a mention)
+    mentionableUsers   everyone who CAN be mentioned, with their email address
+    resolved           who "@Roman test" actually matched
+    resendConfigured   true/false - is RESEND_API_KEY set
+    from               the address it would send FROM
 
-The same rule is applied in two places - the browser, which decides what the history line
-says, and the server, which decides who gets the email - so they cannot disagree.
+WHAT THE ANSWER WILL PROBABLY BE
+--------------------------------
+My strongest suspicion, in order:
+
+  a) mentionableUsers is EMPTY or missing people.
+     Users are only mentionable if they have an email address on their portal account AND
+     a pre-contract or admin role. A user with no email set is silently skipped - there is
+     nowhere to send to. Check Admin -> Users.
+
+  b) "from" reads  Rock Roofing <onboarding@resend.dev>
+     That is Resend's test sender. It is only allowed to deliver to the address that owns
+     the Resend account - everyone else is rejected. If that is what you see, set
+     FORMS_FROM_EMAIL in Vercel to a verified rockroofing.co.uk sender and it will work.
+     This would also explain why the daily activity email may only ever have reached you.
+
+  c) resendConfigured is false - the key is missing on this deployment.
+
+Send me what it returns and I will know which. If it is (b) it is a Vercel setting, not a
+code change.
