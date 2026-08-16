@@ -1,78 +1,71 @@
-pkg411 - 8x8 auth corrected against the real documentation
-==========================================================
+pkg412 - Edita's scorecard, reshaped
+====================================
 
-Deploy after pkg410. Replaces two files from it.
+Deploy after pkg411.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/crm8x8.js
-  pages/api/cron/crm-call-volume.js
+  pages/scorecard-crm.js
+  pages/api/targets.js
 
 NEW FILES: none.
 
 
-I HAD THE AUTHENTICATION WRONG
-------------------------------
-I guessed OAuth2 with a client id and secret. It is not that.
+THE CARDS NOW, IN ORDER
+-----------------------
+    Deals researched
+    Emails sent externally
+    Calls made
+    Glenigan scored >=5
+    Actively Chased scored >=5          NEW
+    Strike rate (value) - all estimators
+    Total value of work priced
+    Average value of projects priced    NEW
+    Total value of work secured
+    Average value of projects secured
 
-8x8 Work Analytics wants an API KEY HEADER plus the USERNAME AND PASSWORD of a real 8x8
-user who has Work Analytics access. Corrected.
-
-    POST https://api.8x8.com/analytics/work/v1/oauth/token
-    header  8x8-apikey: {key}
-    body    username={8x8 user}&password={their password}
-
-Every report request then sends BOTH the 8x8-apikey header and Authorization: Bearer.
-Token lasts 1800 seconds and is cached.
-
-
-SET THESE IN VERCEL
--------------------
-    EIGHTX8_API_KEY     from Admin Console. For Work Analytics the SECRET is NOT needed.
-    EIGHTX8_USERNAME    an 8x8 user with Work Analytics access
-    EIGHTX8_PASSWORD    that user's password
-    EIGHTX8_PBX_ID      the opaque PBX id - NOT the PBX name
-
-Two things from their docs worth knowing before you waste an afternoon:
-
-  - The user whose credentials you use MUST have opened Analytics for Work in a browser
-    at least once. Until they have, the API will reject them. If you get a 401, that is
-    the first thing to check - the error message now says so.
-  - It does not have to be the same person who generated the API key.
-
-I do not know your PBX_ID. It is an opaque string rather than a name, and their docs do
-not show a way to list it - it will be in Admin Console or 8x8 can tell you.
+REMOVED: Glenigan enquiries received, Glenigan enquiries priced, Strike rate MC Secured/
+Negotiating, Projects priced >=200K, Projects secured >=200K.
 
 
-THE GOOD NEWS - 8x8 ALREADY DOES "UNRETURNED CALLS"
------------------------------------------------------
-Their docs list it as its own report:
+ACTIVELY CHASED SCORED >=5
+--------------------------
+Identical rule to the Glenigan one: reached Received in that month, and scores 5 or more
+as it stands today. Lead source is read as it is NOW, so a project marked Actively Chased
+after it was received still counts, dated by when it was received.
 
-    GET /v2/pbxes/{pbxId}/calls/unreturned
-
-That is very close to what you asked for. It means we do not have to stitch missed inbound
-calls to later outbound ones ourselves and guess at matching phone numbers - which would
-have been fragile and probably wrong.
-
-Whether it can distinguish "not returned within an hour" from "not returned at all"
-depends on what fields it carries. There is a probe for it below.
+"Actively Chased" is matched on the lead source you added in pkg380. Nothing will show
+until projects start carrying it - and, like the Glenigan card, it needs a received date,
+which only exists for stage moves the CRM has watched. Forward-only, as agreed.
 
 
-RUN THESE TWO ONCE THE CREDENTIALS ARE IN
--------------------------------------------
-    /api/cron/crm-call-volume?sample=1        one raw call record + its field names
-    /api/cron/crm-call-volume?unreturned=1    same, for the Unreturned Calls report
+AVERAGE VALUE OF PROJECTS PRICED
+--------------------------------
+Same rolling shape as the secured one - 6 months to the month shown, with the previous
+6 underneath and the direction of travel.
 
-Both write nothing. Send me the responses and I will finish the integration properly
-rather than guessing at field names.
+One decision worth knowing: it averages per PROJECT, not per pricing event. A project
+repriced three times in the window is still one project. Averaging the events instead
+would let a single job that got revised a lot drag the whole figure about.
+
+Each project is taken at the LAST price set in the window - the current answer, not the
+first guess.
 
 
-STILL OPEN
-----------
-The docs page you sent covers the queue and agent reports. It refers to CALL DETAIL
-RECORDS and EXTENSION SUMMARY on other pages, and one of those is probably the better
-source for "outbound calls per person" than the /calls endpoint I am currently pointing at.
+TARGETS
+-------
+Defaults for the two new cards are placeholders and almost certainly wrong:
 
-If you can send those two doc pages the same way you sent this one - Word document worked
-where the text attachments did not - I can pick the right endpoint rather than the first
-plausible one.
+    Actively Chased scored >=5        3 / month
+    Average value of projects priced  £200,000
+
+Set the real ones with the pencil on each card. The targets for the five removed metrics
+are left in the defaults file - harmless, and they belong to cards that may come back.
+
+
+LEFT IN PLACE ON PURPOSE
+------------------------
+The calculations behind the removed cards still run. They feed drill-downs elsewhere and
+cost nothing, and tearing out working code to remove three cards from a list is a risk
+with no upside. If you want them properly gone, say so and I will do it as its own change
+where it can be checked on its own.

@@ -424,6 +424,18 @@ export default function Scorecard() {
     })
     const gleniganScored5 = gleniganScored5Projects.length
 
+    // Actively Chased scored >=5. Same rule as the Glenigan one - reached Received in this
+    // month, and scores 5 or more as it stands today. Lead source is read as it is NOW, so
+    // a project marked Actively Chased after it was received still counts, dated by when
+    // it was received.
+    const chasedScored5Projects = deals.filter(d => {
+      if (!getLeadSource(d)?.toLowerCase().includes('actively chased')) return false
+      if (!d.receivedDate || monthKey(d.receivedDate) !== m) return false
+      const score = parseInt(d.label)
+      return !isNaN(score) && score >= 5
+    })
+    const chasedScored5Count = chasedScored5Projects.length
+
     // #5 Strike rate (value): rolling 6 months, all estimators, all decided deals with a value
     const rolling6All = deals.filter(d =>
       (d.status === 'won' || d.status === 'lost') && d.value > 0 &&
@@ -491,6 +503,31 @@ export default function Scorecard() {
     const avgNow = avgWindow(m, 6)
     const avgPrior = avgWindow(priorEnd, 6)
 
+    // AVERAGE VALUE OF PROJECTS PRICED - same rolling shape as the secured one, but per
+    // PROJECT rather than per pricing event. A project repriced three times in the window
+    // is still one project; averaging the events instead would let a single job that got
+    // revised a lot drag the figure around.
+    // Each project is taken at the LAST price it was set to in the window - the current
+    // answer, not the first guess.
+    const avgPricedWindow = (endMonth, backMonths) => {
+      const end = new Date(`${endMonth}-01T00:00:00Z`)
+      const start = new Date(end); start.setMonth(start.getMonth() - (backMonths - 1))
+      const startKey = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`
+      const latest = new Map()
+      for (const v of valueChanges) {
+        if (!v.changeDate) continue
+        const k = monthKey(v.changeDate)
+        if (k < startKey || k > endMonth) continue
+        if (!(Number(v.newValue) > 0)) continue
+        const prev = latest.get(String(v.dealId))
+        if (!prev || String(v.changeDate) > String(prev.changeDate)) latest.set(String(v.dealId), v)
+      }
+      const vals = [...latest.values()].map(v => Number(v.newValue))
+      return vals.length ? { avg: vals.reduce((a, b) => a + b, 0) / vals.length, count: vals.length } : { avg: null, count: 0 }
+    }
+    const avgPricedNow = avgPricedWindow(m, 6)
+    const avgPricedPrior = avgPricedWindow(priorEnd, 6)
+
     // A MONTH WE NEVER MEASURED IS NOT A MISSED TARGET.
     //
     // These three are dated by events - entering Received, getting a first value - and
@@ -506,6 +543,11 @@ export default function Scorecard() {
     return {
       gleniganReceived: gr, gleniganPriced: gp, gleniganScored5: gs,
       dealsResearched,
+      chasedScored5: chasedScored5Count,
+      _chasedScored5Projects: chasedScored5Projects,
+      avgValuePriced: avgPricedNow.avg,
+      _avgValuePricedPrior: avgPricedPrior.avg,
+      _avgValuePricedCount: avgPricedNow.count,
       // Outbound external email for this person's mailbox in this month. null rather than
       // 0 when there is no figure at all - a month we never counted is not a month with
       // no emails, and a red zero against target would be a lie.
@@ -549,15 +591,12 @@ export default function Scorecard() {
     { key: 'dealsResearched', label: 'Deals researched', sub: 'Projects added to Project In', format: v => v, targetKey: 'dealsResearched', drillKey: '_dealsResearchedList' },
     { key: 'emailsSentExternal', label: 'Emails sent externally', sub: 'To at least one address outside Rock Roofing', format: v => v, targetKey: 'emailsSentExternal' },
     { key: 'callsMade', label: 'Calls made', sub: 'Outbound calls, from 8x8', format: v => v, targetKey: 'callsMade' },
-    { key: 'gleniganReceived', label: 'Glenigan enquiries received', format: v => v, targetKey: 'gleniganReceived', drillKey: '_gleniganReceivedProjects' },
-    { key: 'gleniganPriced', label: 'Glenigan enquiries priced', format: v => v, targetKey: 'gleniganPriced', drillKey: '_gleniganPricedProjects' },
     { key: 'gleniganScored5', label: 'Glenigan scored ≥5', format: v => v, targetKey: 'gleniganScored5', drillKey: '_gleniganScored5Projects' },
+    { key: 'chasedScored5', label: 'Actively Chased scored ≥5', sub: 'Received in month, scored 5 or more', format: v => v, targetKey: 'chasedScored5', drillKey: '_chasedScored5Projects' },
     { key: 'strikeRateValue', label: 'Strike rate (value) — all estimators', sub: 'Rolling 6 months', format: pct, targetKey: 'strikeRateValue', drillKey: '_rolling6AllProjects' },
-    { key: 'strikeRateMCSecNeg', label: 'Strike rate — MC Secured/Negotiating', sub: 'Rolling 6 months, all estimators', format: pct, targetKey: 'strikeRateMCSecNeg', drillKey: '_rolling6MCProjects' },
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'All estimators, value change data', format: fmt, targetKey: 'totalValuePriced', drillKey: '_allMonthChanges', isValueChange: true, showAvg: true },
-    { key: 'projectsPricedOver200k', label: 'Projects priced ≥£200K', sub: 'All estimators', format: v => v, targetKey: 'projectsPricedOver200k', drillKey: '_projectsPricedOver200kList', isValueChange: true },
+    { key: 'avgValuePriced', label: 'Average value of projects priced', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValuePriced', comparePriorKey: '_avgValuePricedPrior' },
     { key: 'totalValueSecured', label: 'Total value of work secured', sub: 'All estimators', format: fmt, targetKey: 'totalValueSecured', drillKey: '_allWonProjects', showAvg: true },
-    { key: 'projectsSecuredOver200k', label: 'Projects secured ≥£200K', sub: 'All estimators', format: v => v, targetKey: 'projectsSecuredOver200k', drillKey: '_projectsSecuredOver200kList' },
     { key: 'avgValueSecured', label: 'Average value of projects secured', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
   ]
 
@@ -646,9 +685,12 @@ export default function Scorecard() {
                 <span style={{ color: up ? '#15803d' : '#b91c1c', marginLeft: 8, fontWeight: 600 }}>
                   {up ? '▲' : '▼'} {m.format(Math.abs(diff))}{pctDiff != null ? ` (${Math.abs(pctDiff).toFixed(0)}%)` : ''}
                 </span>
-                {metrics._avgValueSecuredCount != null && (
-                  <span style={{ color: '#aaa', marginLeft: 8 }}>from {metrics._avgValueSecuredCount} won deal{metrics._avgValueSecuredCount === 1 ? '' : 's'}</span>
-                )}
+                {(() => {
+                  // Count belongs to whichever card is drawing, not always the secured one.
+                  const c = m.key === 'avgValuePriced' ? metrics._avgValuePricedCount : metrics._avgValueSecuredCount
+                  const noun = m.key === 'avgValuePriced' ? 'project' : 'won deal'
+                  return c != null ? <span style={{ color: '#aaa', marginLeft: 8 }}>from {c} {noun}{c === 1 ? '' : 's'}</span> : null
+                })()}
               </div>
             )
           })()}
