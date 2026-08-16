@@ -216,7 +216,6 @@ export default function Scorecard() {
   const [deals, setDeals] = useState([])
   const [valueChanges, setValueChanges] = useState([])
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState(null)
   const [targets, setTargets] = useState(null)
   const [editingTarget, setEditingTarget] = useState(null)
@@ -269,14 +268,10 @@ export default function Scorecard() {
     setLoading(false)
   }
 
-  async function doSync() {
-    setSyncing(true)
-    try {
-      await fetch('/api/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-      await loadData()
-    } catch(e) { console.error(e) }
-    setSyncing(false)
-  }
+  // No sync function here on purpose. This page reads the CRM, which needs no syncing,
+  // and the old one called /api/sync - a Pipedrive pull. It was already unreachable with
+  // the button gone, but leaving it in a page labelled CRM-only was one careless edit
+  // away from being live again.
 
   async function saveTarget(key, value, type) {
     const newTargets = { ...targets, [type]: { ...targets[type], [key]: parseFloat(value) } }

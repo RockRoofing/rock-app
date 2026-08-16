@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { get, getLastSync } from '../../lib/db'
+import { get } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 
 // PARALLEL / COMPARISON endpoint. Same output shape as /api/deals, but sourced
@@ -9,7 +9,6 @@ export default async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   const crmDeals = await get('crm:deals') || []
   const deals = crmDealsToFlat(crmDeals)
-  const lastSync = await getLastSync()
 
   const lightweight = deals.map(d => ({
     id: d.id,
@@ -42,5 +41,8 @@ export default async function handler(req, res) {
     label: d.label || null,
   }))
 
-  return res.status(200).json({ deals: lightweight, lastSync })
+  // lastSync is deliberately null. It used to return pipedrive:last_sync, which was the
+  // last Pipedrive pull - meaningless on a page that reads the CRM, and the only remaining
+  // Pipedrive read on this endpoint. The CRM is edited live; there is no sync to report.
+  return res.status(200).json({ deals: lightweight, lastSync: null })
 }

@@ -748,11 +748,12 @@ function EmailCard({ m, children }) {
 
 // Emails filed against one project. Loads its own data - the deals list is already 6.4MB
 // and email must not ride along with it.
-function DealEmails({ dealId }) {
+function DealEmails({ dealId, deals }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
+  const [moveFor, setMoveFor] = useState(null);
 
   useEffect(() => {
     let dead = false;
@@ -768,11 +769,31 @@ function DealEmails({ dealId }) {
     return () => { dead = true; };
   }, [dealId]);
 
-  // Filed against the wrong project, or should not be on a project at all. Removing it
-  // also tells the sync to leave it alone - without that it would simply be re-filed on
-  // the next run and the removal would look like it had not worked.
+  // Filed against the WRONG project - far commoner than an email that should not be on a
+  // project at all. It gets its own action because Remove is not a route to the same
+  // place: removing does not put the email back in the queue for you to re-file.
+  const move = async (m, target) => {
+    const before = items;
+    setMoveFor(null); setNote('');
+    setItems((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'move-email', messageId: m.id, fromDealId: String(dealId), toDealId: String(target.id) }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+      setNote(`Moved to ${target.title || target.id}.`);
+    } catch (e) {
+      setItems(before);
+      setNote(`That did not save - the email has been put back. ${e.message || ''}`.trim());
+    }
+  };
+
+  // Should not be on a project at all. Removing also tells the sync to leave it alone -
+  // without that it would simply be re-filed on the next run and the removal would look
+  // like it had not worked.
   const unfile = async (m) => {
-    const ok = window.confirm('Take this email off the project?\n\nIt stays in Outlook. The sync will not file it again, here or anywhere else, until you undo it.');
+    const ok = window.confirm('Take this email off the project?\n\nIt stays in Outlook. The sync will not file it again, here or anywhere else, until you undo it.\n\nIf it simply belongs on a DIFFERENT project, use Move instead.');
     if (!ok) return;
     const before = items;
     setItems((prev) => prev.filter((x) => x.id !== m.id));
@@ -802,10 +823,18 @@ function DealEmails({ dealId }) {
         {!loading && err && <div style={{ fontSize: 13, color: C.lost }}>{err}</div>}
         {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>No email filed against this project yet.</div>}
         {!loading && !err && items.map((m) => (
-          <EmailCard key={m.id} m={m}>
-            <div style={{ flex: 1 }} />
-            <button onClick={() => unfile(m)} title="Take this email off the project" style={{ background: 'none', border: 'none', color: C.dim, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
-          </EmailCard>
+          <div key={m.id}>
+            <EmailCard m={m}>
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setMoveFor((v) => v === m.id ? null : m.id)} title="File this email against a different project" style={{ background: 'none', border: 'none', color: C.link, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Move</button>
+              <button onClick={() => unfile(m)} title="Take this email off the project altogether" style={{ background: 'none', border: 'none', color: C.dim, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
+            </EmailCard>
+            {moveFor === m.id && (
+              <div style={{ marginTop: -4, marginBottom: 10 }}>
+                <ProjectPicker deals={(deals || []).filter((d) => String(d.id) !== String(dealId))} onPick={(d) => move(m, d)} onCancel={() => setMoveFor(null)} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -1003,7 +1032,7 @@ function EmailsNavButton({ active, onClick, refreshKey }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
@@ -1151,7 +1180,7 @@ function DealView({ deal, today, schema, me, users, onBack, onMove, onSetStatus,
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
           {/* Email - loads on its own, keyed to the deal */}
-          <DealEmails dealId={deal.id} />
+          <DealEmails dealId={deal.id} deals={allDeals} />
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
@@ -2350,7 +2379,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }
@@ -2467,9 +2496,9 @@ function CRMPageInner() {
       {/* black nav with Rock Roofing logo */}
       <div style={{ background: C.nav, color: '#fff', padding: '10px 16px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: .3, marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ background: C.link, color: '#fff', borderRadius: 5, padding: '2px 7px', fontSize: 14, fontWeight: 800 }}>RR</span>Rock Roofing
+          <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />Rock Roofing
         </span>
-        <a href="/sales" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Portal</a>
+        <a href="/sales" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Pre-Contract</a>
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>
@@ -2485,7 +2514,7 @@ function CRMPageInner() {
         <button onClick={() => setView('contacts')} style={{ ...backBtn, background: view === 'contacts' ? C.link : 'transparent', color: '#fff', borderColor: view === 'contacts' ? C.link : '#444' }}>Contacts</button>
         <button onClick={() => setView('activities')} style={{ ...backBtn, background: view === 'activities' ? C.link : 'transparent', color: '#fff', borderColor: view === 'activities' ? C.link : '#444' }}>Activities</button>
         <EmailsNavButton active={view === 'emails'} onClick={() => setView('emails')} refreshKey={view} />
-        <button onClick={resetView} title="Clear remembered filters, columns and sort" style={{ ...backBtn, color: '#aaa', borderColor: '#444', background: 'transparent' }}>Reset view</button>
+        <button onClick={resetView} title="Clear remembered filters, columns and sort" style={{ ...backBtn, color: '#aaa', borderColor: '#444', background: 'transparent' }}>Clear Filters</button>
         {isDealView && <button onClick={() => setShowAdd(true)} style={primaryBtn}>+ Add project</button>}
         <div style={{ flex: 1 }} />
         <div style={{ position: 'relative', minWidth: 260 }}>

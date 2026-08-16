@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
-import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain } from '../../lib/crmEmailSync'
+import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
 //   GET                    -> { deals, schema }
@@ -383,6 +383,19 @@ export default async function handler(req, res) {
       const messageId = String(body.messageId || '')
       if (!messageId) return res.status(400).json({ error: 'messageId required' })
       const out = await allowEmailAgain(messageId)
+      return res.json(out)
+    }
+
+    // Move an email from one project to another. Filed against the wrong job is far more
+    // common than filed wrongly altogether, and un-filing then hunting for it in the
+    // queue is not a route back - the queue is not where it went.
+    if (body.action === 'move-email') {
+      const messageId = String(body.messageId || '')
+      const fromDealId = String(body.fromDealId || '')
+      const toDealId = String(body.toDealId || '')
+      if (!messageId || !fromDealId || !toDealId) return res.status(400).json({ error: 'messageId, fromDealId and toDealId required' })
+      if (fromDealId === toDealId) return res.status(400).json({ error: 'That is the project it is already on' })
+      const out = await moveEmail(fromDealId, toDealId, messageId)
       return res.json(out)
     }
 

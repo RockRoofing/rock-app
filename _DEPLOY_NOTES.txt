@@ -1,87 +1,79 @@
-pkg377 - the (CRM) pages now read nothing from Pipedrive
-========================================================
+pkg378 - move an email between projects, plus the CRM tidy-ups
+==============================================================
 
-REPLACES pkg376. Deploy this one instead - it contains everything pkg376 had.
+Deploy after pkg377.
 
-NEW FILES - create these two with "Add file" in GitHub
-------------------------------------------------------
-  lib/crmValueChanges.js
-  pages/api/value-changes-crm.js
-  pages/scorecard-crm.js          (new if you have not already added pkg376)
-
-CHANGED FILES (already exist - replace them)
----------------------------------------------
-  pages/sales-crm.js
+CHANGED FILES (all already exist - replace them)
+------------------------------------------------
   pages/crm.js
-  components/PreContractNav.js
+  pages/api/crm.js
+  lib/crmEmailSync.js
+  pages/sales-crm.js
+  pages/scorecard-crm.js
+  pages/api/deals-crm.js
+
+NEW FILES: none.
 
 
-THE PROBLEM
------------
-You asked whether the (CRM) pages were free of Pipedrive. They were not, and it mattered
-more than a labelling point.
-
-Three metrics are built from VALUE-CHANGE records:
-
-    Total value of work priced
-    Value priced - existing customers
-    Projects priced over 200K
-
-Those records were only ever written by pages/api/webhook.js, when Pipedrive fired an
-event. Switch Pipedrive off and they stop being written - on the live pages AND the (CRM)
-ones. Those three metrics would have silently flatlined and nobody would have seen why for
-a month.
-
-
-THE FIX
--------
-The same records are now derived from the CRM's own deal history:
-
-    a value edit on a deal        -> value change record
-    a deal entering a priced stage -> stage entry record
-    (priced stages: MC Unsecured, MC Secured, Negotiating, Variations)
-
-That history is already being kept, so this works on changes made BEFORE today as well as
-after. Older entries hold the numbers only inside the text ("Value: £180,000 -> £250,000")
-so those are parsed; from now on the numbers are also stored outright on the entry, which
-is the change to pages/crm.js.
-
-Tested against both shapes, and against the awkward cases:
-  - a deal moving in, out, and back into Negotiating counts ONCE, not twice
-  - a value already counted by an edit is not counted again by the stage move
-  - a deal entering a priced stage with no value is recorded as zero, not skipped
-That matches how the old webhook behaved, so the numbers are comparable.
-
-Derived records are computed on read, never stored, so they cannot drift out of step with
-the deals they came from.
-
-
-BEFORE YOU COMPARE - RUN THIS ONCE
+1. MOVE AN EMAIL TO ANOTHER PROJECT
 -----------------------------------
-The CRM only has history from when the CRM started. Everything before that lives in the
-old Pipedrive-era store. Copy it across:
+Every email in a project's Email section now has TWO actions:
 
-    Open /sales-crm, or just hit the endpoint - it is a one-line POST. Easiest way:
-    ask me and I will add a button, or run it from the browser console on any portal page:
+    Move     file it against a different project
+    Remove   take it off projects altogether
 
-        fetch('/api/value-changes-crm',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({action:'seed'})}).then(r=>r.json()).then(console.log)
+Move opens the same project search you get in the review queue. Pick the right job and it
+goes, immediately, with the row put back if the save fails.
 
-    It returns { copied: n }. Safe to run twice - it skips anything already copied.
+Why this needed its own action rather than reusing Remove: removing does NOT put the email
+back in the review queue. It marks it do-not-assign and it is gone. So "remove it and file
+it properly" was never actually a route - you would have lost it. Filed against the wrong
+job is also far commoner than filed wrongly altogether.
 
-Those are your records; only the collection method was Pipedrive's. Without this, the
-three metrics above will read near-zero for any month before the CRM existed, and the
-comparison against the live page will look alarming for no good reason.
+THE THREAD FOLLOWS THE CORRECTION. Move an email and the rest of that conversation files
+against the new project from now on, instead of continuing to land on the one you just
+corrected. And unlike Remove, a moved email is NOT marked do-not-assign - it belongs on a
+project, just a different one.
 
-Say the word and I will put a proper button on the page instead of a console command.
+The Remove confirmation now points at Move, so nobody reaches for the destructive one by
+mistake.
 
 
-WHAT EACH PAGE READS NOW
+2. THE FOUR CRM TIDY-UPS
 ------------------------
-  /sales-crm        deals: CRM      value changes: CRM
-  /scorecard-crm    deals: CRM      value changes: CRM     targets: yours    GP margin: Xero
-  /sales            deals: Pipedrive sync    value changes: Pipedrive webhook
-  /scorecard        deals: Pipedrive sync    value changes: Pipedrive webhook
+  "Portal" back button          ->  "Pre-Contract"
+  "RR" square + Rock Roofing    ->  the actual logo (public/rock-logo.jpg, same as the
+                                    Pre-Contract nav uses)
+  "Reset view"                  ->  "Clear Filters"
 
-Xero is not a Pipedrive dependency and stays on both. Nothing on the live pages is
-touched - they carry on exactly as they are until you decide to retire them.
+Behaviour of the button is unchanged - it still clears remembered filters, columns and
+sort. Only the label was misleading.
+
+
+3. THE LAST PIPEDRIVE TRACES, REMOVED
+-------------------------------------
+You asked whether the (CRM) pages were free of Pipedrive. Every figure was, but three
+traces remained in the code. Two are now gone:
+
+  a) A dead doSync() on both CRM pages, calling /api/sync - a Pipedrive pull. No button
+     reached it since the buttons came off, but it sat in a page labelled CRM-only and was
+     one careless edit from being live again. Removed, with a comment saying why so it
+     does not get helpfully added back.
+
+  b) /api/deals-crm read pipedrive:last_sync and handed it to the page. Never displayed,
+     but a genuine Pipedrive read. It now returns null - the CRM is edited live, so there
+     is no sync to report.
+
+  c) Still there BY DESIGN: the seed action copies the Pipedrive-era value-change archive
+     into the CRM store. That is your historical data; only the collection method was
+     Pipedrive's. Entries are tagged source:'pipedrive-archive' so you can always tell
+     them apart from CRM-derived ones.
+
+Pull the Pipedrive API key from Vercel now and nothing on either CRM page errors.
+
+
+STILL WAITING ON YOU
+--------------------
+  - Run the value-change seed once, or pre-CRM months read near-zero (pkg377 notes).
+    Say the word and I will put a button on the page instead of the console command.
+  - pkg265 is STILL not in the repo. The O&M untracked-download bug is live.
