@@ -1,106 +1,53 @@
-pkg386 - Pipedrive removed completely
-=====================================
+pkg387 - Estimator blank on Project Financials
+==============================================
 
-REPLACES pkg385. Deploy this one instead - it contains everything pkg385 had.
-
-
-DELETE THESE FILES IN GITHUB
-----------------------------
-  pages/sales.js
-  pages/scorecard.js
-  pages/api/sync.js
-  pages/api/webhook.js
-  pages/api/deals.js
-  pages/api/value-changes/index.js        (then the empty value-changes folder)
-  pages/api/cron/pipedrive-sync.js
-  pages/api/allfields.js
-  pages/api/deal-raw.js
-  pages/api/stages.js
-  lib/pipedrive.js
-
-(In GitHub: open the file, three-dot menu top right, Delete file, commit.)
-
-CHANGED FILES (replace)
------------------------
-  components/PreContractNav.js
-  lib/db.js
-  pages/index.js
-  pages/crm.js
-  pages/sales-crm.js
-  pages/scorecard-crm.js
-  pages/negotiating.js
-  pages/operations/negotiating.js
-  pages/api/negotiating.js
-  pages/api/planning.js
-  pages/api/planning-week.js
-  pages/api/health-check.js
-  pages/api/test-storage.js
-
-NEW FILES: none.  vercel.json NOT changed - the pipedrive-sync cron was never
-actually scheduled in it, only the file existed.
+Deploy after pkg386. One changed file: pages/api/dashboard.js. No new files.
 
 
-NEGOTIATING - DONE THE WAY YOU ASKED
-------------------------------------
-Only the DATA SOURCE changed. pages/api/negotiating.js now reads the CRM instead of the
-Pipedrive cache.
+THE CAUSE
+---------
+Project Financials read the estimator from ONE place:
 
-Untouched: components/NegotiatingTable.js, pages/negotiating.js and
-pages/operations/negotiating.js. Both pages share the one table component and the one
-endpoint, so the ops mirror picks up the CRM data automatically. Nothing about the layout,
-columns or behaviour of either page moved. Only the subtitle now says "Live from the CRM"
-instead of "Live from Pipedrive".
+    estimator: settings.estimator
 
+That is a legacy flat field that almost nothing writes any more. Edit Project Details
+writes to settings.peopleOverride.estimator, and falls back to the IHM if there is no
+override. So the two screens were reading different places and disagreeing - the name on
+Project Details, blank on Project Financials.
 
-TWO THINGS I FOUND WHILE REMOVING IT
-------------------------------------
-1. THE PLANNING GANTT WAS READING PIPEDRIVE.
-   pages/api/planning.js and planning-week.js pulled negotiated projects from the
-   Pipedrive cache - the "N:<dealId>" rows on the Gantt and on the Weekly Labour
-   Allocation. Deleting the sync would have frozen those, and eventually emptied them.
-   Both now read the CRM.
+This is the SAME fault that was found and fixed for Contracts Manager. The comment above
+that line still explains it:
 
-   IMPORTANT AND CHECKED: CRM deals keep Pipedrive's original ID (the import maps
-   "Deal - ID" straight through). So every existing N:<dealId> allocation still resolves
-   to the same project. No planning data is lost.
+    "Use the SAME resolver Edit Project Details uses, so the two always agree:
+     commercial override -> Ops/IHM -> blank."
 
-2. HEALTH-CHECK WOULD HAVE EMAILED YOU A FALSE ALARM.
-   It checked the Pipedrive sync had run in the last 25 hours and emailed an alert if not.
-   With the sync gone it would have judged itself unhealthy on EVERY call and mailed
-   ALERT_EMAIL each time. Rewritten as a plain liveness endpoint.
+Estimator was left on the old path when CM was moved across.
+
+Now:
+
+    estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || ''
+
+resolveProjectPeople is already being called on that line - it was just not being used for
+this field. Same order as everywhere else: override, then IHM, then the legacy field, then
+blank. Nothing else in the resolver changes.
 
 
-ALSO REMOVED
-------------
-  the webhook                     as you asked - Pipedrive no longer writes anything here
-  /api/sync, /api/deals           the old dashboards were the only callers
-  the old /api/value-changes      (the -crm one is separate and stays)
-  /api/allfields, /api/deal-raw, /api/stages
-                                  orphaned debug endpoints calling the Pipedrive API
-                                  directly - nothing in the app referenced them
-  saveCachedDeals, saveLastSync, getFieldMap, saveFieldMap in lib/db.js
-                                  dead writers to keys nothing reads
-  the Pipedrive probes in /api/test-storage
-                                  now reports the CRM stores instead
+AND THE PART THAT WOULD HAVE MADE IT LOOK LIKE NOTHING HAPPENED
+----------------------------------------------------------------
+/api/dashboard serves a CACHED snapshot, and only rebuilds when the cache fails a list of
+shape checks. The existing snapshot passes every one of them, so the fix would have gone
+in, deployed cleanly, and changed nothing on screen - and the obvious conclusion would
+have been that the fix did not work.
 
-VERIFIED: zero references to api.pipedrive.com or PIPEDRIVE_API_KEY anywhere in the app.
-You can delete that environment variable from Vercel whenever you like.
-
-The Pipedrive IMPORT tooling in the CRM is kept on purpose - lib/crmImportMap.js and the
-import screen - so you can still bring in an export if you ever need to. It reads files
-you upload; it never contacts Pipedrive.
+Added estimatorResolved as a new marker, so the cache is judged stale exactly once and
+rebuilds. Same trick as cmResolved, which is there for the same reason.
 
 
-WHAT THE NAV LOOKS LIKE NOW
----------------------------
-Nine tabs down to seven, and "(CRM)" dropped since there is nothing left to distinguish
-them from:
+AFTER DEPLOYING
+---------------
+The first load of Project Financials will be slower than usual - it is rebuilding the
+snapshot. After that it is back to normal, with the estimator matching Edit Project
+Details on every row.
 
-    Sales Dashboard  ->  /sales-crm
-    Scorecards       ->  /scorecard-crm
-
-Green comparison banners removed from both. Portal tile and the CRM back button repointed.
-No dangling links anywhere - checked.
-
-URLs keep the -crm suffix: renaming the files too would mean deleting and recreating two
-large pages in the GitHub editor for a cosmetic gain, and would break bookmarks.
+If a row is STILL blank after that, the estimator genuinely is not set for that project in
+either the override or the IHM - open Edit Project Details and it will be empty there too.

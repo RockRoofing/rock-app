@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -294,11 +294,19 @@ export default async function handler(req, res) {
         // job number by exact string, where the resolver matches tolerantly ("J203"/"203").
         contractsManager: resolvedPeople?.team?.contractsManager?.name
           || (ihmByNo[String(cp.jobNo).trim()]?.contractsManager) || settings.contractsManager || '',
-        // Cache-validity marker: forces one rebuild so old snapshots don't keep serving
-        // the pre-resolver CM.
+        // Cache-validity markers: force one rebuild so old snapshots do not keep serving
+        // the pre-resolver values. Without a NEW marker the estimator fix would sit in the
+        // code doing nothing, because the cached snapshot already satisfies every existing
+        // condition above.
         cmResolved: true,
+        estimatorResolved: true,
         appliedForLatest,
-        estimator: settings.estimator || '',
+        // Same fix as contractsManager above, which was done and this was not.
+        // It read settings.estimator only - a legacy flat field almost nothing writes
+        // any more. Edit Project Details writes to peopleOverride.estimator and falls
+        // back to the IHM, so the two disagreed: the name was on the project details
+        // screen and blank on Project Financials.
+        estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || '',
         qsName: settings.qsName || '',
         qsEmail: settings.qsEmail || '',
         customerEmail: settings.customerEmail || '',
