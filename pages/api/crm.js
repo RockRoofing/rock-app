@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
-import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail } from '../../lib/crmEmailSync'
+import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
 //   GET                    -> { deals, schema }
@@ -370,6 +370,22 @@ export default async function handler(req, res) {
 
     // Take an email back off a project. Also marks it do-not-assign, otherwise the next
     // sync would simply file it again and it would look like the removal never happened.
+    // BULK. One request, one write - not a loop of singles from the browser.
+    if (body.action === 'dismiss-emails') {
+      const ids = Array.isArray(body.messageIds) ? body.messageIds : []
+      if (!ids.length) return res.status(400).json({ error: 'messageIds required' })
+      const out = await dismissEmails(ids)
+      return res.json(out)
+    }
+
+    if (body.action === 'allocate-emails') {
+      const ids = Array.isArray(body.messageIds) ? body.messageIds : []
+      const dealId = String(body.dealId || '')
+      if (!ids.length || !dealId) return res.status(400).json({ error: 'messageIds and dealId required' })
+      const out = await allocateEmails(ids, dealId)
+      return res.json(out)
+    }
+
     if (body.action === 'unfile-email') {
       const messageId = String(body.messageId || '')
       const dealId = String(body.dealId || '')

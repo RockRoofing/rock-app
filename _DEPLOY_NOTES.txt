@@ -1,93 +1,55 @@
-pkg380 - project score mapping, Actively Chased, and no more false red months
-=============================================================================
+pkg381 - select all in the email queue, then act on the lot
+===========================================================
 
-Deploy after pkg379.
+Deploy after pkg380.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/crmImportMap.js
-  lib/crmFieldSchema.js
-  pages/scorecard-crm.js
+  pages/crm.js
+  pages/api/crm.js
+  lib/crmEmailSync.js
 
 NEW FILES: none.
 
 
-1. PROJECT SCORE - YOU WERE RIGHT, AND I CHECKED YOUR EXPORT
-------------------------------------------------------------
-"Label" is column 50 of deals-2641369-41.xlsx. It was there all along. The import mapping
-read 34 "Deal -" columns and Label was not one of them, so every score was dropped on the
-way in.
+WHAT YOU GET
+------------
+A tickbox on every row in the Emails review queue, and a bar across the top with
+"Select all". Once anything is ticked the bar offers:
 
-What is actually in it, from your file:
+    Allocate to project     files them all against one job
+    Do not assign           marks them all, in one go
+    Clear                   drops the selection
 
-    scored 5   92        scored 2   42
-    scored 4   86        scored 7   39
-    scored 3   60        scored 8   21
-    scored 6   47        scored 9   16
-                         scored 1   12
-
-415 deals carry a score. Blank on the other 6,445 - which is fine, most were never scored.
-
-Now mapped to project_score, which is the field the "Glenigan scored 5 or more" metric
-reads. It applies to any FUTURE import - see the note at the bottom about getting the
-existing 415 in without a wipe-and-replace.
+The project search is the same one you already use, and after a bulk allocate you get
+"Filed 23 against Poland House" with an Open project link.
 
 
-2. LEAD SOURCE IS FINE - AND THAT MATTERS
------------------------------------------
-I checked, because if lead source had been the problem then none of the date work would
-have helped. From your export:
+SELECT ALL MEANS WHAT IS SHOWN, NOT THE WHOLE QUEUE
+---------------------------------------------------
+If you have searched for "Nishkam" and tick the box, you get the Nishkam ones. The label
+says so - "Select all 14 shown" when a search is on, "Select all 14" when it is not.
 
-    Glenigan                     1154
-    Glenigan, Other                56
-    Glenigan, Website New Build     1
-                                 ----
-                                 1211 deals
-
-The metrics match on "glenigan" appearing anywhere in the value, so the comma-separated
-ones are counted correctly. Lead source was never the blocker. The missing received date
-was, exactly as diagnosed.
-
-"Actively Chased" added to the Lead Source options, between Website Refurb and Other.
-
-Worth knowing: Glenigan Project ID is populated on 4,940 of 6,860 deals - far more than
-carry a Glenigan lead source. So it is NOT a reliable "this came from Glenigan" signal,
-and the metrics correctly ignore it. I had suggested using it; checking the data says no.
+Acting on 700 hidden rows because a filter happened to be applied is how people lose
+things, so it does not work that way. To clear the whole queue, clear the search first.
 
 
-3. NO MORE RED DOTS FOR MONTHS WE NEVER MEASURED
-------------------------------------------------
-Your screenshot showed twelve straight months of red on all three cards. That is not a
-year of missed targets - it is a year we did not record the data.
+ONE REQUEST, NOT HUNDREDS
+-------------------------
+Both bulk actions are a single call and a single write. Doing it the easy way - a loop of
+single requests from the browser - would be 300 round trips and 300 rewrites of the same
+key to clear 300 rows, and a failure halfway would leave the queue in a state nobody could
+reason about. Either the whole batch lands or none of it does, with the rows put straight
+back on screen if the write fails.
 
-Months before tracking began now show a dash, no rating and no red dot. The average, the
-trendline and the chart all skip them.
-
-The start date is one line at the top of pages/scorecard-crm.js:
-
-    const GLENIGAN_TRACKING_FROM = '2026-08-01'
-
-Set to this month. Change that one string if you ever backfill properly.
+Bulk allocate also carries the THREAD links across, same as filing one by hand, so replies
+to those conversations land on the right project from now on.
 
 
-GETTING THE 415 EXISTING SCORES IN
-----------------------------------
-The mapping fixes future imports, but a full re-import is wipe-and-replace - and the CRM
-now holds things the export does not: filed email, thread links, CRM-created activities,
-notes, hand-made corrections. A re-import would take those with it.
+NO UNDO ON A BULK ACTION
+------------------------
+Single Do-not-assign still offers Undo. A bulk one does not - there is no sensible way to
+unpick which of 200 you meant to reverse. The confirmation says so plainly before you
+commit. Nothing is deleted from Outlook either way.
 
-So DO NOT re-import to get the scores.
-
-Say the word and I will build a scores-only patch instead: upload that same xlsx, it
-matches on deal ID and writes project_score onto existing deals, touching nothing else.
-Perhaps thirty minutes, and no risk to anything already in the CRM.
-
-
-WHAT HAPPENS FROM HERE WITHOUT ANY MORE WORK
---------------------------------------------
-  Received date    recorded on every stage move made in the CRM     from today
-  First value      recorded on every value edit made in the CRM     from today
-  Project score    typed into the Project Score field on a deal     from today
-
-All three metrics start filling in from this month. Before that, dashes - which is the
-honest answer.
+Selection clears on every refresh, because ids may no longer exist after one.

@@ -887,6 +887,9 @@ function EmailQueue({ deals, onOpenDeal }) {
   const [search, setSearch] = useState('');
   const [pickerFor, setPickerFor] = useState(null);
   const [busy, setBusy] = useState('');
+  const [sel, setSel] = useState(() => new Set());
+  const [bulkPicker, setBulkPicker] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -898,6 +901,8 @@ function EmailQueue({ deals, onOpenDeal }) {
       if (d && d.ok) setItems(d.items || []);
       else setErr(d?.error || 'Could not load the queue');
     } catch { setErr('Could not load the queue'); }
+    setSel(new Set());          // ids may be gone after a reload
+    setBulkPicker(false);
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -927,6 +932,61 @@ function EmailQueue({ deals, onOpenDeal }) {
     const ok = window.confirm('Do not assign this email to a project?\n\nIt stays in Outlook untouched. The sync will leave it alone from now on, so it will not come back to this queue.');
     if (!ok) return;
     act(m, { action: 'dismiss-email', messageId: m.id }, 'Marked do not assign.', null, m.id);
+  };
+
+  // BULK ACTIONS
+  // Select-all ticks what is CURRENTLY SHOWN, not the whole queue. If you have searched
+  // for "Nishkam" and tick the box, you get the Nishkam ones - acting on 700 hidden rows
+  // because a filter was on is how people lose things.
+  const toggleOne = (id) => setSel((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const bulkDismiss = async () => {
+    const ids = [...sel];
+    if (!ids.length) return;
+    const ok = window.confirm(`Do not assign ${ids.length} email${ids.length === 1 ? '' : 's'} to a project?\n\nThey stay in Outlook untouched. The sync will leave them alone from now on, so they will not come back to this queue.\n\nThere is no undo for a bulk action.`);
+    if (!ok) return;
+    setBulkBusy(true); setNote(''); setNoteDeal(null); setNoteUndo('');
+    const before = items;
+    setItems((prev) => prev.filter((x) => !sel.has(x.id)));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss-emails', messageIds: ids }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+      setNote(`Marked do not assign: ${d.count}.`);
+      setSel(new Set());
+    } catch (e) {
+      setItems(before);
+      setNote(`That did not save - nothing was changed. ${e.message || ''}`.trim());
+    }
+    setBulkBusy(false);
+  };
+
+  const bulkAllocate = async (deal) => {
+    const ids = [...sel];
+    if (!ids.length) return;
+    setBulkBusy(true); setBulkPicker(false); setNote(''); setNoteUndo('');
+    const before = items;
+    setItems((prev) => prev.filter((x) => !sel.has(x.id)));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'allocate-emails', messageIds: ids, dealId: String(deal.id) }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+      setNote(`Filed ${d.count} against ${deal.title || deal.id}.`);
+      setNoteDeal(deal);
+      setSel(new Set());
+    } catch (e) {
+      setItems(before);
+      setNote(`That did not save - nothing was changed. ${e.message || ''}`.trim());
+    }
+    setBulkBusy(false);
   };
 
   const shown = useMemo(() => {
@@ -971,8 +1031,54 @@ function EmailQueue({ deals, onOpenDeal }) {
         {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>Nothing waiting. Every synced email has found a project.</div>}
         {!loading && !err && !!items.length && !shown.length && <div style={{ fontSize: 13, color: C.dim }}>Nothing matches that search.</div>}
 
+        {/* Select-all bar. Acts on what is SHOWN, so a search narrows what you are about
+            to act on rather than being quietly ignored. */}
+        {!loading && !err && !!shown.length && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '8px 11px', marginBottom: 8, borderRadius: 8, background: sel.size ? C.activityBg : C.faint, border: `1px solid ${sel.size ? C.activityBorder : C.line}` }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, cursor: 'pointer', color: C.text }}>
+              <input
+                type="checkbox"
+                checked={shown.length > 0 && shown.every((m) => sel.has(m.id))}
+                ref={(el) => { if (el) el.indeterminate = sel.size > 0 && !shown.every((m) => sel.has(m.id)); }}
+                onChange={(e) => {
+                  const ids = shown.map((m) => m.id);
+                  setSel((prev) => {
+                    const next = new Set(prev);
+                    if (e.target.checked) ids.forEach((id) => next.add(id));
+                    else ids.forEach((id) => next.delete(id));
+                    return next;
+                  });
+                }}
+                style={{ width: 15, height: 15, cursor: 'pointer' }} />
+              Select all {search.trim() ? `${shown.length} shown` : `${shown.length}`}
+            </label>
+
+            {sel.size > 0 && <>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: C.text }}>{sel.size} selected</span>
+              <div style={{ flex: 1 }} />
+              <button disabled={bulkBusy} onClick={() => setBulkPicker((v) => !v)} style={{ ...primaryBtn, opacity: bulkBusy ? 0.5 : 1 }}>Allocate to project</button>
+              <button disabled={bulkBusy} onClick={bulkDismiss} style={{ ...ghostBtn, color: C.dim, opacity: bulkBusy ? 0.5 : 1 }}>Do not assign</button>
+              <button disabled={bulkBusy} onClick={() => { setSel(new Set()); setBulkPicker(false); }} style={{ ...ghostBtn, color: C.dim }}>Clear</button>
+            </>}
+          </div>
+        )}
+
+        {bulkPicker && sel.size > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, color: C.dim, marginBottom: 6 }}>File all {sel.size} against:</div>
+            <ProjectPicker deals={deals} onPick={bulkAllocate} onCancel={() => setBulkPicker(false)} />
+          </div>
+        )}
+
         {!loading && !err && shown.map((m) => (
-          <div key={m.id}>
+          <div key={m.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+            <input
+              type="checkbox"
+              checked={sel.has(m.id)}
+              onChange={() => toggleOne(m.id)}
+              title="Select for a bulk action"
+              style={{ width: 15, height: 15, marginTop: 14, cursor: 'pointer', flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
             <EmailCard m={m}>
               <div style={{ flex: 1 }} />
               <button disabled={busy === m.id} onClick={() => setPickerFor((v) => v === m.id ? null : m.id)} style={{ ...primaryBtn, opacity: busy === m.id ? 0.5 : 1 }}>Allocate to project</button>
@@ -992,6 +1098,7 @@ function EmailQueue({ deals, onOpenDeal }) {
                 <ProjectPicker deals={deals} onPick={(d) => allocate(m, d)} onCancel={() => setPickerFor(null)} />
               </div>
             )}
+            </div>
           </div>
         ))}
       </div>
