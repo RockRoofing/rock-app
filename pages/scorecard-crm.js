@@ -621,10 +621,7 @@ export default function Scorecard() {
         <PreContractNav active="scorecard-crm">
         </PreContractNav>
 
-        <div style={{ background: '#1c704f', color: '#fff', padding: '8px 24px', fontSize: 13, fontWeight: 600 }}>
-          CRM comparison view &mdash; every figure below comes from the CRM. Nothing on this page reads Pipedrive.
-          <span style={{ fontWeight: 400, opacity: 0.85 }}> GP margin comes from Xero, as it does on the live page.</span>
-        </div>
+
 
         <div style={{ borderBottom: '0.5px solid #e1e0d9', background: '#fff', padding: '0 24px', display: 'flex' }}>
           {['Roman', 'Niall', 'James', 'Edita'].map(p => (

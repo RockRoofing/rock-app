@@ -1268,9 +1268,6 @@ export default function Dashboard() {
       <div style={{ ...s, minHeight: '100vh', background: '#fafaf9' }}>
         <PreContractNav active="sales-crm">
         </PreContractNav>
-        <div style={{ background: '#1c704f', color: '#fff', padding: '8px 24px', fontSize: 13, fontWeight: 600 }}>
-          CRM comparison view &mdash; data sourced from the CRM (imported deals). Compare against the live Sales Dashboard.
-        </div>
         <div style={{ borderBottom: '0.5px solid #e1e0d9', background: '#fff', padding: '0 24px', overflowX: 'auto', display: 'flex' }}>
           {NAV.map(n => (
             <button key={n} onClick={() => navigateTo(n)} style={{ padding: '12px 16px', border: 'none', borderBottom: page === n ? '2px solid #1a1a19' : '2px solid transparent', background: 'transparent', fontSize: 13, fontWeight: page === n ? 500 : 400, color: page === n ? '#1a1a19' : '#888', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{n}</button>

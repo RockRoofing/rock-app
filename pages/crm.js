@@ -2684,7 +2684,7 @@ function CRMPageInner() {
         <span style={{ fontSize: 17, fontWeight: 800, letterSpacing: .3, marginRight: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <img src="/rock-logo.jpg" alt="Rock Roofing" style={{ height: 32, width: 32, borderRadius: 4 }} />Rock Roofing
         </span>
-        <a href="/sales" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Pre-Contract</a>
+        <a href="/sales-crm" style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444', textDecoration: 'none' }}>&larr; Pre-Contract</a>
         <span title={saveError || ''} style={{ fontSize: 11.5, color: saveError ? '#ff6b6b' : saving ? '#f5c518' : '#7ac57a', minWidth: 46, maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {!loaded ? '' : saveError ? saveError : saving ? 'Saving...' : 'Saved'}
         </span>

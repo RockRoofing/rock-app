@@ -1,15 +1,20 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getCachedDeals } from '../../lib/db'
+import { get } from '../../lib/db'
+import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
+import { getMilestones } from '../../lib/crmMilestones'
 
-// Returns all Pipedrive deals currently sitting in the Negotiating stage.
-// Source: the cached, normalised deals kept up to date by the Pipedrive
-// sync/webhook (same data the Sales dashboard uses) — no extra API calls.
+// Returns all deals currently sitting in the Negotiating stage.
+//
+// Source: the CRM. It used to read the Pipedrive sync cache, which meant this page would
+// have quietly gone stale the day Pipedrive was switched off - the last page in
+// Pre-Contract still tied to it.
 //
 // GET /api/negotiating -> { deals: [...], count, totalValue }
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   try {
-    const all = (await getCachedDeals()) || []
+    const crmDeals = await get('crm:deals') || []
+    const all = crmDealsToFlat(crmDeals, await getMilestones(crmDeals))
     const deals = all
       .filter(d => d.stageName === 'Negotiating' && d.status === 'open')
       .map(d => ({

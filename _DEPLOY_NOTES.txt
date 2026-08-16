@@ -1,102 +1,77 @@
-pkg384 - lost reasons, and a filter that silently emptied a panel
-=================================================================
+pkg385 - retire the Pipedrive dashboards
+========================================
 
-Deploy after pkg383.
+Deploy after pkg384.
+
+DELETE THESE TWO FILES IN GITHUB
+--------------------------------
+  pages/sales.js
+  pages/scorecard.js
+
+(In GitHub: open the file, the three-dot menu at the top right, Delete file, commit.)
 
 CHANGED FILES (replace)
 -----------------------
+  components/PreContractNav.js
+  pages/index.js
   pages/crm.js
   pages/sales-crm.js
-  lib/crmFieldSchema.js
+  pages/scorecard-crm.js
+  pages/negotiating.js
+  pages/api/negotiating.js
 
 NEW FILES: none.
 
 
-1. LOST REASON - the same class of fault as the close date
------------------------------------------------------------
-The Sales dashboard has a whole Lost Reasons panel built on this field. It was imported
-(6,005 lost deals carry one) but was NOT in the CRM field schema, so there was no way to
-set or edit it. Anything lost in the CRM had no reason, for ever, and that panel would
-have decayed month by month exactly as the close date did.
+WHAT CHANGES ON SCREEN
+----------------------
+The Pre-Contract nav goes from nine tabs to seven. "(CRM)" is dropped from the two that
+remain, because there is nothing left to distinguish them from:
 
-Now:
-  - Lost Reason is a field on the deal, in the Details group
-  - Pressing LOST asks why before it closes the deal
+    Sales Dashboard  ->  /sales-crm
+    Scorecards       ->  /scorecard-crm
 
-The list is what you actually use, taken from your export - the 15 below cover 99% of
-6,005 lost deals:
+The green comparison banners are gone from both - there is no longer anything to compare
+against.
 
-    Unable to make contact (2,667)      Project Not Suitable (1,220)
-    Roofing package already let (1,183) Price (124)
-    Alternative spec (117)              Project Shelved (116)
-    Main Contractor not suitable (94)   No Time to Price (94)
-    Duplicate (62)                      Gone with preferred, approved suppy chain (51)
-    Package Contractor (49)             Main Contractor didn't secure (47)
-    No Single Ply (29)                  No Feedback Given (25)
-    No available labour resource, Lead Time, Design Liability
+The portal tile and the CRM back button both now point at the new Sales Dashboard. I
+checked for anything else linking to the old pages: nothing.
 
-("suppy chain" is spelt that way in your data - matched deliberately so the existing 51
-deals group with new ones instead of splitting into two near-identical categories.)
-
-There is a "Something else..." option for anything not on the list, and a "Mark lost
-without a reason" button. Blocking someone from closing a deal because a dropdown is
-empty only teaches them to pick anything, so it is a prompt, not a gate.
-
-ALSO FIXED WHILE IN THERE: a dropdown holding a value that is not one of its options used
-to render BLANK. Your import has 110 distinct lost reasons, most of them one-off free
-text. Without this, opening one of those deals would have shown an empty Lost Reason and
-looked like the data had gone. Now the stored value is kept and shown. This applies to
-every select field, not just this one.
+The URLs keep the -crm suffix. Renaming the files as well would have meant deleting and
+recreating two large pages in the GitHub editor for a cosmetic gain, and would break any
+bookmarks people have already made to /sales-crm.
 
 
-2. A FILTER THAT MATCHED NOTHING
---------------------------------
-On Sales (CRM), the Projects Priced panel has a "Project stage (multi-select)" filter with
-chips: MC Unsecured, MC Secured, Negotiating, Variations, Review, MC Unsecured - Not
-Priced.
+ONE THING I FOUND WHILE DOING THIS - AND IT MATTERED
+-----------------------------------------------------
+The NEGOTIATING page was still running on Pipedrive.
 
-Those are CRM pipeline stages. The filter was testing them against projectStage - which,
-as you said, is a different thing entirely: Live Project / Contractor tendering, meaning
-whether the customer is pricing or has secured.
+/api/negotiating read getCachedDeals(), which is pipedrive:deals, kept current by the
+sync cron. Deleting the two dashboards would not have broken it - but the day you switch
+Pipedrive off it would have silently gone stale, showing a frozen list of deals that were
+in Negotiating whenever the last sync ran. Exactly the failure we have spent the last
+three packages removing everywhere else.
 
-So ticking any chip emptied the panel. Not an error, just nothing - which is the sort of
-thing that gets read as "no projects priced this month".
+It now reads the CRM through the same adapter as everything else. The page subtitle said
+"Live from Pipedrive"; it now says "Live from the CRM".
 
-Now filtered on stageName, the CRM stage, which is what the chips are. The same applies
-to the zero-value warning list underneath it.
-
-The Strike Rate panel was already correct - it uses stageName - which is why that page
-matched Pipedrive to the pound when you tested it.
+That was the last one. I searched every page: nothing in Pre-Contract reads
+/api/deals, /api/value-changes, /api/sync or the Pipedrive cache any more.
 
 
-THE FULL AUDIT - WHAT ELSE I CHECKED
-------------------------------------
-Every field the dashboards read, against what the CRM can actually maintain:
+WHAT IS STILL RUNNING THAT YOU MAY WANT TO STOP
+-----------------------------------------------
+Deliberately left alone - tell me and I will remove them:
 
-  won_time / lost_time    was broken - fixed in pkg383, repair button on /crm-scores
-  lost_reason             was broken - fixed here
-  created                 fine, set on every new deal
-  everything else         fine - all editable in the CRM
+  pages/api/sync.js            the Pipedrive pull
+  pages/api/webhook.js         still records value changes to the old store
+  pages/api/deals.js           now unused
+  pages/api/value-changes/     now unused (the -crm one is separate and stays)
+  the pipedrive-sync cron in vercel.json
 
-Export completeness: 385 won deals all carry a won time, 6,005 lost all carry a lost time,
-so imported history is sound. No archived deals. Of 84 export columns, 38 are mapped; the
-46 unmapped are Pipedrive plumbing - MRR/ARR/ACV, product fields, source channel,
-currency-of-X, lat/long address parts, sequence enrollment. Priority and Probability
-ignored as agreed.
+None of it does any harm - it writes to keys nothing reads now. But it is dead weight, and
+the crons cost you a run every hour for nothing. I have left them because removing the
+webhook is irreversible without reconfiguring Pipedrive, and you may want a period where
+the old data keeps updating in case you need to go back.
 
-One thing left, and it is a design question rather than a bug - see below.
-
-
-STILL OPEN: LINKING BY NAME
----------------------------
-You asked the right question. The CRM links deals to companies and contacts BY NAME. The
-export carries Organization ID and Contact person ID, which we do not import.
-
-And yes - fixing it properly means the CRM needs its own stable ids for companies and
-contacts, which it does not have today: those records are derived from the names on deals.
-That is a real piece of work, not a patch, and it touches the Companies and Contacts tabs,
-the delete/merge behaviour, and the import.
-
-What actually breaks today: rename an organisation and its deals stop pointing at it. How
-often that happens is your call. If it is rare, this can wait; if people rename companies
-regularly, it should be scheduled properly rather than bolted on.
+Say when, and it is a five minute package.
