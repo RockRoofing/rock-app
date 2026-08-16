@@ -1,84 +1,93 @@
-pkg379 - why the three Glenigan metrics read zero
-=================================================
+pkg380 - project score mapping, Actively Chased, and no more false red months
+=============================================================================
 
-Deploy after pkg378.
-
-NEW FILE - create with "Add file"
-----------------------------------
-  lib/crmMilestones.js
+Deploy after pkg379.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/crmDashboardAdapter.js
-  pages/api/deals-crm.js
-  pages/api/value-changes-crm.js
+  lib/crmImportMap.js
+  lib/crmFieldSchema.js
   pages/scorecard-crm.js
 
-
-WHY THEY WERE ZERO
-------------------
-Not one cause. Three.
-
-1. RECEIVED DATE WAS HARD-CODED NULL
-   All three metrics are dated by the day a project first entered Received. The adapter
-   set receivedDate to null for every deal, with the comment "not in the export". So all
-   three filtered to nothing, every month. This was the main cause.
-
-   Received date is not a field on a deal - it is a fact about a stage TRANSITION, so it
-   only exists if something was watching when it happened. Pipedrive's webhook was
-   watching for years. The CRM import was a snapshot: what each deal looks like NOW, not
-   how it got there.
-
-2. PROJECT SCORE WAS HARD-CODED NULL
-   "Scored 5 or more" reads it. Even with the date fixed it would have stayed zero.
-   The CRM has a project_score field, but the Pipedrive import never mapped it, so it is
-   blank on imported deals.
-
-3. THE "PRICED" RULE DID NOT MATCH WHAT YOU DESCRIBED
-   Coded: received this month AND has a value now.
-   Yours:  got a value for the FIRST time, dated by the month that happened.
-   Those differ whenever pricing lags the enquiry - which is normally.
+NEW FILES: none.
 
 
-WHAT IS FIXED
--------------
-Received date now comes from two places, merged:
-  - DERIVED from CRM stage history - correct from the day the CRM went live. Takes the
-    FIRST entry into Received, so a project that passes back through later is not
-    re-dated.
-  - SEEDED from the Pipedrive-era record - the years before that.
+1. PROJECT SCORE - YOU WERE RIGHT, AND I CHECKED YOUR EXPORT
+------------------------------------------------------------
+"Label" is column 50 of deals-2641369-41.xlsx. It was there all along. The import mapping
+read 34 "Deal -" columns and Label was not one of them, so every score was dropped on the
+way in.
 
-Project score now maps from the deal's project_score field, falling back to the seeded
-value.
+What is actually in it, from your file:
 
-Glenigan priced rewritten to your definition: a value-change record where the old value
-was zero and the new one is not, earliest such record only, counted in the month it
-happened.
+    scored 5   92        scored 2   42
+    scored 4   86        scored 7   39
+    scored 3   60        scored 8   21
+    scored 6   47        scored 9   16
+                         scored 1   12
 
-Your other two points were already right and still are: lead source and score are read as
-they stand TODAY, so a project marked Glenigan or scored after it was received still
-counts, dated by when it was received.
+415 deals carry a score. Blank on the other 6,445 - which is fine, most were never scored.
 
-
-RUN THE SEED - NOTHING WORKS WITHOUT IT
----------------------------------------
-The seed button now does BOTH jobs: value-change history and received dates/scores.
-
-    fetch('/api/value-changes-crm',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'seed'})}).then(r=>r.json()).then(console.log)
-
-Returns counts for each. Safe to run twice.
-
-Until you run it, historical months stay at zero - the CRM genuinely does not know when
-those projects were received, and no code can invent it.
+Now mapped to project_score, which is the field the "Glenigan scored 5 or more" metric
+reads. It applies to any FUTURE import - see the note at the bottom about getting the
+existing 415 in without a wipe-and-replace.
 
 
-ONE THING I CANNOT FIX FROM HERE
---------------------------------
-Project scores were never imported. If your Pipedrive export has a score column, tell me
-what it is called and I will add it to the import mapping - then a re-import fills them
-in. Otherwise the seed recovers whatever Pipedrive held, and anything it did not hold
-stays blank until somebody types it into the Project Score field.
+2. LEAD SOURCE IS FINE - AND THAT MATTERS
+-----------------------------------------
+I checked, because if lead source had been the problem then none of the date work would
+have helped. From your export:
 
-Check after seeding: if received counts look right but scored-5 is still zero, that is
-this, not a bug.
+    Glenigan                     1154
+    Glenigan, Other                56
+    Glenigan, Website New Build     1
+                                 ----
+                                 1211 deals
+
+The metrics match on "glenigan" appearing anywhere in the value, so the comma-separated
+ones are counted correctly. Lead source was never the blocker. The missing received date
+was, exactly as diagnosed.
+
+"Actively Chased" added to the Lead Source options, between Website Refurb and Other.
+
+Worth knowing: Glenigan Project ID is populated on 4,940 of 6,860 deals - far more than
+carry a Glenigan lead source. So it is NOT a reliable "this came from Glenigan" signal,
+and the metrics correctly ignore it. I had suggested using it; checking the data says no.
+
+
+3. NO MORE RED DOTS FOR MONTHS WE NEVER MEASURED
+------------------------------------------------
+Your screenshot showed twelve straight months of red on all three cards. That is not a
+year of missed targets - it is a year we did not record the data.
+
+Months before tracking began now show a dash, no rating and no red dot. The average, the
+trendline and the chart all skip them.
+
+The start date is one line at the top of pages/scorecard-crm.js:
+
+    const GLENIGAN_TRACKING_FROM = '2026-08-01'
+
+Set to this month. Change that one string if you ever backfill properly.
+
+
+GETTING THE 415 EXISTING SCORES IN
+----------------------------------
+The mapping fixes future imports, but a full re-import is wipe-and-replace - and the CRM
+now holds things the export does not: filed email, thread links, CRM-created activities,
+notes, hand-made corrections. A re-import would take those with it.
+
+So DO NOT re-import to get the scores.
+
+Say the word and I will build a scores-only patch instead: upload that same xlsx, it
+matches on deal ID and writes project_score onto existing deals, touching nothing else.
+Perhaps thirty minutes, and no risk to anything already in the CRM.
+
+
+WHAT HAPPENS FROM HERE WITHOUT ANY MORE WORK
+--------------------------------------------
+  Received date    recorded on every stage move made in the CRM     from today
+  First value      recorded on every value edit made in the CRM     from today
+  Project score    typed into the Project Score field on a deal     from today
+
+All three metrics start filling in from this month. Before that, dashes - which is the
+honest answer.

@@ -59,6 +59,11 @@ function computeTrendline(data) {
 }
 
 // Helper: get lead source value from deal (handles both mapped field name and raw API key)
+// When the CRM started recording stage changes and value edits for itself. Months before
+// this have no data behind the three Glenigan metrics - not a score of zero. Move this
+// date if you ever backfill the history properly.
+const GLENIGAN_TRACKING_FROM = '2026-08-01'
+
 function getLeadSource(d) {
   return d.leadSource || d[LEAD_SOURCE_KEY] || ''
 }
@@ -441,8 +446,20 @@ export default function Scorecard() {
     const projectsSecuredOver200kList = allMonthWon.filter(d => d.value >= 200000)
     const projectsSecuredOver200k = projectsSecuredOver200kList.length
 
+    // A MONTH WE NEVER MEASURED IS NOT A MISSED TARGET.
+    //
+    // These three are dated by events - entering Received, getting a first value - and
+    // the CRM only started recording those when it went live. Every month before that
+    // read 0, which the card then painted red against target. That is a year of failures
+    // Edita did not have. Before the start date they are null, which the card already
+    // renders as a dash with no rating.
+    const measured = monthKey(GLENIGAN_TRACKING_FROM) <= m
+    const gr = measured ? gleniganReceived : null
+    const gp = measured ? gleniganPriced : null
+    const gs = measured ? gleniganScored5 : null
+
     return {
-      gleniganReceived, gleniganPriced, gleniganScored5,
+      gleniganReceived: gr, gleniganPriced: gp, gleniganScored5: gs,
       strikeRateValue, strikeRateMCSecNeg,
       totalValuePriced, projectsPricedOver200k,
       totalValueSecured, projectsSecuredOver200k,
