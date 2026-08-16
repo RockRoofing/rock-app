@@ -31,6 +31,73 @@ const STAGES = [
 const STAGE_INDEX = Object.fromEntries(STAGES.map((s, i) => [s.id, i]));
 const stageLabel = (id) => (STAGES.find((s) => s.id === id) || {}).label || id;
 
+// ===========================================================================
+// Missing-information flag
+// ===========================================================================
+// A project that has reached Received is being priced, and a project in Negotiating is
+// being argued over commercially. Both need certain things filled in, and the point of
+// flagging it on the card is that you see it while scanning the board rather than
+// discovering it when somebody asks.
+
+// Needed from Received onwards.
+const REQUIRED_FROM_RECEIVED = [
+  ['value', 'Value'],
+  ['organization', 'Organization'],
+  ['contact_person', 'Contact'],
+  ['project_score', 'Project Score'],
+  ['site_location', 'Site Location'],
+  ['region', 'Region'],
+  ['credit_score', 'Credit Score'],
+  ['credit_limit', 'Credit Limit'],
+  ['project_stage', 'Project Stage'],
+  ['sales_person', 'Sales Person'],
+  ['project_type', 'Project Type'],
+  ['lead_source', 'Lead Source'],
+];
+
+// Needed once it reaches Negotiating, on top of the above.
+const REQUIRED_FROM_NEGOTIATING = [
+  ['insured_credit_limit', 'Insured Credit Limit'],
+  ['roofing_works_onsite', 'Roofing Works On-Site'],
+  ['scope_of_works', 'Description of Project Scope of Works'],
+];
+
+// Blank means blank. A zero VALUE is missing information - no job is worth nothing - but a
+// zero credit limit is a real answer, so the two are not treated the same.
+const isBlank = (v, key) => {
+  if (v == null) return true;
+  const t = String(v).trim();
+  if (!t || t === '-') return true;
+  if (key === 'value') return !(Number(v) > 0);
+  return false;
+};
+
+// Returns the labels of everything missing, or an empty array.
+function missingInfo(deal) {
+  if (!deal || deal.status !== 'open') return [];   // closed deals are history, not work
+  const idx = STAGE_INDEX[deal.stageId];
+  if (idx == null || idx < STAGE_INDEX.stage_received) return [];
+  const f = deal.fields || {};
+  const needed = idx >= STAGE_INDEX.stage_negotiating
+    ? [...REQUIRED_FROM_RECEIVED, ...REQUIRED_FROM_NEGOTIATING]
+    : REQUIRED_FROM_RECEIVED;
+  return needed.filter(([k]) => isBlank(f[k], k)).map(([, label]) => label);
+}
+
+// The flag itself. Same component on the kanban card and the list row, so they cannot
+// end up meaning different things.
+function MissingFlag({ deal, size = 13 }) {
+  const missing = missingInfo(deal);
+  if (!missing.length) return null;
+  return (
+    <span
+      title={`Missing before this can progress:\n\n- ${missing.join('\n- ')}`}
+      style={{ color: C.lost, fontSize: size, lineHeight: 1, cursor: 'help', flexShrink: 0 }}>
+      &#9873;
+    </span>
+  );
+}
+
 const ORANGE_STAGES = new Set(['stage_project_in','stage_1st_contact','stage_calls_x3','stage_in_abeyance','stage_tbf','stage_mc_unsec_np','stage_info_pending']);
 const BLUE_STAGES = new Set(['stage_received','stage_1','stage_2','stage_review','stage_mc_unsecured','stage_variations','stage_mc_secured','stage_negotiating']);
 const ESTIMATOR_STAGES = ['stage_received','stage_1','stage_2','stage_review','stage_mc_unsecured','stage_variations','stage_mc_secured','stage_negotiating'];
@@ -452,7 +519,10 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
     <div draggable onDragStart={(e) => onDragStart(e, deal.id)} onClick={() => onOpen(deal.id)} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 6, padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
         <div style={{ fontWeight: 600, color: C.text, lineHeight: 1.3, marginBottom: 3 }}>{deal.title}</div>
-        {st && <div style={{ flexShrink: 0, marginTop: 1 }}><Dot state={st} size={14} /></div>}
+        <div style={{ flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <MissingFlag deal={deal} size={14} />
+          {st && <Dot state={st} size={14} />}
+        </div>
       </div>
       <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.organization || '\u00a0'}</div>
       <div style={{ color: C.dim, marginBottom: 2 }}>{deal.fields.contact_person || '\u00a0'}</div>
@@ -1485,7 +1555,14 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
         <tbody>
           {deals.map((d) => { const stt = dealDotState(d, today); return (
             <tr key={d.id} onClick={() => onOpen(d.id)} style={{ cursor: 'pointer', borderBottom: `1px solid ${C.line}` }} onMouseEnter={(e) => (e.currentTarget.style.background = '#f7f9fb')} onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}>
-              <td style={{ ...td, textAlign: 'center', borderRight: `1px solid ${C.faint}` }}>{stt && <Dot state={stt} size={13} />}</td>
+              <td style={{ ...td, textAlign: 'center', borderRight: `1px solid ${C.faint}` }}>
+                {/* Flag shares the dot column - the row already has a fixed set of
+                    chosen columns, and adding one would push everyone's layout about. */}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <MissingFlag deal={d} size={13} />
+                  {stt && <Dot state={stt} size={13} />}
+                </span>
+              </td>
               {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{displayCell(d, k)}</td>)}
             </tr>
           ); })}

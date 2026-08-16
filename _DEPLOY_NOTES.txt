@@ -1,68 +1,61 @@
-pkg405 - projects added via Add Project were invisible to two dashboards
-========================================================================
+pkg406 - red flag for missing information
+=========================================
 
-Deploy after pkg404.
-
-CHANGED FILES (replace)
------------------------
-  pages/crm.js
-  lib/crmMilestones.js
-  lib/crmValueChanges.js
-
-NEW FILES: none.
+Deploy after pkg405. One changed file: pages/crm.js. No new files.
 
 
-YOUR TWO CATCHES - BOTH RIGHT, BOTH THE SAME ROOT CAUSE
---------------------------------------------------------
-createProject wrote exactly one history entry:
+WHAT YOU GET
+------------
+A red flag on the deal card in Kanban and on the row in List view, whenever a project has
+reached a stage where something should be filled in and is not.
 
-    { type: 'note', text: 'Project created' }
+Hover it and it names exactly what is missing:
 
-No stage entry. No value entry. Everything the dashboards derive comes from history, so:
+    Missing before this can progress:
 
-  TENDERS RECEIVED   needs a move INTO Received. A project MOVED there records one and
-                     works. A project CREATED there has no move to find, so it never
-                     appeared. Exactly as you described.
+    - Credit Limit
+    - Project Score
+    - Lead Source
 
-  PROJECTS PRICED    needs a value entry. A price typed into the Add Project form was
-                     stored on the deal but never recorded as having been SET, so only
-                     later EDITS were ever counted.
-
-FIXED: creating a project now writes the stage it was created into, and - where a price
-was entered - the value being set from zero. Both in the same shape a later edit produces,
-so the derivations treat them identically. No special cases downstream.
-
-Tested:
-    created AT Received, £180k    -> Tenders Received: yes. Projects Priced: yes.
-                                     Deals Researched: NO - it was never researched.
-    created at Project In, no value -> Deals Researched: yes. Priced: no. Received: no.
+On the kanban card it sits beside the activity dot, top right. In List it shares the dot
+column - adding a new column would have pushed everyone's chosen layout about.
 
 
-A BUG THIS FIX INTRODUCED, CAUGHT ON THE BENCH
------------------------------------------------
-Creating a project straight into MC Secured with a value wrote BOTH entries at the same
-instant. The "has this money already been counted" guard compares against the last value
-logged - and with the stage entry sorted first it had nothing to compare against, so the
-same £250,000 was counted twice. £500k reported for a £250k job.
+THE RULES
+---------
+FROM RECEIVED ONWARDS (the yellow ones):
+    Value, Organization, Contact, Project Score, Site Location, Region, Credit Score,
+    Credit Limit, Project Stage, Sales Person, Project Type, Lead Source
 
-Value entries now sort before stage entries when the timestamps are equal. Re-tested:
-every combination of creation stage and value now produces exactly ONE entry.
+FROM NEGOTIATING (the pink ones, on top of all the above):
+    Insured Credit Limit, Roofing Works On-Site, Description of Project Scope of Works
 
+"Received onwards" is by pipeline order, so it covers Received, Stage 1, Stage 2, Review,
+MC Unsecured, Variations, MC Secured and Negotiating. Anything earlier is never flagged -
+a project that has just come in is not supposed to be complete yet.
 
-YOUR THIRD QUESTION - past data for Projects Priced
-----------------------------------------------------
-No, and there is nowhere to get it. The import carries each deal's CURRENT value and
-nothing about when it was set - there is no first-value date in the export.
-
-The only historical source is the Pipedrive-era archive the webhook recorded, which you
-seeded into crm:value-changes. That covers the period the webhook was running and nothing
-before it. Anything earlier is not recoverable.
+CLOSED DEALS ARE NEVER FLAGGED. Won and lost projects are history, not work outstanding,
+and a board covered in flags on finished jobs would train people to ignore them.
 
 
-AND YOUR FIRST QUESTION - Deals Researched and status
--------------------------------------------------------
-Yes: open, won AND lost are all counted. There is no status filter anywhere in that path -
-not in the derivation, not on the dashboard, not on the scorecard card.
+ONE JUDGEMENT WORTH KNOWING
+---------------------------
+A VALUE of zero counts as missing - no job is worth nothing, so a zero there means nobody
+has priced it yet.
 
-That is deliberate and I believe correct: a deal researched in May and lost in July was
-still researched in May. The research happened. Say the word if you want it otherwise.
+A CREDIT LIMIT of zero does NOT. Zero is a real answer for a customer with no credit, and
+flagging it would be telling you to go and fill in something already filled in.
+
+Tested: 12 flags on an empty Received project, 3 on a Negotiating project with only the
+pink ones missing, none on the same project once complete, none on anything won or lost.
+
+
+CHECK MY READING OF THE SCREENSHOT
+----------------------------------
+From your markup I read the yellow as the twelve listed above. OWNER sits between Contact
+and Project Score and I read it as NOT highlighted, so it is not required - and Tender
+Return date, Glenigan Project ID, Size m2, Estimator Responsible, Systems Priced, General
+Information and Project Start Date are all excluded too.
+
+If I have any of those wrong they are one line each at the top of pages/crm.js -
+REQUIRED_FROM_RECEIVED and REQUIRED_FROM_NEGOTIATING. Tell me which and I will move them.
