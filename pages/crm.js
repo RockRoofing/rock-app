@@ -15,7 +15,7 @@ import * as XLSX from 'xlsx';
 import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, mapNoteRows, groupByDeal, detectExportType } from '../lib/crmImportMap';
 import { SEED_DEALS } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
-import { DEFAULT_FIELD_SCHEMA, MENTION_USERS } from '../lib/crmFieldSchema';
+import { DEFAULT_FIELD_SCHEMA } from '../lib/crmFieldSchema';
 
 const STAGES = [
   { id: 'stage_project_in', label: 'Project In' }, { id: 'stage_1st_contact', label: '1st Contact' },
@@ -275,11 +275,15 @@ function TypeAhead({ value, onChange, options, placeholder }) {
 // ===========================================================================
 // Mention textarea
 // ===========================================================================
-function MentionInput({ value, onChange, placeholder, rows }) {
+function MentionInput({ value, onChange, placeholder, rows, users }) {
   const [showList, setShowList] = useState(false);
   const [q, setQ] = useState('');
   const ref = useRef(null);
-  const matches = MENTION_USERS.filter((u) => u.name.toLowerCase().includes(q.toLowerCase()) || u.username.includes(q.toLowerCase())).slice(0, 6);
+  // Real portal users, not the hard-coded five first names this used to carry. That list
+  // meant "@Edita" worked, "@Edita Durikova" did not, and anyone who joined since was
+  // unmentionable.
+  const pool = (users && users.length) ? users : [];
+  const matches = pool.filter((u) => (u.name || '').toLowerCase().includes(q.toLowerCase()) || (u.username || '').includes(q.toLowerCase())).slice(0, 6);
   const onInput = (e) => { const val = e.target.value; onChange(val); const m = /@(\w*)$/.exec(val.slice(0, e.target.selectionStart)); if (m) { setQ(m[1]); setShowList(true); } else setShowList(false); };
   const pick = (u) => { const el = ref.current; const pos = el.selectionStart; const before = value.slice(0, pos).replace(/@(\w*)$/, `@${u.name} `); const after = value.slice(pos); onChange(before + after); setShowList(false); setTimeout(() => el.focus(), 0); };
   return (
@@ -287,13 +291,27 @@ function MentionInput({ value, onChange, placeholder, rows }) {
       <textarea ref={ref} value={value} onChange={onInput} placeholder={placeholder} rows={rows || 2} style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14, fontFamily: 'inherit', background: 'transparent' }} />
       {showList && matches.length > 0 && (
         <div style={{ position: 'absolute', bottom: '100%', left: 0, zIndex: 40, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, marginBottom: 4, boxShadow: '0 4px 12px rgba(0,0,0,.15)', minWidth: 160 }}>
-          {matches.map((u) => <div key={u.username} onMouseDown={() => pick(u)} style={{ padding: '7px 12px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: C.mention, color: C.link, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{u.name[0]}</span>{u.name}</div>)}
+          {matches.map((u) => <div key={u.username || u.name} onMouseDown={() => pick(u)} style={{ padding: '7px 12px', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 22, height: 22, borderRadius: '50%', background: C.mention, color: C.link, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{u.name[0]}</span>{u.name}</div>)}
         </div>
       )}
     </div>
   );
 }
-function extractMentions(text) { const names = MENTION_USERS.map((u) => u.name); return names.filter((n) => new RegExp(`@${n}\\b`, 'i').test(text || '')); }
+// Longest handle first, so "@Edita Durikova" resolves to the full name rather than
+// stopping at "Edita" and leaving "Durikova" hanging. \B guard stops an email address in
+// the body counting as a mention.
+function extractMentions(text, users) {
+  const body = String(text || '');
+  const out = [];
+  const pool = [...(users || [])].sort((a, b) => (b.name || '').length - (a.name || '').length);
+  for (const u of pool) {
+    for (const h of [u.name, u.first, u.username].filter(Boolean)) {
+      const re = new RegExp(`(^|[^\\w@])@${h.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i');
+      if (re.test(body)) { if (!out.includes(u.name)) out.push(u.name); break; }
+    }
+  }
+  return out;
+}
 
 // ===========================================================================
 // Tick-box multi-select (click to open, tick items, click away to close)
@@ -347,7 +365,7 @@ function Dot({ state, size = 14 }) {
 // ===========================================================================
 // Comment thread (used under notes, both in Notes section & History)
 // ===========================================================================
-function CommentThread({ comments, onAdd }) {
+function CommentThread({ comments, onAdd, users }) {
   const [text, setText] = useState('');
   return (
     <div style={{ marginTop: 8, paddingLeft: 14, borderLeft: `2px solid ${C.line}` }}>
@@ -358,7 +376,7 @@ function CommentThread({ comments, onAdd }) {
         </div>
       ))}
       <div style={{ marginTop: 4, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: '4px 8px' }}>
-        <MentionInput value={text} onChange={setText} placeholder="Add a comment… (type @ to notify someone)" rows={1} />
+        <MentionInput value={text} onChange={setText} users={users} placeholder="Add a comment… (type @ to notify someone)" rows={1} />
         <div style={{ textAlign: 'right' }}>
           <button disabled={!text.trim()} onClick={() => { onAdd(text.trim()); setText(''); }} style={{ ...miniBtn, opacity: text.trim() ? 1 : 0.5 }}>Save</button>
         </div>
@@ -618,7 +636,7 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
 // History feed (combined edit for activities incl date + reopen; comments on notes)
 // ===========================================================================
 function historyIcon(t) { return ({ note: '📝', activity: '📞', stage: '↗', value: '£', close: '📅', won: '✓', lost: '✕', import: '⬇', mention: '@' })[t] || '•'; }
-function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment }) {
+function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment, users }) {
   const [editing, setEditing] = useState(false);
   const [body, setBody] = useState(h.body || '');
   const [date, setDate] = useState(h.ts ? new Date(h.ts).toISOString().slice(0, 16) : '');
@@ -648,7 +666,7 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment 
           {(isNote || isActivity) && <span onClick={() => onDelete(h.id)} style={{ color: C.lost, cursor: 'pointer' }}>Delete</span>}
           {isNote && <span onClick={() => setShowComments((v) => !v)} style={{ color: C.link, cursor: 'pointer' }}>{showComments ? 'Hide' : 'Comment'} ({(h.comments || []).length})</span>}
         </div>
-        {isNote && showComments && <CommentThread comments={h.comments} onAdd={(body) => onComment(h.id, body)} />}
+        {isNote && showComments && <CommentThread comments={h.comments} onAdd={(body) => onComment(h.id, body)} users={users} />}
       </div>
     </div>
   );
@@ -1306,7 +1324,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
             {(adding || openActs.length === 0) && (
               <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6, padding: 10, marginBottom: openActs.length ? 10 : 0 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: .4, marginBottom: 4 }}>Activity</div>
-                <MentionInput value={newText} onChange={setNewText} placeholder="Call…" rows={2} />
+                <MentionInput value={newText} onChange={setNewText} users={users} placeholder="Call…" rows={2} />
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, flexWrap: 'wrap' }}>
                   <input type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} style={{ ...miniInput, width: 150 }} />
                   <span style={{ fontSize: 12, color: C.dim }}>Assign to</span>
@@ -1332,7 +1350,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
           {/* Notes */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Notes</div>
           <div style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12 }}>
-            <MentionInput value={noteText} onChange={setNoteText} placeholder="Take a note… (type @ to notify someone)" rows={2} />
+            <MentionInput value={noteText} onChange={setNoteText} users={users} placeholder="Take a note… (type @ to notify someone)" rows={2} />
             <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
           </div>
           {/* saved notes with comment threads, staying in Notes section */}
@@ -1342,7 +1360,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
                 <div key={h.id} style={{ background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{h.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span></div>
                   <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap', marginTop: 3 }}>{h.body}</div>
-                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} />
+                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} users={users} />
                 </div>
               ))}
             </div>
@@ -1365,7 +1383,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
           {/* History */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>History</div>
           <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>All activity, newest first · notes & activities editable, deletable, commentable</div>
-          <HistoryFeed history={deal.history}
+          <HistoryFeed history={deal.history} users={users}
             onEdit={(hid, body) => onEditHistory(deal.id, hid, body)}
             onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
             onDelete={(hid) => onDeleteHistory(deal.id, hid)}
@@ -2165,13 +2183,54 @@ function CRMPageInner() {
     });
     if (status === 'won') setConfetti(true);
   };
-  const addNote = (id, body) => { const m = extractMentions(body); patch(id, (d) => { const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }]; if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, history: [...d.history, ...ev] }; }); };
-  const commentNote = (id, hid, body) => { const m = extractMentions(body); patch(id, (d) => { const withComment = d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso() }] } : h); const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }] : []; return { ...d, history: [...withComment, ...extra] }; }); };
+  // Fire-and-forget after the note is stored. The note must survive a failing mail
+  // service - losing somebody's note because Resend was down would be far worse than a
+  // missed notification.
+  const notifyMentions = (id, body, kind) => {
+    const names = extractMentions(body, users);
+    if (!names.length) return names;
+    const d = deals.find((x) => String(x.id) === String(id));
+    fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'notify-mentions', dealId: id, dealTitle: d?.title || '', body, author: me?.name || '', kind }),
+    }).catch(() => {});
+    return names;
+  };
+
+  const addNote = (id, body) => {
+    const m = extractMentions(body, users);
+    patch(id, (d) => {
+      const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }];
+      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` });
+      return { ...d, history: [...d.history, ...ev] };
+    });
+    notifyMentions(id, body, 'note');
+  };
+  const commentNote = (id, hid, body) => {
+    const m = extractMentions(body, users);
+    patch(id, (d) => {
+      const withComment = d.history.map((h) => h.id === hid ? { ...h, comments: [...(h.comments || []), { id: uid(), body, ts: nowIso(), author: me?.name || '' }] } : h);
+      const extra = m.length ? [{ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` }] : [];
+      return { ...d, history: [...withComment, ...extra] };
+    });
+    notifyMentions(id, body, 'comment');
+  };
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));
   const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
   const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
-  const addActivity = (id, text, due, assignee) => { const m = extractMentions(text); patch(id, (d) => { const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null }; const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }]; if (assignee) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `${assignee} assigned an activity — email would send in live version` }); if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Notified: ${m.join(', ')} (email would send in live version)` }); return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] }; }); };
+  const addActivity = (id, text, due, assignee) => {
+    const m = extractMentions(text, users);
+    patch(id, (d) => {
+      const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null };
+      const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }];
+      if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Emailed: ${m.join(', ')}` });
+      return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] };
+    });
+    // Assignment notification is a separate thing and is NOT sent here - the daily
+    // activity email already tells people what is due to them. Mentions are.
+    notifyMentions(id, text, 'note');
+  };
   // Keeps the assignee. It used to drop it, so editing an activity from the deal quietly
   // cleared whoever was responsible for it.
   const editActivity = (id, aid, text, due, assignee) => patch(id, (d) => ({

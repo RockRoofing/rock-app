@@ -1,11 +1,79 @@
-pkg391 - logo only in the CRM nav
-=================================
+pkg392 - @mentions actually notify people now
+=============================================
 
-Deploy after pkg390. One changed file: pages/crm.js. No new files.
+Deploy after pkg391.
 
-The words "Rock Roofing" are gone from the left of the CRM toolbar. The logo stays, same
-size and position, with the same spacing to the Pre-Contract button beside it.
+NEW FILE - create with "Add file"
+----------------------------------
+  lib/crmMentions.js
 
-Note the /crm-scores page (the one-off project scores tool) still shows the logo with the
-name next to it. Left as it is - it is a standalone admin page rather than part of the CRM
-toolbar. Say the word if you want that matching too.
+CHANGED FILES (replace)
+-----------------------
+  pages/crm.js
+  pages/api/crm.js
+
+
+SHORT ANSWER: NO, IT DID NOT WORK
+---------------------------------
+Three separate things were missing.
+
+1. NO EMAIL WAS EVER SENT.
+   The code wrote a history line reading, literally:
+
+       "Notified: Roman (email would send in live version)"
+
+   It was a placeholder from the CRM preview build that never got finished. Anyone
+   mentioning a colleague has been getting a tick in the history and nothing else.
+
+2. MENTIONS MATCHED A HARD-CODED LIST OF FIVE FIRST NAMES.
+   crmFieldSchema carried: roman, niall, james, simon, edita. So:
+       "@Edita"           worked
+       "@Edita Durikova"  did NOT - the full name was not on the list
+       anyone who has joined since was unmentionable entirely
+
+3. THAT LIST HAD NO EMAIL ADDRESSES, so there was nothing to send to anyway.
+
+
+NOW
+---
+Mentions resolve against real PORTAL USERS - the same pre-contract + admin list that
+decides who can own an activity. Full name, first name or username all work.
+
+When you save a note, a comment or an activity containing a mention, the person gets an
+email with the text of what was written and a button that opens that project in the CRM
+(/crm?deal=<id>, which was already built and working).
+
+The history line now says "Emailed: Roman Jarosz" rather than the placeholder.
+
+Tested against the awkward cases:
+    "@Edita can you chase this"            -> Edita Durikova
+    "@Edita Durikova please look"          -> Edita Durikova   (full name, not just first)
+    "cc @roman and @James McVeigh"         -> both
+    "email me at james@rockroofing.co.uk"  -> nobody           (address is not a mention)
+    "@Editable is not a person"            -> nobody           (no partial-word matches)
+    "EDITA without an at sign"             -> nobody
+
+You do not get an email for mentioning yourself.
+
+
+IF THE EMAIL FAILS, THE NOTE IS STILL SAVED
+-------------------------------------------
+The send is fired after the note is stored, and its failure is ignored. Losing somebody's
+note because Resend was down would be far worse than a missed notification.
+
+
+ONE BUG THIS TURNED UP
+----------------------
+addActivity was still calling extractMentions the old way. With the function's signature
+changed it would have silently stopped detecting mentions in activity text - working
+before, broken after, with nothing on screen to show it. Fixed in the same package.
+
+
+REQUIREMENTS
+------------
+RESEND_API_KEY must be set - it already is, the daily activity email uses it. Optional:
+FORMS_FROM_EMAIL for the sender, PORTAL_BASE_URL for the link (defaults to
+https://app.rockroofing.co.uk).
+
+If RESEND_API_KEY is ever missing the mention is recorded and the send reports the reason
+rather than failing silently.

@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
+import { sendMentionEmails, getMentionableUsers } from '../../lib/crmMentions'
 import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
@@ -338,6 +339,20 @@ export default async function handler(req, res) {
     // Mail is filed per project in crm:emails:<dealId> by the hourly sync. Anything it
     // could not place with confidence sits in crm:emails:unallocated to be filed by hand -
     // deliberately NOT auto-guessed, because the wrong project is worse than no project.
+    // @mention notification. Fired by the CRM after a note or comment is saved, so the
+    // note is stored whether or not the email goes out - a failing mail service must not
+    // cost somebody their note.
+    if (body.action === 'notify-mentions') {
+      const out = await sendMentionEmails({
+        dealId: body.dealId,
+        dealTitle: body.dealTitle || '',
+        body: String(body.body || ''),
+        author: body.author || '',
+        kind: body.kind === 'comment' ? 'comment' : 'note',
+      })
+      return res.json(out)
+    }
+
     if (body.action === 'emails') {
       const dealId = String(body.dealId || '')
       if (!dealId) return res.status(400).json({ error: 'dealId required' })
