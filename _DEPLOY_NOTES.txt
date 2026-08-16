@@ -1,94 +1,78 @@
-pkg372 - STOP. Read this before backfilling.
-============================================
+pkg373 - one word can ask, but it cannot decide
+===============================================
 
-DEPLOY pkg366, 368, 369, 370, 371 FIRST. One changed file: lib/crmEmailSync.js. No new files.
-
-
-DO NOT BACKFILL YET. THE DRY RUN FOUND A REAL BUG.
-==================================================
-
-Your detail run did exactly the job it was meant to. Look at what it filed:
-
-  "[SPAM] One fastener item to fit-check?"                 -> FILED to West One, 74%
-  "TMHCC Portal - One-time verification code"              -> FILED to West One, 74%
-  "[SPAM] The NHS no longer has one front door"            -> FILED to West One, 74%
-  "Arbosil ONE: The ONE Silicone for Professional Sealing" -> FILED to West One, 74%
-  "[SPAM] FW: One less thing to chase"                     -> FILED to West One, 74%
-  "[SPAM] Quick follow-up - this one's worth GBP1,200,000" -> FILED to West One, 74%
-
-Around a dozen of those in six weeks, all to the same project, all pure junk.
+Deploy after pkg372. One changed file: lib/crmEmailSync.js. No new files.
 
 
-WHY
----
-Rarity was measured across YOUR PROJECT TITLES ONLY. The word "one" appears in exactly one
-title - West One - so the code treated it as a highly distinctive word, on a par with
-"Ellington" or "Knowsley". It is not. It is one of the commonest words in English.
+THE SECOND RUN WAS A BIG IMPROVEMENT
+------------------------------------
+West One is clean. Every one of the dozen junk emails it was claiming is now NO MATCH:
 
-The same fault, visible in your data:
-    "job in York"      claimed  "Where does a job go?", "The #1 mistake most job ads make"
-    "Vision Labs"      claimed  "...Your Vision, Perfectly Crafted"
-    "Temple Reach"     claimed  "Brand Reach"
-    "5 Bridge Street"  claimed  "5-6 new leads!", "58.5% of your Google visitors"
-    "Health Building"  claimed  every email with the word "building" in it
+    "TMHCC Portal - One-time verification code"     NO MATCH
+    "Arbosil ONE: The ONE Silicone..."              NO MATCH
+    "Building Safety Regulator Updates"             NO MATCH
+    "The #1 mistake most job ads make"              NO MATCH
 
-A word being rare in 6,000 project titles says nothing about whether it is rare in English.
-That was the flaw, and only real mail would have exposed it.
+West One now holds only its real tender thread. Junk filtering took 585 of 1,462 messages
+out before matching, and the review queue dropped from 1,266 to 713.
 
 
-WHAT IS FIXED
--------------
-1. Common English and trade words carry almost no weight now, however rare they are in your
-   titles: one, new, job, work, quote, tender, building, roof, cladding, project, vision,
-   reach, and about 130 more.
+BUT IT LEFT ONE FALSE POSITIVE, AND COST THREE REAL ONES
+--------------------------------------------------------
+FALSE POSITIVE
+    "Bellway Barking: Gran Paradiso and Mont Blanc"  -> FILED to
+    "Barking sites flat roofing works" at 83%, and it dragged two more in on the thread.
 
-2. A match must rest on at least TWO distinctive words - or one long word belonging to
-   exactly one project ("ellington", "knowsley", "brookhill"). "one" can never carry a
-   match on its own. Neither can "5".
+    Cause: damping the common words worked almost too well. In that title, "sites",
+    "flat", "roofing" and "works" now carry near-zero weight - so the title is effectively
+    just the word "barking", and any email mentioning Barking scores 83% against it.
 
-3. Junk is filtered before matching: [SPAM], Undeliverable:, Automatic reply:, Accepted:,
-   Declined:, out of office, postmaster bounces. Reported separately as "junk".
+REAL MATCHES LOST
+    "Fw: Maelfa Roofing Package tender"     was suggested, became NO MATCH
+    "RE: Ty Menyn - Waterproofing Options"  was suggested, became NO MATCH
+    "1371 - DWP Hoxton jobcentre roofing"   was suggested, became NO MATCH
 
-Tested against the actual subject lines from your run - all 15 false positives stopped,
-all 16 genuine matches still file, at the same scores:
-
-    Lakeside 1, Doncaster 100%    Mirrlees Fields 71%     John Lewis HQ 84%
-    AD Plant Ellington 75%        Greenwich Council 78%   Premier Inn Manchester 80%
-    British Legion Bracknell      Bells Gardens 73%       Freemans Cl Hitchin 75%
-    Channel View Phase 2 76%      Kidderminster 100%      Bacup 100%
-    Doris Robinson Court 70%      Poland House 100%       Garages Rear Of 39 100%
-
-Threading and the backfill safety checks still pass.
+    Cause: the rule allowed a single word to carry a match only if it was 7+ letters.
+    "maelfa" is 6, "menyn" is 5, "hoxton" is 6. Good project names, wrongly excluded.
 
 
-WHAT ELSE THE RUN TOLD US - worth knowing before you commit
-------------------------------------------------------------
-* THE MARGIN GUARD EARNED ITS KEEP. "GB071 - Baker Street - Single Ply Roofing" scored 45%
-  against 3091. Baker Street AND 45% against 4097. Baker Street. Without the runner-up
-  rule it would have filed into one of them, a coin toss. It went to review instead.
+THE FIX - ONE RULE COVERS BOTH
+------------------------------
+A single distinctive word is now enough to SUGGEST, but never enough to FILE. Two or more
+distinctive words are required before anything files itself.
 
-* VOLUME. 1,462 messages in six weeks from ONE mailbox, 196 matched, 1,266 queued. Scale
-  that to 24 months across four mailboxes and it is roughly 25,000 messages and 20,000
-  queued. The queue caps at 1,000. Junk filtering removes a large chunk of that, but not
-  all of it.
+That is the honest line. One word is a good enough reason to ask you. It is not a good
+enough reason to decide on your behalf. The length limit came down from 7 to 5 at the
+same time, since it is no longer doing the safety work.
 
-  So for a real backfill I would still not queue the misses. The value in a backfill is
-  the mail that MATCHES - the history on each project. Queueing two years of unmatched
-  newsletters is not a review job anybody will ever do. I can add ?queue=0 so a backfill
-  files matches and reports the rest without filling the queue. Say the word.
-
-* "Undeliverable:" and "Automatic reply:" were filing against projects. Now filtered. If
-  you would rather keep bounce-backs on the project - they do tell you an email failed -
-  that is a one-line change.
+Result:
+    Bellway Barking                -> now a SUGGESTION, not filed
+    Maelfa / Ty Menyn / DWP Hoxton -> back as suggestions
+    All 16 genuine auto-files      -> unchanged, same scores
 
 
-DO THIS NEXT
-------------
-1. Deploy.
-2. Run the SAME dry run again and compare:
+WHAT TO EXPECT ON THE NEXT RUN
+------------------------------
+Roughly the same FILED count, minus the three Barking rows. A few more suggestions in the
+queue, all of them worth a glance. Nothing else moves.
 
-     /api/cron/crm-email-sync?dryRun=1&detail=1&since=2026-07-01&mailbox=edita@rockroofing.co.uk
+Run the same dry run once more:
 
-   Check West One. It should have nothing but the genuine "West One - Rock Roofing -
-   Project Tender Enquiry" thread against it.
-3. Only when that reads clean, run one month for real, then widen.
+    /api/cron/crm-email-sync?dryRun=1&detail=1&since=2026-07-01&mailbox=edita@rockroofing.co.uk
+
+Scan the FILED lines only - there should be about 160 and every one should be a project
+name you recognise in the subject. If that reads clean, the matching is done and you can
+run the month for real.
+
+
+REMAINING, FOR WHEN YOU ARE READY
+---------------------------------
+* 713 queued from six weeks of one mailbox. Over 24 months and four mailboxes that is
+  still far more than the 1,000 cap. Before a full backfill I would add ?queue=0 so it
+  files the matches and reports the rest without filling the queue.
+
+* A lot of the remaining queue is repeated internal noise - "Updates on items you follow",
+  "James McVeigh sent a message", "ROCK - Commercial Roofing Specialists", Pipedrive and
+  Aconex notifications. Those are ordinary emails, not bounces, so the junk filter leaves
+  them alone. If you want them gone too it is a sender-based rule, and I would want your
+  say-so on the list first.
