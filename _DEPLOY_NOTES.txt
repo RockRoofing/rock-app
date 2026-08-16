@@ -1,96 +1,68 @@
-pkg404 - three new metrics on Edita's scorecard. The fourth needs you.
-======================================================================
+pkg405 - projects added via Add Project were invisible to two dashboards
+========================================================================
 
-Deploy after pkg403.
-
-NEW FILES - create these three with "Add file"
------------------------------------------------
-  lib/crmEmailVolume.js
-  pages/api/email-volume.js
-  pages/api/cron/crm-email-volume.js
+Deploy after pkg404.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/scorecard-crm.js
-  pages/api/targets.js
-  vercel.json                (adds the nightly cron - now 13)
+  pages/crm.js
+  lib/crmMilestones.js
+  lib/crmValueChanges.js
+
+NEW FILES: none.
 
 
-1. DEALS RESEARCHED
--------------------
-Same figure as the Deals Researched dashboard, from the same source, so the two cannot
-disagree. Default target 20/month - change it with the pencil on the card.
+YOUR TWO CATCHES - BOTH RIGHT, BOTH THE SAME ROOT CAUSE
+--------------------------------------------------------
+createProject wrote exactly one history entry:
+
+    { type: 'note', text: 'Project created' }
+
+No stage entry. No value entry. Everything the dashboards derive comes from history, so:
+
+  TENDERS RECEIVED   needs a move INTO Received. A project MOVED there records one and
+                     works. A project CREATED there has no move to find, so it never
+                     appeared. Exactly as you described.
+
+  PROJECTS PRICED    needs a value entry. A price typed into the Add Project form was
+                     stored on the deal but never recorded as having been SET, so only
+                     later EDITS were ever counted.
+
+FIXED: creating a project now writes the stage it was created into, and - where a price
+was entered - the value being set from zero. Both in the same shape a later edit produces,
+so the derivations treat them identically. No special cases downstream.
+
+Tested:
+    created AT Received, £180k    -> Tenders Received: yes. Projects Priced: yes.
+                                     Deals Researched: NO - it was never researched.
+    created at Project In, no value -> Deals Researched: yes. Priced: no. Received: no.
 
 
-2. AVERAGE VALUE OF PROJECTS SECURED
-------------------------------------
-Rolling 6 months ending with the month shown, with the 6 months BEFORE that underneath:
+A BUG THIS FIX INTRODUCED, CAUGHT ON THE BENCH
+-----------------------------------------------
+Creating a project straight into MC Secured with a value wrote BOTH entries at the same
+instant. The "has this money already been counted" guard compares against the last value
+logged - and with the stage entry sorted first it had nothing to compare against, so the
+same £250,000 was counted twice. £500k reported for a £250k job.
 
-    Average value of projects secured
-    £182,400
-    Previous 6 months: £150,000   ▲ £32,400 (22%)   from 14 won deals
-
-Two decisions worth knowing:
-
-  - the average is per WON DEAL, not per month. "What is a job worth to us now", not
-    "how much did we win" - you already have Total value of work secured for that.
-  - won deals with NO VALUE are excluded. A won deal worth zero is a data gap, not a
-    cheap job, and leaving it in drags the average down for no reason.
-
-Windows are exactly 6 months and do not overlap. Checked on the bench.
+Value entries now sort before stage entries when the timestamps are equal. Re-tested:
+every combination of creation stage and value now produces exactly ONE entry.
 
 
-3. EMAILS SENT EXTERNALLY
--------------------------
-Counts messages sent from that person's mailbox to at least one address outside
-rockroofing.co.uk. Internal chatter is not the activity being measured.
+YOUR THIRD QUESTION - past data for Projects Priced
+----------------------------------------------------
+No, and there is nowhere to get it. The import carries each deal's CURRENT value and
+nothing about when it was set - there is no first-value date in the export.
 
-Reads Sent Items directly, so it counts everything sent - not just mail the CRM managed to
-file against a project. An email to a customer about a job that never became a project is
-still work done.
-
-Stored as a per-month tally, not the messages:
-
-    crm:email-volume -> { "edita@rockroofing.co.uk": { "2026-08": 143 } }
-
-Counting is not the same as keeping. Nobody needs 40,000 subject lines retained to know
-143 emails went out in August.
-
-A nightly cron (02:00) recounts the last TWO months only - a finished month does not
-change. Re-running OVERWRITES those months rather than adding to them, so it cannot
-double-count.
-
-BACKFILL, once, after deploying:
-
-    /api/cron/crm-email-volume?months=13
-
-That gives you a year of history. It reads a lot of Sent Items, so use ?mailbox= to do one
-person at a time if it times out.
-
-A month with no figure shows a dash, not a red zero. A month we never counted is not a
-month with no emails.
-
-The mailbox is matched to the person by FIRST NAME against the address - "Edita" ->
-edita@rockroofing.co.uk. That is the only join available: the scorecard knows people by
-name, Graph knows them by mailbox, and nothing links the two. It works for your five; if
-you ever have two people sharing a first name it will need a proper mapping.
+The only historical source is the Pipedrive-era archive the webhook recorded, which you
+seeded into crm:value-changes. That covers the period the webhook was running and nothing
+before it. Anything earlier is not recoverable.
 
 
-4. CALLS MADE - I CANNOT BUILD THIS YET
----------------------------------------
-Not done, deliberately. I have no access to 8x8, no credentials, and no way to see their
-API. Writing it from guesswork would produce something that compiles, deploys, and reports
-a number that is wrong - which is worse than not having it, because you would act on it.
+AND YOUR FIRST QUESTION - Deals Researched and status
+-------------------------------------------------------
+Yes: open, won AND lost are all counted. There is no status filter anywhere in that path -
+not in the derivation, not on the dashboard, not on the scorecard card.
 
-To build it I need:
-  1. An 8x8 API key / client credentials, set in Vercel (tell me the variable names you
-     want and I will read them).
-  2. Which 8x8 product it is - Work, Contact Centre, or X Series. The call-log APIs differ.
-  3. Confirmation of what counts as "a call made". Outbound only? Answered only? Over a
-     minimum duration? A 4-second misdial is not a call, and if we do not decide this now
-     the number will be argued about later.
-  4. How an 8x8 extension maps to a person - is Edita's extension recorded against her
-     email address, or a number I will need a lookup table for?
-
-Give me those and it is the same shape of job as the email metric - a nightly cron writing
-a per-person monthly tally, then one card on the scorecard.
+That is deliberate and I believe correct: a deal researched in May and lost in July was
+still researched in May. The research happened. Say the word if you want it otherwise.
