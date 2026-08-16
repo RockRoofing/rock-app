@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { get } from '../../lib/db'
 import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
+import { getMilestones } from '../../lib/crmMilestones'
 
 // PARALLEL / COMPARISON endpoint. Same output shape as /api/deals, but sourced
 // from the CRM (crm:deals) via the adapter instead of the Pipedrive sync cache.
@@ -8,7 +9,9 @@ import { crmDealsToFlat } from '../../lib/crmDashboardAdapter'
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['pre-contract','post-contract','management','admin'])) return;
   const crmDeals = await get('crm:deals') || []
-  const deals = crmDealsToFlat(crmDeals)
+  // Received dates and project scores. Not fields on the deal - see lib/crmMilestones.
+  const milestones = await getMilestones(crmDeals)
+  const deals = crmDealsToFlat(crmDeals, milestones)
 
   const lightweight = deals.map(d => ({
     id: d.id,

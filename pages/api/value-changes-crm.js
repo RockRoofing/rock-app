@@ -2,6 +2,7 @@ import { requireRole } from '../../lib/portalAuth'
 import {
   getAllCrmValueChanges, getStoredValueChanges, saveStoredValueChanges, seedFromLegacy,
 } from '../../lib/crmValueChanges'
+import { seedMilestonesFromLegacy } from '../../lib/crmMilestones'
 
 // PARALLEL endpoint. Same output shape as /api/value-changes, but derived from the CRM's
 // own deal history instead of the Pipedrive webhook. The original is untouched.
@@ -19,9 +20,11 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // One button, both seeds. Value-change history AND the received dates / project
+    // scores the Glenigan metrics are dated by - there is no reason to make you run two.
     if (req.body && req.body.action === 'seed') {
-      const out = await seedFromLegacy()
-      return res.status(200).json(out)
+      const [vc, ms] = await Promise.all([seedFromLegacy(), seedMilestonesFromLegacy()])
+      return res.status(200).json({ ok: true, valueChanges: vc, milestones: ms })
     }
 
     const { dealId, dealTitle, organizationName, oldValue, newValue, changeDate, estimator, notes } = req.body || {}

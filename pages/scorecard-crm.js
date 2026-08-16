@@ -373,8 +373,28 @@ export default function Scorecard() {
     const gleniganReceivedProjects = gleniganDeals.filter(d => d.receivedDate && monthKey(d.receivedDate) === m)
     const gleniganReceived = gleniganReceivedProjects.length
 
-    // #2 Glenigan priced: Glenigan received deals that have had a value assigned (value > 0)
-    const gleniganPricedProjects = gleniganReceivedProjects.filter(d => d.value > 0)
+    // #2 Glenigan priced: a Glenigan project getting a value for the FIRST time, dated by
+    // the month that happened - not by the month it was received.
+    //
+    // The old rule counted "received this month AND has a value now", which dated the
+    // work to the wrong month whenever pricing lagged the enquiry, and re-counted nothing
+    // at all in the month the pricing actually happened. First-value-only is the honest
+    // reading of "enquiries priced", and the value-change records give it to us: an entry
+    // whose old value was zero and whose new value is not.
+    const gleniganIds = new Set(gleniganDeals.map(d => String(d.id)))
+    const firstPricedThisMonth = new Map()
+    for (const v of valueChanges) {
+      if (!gleniganIds.has(String(v.dealId))) continue
+      if (!((v.oldValue || 0) === 0 && (v.newValue || 0) > 0)) continue
+      const prev = firstPricedThisMonth.get(String(v.dealId))
+      // Earliest such record wins - a project priced, zeroed and priced again has still
+      // only been priced for the first time once.
+      if (!prev || String(v.changeDate) < String(prev.changeDate)) firstPricedThisMonth.set(String(v.dealId), v)
+    }
+    const gleniganPricedProjects = [...firstPricedThisMonth.values()]
+      .filter(v => monthKey(v.changeDate) === m)
+      .map(v => deals.find(d => String(d.id) === String(v.dealId)))
+      .filter(Boolean)
     const gleniganPriced = gleniganPricedProjects.length
 
     // #3 Glenigan scored >=5: Glenigan deals received in month where label (score) >= 5
