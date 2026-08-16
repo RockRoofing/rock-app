@@ -1,13 +1,70 @@
-pkg402 - remove the deal count and total from the CRM toolbar
+pkg403 - Deals Researched: past vs future counted differently
 =============================================================
 
-Deploy after pkg401. One changed file: pages/crm.js. No new files.
+Deploy after pkg402. One changed file: lib/crmMilestones.js. No new files.
 
-"471 deals - £35,160,191 open" is gone from the right-hand end of the black toolbar.
 
-The calculation behind it was removed too, not just the display - it summed the value of
-every open deal on every render, and leaving that running to produce a number nobody sees
-would be waste.
+THE PROBLEM WITH pkg400
+-----------------------
+It counted every imported deal, because every one has a created date and no history. You
+spotted that. There is no way to tell from an import whether a project was researched into
+Project In or arrived straight into Received as a tender - the export carries the created
+date and the CURRENT stage, and nothing about the path between them.
 
-The per-stage counts and totals on the kanban column headers are untouched. Those are the
-ones that tell you something.
+
+PAST DEALS - anything created before today
+-------------------------------------------
+Counted only if BOTH:
+    - still sitting in Project In, 1st Contact, Calls x 3 or TBF
+    - created within the last 12 months
+
+Open or closed, won or lost - status is not part of it.
+
+Dated by the created date.
+
+The reasoning: a deal still in one of those four stages was put there by research and
+never moved on. One that has reached Received or beyond cannot be told apart from a
+tender that simply arrived, so it is left out rather than guessed at.
+
+EXCEPTION: a deal with a RECORDED move into Project In counts regardless of where it is
+now and regardless of the 12 months. That is real evidence rather than a stand-in, so it
+is trusted.
+
+
+FROM TODAY - anything created from 2026-08-16
+----------------------------------------------
+Judged on what actually happened, because the history is now there. Counted if the deal
+was ever genuinely in Project In:
+    - created there (which is the default), or
+    - a recorded move INTO Project In, or
+    - a recorded move OUT of Project In
+
+That third one matters: a project created in Project In and moved on the same day only
+ever records the move AWAY. Without it, working quickly would stop the deal counting.
+
+A project created straight into Received is NOT counted - it was never researched.
+
+Dated by the earliest evidence: created date if it started there, otherwise the move-in.
+
+
+TESTED
+------
+    PAST 3mo, Project In / 1st Contact / Calls x 3 / TBF   COUNTED
+    PAST 3mo, MC Secured                                   not counted
+    PAST 3mo, Received                                     not counted
+    PAST 18mo, Project In                                  not counted (outside 12 months)
+    PAST, LOST, in TBF                                     COUNTED (status is irrelevant)
+    PAST, recorded move into Project In, now MC Secured    COUNTED
+    NEW today, created in Project In                       COUNTED
+    NEW today, created at Received                         not counted
+    NEW today, Project In -> Received same day             COUNTED
+
+
+ONE THING TO KNOW
+-----------------
+CRM_LIVE_FROM at the top of the file is set to 2026-08-16 - today. It is the line between
+"judge by the stand-in" and "judge by the history". If you deploy this later than today,
+or want the line drawn elsewhere, change that one string.
+
+Expect the historical numbers to DROP sharply against what pkg400 showed. That is the
+point: pkg400 was counting all 6,860 imported deals.
