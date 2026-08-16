@@ -18,6 +18,9 @@ const DEFAULT_TARGETS = {
     gpMargin: 0.25,
   },
   sales: {
+    dealsResearched: 20,
+    emailsSentExternal: 200,
+    avgValueSecured: 150000,
     gleniganReceived: 6,
     gleniganPriced: 3,
     gleniganScored5: 3,

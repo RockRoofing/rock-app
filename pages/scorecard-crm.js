@@ -222,6 +222,7 @@ export default function Scorecard() {
   const [valueChanges, setValueChanges] = useState([])
   const [loading, setLoading] = useState(true)
   const [lastSync, setLastSync] = useState(null)
+  const [emailVolume, setEmailVolume] = useState({})
   const [targets, setTargets] = useState(null)
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -248,9 +249,10 @@ export default function Scorecard() {
   async function loadData() {
     setLoading(true)
     try {
-      const [dr, vc, tr] = await Promise.all([
+      const [dr, vc, ev, tr] = await Promise.all([
         fetch('/api/deals-crm'),
         fetch('/api/value-changes-crm'),
+        fetch('/api/email-volume'),
         fetch('/api/targets')
       ])
       const dd = await dr.json()
@@ -258,6 +260,9 @@ export default function Scorecard() {
       setDeals(dd.deals || [])
       setLastSync(dd.lastSync)
       setValueChanges(vcd.changes || [])
+      // Email volume is a nice-to-have on this page; a failure here must not stop the
+      // scorecard loading.
+      try { setEmailVolume((await ev.json()).volume || {}) } catch { setEmailVolume({}) }
       const td = await tr.json()
       setTargets(td.targets || DEFAULT_TARGETS)
       // Load Xero project data for GP margin cards
@@ -301,6 +306,15 @@ export default function Scorecard() {
   const personDeals = isEstimator
     ? deals.filter(d => d.estimator === person)
     : deals.filter(d => getSalesPerson(d) === 'Edita Durikova')
+
+  // Which mailbox belongs to the person this scorecard is for. Matched on first name
+  // against the local part of the address, because the scorecard identifies people by
+  // name and Graph identifies them by mailbox, and nothing joins the two.
+  const personMailbox = (() => {
+    const first = String(person || '').split(' ')[0].toLowerCase()
+    if (!first) return ''
+    return Object.keys(emailVolume).find(mb => mb.split('@')[0].toLowerCase() === first) || ''
+  })()
 
   const personDealIds = new Set(personDeals.map(d => String(d.id)))
   const personValueChanges = valueChanges.filter(v => personDealIds.has(v.dealId))
@@ -444,6 +458,32 @@ export default function Scorecard() {
     const projectsSecuredOver200kList = allMonthWon.filter(d => d.value >= 200000)
     const projectsSecuredOver200k = projectsSecuredOver200kList.length
 
+    // DEALS RESEARCHED - projects added to Project In, dated by when they went in.
+    // Same source as the Deals Researched dashboard, so the two cannot disagree.
+    const dealsResearchedList = deals.filter(d =>
+      d.everIn1stContact && d.firstContactDate && monthKey(d.firstContactDate) === m)
+    const dealsResearched = measured ? dealsResearchedList.length : null
+
+    // AVERAGE VALUE OF PROJECTS SECURED - rolling 6 months ending with month m, and the
+    // 6 months before that, so the card can show which way it is going. Average per WON
+    // DEAL, not per month: "what is a job worth to us now" rather than "how much did we
+    // win". Zero-value wins are excluded - they drag the average down without meaning
+    // anything, and a won deal with no value is a data gap, not a cheap job.
+    const avgWindow = (endMonth, backMonths) => {
+      const end = new Date(`${endMonth}-01T00:00:00Z`)
+      const start = new Date(end); start.setMonth(start.getMonth() - (backMonths - 1))
+      const startKey = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`
+      const won = deals.filter(d => d.status === 'won' && d.closeTime && d.value > 0
+        && monthKey(d.closeTime) >= startKey && monthKey(d.closeTime) <= endMonth)
+      return won.length ? { avg: won.reduce((s, d) => s + d.value, 0) / won.length, count: won.length, list: won } : { avg: null, count: 0, list: [] }
+    }
+    const priorEnd = (() => {
+      const e = new Date(`${m}-01T00:00:00Z`); e.setMonth(e.getMonth() - 6)
+      return `${e.getUTCFullYear()}-${String(e.getUTCMonth() + 1).padStart(2, '0')}`
+    })()
+    const avgNow = avgWindow(m, 6)
+    const avgPrior = avgWindow(priorEnd, 6)
+
     // A MONTH WE NEVER MEASURED IS NOT A MISSED TARGET.
     //
     // These three are dated by events - entering Received, getting a first value - and
@@ -458,6 +498,16 @@ export default function Scorecard() {
 
     return {
       gleniganReceived: gr, gleniganPriced: gp, gleniganScored5: gs,
+      dealsResearched,
+      // Outbound external email for this person's mailbox in this month. null rather than
+      // 0 when there is no figure at all - a month we never counted is not a month with
+      // no emails, and a red zero against target would be a lie.
+      emailsSentExternal: personMailbox ? (emailVolume[personMailbox]?.[m] ?? null) : null,
+      avgValueSecured: avgNow.avg,
+      _avgValueSecuredPrior: avgPrior.avg,
+      _avgValueSecuredCount: avgNow.count,
+      _avgValueSecuredList: avgNow.list,
+      _dealsResearchedList: dealsResearchedList,
       strikeRateValue, strikeRateMCSecNeg,
       totalValuePriced, projectsPricedOver200k,
       totalValueSecured, projectsSecuredOver200k,
@@ -487,6 +537,8 @@ export default function Scorecard() {
   ]
 
   const salesMetricDefs = [
+    { key: 'dealsResearched', label: 'Deals researched', sub: 'Projects added to Project In', format: v => v, targetKey: 'dealsResearched', drillKey: '_dealsResearchedList' },
+    { key: 'emailsSentExternal', label: 'Emails sent externally', sub: 'To at least one address outside Rock Roofing', format: v => v, targetKey: 'emailsSentExternal' },
     { key: 'gleniganReceived', label: 'Glenigan enquiries received', format: v => v, targetKey: 'gleniganReceived', drillKey: '_gleniganReceivedProjects' },
     { key: 'gleniganPriced', label: 'Glenigan enquiries priced', format: v => v, targetKey: 'gleniganPriced', drillKey: '_gleniganPricedProjects' },
     { key: 'gleniganScored5', label: 'Glenigan scored ≥5', format: v => v, targetKey: 'gleniganScored5', drillKey: '_gleniganScored5Projects' },
@@ -496,6 +548,7 @@ export default function Scorecard() {
     { key: 'projectsPricedOver200k', label: 'Projects priced ≥£200K', sub: 'All estimators', format: v => v, targetKey: 'projectsPricedOver200k', drillKey: '_projectsPricedOver200kList', isValueChange: true },
     { key: 'totalValueSecured', label: 'Total value of work secured', sub: 'All estimators', format: fmt, targetKey: 'totalValueSecured', drillKey: '_allWonProjects', showAvg: true },
     { key: 'projectsSecuredOver200k', label: 'Projects secured ≥£200K', sub: 'All estimators', format: v => v, targetKey: 'projectsSecuredOver200k', drillKey: '_projectsSecuredOver200kList' },
+    { key: 'avgValueSecured', label: 'Average value of projects secured', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
   ]
 
   const metricDefs = isEstimator ? estimatorMetricDefs : salesMetricDefs
@@ -564,6 +617,28 @@ export default function Scorecard() {
                 <div>Profit: <strong>{t.totalProfit != null ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalProfit) : '—'}</strong></div>
                 <div style={{ color: '#aaa', fontSize: 10 }}>Invoiced: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalGrossInvoiced)} · Costs: {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(t.totalCostsAll)}</div>
                 <div style={{ color: '#aaa', fontSize: 10 }}>{t.count} live project{t.count !== 1 ? 's' : ''}</div>
+              </div>
+            )
+          })()}
+          {/* Prior-period comparison. The point of a rolling average is the direction, so
+              showing the number without what it is moving from says half of it. */}
+          {m.comparePriorKey && (() => {
+            const prior = metrics[m.comparePriorKey]
+            const now = metrics[m.key]
+            if (now == null) return null
+            if (prior == null) return <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>No comparable earlier period</div>
+            const diff = now - prior
+            const pctDiff = prior ? (diff / prior) * 100 : null
+            const up = diff >= 0
+            return (
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>
+                Previous 6 months: <strong>{m.format(prior)}</strong>
+                <span style={{ color: up ? '#15803d' : '#b91c1c', marginLeft: 8, fontWeight: 600 }}>
+                  {up ? '▲' : '▼'} {m.format(Math.abs(diff))}{pctDiff != null ? ` (${Math.abs(pctDiff).toFixed(0)}%)` : ''}
+                </span>
+                {metrics._avgValueSecuredCount != null && (
+                  <span style={{ color: '#aaa', marginLeft: 8 }}>from {metrics._avgValueSecuredCount} won deal{metrics._avgValueSecuredCount === 1 ? '' : 's'}</span>
+                )}
               </div>
             )
           })()}
