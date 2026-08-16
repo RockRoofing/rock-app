@@ -335,6 +335,26 @@ export default function Scorecard() {
     const rolling6Won = rolling6.filter(d => d.status === 'won')
     const strikeRateOverall = rolling6.length ? rolling6Won.reduce((s,d)=>s+d.value,0) / rolling6.reduce((s,d)=>s+d.value,0) : null
 
+    // AVERAGE SECURED PROJECT VALUE - this estimator's own won deals, rolling 6 months to
+    // the month shown, with the 6 months before for comparison. Replaces "Deals secured
+    // >=200K", which was a count with a quarterly target squeezed into a monthly card.
+    //
+    // Per WON DEAL, not per month - "what is a job worth to this estimator" rather than
+    // "how much did they win", which Total value of work secured already answers.
+    // Zero-value wins are excluded: a won deal with no value is a data gap, not a cheap
+    // job, and it would drag the average down for no reason.
+    const avgSecuredWindow = (endDate, backMonths) => {
+      const end = new Date(endDate)
+      const start = new Date(end.getFullYear(), end.getMonth() - (backMonths - 1), 1).toISOString().split('T')[0]
+      const endStr = end.toISOString().split('T')[0]
+      const won = personDeals.filter(d => d.status === 'won' && d.value > 0
+        && d.closeTime && d.closeTime >= start && d.closeTime <= endStr)
+      return won.length ? { avg: won.reduce((a, d) => a + d.value, 0) / won.length, count: won.length, list: won } : { avg: null, count: 0, list: [] }
+    }
+    const avgSecNow = avgSecuredWindow(mEndDate, 6)
+    const priorEndDate = new Date(mEndDate.getFullYear(), mEndDate.getMonth() - 6 + 1, 0)
+    const avgSecPrior = avgSecuredWindow(priorEndDate, 6)
+
     const mcRolling = rolling6.filter(d => ['MC Secured','Negotiating'].includes(d.stageName))
     const mcRollingWon = mcRolling.filter(d => d.status === 'won')
     const strikeRateMCSecured = mcRolling.length ? mcRollingWon.reduce((s,d)=>s+d.value,0) / mcRolling.reduce((s,d)=>s+d.value,0) : null
@@ -369,6 +389,10 @@ export default function Scorecard() {
     return {
       strikeRateOverall, strikeRateMCSecured, valuePricedExisting, totalValuePriced,
       totalValueSecured, dealsSecuredOver200k: dealsOver200kMonth,
+      avgValueSecured: avgSecNow.avg,
+      _avgValueSecuredPrior: avgSecPrior.avg,
+      _avgValueSecuredCount: avgSecNow.count,
+      _avgValueSecuredList: avgSecNow.list,
       dealsSecuredOver200kRolling3: dealsOver200kRolling3, gpMargin,
       _gpMarginProjects: liveProjects,
       _gpMarginTotals: { totalGrossInvoiced, totalCostsAll, totalLabour, totalMaterials, totalProfit, count: liveProjects.length },
@@ -583,7 +607,7 @@ export default function Scorecard() {
     { key: 'valuePricedExisting', label: 'Value priced — existing customers', format: fmt, targetKey: 'valuePricedExisting', showAvg: true },
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'Value change data', format: fmt, targetKey: 'totalValuePriced', showAvg: true },
     { key: 'totalValueSecured', label: 'Total value of work secured', format: fmt, targetKey: 'totalValueSecured', drillKey: '_monthWonProjects', showAvg: true },
-    { key: 'dealsSecuredOver200k', label: 'Deals secured ≥£200K', sub: 'Per month, target 1/quarter', format: v => v, targetKey: 'dealsSecuredOver200k', mode: 'binary', useRolling3: true, drillKey: '_dealsOver200kList' },
+    { key: 'avgValueSecured', label: 'Average secured project value', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
     { key: 'gpMargin', label: 'GP margin — own projects', sub: 'Live & in-progress projects only', format: pct, targetKey: 'gpMargin', drillKey: '_gpMarginProjects', isGpMargin: true },
   ]
 

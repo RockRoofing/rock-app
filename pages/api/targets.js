@@ -14,7 +14,7 @@ const DEFAULT_TARGETS = {
     valuePricedExisting: 300000,
     totalValuePriced: 667000,
     totalValueSecured: 133000,
-    dealsSecuredOver200k: 1,
+    avgValueSecured: 150000,
     gpMargin: 0.25,
   },
   sales: {
