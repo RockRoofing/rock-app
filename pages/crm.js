@@ -501,7 +501,15 @@ function EditableField({ field, value, onSave, users }) {
       {(field.type === 'text' || field.type === 'number' || field.type === 'currency') && <input type={field.type === 'text' ? 'text' : 'number'} {...cp} />}
       {field.type === 'date' && <input type="date" {...cp} />}
       {field.type === 'yesno' && <select {...cp}><option>Yes</option><option>No</option></select>}
-      {field.type === 'select' && <select {...cp}><option value="">-</option>{(field.fromPortalUsers ? (users || []).map((u) => u.name) : (field.options || [])).map((o) => <option key={o} value={o}>{o}</option>)}</select>}
+      {field.type === 'select' && (() => {
+        const opts = field.fromPortalUsers ? (users || []).map((u) => u.name) : (field.options || []);
+        // Keep a stored value that is not on the list. Imported data has 110 distinct
+        // lost reasons, most of them one-off free text; without this the select would
+        // render blank and look as though the value had been lost.
+        const cur = cp.value == null ? '' : String(cp.value);
+        const all = (cur && !opts.includes(cur)) ? [...opts, cur] : opts;
+        return <select {...cp}><option value="">-</option>{all.map((o) => <option key={o} value={o}>{o}</option>)}</select>;
+      })()}
       {field.type === 'multiselect' && <MultiSelect value={draft} onChange={setDraft} options={field.options || []} placeholder="Select…" />}
       <span style={{ display: 'flex', gap: 4 }}><button onClick={() => save(draft)} style={miniBtn}>Save</button><button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button></span>
     </span>
@@ -1136,11 +1144,51 @@ function EmailsNavButton({ active, onClick, refreshKey }) {
   );
 }
 
+// Asks why, before marking a deal Lost. Not optional dressing: the Sales dashboard's
+// Lost Reasons panel is only as good as what gets recorded here, and a field nobody is
+// prompted for is a field nobody fills in.
+function LostReasonModal({ schema, onCancel, onConfirm }) {
+  const options = (schema || []).find((f) => f.key === 'lost_reason')?.options || [];
+  const [reason, setReason] = useState('');
+  const [other, setOther] = useState('');
+  const chosen = reason === '__other' ? other.trim() : reason;
+
+  return (
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 10, padding: 20, width: 'min(460px, 92vw)', maxHeight: '86vh', overflowY: 'auto' }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Why was this lost?</div>
+        <div style={{ fontSize: 12.5, color: C.dim, marginBottom: 14 }}>Feeds the Lost Reasons analysis on the Sales dashboard.</div>
+
+        <select value={reason} onChange={(e) => setReason(e.target.value)} style={{ ...miniInput, width: '100%', marginBottom: 10 }}>
+          <option value="">Choose a reason&#8230;</option>
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          <option value="__other">Something else&#8230;</option>
+        </select>
+
+        {reason === '__other' && (
+          <input autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="In your own words"
+            style={{ ...miniInput, width: '100%', marginBottom: 10 }} />
+        )}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
+          <button onClick={onCancel} style={ghostBtn}>Cancel</button>
+          {/* Skipping is allowed - blocking someone from closing a deal because a
+              dropdown is empty would just teach them to pick anything. */}
+          <button onClick={() => onConfirm('')} style={{ ...ghostBtn, color: C.dim }}>Mark lost without a reason</button>
+          <button disabled={!chosen} onClick={() => onConfirm(chosen)}
+            style={{ ...primaryBtn, background: C.lost, opacity: chosen ? 1 : 0.45 }}>Mark lost</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, today, schema, me, users, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
+  const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
@@ -1189,7 +1237,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onBack, onMove, on
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => onSetStatus(deal.id, 'won')} style={{ ...wlBtn, background: C.won, color: '#fff' }}>Won</button>
-          <button onClick={() => onSetStatus(deal.id, 'lost')} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
+          <button onClick={() => setLostFor(deal.id)} style={{ ...wlBtn, background: C.lost, color: '#fff' }}>Lost</button>
           {deal.status !== 'open' && <button onClick={() => onSetStatus(deal.id, 'open')} style={{ ...backBtn, background: 'transparent', color: '#fff', borderColor: '#444' }}>Reopen</button>}
           <CopyButton
             text={`[CRM-${deal.id}]`}
@@ -1285,6 +1333,13 @@ function DealView({ deal, allDeals, today, schema, me, users, onBack, onMove, on
           )}
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
+
+          {lostFor != null && (
+            <LostReasonModal
+              schema={schema}
+              onCancel={() => setLostFor(null)}
+              onConfirm={(reason) => { onSetLostReason(deal.id, reason); onSetStatus(deal.id, 'lost'); setLostFor(null); }} />
+          )}
 
           {/* Email - loads on its own, keyed to the deal */}
           <DealEmails dealId={deal.id} deals={allDeals} />
@@ -2260,6 +2315,9 @@ function CRMPageInner() {
     }
   }
 
+  // Written before the status change, so the deal is saved once with both.
+  const setLostReason = (id, reason) => patch(id, (d) => ({ ...d, fields: { ...d.fields, lost_reason: reason || null } }));
+
   const createProject = (data) => {
     const id = nextId.current++;
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
@@ -2507,7 +2565,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }

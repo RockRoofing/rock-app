@@ -532,11 +532,16 @@ export default function Dashboard() {
         if (ppFilters.region !== 'All' && deal?.region !== ppFilters.region) return false
         if (ppFilters.custName !== 'All' && deal?.organizationName !== ppFilters.custName) return false
         if (ppFilters.systemPriced !== 'All' && !deal?.systemPriced?.includes(ppFilters.systemPriced)) return false
-        if (ppStages.length > 0 && !ppStages.includes(deal?.projectStage)) return false
+        // stageName, not projectStage. The chips are CRM pipeline stages (MC Secured,
+        // Negotiating...) but projectStage is a different thing entirely - it holds
+        // "Live Project" / "Contractor tendering", meaning whether the customer is
+        // pricing or has secured. Filtering one against the other matched nothing, so
+        // ticking any chip silently emptied the panel.
+        if (ppStages.length > 0 && !ppStages.includes(deal?.stageName)) return false
         return true
       })
-      const zeroValueDeals = deals.filter(d => d.status === 'open' && TRACKED_STAGES.includes(d.projectStage) && (!d.value || d.value === 0) &&
-        (ppStages.length === 0 || ppStages.includes(d.projectStage)) &&
+      const zeroValueDeals = deals.filter(d => d.status === 'open' && TRACKED_STAGES.includes(d.stageName) && (!d.value || d.value === 0) &&
+        (ppStages.length === 0 || ppStages.includes(d.stageName)) &&
         (ppFilters.estimator === 'All' || d.estimator === ppFilters.estimator) &&
         (ppFilters.region === 'All' || d.region === ppFilters.region)
       )
