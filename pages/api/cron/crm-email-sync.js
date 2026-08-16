@@ -4,15 +4,17 @@ import { runEmailSync } from '../../../lib/crmEmailSync'
 // Runs hourly - little and often, so the unallocated queue stays small and current.
 //
 //   ?dryRun=1            report what WOULD be matched, write nothing
+//   ?detail=1            list every subject line with its outcome and score
 //   ?backfillMonths=24   first run only: how far back to go (matched-only, see notes)
 //   ?max=500             cap messages per mailbox, useful when testing
 
 export default async function handler(req, res) {
   try {
     const dryRun = req.query.dryRun === '1'
+    const detail = req.query.detail === '1'
     const backfillMonths = parseInt(req.query.backfillMonths || '0', 10) || 0
     const max = parseInt(req.query.max || '2000', 10) || 2000
-    const result = await runEmailSync({ dryRun, backfillMonths, max })
+    const result = await runEmailSync({ dryRun, backfillMonths, max, detail })
     return res.status(200).json(result)
   } catch (e) {
     console.error('crm-email-sync error:', e)

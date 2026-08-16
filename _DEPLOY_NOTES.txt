@@ -1,79 +1,88 @@
-pkg369 - Do not assign to a project
-===================================
+pkg370 - close matching
+=======================
 
-DEPLOY pkg366 AND pkg368 FIRST. This builds on both.
+DEPLOY pkg366, pkg368 AND pkg369 FIRST. This builds on all three.
 
 CHANGED FILES (all already exist - replace them)
 ------------------------------------------------
-  lib/crmEmailSync.js    remembers what must never be filed
-  pages/api/crm.js       two new actions
-  pages/crm.js           the buttons
+  lib/crmEmailSync.js               the scoring
+  pages/api/cron/crm-email-sync.js  ?detail=1
+  pages/crm.js                      the suggestion row
 
 NEW FILES
 ---------
   NONE.
 
 
-THE PROBLEM THIS FIXES
-----------------------
-Dismiss only emptied the row out of the queue. It did not record anything. So the moment
-the sync state was cleared, or a backfill was run, the same personal email came straight
-back and had to be dismissed all over again. There was no way to say "leave this alone".
+WHY THE OLD RULE MISSED SO MUCH
+-------------------------------
+It looked for the WHOLE project title as one unbroken run of characters in the subject.
+For "Bensham Lane Phase 2":
+
+    RE: Bensham Lane Phase 2 drawings          matched
+    RE: Bensham Lane - drawings for phase 2    MISSED - not contiguous
+    Bensham Ln Ph2                             MISSED - abbreviated
+
+That is almost certainly most of your 94%.
 
 
-WHAT YOU GET
-------------
-
-1. DO NOT ASSIGN  (review queue)
-   The Dismiss button is now "Do not assign". It asks first, then records the message as
-   one that must never go on a project. The sync skips it before it even tries to match -
-   so not even a [CRM-nnn] reference in the subject will file it. A person overrules a
-   rule.
-
-   It stays in Outlook. Nothing is deleted, ever.
-
-2. REMOVE  (on the project)
-   Every email in a project's Email section now has a small "Remove" link. Use it when
-   something has filed against the wrong job, or should not be on a project at all.
-
-   Removing also marks it do-not-assign. That is deliberate: without it the next sync
-   would re-file the same email within fifteen minutes and it would look as though the
-   removal had not worked.
-
-3. UNDO
-   After Do not assign you get an Undo link in the confirmation bar. It lifts the block so
-   the email is picked up again on the next sync. Worth knowing it is there before anybody
-   clicks the button in anger.
-
-   Undo is offered on the queue action only. To bring back something you removed from a
-   project, tell me the subject and I can lift it - or say the word and I will add a small
-   "do not assign" list you can manage yourself.
-
-
-THE SYNC OUTPUT GAINS A FIELD
------------------------------
-Each mailbox now reports "skipped" alongside fetched / matched / queued / discarded. That
-is how many were passed over because you had said do not assign. Handy as a sanity check
-that the list is doing what you think.
-
-
-HOW IT IS STORED
+WHAT IT DOES NOW
 ----------------
-  crm:emails:never    message ids, newest first, capped at 2,000
+Words are scored instead of characters, and each word is weighted by how RARE it is across
+your project titles. "bensham" is on one project and carries a match on its own. "lane",
+"house", "roofing", "works" are on hundreds and barely move the needle. So a subject full
+of common construction words does not score - which is the behaviour you want.
 
-Capped so it cannot grow without limit. Dismissals should be rare; if you ever get near
-2,000 the oldest fall off and could in principle be re-queued once, which is worth knowing
-but very unlikely to matter.
+Above 70% it files itself, as you asked.
 
 
-ON WHO CAN SEE WHAT
--------------------
-Not a change, just so it is written down: every CRM user (pre-contract, management, admin)
-sees every email filed against a project, whichever mailbox it came from. There is no
-per-person restriction once mail is filed. If that needs to change it is a real piece of
-work and a policy decision first.
+THE ONE THING I ADDED TO YOUR SPEC
+----------------------------------
+Auto-filing at 70% on score alone is not safe, and it is worth knowing why.
 
-The lever that does exist is MS_PRIVATE_MAILBOXES. Any mailbox on that list only files
-mail with a project name in the subject - nothing matched on who the email is with, and
-nothing queued for review. That is the setting to use if somebody wants their mailbox
-synced for job mail only.
+You have "Bensham Lane Phase 1" and "Bensham Lane Phase 2". A subject saying only "Bensham
+Lane" scores about the same against BOTH. At a bare 70% threshold it would file into
+whichever sorted first - silently, into the wrong job.
+
+So it now files only when the best match is also CLEARLY AHEAD of the runner-up. If two
+projects score close together it goes to review instead, however high the score. That is
+what makes 70% mean "confident" rather than just "high".
+
+Tested against exactly this case:
+
+    RE: Bensham Lane - drawings for phase 2   -> FILED, Phase 2, 100%
+    RE: Bensham Lane drawings phase 1         -> FILED, Phase 1, 100%
+    Bensham Lane phase                        -> NOT filed, suggested only
+    Roofing works                             -> no match
+    Invoice for roofing works ltd             -> no match
+    Tesco                                     -> no match
+
+Both numbers are tunable from Vercel without a deploy:
+
+    MS_MATCH_THRESHOLD   default 0.70   score needed to file itself
+    MS_MATCH_MARGIN      default 0.12   how far clear of the runner-up it must be
+
+Raise the threshold if you see anything file wrongly. Raise the margin if the wrong ones
+are near-identical project names.
+
+
+SUGGESTIONS IN THE REVIEW QUEUE
+-------------------------------
+Anything scoring over 45% but not confident enough to file now shows a blue bar on its
+queue row:
+
+    Looks like Bensham Lane Phase 2 (63%, next closest Bensham Lane Phase 1)   [Accept]
+
+One click files it. The runner-up is named deliberately - if the two are near-identical
+you want to see that before you accept.
+
+
+SEE EXACTLY WHAT IT WOULD DO - BEFORE THE BACKFILL
+---------------------------------------------------
+    /api/cron/crm-email-sync?dryRun=1&detail=1&max=200
+
+Writes nothing. Returns every subject line with its outcome - FILED, SUGGESTED or NO
+MATCH - plus the project, the score and the runner-up. That is how you judge whether 70%
+is the right number, on your real mail, before committing to anything.
+
+Do that first. Then decide the backfill.

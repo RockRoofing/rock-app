@@ -949,6 +949,15 @@ function EmailQueue({ deals, onOpenDeal }) {
               <button disabled={busy === m.id} onClick={() => setPickerFor((v) => v === m.id ? null : m.id)} style={{ ...primaryBtn, opacity: busy === m.id ? 0.5 : 1 }}>Allocate to project</button>
               <button disabled={busy === m.id} onClick={() => dismiss(m)} style={{ ...ghostBtn, color: C.dim }}>Do not assign</button>
             </EmailCard>
+            {m.suggestTitle && pickerFor !== m.id && (
+              <div style={{ margin: '-4px 0 10px', padding: '8px 11px', background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, color: C.text }}>
+                  Looks like <strong>{m.suggestTitle}</strong> <span style={{ color: C.dim }}>({m.suggestScore}%{m.suggestRunnerUp ? `, next closest ${m.suggestRunnerUp}` : ''})</span>
+                </span>
+                <div style={{ flex: 1 }} />
+                <button disabled={busy === m.id} onClick={() => allocate(m, { id: m.suggestDealId, title: m.suggestTitle })} style={{ ...primaryBtn, padding: '5px 12px' }}>Accept</button>
+              </div>
+            )}
             {pickerFor === m.id && (
               <div style={{ marginTop: -4, marginBottom: 10 }}>
                 <ProjectPicker deals={deals} onPick={(d) => allocate(m, d)} onCancel={() => setPickerFor(null)} />
