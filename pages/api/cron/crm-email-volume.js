@@ -13,7 +13,10 @@ export const config = { maxDuration: 300 }
 
 export default async function handler(req, res) {
   try {
-    const months = Math.min(24, parseInt(req.query.months || '2', 10) || 2)
+    // Capped at 60 rather than 24. Two years was an arbitrary ceiling and it silently
+    // clipped a longer request - asking for 37 months quietly gave you 24, which is the
+    // sort of thing that gets read as "the data does not go back further".
+    const months = Math.min(60, parseInt(req.query.months || '2', 10) || 2)
     const mailbox = String(req.query.mailbox || '').trim()
     const max = parseInt(req.query.max || '20000', 10) || 20000
     const out = await refreshEmailVolume({ months, mailbox, max })
