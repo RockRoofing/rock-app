@@ -1780,9 +1780,25 @@ function CRMPageInner() {
       columns, companyCols, contactCols, sort, entitySort,
       actSort, actShowDone]);
   const dragId = useRef(null);
+  // NEW PROJECT IDS.
+  //
+  // This was a fixed 900000 and nothing ever moved it, so every browser session started
+  // counting from the same place. Create a project today and another tomorrow and both
+  // got id 900000 - two deals, one id. `deals.find(d => d.id === openId)` returns the
+  // FIRST match, so clicking the newer one opened the older one.
+  //
+  // Now seeded above the highest id actually present, once the deals have loaded.
   const nextId = useRef(900000);
 
   useEffect(() => { if (!router.isReady) return; const q = router.query.deal; if (q) { setOpenId(Number(q)); loadDealSubs(Number(q)); } }, [router.isReady, router.query.deal]);
+
+  // Keep the id counter above everything that exists. Runs whenever the list changes, so
+  // a project created by somebody else between loads cannot be collided with either.
+  useEffect(() => {
+    if (!deals.length) return;
+    const highest = deals.reduce((mx, d) => { const n = Number(d.id); return Number.isFinite(n) && n > mx ? n : mx; }, 899999);
+    if (nextId.current <= highest) nextId.current = highest + 1;
+  }, [deals]);
 
   // Load persisted CRM data (deals + schema) from the server on mount.
   useEffect(() => {

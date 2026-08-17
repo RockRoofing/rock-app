@@ -585,6 +585,60 @@ export default async function handler(req, res) {
     // 'lost' entry at the time - so the date is recoverable from that.
     //
     // Only fills a blank. Never touches a date that is already there.
+    // DUPLICATE DEAL IDS.
+    //
+    // New ids came from a counter that started at 900000 every session, so projects
+    // created on different days could share an id. deals.find() returns the first match,
+    // which is why clicking one project opened another.
+    //
+    // Reports them, and renumbers the duplicates on request. The FIRST occurrence keeps
+    // its id - it is the one already referenced by activities, notes, filed email and
+    // planning allocations. Later ones are moved above the highest id in use, and their
+    // sub-records move with them.
+    if (body.action === 'find-duplicate-ids') {
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      const seen = new Map()
+      const dupes = []
+      for (const d of list) {
+        const k = String(d.id)
+        if (seen.has(k)) dupes.push({ id: k, keeps: seen.get(k), duplicate: d.title || '(untitled)' })
+        else seen.set(k, d.title || '(untitled)')
+      }
+      return res.json({ ok: true, total: list.length, duplicates: dupes })
+    }
+
+    if (body.action === 'fix-duplicate-ids') {
+      const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
+      let highest = list.reduce((mx, d) => { const n = Number(d.id); return Number.isFinite(n) && n > mx ? n : mx }, 899999)
+      const seen = new Set()
+      const moved = []
+      for (const d of list) {
+        const k = String(d.id)
+        if (!seen.has(k)) { seen.add(k); continue }
+        const from = k
+        const to = String(++highest)
+        d.id = highest
+        seen.add(to)
+        // Carry its own records across with it.
+        for (const kind of ['activities', 'notes']) {
+          const sub = (await get(SUB_KEY(kind, from))) || []
+          if (sub.length) {
+            await set(SUB_KEY(kind, to), sub)
+            const idx = (await get(SUB_INDEX(kind))) || []
+            if (!idx.includes(to)) await set(SUB_INDEX(kind), [...idx, to])
+          }
+        }
+        moved.push({ from, to, title: d.title || '(untitled)' })
+      }
+      if (moved.length) await set(DEALS_KEY, list)
+      return res.json({
+        ok: true, moved,
+        note: moved.length
+          ? 'The FIRST project with each id kept it. Later ones were renumbered. Their activities and notes were copied across; filed email and planning allocations still point at the original id and may need checking.'
+          : 'No duplicates found.',
+      })
+    }
+
     if (body.action === 'repair-close-dates') {
       const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
       let fixed = 0, alreadyOk = 0, noHistory = 0

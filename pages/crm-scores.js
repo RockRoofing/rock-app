@@ -32,7 +32,10 @@ export default function CrmScoreImport() {
   const [preview, setPreview] = useState(null)
   const [result, setResult] = useState(null)
   const [repaired, setRepaired] = useState(null)
+  const [dupes, setDupes] = useState(null)
   const [mention, setMention] = useState(null)
+  const [testResult, setTestResult] = useState(null)
+  const [testTo, setTestTo] = useState('')
 
   async function readFile(file) {
     if (!file) return
@@ -97,6 +100,18 @@ export default function CrmScoreImport() {
     setBusy(false)
   }
 
+  async function checkDupes(fix) {
+    setBusy(true); setDupes(null); setMsg(fix ? 'Renumbering...' : 'Checking...')
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: fix ? 'fix-duplicate-ids' : 'find-duplicate-ids' }),
+      }).then((r) => r.json())
+      setDupes(d); setMsg('')
+    } catch (e) { setMsg(`Could not run: ${e.message || 'failed'}`) }
+    setBusy(false)
+  }
+
   async function repair() {
     setBusy(true); setRepaired(null); setMsg('Checking every won and lost deal...')
     try {
@@ -122,6 +137,19 @@ export default function CrmScoreImport() {
       }).then((r) => r.json())
       setMention(d); setMsg('')
     } catch (e) { setMsg(`Could not check: ${e.message || 'failed'}`) }
+    setBusy(false)
+  }
+
+  // Sends a real email down the identical path a mention uses.
+  async function sendTest() {
+    setBusy(true); setTestResult(null); setMsg('Sending...')
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mention-test-send', to: testTo.trim() || undefined }),
+      }).then((r) => r.json())
+      setTestResult(d); setMsg('')
+    } catch (e) { setTestResult({ ok: false, error: e.message || 'failed' }); setMsg('') }
     setBusy(false)
   }
 
@@ -175,6 +203,41 @@ export default function CrmScoreImport() {
             </button>
           </div>
         )}
+
+        <div style={{ background: '#fff', border: '2px solid #b91c1c', borderRadius: 10, padding: 18, marginTop: 24 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: '#b91c1c' }}>Duplicate project ids</div>
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, marginTop: 0 }}>
+            New projects took their id from a counter that restarted at 900000 every browser session,
+            so projects created on different days could share one. The CRM opens the FIRST project with
+            a given id &mdash; which is why clicking one project opened another. Check first; it lists
+            them without changing anything.
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => checkDupes(false)} disabled={busy}
+              style={{ background: '#1a1a19', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+              Check for duplicates
+            </button>
+            {dupes && dupes.duplicates && dupes.duplicates.length > 0 && (
+              <button onClick={() => { if (window.confirm('Renumber the duplicates? The first project with each id keeps it; later ones get a new id. Their activities and notes move with them.')) checkDupes(true) }} disabled={busy}
+                style={{ background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+                Renumber {dupes.duplicates.length}
+              </button>
+            )}
+          </div>
+          {dupes && (
+            <div style={{ fontSize: 13, marginTop: 12, lineHeight: 1.7 }}>
+              {dupes.duplicates && (dupes.duplicates.length
+                ? <>
+                    <div style={{ color: '#b91c1c', fontWeight: 600 }}>{dupes.duplicates.length} duplicate id{dupes.duplicates.length === 1 ? '' : 's'} of {dupes.total} projects</div>
+                    <ul style={{ paddingLeft: 18, color: '#555' }}>
+                      {dupes.duplicates.map((x, i) => <li key={i}>id {x.id}: &ldquo;{x.duplicate}&rdquo; is hidden behind &ldquo;{x.keeps}&rdquo;</li>)}
+                    </ul>
+                  </>
+                : <div style={{ color: '#15803d' }}>No duplicates. {dupes.total} projects checked.</div>)}
+              {dupes.moved && <div style={{ color: '#15803d' }}>Renumbered {dupes.moved.length}. {dupes.note}</div>}
+            </div>
+          )}
+        </div>
 
         <div style={{ background: '#fff', border: '1px solid #e1e0d9', borderRadius: 10, padding: 18, marginTop: 24 }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Repair missing close dates</div>
@@ -230,6 +293,29 @@ export default function CrmScoreImport() {
               </ul>
             </div>
           )}
+
+          <div style={{ borderTop: '1px solid #eee', marginTop: 16, paddingTop: 14 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 6 }}>Send a real test email</div>
+            <p style={{ fontSize: 12.5, color: '#555', marginTop: 0, lineHeight: 1.5 }}>
+              Uses the identical path a mention uses. If this arrives, the email chain is sound and
+              anything still missing is about who got matched, not about email. Blank sends to you.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="you@rockroofing.co.uk"
+                style={{ flex: 1, minWidth: 220, padding: '8px 10px', fontSize: 13, border: '1px solid #d9d9d4', borderRadius: 6, fontFamily: 'inherit' }} />
+              <button onClick={sendTest} disabled={busy}
+                style={{ background: BRAND, color: '#fff', border: 'none', borderRadius: 7, padding: '9px 16px', fontSize: 13.5, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+                Send test
+              </button>
+            </div>
+            {testResult && (
+              <div style={{ fontSize: 13, marginTop: 10, color: testResult.ok ? '#15803d' : '#b91c1c', lineHeight: 1.6 }}>
+                {testResult.ok
+                  ? `Sent to ${testResult.to}. Check that inbox, and the spam folder.`
+                  : `Not sent. ${testResult.error || 'Unknown reason.'}`}
+              </div>
+            )}
+          </div>
         </div>
 
         {result && (
