@@ -1574,17 +1574,47 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                 </tr>
               </thead>
               <tbody>
-                {Array.from({ length: 14 }, (_, i) => {
-                  const d = new Date()
-                  d.setDate(1)
-                  d.setMonth(d.getMonth() - 2 + i)   // start 2 months earlier, run 12 ahead
-                  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                {(() => {
+                  // ROLLING WINDOW, PLUS ANY MONTH THAT ALREADY HAS DATES.
+                  //
+                  // The window is the last 2 months and 12 ahead. But the completeness
+                  // check flags ANY month holding some dates and not all three - however
+                  // old. So a month part-filled months ago kept warning "Complete all
+                  // monthly dates for May 2026" with no May row on screen to fix it in.
+                  // An unfixable warning, which people learn to ignore.
+                  //
+                  // Every month with data is now shown, in date order, whether or not it
+                  // falls in the window.
+                  const overridesAll = form.dateOverrides || {}
+                  const keys = []
+                  for (let i = 0; i < 14; i++) {
+                    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 2 + i)
+                    keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+                  }
+                  for (const k of Object.keys(overridesAll)) {
+                    const r = overridesAll[k] || {}
+                    if ((r.applicationDate || r.valuationDate || r.paymentDate) && !keys.includes(k)) keys.push(k)
+                  }
+                  keys.sort()
+                  return keys
+                })().map((key) => {
+                  const [ky, km] = key.split('-').map(Number)
+                  const d = new Date(ky, km - 1, 1)
                   const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
                   const overrides = form.dateOverrides || {}
                   const row = overrides[key] || {}
+                  // Outside the rolling window - shown only because it holds data.
+                  const outOfWindow = (() => {
+                    const first = new Date(); first.setDate(1); first.setMonth(first.getMonth() - 2)
+                    const firstKey = `${first.getFullYear()}-${String(first.getMonth() + 1).padStart(2, '0')}`
+                    return key < firstKey
+                  })()
                   return (
                     <tr key={key} style={{ borderBottom: '0.5px solid #f0f0f0' }}>
-                      <td style={{ padding: '6px 10px', fontWeight: 500, color: '#1a1a2e', whiteSpace: 'nowrap' }}>{label}</td>
+                      <td style={{ padding: '6px 10px', fontWeight: 500, color: outOfWindow ? '#c2410c' : '#1a1a2e', whiteSpace: 'nowrap' }}>
+                        {label}
+                        {outOfWindow && <div style={{ fontSize: 9.5, fontWeight: 600, color: '#c2410c' }}>past month, part filled</div>}
+                      </td>
                       {['applicationDate', 'valuationDate', 'paymentDate'].map(field => {
                         // Constrain each row's picker to its own month so the native
                         // date picker OPENS on that month (e.g. a November row opens

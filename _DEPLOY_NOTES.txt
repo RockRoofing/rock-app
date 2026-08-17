@@ -1,36 +1,49 @@
-pkg440 - N/A on the retention releases when retention is 0%
-===========================================================
+pkg441 - "Complete all monthly dates for May 2026" with no May row
+==================================================================
 
-Deploy after pkg439. One changed file: pages/retention.js. No new files.
-
-
-WHAT CHANGED
-------------
-On a project with 0% retention, all four release columns now read a greyed "N/A":
-
-    1st Value    1st Date    2nd Value    2nd Date
-
-They were showing an amber "TBC" warning, for ever, on projects that were never going to
-have a release date - chasing something that does not exist. Hovering any of them says
-"Retention is 0% on this project - nothing to release."
-
-I did all four rather than only the two dates you mentioned. A £0.00 release value beside
-an N/A date would have read as a release that had not been valued yet, which is the same
-confusion in a different column.
+Deploy after pkg440. One changed file: pages/project/[id].js (literal [id] folder).
 
 
-ONE DISTINCTION THAT MATTERS
-----------------------------
-Only an EXPLICIT zero counts. A BLANK retention still shows the TBC warning.
+THE PROBLEM
+-----------
+Two different rules were in play and they had drifted apart.
 
-Blank means nobody has set the retention yet - that is a project needing attention, and
-exactly the thing this register should be surfacing. Treating blank as zero would have
-quietly hidden them.
+  THE TABLE shows a rolling window: the last 2 months and 12 ahead. Today that is
+  June 2026 to July 2027.
 
-Checked: 3% behaves normally, 0 and "0" show N/A, blank and null keep the warning.
+  THE COMPLETENESS CHECK looks at EVERY month that holds any dates at all, however old,
+  and flags any with some of the three filled in and not all.
+
+May 2026 has a partial set saved from an earlier session. The window has since rolled past
+it, so the warning had no row to be fixed in. Unfixable - and an unfixable warning is worse
+than no warning, because people learn to ignore the whole banner.
 
 
-ALREADY CORRECT, LEFT ALONE
----------------------------
-The Retention Owed / 612 Allocated match flag only fires when one of the two is above
-zero, so a 0% project does not show a false mismatch there. Nothing needed.
+FIXED
+-----
+Any month holding dates is now shown, whether or not it falls in the window, sorted into
+place. May 2026 will appear at the top of your table.
+
+Past months that only appear because they hold data are labelled in orange - "past month,
+part filled" - so it is obvious why a month from before the window is on screen.
+
+
+HOW TO CLEAR IT
+---------------
+Two ways, both fine:
+
+  FILL IT IN   complete the missing date(s) for May. The warning goes.
+
+  CLEAR IT     delete all three May dates. The row removes itself entirely - that was
+               already the behaviour, it just needed a row to do it in.
+
+Which is right depends on whether May was a real application month. If it was, fill it in;
+if somebody started typing and stopped, clear it.
+
+
+WORTH CHECKING ELSEWHERE
+------------------------
+This will not be the only project. Any project where somebody part-filled a month that has
+since scrolled out of the window will have had the same silent, unfixable warning. They
+will all become fixable with this deploy - so if the "still to complete" count drops across
+several projects over the next few days, that is why.
