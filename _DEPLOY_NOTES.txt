@@ -1,46 +1,61 @@
-pkg429 - rolling averages, named and bounded properly
-=====================================================
+pkg430 - fixes the failed build. My mistake.
+============================================
 
-Deploy after pkg428. One changed file: pages/scorecard-crm.js. No new files.
+Deploy after pkg429. One changed file: pages/scorecard-crm.js. No new files.
 
-
-1. YOUR QUESTION - AVERAGE VALUE OF PROJECTS SECURED
------------------------------------------------------
-Yes, it already excludes variations. Done in pkg416, on BOTH the estimator cards and
-Edita's. Nothing needed here.
+URGENT - pkg428/429 broke the build. This is the fix.
 
 
-2. TOTAL VALUE OF WORK SECURED - the "Avg" line
--------------------------------------------------
-Now reads:
+THE ERROR
+---------
+    ReferenceError: useMemo is not defined
+    Error occurred prerendering page "/scorecard-crm"
 
-    Avg: £412,000/month (6 months)
+pkg428 added a useMemo for the deal lookup and I never added it to the React import. The
+file still read:
 
-It was averaging EVERY month on screen, so the figure moved whenever anybody touched the
-From/To boxes at the top - two people could read different "averages" off the same card
-and both be looking at it correctly. Now always the 6 months to and including the month
-the card is showing.
+    import { useState, useEffect } from 'react'
 
-Near the start of a short date range there are fewer than six months to average, so it
-says how many it actually had - "(4 months)" - rather than labelling four as six.
+Now:
 
-This applies to Total value of work priced too, which carries the same line.
+    import { useState, useEffect, useMemo } from 'react'
 
 
-3. AVERAGE PROJECT VALUE (ROLLING 6 MONTHS)
----------------------------------------------
-Renamed from "Average value of projects priced". The sub-line now says what it does
-instead of describing the window twice:
+WHY MY BUILD CHECK MISSED IT
+----------------------------
+`npm run build` here COMPILES the page but does not PRERENDER it. Vercel does, and that is
+when the missing hook is actually called. So it passed locally and failed on deploy - the
+same blind spot as the runtime ordering fault in pkg407.
 
-    Every project priced in the 6 months to and including this month. Excludes variations.
+I have added a sweep for it: every page and component is now checked for React hooks used
+but not imported. Ran it across the whole app - everything else is clean.
 
-To answer what "rolling 6 months vs 6 months before" meant: the big number is the 6 months
-ending with the month shown, and the grey line underneath compares it with the 6 months
-before that, so you can see which way it is moving. April's card covers November to April;
-March covers October to March. Exactly as you described - checked against the code, the
-windows were already right, only the wording was poor.
 
-Variations excluded, from pkg428.
+SOMETHING ELSE IN THAT LOG YOU SHOULD KNOW ABOUT
+--------------------------------------------------
+Before the fatal error there were dozens of warnings like:
 
-The comparison line stays. Say the word if you would rather the card just showed the
-number without it.
+    Attempted import error: 'sendTestMention' is not exported from '../../lib/crmMentions'
+    Import trace: ./pages/api/cron/pipedrive-sync.js
+
+Those come from FOUR FILES THAT SHOULD HAVE BEEN DELETED in pkg386:
+
+    pages/api/cron/pipedrive-sync.js
+    pages/api/sync.js
+    pages/api/webhook.js
+    pages/api/deals.js
+
+They import lib/pipedrive.js, which pkg386 DID remove - so they have been failing to
+resolve on every build since. Warnings only, not fatal, but they are noise that hides real
+problems, and pipedrive-sync.js in particular is a cron endpoint that would error if
+anything ever called it.
+
+pkg386 listed them under "DELETE THESE FILES IN GITHUB". Worth deleting them now:
+open each in GitHub, three-dot menu, Delete file, commit. Nothing references them.
+
+Also on that list and worth checking at the same time:
+    pages/api/value-changes/index.js   (then the empty folder)
+    pages/api/allfields.js
+    pages/api/deal-raw.js
+    pages/api/stages.js
+    lib/pipedrive.js
