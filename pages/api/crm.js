@@ -3,7 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
-import { sendMentionEmails, getMentionableUsers, diagnoseMentions } from '../../lib/crmMentions'
+import { sendMentionEmails, getMentionableUsers, diagnoseMentions, sendTestMention } from '../../lib/crmMentions'
 import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
 
 // Persistence for the CRM. Shared across all pre-contract staff.
@@ -355,6 +355,16 @@ export default async function handler(req, res) {
 
     // Diagnostic for @mention email. Sends nothing; says who it resolves to and how the
     // mail service is configured.
+    // Sends one real email down the identical path a mention uses.
+    if (body.action === 'mention-test-send') {
+      const users = await getMentionableUsers()
+      const me = (acc.user.email || '').toLowerCase()
+      const to = String(body.to || me || '').trim()
+      if (!to) return res.status(400).json({ error: 'No address - your portal account has no email on it.' })
+      const out = await sendTestMention(to)
+      return res.json({ ...out, mentionable: users.map((u) => u.email) })
+    }
+
     if (body.action === 'mention-diagnose') {
       const out = await diagnoseMentions(String(body.body || '@'))
       return res.json(out)
@@ -497,7 +507,50 @@ export default async function handler(req, res) {
       const open = (await get(OPEN_ACTIVITIES)) || []
       await set(OPEN_ACTIVITIES, open.filter(a => String(a.dealId) !== dealId))
 
-      return res.json({ ok: true })
+      // EVERYTHING ELSE THAT KNOWS ABOUT THIS PROJECT.
+      //
+      // Deleting used to clear the deal, its activities and its notes. Everything added
+      // since - filed email, conversation links, milestones, value changes - was left
+      // behind, pointing at a project that no longer exists. The consequences were not
+      // obvious: orphaned milestones still counted towards Deals Researched, orphaned
+      // value changes still counted towards work priced, and any reply on a filed thread
+      // would re-file itself against the deleted id.
+      const removed = {}
+
+      // Filed email, and the conversation links that would re-file replies against it.
+      await set(`crm:emails:${dealId}`, [])
+      const threads = (await get('crm:emails:threads')) || []
+      const keptThreads = threads.filter(t => !(t && String(t.d) === dealId))
+      removed.threadLinks = threads.length - keptThreads.length
+      await set('crm:emails:threads', keptThreads)
+
+      // Suggestions in the review queue pointing at it - the row stays, the suggestion
+      // goes, otherwise you would be offered a project that is not there.
+      const queue = (await get('crm:emails:unallocated')) || []
+      let suggestionsCleared = 0
+      const cleanQueue = queue.map(e => {
+        if (e && String(e.suggestDealId) === dealId) {
+          suggestionsCleared++
+          const { suggestDealId, suggestTitle, suggestScore, suggestRunnerUp, ...rest } = e
+          return rest
+        }
+        return e
+      })
+      if (suggestionsCleared) await set('crm:emails:unallocated', cleanQueue)
+      removed.emailSuggestions = suggestionsCleared
+
+      // Milestones - received date, Project In date, score. These drive Deals Researched
+      // and the Glenigan cards, so leaving them would keep counting a deleted project.
+      const milestones = (await get('crm:deal-milestones')) || {}
+      if (milestones[dealId]) { delete milestones[dealId]; await set('crm:deal-milestones', milestones); removed.milestones = 1 }
+
+      // Hand-made and seeded value changes. Derived ones vanish with the deal itself.
+      const vc = (await get('crm:value-changes')) || []
+      const keptVc = vc.filter(v => String(v.dealId) !== dealId)
+      removed.valueChanges = vc.length - keptVc.length
+      if (removed.valueChanges) await set('crm:value-changes', keptVc)
+
+      return res.json({ ok: true, removed })
     }
 
     // PROJECT SCORES ONLY. Writes fields.project_score onto deals that already exist and
