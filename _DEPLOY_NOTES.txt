@@ -1,50 +1,49 @@
-pkg446 - "+ add period" did nothing
-===================================
+pkg448 - editing an activity date did not stick
+===============================================
 
-Deploy after pkg445. One changed file: pages/project/[id].js (literal [id] folder).
-
-
-THE CAUSE
----------
-The button worked. The row never appeared.
-
-Pressing it creates an empty period - "2026-08#2": {} - ready for you to fill in. But the
-code deciding which rows to render only included a key if it ALREADY HAD A DATE on it:
-
-    if (r.applicationDate || r.valuationDate || r.paymentDate) keys.push(k)
-
-An empty period fails that test, so the row was created in state and never drawn. Press
-the button, nothing happens, press it again and you have silently made three of them.
+Deploy after pkg447. One changed file: pages/crm.js. No new files.
 
 
-FIXED
------
-An EXTRA PERIOD now earns a row whether or not it has dates - that is the entire point of
-a button that adds a blank one.
+THE CAUSE - A RACE, WHICH IS WHY IT WAS INTERMITTENT
+------------------------------------------------------
+The Activities list refreshes itself every 60 seconds and whenever the window regains
+focus. That refresh REPLACES the whole list with what the server currently holds.
 
-A base month still needs a date to appear outside the rolling window, otherwise every
-month anyone had ever touched would pile up at the top of the table.
+Completing an activity was protected against this - it raises a "writing" flag, and the
+refresh skips while it is set. EDITING one never raised that flag.
 
+So the sequence was:
 
-AND A SECOND FAULT BEHIND IT
-----------------------------
-Even once rendered, the row would have vanished again the moment you cleared a date to
-retype it. The cleanup rule removes any row with all three dates empty - which is right
-for a base month, and wrong for a period somebody added deliberately and which has its own
-"remove period" link.
+    1. change the date, press Save
+    2. the write goes off to the server
+    3. the 60-second refresh lands before the server has caught up
+    4. the list is replaced with the OLD date
 
-Extra periods are now exempt. They go when you remove them, not when you empty them.
+Whether it stuck depended entirely on where you happened to be in that 60-second cycle.
+Which is exactly "more often than not it doesn't change, so I go in again" - and trying
+again eventually worked because eventually you missed the refresh.
 
-
-CHECKED WHILE IN THERE
-----------------------
-A freshly added blank period does NOT set off the "Still to complete" banner. It only
-starts asking for the rest once you fill in the first date - which is the right moment,
-since a half-filled period is a real gap and an untouched one is not.
+Editing now raises the same flag as completing.
 
 
-IF YOU PRESSED IT A FEW TIMES ALREADY
----------------------------------------
-You may have several blank periods saved on that project. They will all appear as rows
-after this deploys - "August 2026 - period 2", "period 3", and so on. Use "remove period"
-on the ones you do not want.
+AND A SECOND REASON THE VIEW DID NOT CHANGE
+---------------------------------------------
+For a MANUAL activity - one created in the CRM rather than imported - the edit updated the
+deal record but never told the Activities table. The table reads its own list, so the row
+sat there showing the old date until the next refresh brought it round.
+
+It now updates both, so the row changes the moment you press Save.
+
+Imported activities were already doing this, which is probably why the two behaved
+differently.
+
+
+ALSO
+----
+The due date is now written to both field names the store uses. It was writing only one
+of them - harmless as things stand, since the reader checks that one first, but it would
+have bitten the moment anything wrote the other.
+
+And a failed save now says so with an alert, rather than only appearing in the browser
+console where nobody looks. If a date genuinely will not save you will know immediately
+instead of assuming it is the same intermittent fault.

@@ -261,8 +261,11 @@ function dealDotState(deal, today) {
   if (deal.status !== 'open') return null;
   const open = (deal.activities || []).filter((a) => !a.done);
   if (open.length) {
-    if (open.some((a) => a.due < today)) return 'overdue';
-    if (open.some((a) => a.due === today)) return 'today';
+    // `a.due < today` on an EMPTY STRING is true - "" sorts before every date - so an
+    // activity with no due date read as permanently overdue and showed "Due · OVERDUE"
+    // with no date beside it. Requiring a due date first.
+    if (open.some((a) => a.due && a.due < today)) return 'overdue';
+    if (open.some((a) => a.due && a.due === today)) return 'today';
     return 'future';
   }
   const sum = deal._actSummary;
@@ -741,7 +744,12 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
           <div>
             <div style={{ fontSize: 14 }}>{activity.text}</div>
-            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''} · Assigned to {activity.assignee || 'nobody'}</div>
+            <div style={{ fontSize: 12, color: overdue ? C.red : C.dim, marginTop: 2 }}>
+              {activity.due
+                ? <>Due {shortDate(activity.due)}{overdue ? ' · OVERDUE' : ''}</>
+                : <span style={{ color: '#c2410c' }} title="This activity has no due date. Edit it to set one.">No due date</span>}
+              {' · Assigned to '}{activity.assignee || 'nobody'}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             <button onClick={() => onComplete(activity.id)} style={miniBtn}>Done</button>
@@ -1464,7 +1472,7 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={a.due < today} me={me} users={users} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={!!a.due && a.due < today} me={me} users={users} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -2467,14 +2475,54 @@ function CRMPageInner() {
   };
   // Keeps the assignee. It used to drop it, so editing an activity from the deal quietly
   // cleared whoever was responsible for it.
-  const editActivity = (id, aid, text, due, assignee) => patch(id, (d) => ({
-    ...d,
-    activities: d.activities.map((a) => a.id === aid
+  // IMPORTED ACTIVITIES LIVE IN THEIR OWN STORE.
+  //
+  // Activities imported from Pipedrive are merged onto the deal when you open it, but
+  // stripped again before saving - crmActivities() filters out anything flagged
+  // `imported`, deliberately, because they belong to crm:activities:<dealId>.
+  //
+  // So marking one done, or deleting it, changed nothing that was ever written. It looked
+  // right until the next load and then came straight back. Every reminder that came over
+  // in the import behaved this way, which is why almost all of today's were still there.
+  //
+  // Completing or deleting an imported activity now writes to that store directly.
+  const persistImportedActivities = async (dealId, activities) => {
+    const items = (activities || []).filter((a) => a.imported).map((a) => {
+      const { imported, ...rest } = a
+      return rest
+    });
+    try {
+      await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save-sub', kind: 'activities', dealId: String(dealId), items }),
+      });
+    } catch { /* the deal itself still saved; this is the imported side only */ }
+  };
+
+  // Same store problem as completing one: rescheduling an imported activity for next week
+  // was never written either, so it reappeared on today's list.
+  const editActivity = (id, aid, text, due, assignee) => patch(id, (d) => {
+    const act = d.activities.find((a) => a.id === aid);
+    const next = d.activities.map((a) => a.id === aid
       ? { ...a, text, due, assignee: assignee === undefined ? (a.assignee || null) : (assignee || null) }
-      : a),
-  }));
-  const completeActivity = (id, aid) => { patch(id, (d) => { const act = d.activities.find((a) => a.id === aid); return { ...d, activities: d.activities.map((a) => a.id === aid ? { ...a, done: true } : a), history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] }; }); };
-  const deleteActivity = (id, aid) => patch(id, (d) => ({ ...d, activities: d.activities.filter((a) => a.id !== aid) }));
+      : a);
+    if (act && act.imported) persistImportedActivities(id, next);
+    return { ...d, activities: next };
+  });
+  const completeActivity = (id, aid) => {
+    patch(id, (d) => {
+      const act = d.activities.find((a) => a.id === aid);
+      const next = d.activities.map((a) => a.id === aid ? { ...a, done: true } : a);
+      if (act && act.imported) persistImportedActivities(id, next);
+      return { ...d, activities: next, history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] };
+    });
+  };
+  const deleteActivity = (id, aid) => patch(id, (d) => {
+    const act = d.activities.find((a) => a.id === aid);
+    const next = d.activities.filter((a) => a.id !== aid);
+    if (act && act.imported) persistImportedActivities(id, next);
+    return { ...d, activities: next };
+  });
   // Company / contact detail fields that should flow back to the master lists when they
   // are edited on a deal.
   const ORG_KEYS = ['organization', 'org_address', 'org_phone', 'org_website', 'org_email', 'org_reg_number', 'supply_chain_approved'];
@@ -2967,18 +3015,35 @@ function CRMPageInner() {
   // Edit the description (and due date / owner) from the table.
   async function editActivityFromTable(row, text, due, assignee) {
     const dealId = row.dealId;
+    // HOLD OFF THE BACKGROUND REFRESH WHILE THIS WRITES.
+    //
+    // refreshActivityState() runs every 60 seconds and on window focus, and it REPLACES
+    // openActivities wholesale. Completing an activity already guarded against that with
+    // pendingWrites; editing one never did. So a refresh landing between the save and the
+    // server catching up would put the OLD date straight back - which is why the change
+    // stuck sometimes and not others, and why trying again eventually worked.
+    pendingWrites.current++;
     try {
       if (isManualActivity(dealId, row.rawId)) {
         patch(Number(dealId), (d) => ({
           ...d,
           activities: d.activities.map((a) => a.id === row.rawId ? { ...a, text, due, assignee: assignee || a.assignee || null } : a),
         }));
+        // The table reads openActivities, not the deal, so it needs telling too -
+        // otherwise a manual activity edited here did not visibly change at all.
+        setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
+          ? { ...a, text, due, assignee: assignee || a.assignee } : a));
       } else {
-        await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, assignee: assignee || '' });
+        await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, due, assignee: assignee || '' });
         setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
           ? { ...a, text, due, assignee: assignee || a.assignee } : a));
       }
-    } catch (e) { console.error('Could not update the activity:', e); }
+    } catch (e) {
+      console.error('Could not update the activity:', e);
+      alert('That activity did not save. Please try again.');
+    } finally {
+      pendingWrites.current = Math.max(0, pendingWrites.current - 1);
+    }
   }
 
 
