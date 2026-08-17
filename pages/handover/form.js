@@ -121,17 +121,19 @@ export default function Handover() {
     // the handover before they know the discount, which is not the point - the point is
     // that it cannot be finalised without an answer. Zero is a valid answer; blank means
     // nobody asked, and the retention register then has no basis for its Final Account.
+    // MCD is NOT blocked on finalise. Blank is treated as 0% everywhere downstream, so
+    // there is nothing to chase and nothing to flag - which is what was asked for.
+    // Only a nonsense value is rejected: a negative or over-100 discount is a typo, and
+    // it would quietly distort every Final Account on the project.
     if (finalise) {
       const mcd = data.discount
-      if (mcd === '' || mcd == null || isNaN(parseFloat(mcd))) {
-        setErr('Main Contractor\u2019s Discount (MCD) % is required before finalising. Enter 0 if there is no discount.')
-        setOpenSections(prev => new Set(prev).add('commercial'))
-        return
-      }
-      if (parseFloat(mcd) < 0 || parseFloat(mcd) > 100) {
-        setErr('MCD must be between 0 and 100%.')
-        setOpenSections(prev => new Set(prev).add('commercial'))
-        return
+      if (mcd !== '' && mcd != null && !isNaN(parseFloat(mcd))) {
+        const n = parseFloat(mcd)
+        if (n < 0 || n > 100) {
+          setErr('MCD must be between 0 and 100%.')
+          setOpenSections(prev => new Set(prev).add('commercial'))
+          return
+        }
       }
     }
     setSaving(true)

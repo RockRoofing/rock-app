@@ -1497,6 +1497,16 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
   const retOverridden = hasOv('retentionPct')
   const retFromIhm = !retOverridden && people?.retentionPct != null
 
+  // MCD %, same route as retention: override -> IHM -> what is stored. Held as a
+  // percentage (2.5 = 2.5%), unlike retention which is a fraction - they are entered the
+  // same way but stored differently, which is easy to trip over.
+  const mcdResolved = hasOv('mcdPct')
+    ? (ov.mcdPct === '' ? '' : ov.mcdPct)
+    : (people?.mcdPct != null ? people.mcdPct : (form.mcdPct != null ? form.mcdPct : null))
+  const mcdDisplay = (mcdResolved == null || mcdResolved === '') ? '' : parseFloat(mcdResolved)
+  const mcdOverridden = hasOv('mcdPct')
+  const mcdFromIhm = !mcdOverridden && people?.mcdPct != null
+
   // Live "what's left to complete" - mirrors the banner shown on Financials/Retention,
   // computed from the values currently in the form so it updates as you edit.
   const livePeople = {
@@ -1612,12 +1622,13 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
           <span style={{ color: '#dc2626' }}> *</span>
         </label>
         <input type="number" min="0" max="100" step="0.01" inputMode="decimal"
-          value={form.mcdPct === 0 || form.mcdPct ? form.mcdPct : ''}
+          value={mcdDisplay === '' ? '' : mcdDisplay}
           onChange={f('mcdPct')} style={inputStyle} placeholder="0.00" />
         <div style={{ fontSize: 11.5, color: '#888', marginTop: -6, marginBottom: 10 }}>
-          Enter 0 if there is no discount. Deducted from the gross on every application
-          <strong> before</strong> retention is calculated, so it sets the Final Account
-          the retention register works from.
+          {mcdFromIhm && <span style={{ color: '#1c704f' }}>From the Internal Handover Minutes. </span>}
+          Two decimal places. Deducted from the gross on every application <strong>before</strong>
+          {' '}retention is calculated, so it sets the Final Account the retention register works from.
+          {' '}Left blank it is treated as 0%.
         </div>
         <label style={labelStyle}>Labour budget (£)</label>
         <input type="number" step="0.01" inputMode="decimal" value={form.labourBudget || ''} onChange={f('labourBudget')} style={inputStyle} placeholder="0.00" />

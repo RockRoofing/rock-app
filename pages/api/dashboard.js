@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'mcdPct' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'mcdRecorded' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -229,10 +229,21 @@ export default async function handler(req, res) {
       //
       // Applied to the whole account including variations, because that is exactly what
       // the applications do: mcd = (measured + variations + materials) x mcdPct.
-      const mcdPct = (settings.mcdPct != null && settings.mcdPct !== '' && isFinite(parseFloat(settings.mcdPct)))
+      // DEFAULTS TO 0, deliberately.
+      //
+      // Nothing recorded means no discount, not "unknown". So the Final Account equals
+      // the gross, nothing is deducted, and no project is ever flagged incomplete for
+      // it - which is what you asked for.
+      //
+      // The trade-off, stated plainly: a project where somebody simply forgot to ask is
+      // indistinguishable from one with genuinely no discount. Both read 0%. The
+      // register no longer nags, and it also cannot tell you which is which.
+      const mcdRaw = (settings.mcdPct != null && settings.mcdPct !== '' && isFinite(parseFloat(settings.mcdPct)))
         ? parseFloat(settings.mcdPct)
         : (resolvedPeople?.mcdPct != null ? resolvedPeople.mcdPct : null)
-      const mcdValue = mcdPct != null ? afaBeforeMcd * (mcdPct / 100) : 0
+      const mcdPct = mcdRaw != null ? mcdRaw : 0
+      const mcdRecorded = mcdRaw != null          // whether anyone actually set it
+      const mcdValue = afaBeforeMcd * (mcdPct / 100)
       const afa = afaBeforeMcd - mcdValue
 
       // ── Invoiced value & retention ────────────────────────────────────────
@@ -345,6 +356,7 @@ export default async function handler(req, res) {
         afa,
         afaGross: afaBeforeMcd,
         mcdPct,
+        mcdRecorded,
         mcdValue,
         // All-time figures
         totalInvoiced,

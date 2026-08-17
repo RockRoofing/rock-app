@@ -192,7 +192,8 @@ export default function RetentionPage() {
           retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
-          mcdPct: p.mcdPct != null ? p.mcdPct : null,
+          mcdPct: p.mcdPct != null ? p.mcdPct : 0,
+          mcdRecorded: !!p.mcdRecorded,
           mcdValue: p.mcdValue || 0,
           detailsMissing: p.detailsMissing || [],
           pcDateTBC: !!p.pcDateTBC,
@@ -292,7 +293,7 @@ export default function RetentionPage() {
         ...e,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
         retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
-        afaGross: x.afaGross, mcdPct: x.mcdPct, mcdValue: x.mcdValue,
+        afaGross: x.afaGross, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
@@ -607,10 +608,12 @@ export default function RetentionPage() {
                             {/* MCD deducted. A missing percentage is shown, not hidden -
                                 a blank here means nobody has recorded one and the Final
                                 Account is therefore the gross. */}
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: entry.mcdPct == null ? '#b45309' : '#666' }}>
-                              {entry.mcdPct == null
-                                ? <span title="No MCD recorded on the IHM or in Edit Project Details. Final Account is the gross figure until one is set.">not set</span>
-                                : <>{fmt(parseFloat(entry.mcdValue || 0))}<div style={{ fontSize: 9.5, color: '#999' }}>{parseFloat(entry.mcdPct)}%</div></>}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#666' }}>
+                              {fmt(parseFloat(entry.mcdValue || 0))}
+                              <div style={{ fontSize: 9.5, color: entry.mcdRecorded ? '#999' : '#bbb' }}
+                                title={entry.mcdRecorded ? '' : 'No MCD recorded - treated as 0%'}>
+                                {parseFloat(entry.mcdPct || 0).toFixed(2)}%{!entry.mcdRecorded && ' (default)'}
+                              </div>
                             </td>
                             {/* Final Account - net of MCD, the base for retention */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: faBelowInvoiced ? '#dc2626' : undefined, fontWeight: faBelowInvoiced ? 700 : undefined }}>

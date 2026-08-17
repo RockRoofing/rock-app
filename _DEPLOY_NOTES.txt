@@ -1,52 +1,65 @@
-pkg435 - pence everywhere in Commercial
-=======================================
+pkg436 - MCD to 2dp, auto-populated, defaults to 0%
+===================================================
 
-Deploy after pkg434.
+Deploy after pkg435. Supersedes the MCD parts of pkg434 - deploy pkg434 first if you have
+not, then this.
 
-CHANGED FILES (all already exist - replace them)
-------------------------------------------------
-  pages/commercial.js
+CHANGED FILES (replace)
+-----------------------
+  lib/ihmSchema.js
+  pages/handover/form.js
+  pages/api/dashboard.js
   pages/retention.js
-  pages/commercial-scorecard.js
-  pages/wip.js
-  pages/project-cashflow.js
-  pages/project/[id].js            <- literal [id] folder, brackets and all
-  pages/forms/cm/project-finance.js
+  pages/project/[id].js          <- literal [id] folder
 
 NEW FILES: none.
 
 
-WHAT CHANGED
-------------
-Every money figure in the Commercial portal now shows two decimal places.
+1. IHM - percentage to 2dp
+--------------------------
+Number field, step 0.01, 0 to 100, with a % beside it. Enter 2.50 and it stays 2.50.
 
-    £17,534    ->    £17,533.70
-    £996       ->    £996.00
-    £0         ->    £0.00
-
-Fifteen formatters across seven files. Most pages shared one helper, so a single change
-covered the whole page.
+Only a nonsense value is rejected on finalise - negative, or over 100. Those are typos and
+they would quietly distort every Final Account on the project. Blank is fine.
 
 
-ALREADY CORRECT, LEFT ALONE
----------------------------
-Applications for Payment, Outstanding Invoices, Variations and Contracted Rates were
-already showing pence. Nothing to do there.
+2. AUTO-POPULATES EDIT PROJECT DETAILS
+--------------------------------------
+The Commercial MCD box now fills itself from the IHM, and says so in green underneath:
+"From the Internal Handover Minutes."
+
+Type over it and yours wins. Exactly the same override -> IHM -> stored chain that
+retention already uses.
 
 
-DELIBERATELY NOT CHANGED - THREE CHART AXES
----------------------------------------------
-Three formatters on pages/project/[id].js use compact notation for chart axis labels and
-tick marks - "£1.2M", "£450K". Pence on those would read "£1.20M" and make the axis
-unreadable without telling you anything.
+3. DEFAULTS TO 0% - AND SO IT NEVER FLAGS
+-------------------------------------------
+Nothing recorded is treated as no discount. Final Account equals the gross, nothing is
+deducted, and MCD is NOT part of the "project details incomplete" check on either the
+Retention page or Project Financials.
 
-They are labels on a graph, not figures you would reconcile against Xero. If you want them
-changed too, say so - but I would leave them.
+I have to be straight with you about one thing here, because you asked for two things
+that cannot both be true.
+
+You asked for MCD to be mandatory and to flag as incomplete, AND for it to default to 0%
+so it never flags. A default means there is always a value, so there is never anything to
+flag - the two cancel out. I have built the default, because that was the last thing you
+said and it is the one that keeps the register quiet.
+
+The cost of that choice: a project where somebody simply forgot to ask about the discount
+is indistinguishable from one that genuinely has none. Both read 0.00%. If a 2.5% MCD is
+missed on a £500k job, the Final Account is £12,500 too high and nothing anywhere will
+tell you.
+
+The retention register does what it can about this without nagging: an MCD that nobody set
+shows "0.00% (default)" in pale grey, where one that was actually entered shows "0.00%" in
+normal grey. Same number, and you can see which is which if you look.
+
+If you would rather it DID flag when nobody has recorded one, say so - it is one line in
+lib/projectComplete.js and I will add it.
 
 
-ONE THING WORTH KNOWING
------------------------
-Some totals may now show a penny or two of rounding that was previously hidden. A column
-of figures each rounded to the pound could add up to a total that looked wrong by a few
-pounds; with pence showing, those will reconcile exactly. If a total looks like it has
-changed, it has not - you are just seeing what was always there.
+AFTER DEPLOYING
+---------------
+The dashboard cache rebuilds itself once - I bumped the validity marker - so the first
+load of Project Financials will be slower than usual. Nothing to run by hand.
