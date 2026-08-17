@@ -1,66 +1,49 @@
-pkg417 - click a point on the graph, get that month's detail
-============================================================
+pkg418 - the snapshot found zero projects. My mistake.
+======================================================
 
-Deploy after pkg416. One changed file: pages/scorecard-crm.js. No new files.
-
-
-1. THE GRAPHS ARE NOW CLICKABLE
--------------------------------
-Click any point on any trend line and the detail opens FOR THAT MONTH. Select May and you
-get May's workings, not the workings of the month the card happens to be showing.
-
-Every metric on both scorecards, wherever a drill-down exists.
-
-How it works: each point on the line now carries its own month, and the click rebuilds
-that month's figures from scratch rather than reusing the card's. So the modal title and
-the rows always agree with the point you clicked.
-
-Dots are slightly larger and the cursor changes over the chart, so it is discoverable
-rather than a hidden feature.
-
-The two cards with no detail behind them - Emails sent externally and Calls made - are
-not clickable, because they are stored as monthly tallies rather than records.
+Deploy after pkg417. One changed file: lib/crmGpSnapshots.js. No new files.
 
 
-2. THE COMPARISON CARDS ARE TALLER
-----------------------------------
-"Average value of projects secured", "Average secured project value" and "Average value of
-projects priced" all carry an extra line:
+THE BUG
+-------
+    "projects": 0  on every month
 
-    Previous 6 months: £150,000   ▲ £32,400 (22%)   from 14 won deals
+/api/dashboard computes a variable called `stage` and returns it under the key `status`.
+I filtered on `p.stage`, which is undefined on every project, so nothing was ever
+INPROGRESS and every month recorded nothing.
 
-That did not fit. All three now use the same height as GP margin - own projects, which was
-already taller for exactly the same reason. The chart inside grows with it rather than
-leaving a gap.
+Reproduced on the bench: the old filter returns 0 of 4 test projects, the corrected one
+returns the 2 that are live.
+
+Now reads `status`, and accepts `stage` as well in case that endpoint is ever tidied up.
 
 
-3. GP MARGIN SHOWING NOTHING - YES, AND NO
---------------------------------------------
-YES: it is empty because there are no snapshots yet. pkg415 introduced them and nothing
-has been recorded, so every month is genuinely unknown and shows a dash. The card is
-behaving correctly.
+TWO THINGS SO THIS CANNOT HAPPEN QUIETLY AGAIN
+------------------------------------------------
+1. The response now reports what it actually saw:
 
-NO: it will NOT fill in by itself on the 21st, and there are two reasons.
+       "projectsSeen": 214,
+       "liveNow": 63,
+       "statusCounts": { "INPROGRESS": 63, "DEFECTS": 22, "CLOSED": 129 }
 
-  a) The cron is set for the 22nd, not the 21st - it runs after the 21st so the EOM report
-     for the month before has settled, which is what you asked for.
+   and warns outright if nothing came back as INPROGRESS. A run reporting zero with no
+   explanation is what cost you the last deploy.
 
-  b) Even then it only fills in the month just gone. The five months before that get
-     built on the FIRST run only, and only if you trigger it.
+2. The failed run has already WRITTEN empty snapshots for all six months. Left as it was,
+   the "reuse the recorded project set" rule would have faithfully reused those empty
+   lists and kept every month blank for ever - correct behaviour applied to junk data.
 
-So run this once, now:
+   An empty recorded set is now treated as a failed run rather than a decision, and gets
+   rebuilt. No need to clear anything by hand.
 
+
+RUN IT AGAIN AFTER DEPLOYING
+----------------------------
     /api/cron/gp-snapshot
 
-That builds the last 6 months immediately. From then on the 22nd looks after it.
+Check "liveNow" in the response is a sensible number against what Project Financials
+shows. If it is, the GP margin card will have six months of figures.
 
-Worth repeating from pkg415: that first run has to use TODAY'S live project list for all
-six months, because a project's live/defects/complete status is a manual flag with no
-history. So those six are approximate and get less true the further back you go. Every
-month recorded from now on keeps its own project set and is sound.
-
-If you would rather not have six approximate months on the chart:
-
-    /api/cron/gp-snapshot?only=2026-07
-
-starts clean from last month and builds up honestly from there.
+The caveat from pkg415 still stands: this first real run uses today's live project list
+for all six months, because the live/defects/complete flag has no history. Those six are
+approximate. Everything recorded from the 22nd onwards keeps its own set and is sound.
