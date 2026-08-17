@@ -196,7 +196,11 @@ export default async function handler(req, res) {
         monthLabel: monthLabel || '',
         status: 'draft',
         appDate: appDate || '', valDate: valDate || '', paymentDate: paymentDate || '', finalDate: finalDate || '',
-        mcdPct: mcdPct != null ? mcdPct : (prev ? prev.mcdPct : 0),
+        // Falls back to the PROJECT's MCD, the same way retention does on the next line.
+        // It used to default to 0 when there was no previous application, so the first
+        // application on every project silently applied no discount - and every figure
+        // downstream of it was then wrong by the value of the MCD.
+        mcdPct: mcdPct != null ? mcdPct : (prev && prev.mcdPct != null ? prev.mcdPct : (project.mcdPct != null ? project.mcdPct : 0)),
         retentionPct: retentionPct != null ? retentionPct : (prev ? prev.retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5)),
         contractWorks,
         variations: [],

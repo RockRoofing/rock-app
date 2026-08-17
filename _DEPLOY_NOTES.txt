@@ -1,80 +1,93 @@
-pkg433 - why 612 Allocated reads £996 instead of £17,317
-========================================================
+pkg434 - MCD: captured once, applied everywhere
+===============================================
 
-Deploy after pkg432.
+Deploy after pkg433.
 
-CHANGED FILES (replace)
------------------------
-  pages/api/sync-invoices.js
-  components/SyncBar.js
+CHANGED FILES (all already exist - replace them)
+------------------------------------------------
+  lib/ihmSchema.js
+  lib/projectPeople.js
+  pages/handover/form.js
+  pages/project/[id].js          <- note the literal [id] folder
+  pages/api/dashboard.js
+  pages/api/applications.js
+  pages/retention.js
 
 NEW FILES: none.
 
 
-THE CAUSE
----------
-Your Xero export shows Gas Lane retention across TWELVE applications:
+TO YOUR QUESTION - YES, MCD APPLIES TO VARIATIONS
+---------------------------------------------------
+Confirmed from your own application code, not assumed:
 
-    Jul 24     43.39        Mar 25    326.94
-    Nov 24  10,967.15       Apr 25  1,128.67
-    Jan 25   2,048.22       May 25    246.11
-    Jan 25     360.45       Jun 25    695.83
-    Feb 25     721.31       Jul 25    297.36
-                            Aug 25    268.24
-                            Oct 25    213.87
-                                    ----------
-                            TOTAL  17,317.54
+    gross     = measured + variations + materials on site
+    mcd       = gross x mcdPct
+    subTotal  = gross - mcd
+    retention = subTotal x retentionPct
 
-The invoice sync only RE-FETCHES invoices inside its window. Anything outside is kept
-from what is already stored - it is not read from Xero again.
+MCD comes off the WHOLE gross, variations included. And retention is calculated on the
+sub-total AFTER MCD - which is exactly why you were right that the Final Account needs to
+be net of it.
 
-retention612 was added to this sync AFTER many of those lines were first stored. Lines
-stored before it existed have no retention612 at all, and the total treats a missing
-value as zero.
+On a £500,000 account at 2.5% MCD and 3% retention:
 
-Gas Lane's most recent application is October 2025. On the default SIX MONTH window, not
-one of its twelve applications is re-fetched:
-
-    window   apps re-fetched   612 recovered
-     6 mo         0 / 12          £0
-    12 mo         2 / 12        £482
-    18 mo         8 / 12      £3,898
-    24 mo        11 / 12     £17,274
-    30 mo        12 / 12     £17,317
-
-The Retention page's own sync button was set to 12 months, which recovers £482 of £17,317.
-That is the £996 you are seeing - a fragment, from whichever lines happened to be
-re-fetched at some point.
-
-This is NOT a Xero problem. Your figures there are right.
+    Gross AFA     £500,000
+    MCD 2.5%       £12,500
+    Final Account £487,500   <- retention calculated on this
+    Retention      £14,625   (was showing £15,000 - overstated by £375)
 
 
-FIXED
------
-The sync cap was 24 months, which was not even enough to repair Gas Lane - it starts July
-2024. Now 60. The dropdown on the sync bar offers 3, 6, 12, 18, 24, 36 and 48 months.
+1. IHM - the source
+-------------------
+"Discount" was free text. Now "Main Contractor's Discount (MCD) %", a number field with a
+% sign, MANDATORY, 0 to 100.
+
+Required ON FINALISE, not on save - somebody starting a handover before they know the
+discount is not doing anything wrong. Finalising without one is. If it is missing the form
+jumps to the Commercial section and says so.
+
+Zero is a valid answer. Blank is not: blank means nobody asked, and the retention register
+then has no basis for its Final Account.
+
+Old free-text values still work - "2.5", "2.5%" and "MCD 2.5" all read as 2.5.
 
 
-DO THIS AFTER DEPLOYING
------------------------
-On the Retention page, set the sync dropdown to 36 months and press Invoices.
-
-It will take a while - it is re-reading three years of sales invoices from Xero and Xero
-rate-limits. Leave it to finish.
-
-Then check Gas Lane. 612 Allocated should read about £17,317.
-
-EVERY project is affected, not only Gas Lane. Any project whose invoicing stopped more
-than six months ago will be showing a partial 612 figure or none at all. One 36-month
-sync repairs the lot.
+2. COMMERCIAL - Edit Project Details
+------------------------------------
+New MCD % box under the contract value, marked required. Prefilled from the IHM, editable
+here, and what is typed here wins. Same override -> IHM -> nothing chain retention already
+uses.
 
 
-WORTH KNOWING FOR NEXT TIME
+3. APPLICATIONS - automatic
 ---------------------------
-This will happen again to any field added to the invoice sync later. Lines outside the
-window keep whatever they were stored with, so a new field is missing on old lines
-permanently until a wide enough sync is run.
+A new application takes the project's MCD without anyone entering it.
 
-If a field is ever added again, the accompanying instruction has to be "run a full-history
-sync once" - otherwise it silently reads zero on everything historic, and it looks like
-Xero is wrong rather than the sync.
+A BUG FOUND ON THE WAY: a new application with no previous one defaulted mcdPct to ZERO,
+not to the project's figure. So the FIRST application on every project applied no discount
+at all, and everything downstream of it was wrong by the value of the MCD. Retention now
+falls back correctly too.
+
+
+4. RETENTION REGISTER - two new columns
+---------------------------------------
+    Gross AFA   contract value + instructed variations, before MCD
+    MCD         the deduction, with the percentage underneath
+    Final Acct  gross less MCD - what retention is calculated on
+
+A project with no MCD recorded shows "not set" in amber rather than a silent zero, so you
+can see which projects still need one instead of assuming they are all discount-free.
+
+Account Remaining, Total Due and the final-account balance all now work off the net Final
+Account. They were all overstated by the MCD.
+
+
+AFTER DEPLOYING
+---------------
+The dashboard cache is invalidated automatically - I added mcdPct to the validity check,
+so it rebuilds once. The first load of Project Financials will be slower than usual.
+
+EXPECT MOST PROJECTS TO SHOW "not set" AT FIRST. MCD only exists where an IHM recorded a
+discount, and it was free text before, so many will be blank. The register makes that
+visible rather than assuming zero - which is the honest position, but it does mean there
+is some data entry to do.

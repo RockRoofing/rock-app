@@ -117,6 +117,23 @@ export default function Handover() {
       setOpenSections(prev => new Set(prev).add('meeting'))
       return
     }
+    // MCD is mandatory ON FINALISE ONLY. Blocking a draft would stop somebody starting
+    // the handover before they know the discount, which is not the point - the point is
+    // that it cannot be finalised without an answer. Zero is a valid answer; blank means
+    // nobody asked, and the retention register then has no basis for its Final Account.
+    if (finalise) {
+      const mcd = data.discount
+      if (mcd === '' || mcd == null || isNaN(parseFloat(mcd))) {
+        setErr('Main Contractor\u2019s Discount (MCD) % is required before finalising. Enter 0 if there is no discount.')
+        setOpenSections(prev => new Set(prev).add('commercial'))
+        return
+      }
+      if (parseFloat(mcd) < 0 || parseFloat(mcd) > 100) {
+        setErr('MCD must be between 0 and 100%.')
+        setOpenSections(prev => new Set(prev).add('commercial'))
+        return
+      }
+    }
     setSaving(true)
     try {
       const r = await fetch('/api/ops-projects', {
@@ -252,6 +269,14 @@ function FieldRenderer({ f, value, onChange, team, mfrBook, projectNo, projectNa
         ? <select value={value || ''} onChange={e => onChange(e.target.value)} style={inp2}>
             <option value="">—</option><option>Yes</option><option>No</option><option>N/A</option><option>TBC</option>
           </select>
+        : f.type === 'percent'
+        ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="number" min="0" max="100" step="0.01" inputMode="decimal"
+              value={value === 0 || value ? value : ''}
+              onChange={e => onChange(e.target.value)}
+              style={{ ...inp2, maxWidth: 140 }} />
+            <span style={{ color: '#888', fontSize: 14 }}>%</span>
+          </div>
         : <input value={value || ''} onChange={e => onChange(e.target.value)} style={inp2} />}
     </div>
   )

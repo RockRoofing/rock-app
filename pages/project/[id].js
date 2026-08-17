@@ -154,7 +154,17 @@ export default function ProjectPage() {
     let effRet = form.retentionPct
     if (ovRet != null && ovRet !== '') effRet = parseFloat(ovRet)
     else if (people?.retentionPct != null) effRet = people.retentionPct
-    const payload = { ...form, retentionPct: (effRet != null && !isNaN(effRet)) ? effRet : (form.retentionPct || 0) }
+    // MCD resolved the same way: what was typed here wins, otherwise the IHM's figure.
+    // Stored on settings so applications, the AFA and the retention register all read one
+    // number rather than each working it out differently.
+    let effMcd = form.mcdPct
+    if (effMcd === '' || effMcd == null) effMcd = (people?.mcdPct != null ? people.mcdPct : null)
+    else effMcd = parseFloat(effMcd)
+    const payload = {
+      ...form,
+      retentionPct: (effRet != null && !isNaN(effRet)) ? effRet : (form.retentionPct || 0),
+      mcdPct: (effMcd != null && !isNaN(effMcd)) ? effMcd : null,
+    }
     await fetch(`/api/project/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     setSettings(payload)
     setEditMode(false)
@@ -1594,6 +1604,21 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         )}
         <label style={labelStyle}>Original contract value (£)</label>
         <input type="number" step="0.01" inputMode="decimal" value={form.contractValue || ''} onChange={f('contractValue')} style={inputStyle} placeholder="0.00" />
+        {/* MCD. Mandatory, and 0 is a valid answer - blank means nobody asked, and the
+            Final Account on the retention register then has no basis. Prefilled from the
+            IHM, editable here, and pushed into every application. */}
+        <label style={labelStyle}>
+          Main Contractor&rsquo;s Discount (MCD) %
+          <span style={{ color: '#dc2626' }}> *</span>
+        </label>
+        <input type="number" min="0" max="100" step="0.01" inputMode="decimal"
+          value={form.mcdPct === 0 || form.mcdPct ? form.mcdPct : ''}
+          onChange={f('mcdPct')} style={inputStyle} placeholder="0.00" />
+        <div style={{ fontSize: 11.5, color: '#888', marginTop: -6, marginBottom: 10 }}>
+          Enter 0 if there is no discount. Deducted from the gross on every application
+          <strong> before</strong> retention is calculated, so it sets the Final Account
+          the retention register works from.
+        </div>
         <label style={labelStyle}>Labour budget (£)</label>
         <input type="number" step="0.01" inputMode="decimal" value={form.labourBudget || ''} onChange={f('labourBudget')} style={inputStyle} placeholder="0.00" />
         <label style={labelStyle}>Materials budget (£)</label>

@@ -191,6 +191,9 @@ export default function RetentionPage() {
           appliedForLatest: p.appliedForLatest || 0,
           retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
+          afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
+          mcdPct: p.mcdPct != null ? p.mcdPct : null,
+          mcdValue: p.mcdValue || 0,
           detailsMissing: p.detailsMissing || [],
           pcDateTBC: !!p.pcDateTBC,
           defectsDateTBC: !!p.defectsDateTBC,
@@ -289,6 +292,7 @@ export default function RetentionPage() {
         ...e,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
         retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
+        afaGross: x.afaGross, mcdPct: x.mcdPct, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
@@ -331,6 +335,8 @@ export default function RetentionPage() {
       case 'invoiced': return parseFloat(e.invoicedNet != null ? e.invoicedNet : e.invoiced || 0) || 0
       case 'retentionOwed': return parseFloat(e.retentionOwed || 0) || 0
       case 'r612': return parseFloat(e.retention612Allocated || 0) || 0
+      case 'afaGross': return parseFloat(e.afaGross || 0) || 0
+      case 'mcdValue': return parseFloat(e.mcdValue || 0) || 0
       case 'retPct': return parseFloat(e.retentionPct || 0) || 0
       case 'pcType': return e.pcType || ''
       case 'qs': return e.qsName || ''
@@ -477,7 +483,9 @@ export default function RetentionPage() {
                         ['Ref', 'left', 'Project reference (job number) from project details.', 'ref'],
                         ['Customer', 'left', 'Customer name from project details.', 'customer'],
                         ['Project', 'left', 'Project name from project details.', 'project'],
-                        ['Final Account', 'right', 'Agreed Final Account (AFA) from project details = contract value + instructed variations.', 'finalAccount'],
+                        ['Gross AFA', 'right', 'Contract value + instructed variations, BEFORE Main Contractor\u2019s Discount.', 'afaGross'],
+                        ['MCD', 'right', 'Main Contractor\u2019s Discount deducted from the gross. Set on the IHM and editable in Edit Project Details.', 'mcdValue'],
+                        ['Final Account', 'right', 'Gross AFA less MCD. This is the figure retention is calculated on, matching how every application works: gross \u2192 less MCD \u2192 retention on the sub-total.', 'finalAccount'],
                         ['Applied for', 'right', 'Auto-populates from the latest application on this project. You can still type a value to override it.', 'appliedFor'],
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
@@ -592,7 +600,19 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.customerName || '—'}</td>
                             {/* Project */}
                             <td style={{ padding: '8px 10px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.projectName || '—'}</td>
-                            {/* Final Account */}
+                            {/* Gross AFA - before MCD */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#666' }}>
+                              {entry.afaGross != null ? fmt(parseFloat(entry.afaGross)) : '\u2014'}
+                            </td>
+                            {/* MCD deducted. A missing percentage is shown, not hidden -
+                                a blank here means nobody has recorded one and the Final
+                                Account is therefore the gross. */}
+                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: entry.mcdPct == null ? '#b45309' : '#666' }}>
+                              {entry.mcdPct == null
+                                ? <span title="No MCD recorded on the IHM or in Edit Project Details. Final Account is the gross figure until one is set.">not set</span>
+                                : <>{fmt(parseFloat(entry.mcdValue || 0))}<div style={{ fontSize: 9.5, color: '#999' }}>{parseFloat(entry.mcdPct)}%</div></>}
+                            </td>
+                            {/* Final Account - net of MCD, the base for retention */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: faBelowInvoiced ? '#dc2626' : undefined, fontWeight: faBelowInvoiced ? 700 : undefined }}>
                               {fmt(fa || null)}
                               {faBelowInvoiced && <div style={{ fontSize: 9.5, color: '#dc2626', fontWeight: 600 }}>⚠ FA lower than invoiced</div>}

@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'mcdPct' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -199,6 +199,16 @@ export default async function handler(req, res) {
         }
       } catch {}
 
+      // Resolved BEFORE the AFA block, which needs mcdPct from it. It used to sit lower
+      // down; reading it above its own declaration is a ReferenceError, not undefined,
+      // and would have taken the whole dashboard out.
+      const resolvedPeople = resolveProjectPeople({
+        jobNo: cp.jobNo,
+        opsProjects,
+        users: portalUsers,
+        override: settings.peopleOverride || {},
+      })
+
       // ── Contract / AFA ────────────────────────────────────────────────────
       const contractValue = parseFloat(settings.contractValue || 0)
       const instructedVars = (settings.variations || [])
@@ -206,8 +216,24 @@ export default async function handler(req, res) {
         .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
       // A sent application's Anticipated Final Account is the source of truth when set;
       // otherwise fall back to contract value + instructed variations.
-      const computedAfa = contractValue + instructedVars
-      const afa = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : computedAfa
+      const grossAfa = contractValue + instructedVars
+      const afaBeforeMcd = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : grossAfa
+
+      // MCD, DEDUCTED FROM THE FINAL ACCOUNT.
+      //
+      // Every application computes  gross -> minus MCD -> subTotal -> retention on the
+      // SUBTOTAL. So the figure retention is applied to is net of MCD, and the Final
+      // Account on the retention register has to be the same or the whole register is
+      // overstated - Account Remaining, Total Due and the final-account balance all read
+      // high by the value of the discount.
+      //
+      // Applied to the whole account including variations, because that is exactly what
+      // the applications do: mcd = (measured + variations + materials) x mcdPct.
+      const mcdPct = (settings.mcdPct != null && settings.mcdPct !== '' && isFinite(parseFloat(settings.mcdPct)))
+        ? parseFloat(settings.mcdPct)
+        : (resolvedPeople?.mcdPct != null ? resolvedPeople.mcdPct : null)
+      const mcdValue = mcdPct != null ? afaBeforeMcd * (mcdPct / 100) : 0
+      const afa = afaBeforeMcd - mcdValue
 
       // ── Invoiced value & retention ────────────────────────────────────────
       // invoicedSales200 = sum of account-code-200 (Sales) lines: NET of VAT and
@@ -271,13 +297,6 @@ export default async function handler(req, res) {
       if (rs === 'complete') stage = 'CLOSED'
       else if (rs === 'defects') stage = 'DEFECTS'
 
-      const resolvedPeople = resolveProjectPeople({
-        jobNo: cp.jobNo,
-        opsProjects,
-        users: portalUsers,
-        override: settings.peopleOverride || {},
-      })
-
       return {
         xeroId: id,
         trackingOptionId: id,
@@ -324,6 +343,9 @@ export default async function handler(req, res) {
         valuationDay: settings.valuationDay || null,
         contractValue,
         afa,
+        afaGross: afaBeforeMcd,
+        mcdPct,
+        mcdValue,
         // All-time figures
         totalInvoiced,
         invoicedExVat,
