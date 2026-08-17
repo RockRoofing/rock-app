@@ -108,6 +108,18 @@ const DEFAULT_TARGETS = {
 // with no valuation date that month is a gap in the data, not a zero, and the EOM report
 // leaves it out. The scorecard was including it at full value, which was one of the
 // reasons the two disagreed.
+  // Valuation date for a month. A project applying more often than monthly holds extra
+// periods keyed "2026-08#2", "2026-08#3". For a MONTH-END report the right answer is
+// the LAST valuation in that month - that is the position as at month end.
+const pickValuationDate = (overrides, monthKey) => {
+  const dates = Object.keys(overrides || {})
+    .filter(k => k === monthKey || k.startsWith(monthKey + '#'))
+    .map(k => (overrides[k] || {}).valuationDate)
+    .filter(Boolean)
+    .sort()
+  return dates.length ? dates[dates.length - 1] : null
+}
+
 function eomAtValDate(project, monthKey) {
   const costLines = project._costLines || []
   const invoiceLines = project._invoiceLines || []
@@ -115,7 +127,7 @@ function eomAtValDate(project, monthKey) {
   const [year, month] = monthKey.split('-').map(Number)
   const isComplete = project.status === 'DEFECTS' || project.status === 'CLOSED'
 
-  const override = project.dateOverrides?.[monthKey]?.valuationDate
+  const override = pickValuationDate(project.dateOverrides, monthKey)
   let vDateStr = null
   if (override) vDateStr = override
   else if (project.valuationDay) {

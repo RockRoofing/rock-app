@@ -26,6 +26,18 @@ const GROUP = {
 // in the current month, so we show ALL-TO-DATE figures instead — this preserves
 // the final margin and captures any later return-visit costs. IN PROGRESS
 // projects stay strict: no valuation date for the month => null (flags the gap).
+  // Valuation date for a month. A project applying more often than monthly holds extra
+  // periods keyed "2026-08#2", "2026-08#3". For a MONTH-END report the right answer is
+  // the LAST valuation in that month - that is the position as at month end.
+  const pickValuationDate = (overrides, monthKey) => {
+    const dates = Object.keys(overrides || {})
+      .filter(k => k === monthKey || k.startsWith(monthKey + '#'))
+      .map(k => (overrides[k] || {}).valuationDate)
+      .filter(Boolean)
+      .sort()
+    return dates.length ? dates[dates.length - 1] : null
+  }
+
 function calcAtValDate(project, monthKey) {
   const costLines = project._costLines || []
   const invoiceLines = project._invoiceLines || []
@@ -37,7 +49,7 @@ function calcAtValDate(project, monthKey) {
   // Resolve the valuation date for this month with the SAME precedence as the
   // Application Calendar: a manual per-month override wins; otherwise the fixed
   // valuation day-of-month.
-  const override = project.dateOverrides?.[monthKey]?.valuationDate
+  const override = pickValuationDate(project.dateOverrides, monthKey)
   let vDateStr = null
   if (override) {
     vDateStr = override

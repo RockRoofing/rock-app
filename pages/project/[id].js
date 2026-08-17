@@ -1595,12 +1595,24 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                     const r = overridesAll[k] || {}
                     if ((r.applicationDate || r.valuationDate || r.paymentDate) && !keys.includes(k)) keys.push(k)
                   }
-                  keys.sort()
+                  // EXTRA PERIODS WITHIN A MONTH.
+                  //
+                  // A fortnightly project has two applications in a month and only one
+                  // row to put dates in. An extra period is keyed "2026-08#2" - the month
+                  // it belongs to, then which one it is - so everything that groups by
+                  // month still finds it by taking the part before the #.
+                  //
+                  // Only shown where one already exists, so a monthly project (almost all
+                  // of them) sees exactly what it did before.
+                  keys.sort((a, b) => a.localeCompare(b))
                   return keys
                 })().map((key) => {
-                  const [ky, km] = key.split('-').map(Number)
+                  // "2026-08" or "2026-08#2". The month is always the part before the #.
+                  const [monthPart, periodNo] = String(key).split('#')
+                  const [ky, km] = monthPart.split('-').map(Number)
                   const d = new Date(ky, km - 1, 1)
                   const label = d.toLocaleString('en-GB', { month: 'long', year: 'numeric' })
+                    + (periodNo ? ` \u2013 period ${periodNo}` : '')
                   const overrides = form.dateOverrides || {}
                   const row = overrides[key] || {}
                   // Outside the rolling window - shown only because it holds data.
@@ -1614,14 +1626,43 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                       <td style={{ padding: '6px 10px', fontWeight: 500, color: outOfWindow ? '#c2410c' : '#1a1a2e', whiteSpace: 'nowrap' }}>
                         {label}
                         {outOfWindow && <div style={{ fontSize: 9.5, fontWeight: 600, color: '#c2410c' }}>past month, part filled</div>}
+                        {/* Add a second (or third) set of dates in this month, for a
+                            project that applies more often than monthly. Only offered on
+                            the base row - you add periods to a month, not to a period. */}
+                        {!periodNo && (
+                          <button type="button"
+                            onClick={() => {
+                              const ovs = { ...(form.dateOverrides || {}) }
+                              let n = 2
+                              while (ovs[`${monthPart}#${n}`]) n++
+                              ovs[`${monthPart}#${n}`] = {}
+                              setForm({ ...form, dateOverrides: ovs })
+                            }}
+                            title="Add another application period in this month, for fortnightly or weekly cycles"
+                            style={{ display: 'block', marginTop: 2, background: 'none', border: 'none', padding: 0, color: '#4f46e5', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            + add period
+                          </button>
+                        )}
+                        {periodNo && (
+                          <button type="button"
+                            onClick={() => {
+                              const ovs = { ...(form.dateOverrides || {}) }
+                              delete ovs[key]
+                              setForm({ ...form, dateOverrides: ovs })
+                            }}
+                            title="Remove this extra period"
+                            style={{ display: 'block', marginTop: 2, background: 'none', border: 'none', padding: 0, color: '#c2410c', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            remove period
+                          </button>
+                        )}
                       </td>
                       {['applicationDate', 'valuationDate', 'paymentDate'].map(field => {
                         // Constrain each row's picker to its own month so the native
                         // date picker OPENS on that month (e.g. a November row opens
                         // November) and only that month's dates can be entered.
                         const [ky, km] = key.split('-').map(n => parseInt(n, 10))
-                        const monthMin = `${key}-01`
-                        const monthMax = `${key}-${String(new Date(ky, km, 0).getDate()).padStart(2, '0')}`
+                        const monthMin = `${monthPart}-01`
+                        const monthMax = `${monthPart}-${String(new Date(ky, km, 0).getDate()).padStart(2, '0')}`
                         return (
                         <td key={field} style={{ padding: '4px 8px' }}>
                           <input type="date" value={row[field] || ''} min={monthMin} max={monthMax}

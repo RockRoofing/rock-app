@@ -1,46 +1,52 @@
-pkg442 - retention tracker: scrollbar always in view, header frozen
-===================================================================
+pkg444 - change an application's dates and period without starting again
+========================================================================
 
-Deploy after pkg441. One changed file: pages/retention.js. No new files.
+Deploy after pkg443. One changed file: pages/applications.js. No new files.
 
 
-1. THE HORIZONTAL SCROLLBAR
+THE PROBLEM
+-----------
+The month was fixed when the application was created, and the four dates were read-only
+cards. Get to the end of a full application, notice it is on the wrong month, and the only
+way out was to delete it and do the whole thing again.
+
+
+1. THE DATES ARE EDITABLE
+-------------------------
+"Edit dates" beside the Dates heading turns the four cards into date fields:
+
+    Application date · Valuation date · Payment due · Final date for payment
+
+Change what is wrong, press Done, then Save as usual. Nothing else about the application
+is touched.
+
+
+2. THE PERIOD IS CHANGEABLE
 ---------------------------
-The table container had no height limit, so it grew to whatever length the table needed
-and the PAGE scrolled instead. The horizontal bar therefore sat at the very bottom of the
-table - you had to scroll past every row to reach it, move it, then scroll back up to see
-what you had done.
+The month beside the application number is now a dropdown. Pick the right one and the
+application moves - keeping every line, every variation, every value you have entered.
 
-The table area is now a bounded box: it fills the window down to about 300px from the top
-and scrolls internally in both directions. The horizontal bar is pinned to the bottom of
-the visible area and is always reachable, wherever you are in the list.
+Choosing a period pulls that period's dates from Project Details where they are set. Where
+they are not, whatever is already on the application is KEPT rather than blanked - so a
+date you typed by hand is not wiped by correcting the month.
 
-Minimum height 320px, so it does not collapse to nothing on a short window or a filtered
-list of two rows.
-
-
-2. FROZEN HEADER
-----------------
-Column headings stay put while the rows scroll under them. Sorting still works - they are
-the same buttons.
-
-Applied to each header CELL rather than the row, which matters: the table uses collapsed
-borders, and with those the row's background and border do not travel with a sticky cell.
-Done at row level the data would have scrolled straight through the headings. Each cell
-now carries its own background and its own bottom border.
+The list covers 6 months back and 12 ahead, plus any period Project Details holds dates
+for - including the "#2" rows a fortnightly project uses from pkg443 - plus whatever the
+application is currently on, so its own value can never be missing from its own dropdown.
 
 
-ONE THING I CHECKED AND DID NOT CHANGE
-----------------------------------------
-The white card around the table has overflow:hidden, which rounds the corners. I briefly
-changed it, thinking it would capture the sticky header - then checked properly. It does
-not: the scroll box inside has overflow:auto, so that is the nearest scrollport and the
-header sticks to it. Reverted rather than leave a less widely supported CSS value in for
-no benefit.
+BOTH RESPECT THE SENT LOCK
+--------------------------
+A sent application is locked, as before. Double-click to unlock and the dates and period
+become editable with everything else. Editing a sent application still returns it to
+draft, keeping its application number - unchanged behaviour.
 
 
-WORTH KNOWING
--------------
-The 300px allowance covers the page header, the filter bar and the summary tiles. If you
-add anything above the table later, that number needs adjusting or the bottom of the box
-will sit off-screen. It is one line near the top of the table block.
+ONE THING TO KNOW
+-----------------
+Changing the period does NOT renumber the application. If you move App 14 from August to
+September and App 15 already exists in September, you will have two applications numbered
+out of order.
+
+That is deliberate - the number is permanent once assigned, and renumbering silently would
+be worse. The number is editable beside the title if it needs correcting.

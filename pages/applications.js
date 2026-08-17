@@ -8,7 +8,13 @@ import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppV
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s + (s.length === 10 ? 'T00:00:00' : '')); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
-const monthLabel = (key) => { const [y, m] = String(key).split('-').map(Number); if (!y) return key; return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }
+const monthLabel = (key) => {
+  const [monthPart, periodNo] = String(key).split('#')
+  const [y, m] = monthPart.split('-').map(Number)
+  if (!y) return key
+  const base = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+  return periodNo ? `${base} \u2013 period ${periodNo}` : base
+}
 
 export default function ApplicationsPage() {
   const [projects, setProjects] = useState([])
@@ -143,11 +149,26 @@ export default function ApplicationsPage() {
     if (!sortedApps.length) return
     const last = sortedApps[sortedApps.length - 1]
     if (!last.monthKey) return
-    const [y, m] = last.monthKey.split('-').map(Number)
+    const [lastMonth] = String(last.monthKey).split('#')
+    const [y, m] = lastMonth.split('-').map(Number)
     if (!y || !m) return
+
+    // NEXT PERIOD, not always next month.
+    //
+    // If Project Details holds an unused extra period in the current month - the "#2"
+    // rows a fortnightly project sets up - offer that before rolling on to next month.
+    // Otherwise the default was always a month ahead and the dates had to be retyped
+    // for every second application.
+    const used = new Set(sortedApps.map(a => String(a.monthKey)))
+    const ovKeys = Object.keys(settings.dateOverrides || {})
+      .filter(k => k.startsWith(lastMonth + '#') || k === lastMonth)
+      .sort()
+    const nextInMonth = ovKeys.find(k => !used.has(k))
+    if (nextInMonth) { setNewMonth(nextInMonth); return }
+
     const d = new Date(y, m, 1) // next month
     setNewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
-  }, [sortedApps])
+  }, [sortedApps, settings])
   function prevGrossFor(app) {
     // previous = the application with the highest seq below this one's seq
     let prev = null
@@ -480,8 +501,29 @@ function PctInput({ value, onCommit, width = 58, max = 100, style }) {
   )
 }
 
-function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
-  const [rows, setRows] = useState(() => app.contractWorks.map(r => ({ ...r })))
+function ApplicationEditor({ app: appProp, appNumber, prevGross, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
+  // The application is now EDITABLE state, not a read-only prop. Its dates and period
+  // were fixed at creation, so getting the month wrong meant deleting a finished
+  // application and doing the whole thing again.
+  const [app, setApp] = useState(() => ({ ...appProp }))
+  const [editDates, setEditDates] = useState(false)
+  // Months to choose from: 6 back, 12 ahead, plus any period Project Details has dates
+  // for (including the "#2" rows a fortnightly project uses), plus whatever this
+  // application is already on so its own value is never missing from the list.
+  const periodOptions = useMemo(() => {
+    const keys = new Set()
+    for (let i = -6; i <= 12; i++) {
+      const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + i)
+      keys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    for (const k of Object.keys(settings.dateOverrides || {})) keys.add(k)
+    if (appProp.monthKey) keys.add(appProp.monthKey)
+    return [...keys].sort()
+  }, [settings, appProp.monthKey])
+  // Follow the prop when a genuinely different application is opened, but do NOT clobber
+  // in-progress edits when the same one is re-rendered after a save.
+  useEffect(() => { setApp(a => (a.id === appProp.id ? a : { ...appProp })) }, [appProp.id])
+  const [rows, setRows] = useState(() => appProp.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
   const [mats, setMats] = useState(() => (app.materials || []).map(m => ({ ...m })))
@@ -672,7 +714,31 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
             onChange={e => { setAppNoEdit(e.target.value); setDirty(true) }}
             title="Application number (auto-assigned; edit to override)"
             style={{ width: 46, padding: '3px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 15, fontWeight: 700, textAlign: 'center' }} />
-          <span>&mdash; {app.monthLabel || monthLabel(app.monthKey)}</span>
+          {/* PERIOD - changeable. Picking the wrong month at creation used to mean
+              deleting the application and rebuilding it from scratch. */}
+          <span>&mdash;</span>
+          <select
+            disabled={locked}
+            value={app.monthKey || ''}
+            onChange={e => {
+              const mk = e.target.value
+              const d = resolveAppDates(mk, settings)
+              // Take the period's own dates where Project Details has them; keep what is
+              // already on the application where it does not, so a manual date entered
+              // above is not wiped by changing the month.
+              setApp(a => ({
+                ...a, monthKey: mk, monthLabel: monthLabel(mk),
+                appDate: d.appDate || a.appDate,
+                valDate: d.valDate || a.valDate,
+                paymentDate: d.paymentDate || a.paymentDate,
+                finalDate: d.finalDate || a.finalDate,
+              }))
+              setDirty(true)
+            }}
+            title="The month (or period) this application is for"
+            style={{ padding: '3px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', background: '#fff' }}>
+            {periodOptions.map(k => <option key={k} value={k}>{monthLabel(k)}</option>)}
+          </select>
         </div>
         <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: isSent ? '#dcfce7' : '#fef9c3', color: isSent ? '#16a34a' : '#a16207' }}>{isSent ? (unlocked ? 'Sent — editing' : 'Sent') : 'Draft'}</span>
         <div style={{ flex: 1 }} />
@@ -689,14 +755,40 @@ function ApplicationEditor({ app, appNumber, prevGross, isFirstApp, projectId, m
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
 
-      {/* Dates */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
-        {[['Application date', app.appDate], ['Valuation date', app.valDate], ['Payment due', app.paymentDate], ['Final date for payment', app.finalDate]].map(([l, v]) => (
-          <div key={l} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>{l}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{fmtDate(v)}</div>
+      {/* DATES - EDITABLE IN PLACE.
+          These were read-only cards, so a wrong period meant deleting a finished
+          application and starting again. They are ordinary fields now: click Edit dates,
+          change what is wrong, Save. Nothing else about the application is touched. */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Dates</div>
+          <button type="button" onClick={() => setEditDates(v => !v)}
+            style={{ background: 'none', border: 'none', padding: 0, color: '#4f46e5', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {editDates ? 'Done' : 'Edit dates'}
+          </button>
+          {isSent && !unlocked && editDates && (
+            <span style={{ fontSize: 11, color: '#c2410c' }}>Sent - unlock first to change these.</span>
+          )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12 }}>
+          {[['Application date', 'appDate'], ['Valuation date', 'valDate'], ['Payment due', 'paymentDate'], ['Final date for payment', 'finalDate']].map(([l, field]) => (
+            <div key={field} style={{ background: '#fff', borderRadius: 10, padding: '12px 16px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>{l}</div>
+              {editDates
+                ? <input type="date" value={app[field] || ''}
+                    disabled={isSent && !unlocked}
+                    onChange={e => { setApp(a => ({ ...a, [field]: e.target.value })); setDirty(true) }}
+                    style={{ width: '100%', fontSize: 13, padding: '4px 6px', border: '1px solid #e5e7eb', borderRadius: 6, fontFamily: 'inherit' }} />
+                : <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{fmtDate(app[field])}</div>}
+            </div>
+          ))}
+        </div>
+        {editDates && (
+          <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+            Changing these does not move the application to another month on the register -
+            use &ldquo;Period&rdquo; below the title for that.
           </div>
-        ))}
+        )}
       </div>
 
       {/* Previously certified — entered manually (required from App 2 onwards) */}
