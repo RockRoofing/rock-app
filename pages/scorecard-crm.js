@@ -547,23 +547,25 @@ export default function Scorecard() {
       .filter(Boolean)
     const gleniganPriced = gleniganPricedProjects.length
 
-    // #3 Glenigan scored >=5: Glenigan deals received in month where label (score) >= 5
-    const gleniganScored5Projects = gleniganReceivedProjects.filter(d => {
-      const score = parseInt(d.label)
-      return !isNaN(score) && score >= 5
-    })
-    const gleniganScored5 = gleniganScored5Projects.length
-
-    // Actively Chased scored >=5. Same rule as the Glenigan one - reached Received in this
-    // month, and scores 5 or more as it stands today. Lead source is read as it is NOW, so
-    // a project marked Actively Chased after it was received still counts, dated by when
-    // it was received.
-    const chasedScored5Projects = deals.filter(d => {
-      if (!getLeadSource(d)?.toLowerCase().includes('actively chased')) return false
+    // SCORED >=5, for a given lead source. One function, used for both cards, so they
+    // cannot drift apart - they were two separate pieces of code doing the same thing,
+    // which is how a rule ends up applying to one and not the other.
+    //
+    // Reached Received in THIS month, lead source matches as it stands TODAY, and scores
+    // 5 or more today. Both the lead source and the score are read as they are now, so
+    // marking either after the project was received still counts - dated by when it was
+    // received, which is what you specified.
+    const scoredFiveFor = (sourceWord) => deals.filter(d => {
+      if (!getLeadSource(d)?.toLowerCase().includes(sourceWord)) return false
       if (!d.receivedDate || monthKey(d.receivedDate) !== m) return false
       const score = parseInt(d.label)
       return !isNaN(score) && score >= 5
     })
+
+    const gleniganScored5Projects = scoredFiveFor('glenigan')
+    const gleniganScored5 = gleniganScored5Projects.length
+
+    const chasedScored5Projects = scoredFiveFor('actively chased')
     const chasedScored5Count = chasedScored5Projects.length
 
     // #5 Strike rate (value): rolling 6 months, all estimators, all decided deals with a value

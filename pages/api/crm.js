@@ -88,8 +88,27 @@ async function loadDeals() {
 }
 async function loadSchema() {
   const saved = await get(SCHEMA_KEY)
-  if (Array.isArray(saved) && saved.length) return saved
-  return DEFAULT_FIELD_SCHEMA
+  if (!Array.isArray(saved) || !saved.length) return DEFAULT_FIELD_SCHEMA
+
+  // MERGE THE CODE'S OPTIONS INTO THE SAVED SCHEMA.
+  //
+  // The saved schema is a snapshot taken the first time the CRM loaded, and it wins
+  // outright. So a new option added in code - "Actively Chased" on Lead Source - appeared
+  // in Add Project, which reads DEFAULT_FIELD_SCHEMA directly, and NOT in the deal view,
+  // which reads this. Two dropdowns for the same field offering different choices.
+  //
+  // Options the code knows about are added; options only in the saved copy are KEPT,
+  // because those were added deliberately through Manage Fields and are not ours to
+  // remove. Order follows the code, with anything extra appended.
+  const byKey = new Map(DEFAULT_FIELD_SCHEMA.map((f) => [f.key, f]))
+  return saved.map((f) => {
+    const def = byKey.get(f.key)
+    if (!def || !Array.isArray(def.options)) return f
+    const savedOpts = Array.isArray(f.options) ? f.options : []
+    const merged = [...def.options, ...savedOpts.filter((o) => !def.options.includes(o))]
+    if (merged.length === savedOpts.length && merged.every((o, i) => o === savedOpts[i])) return f
+    return { ...f, options: merged }
+  })
 }
 
 // Import chunks carry a lot of JSON. Next.js caps request bodies at 1MB BY DEFAULT, which
