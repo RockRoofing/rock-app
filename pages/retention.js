@@ -4,6 +4,14 @@ import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import SyncBar from '../components/SyncBar'
 
+// The register is ~26 columns wide. The table used width:100%, which made it SHRINK to
+// fit its container rather than overflow it - so there was nothing to scroll, columns
+// just squeezed until they were unreadable, and a scrollbar only appeared once zooming
+// out made the viewport narrower than the content itself. TABLE_MIN_WIDTH forces the
+// overflow so the bar is there whenever it is needed.
+const TABLE_MIN_WIDTH = 2400
+const naCell = { padding: '8px 10px', whiteSpace: 'nowrap', color: '#bbb', textAlign: 'center' }
+
 const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 
@@ -178,9 +186,9 @@ export default function RetentionPage() {
           finalAccount: p.afa || 0,
           retentionPct: (p.retentionPct || 0) * 100,
           completionDate: p.completionDate || p.pcDate || '',
-          pcType: '',
+          pcType: p.pcType || '',
           qsName: p.qsName || p.estimator || '',
-          qsEmail: '',
+          qsEmail: p.qsEmail || p.qsEmailSetting || '',
           comments: p.retentionComments || p.comment || '',
           invoiced: p.totalInvoiced || 0,
           invoicedNet: p.grossInvoiced || p.invoicedExVat || 0,
@@ -477,8 +485,8 @@ export default function RetentionPage() {
             ) : allEntries.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>{filter.size === 0 ? 'No status filters selected — tick Live Project, Defects Liability or Complete above.' : 'No retention entries match the current filters.'}</div>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                <table style={{ minWidth: TABLE_MIN_WIDTH, width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
                       {[
@@ -496,7 +504,7 @@ export default function RetentionPage() {
                         ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.', 'r612'],
                         ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
-                        ['PC Type', 'left', 'Practical completion type (manual).', 'pcType'],
+                        ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).', 'qs'],
                         ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not paid, green = settled.', null],
                         ['1st Date', 'left', 'Due date of the first retention release (manual).', 'r1date'],
@@ -522,6 +530,12 @@ export default function RetentionPage() {
                     {sortedEntries.map((entry, i) => {
                       const isEditing = editingId === entry.id
                       const closed = isClosed(entry)
+                      // 0% retention. Explicit zero only - a BLANK retention means nobody
+                      // has set it yet, which is a different thing and still needs
+                      // chasing. Treating blank as zero would hide the projects that
+                      // actually need attention.
+                      const noRetention = entry.retentionPct !== '' && entry.retentionPct != null
+                        && parseFloat(entry.retentionPct) === 0
                       const rowBg = closed ? '#dcfce7' : (i % 2 === 0 ? '#fff' : '#fafafa')
                       const fa = parseFloat(entry.finalAccount || entry.projectValue || 0) || 0
                       const invNet = entry.invoicedNet != null ? parseFloat(entry.invoicedNet) : (entry.invoiced != null ? parseFloat(entry.invoiced) : null)
@@ -642,14 +656,27 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', color: '#555' }}>{entry.pcType || '—'}</td>
                             {/* QS */}
                             <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{entry.qsName || '—'}</td>
+                            {/* Retention releases. At 0% retention there is nothing to
+                                release, so chasing a release date is chasing something
+                                that does not exist - the row showed an amber "TBC"
+                                warning for ever on projects that were never going to
+                                have one. N/A, greyed, and no warning. */}
                             {/* 1st Value (coloured) */}
-                            {releaseCell(entry.release1Value, firstReceived, releaseWarn)}
+                            {noRetention
+                              ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
+                              : releaseCell(entry.release1Value, firstReceived, releaseWarn)}
                             {/* 1st Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (entry.pcDateTBC ? <span title="PC date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>
+                            {noRetention
+                              ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
+                              : <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release1Date ? '#555' : '#c77700' }}>{entry.release1Date || (entry.pcDateTBC ? <span title="PC date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>}
                             {/* 2nd Value (coloured) */}
-                            {releaseCell(entry.release2Value, secondReceived, releaseWarn)}
+                            {noRetention
+                              ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
+                              : releaseCell(entry.release2Value, secondReceived, releaseWarn)}
                             {/* 2nd Date */}
-                            <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (entry.defectsDateTBC ? <span title="Defects date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>
+                            {noRetention
+                              ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
+                              : <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', color: entry.release2Date ? '#555' : '#c77700' }}>{entry.release2Date || (entry.defectsDateTBC ? <span title="Defects date marked TBC in project details.">⚠ TBC</span> : (closed ? '—' : <span title="Retention release date not confirmed — set it in Edit / project details.">⚠ TBC</span>))}</td>}
                             {/* VAT */}
                             {vatNeedsManual(entry)
                               ? <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>

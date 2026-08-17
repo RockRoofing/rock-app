@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'mcdRecorded' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'pcType' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -336,7 +336,17 @@ export default async function handler(req, res) {
         name: cp.name,
         status: stage,
         stageSource: 'retention',   // marker: stage now driven by Retention Tracker
-        customer: settings.customerName || '',
+        // Customer, PC type and the QS email all exist in Edit Project Details but were
+        // never returned here, so the retention register showed them blank or fell back
+        // to something else.
+        //
+        // Customer prefers the RESOLVED company name - override -> IHM -> nothing - and
+        // only falls back to the free-text customerName typed on the commercial side.
+        // The two disagreed on any project where the IHM had the proper company name and
+        // somebody had typed a shorthand into Commercial.
+        customer: resolvedPeople?.customerCompany || settings.customerName || '',
+        pcType: settings.pcType || '',
+        qsEmailSetting: settings.qsEmail || '',
         // Use the SAME resolver Edit Project Details uses, so the two always agree:
         //   commercial override -> Ops/IHM -> blank.
         // Previously this read ihmByNo directly, which (a) ignored a commercial override

@@ -1,65 +1,36 @@
-pkg438 - Final Account from the application
-===========================================
+pkg440 - N/A on the retention releases when retention is 0%
+===========================================================
 
-Deploy after pkg437.
-
-CHANGED FILES (replace)
------------------------
-  pages/api/dashboard.js
-  pages/retention.js
-
-NEW FILES: none.
+Deploy after pkg439. One changed file: pages/retention.js. No new files.
 
 
-FIRST - THE DISCOUNT IS NOT BEING APPLIED TWICE
--------------------------------------------------
-It is not being applied AT ALL to the Final Account.
+WHAT CHANGED
+------------
+On a project with 0% retention, all four release columns now read a greyed "N/A":
 
-Your row reads:
+    1st Value    1st Date    2nd Value    2nd Date
 
-    Gross AFA       £350,800.30
-    MCD 2.50%         £8,770.01
-    Final Account   £350,800.30   <- identical to the gross
+They were showing an amber "TBC" warning, for ever, on projects that were never going to
+have a release date - chasing something that does not exist. Hovering any of them says
+"Retention is 0% on this project - nothing to release."
 
-The code is correct - it already computes  afa = gross - MCD. What you were looking at is
-a CACHED dashboard payload built before pkg436's marker took effect: it has the new
-afaGross and mcdValue fields but an afa calculated the old way. Deploying this rebuilds
-it. Final Account should read £342,030.29.
+I did all four rather than only the two dates you mentioned. A £0.00 release value beside
+an N/A date would have read as a release that had not been valued yet, which is the same
+confusion in a different column.
 
 
-NOW THE CHANGE YOU ASKED FOR
+ONE DISTINCTION THAT MATTERS
 ----------------------------
-Final Account now comes from the LATEST APPLICATION, falling back to Edit Project Details
-when a project has no applications.
+Only an EXPLICIT zero counts. A BLANK retention still shows the TBC warning.
 
-    1. manual override, if one is set
-    2. latest application  - measured contract sum + variations at FINAL value
-    3. Edit Project Details - contract value + instructed variations
+Blank means nobody has set the retention yet - that is a project needing attention, and
+exactly the thing this register should be surfacing. Treating blank as zero would have
+quietly hidden them.
 
-The application is the better source: it carries variations at their final value, whereas
-project details only has whatever happens to be ticked as instructed.
-
-The Gross AFA column now says underneath which of the three it used - "application 12",
-"project details", or "manual override" - so a figure that looks wrong can be traced
-without opening anything.
-
-MCD is then deducted from whichever source was used, exactly as before.
+Checked: 3% behaves normally, 0 and "0" show N/A, blank and null keep the warning.
 
 
-SOMETHING ON GAS LANE WORTH CHECKING
---------------------------------------
-Once this deploys, Account Remaining on that project will go from +£8,338.01 to
--£432.00.
-
-    Final Account (net)  £342,030.29
-    Invoiced             £342,462.29
-                         -----------
-                                -£432.00
-
-That is not a rounding error and it is not caused by this change - it was always there,
-hidden behind a Final Account that was £8,770 too high. It means either the account is
-genuinely £432 higher than the application says, or MCD has not been deducted on every
-invoice.
-
-Small, but worth Joe or Nathan looking at, because if it is the second reason it will be
-true on other projects too.
+ALREADY CORRECT, LEFT ALONE
+---------------------------
+The Retention Owed / 612 Allocated match flag only fires when one of the two is above
+zero, so a 0% project does not show a false mismatch there. Nothing needed.
