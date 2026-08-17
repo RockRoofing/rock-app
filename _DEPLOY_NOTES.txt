@@ -1,53 +1,61 @@
-pkg450 - URGENT. pkg447/449 could delete activities.
-====================================================
+pkg451 - the actual root cause: two names for one date
+======================================================
 
-Deploy after pkg449, as soon as you can. One changed file: pages/crm.js.
+Deploy after pkg450.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/crm.js
+  pages/crm-scores.js
+  pages/api/crm.js
 
-I INTRODUCED A DATA-LOSS BUG. THIS FIXES IT.
-----------------------------------------------
-Activities are all in ONE store per deal, crm:activities:<dealId>. Each record is flagged
-either crm:true (created in the CRM) or not (imported from Pipedrive).
-
-The write endpoint REPLACES that whole key. The deal save knows this and merges - it keeps
-the imported ones and swaps in the CRM ones.
-
-The helper I added in pkg447 did not. It wrote back only the imported records, so
-completing or editing an imported activity DELETED every CRM-created activity on that
-deal.
-
-Proven on the bench: a store holding one imported and one CRM activity comes back holding
-only the imported one.
-
-Now it touches only imported records and passes CRM-created ones straight through
-untouched. There is also a guard so a deal whose activities have not finished loading can
-never write an empty list over the store.
+NEW FILES: none.
 
 
-TO YOUR QUESTION - WHY TWO PLACES?
-------------------------------------
-They are not in two places. They are in ONE store with two writers, which turns out to be
-just as bad:
+THIS IS THE ONE. NOT MINE, AND IT HAS BEEN THERE ALL ALONG
+------------------------------------------------------------
+An activity's due date is stored under one of TWO field names, depending on where it came
+from:
 
-    the DEAL SAVE      owns the crm:true records, merges, keeps imported ones
-    my helper          owned the imported records, and did not merge
+    imported from Pipedrive   ->  dueDate
+    created in the CRM        ->  due
 
-Two writers to one key, with different ideas about what they were allowed to touch. Every
-problem you have reported this evening comes from that - the dates disagreeing, the
-completions not sticking, and now this.
+The deal sends its own objects straight through when it saves, and those use `due`.
 
-They now agree: each writer touches only its own kind and leaves the other alone.
+The Activities list reads  dueDate || due  - finds it either way.
+The deal view read         dueDate         - and nothing else.
+
+So a CRM-created activity lost its date the instant the deal was reopened. The list showed
+19 Aug; the deal said "No due date". Same record, two screens, two answers - exactly your
+two screenshots.
+
+    CRM-created   deal shows ""            list shows "2026-08-20"
+    imported      deal shows "2026-08-19"  list shows "2026-08-19"
+
+That is the whole thing. Every symptom this evening - dates not sticking, the deal
+disagreeing with the list, editing twice to make it hold - comes back to this line.
 
 
-ABOUT THE DUPLICATE ON POOL MOTORS
-------------------------------------
-The two rows - 19 Aug to Edita, 20 Aug to James - are two genuinely different activity
-records, not one shown twice. Different people, different dates.
+FIXED IN BOTH DIRECTIONS
+------------------------
+The deal now reads  dueDate || due, like every other reader.
+The save now WRITES BOTH names, so no reader can miss it and none can pick up a stale one.
 
-What I cannot tell from here is whether the 19 Aug one was created deliberately or is the
-wreckage of an edit that half-wrote. Once this is deployed, delete whichever is wrong and
-it will stay deleted.
 
-If activities have gone MISSING from other deals over the last hour, that is the bug above
-and I am sorry - they were removed from the store and cannot be recovered from the app.
-Worth a quick look at a few busy deals to see whether anything you expected is absent.
+REPAIR THE EXISTING ONES - ONE CLICK
+--------------------------------------
+Activities already saved carry only one name. Go to /crm-scores and press
+"Repair activity due dates".
+
+It gives every activity the same date under both names, touches nothing already correct,
+and is safe to run twice. It reports how many it fixed and across how many projects.
+
+Do this straight after deploying - until you do, CRM-created activities will still show
+blank on the deal.
+
+
+ON THE POOL MOTORS DUPLICATE
+----------------------------
+Those two "Call" activities are two real records - one Edita's, one James's. Not one shown
+twice. Once the repair has run, both will show their dates on the deal as well as the
+list, and you can delete whichever is not wanted.

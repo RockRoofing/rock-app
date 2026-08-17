@@ -33,6 +33,7 @@ export default function CrmScoreImport() {
   const [result, setResult] = useState(null)
   const [repaired, setRepaired] = useState(null)
   const [dupes, setDupes] = useState(null)
+  const [actDates, setActDates] = useState(null)
   const [mention, setMention] = useState(null)
   const [testResult, setTestResult] = useState(null)
   const [testTo, setTestTo] = useState('')
@@ -97,6 +98,19 @@ export default function CrmScoreImport() {
     } catch (e) {
       setMsg(`Stopped: ${e.message || 'that did not save'}. Anything already written stays written - run it again and it will pick up where it left off.`)
     }
+    setBusy(false)
+  }
+
+  // One-off: give every activity the same date under both field names.
+  async function repairActivityDates() {
+    setBusy(true); setActDates(null); setMsg('Checking every activity...')
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'repair-activity-dates' }),
+      }).then((r) => r.json())
+      setActDates(d); setMsg('')
+    } catch (e) { setMsg(`Could not run: ${e.message || 'failed'}`) }
     setBusy(false)
   }
 
@@ -235,6 +249,25 @@ export default function CrmScoreImport() {
                   </>
                 : <div style={{ color: '#15803d' }}>No duplicates. {dupes.total} projects checked.</div>)}
               {dupes.moved && <div style={{ color: '#15803d' }}>Renumbered {dupes.moved.length}. {dupes.note}</div>}
+            </div>
+          )}
+        </div>
+
+        <div style={{ background: '#fff', border: '1px solid #e1e0d9', borderRadius: 10, padding: 18, marginTop: 24 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Repair activity due dates</div>
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.55, marginTop: 0 }}>
+            Activities created in the CRM stored their date under one field name and the deal view
+            read another, so the date showed on the Activities list and the deal said &ldquo;No due
+            date&rdquo;. Fixed going forward &mdash; this brings existing activities into line.
+            Changes nothing that is already correct. Safe to run twice.
+          </p>
+          <button onClick={repairActivityDates} disabled={busy}
+            style={{ background: '#1a1a19', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, fontFamily: 'inherit' }}>
+            {busy ? 'Working...' : 'Repair activity dates'}
+          </button>
+          {actDates && (
+            <div style={{ fontSize: 13.5, lineHeight: 1.7, marginTop: 12, color: '#15803d' }}>
+              <strong>{actDates.recordsFixed}</strong> activities repaired across <strong>{actDates.dealsTouched}</strong> projects.
             </div>
           )}
         </div>

@@ -239,7 +239,13 @@ export default async function handler(req, res) {
     if (body.action === 'save-deal-activities') {
       const dealId = String(body.dealId || '')
       if (!dealId) return res.status(400).json({ error: 'dealId required' })
-      const supplied = (Array.isArray(body.activities) ? body.activities : []).map(a => ({ ...a, crm: true }))
+      // Write BOTH names. The deal sends `due`; imported records use `dueDate`; different
+      // readers reach for different ones. Storing both means no reader can miss it and no
+      // future reader can pick up a stale one.
+      const supplied = (Array.isArray(body.activities) ? body.activities : []).map(a => {
+        const d = a.dueDate || a.due || ''
+        return { ...a, due: d, dueDate: d, crm: true }
+      })
 
       const stored = (await get(SUB_KEY('activities', dealId))) || []
       const keptImported = stored.filter(a => !a.crm)
@@ -657,6 +663,28 @@ export default async function handler(req, res) {
           ? 'The FIRST project with each id kept it. Later ones were renumbered. Their activities and notes were copied across; filed email and planning allocations still point at the original id and may need checking.'
           : 'No duplicates found.',
       })
+    }
+
+    // ONE-OFF: make every activity carry both date names.
+    //
+    // CRM-created activities were stored with `due` only, and the deal view reads
+    // `dueDate` - so their dates showed on the Activities list and vanished on the deal.
+    // Fixed going forward; this brings the existing ones into line.
+    if (body.action === 'repair-activity-dates') {
+      const index = (await get(SUB_INDEX('activities'))) || []
+      let dealsTouched = 0, recordsFixed = 0
+      for (const dealId of index) {
+        const items = (await get(SUB_KEY('activities', dealId))) || []
+        let changed = false
+        const next = items.map(a => {
+          const d = a.dueDate || a.due || ''
+          if (a.dueDate === d && a.due === d) return a
+          changed = true; recordsFixed++
+          return { ...a, due: d, dueDate: d }
+        })
+        if (changed) { await set(SUB_KEY('activities', dealId), next); dealsTouched++ }
+      }
+      return res.json({ ok: true, dealsTouched, recordsFixed, note: 'Every activity now carries the same date under both field names.' })
     }
 
     if (body.action === 'repair-close-dates') {

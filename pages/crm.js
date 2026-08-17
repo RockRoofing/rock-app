@@ -1950,8 +1950,16 @@ function CRMPageInner() {
         fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(id) }) }).then((r) => r.json()),
         fetch('/api/crm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get-sub', kind: 'notes', dealId: String(id) }) }).then((r) => r.json()),
       ]);
+      // TWO NAMES FOR THE SAME THING, and this line only knew one of them.
+      //
+      // An IMPORTED activity stores its date as dueDate. A CRM-CREATED one stores it as
+      // due - the deal sends its own objects straight through on save, and those use due.
+      //
+      // This read only looked at dueDate, so every CRM-created activity lost its date the
+      // moment the deal was reopened: the Activities list showed it (that reader checks
+      // both) and the deal said "No due date". Same record, two screens, two answers.
       const acts = (a.items || []).map((x) => ({
-        id: x.id, text: x.text || x.subject || 'Activity', due: x.dueDate || '',
+        id: x.id, text: x.text || x.subject || 'Activity', due: x.dueDate || x.due || '',
         done: !!x.done, assignee: x.assignee || null, author: x.createdBy || null,
         type: x.type || '', imported: !x.crm,
       }));
