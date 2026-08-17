@@ -350,7 +350,13 @@ export default function Scorecard() {
       const end = new Date(endDate)
       const start = new Date(end.getFullYear(), end.getMonth() - (backMonths - 1), 1).toISOString().split('T')[0]
       const endStr = end.toISOString().split('T')[0]
+      // VARIATIONS EXCLUDED. A variation is extra work on a job already won, usually
+      // small, and it is not a project secured. Leaving them in dragged the average
+      // towards the size of a typical variation rather than a typical job - nineteen
+      // won variations averaging £6,700 against real projects in the hundreds of
+      // thousands would have halved the figure and told you nothing.
       const won = personDeals.filter(d => d.status === 'won' && d.value > 0
+        && d.stageName !== 'Variations'
         && d.closeTime && d.closeTime >= start && d.closeTime <= endStr)
       return won.length ? { avg: won.reduce((a, d) => a + d.value, 0) / won.length, count: won.length, list: won } : { avg: null, count: 0, list: [] }
     }
@@ -540,7 +546,10 @@ export default function Scorecard() {
       const end = new Date(`${endMonth}-01T00:00:00Z`)
       const start = new Date(end); start.setMonth(start.getMonth() - (backMonths - 1))
       const startKey = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`
+      // Variations excluded here too - same reason as the estimator cards. The two must
+      // agree about what counts as a secured project or they cannot be compared.
       const won = deals.filter(d => d.status === 'won' && d.closeTime && d.value > 0
+        && d.stageName !== 'Variations'
         && monthKey(d.closeTime) >= startKey && monthKey(d.closeTime) <= endMonth)
       return won.length ? { avg: won.reduce((s, d) => s + d.value, 0) / won.length, count: won.length, list: won } : { avg: null, count: 0, list: [] }
     }

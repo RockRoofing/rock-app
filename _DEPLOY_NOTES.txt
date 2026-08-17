@@ -1,73 +1,48 @@
-pkg415 - GP margin month by month
-=================================
+pkg416 - variations excluded from average secured project value
+===============================================================
 
-Deploy after pkg414.
-
-NEW FILES - create these three with "Add file"
------------------------------------------------
-  lib/crmGpSnapshots.js
-  pages/api/gp-snapshots.js
-  pages/api/cron/gp-snapshot.js
-
-CHANGED FILES (replace)
------------------------
-  pages/scorecard-crm.js
-  vercel.json                (snapshot cron, 03:00 on the 22nd - now 15)
+Deploy after pkg415. One changed file: pages/scorecard-crm.js. No new files.
 
 
-BUILT AS YOU SPECIFIED
-----------------------
-Snapshot taken on the 22nd for the month just gone, so the EOM report has settled. Each
-run also re-does the previous 6 months to pick up invoices and costs processed late.
+THE LOGIC, AS IT WAS
+--------------------
+Take the person's deals where status is won, value is above zero, and the close date falls
+in the rolling 6 months ending with the month shown. Sum the values, divide by the count.
+The comparison figure is the 6 months before that, non-overlapping.
 
-Cumulative to month end, across in-progress projects only. Defects and complete are
-excluded, matching the EOM report.
+Edita's card does the same across all estimators rather than one person's.
 
-Both sides are recomputed from DATED lines - invoiced:lines and costs:lines both carry a
-date - so an old month is genuinely recalculated rather than a frozen copy of whatever it
-looked like the day it was first taken. That is what makes the 6-month re-run worth doing.
+No stage filter at all - so yes, variations were counted as secured projects.
 
 
-ONE THING I HAD TO DECIDE, AND IT MATTERS
+WHY THAT MATTERED MORE THAN IT LOOKS
+--------------------------------------
+A variation is extra work on a job you have already won. They are numerous and small.
+From the export we looked at earlier, nineteen won variations averaged about £6,700
+against real projects in the hundreds of thousands.
+
+On a worked example: two real projects at £300,000 and £100,000, plus two variations at
+£6,700 and £2,253.
+
+    with variations       4 deals, average £102,238
+    without variations    2 deals, average £200,000
+
+The number was being halved, and it was drifting towards "what is a typical variation
+worth" rather than "what is a typical job worth" - which is the opposite of what the card
+is for.
+
+Now excluded, on BOTH the estimator cards and Edita's. The two must agree about what
+counts as a secured project or they cannot be compared with each other.
+
+
+TWO THINGS I HAVE NOT CHANGED - YOUR CALL
 -------------------------------------------
-A project's live/defects/complete status is a MANUAL flag in the retention tracker. There
-is no record of when it changed - only what it is now.
+TOTAL VALUE OF WORK SECURED still includes variations. I think that is right: a variation
+IS money secured, and that card is measuring revenue rather than typical job size. But it
+does mean the total and the average now count different things, and somebody will
+eventually multiply one by the other and get a surprise.
 
-So if a re-snapshot re-derived the project list, a job that moved to defects in September
-would VANISH from July's figure, and July would change months later for a reason that has
-nothing to do with July. History would quietly rewrite itself and nobody would know why.
+STRIKE RATE also still includes them. Same question, and it cuts the other way - a won
+variation with no competitive process arguably flatters the strike rate.
 
-So the project SET is recorded with the first snapshot of a month and REUSED on every
-re-run. Only the money is recomputed. You get the late invoices and costs you asked for,
-without the membership drifting underneath.
-
-The response says which months reused their set and which took a fresh one.
-
-
-WHAT THE CARD DOES NOW
-----------------------
-Each month shows its own snapshot. The current month has no snapshot yet - by design, it
-is taken on the 22nd - so it falls back to the live figure, which is the right answer for
-a month still running.
-
-Months before the first snapshot show a DASH, not a number. They are genuinely unknown.
-
-
-RUN THIS ONCE AFTER DEPLOYING
------------------------------
-    /api/cron/gp-snapshot
-
-Builds the last 6 months. Be aware of what that first run can and cannot do: it has to use
-TODAY'S live project list for all six, because there is no history of the status flag. So
-those six months are an approximation, and the further back you go the less true it is - a
-project that finished in March is missing from March's figure.
-
-From the next run onwards each month keeps its own recorded set and the figures are sound.
-
-If you would rather not have six approximate months on the chart, run this instead and
-start clean from last month only:
-
-    /api/cron/gp-snapshot?only=2026-07
-
-Your call. I would take the six and treat the older ones as indicative, but it is a
-judgement about how much a roughly-right number is worth against an empty chart.
+Say the word on either and it is one line each.
