@@ -224,6 +224,7 @@ export default function Scorecard() {
   const [lastSync, setLastSync] = useState(null)
   const [emailVolume, setEmailVolume] = useState({})
   const [callVolume, setCallVolume] = useState({})
+  const [gpSnapshots, setGpSnapshots] = useState({})
   const [targets, setTargets] = useState(null)
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -250,11 +251,12 @@ export default function Scorecard() {
   async function loadData() {
     setLoading(true)
     try {
-      const [dr, vc, ev, cv, tr] = await Promise.all([
+      const [dr, vc, ev, cv, gs, tr] = await Promise.all([
         fetch('/api/deals-crm'),
         fetch('/api/value-changes-crm'),
         fetch('/api/email-volume'),
         fetch('/api/call-volume'),
+        fetch('/api/gp-snapshots'),
         fetch('/api/targets')
       ])
       const dd = await dr.json()
@@ -266,6 +268,7 @@ export default function Scorecard() {
       // scorecard loading.
       try { setEmailVolume((await ev.json()).volume || {}) } catch { setEmailVolume({}) }
       try { setCallVolume((await cv.json()).volume || {}) } catch { setCallVolume({}) }
+      try { setGpSnapshots((await gs.json()).snapshots || {}) } catch { setGpSnapshots({}) }
       const td = await tr.json()
       setTargets(td.targets || DEFAULT_TARGETS)
       // Load Xero project data for GP margin cards
@@ -384,7 +387,23 @@ export default function Scorecard() {
     const totalLabour = liveProjects.reduce((s, p) => s + (p.labourSpend || 0), 0)
     const totalMaterials = liveProjects.reduce((s, p) => s + (p.materialsSpend || 0), 0)
     const totalProfit = totalGrossInvoiced - totalCostsAll
-    const gpMargin = totalGrossInvoiced > 0 ? totalProfit / totalGrossInvoiced : null
+    const liveGpMargin = totalGrossInvoiced > 0 ? totalProfit / totalGrossInvoiced : null
+
+    // GP MARGIN FOR THIS MONTH.
+    //
+    // Prefer the recorded snapshot: invoices and costs dated up to that month end, across
+    // the projects that were live at the time. Without it every month showed the same
+    // number - the live figure repeated - so the trendline was flat by construction and
+    // "last full month" and "current month" were identical.
+    //
+    // The CURRENT month has no snapshot yet, by design: it is taken on the 22nd once the
+    // EOM report has settled. So the current month falls back to the live figure, which
+    // is the right answer for a month still running.
+    const snap = gpSnapshots[m]
+    const snapEst = snap && (snap.byEstimator[person]
+      || Object.entries(snap.byEstimator).find(([k]) => k.toLowerCase().includes(String(person).toLowerCase()))?.[1])
+    const isCurrentMonth = m === monthKey(new Date().toISOString())
+    const gpMargin = snapEst ? snapEst.margin : (isCurrentMonth ? liveGpMargin : null)
 
     return {
       strikeRateOverall, strikeRateMCSecured, valuePricedExisting, totalValuePriced,

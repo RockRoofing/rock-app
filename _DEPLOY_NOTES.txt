@@ -1,37 +1,73 @@
-pkg414 - the two "priced" cards had no drill-down
-=================================================
+pkg415 - GP margin month by month
+=================================
 
-Deploy after pkg413. One changed file: pages/scorecard-crm.js. No new files.
+Deploy after pkg414.
 
+NEW FILES - create these three with "Add file"
+-----------------------------------------------
+  lib/crmGpSnapshots.js
+  pages/api/gp-snapshots.js
+  pages/api/cron/gp-snapshot.js
 
-THE CAUSE
----------
-On the estimator scorecards, "Value priced - existing customers" and "Total value of work
-priced" had no drillKey at all. Clicking them did nothing because there was nothing
-wired up to open.
-
-The data was there the whole time. Both figures are computed from lists of value-change
-events - monthChanges and existingChanges - and both lists were built, summed, and then
-thrown away rather than returned. The equivalent card on Edita's page had its drill-down
-because it happened to be written later.
-
-Both now open the same event list the sales page uses: date, project, old value, new
-value, and the change.
+CHANGED FILES (replace)
+-----------------------
+  pages/scorecard-crm.js
+  vercel.json                (snapshot cron, 03:00 on the 22nd - now 15)
 
 
-WHILE I WAS IN THERE
---------------------
-I checked every card on both scorecards rather than just the two you reported. One more
-was missing: "Average value of projects priced" on Edita's page - added in pkg412, and I
-had computed the list of projects behind it and not returned it. Same fault, one package
-old. Now wired.
+BUILT AS YOU SPECIFIED
+----------------------
+Snapshot taken on the 22nd for the month just gone, so the EOM report has settled. Each
+run also re-does the previous 6 months to pick up invoices and costs processed late.
 
-Every card on both pages now opens its detail except two:
+Cumulative to month end, across in-progress projects only. Defects and complete are
+excluded, matching the EOM report.
 
-    Emails sent externally
-    Calls made
+Both sides are recomputed from DATED lines - invoiced:lines and costs:lines both carry a
+date - so an old month is genuinely recalculated rather than a frozen copy of whatever it
+looked like the day it was first taken. That is what makes the 6-month re-run worth doing.
 
-Those are stored as monthly TALLIES, not as the underlying messages or calls - a
-deliberate decision, so there is genuinely no detail to show. If you ever want to click
-into them, that is a different job: it would mean storing every message and call record
-rather than a count, which is a lot of data to keep to answer a question nobody may ask.
+
+ONE THING I HAD TO DECIDE, AND IT MATTERS
+-------------------------------------------
+A project's live/defects/complete status is a MANUAL flag in the retention tracker. There
+is no record of when it changed - only what it is now.
+
+So if a re-snapshot re-derived the project list, a job that moved to defects in September
+would VANISH from July's figure, and July would change months later for a reason that has
+nothing to do with July. History would quietly rewrite itself and nobody would know why.
+
+So the project SET is recorded with the first snapshot of a month and REUSED on every
+re-run. Only the money is recomputed. You get the late invoices and costs you asked for,
+without the membership drifting underneath.
+
+The response says which months reused their set and which took a fresh one.
+
+
+WHAT THE CARD DOES NOW
+----------------------
+Each month shows its own snapshot. The current month has no snapshot yet - by design, it
+is taken on the 22nd - so it falls back to the live figure, which is the right answer for
+a month still running.
+
+Months before the first snapshot show a DASH, not a number. They are genuinely unknown.
+
+
+RUN THIS ONCE AFTER DEPLOYING
+-----------------------------
+    /api/cron/gp-snapshot
+
+Builds the last 6 months. Be aware of what that first run can and cannot do: it has to use
+TODAY'S live project list for all six, because there is no history of the status flag. So
+those six months are an approximation, and the further back you go the less true it is - a
+project that finished in March is missing from March's figure.
+
+From the next run onwards each month keeps its own recorded set and the figures are sound.
+
+If you would rather not have six approximate months on the chart, run this instead and
+start clean from last month only:
+
+    /api/cron/gp-snapshot?only=2026-07
+
+Your call. I would take the six and treat the older ones as indicative, but it is a
+judgement about how much a roughly-right number is worth against an empty chart.
