@@ -1,15 +1,12 @@
-pkg419 - GP margin now matches the EOM report exactly
-=====================================================
+pkg420 - the month you click is the month you get
+=================================================
 
-Deploy after pkg418.
+Deploy after pkg419. One changed file: pages/scorecard-crm.js. No new files.
 
-CHANGED FILES (replace)
------------------------
-  pages/scorecard-crm.js
-  lib/crmGpSnapshots.js
-  pages/api/cron/gp-snapshot.js
 
-NEW FILES: none.
+WHY IT LOOKED BROKEN
+--------------------
+The chart click was working. It was losing a race by one event.
 
 
 THE FOUR REASONS THEY DISAGREED
@@ -21,57 +18,16 @@ THE FOUR REASONS THEY DISAGREED
    with per-month manual overrides, matching the Application Calendar. The scorecard used
    everything to TODAY. Mid-month those are different amounts of work. The scorecard now
    uses the valuation date.
+looked like it had not been built.
 
-3. PROJECTS WITH NO VALUATION DATE. EOM excludes an in-progress project that has none
-   that month - it is a gap in the data, not a zero. The scorecard was including it at
-   full value. Now excluded, and the snapshot reports how many were dropped
-   ("excludedNoValDate") so a month with a lot of them is visible rather than silent.
-
-4. THE ESTIMATOR NAME - your question. EOM matches exactly; the scorecard was matching a
-   first-name SUBSTRING. Both now match exactly.
+The chart container now stops the click there. Clicking a point gives that point's month;
+clicking anywhere else on the card still gives the card's month, as before.
 
 
-ON THE NAME, SINCE YOU ASKED WHY
---------------------------------
-It was not deliberate. The scorecard identifies people by FIRST name - the tabs are Roman,
-Niall, James - while a project carries the resolved PORTAL USER name, "Roman Jarosz". The
-substring was papering over that gap.
+WHAT TO EXPECT
+--------------
+Click May on any trend line and the modal title reads "... - May 26" with May's projects
+in it. Click the big number or the card background and you get the month named at the top
+of the column - "Last full month: Jul 26" or the current month.
 
-Now the first name is resolved to the full name from the project data itself, and the
-comparison is exact. Resolved from the project data rather than a second source, so it
-cannot drift from what the EOM report is matching against.
-
-If a first name ever resolves to TWO people it matches nobody rather than guessing, and
-the card shows a dash. Better a visible gap than a figure quietly containing someone
-else's jobs.
-
-
-THE CALCULATION IS COPIED, NOT REINVENTED
--------------------------------------------
-eomAtValDate is lifted from calcAtValDate in pages/commercial.js, in both the scorecard
-and the snapshot job. Same valuation-date precedence, same Sales-200 basis, same
-fall-back to ex-VAT subtotal on older lines.
-
-Tested: valuation day 25 takes costs to the 25th and leaves the 28th out; a manual
-override to the 15th wins over the fixed day; day 31 clamps to 28 in February; no
-valuation date returns null and the project is dropped.
-
-If calcAtValDate is ever changed, change eomAtValDate with it. There is a comment saying
-so in both files.
-
-
-THE SNAPSHOTS ARE ALSO WRONG AND NEED REBUILDING
---------------------------------------------------
-Anything recorded before this used month end and no hide list. Re-run:
-
-    /api/cron/gp-snapshot
-
-The empty-set rule from pkg418 means the existing records rebuild rather than being
-reused. The response now reports projects, counted, and excludedNoValDate per month.
-
-
-HOW TO CHECK IT
----------------
-Open the EOM report, filter to one estimator, note the margin. Open that estimator's
-scorecard and look at the current month. They should now agree. If they do not, tell me
-which two numbers and I will find the fifth difference.
+Both behaviours are wanted, they just needed separating.

@@ -855,7 +855,15 @@ export default function Scorecard() {
           </div>
         </div>
         {withGraph && (
-          <div style={{ height: ((m.isGpMargin || m.comparePriorKey) ? CARD_HEIGHT + 60 : CARD_HEIGHT) - 28 }}>
+          // STOP THE CLICK HERE.
+          //
+          // The whole card has an onClick that opens ITS OWN month. A click on the chart
+          // fired the chart's handler correctly and then bubbled up to the card, which
+          // immediately replaced the modal with the card's month. The month-specific
+          // drill was working the whole time and losing the race by one event.
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ height: ((m.isGpMargin || m.comparePriorKey) ? CARD_HEIGHT + 60 : CARD_HEIGHT) - 28 }}>
             {actual != null && (
               <ResponsiveContainer width="100%" height="100%">
                 {/* Clicking a point opens the detail for THAT month, not the month the
