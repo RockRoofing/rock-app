@@ -1,42 +1,46 @@
-pkg428 - variations out of average value of projects priced
-===========================================================
+pkg429 - rolling averages, named and bounded properly
+=====================================================
 
-Deploy after pkg427. One changed file: pages/scorecard-crm.js. No new files.
-
-
-YOUR QUESTION FIRST: NO, IT DOES NOT DOUBLE COUNT
----------------------------------------------------
-A project priced at £180,000 in March and revised to £250,000 in June contributes
-£250,000, ONCE. Not both, not the £70,000 uplift.
-
-All of a project's pricing events in the window collapse to the LATEST one - the current
-answer rather than the first guess. That is why the card says "from 14 projects" rather
-than counting pricing events.
-
-Proven in the same test as the change below: that project appears in the values list as
-250000 and nothing else.
+Deploy after pkg428. One changed file: pages/scorecard-crm.js. No new files.
 
 
-THE CHANGE
-----------
-Variations are now excluded, matching what you asked for on the secured card.
-
-Worked example - two real projects and one variation that was priced then revised:
-
-    with variations       3 projects, values [250000, 150000, 2253], average £134,084
-    without variations    2 projects, values [250000, 150000], average £200,000
-
-Judged on the DEAL's stage, not on anything held on the value-change record. That matters:
-a record only carries a stage when it came from a stage move, so filtering on the record
-would have caught variations that entered the stage and missed every variation that was
-simply re-priced. Going via the deal catches both.
+1. YOUR QUESTION - AVERAGE VALUE OF PROJECTS SECURED
+-----------------------------------------------------
+Yes, it already excludes variations. Done in pkg416, on BOTH the estimator cards and
+Edita's. Nothing needed here.
 
 
-STILL INCLUDING VARIATIONS, DELIBERATELY
-------------------------------------------
-    Total value of work priced
-    Total value of work secured
+2. TOTAL VALUE OF WORK SECURED - the "Avg" line
+-------------------------------------------------
+Now reads:
 
-Both measure money, and a variation is money. Say the word if you want either changed, but
-be aware the totals and the averages now count different things - dividing one by the
-other will not give you the other.
+    Avg: £412,000/month (6 months)
+
+It was averaging EVERY month on screen, so the figure moved whenever anybody touched the
+From/To boxes at the top - two people could read different "averages" off the same card
+and both be looking at it correctly. Now always the 6 months to and including the month
+the card is showing.
+
+Near the start of a short date range there are fewer than six months to average, so it
+says how many it actually had - "(4 months)" - rather than labelling four as six.
+
+This applies to Total value of work priced too, which carries the same line.
+
+
+3. AVERAGE PROJECT VALUE (ROLLING 6 MONTHS)
+---------------------------------------------
+Renamed from "Average value of projects priced". The sub-line now says what it does
+instead of describing the window twice:
+
+    Every project priced in the 6 months to and including this month. Excludes variations.
+
+To answer what "rolling 6 months vs 6 months before" meant: the big number is the 6 months
+ending with the month shown, and the grey line underneath compares it with the 6 months
+before that, so you can see which way it is moving. April's card covers November to April;
+March covers October to March. Exactly as you described - checked against the code, the
+windows were already right, only the wording was poor.
+
+Variations excluded, from pkg428.
+
+The comparison line stays. Say the word if you would rather the card just showed the
+number without it.

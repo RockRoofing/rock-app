@@ -746,7 +746,7 @@ export default function Scorecard() {
     { key: 'chasedScored5', label: 'Actively Chased scored ≥5', sub: 'Received in month, scored 5 or more', format: v => v, targetKey: 'chasedScored5', drillKey: '_chasedScored5Projects' },
     { key: 'strikeRateValue', label: 'Strike rate (value) — all estimators', sub: 'Rolling 6 months', format: pct, targetKey: 'strikeRateValue', drillKey: '_rolling6AllProjects' },
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'All estimators, value change data', format: fmt, targetKey: 'totalValuePriced', drillKey: '_allMonthChanges', isValueChange: true, showAvg: true },
-    { key: 'avgValuePriced', label: 'Average value of projects priced', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValuePriced', drillKey: '_avgValuePricedList', isValueChange: true, comparePriorKey: '_avgValuePricedPrior' },
+    { key: 'avgValuePriced', label: 'Average Project Value (Rolling 6 months)', sub: 'Every project priced in the 6 months to and including this month. Excludes variations.', format: fmt, targetKey: 'avgValuePriced', drillKey: '_avgValuePricedList', isValueChange: true, comparePriorKey: '_avgValuePricedPrior' },
     { key: 'totalValueSecured', label: 'Total value of work secured', sub: 'All estimators', format: fmt, targetKey: 'totalValueSecured', drillKey: '_allWonProjects', showAvg: true },
     { key: 'avgValueSecured', label: 'Average value of projects secured', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
   ]
@@ -856,10 +856,25 @@ export default function Scorecard() {
             )
           })()}
           {withGraph && m.showAvg && (() => {
-            const vals = allMonthMetrics.map(mm => mm[m.key]).filter(v => v != null && !isNaN(v))
+            // SIX MONTHS to and including the month shown - not everything on screen.
+            // It averaged the whole date range, so the figure moved whenever somebody
+            // changed the From/To boxes and two people could read different "averages"
+            // off the same card. Six months, always, and it says so.
+            const end = new Date(`${monthStr}-01T00:00:00Z`)
+            const start = new Date(end); start.setUTCMonth(start.getUTCMonth() - 5)
+            const startKey = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}`
+            const vals = allMonthMetrics
+              .filter(mm => mm.month >= startKey && mm.month <= monthStr)
+              .map(mm => mm[m.key])
+              .filter(v => v != null && !isNaN(v))
             const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+            // Say how many months it actually had. Near the start of the chosen date
+            // range there are fewer than six to average, and labelling four months as six
+            // would be a small lie that nobody could see.
             return avg != null ? (
-              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>Avg: {m.format(avg)}/mo</div>
+              <div style={{ fontSize: 12, color: '#aaa', marginBottom: 4 }}>
+                Avg: {m.format(avg)}/month ({vals.length} month{vals.length === 1 ? '' : 's'})
+              </div>
             ) : null
           })()}
           <div
