@@ -1,5 +1,6 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getProject, saveProject, get, getAllProjectSettings } from '../../lib/db'
+import { getProject, saveProject, get, getAllProjectSettings, getOpsProjects, getPortalUsers } from '../../lib/db'
+import { resolveProjectPeople } from '../../lib/projectPeople'
 import { computeApplicationSummary, buildContractWorksFromRates, buildAppVariations, resolveAppDates, backfillAppNumbers } from '../../lib/applications'
 
 // Drop the dashboard snapshot so Project Financials / Budget Tracker / Retentions
@@ -43,6 +44,45 @@ function applyAfaOverrideFromApp(project, app) {
 //     variations: [...], materials: [...],   (Phase 3)
 //     createdAt, submittedAt, createdBy }
 
+
+// RETENTION AND MCD FOR AN APPLICATION.
+//
+// Applications read raw project settings, which only hold these once somebody has typed
+// them into Edit Project Details. The IHM is the actual source - it is where both are
+// first recorded - so a project handed over correctly but never edited in Commercial had
+// no retention and no MCD on its applications.
+//
+// Resolved the same way everything else does: commercial override -> IHM -> nothing.
+//
+// UNITS DIFFER, and it is the easiest mistake to make here:
+//   retentionPct is stored as a FRACTION (0.03 = 3%) on project settings
+//   applications want a PERCENTAGE (3 = 3%)
+//   mcdPct is a PERCENTAGE everywhere
+async function resolveProjectRates(projectId, project) {
+  let people = null
+  try {
+    people = resolveProjectPeople({
+      jobNo: project.jobNo || projectId,
+      opsProjects: (await getOpsProjects()) || [],
+      users: (await getPortalUsers()) || [],
+      override: project.peopleOverride || {},
+    })
+  } catch { /* no IHM - fall through to whatever settings hold */ }
+
+  const retFraction = (project.retentionPct != null && project.retentionPct !== '')
+    ? parseFloat(project.retentionPct)
+    : (people?.retentionPct != null ? people.retentionPct : null)
+
+  const mcd = (project.mcdPct != null && project.mcdPct !== '')
+    ? parseFloat(project.mcdPct)
+    : (people?.mcdPct != null ? people.mcdPct : null)
+
+  return {
+    retentionPct: (retFraction != null && !isNaN(retFraction)) ? retFraction : null,   // fraction
+    mcdPct: (mcd != null && !isNaN(mcd)) ? mcd : null,                                 // percentage
+  }
+}
+
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
@@ -85,6 +125,7 @@ export default async function handler(req, res) {
     const { projectId } = req.query
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
+    const rates = await resolveProjectRates(projectId, project)
 
     // One-time backfill: assign permanent appNumbers to any sent applications that
     // predate this field, so numbering is correct and persists.
@@ -131,8 +172,8 @@ export default async function handler(req, res) {
         valuationDay: project.valuationDay || null,
         paymentDay: project.paymentDay || null,
         dateOverrides: project.dateOverrides || {},
-        retentionPct: project.retentionPct != null ? project.retentionPct : null,
-        mcdPct: project.mcdPct != null ? project.mcdPct : null,
+        retentionPct: rates.retentionPct,
+        mcdPct: rates.mcdPct,
         finalPaymentDays: project.finalPaymentDays != null ? project.finalPaymentDays : null,
         customerName: project.customerName || '',
         customerEmail: project.customerEmail || '',
@@ -147,6 +188,7 @@ export default async function handler(req, res) {
     const { action, projectId } = req.body || {}
     if (!projectId) return res.status(400).json({ error: 'projectId required' })
     const project = (await getProject(projectId)) || {}
+    const rates = await resolveProjectRates(projectId, project)
     const apps = Array.isArray(project.applications) ? project.applications : []
 
     if (action === 'create') {
@@ -200,8 +242,10 @@ export default async function handler(req, res) {
         // It used to default to 0 when there was no previous application, so the first
         // application on every project silently applied no discount - and every figure
         // downstream of it was then wrong by the value of the MCD.
-        mcdPct: mcdPct != null ? mcdPct : (prev && prev.mcdPct != null ? prev.mcdPct : (project.mcdPct != null ? project.mcdPct : 0)),
-        retentionPct: retentionPct != null ? retentionPct : (prev ? prev.retentionPct : (project.retentionPct != null ? project.retentionPct * 100 : 5)),
+        mcdPct: mcdPct != null ? mcdPct : (prev && prev.mcdPct != null ? prev.mcdPct : (rates.mcdPct != null ? rates.mcdPct : 0)),
+        // Fraction -> percentage. Defaulting to 5 when nothing is set was a guess that
+        // looked like a real answer; 0 with the project's own figure preferred is honest.
+        retentionPct: retentionPct != null ? retentionPct : (prev && prev.retentionPct != null ? prev.retentionPct : (rates.retentionPct != null ? rates.retentionPct * 100 : 0)),
         contractWorks,
         variations: [],
         variationData,

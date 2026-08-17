@@ -1,65 +1,59 @@
-pkg436 - MCD to 2dp, auto-populated, defaults to 0%
-===================================================
+pkg437 - applications now pull retention AND MCD from the project
+=================================================================
 
-Deploy after pkg435. Supersedes the MCD parts of pkg434 - deploy pkg434 first if you have
-not, then this.
-
-CHANGED FILES (replace)
------------------------
-  lib/ihmSchema.js
-  pages/handover/form.js
-  pages/api/dashboard.js
-  pages/retention.js
-  pages/project/[id].js          <- literal [id] folder
-
-NEW FILES: none.
+Deploy after pkg436. One changed file: pages/api/applications.js. No new files.
 
 
-1. IHM - percentage to 2dp
---------------------------
-Number field, step 0.01, 0 to 100, with a % beside it. Enter 2.50 and it stays 2.50.
+YOU WERE HALF RIGHT
+-------------------
+MCD was not pulling through. But retention was not either, quite - it only worked if
+somebody had typed it into Edit Project Details.
 
-Only a nonsense value is rejected on finalise - negative, or over 100. Those are typos and
-they would quietly distort every Final Account on the project. Blank is fine.
+Applications read the RAW project settings and never resolved through the IHM. Those
+settings only hold retention and MCD once they have been entered in Commercial. So a
+project handed over properly, with both recorded on the IHM, but never opened in Edit
+Project Details, produced applications with:
 
+    retention  5%   <- a hard-coded default, not the project's figure
+    MCD        0%   <- nothing
 
-2. AUTO-POPULATES EDIT PROJECT DETAILS
---------------------------------------
-The Commercial MCD box now fills itself from the IHM, and says so in green underneath:
-"From the Internal Handover Minutes."
-
-Type over it and yours wins. Exactly the same override -> IHM -> stored chain that
-retention already uses.
-
-
-3. DEFAULTS TO 0% - AND SO IT NEVER FLAGS
--------------------------------------------
-Nothing recorded is treated as no discount. Final Account equals the gross, nothing is
-deducted, and MCD is NOT part of the "project details incomplete" check on either the
-Retention page or Project Financials.
-
-I have to be straight with you about one thing here, because you asked for two things
-that cannot both be true.
-
-You asked for MCD to be mandatory and to flag as incomplete, AND for it to default to 0%
-so it never flags. A default means there is always a value, so there is never anything to
-flag - the two cancel out. I have built the default, because that was the last thing you
-said and it is the one that keeps the register quiet.
-
-The cost of that choice: a project where somebody simply forgot to ask about the discount
-is indistinguishable from one that genuinely has none. Both read 0.00%. If a 2.5% MCD is
-missed on a £500k job, the Final Account is £12,500 too high and nothing anywhere will
-tell you.
-
-The retention register does what it can about this without nagging: an MCD that nobody set
-shows "0.00% (default)" in pale grey, where one that was actually entered shows "0.00%" in
-normal grey. Same number, and you can see which is which if you look.
-
-If you would rather it DID flag when nobody has recorded one, say so - it is one line in
-lib/projectComplete.js and I will add it.
+The 5% is the worse of the two, because it looks like a real answer.
 
 
-AFTER DEPLOYING
----------------
-The dashboard cache rebuilds itself once - I bumped the validity marker - so the first
-load of Project Financials will be slower than usual. Nothing to run by hand.
+FIXED
+-----
+Both now resolve the same way everything else in the app does:
+
+    Commercial override  ->  IHM  ->  nothing
+
+Applied when the application list loads AND when a new application is created, so an
+application picks up the right figures whether or not anyone has been into Commercial.
+
+Tested:
+    IHM only, never edited in Commercial   -> retention 3%, MCD 2.5%
+    Commercial override beats IHM          -> retention 5%, MCD 1.25%
+    Commercial MCD 0 beats IHM 2.5         -> MCD 0%   (a deliberate zero wins)
+    No IHM, nothing set anywhere           -> retention 0%, MCD 0%
+
+
+ONE BEHAVIOUR CHANGE WORTH KNOWING
+------------------------------------
+Retention no longer defaults to 5% when nothing is set. It defaults to 0%.
+
+A guessed 5% is indistinguishable from a real 5%, and it silently deducts money from every
+certificate on a project nobody has configured. 0% is visibly wrong and gets corrected;
+5% just quietly happens.
+
+If a project genuinely is 5%, it should be on the IHM - and now that it flows through, it
+will be.
+
+
+EXISTING APPLICATIONS ARE UNTOUCHED
+-------------------------------------
+This changes what a NEW application starts with, and what the list page shows as the
+project's rates. Applications already created keep the mcdPct and retentionPct they were
+saved with - deliberately, since changing a sent certificate retrospectively would be
+worse than leaving it.
+
+If an existing draft has the wrong figures, the fastest fix is to set them on the
+application itself.
