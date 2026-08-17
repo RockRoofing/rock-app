@@ -1,93 +1,52 @@
-pkg434 - MCD: captured once, applied everywhere
-===============================================
+pkg435 - pence everywhere in Commercial
+=======================================
 
-Deploy after pkg433.
+Deploy after pkg434.
 
 CHANGED FILES (all already exist - replace them)
 ------------------------------------------------
-  lib/ihmSchema.js
-  lib/projectPeople.js
-  pages/handover/form.js
-  pages/project/[id].js          <- note the literal [id] folder
-  pages/api/dashboard.js
-  pages/api/applications.js
+  pages/commercial.js
   pages/retention.js
+  pages/commercial-scorecard.js
+  pages/wip.js
+  pages/project-cashflow.js
+  pages/project/[id].js            <- literal [id] folder, brackets and all
+  pages/forms/cm/project-finance.js
 
 NEW FILES: none.
 
 
-TO YOUR QUESTION - YES, MCD APPLIES TO VARIATIONS
----------------------------------------------------
-Confirmed from your own application code, not assumed:
+WHAT CHANGED
+------------
+Every money figure in the Commercial portal now shows two decimal places.
 
-    gross     = measured + variations + materials on site
-    mcd       = gross x mcdPct
-    subTotal  = gross - mcd
-    retention = subTotal x retentionPct
+    £17,534    ->    £17,533.70
+    £996       ->    £996.00
+    £0         ->    £0.00
 
-MCD comes off the WHOLE gross, variations included. And retention is calculated on the
-sub-total AFTER MCD - which is exactly why you were right that the Final Account needs to
-be net of it.
-
-On a £500,000 account at 2.5% MCD and 3% retention:
-
-    Gross AFA     £500,000
-    MCD 2.5%       £12,500
-    Final Account £487,500   <- retention calculated on this
-    Retention      £14,625   (was showing £15,000 - overstated by £375)
+Fifteen formatters across seven files. Most pages shared one helper, so a single change
+covered the whole page.
 
 
-1. IHM - the source
--------------------
-"Discount" was free text. Now "Main Contractor's Discount (MCD) %", a number field with a
-% sign, MANDATORY, 0 to 100.
-
-Required ON FINALISE, not on save - somebody starting a handover before they know the
-discount is not doing anything wrong. Finalising without one is. If it is missing the form
-jumps to the Commercial section and says so.
-
-Zero is a valid answer. Blank is not: blank means nobody asked, and the retention register
-then has no basis for its Final Account.
-
-Old free-text values still work - "2.5", "2.5%" and "MCD 2.5" all read as 2.5.
-
-
-2. COMMERCIAL - Edit Project Details
-------------------------------------
-New MCD % box under the contract value, marked required. Prefilled from the IHM, editable
-here, and what is typed here wins. Same override -> IHM -> nothing chain retention already
-uses.
-
-
-3. APPLICATIONS - automatic
+ALREADY CORRECT, LEFT ALONE
 ---------------------------
-A new application takes the project's MCD without anyone entering it.
-
-A BUG FOUND ON THE WAY: a new application with no previous one defaulted mcdPct to ZERO,
-not to the project's figure. So the FIRST application on every project applied no discount
-at all, and everything downstream of it was wrong by the value of the MCD. Retention now
-falls back correctly too.
+Applications for Payment, Outstanding Invoices, Variations and Contracted Rates were
+already showing pence. Nothing to do there.
 
 
-4. RETENTION REGISTER - two new columns
----------------------------------------
-    Gross AFA   contract value + instructed variations, before MCD
-    MCD         the deduction, with the percentage underneath
-    Final Acct  gross less MCD - what retention is calculated on
+DELIBERATELY NOT CHANGED - THREE CHART AXES
+---------------------------------------------
+Three formatters on pages/project/[id].js use compact notation for chart axis labels and
+tick marks - "£1.2M", "£450K". Pence on those would read "£1.20M" and make the axis
+unreadable without telling you anything.
 
-A project with no MCD recorded shows "not set" in amber rather than a silent zero, so you
-can see which projects still need one instead of assuming they are all discount-free.
-
-Account Remaining, Total Due and the final-account balance all now work off the net Final
-Account. They were all overstated by the MCD.
+They are labels on a graph, not figures you would reconcile against Xero. If you want them
+changed too, say so - but I would leave them.
 
 
-AFTER DEPLOYING
----------------
-The dashboard cache is invalidated automatically - I added mcdPct to the validity check,
-so it rebuilds once. The first load of Project Financials will be slower than usual.
-
-EXPECT MOST PROJECTS TO SHOW "not set" AT FIRST. MCD only exists where an IHM recorded a
-discount, and it was free text before, so many will be blank. The register makes that
-visible rather than assuming zero - which is the honest position, but it does mean there
-is some data entry to do.
+ONE THING WORTH KNOWING
+-----------------------
+Some totals may now show a penny or two of rounding that was previously hidden. A column
+of figures each rounded to the pound could add up to a total that looked wrong by a few
+pounds; with pence showing, those will reconcile exactly. If a total looks like it has
+changed, it has not - you are just seeing what was always there.

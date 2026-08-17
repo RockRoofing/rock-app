@@ -8,7 +8,7 @@ import { INK, BRAND, useMyProjects, ProjectPicker, ProjectHeader } from '../../.
 // including WIP), so it matches what Commercial see.
 
 const money = (n) => (n || n === 0)
-  ? `${n < 0 ? '-' : ''}\u00a3${Math.abs(Number(n)).toLocaleString('en-GB', { maximumFractionDigits: 0 })}`
+  ? `${n < 0 ? '-' : ''}\u00a3${Math.abs(Number(n)).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   : '\u2014'
 const pct1 = (n) => (n || n === 0) ? `${(Number(n) * 100).toFixed(1)}%` : '\u2014'
 const fmtDay = (s) => {

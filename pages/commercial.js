@@ -7,7 +7,7 @@ import SyncBar from '../components/SyncBar'
 import HideProjectsDropdown from '../components/HideProjectsDropdown'
 import { computeProjectWip } from '../lib/wipCalc'
 
-const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
+const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
 const pct = (n) => n == null ? '—' : (n * 100).toFixed(1) + '%'
 const pctColor = (n) => n == null ? '#888' : n > 0.2 ? '#16a34a' : n > 0 ? '#ca8a04' : '#e63946'
 

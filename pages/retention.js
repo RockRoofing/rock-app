@@ -4,8 +4,8 @@ import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import SyncBar from '../components/SyncBar'
 
-const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
-const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
+const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 
 const EMPTY_ENTRY = {
   ourRef: '', customerName: '', projectName: '', projectValue: '', finalAccount: '',

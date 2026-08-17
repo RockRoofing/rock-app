@@ -398,7 +398,7 @@ const ghostBtn = { background: '#f2f2f0', border: '1px solid #e2e2de', borderRad
 // the materials budget) and land on a single delivery day. Cumulative: each period
 // starts from the previous saved forecasted application. Never written to the real
 // applications store.
-function gbp(n) { return `£${Math.round(n || 0).toLocaleString('en-GB')}` }
+function gbp(n) { return `\u00a3${(Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
 function gbpK(n) { const v = n || 0; return Math.abs(v) >= 1000 ? `£${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `£${Math.round(v)}` }
 function num(v) { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 

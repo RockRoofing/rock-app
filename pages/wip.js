@@ -6,7 +6,7 @@ import ProjectDatesModal from '../components/ProjectDatesModal'
 
 const GOLD = '#ca8a04'
 const INK = '#1a1a19'
-const fmtC = (n) => `£${Math.round(n || 0).toLocaleString('en-GB')}`
+const fmtC = (n) => `\u00a3${(Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s); return isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
 const monthLabel = (mk) => { if (!mk) return ''; const [y, m] = mk.split('-'); return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }
 

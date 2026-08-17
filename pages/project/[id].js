@@ -7,8 +7,8 @@ import { computeProjectWip } from '../../lib/wipCalc'
 import { missingProjectFields } from '../../lib/projectComplete'
 import ReportImprovementLink from '../../components/ReportImprovementLink'
 
-const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n)
-const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(n || 0)
+const fmt = (n) => n == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 // Pence-accurate. Used in Edit Project Details, where variation lines have to add up
 // to the totals shown beneath them - rounding each figure to whole pounds made the
 // parts disagree with the sum.
@@ -380,15 +380,15 @@ function OverviewTab({ p, settings, atDate, trendData, vDateLabel, costLines, in
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 12 }}>
           <span style={{ color: '#555', fontWeight: 500 }}>{label}</span>
           <span style={{ color: over ? '#e63946' : '#555' }}>
-            {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(spent)}
-            {budget > 0 && <span style={{ color: '#888' }}> / {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(budget)}</span>}
+            {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(spent)}
+            {budget > 0 && <span style={{ color: '#888' }}> / {new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(budget)}</span>}
           </span>
         </div>
         <div style={{ background: '#f0f0f0', borderRadius: 6, height: 10, overflow: 'hidden' }}>
           <div style={{ width: `${pctUsed}%`, background: over ? '#e63946' : color, height: '100%', borderRadius: 6, transition: 'width 0.5s' }} />
         </div>
         <div style={{ fontSize: 10, color: '#888', marginTop: 3 }}>
-          {budget > 0 ? `${pctUsed.toFixed(0)}% used — ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(Math.max(budget - spent, 0))} remaining` : '⚠ Budget not set'}
+          {budget > 0 ? `${pctUsed.toFixed(0)}% used — ${new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.max(budget - spent, 0))} remaining` : '⚠ Budget not set'}
         </div>
       </div>
     )
@@ -414,14 +414,14 @@ function OverviewTab({ p, settings, atDate, trendData, vDateLabel, costLines, in
             <div style={{ width: 12, height: 12, background: '#16a34a', borderRadius: 3 }} />
             <div>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Labour — {labourPct.toFixed(0)}%</div>
-              <div style={{ fontSize: 11, color: '#888' }}>{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(labour)}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(labour)}</div>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 12, height: 12, background: '#ea7c28', borderRadius: 3 }} />
             <div>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Materials — {(100 - labourPct).toFixed(0)}%</div>
-              <div style={{ fontSize: 11, color: '#888' }}>{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(materials)}</div>
+              <div style={{ fontSize: 11, color: '#888' }}>{new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(materials)}</div>
             </div>
           </div>
         </div>
@@ -911,7 +911,7 @@ function IncomeTab({ invoiceLines, atDate }) {
                 const barH2 = Math.max((d.value / maxVal) * chartH, 2)
                 const y = padT + chartH - barH2
                 const isLatest = i === monthlyData.length - 1
-                const exact = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(d.value)
+                const exact = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(d.value)
                 return (
                   <g key={i}>
                     <rect x={x} y={y} width={barW} height={barH2} rx={3} fill="#16a34a" opacity={0.9}>
