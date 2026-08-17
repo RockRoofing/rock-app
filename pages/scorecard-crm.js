@@ -693,7 +693,7 @@ export default function Scorecard() {
     const isEditing = editingTarget === `${label}-${m.key}`
     const hasDrill = !!m.drillKey && (metrics[m.drillKey]?.length > 0)
 
-    const trendData = allMonthMetrics.map(mm => ({ month: monthLabel(mm.month), value: mm[m.key] }))
+    const trendData = allMonthMetrics.map(mm => ({ month: monthLabel(mm.month), monthKeyRaw: mm.month, value: mm[m.key] }))
     const trendlineValues = computeTrendline(trendData)
     const chartData = trendData.map((d, i) => ({ ...d, trend: trendlineValues[i] }))
     const dotSize = 48
@@ -706,7 +706,10 @@ export default function Scorecard() {
           background: '#fff', borderRadius: 10, padding: '14px 16px',
           border: `1px solid #e1e0d9`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
           display: 'grid', gridTemplateColumns: withGraph ? '160px 1fr' : '1fr',
-          gap: 16, alignItems: 'center', height: m.isGpMargin ? CARD_HEIGHT + 60 : CARD_HEIGHT, boxSizing: 'border-box',
+          // The comparison cards carry an extra line - "Previous 6 months: £x ▲ £y from
+          // n won deals" - which does not fit in the standard height. Same +60 as GP
+          // margin, which has the same problem for the same reason.
+          gap: 16, alignItems: 'center', height: (m.isGpMargin || m.comparePriorKey) ? CARD_HEIGHT + 60 : CARD_HEIGHT, boxSizing: 'border-box',
           cursor: hasDrill ? 'pointer' : 'default',
           transition: 'box-shadow 0.15s',
         }}
@@ -780,14 +783,23 @@ export default function Scorecard() {
           </div>
         </div>
         {withGraph && (
-          <div style={{ height: CARD_HEIGHT - 28 }}>
+          <div style={{ height: ((m.isGpMargin || m.comparePriorKey) ? CARD_HEIGHT + 60 : CARD_HEIGHT) - 28 }}>
             {actual != null && (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
+                {/* Clicking a point opens the detail for THAT month, not the month the
+                    card is showing. Recharts hands back the clicked datum, and each point
+                    now carries its own month key, so the drill can rebuild that month's
+                    figures rather than reusing the card's. */}
+                <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}
+                  onClick={(e) => {
+                    const mk = e?.activePayload?.[0]?.payload?.monthKeyRaw
+                    if (mk && m.drillKey) openDrill(m, getMetrics(mk), mk)
+                  }}
+                  style={{ cursor: m.drillKey ? 'pointer' : 'default' }}>
                   <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#bbb' }} interval="preserveStartEnd" />
                   <YAxis hide domain={['auto','auto']} />
                   <Tooltip formatter={(v) => m.format(v)} labelStyle={{ fontSize: 11 }} contentStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  <Line type="monotone" dataKey="value" stroke="#2a78d6" strokeWidth={2} dot={{ r: 3, cursor: 'pointer' }} activeDot={{ r: 6, cursor: 'pointer' }} connectNulls />
                   <Line type="linear" dataKey="trend" stroke="#bbb" strokeWidth={1.5} strokeDasharray="4 3" dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>

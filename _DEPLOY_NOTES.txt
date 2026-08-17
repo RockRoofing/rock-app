@@ -1,48 +1,66 @@
-pkg416 - variations excluded from average secured project value
-===============================================================
+pkg417 - click a point on the graph, get that month's detail
+============================================================
 
-Deploy after pkg415. One changed file: pages/scorecard-crm.js. No new files.
-
-
-THE LOGIC, AS IT WAS
---------------------
-Take the person's deals where status is won, value is above zero, and the close date falls
-in the rolling 6 months ending with the month shown. Sum the values, divide by the count.
-The comparison figure is the 6 months before that, non-overlapping.
-
-Edita's card does the same across all estimators rather than one person's.
-
-No stage filter at all - so yes, variations were counted as secured projects.
+Deploy after pkg416. One changed file: pages/scorecard-crm.js. No new files.
 
 
-WHY THAT MATTERED MORE THAN IT LOOKS
---------------------------------------
-A variation is extra work on a job you have already won. They are numerous and small.
-From the export we looked at earlier, nineteen won variations averaged about £6,700
-against real projects in the hundreds of thousands.
+1. THE GRAPHS ARE NOW CLICKABLE
+-------------------------------
+Click any point on any trend line and the detail opens FOR THAT MONTH. Select May and you
+get May's workings, not the workings of the month the card happens to be showing.
 
-On a worked example: two real projects at £300,000 and £100,000, plus two variations at
-£6,700 and £2,253.
+Every metric on both scorecards, wherever a drill-down exists.
 
-    with variations       4 deals, average £102,238
-    without variations    2 deals, average £200,000
+How it works: each point on the line now carries its own month, and the click rebuilds
+that month's figures from scratch rather than reusing the card's. So the modal title and
+the rows always agree with the point you clicked.
 
-The number was being halved, and it was drifting towards "what is a typical variation
-worth" rather than "what is a typical job worth" - which is the opposite of what the card
-is for.
+Dots are slightly larger and the cursor changes over the chart, so it is discoverable
+rather than a hidden feature.
 
-Now excluded, on BOTH the estimator cards and Edita's. The two must agree about what
-counts as a secured project or they cannot be compared with each other.
+The two cards with no detail behind them - Emails sent externally and Calls made - are
+not clickable, because they are stored as monthly tallies rather than records.
 
 
-TWO THINGS I HAVE NOT CHANGED - YOUR CALL
--------------------------------------------
-TOTAL VALUE OF WORK SECURED still includes variations. I think that is right: a variation
-IS money secured, and that card is measuring revenue rather than typical job size. But it
-does mean the total and the average now count different things, and somebody will
-eventually multiply one by the other and get a surprise.
+2. THE COMPARISON CARDS ARE TALLER
+----------------------------------
+"Average value of projects secured", "Average secured project value" and "Average value of
+projects priced" all carry an extra line:
 
-STRIKE RATE also still includes them. Same question, and it cuts the other way - a won
-variation with no competitive process arguably flatters the strike rate.
+    Previous 6 months: £150,000   ▲ £32,400 (22%)   from 14 won deals
 
-Say the word on either and it is one line each.
+That did not fit. All three now use the same height as GP margin - own projects, which was
+already taller for exactly the same reason. The chart inside grows with it rather than
+leaving a gap.
+
+
+3. GP MARGIN SHOWING NOTHING - YES, AND NO
+--------------------------------------------
+YES: it is empty because there are no snapshots yet. pkg415 introduced them and nothing
+has been recorded, so every month is genuinely unknown and shows a dash. The card is
+behaving correctly.
+
+NO: it will NOT fill in by itself on the 21st, and there are two reasons.
+
+  a) The cron is set for the 22nd, not the 21st - it runs after the 21st so the EOM report
+     for the month before has settled, which is what you asked for.
+
+  b) Even then it only fills in the month just gone. The five months before that get
+     built on the FIRST run only, and only if you trigger it.
+
+So run this once, now:
+
+    /api/cron/gp-snapshot
+
+That builds the last 6 months immediately. From then on the 22nd looks after it.
+
+Worth repeating from pkg415: that first run has to use TODAY'S live project list for all
+six months, because a project's live/defects/complete status is a manual flag with no
+history. So those six are approximate and get less true the further back you go. Every
+month recorded from now on keeps its own project set and is sound.
+
+If you would rather not have six approximate months on the chart:
+
+    /api/cron/gp-snapshot?only=2026-07
+
+starts clean from last month and builds up honestly from there.
