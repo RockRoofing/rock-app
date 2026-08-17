@@ -1,49 +1,77 @@
-pkg418 - the snapshot found zero projects. My mistake.
-======================================================
+pkg419 - GP margin now matches the EOM report exactly
+=====================================================
 
-Deploy after pkg417. One changed file: lib/crmGpSnapshots.js. No new files.
+Deploy after pkg418.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/scorecard-crm.js
+  lib/crmGpSnapshots.js
+  pages/api/cron/gp-snapshot.js
 
-THE BUG
--------
-    "projects": 0  on every month
-
-/api/dashboard computes a variable called `stage` and returns it under the key `status`.
-I filtered on `p.stage`, which is undefined on every project, so nothing was ever
-INPROGRESS and every month recorded nothing.
-
-Reproduced on the bench: the old filter returns 0 of 4 test projects, the corrected one
-returns the 2 that are live.
-
-Now reads `status`, and accepts `stage` as well in case that endpoint is ever tidied up.
+NEW FILES: none.
 
 
-TWO THINGS SO THIS CANNOT HAPPEN QUIETLY AGAIN
-------------------------------------------------
-1. The response now reports what it actually saw:
+THE FOUR REASONS THEY DISAGREED
+-------------------------------
+1. HIDDEN PROJECTS. The EOM report drops anything on the shared hide list. The scorecard
+   counted them. Now excluded, from the same list.
 
-       "projectsSeen": 214,
-       "liveNow": 63,
-       "statusCounts": { "INPROGRESS": 63, "DEFECTS": 22, "CLOSED": 129 }
+2. THE CUT-OFF DATE - the big one. EOM measures to each project's own VALUATION DATE,
+   with per-month manual overrides, matching the Application Calendar. The scorecard used
+   everything to TODAY. Mid-month those are different amounts of work. The scorecard now
+   uses the valuation date.
 
-   and warns outright if nothing came back as INPROGRESS. A run reporting zero with no
-   explanation is what cost you the last deploy.
+3. PROJECTS WITH NO VALUATION DATE. EOM excludes an in-progress project that has none
+   that month - it is a gap in the data, not a zero. The scorecard was including it at
+   full value. Now excluded, and the snapshot reports how many were dropped
+   ("excludedNoValDate") so a month with a lot of them is visible rather than silent.
 
-2. The failed run has already WRITTEN empty snapshots for all six months. Left as it was,
-   the "reuse the recorded project set" rule would have faithfully reused those empty
-   lists and kept every month blank for ever - correct behaviour applied to junk data.
-
-   An empty recorded set is now treated as a failed run rather than a decision, and gets
-   rebuilt. No need to clear anything by hand.
+4. THE ESTIMATOR NAME - your question. EOM matches exactly; the scorecard was matching a
+   first-name SUBSTRING. Both now match exactly.
 
 
-RUN IT AGAIN AFTER DEPLOYING
-----------------------------
+ON THE NAME, SINCE YOU ASKED WHY
+--------------------------------
+It was not deliberate. The scorecard identifies people by FIRST name - the tabs are Roman,
+Niall, James - while a project carries the resolved PORTAL USER name, "Roman Jarosz". The
+substring was papering over that gap.
+
+Now the first name is resolved to the full name from the project data itself, and the
+comparison is exact. Resolved from the project data rather than a second source, so it
+cannot drift from what the EOM report is matching against.
+
+If a first name ever resolves to TWO people it matches nobody rather than guessing, and
+the card shows a dash. Better a visible gap than a figure quietly containing someone
+else's jobs.
+
+
+THE CALCULATION IS COPIED, NOT REINVENTED
+-------------------------------------------
+eomAtValDate is lifted from calcAtValDate in pages/commercial.js, in both the scorecard
+and the snapshot job. Same valuation-date precedence, same Sales-200 basis, same
+fall-back to ex-VAT subtotal on older lines.
+
+Tested: valuation day 25 takes costs to the 25th and leaves the 28th out; a manual
+override to the 15th wins over the fixed day; day 31 clamps to 28 in February; no
+valuation date returns null and the project is dropped.
+
+If calcAtValDate is ever changed, change eomAtValDate with it. There is a comment saying
+so in both files.
+
+
+THE SNAPSHOTS ARE ALSO WRONG AND NEED REBUILDING
+--------------------------------------------------
+Anything recorded before this used month end and no hide list. Re-run:
+
     /api/cron/gp-snapshot
 
-Check "liveNow" in the response is a sensible number against what Project Financials
-shows. If it is, the GP margin card will have six months of figures.
+The empty-set rule from pkg418 means the existing records rebuild rather than being
+reused. The response now reports projects, counted, and excludedNoValDate per month.
 
-The caveat from pkg415 still stands: this first real run uses today's live project list
-for all six months, because the live/defects/complete flag has no history. Those six are
-approximate. Everything recorded from the 22nd onwards keeps its own set and is sound.
+
+HOW TO CHECK IT
+---------------
+Open the EOM report, filter to one estimator, note the margin. Open that estimator's
+scorecard and look at the current month. They should now agree. If they do not, tell me
+which two numbers and I will find the fifth difference.

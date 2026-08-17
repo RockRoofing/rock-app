@@ -97,6 +97,41 @@ const DEFAULT_TARGETS = {
 }
 
 // Drill-down modal component — handles deal objects, value change events, and GP margin projects
+
+// EOM VALUATION-DATE CALCULATION.
+//
+// Copied deliberately from pages/commercial.js (calcAtValDate) so the scorecard and the
+// EOM report answer with the same number rather than two near-misses. If that one is ever
+// changed, change this with it.
+//
+// Returns null when the project should be EXCLUDED from the month - an in-progress job
+// with no valuation date that month is a gap in the data, not a zero, and the EOM report
+// leaves it out. The scorecard was including it at full value, which was one of the
+// reasons the two disagreed.
+function eomAtValDate(project, monthKey) {
+  const costLines = project._costLines || []
+  const invoiceLines = project._invoiceLines || []
+  if (!monthKey) return null
+  const [year, month] = monthKey.split('-').map(Number)
+  const isComplete = project.status === 'DEFECTS' || project.status === 'CLOSED'
+
+  const override = project.dateOverrides?.[monthKey]?.valuationDate
+  let vDateStr = null
+  if (override) vDateStr = override
+  else if (project.valuationDay) {
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const day = Math.min(parseInt(project.valuationDay), daysInMonth)
+    vDateStr = new Date(Date.UTC(year, month - 1, day)).toISOString().split('T')[0]
+  }
+  if (!vDateStr && !isComplete) return null
+
+  const withinDate = (d) => !vDateStr || (d && d <= vDateStr)
+  const costsToDate = costLines.filter(l => l.date && withinDate(l.date)).reduce((s, l) => s + (l.amount || 0), 0)
+  const invoicedToDate = invoiceLines.filter(i => i.date && withinDate(i.date))
+    .reduce((s, i) => s + (i.sales200 != null ? i.sales200 : (i.subTotal || 0)), 0)
+  return { grossInvoiced: invoicedToDate, totalCosts: costsToDate }
+}
+
 function DrillModal({ title, projects, isValueChange, isGpMargin, onClose }) {
   if (!projects || projects.length === 0) return null
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', fontSize: 12, verticalAlign: 'middle' }
@@ -225,6 +260,7 @@ export default function Scorecard() {
   const [emailVolume, setEmailVolume] = useState({})
   const [callVolume, setCallVolume] = useState({})
   const [gpSnapshots, setGpSnapshots] = useState({})
+  const [hiddenProjects, setHiddenProjects] = useState([])
   const [targets, setTargets] = useState(null)
   const [editingTarget, setEditingTarget] = useState(null)
   const [editValue, setEditValue] = useState('')
@@ -272,6 +308,8 @@ export default function Scorecard() {
       const td = await tr.json()
       setTargets(td.targets || DEFAULT_TARGETS)
       // Load Xero project data for GP margin cards
+      // The EOM report hides these; the scorecard was counting them.
+      try { setHiddenProjects((await fetch('/api/hidden-projects').then(r => r.json())).hidden || []) } catch { setHiddenProjects([]) }
       try {
         const xr = await fetch('/api/dashboard')
         const xd = await xr.json()
@@ -304,6 +342,20 @@ export default function Scorecard() {
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
   const tdS = { padding: '7px 10px', borderBottom: '0.5px solid #f0efec', verticalAlign: 'middle', fontSize: 13 }
   const thS = { padding: '8px 10px', fontWeight: 500, color: '#555', textAlign: 'left', whiteSpace: 'nowrap', borderBottom: '1px solid #e1e0d9', fontSize: 13 }
+
+  // Resolve the first name this page uses to the FULL name the projects carry, so the
+  // comparison can be exact. Taken from the project data itself rather than a second
+  // source, so it cannot drift from what the EOM report is matching against.
+  const estimatorFullName = (() => {
+    const p = String(person || '').trim().toLowerCase()
+    if (!p) return ''
+    const names = [...new Set(xeroProjects.map(x => (x.estimator || '').trim()).filter(Boolean))]
+    const exact = names.find(n => n.toLowerCase() === p)
+    if (exact) return exact
+    const byFirst = names.filter(n => n.toLowerCase().split(' ')[0] === p)
+    // Exactly one, or none. Two people called Roman is a question for a human.
+    return byFirst.length === 1 ? byFirst[0] : ''
+  })()
 
   const isEstimator = ESTIMATORS.includes(person)
   const type = isEstimator ? 'estimator' : 'sales'
@@ -382,14 +434,34 @@ export default function Scorecard() {
     const dealsOver200kRolling3List = personDeals.filter(d => d.status === 'won' && d.over200k && d.wonTime >= threeMonthsAgo && d.wonTime <= mEnd)
     const dealsOver200kRolling3 = dealsOver200kRolling3List.length
 
-    // GP Margin — live/in-progress projects for this estimator only
+    // GP MARGIN - now computed exactly as the EOM report does it.
+    //
+    // Four things were making the two disagree, and they compounded:
+    //   1. hidden projects were counted here and not there
+    //   2. this used everything to TODAY; EOM stops at each project's valuation date
+    //   3. an in-progress project with no valuation date is EXCLUDED from EOM as a gap;
+    //      here it was included at full value
+    //   4. the estimator was matched on a first-name SUBSTRING; EOM matches exactly
+    //
+    // On (4): the project's estimator is the resolved PORTAL USER NAME - "Roman Jarosz" -
+    // while this page identifies people by first name. Matching those exactly means
+    // resolving the first name to the full name first, which is what estimatorFullName
+    // does. No substring matching: "Roman" must resolve to one person or it matches
+    // nobody, rather than quietly matching two.
     const liveProjects = xeroProjects.filter(p =>
       p.status === 'INPROGRESS' &&
       p.estimator &&
-      p.estimator.toLowerCase().includes(person.toLowerCase())
+      !hiddenProjects.includes(String(p.xeroId)) &&
+      p.estimator.trim() === estimatorFullName
     )
-    const totalGrossInvoiced = liveProjects.reduce((s, p) => s + (p.grossInvoiced || 0), 0)
-    const totalCostsAll = liveProjects.reduce((s, p) => s + (p.totalCosts || 0), 0)
+
+    // Valuation-date figures for the month being shown, EOM's own basis. Projects that
+    // EOM excludes return null and are dropped here too.
+    const eomRows = liveProjects
+      .map(p => ({ p, eom: eomAtValDate(p, m) }))
+      .filter(r => r.eom)
+    const totalGrossInvoiced = eomRows.reduce((s, r) => s + r.eom.grossInvoiced, 0)
+    const totalCostsAll = eomRows.reduce((s, r) => s + r.eom.totalCosts, 0)
     const totalLabour = liveProjects.reduce((s, p) => s + (p.labourSpend || 0), 0)
     const totalMaterials = liveProjects.reduce((s, p) => s + (p.materialsSpend || 0), 0)
     const totalProfit = totalGrossInvoiced - totalCostsAll

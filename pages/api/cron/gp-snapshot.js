@@ -17,10 +17,13 @@ export default async function handler(req, res) {
     const r = await fetch(`${base}/api/dashboard`, { headers: { cookie: req.headers.cookie || '' } })
     if (!r.ok) return res.status(500).json({ error: `Could not read /api/dashboard (${r.status})` })
     const { projects } = await r.json()
+    // The same hide list the EOM report applies, so the two count the same projects.
+    let hidden = []
+    try { hidden = (await fetch(`${base}/api/hidden-projects`, { headers: { cookie: req.headers.cookie || '' } }).then(x => x.json())).hidden || [] } catch {}
 
     const months = Math.min(24, parseInt(req.query.months || '6', 10) || 6)
     const only = String(req.query.only || '').trim()
-    return res.status(200).json(await refreshGpSnapshots(projects, { months, only }))
+    return res.status(200).json(await refreshGpSnapshots(projects, { months, only, hidden }))
   } catch (e) {
     console.error('gp-snapshot error:', e)
     return res.status(500).json({ error: e.message || 'Failed' })
