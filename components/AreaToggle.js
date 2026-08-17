@@ -43,7 +43,10 @@ export default function AreaToggle({ active, style }) {
         style={{ ...base, background: isCrm ? ON : 'transparent', color: isCrm ? '#fff' : '#9a9a97' }}>
         CRM
       </a>
-      <a href="/sales-crm"
+      {/* Scorecards, not the Sales Dashboard. It is the first tab in the Pre-Contract
+          nav and the page people want on arrival, so the toggle should land there rather
+          than somewhere they then have to click away from. */}
+      <a href="/scorecard-crm"
         aria-current={!isCrm ? 'page' : undefined}
         style={{ ...base, background: !isCrm ? ON : 'transparent', color: !isCrm ? '#fff' : '#9a9a97' }}>
         Pre-Contract
