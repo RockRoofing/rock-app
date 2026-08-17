@@ -1,52 +1,48 @@
-pkg444 - change an application's dates and period without starting again
-========================================================================
+pkg445 - payment date picker was locked to the wrong month
+==========================================================
 
-Deploy after pkg443. One changed file: pages/applications.js. No new files.
-
-
-THE PROBLEM
------------
-The month was fixed when the application was created, and the four dates were read-only
-cards. Get to the end of a full application, notice it is on the wrong month, and the only
-way out was to delete it and do the whole thing again.
+Deploy after pkg444. One changed file: pages/project/[id].js (literal [id] folder).
 
 
-1. THE DATES ARE EDITABLE
--------------------------
-"Edit dates" beside the Dates heading turns the four cards into date fields:
+YES, IT MAKES SENSE - AND YOU FOUND THE CAUSE
+-----------------------------------------------
+Your screenshot shows every month except August greyed out. That is a min/max on the date
+input, and it was applied to ALL THREE columns:
 
-    Application date · Valuation date · Payment due · Final date for payment
+    Application date   belongs to that month   correct
+    Valuation date     belongs to that month   correct
+    Payment date       normally the month AFTER, or later   WRONG
 
-Change what is wrong, press Done, then Save as usual. Nothing else about the application
-is touched.
-
-
-2. THE PERIOD IS CHANGEABLE
----------------------------
-The month beside the application number is now a dropdown. Pick the right one and the
-application moves - keeping every line, every variation, every value you have entered.
-
-Choosing a period pulls that period's dates from Project Details where they are set. Where
-they are not, whatever is already on the application is KEPT rather than blanked - so a
-date you typed by hand is not wiped by correcting the month.
-
-The list covers 6 months back and 12 ahead, plus any period Project Details holds dates
-for - including the "#2" rows a fortnightly project uses from pkg443 - plus whatever the
-application is currently on, so its own value can never be missing from its own dropdown.
+So on an August row the picker greyed out September, and a payment due 11 September - your
+exact example - could only be typed by hand.
 
 
-BOTH RESPECT THE SENT LOCK
---------------------------
-A sent application is locked, as before. Double-click to unlock and the dates and period
-become editable with everything else. Editing a sent application still returns it to
-draft, keeping its application number - unchanged behaviour.
+FIXED
+-----
+Application and valuation dates: unchanged, still limited to their own month. They should
+be.
+
+Payment date: now runs from the 1st of the row's month to the end of the month SIX after
+it. Wide enough for any real payment term - 30, 45, 60, even 90 days - and still narrow
+enough that the picker opens on the right month instead of on today.
+
+    August 2026 row   ->  payment selectable 01 Aug 2026 to 28 Feb 2027
+    December 2026 row ->  payment selectable 01 Dec 2026 to 30 Jun 2027
+
+Year rollover checked, February and 30/31-day months included.
 
 
-ONE THING TO KNOW
------------------
-Changing the period does NOT renumber the application. If you move App 14 from August to
-September and App 15 already exists in September, you will have two applications numbered
-out of order.
+WHY A WINDOW RATHER THAN NO LIMIT AT ALL
+------------------------------------------
+Removing the limits entirely would open the picker on today's date every time, so a
+January 2027 row would need scrolling back and forth. Keeping a window means it still
+opens where you are working, and it also stops a payment date being set years out by a
+mis-click.
 
-That is deliberate - the number is permanent once assigned, and renumbering silently would
-be worse. The number is editable beside the title if it needs correcting.
+If six months is ever not enough, it is one number in that file.
+
+
+ALREADY FINE, CHECKED
+---------------------
+The four date fields on the application itself - the ones pkg444 made editable - have no
+limits at all. Any date, any month, any year. Nothing needed there.

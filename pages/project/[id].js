@@ -1657,12 +1657,26 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                         )}
                       </td>
                       {['applicationDate', 'valuationDate', 'paymentDate'].map(field => {
-                        // Constrain each row's picker to its own month so the native
-                        // date picker OPENS on that month (e.g. a November row opens
-                        // November) and only that month's dates can be entered.
-                        const [ky, km] = key.split('-').map(n => parseInt(n, 10))
+                        // WINDOW, NOT A CLAMP.
+                        //
+                        // All three were locked to the row's own month, which is right for
+                        // the application and valuation dates - those belong to it - and
+                        // wrong for PAYMENT, which is normally the following month or
+                        // later. On an August row the picker greyed out September, so a
+                        // payment due 11 September had to be typed by hand.
+                        //
+                        // Payment now runs from the 1st of the row's month to the end of
+                        // the month six after it. Wide enough for any real payment term -
+                        // 30, 45, 60, 90 days - and still narrow enough that the picker
+                        // opens on the right month rather than today.
+                        const [ky, km] = monthPart.split('-').map(n => parseInt(n, 10))
+                        const isPayment = field === 'paymentDate'
                         const monthMin = `${monthPart}-01`
-                        const monthMax = `${monthPart}-${String(new Date(ky, km, 0).getDate()).padStart(2, '0')}`
+                        const lastDayOf = (yy, mm) => String(new Date(yy, mm, 0).getDate()).padStart(2, '0')
+                        const endMonth = new Date(ky, km - 1 + (isPayment ? 6 : 0), 1)
+                        const ey = endMonth.getFullYear()
+                        const em = endMonth.getMonth() + 1
+                        const monthMax = `${ey}-${String(em).padStart(2, '0')}-${lastDayOf(ey, em)}`
                         return (
                         <td key={field} style={{ padding: '4px 8px' }}>
                           <input type="date" value={row[field] || ''} min={monthMin} max={monthMax}
