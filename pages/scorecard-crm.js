@@ -465,23 +465,27 @@ export default function Scorecard() {
     const totalLabour = liveProjects.reduce((s, p) => s + (p.labourSpend || 0), 0)
     const totalMaterials = liveProjects.reduce((s, p) => s + (p.materialsSpend || 0), 0)
     const totalProfit = totalGrossInvoiced - totalCostsAll
-    const liveGpMargin = totalGrossInvoiced > 0 ? totalProfit / totalGrossInvoiced : null
+    // Not "live" - this is the same valuation-date calculation used for any month. It was
+    // only ever called live because it happened to be the current one.
+    const computedMargin = totalGrossInvoiced > 0 ? totalProfit / totalGrossInvoiced : null
 
-    // GP MARGIN FOR THIS MONTH.
+    // GP MARGIN - LAST FULL MONTH ONWARDS ONLY. The current month is deliberately blank.
     //
-    // Prefer the recorded snapshot: invoices and costs dated up to that month end, across
-    // the projects that were live at the time. Without it every month showed the same
-    // number - the live figure repeated - so the trendline was flat by construction and
-    // "last full month" and "current month" were identical.
+    // This figure is CUMULATIVE: everything invoiced and spent since each project began,
+    // up to that month's valuation date. Part way through a month the valuation date has
+    // often not passed, so a project contributes costs already booked against invoicing
+    // not yet raised - and the margin reads far worse than the job is doing. On a small
+    // set of projects that is not slightly off, it is wildly off.
     //
-    // The CURRENT month has no snapshot yet, by design: it is taken on the 22nd once the
-    // EOM report has settled. So the current month falls back to the live figure, which
-    // is the right answer for a month still running.
+    // A number that swings and then settles teaches people to distrust the settled one
+    // too, so the current month shows a dash and says why.
     const snap = gpSnapshots[m]
     const snapEst = snap && (snap.byEstimator[person]
       || Object.entries(snap.byEstimator).find(([k]) => k.toLowerCase().includes(String(person).toLowerCase()))?.[1])
     const isCurrentMonth = m === monthKey(new Date().toISOString())
-    const gpMargin = snapEst ? snapEst.margin : (isCurrentMonth ? liveGpMargin : null)
+    // Snapshot first where there is one; otherwise compute it, which works for any past
+    // month because the cost and invoice lines are dated.
+    const gpMargin = isCurrentMonth ? null : (snapEst ? snapEst.margin : computedMargin)
 
     return {
       strikeRateOverall, strikeRateMCSecured, valuePricedExisting, totalValuePriced,
@@ -717,7 +721,7 @@ export default function Scorecard() {
     { key: 'totalValuePriced', label: 'Total value of work priced', sub: 'Value change data', format: fmt, targetKey: 'totalValuePriced', drillKey: '_monthChanges', isValueChange: true, showAvg: true },
     { key: 'totalValueSecured', label: 'Total value of work secured', format: fmt, targetKey: 'totalValueSecured', drillKey: '_monthWonProjects', showAvg: true },
     { key: 'avgValueSecured', label: 'Average secured project value', sub: 'Rolling 6 months, vs the 6 months before', format: fmt, targetKey: 'avgValueSecured', drillKey: '_avgValueSecuredList', comparePriorKey: '_avgValueSecuredPrior' },
-    { key: 'gpMargin', label: 'GP margin — own projects', sub: 'Live & in-progress projects only', format: pct, targetKey: 'gpMargin', drillKey: '_gpMarginProjects', isGpMargin: true },
+    { key: 'gpMargin', label: 'GP margin — own projects', sub: 'In-progress projects, to the valuation date. Complete months only.', format: pct, targetKey: 'gpMargin', drillKey: '_gpMarginProjects', isGpMargin: true },
   ]
 
   const salesMetricDefs = [
@@ -795,6 +799,13 @@ export default function Scorecard() {
             {m.sub && <div style={{ color: '#bbb', fontSize: 13 }}>({m.sub})</div>}
           </div>
           <div style={{ fontSize: 29, fontWeight: 600, color: '#1a1a19', marginBottom: 2 }}>{actual != null ? m.format(actual) : '—'}</div>
+          {/* A bare dash reads as broken. Say why it is empty, so nobody goes looking for
+              a fault that is not there. */}
+          {actual == null && m.isGpMargin && monthStr === currentMonth && (
+            <div style={{ fontSize: 11, color: '#999', lineHeight: 1.4, marginBottom: 2 }}>
+              Shown once the month is complete &mdash; a part month reads far worse than the jobs are doing.
+            </div>
+          )}
           {m.isGpMargin && metrics._gpMarginTotals && (() => {
             const t = metrics._gpMarginTotals
             return (
