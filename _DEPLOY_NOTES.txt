@@ -1,61 +1,58 @@
-pkg426 - clicking one project opened another. Duplicate ids.
-============================================================
+pkg427 - test2 and test3 share an id. Here is why, and the way out.
+===================================================================
 
-Deploy after pkg425. This one matters - deploy it before creating any more projects.
+Deploy after pkg426. If pkg426 is not in yet, deploy both - this builds on it.
 
 CHANGED FILES (replace)
 -----------------------
   pages/crm.js
-  pages/crm-scores.js
   pages/api/crm.js
 
 NEW FILES: none.
 
 
-THE CAUSE
----------
-New projects took their id from a counter that was hard-coded:
+WHAT IS HAPPENING TO TEST2 AND TEST3
+--------------------------------------
+They have the same id. Everything in the CRM is keyed by id, so they are not two projects
+as far as the code is concerned - they are one project listed twice.
 
-    const nextId = useRef(900000)
+    clicking test3   -> deals.find() returns the FIRST match -> opens test2
+    deleting test3   -> the delete filters on id -> removes BOTH
 
-Nothing ever moved it off 900000. It is a REF, so it resets every time the page loads.
-Create a project today and another tomorrow and BOTH get id 900000.
+You were right that it looked like it was deleting the other one. It was.
 
-The CRM opens a deal with  deals.find(d => d.id === openId)  - which returns the FIRST
-match. So clicking the newer project opened the older one. Exactly what you saw.
+Reproduced on the bench, both behaviours.
 
-Reproduced on the bench: two projects both on 900000, clicking the second returns the
-first.
-
-It would also have affected saving, filed email, activities - anything keyed by deal id.
-Two projects sharing an id share everything hung off it.
+The cause was in pkg426: new ids came from a counter hard-coded to 900000 that reset on
+every page load. Two projects created in different sessions both got 900000.
 
 
-FIXED, TWO PARTS
-----------------
-1. NO MORE COLLISIONS. The counter is now seeded above the highest id actually present,
-   and re-seeded whenever the deal list changes - so a project someone else created
-   between loads cannot be collided with either.
+WHY pkg426 WAS NOT ENOUGH
+-------------------------
+It seeded the counter above the highest existing id, which fixes one browser. But four
+people using the CRM at once each compute "highest + 1" from their own copy of the list
+and all reach the same answer. Demonstrated: two users, same list, same id.
 
-2. THE ONES ALREADY BROKEN. Go to /crm-scores - there is a red panel at the top.
-
-       "Check for duplicates"   lists them, changes nothing
-       "Renumber n"             fixes them, after a confirmation
-
-   The FIRST project with each id KEEPS it - it is the one already referenced by
-   activities, notes, filed email and planning allocations. Later ones are renumbered
-   above the highest id in use, and their activities and notes are copied across with
-   them.
-
-   Check first. It tells you exactly which projects are hidden behind which.
+New ids are now a MILLISECOND TIMESTAMP. It cannot repeat across sessions or between
+people, it is still a plain sortable number, and there is a guard that steps past any id
+that somehow already exists.
 
 
-ONE THING THE RENUMBER CANNOT MOVE
-------------------------------------
-Filed email (crm:emails:<id>) and planning allocations (N:<dealId>) still point at the
-ORIGINAL id. For a renumbered project those now belong to the project that kept the id.
+AND DELETE NO LONGER TAKES TWO
+------------------------------
+Both the browser and the server now remove exactly ONE project, not everything sharing
+that id. If a duplicate is still present, the shared activities, notes and email are left
+alone - otherwise deleting one project would gut the other.
 
-In practice this is unlikely to bite - the affected projects are ones created in the last
-few days, and they will not have email filed against them or labour allocated yet. But if
-a renumbered project looks like it has somebody else's email on it, that is why, and the
-Move button on the Email section will put it right.
+Ids cannot collide any more, but a delete that can destroy a project you did not ask about
+should not depend on nothing upstream being broken.
+
+
+WHAT TO DO WITH TEST2 AND TEST3
+---------------------------------
+1. Deploy this.
+2. Go to /crm-scores, red panel at the top, "Check for duplicates". It will list them.
+3. "Renumber" - test2 keeps 900000, test3 gets a fresh id.
+4. Both then open and delete independently. Delete them both if they were only tests.
+
+Any project created from now on gets a timestamp id and cannot collide with anything.

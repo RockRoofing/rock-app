@@ -512,9 +512,26 @@ export default async function handler(req, res) {
       if (!dealId) return res.status(400).json({ error: 'dealId required' })
 
       const list = Array.isArray(await get(DEALS_KEY)) ? await get(DEALS_KEY) : []
-      await set(DEALS_KEY, list.filter(d => String(d.id) !== dealId))
 
-      for (const kind of ['activities', 'notes']) {
+      // REMOVE ONE, NOT ALL WITH THAT ID.
+      //
+      // This filtered on id, so if two projects ever shared one, deleting either wiped
+      // BOTH - silently, and with no way back. Ids cannot collide any more, but a delete
+      // that can destroy a project you did not ask about is not something to leave to
+      // the assumption that nothing upstream is broken.
+      let dropped = 0
+      const keptDeals = list.filter(d => {
+        if (String(d.id) !== dealId || dropped) return true
+        dropped = 1
+        return false
+      })
+      if (!dropped) return res.json({ ok: true, note: 'That project was already gone.' })
+      const stillThere = keptDeals.some(d => String(d.id) === dealId)
+      await set(DEALS_KEY, keptDeals)
+
+      // If a duplicate of this id is still present, its activities, notes and email are
+      // the SAME records. Leave them alone or deleting one project guts the other.
+      for (const kind of stillThere ? [] : ['activities', 'notes']) {
         await set(SUB_KEY(kind, dealId), [])
         const idx = (await get(SUB_INDEX(kind))) || []
         await set(SUB_INDEX(kind), idx.filter(id => String(id) !== dealId))
@@ -523,8 +540,10 @@ export default async function handler(req, res) {
         await set(SUB_SUMMARY(kind), sum)
       }
 
-      const open = (await get(OPEN_ACTIVITIES)) || []
-      await set(OPEN_ACTIVITIES, open.filter(a => String(a.dealId) !== dealId))
+      if (!stillThere) {
+        const open = (await get(OPEN_ACTIVITIES)) || []
+        await set(OPEN_ACTIVITIES, open.filter(a => String(a.dealId) !== dealId))
+      }
 
       // EVERYTHING ELSE THAT KNOWS ABOUT THIS PROJECT.
       //
@@ -535,6 +554,7 @@ export default async function handler(req, res) {
       // value changes still counted towards work priced, and any reply on a filed thread
       // would re-file itself against the deleted id.
       const removed = {}
+      if (stillThere) return res.json({ ok: true, removed, note: 'Another project still uses that id, so its records were left alone.' })
 
       // Filed email, and the conversation links that would re-file replies against it.
       await set(`crm:emails:${dealId}`, [])

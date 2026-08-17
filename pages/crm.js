@@ -2609,7 +2609,13 @@ function CRMPageInner() {
     if (!window.confirm(`Last check - permanently delete "${name}"?`)) return;
 
     closeDeal();
-    setDeals((prev) => prev.filter((x) => x.id !== id));
+    // Remove ONE, matching the server. Filtering on id removed every project sharing it.
+    let gone = false;
+    setDeals((prev) => prev.filter((x) => {
+      if (x.id !== id || gone) return true;
+      gone = true;
+      return false;
+    }));
     setOpenActivities((prev) => prev.filter((a) => String(a.dealId) !== String(id)));
     try {
       await fetch('/api/crm', {
@@ -2628,7 +2634,23 @@ function CRMPageInner() {
   const setLostReason = (id, reason) => patch(id, (d) => ({ ...d, fields: { ...d.fields, lost_reason: reason || null } }));
 
   const createProject = (data) => {
-    const id = nextId.current++;
+    // A TIMESTAMP, NOT A COUNTER.
+    //
+    // The counter started at 900000 every page load, so projects created in different
+    // sessions shared an id - and everything is keyed by id, so they shared each other's
+    // activities, notes and email. Clicking one opened the other; deleting one deleted
+    // both, because the delete filters on id.
+    //
+    // Seeding the counter above the highest existing id fixes that within one browser,
+    // but four people using the CRM at once each compute "highest + 1" from their own
+    // copy of the list and reach the same answer. A millisecond timestamp cannot collide
+    // across sessions or between people, and it stays a plain sortable number.
+    //
+    // The guard below is belt and braces: if an id somehow exists already, step past it.
+    let id = Date.now();
+    const taken = new Set(deals.map((d) => Number(d.id)));
+    while (taken.has(id)) id++;
+    if (nextId.current > id) id = nextId.current++;   // respect a seeded counter if higher
     const fields = { value: Number(data.value) || 0, organization: data.organization || null, contact_person: data.contact_person || null, owner: null, created: nowIso().slice(0, 10), expected_close_date: data.expected_close_date || null, project_score: data.project_score || null };
     ['site_location','site_postcode','region','size_m2','credit_score','credit_limit','insured_credit_limit','glenigan_id','estimator_responsible','project_stage','roofing_works_onsite','sales_person','project_start_date','project_type','systems_priced','lead_source','scope_of_works','general_info','contact_phone','contact_email','contact_job_role','org_address','org_phone','org_website','org_email','org_reg_number','supply_chain_approved'].forEach((k) => { fields[k] = data[k] || null; });
     const link = (fields.contact_person && fields.organization) ? { person: fields.contact_person, org: fields.organization, ts: nowIso() } : null;
