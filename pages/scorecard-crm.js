@@ -689,11 +689,16 @@ export default function Scorecard() {
     const gr = measured ? gleniganReceived : null
     const gp = measured ? gleniganPriced : null
     const gs = measured ? gleniganScored5 : null
+    // Actively Chased was NOT gated, so it reported 0 for months the CRM never measured -
+    // a flat line at zero, next to a Glenigan card showing a dash for exactly the same
+    // months. Same rule, same dependency on a received date, same gate. Zero and unknown
+    // are different answers and the two cards were giving different ones.
+    const cs = measured ? chasedScored5Count : null
 
     return {
       gleniganReceived: gr, gleniganPriced: gp, gleniganScored5: gs,
       dealsResearched,
-      chasedScored5: chasedScored5Count,
+      chasedScored5: cs,
       _chasedScored5Projects: chasedScored5Projects,
       avgValuePriced: avgPricedNow.avg,
       _avgValuePricedPrior: avgPricedPrior.avg,

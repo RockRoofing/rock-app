@@ -1,61 +1,65 @@
-pkg430 - fixes the failed build. My mistake.
-============================================
+pkg431 - Actively Chased was showing 0 where it should show a dash
+==================================================================
 
-Deploy after pkg429. One changed file: pages/scorecard-crm.js. No new files.
-
-URGENT - pkg428/429 broke the build. This is the fix.
-
-
-THE ERROR
----------
-    ReferenceError: useMemo is not defined
-    Error occurred prerendering page "/scorecard-crm"
-
-pkg428 added a useMemo for the deal lookup and I never added it to the React import. The
-file still read:
-
-    import { useState, useEffect } from 'react'
-
-Now:
-
-    import { useState, useEffect, useMemo } from 'react'
+Deploy after pkg430 (which fixes the failed build - deploy that first).
+One changed file: pages/scorecard-crm.js. No new files.
 
 
-WHY MY BUILD CHECK MISSED IT
-----------------------------
-`npm run build` here COMPILES the page but does not PRERENDER it. Vercel does, and that is
-when the missing hook is actually called. So it passed locally and failed on deploy - the
-same blind spot as the runtime ordering fault in pkg407.
+NO, THE GRAPHS ARE NOT FAULTY
+-----------------------------
+But you spotted a real inconsistency, and it is the one thing on that screen that IS
+wrong.
 
-I have added a sweep for it: every page and component is now checked for React hooks used
-but not imported. Ran it across the whole app - everything else is clean.
+    Glenigan scored >=5          dash, no line
+    Actively Chased scored >=5   0, flat line at zero
+
+Same rule, same dependency, two different answers. Glenigan is gated on the tracking date
+- months before the CRM started recording stage moves have no received date, so it says
+"unknown" and draws nothing. Actively Chased was never given that gate, so it reported a
+confident 0 for the same months.
+
+Zero and unknown are different answers. Now both show a dash for months the CRM did not
+measure, and both will start reporting from this month.
 
 
-SOMETHING ELSE IN THAT LOG YOU SHOULD KNOW ABOUT
---------------------------------------------------
-Before the fatal error there were dozens of warnings like:
+THE OTHER BLANKS ARE CORRECT - HERE IS WHY EACH ONE
+-----------------------------------------------------
+CALLS MADE - dash
+    8x8 is not connected yet. Nothing has been recorded, so every month is unknown. Fills
+    in once the credentials are in and the backfill is run.
 
-    Attempted import error: 'sendTestMention' is not exported from '../../lib/crmMentions'
-    Import trace: ./pages/api/cron/pipedrive-sync.js
+GLENIGAN SCORED >=5 - dash
+    Needs a RECEIVED DATE, which only exists for stage moves the CRM has watched. Fills in
+    from this month as projects come in.
 
-Those come from FOUR FILES THAT SHOULD HAVE BEEN DELETED in pkg386:
+TOTAL VALUE OF WORK PRICED - £0, red, flat line
+    This one is worth acting on. £0 across thirteen months means there are NO value-change
+    records at all - the one-off seed from pkg377 has never been run.
 
-    pages/api/cron/pipedrive-sync.js
-    pages/api/sync.js
-    pages/api/webhook.js
-    pages/api/deals.js
+    Without it, every priced metric on this page reads zero: total value priced, average
+    project value, value priced to existing customers.
 
-They import lib/pipedrive.js, which pkg386 DID remove - so they have been failing to
-resolve on every build since. Warnings only, not fatal, but they are noise that hides real
-problems, and pipedrive-sync.js in particular is a cron endpoint that would error if
-anything ever called it.
+    Run it once, on /crm-scores, or from the console on any portal page:
 
-pkg386 listed them under "DELETE THESE FILES IN GITHUB". Worth deleting them now:
-open each in GitHub, three-dot menu, Delete file, commit. Nothing references them.
+        fetch('/api/value-changes-crm',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'seed'})}).then(r=>r.json()).then(console.log)
 
-Also on that list and worth checking at the same time:
-    pages/api/value-changes/index.js   (then the empty folder)
-    pages/api/allfields.js
-    pages/api/deal-raw.js
-    pages/api/stages.js
-    lib/pipedrive.js
+AVERAGE PROJECT VALUE - dash
+    Same cause as above. It will populate the moment the seed is run.
+
+STRIKE RATE, TOTAL VALUE SECURED, AVERAGE SECURED - working
+    21.9%, £778,074, £248,818 with proper trend lines. These come from the deals
+    themselves, which have thirteen months of history behind them.
+
+
+SO: YES, THEY FILL IN AS THE DATA ARRIVES
+-------------------------------------------
+A dash means "not measured", never "zero". That is deliberate throughout - a red zero
+against target for a month nobody recorded would be a fabricated failure.
+
+Priority order for making the blanks go away:
+    1. Run the value-change seed - fixes three cards immediately, using data you already
+       have from the Pipedrive era.
+    2. 8x8 credentials - fixes Calls made.
+    3. Time - the two scored cards fill in as projects reach Received from now on.
