@@ -357,6 +357,9 @@ export default function Scorecard() {
     return byFirst.length === 1 ? byFirst[0] : ''
   })()
 
+  // Deal lookup for value-change records, which carry a dealId but no stage.
+  const dealById = useMemo(() => new Map(deals.map(d => [String(d.id), d])), [deals])
+
   const isEstimator = ESTIMATORS.includes(person)
   const type = isEstimator ? 'estimator' : 'sales'
   const t = targets?.[type] || DEFAULT_TARGETS[type]
@@ -654,6 +657,15 @@ export default function Scorecard() {
         const k = monthKey(v.changeDate)
         if (k < startKey || k > endMonth) continue
         if (!(Number(v.newValue) > 0)) continue
+        // VARIATIONS EXCLUDED, matching the secured card. A variation is extra work on a
+        // job already won - pricing one is not pricing a project, and their small values
+        // drag the average towards the size of a typical variation rather than a typical
+        // job.
+        //
+        // Judged on the DEAL's stage rather than anything on the record: a value-change
+        // entry only carries a stage when it came from a stage move, so filtering on the
+        // record would have missed every variation that was simply re-priced.
+        if (dealById.get(String(v.dealId))?.stageName === 'Variations') continue
         const prev = latest.get(String(v.dealId))
         if (!prev || String(v.changeDate) > String(prev.changeDate)) latest.set(String(v.dealId), v)
       }

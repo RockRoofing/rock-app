@@ -1,58 +1,42 @@
-pkg427 - test2 and test3 share an id. Here is why, and the way out.
-===================================================================
+pkg428 - variations out of average value of projects priced
+===========================================================
 
-Deploy after pkg426. If pkg426 is not in yet, deploy both - this builds on it.
-
-CHANGED FILES (replace)
------------------------
-  pages/crm.js
-  pages/api/crm.js
-
-NEW FILES: none.
+Deploy after pkg427. One changed file: pages/scorecard-crm.js. No new files.
 
 
-WHAT IS HAPPENING TO TEST2 AND TEST3
---------------------------------------
-They have the same id. Everything in the CRM is keyed by id, so they are not two projects
-as far as the code is concerned - they are one project listed twice.
+YOUR QUESTION FIRST: NO, IT DOES NOT DOUBLE COUNT
+---------------------------------------------------
+A project priced at £180,000 in March and revised to £250,000 in June contributes
+£250,000, ONCE. Not both, not the £70,000 uplift.
 
-    clicking test3   -> deals.find() returns the FIRST match -> opens test2
-    deleting test3   -> the delete filters on id -> removes BOTH
+All of a project's pricing events in the window collapse to the LATEST one - the current
+answer rather than the first guess. That is why the card says "from 14 projects" rather
+than counting pricing events.
 
-You were right that it looked like it was deleting the other one. It was.
-
-Reproduced on the bench, both behaviours.
-
-The cause was in pkg426: new ids came from a counter hard-coded to 900000 that reset on
-every page load. Two projects created in different sessions both got 900000.
+Proven in the same test as the change below: that project appears in the values list as
+250000 and nothing else.
 
 
-WHY pkg426 WAS NOT ENOUGH
--------------------------
-It seeded the counter above the highest existing id, which fixes one browser. But four
-people using the CRM at once each compute "highest + 1" from their own copy of the list
-and all reach the same answer. Demonstrated: two users, same list, same id.
+THE CHANGE
+----------
+Variations are now excluded, matching what you asked for on the secured card.
 
-New ids are now a MILLISECOND TIMESTAMP. It cannot repeat across sessions or between
-people, it is still a plain sortable number, and there is a guard that steps past any id
-that somehow already exists.
+Worked example - two real projects and one variation that was priced then revised:
 
+    with variations       3 projects, values [250000, 150000, 2253], average £134,084
+    without variations    2 projects, values [250000, 150000], average £200,000
 
-AND DELETE NO LONGER TAKES TWO
-------------------------------
-Both the browser and the server now remove exactly ONE project, not everything sharing
-that id. If a duplicate is still present, the shared activities, notes and email are left
-alone - otherwise deleting one project would gut the other.
-
-Ids cannot collide any more, but a delete that can destroy a project you did not ask about
-should not depend on nothing upstream being broken.
+Judged on the DEAL's stage, not on anything held on the value-change record. That matters:
+a record only carries a stage when it came from a stage move, so filtering on the record
+would have caught variations that entered the stage and missed every variation that was
+simply re-priced. Going via the deal catches both.
 
 
-WHAT TO DO WITH TEST2 AND TEST3
----------------------------------
-1. Deploy this.
-2. Go to /crm-scores, red panel at the top, "Check for duplicates". It will list them.
-3. "Renumber" - test2 keeps 900000, test3 gets a fresh id.
-4. Both then open and delete independently. Delete them both if they were only tests.
+STILL INCLUDING VARIATIONS, DELIBERATELY
+------------------------------------------
+    Total value of work priced
+    Total value of work secured
 
-Any project created from now on gets a timestamp id and cannot collide with anything.
+Both measure money, and a variation is money. Say the word if you want either changed, but
+be aware the totals and the averages now count different things - dividing one by the
+other will not give you the other.
