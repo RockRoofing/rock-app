@@ -187,6 +187,17 @@ export default async function handler(req, res) {
       // application on this project (by sequence). Gross = the application total
       // before MCD/retention deductions.
       let appliedForLatest = 0
+      // FINAL ACCOUNT FROM THE APPLICATION.
+      //
+      // The application is the better source: it holds the measured contract sum and the
+      // variations at FINAL value, which is what the final account actually is. Project
+      // details only holds the original contract value plus whatever variations happen to
+      // have been ticked as instructed.
+      //
+      // Null when there are no applications - the caller then falls back to project
+      // details. Zero would be indistinguishable from a real zero.
+      let afaFromApplication = null
+      let afaSource = 'project details'
       try {
         const apps = Array.isArray(settings.applications) ? settings.applications.slice() : []
         if (apps.length) {
@@ -196,6 +207,12 @@ export default async function handler(req, res) {
           for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
           const sum = computeApplicationSummary(latest, prevGross)
           appliedForLatest = sum.grossCurrent || sum.applicationTotal || 0
+          // measured contract sum + variations at final value, GROSS of MCD.
+          const afaApp = sum.anticipatedFinalAccount
+          if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
+            afaFromApplication = afaApp
+            afaSource = `application ${latest.appNumber || latest.seq || ''}`.trim()
+          }
         }
       } catch {}
 
@@ -216,8 +233,11 @@ export default async function handler(req, res) {
         .reduce((s, v) => s + (parseFloat(v.materials || 0) + parseFloat(v.labour || 0) + parseFloat(v.profit || 0)), 0)
       // A sent application's Anticipated Final Account is the source of truth when set;
       // otherwise fall back to contract value + instructed variations.
-      const grossAfa = contractValue + instructedVars
+      // Order of preference: manual override -> latest application -> project details.
+      const afaFromSettings = contractValue + instructedVars
+      const grossAfa = afaFromApplication != null ? afaFromApplication : afaFromSettings
       const afaBeforeMcd = (settings.afaOverride != null && isFinite(settings.afaOverride)) ? Number(settings.afaOverride) : grossAfa
+      if (settings.afaOverride != null && isFinite(settings.afaOverride)) afaSource = 'manual override'
 
       // MCD, DEDUCTED FROM THE FINAL ACCOUNT.
       //
@@ -355,6 +375,7 @@ export default async function handler(req, res) {
         contractValue,
         afa,
         afaGross: afaBeforeMcd,
+        afaSource,
         mcdPct,
         mcdRecorded,
         mcdValue,

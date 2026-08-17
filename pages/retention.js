@@ -192,6 +192,7 @@ export default function RetentionPage() {
           retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
+          afaSource: p.afaSource || '',
           mcdPct: p.mcdPct != null ? p.mcdPct : 0,
           mcdRecorded: !!p.mcdRecorded,
           mcdValue: p.mcdValue || 0,
@@ -293,7 +294,7 @@ export default function RetentionPage() {
         ...e,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
         retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
-        afaGross: x.afaGross, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
+        afaGross: x.afaGross, afaSource: x.afaSource, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
         retentionPct: e.retentionPct || x.retentionPct,
@@ -484,7 +485,7 @@ export default function RetentionPage() {
                         ['Ref', 'left', 'Project reference (job number) from project details.', 'ref'],
                         ['Customer', 'left', 'Customer name from project details.', 'customer'],
                         ['Project', 'left', 'Project name from project details.', 'project'],
-                        ['Gross AFA', 'right', 'Contract value + instructed variations, BEFORE Main Contractor\u2019s Discount.', 'afaGross'],
+                        ['Gross AFA', 'right', 'Final account BEFORE Main Contractor\u2019s Discount. Taken from the latest application (measured contract sum + variations at final value). Falls back to Edit Project Details when the project has no applications.', 'afaGross'],
                         ['MCD', 'right', 'Main Contractor\u2019s Discount deducted from the gross. Set on the IHM and editable in Edit Project Details.', 'mcdValue'],
                         ['Final Account', 'right', 'Gross AFA less MCD. This is the figure retention is calculated on, matching how every application works: gross \u2192 less MCD \u2192 retention on the sub-total.', 'finalAccount'],
                         ['Applied for', 'right', 'Auto-populates from the latest application on this project. You can still type a value to override it.', 'appliedFor'],
@@ -604,6 +605,7 @@ export default function RetentionPage() {
                             {/* Gross AFA - before MCD */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#666' }}>
                               {entry.afaGross != null ? fmt(parseFloat(entry.afaGross)) : '\u2014'}
+                              {entry.afaSource && <div style={{ fontSize: 9.5, color: '#bbb' }}>{entry.afaSource}</div>}
                             </td>
                             {/* MCD deducted. A missing percentage is shown, not hidden -
                                 a blank here means nobody has recorded one and the Final

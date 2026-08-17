@@ -1,59 +1,65 @@
-pkg437 - applications now pull retention AND MCD from the project
-=================================================================
+pkg438 - Final Account from the application
+===========================================
 
-Deploy after pkg436. One changed file: pages/api/applications.js. No new files.
+Deploy after pkg437.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/api/dashboard.js
+  pages/retention.js
 
-YOU WERE HALF RIGHT
--------------------
-MCD was not pulling through. But retention was not either, quite - it only worked if
-somebody had typed it into Edit Project Details.
-
-Applications read the RAW project settings and never resolved through the IHM. Those
-settings only hold retention and MCD once they have been entered in Commercial. So a
-project handed over properly, with both recorded on the IHM, but never opened in Edit
-Project Details, produced applications with:
-
-    retention  5%   <- a hard-coded default, not the project's figure
-    MCD        0%   <- nothing
-
-The 5% is the worse of the two, because it looks like a real answer.
+NEW FILES: none.
 
 
-FIXED
------
-Both now resolve the same way everything else in the app does:
+FIRST - THE DISCOUNT IS NOT BEING APPLIED TWICE
+-------------------------------------------------
+It is not being applied AT ALL to the Final Account.
 
-    Commercial override  ->  IHM  ->  nothing
+Your row reads:
 
-Applied when the application list loads AND when a new application is created, so an
-application picks up the right figures whether or not anyone has been into Commercial.
+    Gross AFA       £350,800.30
+    MCD 2.50%         £8,770.01
+    Final Account   £350,800.30   <- identical to the gross
 
-Tested:
-    IHM only, never edited in Commercial   -> retention 3%, MCD 2.5%
-    Commercial override beats IHM          -> retention 5%, MCD 1.25%
-    Commercial MCD 0 beats IHM 2.5         -> MCD 0%   (a deliberate zero wins)
-    No IHM, nothing set anywhere           -> retention 0%, MCD 0%
-
-
-ONE BEHAVIOUR CHANGE WORTH KNOWING
-------------------------------------
-Retention no longer defaults to 5% when nothing is set. It defaults to 0%.
-
-A guessed 5% is indistinguishable from a real 5%, and it silently deducts money from every
-certificate on a project nobody has configured. 0% is visibly wrong and gets corrected;
-5% just quietly happens.
-
-If a project genuinely is 5%, it should be on the IHM - and now that it flows through, it
-will be.
+The code is correct - it already computes  afa = gross - MCD. What you were looking at is
+a CACHED dashboard payload built before pkg436's marker took effect: it has the new
+afaGross and mcdValue fields but an afa calculated the old way. Deploying this rebuilds
+it. Final Account should read £342,030.29.
 
 
-EXISTING APPLICATIONS ARE UNTOUCHED
--------------------------------------
-This changes what a NEW application starts with, and what the list page shows as the
-project's rates. Applications already created keep the mcdPct and retentionPct they were
-saved with - deliberately, since changing a sent certificate retrospectively would be
-worse than leaving it.
+NOW THE CHANGE YOU ASKED FOR
+----------------------------
+Final Account now comes from the LATEST APPLICATION, falling back to Edit Project Details
+when a project has no applications.
 
-If an existing draft has the wrong figures, the fastest fix is to set them on the
-application itself.
+    1. manual override, if one is set
+    2. latest application  - measured contract sum + variations at FINAL value
+    3. Edit Project Details - contract value + instructed variations
+
+The application is the better source: it carries variations at their final value, whereas
+project details only has whatever happens to be ticked as instructed.
+
+The Gross AFA column now says underneath which of the three it used - "application 12",
+"project details", or "manual override" - so a figure that looks wrong can be traced
+without opening anything.
+
+MCD is then deducted from whichever source was used, exactly as before.
+
+
+SOMETHING ON GAS LANE WORTH CHECKING
+--------------------------------------
+Once this deploys, Account Remaining on that project will go from +£8,338.01 to
+-£432.00.
+
+    Final Account (net)  £342,030.29
+    Invoiced             £342,462.29
+                         -----------
+                                -£432.00
+
+That is not a rounding error and it is not caused by this change - it was always there,
+hidden behind a Final Account that was £8,770 too high. It means either the account is
+genuinely £432 higher than the application says, or MCD has not been deducted on every
+invoice.
+
+Small, but worth Joe or Nathan looking at, because if it is the second reason it will be
+true on other projects too.
