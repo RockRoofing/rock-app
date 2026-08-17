@@ -1,49 +1,46 @@
-pkg441 - "Complete all monthly dates for May 2026" with no May row
-==================================================================
+pkg442 - retention tracker: scrollbar always in view, header frozen
+===================================================================
 
-Deploy after pkg440. One changed file: pages/project/[id].js (literal [id] folder).
-
-
-THE PROBLEM
------------
-Two different rules were in play and they had drifted apart.
-
-  THE TABLE shows a rolling window: the last 2 months and 12 ahead. Today that is
-  June 2026 to July 2027.
-
-  THE COMPLETENESS CHECK looks at EVERY month that holds any dates at all, however old,
-  and flags any with some of the three filled in and not all.
-
-May 2026 has a partial set saved from an earlier session. The window has since rolled past
-it, so the warning had no row to be fixed in. Unfixable - and an unfixable warning is worse
-than no warning, because people learn to ignore the whole banner.
+Deploy after pkg441. One changed file: pages/retention.js. No new files.
 
 
-FIXED
------
-Any month holding dates is now shown, whether or not it falls in the window, sorted into
-place. May 2026 will appear at the top of your table.
+1. THE HORIZONTAL SCROLLBAR
+---------------------------
+The table container had no height limit, so it grew to whatever length the table needed
+and the PAGE scrolled instead. The horizontal bar therefore sat at the very bottom of the
+table - you had to scroll past every row to reach it, move it, then scroll back up to see
+what you had done.
 
-Past months that only appear because they hold data are labelled in orange - "past month,
-part filled" - so it is obvious why a month from before the window is on screen.
+The table area is now a bounded box: it fills the window down to about 300px from the top
+and scrolls internally in both directions. The horizontal bar is pinned to the bottom of
+the visible area and is always reachable, wherever you are in the list.
 
-
-HOW TO CLEAR IT
----------------
-Two ways, both fine:
-
-  FILL IT IN   complete the missing date(s) for May. The warning goes.
-
-  CLEAR IT     delete all three May dates. The row removes itself entirely - that was
-               already the behaviour, it just needed a row to do it in.
-
-Which is right depends on whether May was a real application month. If it was, fill it in;
-if somebody started typing and stopped, clear it.
+Minimum height 320px, so it does not collapse to nothing on a short window or a filtered
+list of two rows.
 
 
-WORTH CHECKING ELSEWHERE
-------------------------
-This will not be the only project. Any project where somebody part-filled a month that has
-since scrolled out of the window will have had the same silent, unfixable warning. They
-will all become fixable with this deploy - so if the "still to complete" count drops across
-several projects over the next few days, that is why.
+2. FROZEN HEADER
+----------------
+Column headings stay put while the rows scroll under them. Sorting still works - they are
+the same buttons.
+
+Applied to each header CELL rather than the row, which matters: the table uses collapsed
+borders, and with those the row's background and border do not travel with a sticky cell.
+Done at row level the data would have scrolled straight through the headings. Each cell
+now carries its own background and its own bottom border.
+
+
+ONE THING I CHECKED AND DID NOT CHANGE
+----------------------------------------
+The white card around the table has overflow:hidden, which rounds the corners. I briefly
+changed it, thinking it would capture the sticky header - then checked properly. It does
+not: the scroll box inside has overflow:auto, so that is the nearest scrollport and the
+header sticks to it. Reverted rather than leave a less widely supported CSS value in for
+no benefit.
+
+
+WORTH KNOWING
+-------------
+The 300px allowance covers the page header, the filter bar and the summary tiles. If you
+add anything above the table later, that number needs adjusting or the bottom of the box
+will sit off-screen. It is one line near the top of the table block.

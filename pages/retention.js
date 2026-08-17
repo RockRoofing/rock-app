@@ -479,13 +479,33 @@ export default function RetentionPage() {
           </div>
 
           {/* Table */}
+          {/* overflow:hidden stays. It rounds the corners, and it does NOT interfere with
+              the sticky header: the scroll box below has overflow:auto, so that is the
+              nearest scrollport and the header sticks to it, not to this. */}
           <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading...</div>
             ) : allEntries.length === 0 ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>{filter.size === 0 ? 'No status filters selected — tick Live Project, Defects Liability or Complete above.' : 'No retention entries match the current filters.'}</div>
             ) : (
-              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              // A BOUNDED SCROLL BOX, not a container that grows with the table.
+              //
+              // It had no height limit, so the table ran to whatever length it needed and
+              // the page scrolled instead. The horizontal bar therefore sat at the very
+              // bottom of the table - you had to scroll past every row to reach it, then
+              // scroll back up to see what you had moved.
+              //
+              // Capping the height makes the box scroll internally in both directions:
+              // the horizontal bar stays pinned at the bottom of the visible area, and
+              // the header can be made sticky against the top of the box rather than the
+              // page.
+              <div style={{
+                maxHeight: 'calc(100vh - 300px)',
+                minHeight: 320,
+                overflow: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                position: 'relative',
+              }}>
                 <table style={{ minWidth: TABLE_MIN_WIDTH, width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
@@ -520,7 +540,19 @@ export default function RetentionPage() {
                       ].map(([h, align, tip, key]) => (
                         <th key={(h || 'actions') + (key || '')} title={tip || undefined}
                           onClick={() => key && toggleSort(key)}
-                          style={{ padding: '9px 10px', textAlign: align, fontWeight: 600, color: sortKey === key ? '#1a1a2e' : '#555', whiteSpace: 'nowrap', cursor: key ? 'pointer' : (tip ? 'help' : 'default'), userSelect: 'none' }}>
+                          style={{
+                            padding: '9px 10px', textAlign: align, fontWeight: 600,
+                            color: sortKey === key ? '#1a1a2e' : '#555', whiteSpace: 'nowrap',
+                            cursor: key ? 'pointer' : (tip ? 'help' : 'default'), userSelect: 'none',
+                            // Sticky per CELL, not on the row: with borderCollapse the row's
+                            // background does not travel with a sticky cell, so each th
+                            // carries its own or the data scrolls through it.
+                            position: 'sticky', top: 0, zIndex: 2,
+                            background: '#f8f9fa',
+                            // Same reason - a collapsed border is painted by the table and
+                            // scrolls away with it. This one is part of the cell.
+                            boxShadow: 'inset 0 -2px 0 #eee',
+                          }}>
                           {h}{key && sortKey === key ? <span style={{ marginLeft: 3, fontSize: 10 }}>{sortDir === 'asc' ? '▲' : '▼'}</span> : (tip ? <span style={{ color: '#bbb', marginLeft: 3, fontSize: 10 }}>ⓘ</span> : null)}
                         </th>
                       ))}
