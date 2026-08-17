@@ -1,49 +1,54 @@
-pkg448 - editing an activity date did not stick
-===============================================
+pkg449 - the deal and the Activities list disagreeing about a date
+==================================================================
 
-Deploy after pkg447. One changed file: pages/crm.js. No new files.
-
-
-THE CAUSE - A RACE, WHICH IS WHY IT WAS INTERMITTENT
-------------------------------------------------------
-The Activities list refreshes itself every 60 seconds and whenever the window regains
-focus. That refresh REPLACES the whole list with what the server currently holds.
-
-Completing an activity was protected against this - it raises a "writing" flag, and the
-refresh skips while it is set. EDITING one never raised that flag.
-
-So the sequence was:
-
-    1. change the date, press Save
-    2. the write goes off to the server
-    3. the 60-second refresh lands before the server has caught up
-    4. the list is replaced with the OLD date
-
-Whether it stuck depended entirely on where you happened to be in that 60-second cycle.
-Which is exactly "more often than not it doesn't change, so I go in again" - and trying
-again eventually worked because eventually you missed the refresh.
-
-Editing now raises the same flag as completing.
+Deploy after pkg448. One changed file: pages/crm.js. No new files.
 
 
-AND A SECOND REASON THE VIEW DID NOT CHANGE
+WHY THE TWO SCREENS DISAGREED
+-----------------------------
+An imported activity exists in two places at once: the store it lives in, and a cut-down
+copy merged onto the deal when you open it.
+
+The store holds  subject, dueDate, createdBy, the Pipedrive id, type...
+The deal holds   id, text, due, done, assignee, type
+
+Note DUEDATE against DUE. The deal reads dueDate into due when it loads, and drops the
+original. So when pkg447 started writing the deal's version back, it saved `due` and threw
+`dueDate` away - and every reader looks for `dueDate` FIRST.
+
+Result: one screen showed the new date, the other showed the old one, and which was which
+depended on where you were standing. Exactly what you described - the deal saying no due
+date while the Activities list showed one.
+
+It was also quietly discarding everything else the store held that the deal does not map:
+the Pipedrive id, who created it, the activity type.
+
+
+FIXED
+-----
+The deal now READS the store and MERGES into it, field by field, rather than overwriting
+it with its own smaller version. Nothing the deal does not know about is lost, and the
+date is written to BOTH names so no reader can pick up a stale one.
+
+Verified on the bench: after an edit, dueDate and due agree, and the Pipedrive id, creator
+and type all survive.
+
+
+AND BOTH DIRECTIONS NOW UPDATE BOTH SCREENS
 ---------------------------------------------
-For a MANUAL activity - one created in the CRM rather than imported - the edit updated the
-deal record but never told the Activities table. The table reads its own list, so the row
-sat there showing the old date until the next refresh brought it round.
+Edit on the DEAL      -> the Activities list updates immediately
+Edit in the ACTIVITIES list -> the deal in memory updates immediately
 
-It now updates both, so the row changes the moment you press Save.
+Before, each only told its own screen and the other caught up on the next refresh, if at
+all. That is the second half of "it doesn't always reflect the change".
 
-Imported activities were already doing this, which is probably why the two behaved
-differently.
+Completing one from the deal now also removes it from the Activities list straight away,
+rather than leaving it sitting there until a refresh.
 
 
-ALSO
-----
-The due date is now written to both field names the store uses. It was writing only one
-of them - harmless as things stand, since the reader checks that one first, but it would
-have bitten the moment anything wrote the other.
-
-And a failed save now says so with an alert, rather than only appearing in the browser
-console where nobody looks. If a date genuinely will not save you will know immediately
-instead of assuming it is the same intermittent fault.
+WHAT TO EXPECT
+--------------
+Any activity currently showing two different dates is holding two different values in the
+two stores. Edit it once after deploying and both will be written together, which settles
+it. There is no way to tell from here which of the two was the one you meant, so it needs
+the edit rather than something I can repair automatically.

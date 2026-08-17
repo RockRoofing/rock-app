@@ -2486,16 +2486,53 @@ function CRMPageInner() {
   // in the import behaved this way, which is why almost all of today's were still there.
   //
   // Completing or deleting an imported activity now writes to that store directly.
+  // MERGE INTO THE STORE, DO NOT REPLACE IT.
+  //
+  // The deal holds a cut-down view of an imported activity - id, text, due, done,
+  // assignee, type. The store holds more: subject, dueDate, createdBy, the Pipedrive id,
+  // and so on. Writing the deal's version straight back threw all of that away, and
+  // crucially it dropped `dueDate` while setting `due` - so the two records disagreed
+  // about the date, and which one you saw depended on which screen you were looking at.
+  //
+  // Reading the store first and merging field by field keeps everything the deal does not
+  // know about, and writes the date to BOTH names so no reader can pick the stale one.
   const persistImportedActivities = async (dealId, activities) => {
-    const items = (activities || []).filter((a) => a.imported).map((a) => {
-      const { imported, ...rest } = a
-      return rest
-    });
+    const mine = (activities || []).filter((a) => a.imported);
     try {
+      const got = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get-sub', kind: 'activities', dealId: String(dealId) }),
+      }).then((r) => r.json());
+      const stored = Array.isArray(got.items) ? got.items : [];
+      const byId = new Map(mine.map((a) => [a.id, a]));
+
+      // Anything no longer on the deal has been deleted, so it goes from the store too.
+      const items = stored
+        .filter((x) => byId.has(x.id))
+        .map((x) => {
+          const a = byId.get(x.id);
+          return {
+            ...x,
+            text: a.text, subject: a.text,
+            dueDate: a.due || '', due: a.due || '',
+            done: !!a.done,
+            assignee: a.assignee || '',
+          };
+        });
+
       await fetch('/api/crm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'save-sub', kind: 'activities', dealId: String(dealId), items }),
       });
+
+      // Keep the Activities table in step. It reads its own list, so without this the two
+      // screens showed different dates for the same activity until the next refresh.
+      setOpenActivities((prev) => prev.map((r) => {
+        const a = byId.get(r.id);
+        return (a && String(r.dealId) === String(dealId))
+          ? { ...r, text: a.text, due: a.due || '', assignee: a.assignee || r.assignee, done: !!a.done }
+          : r;
+      }).filter((r) => !(String(r.dealId) === String(dealId) && r.done)));
     } catch { /* the deal itself still saved; this is the imported side only */ }
   };
 
@@ -3037,6 +3074,14 @@ function CRMPageInner() {
         await patchImportedActivity(dealId, row.rawId, { subject: text, text, dueDate: due, due, assignee: assignee || '' });
         setOpenActivities((prev) => prev.map((a) => (String(a.dealId) === String(dealId) && a.id === row.rawId)
           ? { ...a, text, due, assignee: assignee || a.assignee } : a));
+        // The deal may already be loaded in memory with the OLD value merged onto it.
+        // Without this, opening the project after editing here showed the previous date -
+        // the same disagreement as the other direction, just reversed.
+        setDeals((prev) => prev.map((d) => String(d.id) !== String(dealId) ? d : {
+          ...d,
+          activities: (d.activities || []).map((a) => a.id === row.rawId
+            ? { ...a, text, due, assignee: assignee || a.assignee || null } : a),
+        }));
       }
     } catch (e) {
       console.error('Could not update the activity:', e);
