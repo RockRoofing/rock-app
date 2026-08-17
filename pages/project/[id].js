@@ -1592,8 +1592,17 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                     keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
                   }
                   for (const k of Object.keys(overridesAll)) {
+                    if (keys.includes(k)) continue
                     const r = overridesAll[k] || {}
-                    if ((r.applicationDate || r.valuationDate || r.paymentDate) && !keys.includes(k)) keys.push(k)
+                    const hasDates = r.applicationDate || r.valuationDate || r.paymentDate
+                    // An EXTRA PERIOD counts even when empty - that is the whole point of
+                    // "+ add period", which creates a blank one for you to fill in. The
+                    // test used to require a date, so the new row was created in state and
+                    // never rendered: the button appeared to do nothing.
+                    //
+                    // A base month still needs a date to earn a row out of the window,
+                    // otherwise every month ever touched would pile up at the top.
+                    if (hasDates || k.includes('#')) keys.push(k)
                   }
                   // EXTRA PERIODS WITHIN A MONTH.
                   //
@@ -1682,8 +1691,13 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
                           <input type="date" value={row[field] || ''} min={monthMin} max={monthMax}
                             onChange={e => {
                               const newOverrides = { ...overrides, [key]: { ...row, [field]: e.target.value || undefined } }
-                              // Clean up empty rows
-                              if (!newOverrides[key].applicationDate && !newOverrides[key].valuationDate && !newOverrides[key].paymentDate) delete newOverrides[key]
+                              // Clear all three on a BASE MONTH and the row removes
+                              // itself. An extra period does not: somebody added it on
+                              // purpose and it has its own "remove period" link, so
+                              // clearing a date to retype it should not make the row
+                              // vanish under the cursor.
+                              const empty = !newOverrides[key].applicationDate && !newOverrides[key].valuationDate && !newOverrides[key].paymentDate
+                              if (empty && !String(key).includes('#')) delete newOverrides[key]
                               setForm({ ...form, dateOverrides: newOverrides })
                             }}
                             style={{ fontSize: 11, padding: '3px 6px', border: '1px solid #e5e5e5', borderRadius: 4, fontFamily: 'inherit', width: '100%' }} />

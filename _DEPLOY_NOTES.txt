@@ -1,48 +1,50 @@
-pkg445 - payment date picker was locked to the wrong month
-==========================================================
+pkg446 - "+ add period" did nothing
+===================================
 
-Deploy after pkg444. One changed file: pages/project/[id].js (literal [id] folder).
+Deploy after pkg445. One changed file: pages/project/[id].js (literal [id] folder).
 
 
-YES, IT MAKES SENSE - AND YOU FOUND THE CAUSE
------------------------------------------------
-Your screenshot shows every month except August greyed out. That is a min/max on the date
-input, and it was applied to ALL THREE columns:
+THE CAUSE
+---------
+The button worked. The row never appeared.
 
-    Application date   belongs to that month   correct
-    Valuation date     belongs to that month   correct
-    Payment date       normally the month AFTER, or later   WRONG
+Pressing it creates an empty period - "2026-08#2": {} - ready for you to fill in. But the
+code deciding which rows to render only included a key if it ALREADY HAD A DATE on it:
 
-So on an August row the picker greyed out September, and a payment due 11 September - your
-exact example - could only be typed by hand.
+    if (r.applicationDate || r.valuationDate || r.paymentDate) keys.push(k)
+
+An empty period fails that test, so the row was created in state and never drawn. Press
+the button, nothing happens, press it again and you have silently made three of them.
 
 
 FIXED
 -----
-Application and valuation dates: unchanged, still limited to their own month. They should
-be.
+An EXTRA PERIOD now earns a row whether or not it has dates - that is the entire point of
+a button that adds a blank one.
 
-Payment date: now runs from the 1st of the row's month to the end of the month SIX after
-it. Wide enough for any real payment term - 30, 45, 60, even 90 days - and still narrow
-enough that the picker opens on the right month instead of on today.
-
-    August 2026 row   ->  payment selectable 01 Aug 2026 to 28 Feb 2027
-    December 2026 row ->  payment selectable 01 Dec 2026 to 30 Jun 2027
-
-Year rollover checked, February and 30/31-day months included.
+A base month still needs a date to appear outside the rolling window, otherwise every
+month anyone had ever touched would pile up at the top of the table.
 
 
-WHY A WINDOW RATHER THAN NO LIMIT AT ALL
-------------------------------------------
-Removing the limits entirely would open the picker on today's date every time, so a
-January 2027 row would need scrolling back and forth. Keeping a window means it still
-opens where you are working, and it also stops a payment date being set years out by a
-mis-click.
+AND A SECOND FAULT BEHIND IT
+----------------------------
+Even once rendered, the row would have vanished again the moment you cleared a date to
+retype it. The cleanup rule removes any row with all three dates empty - which is right
+for a base month, and wrong for a period somebody added deliberately and which has its own
+"remove period" link.
 
-If six months is ever not enough, it is one number in that file.
+Extra periods are now exempt. They go when you remove them, not when you empty them.
 
 
-ALREADY FINE, CHECKED
----------------------
-The four date fields on the application itself - the ones pkg444 made editable - have no
-limits at all. Any date, any month, any year. Nothing needed there.
+CHECKED WHILE IN THERE
+----------------------
+A freshly added blank period does NOT set off the "Still to complete" banner. It only
+starts asking for the rest once you fill in the first date - which is the right moment,
+since a half-filled period is a real gap and an untouched one is not.
+
+
+IF YOU PRESSED IT A FEW TIMES ALREADY
+---------------------------------------
+You may have several blank periods saved on that project. They will all appear as rows
+after this deploys - "August 2026 - period 2", "period 3", and so on. Use "remove period"
+on the ones you do not want.
