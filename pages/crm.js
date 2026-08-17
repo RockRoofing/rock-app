@@ -2498,6 +2498,10 @@ function CRMPageInner() {
   // know about, and writes the date to BOTH names so no reader can pick the stale one.
   const persistImportedActivities = async (dealId, activities) => {
     const mine = (activities || []).filter((a) => a.imported);
+    // Nothing imported on this deal - the deal save owns everything here, so this helper
+    // must not write at all. Guarding BEFORE the fetch, not after: a deal whose subs had
+    // not finished loading would otherwise have written an empty list over the store.
+    if (!mine.length) return;
     try {
       const got = await fetch('/api/crm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2506,11 +2510,22 @@ function CRMPageInner() {
       const stored = Array.isArray(got.items) ? got.items : [];
       const byId = new Map(mine.map((a) => [a.id, a]));
 
-      // Anything no longer on the deal has been deleted, so it goes from the store too.
+      // TOUCH ONLY THE IMPORTED RECORDS.
+      //
+      // save-sub REPLACES the whole key, and this store holds BOTH kinds - imported ones
+      // and CRM-created ones flagged crm:true. Writing back only the imported records
+      // deleted every activity created in the CRM on that deal. That was a data-loss bug
+      // I introduced in pkg447 and it is the reason for this package.
+      //
+      // CRM-created records are passed through untouched: they are owned by the deal save,
+      // which merges them separately.
+      const importedIdsOnDeal = new Set(mine.map((a) => a.id));
       const items = stored
-        .filter((x) => byId.has(x.id))
+        .filter((x) => x.crm || importedIdsOnDeal.has(x.id))   // deleted imported ones drop out
         .map((x) => {
+          if (x.crm) return x;                                  // not ours to change
           const a = byId.get(x.id);
+          if (!a) return x;
           return {
             ...x,
             text: a.text, subject: a.text,
@@ -2519,6 +2534,7 @@ function CRMPageInner() {
             assignee: a.assignee || '',
           };
         });
+
 
       await fetch('/api/crm', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

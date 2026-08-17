@@ -1,54 +1,53 @@
-pkg449 - the deal and the Activities list disagreeing about a date
-==================================================================
+pkg450 - URGENT. pkg447/449 could delete activities.
+====================================================
 
-Deploy after pkg448. One changed file: pages/crm.js. No new files.
-
-
-WHY THE TWO SCREENS DISAGREED
------------------------------
-An imported activity exists in two places at once: the store it lives in, and a cut-down
-copy merged onto the deal when you open it.
-
-The store holds  subject, dueDate, createdBy, the Pipedrive id, type...
-The deal holds   id, text, due, done, assignee, type
-
-Note DUEDATE against DUE. The deal reads dueDate into due when it loads, and drops the
-original. So when pkg447 started writing the deal's version back, it saved `due` and threw
-`dueDate` away - and every reader looks for `dueDate` FIRST.
-
-Result: one screen showed the new date, the other showed the old one, and which was which
-depended on where you were standing. Exactly what you described - the deal saying no due
-date while the Activities list showed one.
-
-It was also quietly discarding everything else the store held that the deal does not map:
-the Pipedrive id, who created it, the activity type.
+Deploy after pkg449, as soon as you can. One changed file: pages/crm.js.
 
 
-FIXED
------
-The deal now READS the store and MERGES into it, field by field, rather than overwriting
-it with its own smaller version. Nothing the deal does not know about is lost, and the
-date is written to BOTH names so no reader can pick up a stale one.
+I INTRODUCED A DATA-LOSS BUG. THIS FIXES IT.
+----------------------------------------------
+Activities are all in ONE store per deal, crm:activities:<dealId>. Each record is flagged
+either crm:true (created in the CRM) or not (imported from Pipedrive).
 
-Verified on the bench: after an edit, dueDate and due agree, and the Pipedrive id, creator
-and type all survive.
+The write endpoint REPLACES that whole key. The deal save knows this and merges - it keeps
+the imported ones and swaps in the CRM ones.
 
+The helper I added in pkg447 did not. It wrote back only the imported records, so
+completing or editing an imported activity DELETED every CRM-created activity on that
+deal.
 
-AND BOTH DIRECTIONS NOW UPDATE BOTH SCREENS
----------------------------------------------
-Edit on the DEAL      -> the Activities list updates immediately
-Edit in the ACTIVITIES list -> the deal in memory updates immediately
+Proven on the bench: a store holding one imported and one CRM activity comes back holding
+only the imported one.
 
-Before, each only told its own screen and the other caught up on the next refresh, if at
-all. That is the second half of "it doesn't always reflect the change".
-
-Completing one from the deal now also removes it from the Activities list straight away,
-rather than leaving it sitting there until a refresh.
+Now it touches only imported records and passes CRM-created ones straight through
+untouched. There is also a guard so a deal whose activities have not finished loading can
+never write an empty list over the store.
 
 
-WHAT TO EXPECT
---------------
-Any activity currently showing two different dates is holding two different values in the
-two stores. Edit it once after deploying and both will be written together, which settles
-it. There is no way to tell from here which of the two was the one you meant, so it needs
-the edit rather than something I can repair automatically.
+TO YOUR QUESTION - WHY TWO PLACES?
+------------------------------------
+They are not in two places. They are in ONE store with two writers, which turns out to be
+just as bad:
+
+    the DEAL SAVE      owns the crm:true records, merges, keeps imported ones
+    my helper          owned the imported records, and did not merge
+
+Two writers to one key, with different ideas about what they were allowed to touch. Every
+problem you have reported this evening comes from that - the dates disagreeing, the
+completions not sticking, and now this.
+
+They now agree: each writer touches only its own kind and leaves the other alone.
+
+
+ABOUT THE DUPLICATE ON POOL MOTORS
+------------------------------------
+The two rows - 19 Aug to Edita, 20 Aug to James - are two genuinely different activity
+records, not one shown twice. Different people, different dates.
+
+What I cannot tell from here is whether the 19 Aug one was created deliberately or is the
+wreckage of an edit that half-wrote. Once this is deployed, delete whichever is wrong and
+it will stay deleted.
+
+If activities have gone MISSING from other deals over the last hour, that is the bug above
+and I am sorry - they were removed from the store and cannot be recovered from the app.
+Worth a quick look at a few busy deals to see whether anything you expected is absent.
