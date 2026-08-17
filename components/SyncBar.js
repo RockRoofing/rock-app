@@ -149,7 +149,11 @@ export default function SyncBar({ show = ['invoices', 'wages', 'bills'], months:
           <span style={{ fontSize: 11, color: '#8a8a99', whiteSpace: 'nowrap' }}>Sync last</span>
           <select value={months} onChange={e => setMonths(parseInt(e.target.value))} disabled={!!syncing}
             style={{ background: '#2d2d44', color: '#fff', border: '1px solid #444', borderRadius: 6, padding: '5px 6px', fontSize: 12, cursor: syncing ? 'default' : 'pointer' }}>
-            {[3, 6, 12, 18, 24].map(m => <option key={m} value={m}>{m} mo</option>)}
+            {/* 36 and 48 added. Lines outside the window are not re-fetched, so a field
+                added to the sync later stays missing on older lines - retention612 read
+                as zero on any project whose last application predates the window. A
+                project that finished eighteen months ago needs a window that reaches it. */}
+            {[3, 6, 12, 18, 24, 36, 48].map(m => <option key={m} value={m}>{m} mo</option>)}
           </select>
         </span>
       )}

@@ -1,49 +1,80 @@
-pkg432 - three years of email volume
-====================================
+pkg433 - why 612 Allocated reads £996 instead of £17,317
+========================================================
 
-Deploy after pkg431. One changed file: pages/api/cron/crm-email-volume.js. No new files.
+Deploy after pkg432.
 
-The month window was capped at 24. Asking for 37 quietly gave you 24 - which would have
-looked like "the data does not go back further". Now capped at 60.
-
-
-RUN THIS
---------
-    /api/cron/crm-email-volume?months=37&mailbox=edita@rockroofing.co.uk
-
-37 months = three years plus the current month. Re-running OVERWRITES the months it
-recounts, so the year you already have is simply rewritten with the same figures. No
-duplicates, nothing lost.
-
-It should scan roughly 10,900 messages - her thirteen months scanned 3,815, so about 293 a
-month including internal mail - against a cap of 20,000. Comfortable.
-
-CHECK THE RESPONSE for "truncated". If it appears, add &max=40000 and run it again.
-
-
-IF THE OLDER MONTHS COME BACK MISSING OR ZERO
------------------------------------------------
-That would be Microsoft, not us. Sent Items retention and archiving are Exchange settings -
-if mail older than a certain age has been archived out of the mailbox, Graph will not
-return it and there is nothing this code can do about it.
-
-You will be able to tell the two apart: a month that is absent from byMonth was never
-reached; a month present with 0 was reached and genuinely had no external mail. After
-pkg409 a truncated run no longer writes zeros for months it did not get to, so an absent
-month is honest rather than misleading.
-
-
-ONE THING TO DO ON THE SCORECARD AFTERWARDS
----------------------------------------------
-The chart only draws the months inside the From/To range at the top of the page, which
-currently starts a year ago. Widen "From" to 2023 to actually see the extra two years -
-otherwise the data will be there and the graph will look unchanged.
-
-
-THE OTHER TWO MAILBOXES
+CHANGED FILES (replace)
 -----------------------
-Niall and Roman have thirteen months. Same URL with their address if you want three years
-for them too - they are lower volume, so it will be quicker:
+  pages/api/sync-invoices.js
+  components/SyncBar.js
 
-    /api/cron/crm-email-volume?months=37&mailbox=niall@rockroofing.co.uk
-    /api/cron/crm-email-volume?months=37&mailbox=roman@rockroofing.co.uk
+NEW FILES: none.
+
+
+THE CAUSE
+---------
+Your Xero export shows Gas Lane retention across TWELVE applications:
+
+    Jul 24     43.39        Mar 25    326.94
+    Nov 24  10,967.15       Apr 25  1,128.67
+    Jan 25   2,048.22       May 25    246.11
+    Jan 25     360.45       Jun 25    695.83
+    Feb 25     721.31       Jul 25    297.36
+                            Aug 25    268.24
+                            Oct 25    213.87
+                                    ----------
+                            TOTAL  17,317.54
+
+The invoice sync only RE-FETCHES invoices inside its window. Anything outside is kept
+from what is already stored - it is not read from Xero again.
+
+retention612 was added to this sync AFTER many of those lines were first stored. Lines
+stored before it existed have no retention612 at all, and the total treats a missing
+value as zero.
+
+Gas Lane's most recent application is October 2025. On the default SIX MONTH window, not
+one of its twelve applications is re-fetched:
+
+    window   apps re-fetched   612 recovered
+     6 mo         0 / 12          £0
+    12 mo         2 / 12        £482
+    18 mo         8 / 12      £3,898
+    24 mo        11 / 12     £17,274
+    30 mo        12 / 12     £17,317
+
+The Retention page's own sync button was set to 12 months, which recovers £482 of £17,317.
+That is the £996 you are seeing - a fragment, from whichever lines happened to be
+re-fetched at some point.
+
+This is NOT a Xero problem. Your figures there are right.
+
+
+FIXED
+-----
+The sync cap was 24 months, which was not even enough to repair Gas Lane - it starts July
+2024. Now 60. The dropdown on the sync bar offers 3, 6, 12, 18, 24, 36 and 48 months.
+
+
+DO THIS AFTER DEPLOYING
+-----------------------
+On the Retention page, set the sync dropdown to 36 months and press Invoices.
+
+It will take a while - it is re-reading three years of sales invoices from Xero and Xero
+rate-limits. Leave it to finish.
+
+Then check Gas Lane. 612 Allocated should read about £17,317.
+
+EVERY project is affected, not only Gas Lane. Any project whose invoicing stopped more
+than six months ago will be showing a partial 612 figure or none at all. One 36-month
+sync repairs the lot.
+
+
+WORTH KNOWING FOR NEXT TIME
+---------------------------
+This will happen again to any field added to the invoice sync later. Lines outside the
+window keep whatever they were stored with, so a new field is missing on old lines
+permanently until a wide enough sync is run.
+
+If a field is ever added again, the accompanying instruction has to be "run a full-history
+sync once" - otherwise it silently reads zero on everything historic, and it looks like
+Xero is wrong rather than the sync.

@@ -184,7 +184,20 @@ export default async function handler(req, res) {
     catch { return res.status(400).json({ error: 'Could not refresh Xero token — reconnect Xero.' }) }
     const tenantId = tokens.tenant_id
 
-    const months = Math.min(24, Math.max(1, parseInt(req.body?.months) || 6))
+    // Capped at 60, not 24, and worth understanding why the window matters so much.
+    //
+    // Lines OUTSIDE the window are kept from what is already stored - they are not
+    // re-fetched. So any field added to this sync AFTER a line was first stored is
+    // missing on that line for ever, and reads as zero.
+    //
+    // retention612 is exactly that. A project whose last application predates the window
+    // shows £0 or a fraction of its true retention, because only the lines re-fetched
+    // since the field existed carry it. Gas Lane's last app was Oct 2025: on a 6-month
+    // window not one of its twelve applications is re-fetched, so £17,317 of retention
+    // reads as a few hundred pounds.
+    //
+    // A 24-month cap was not enough to repair it either - Gas Lane starts Jul 2024.
+    const months = Math.min(60, Math.max(1, parseInt(req.body?.months) || 6))
     const win = new Date(); win.setMonth(win.getMonth() - months)
     const winStr = win.toISOString().split('T')[0]
 
