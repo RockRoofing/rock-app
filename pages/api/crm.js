@@ -3,6 +3,7 @@ import { verifySessionToken, SESSION_COOKIE } from '../../lib/portalAuth'
 import { canAccessArea, normRole } from '../../lib/roles'
 import { SEED_DEALS } from '../../lib/crmSeedDeals'
 import { DEFAULT_FIELD_SCHEMA } from '../../lib/crmFieldSchema'
+import { fetchMessageBody } from '../../lib/msGraph'
 import { sendMentionEmails, getMentionableUsers, diagnoseMentions, sendTestMention } from '../../lib/crmMentions'
 import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail, allowEmailAgain, moveEmail, dismissEmails, allocateEmails } from '../../lib/crmEmailSync'
 
@@ -448,6 +449,22 @@ export default async function handler(req, res) {
       if (!list.some(r => String(r).toLowerCase() === reason.toLowerCase())) list.push(reason)
       await set(LOST_REASONS_KEY, list)
       return res.json({ ok: true, reasons: list })
+    }
+
+    // Full body of one email, fetched from Graph when somebody expands it. Not stored -
+    // see the note on fetchMessageBody.
+    if (body.action === 'email-body') {
+      const mailbox = String(body.mailbox || '')
+      const messageId = String(body.messageId || '')
+      if (!mailbox || !messageId) return res.status(400).json({ error: 'mailbox and messageId required' })
+      try {
+        const out = await fetchMessageBody({ mailbox, messageId })
+        return res.json({ ok: true, ...out })
+      } catch (e) {
+        // A message deleted or moved in Outlook will 404 here. Say so plainly rather than
+        // leaving a spinner turning.
+        return res.json({ ok: false, error: e.message || 'Could not load that email' })
+      }
     }
 
     if (body.action === 'emails') {

@@ -1,82 +1,56 @@
-pkg462 - six changes
-====================
+pkg463 - "more" now shows the whole email
+=========================================
 
-Deploy after pkg461.
+Deploy after pkg462.
 
 CHANGED FILES (replace)
 -----------------------
   pages/crm.js
   pages/api/crm.js
-  lib/crmFieldSchema.js
+  lib/msGraph.js
 
 NEW FILES: none.
 
 
-1. CLEAR FILTERS NOW CLEARS THE SAVED LISTS
----------------------------------------------
-Tender Review and MC Secured/Negotiating were left on. They are the filters most likely to
-be hiding something - they cut the board to four stages - so a Clear Filters that leaves
-them set is not clearing the filters. The Activities date range is cleared too.
+THE CAUSE
+---------
+The sync never stored the full email. It stores Graph's bodyPreview - their own short
+extract - capped at a further 400 characters:
+
+    preview: (m.bodyPreview || '').slice(0, 400)
+
+So "more" was expanding to the whole of what we HELD, which was the start of the email.
+There was nothing more to show.
 
 
-2. LOST REASONS ARE NOW A MANAGED LIST
-----------------------------------------
-The list is stored rather than hard-coded, and the Mark lost modal reads it.
+FIXED - FETCHED WHEN YOU ASK, NOT STORED
+------------------------------------------
+Pressing "more" on an email whose preview was cut fetches the full body from Outlook,
+once, and caches it for as long as the page is open.
 
-    ANYONE   can pick a reason, or choose "Something else..." and type one. It is
-             recorded on the deal either way - nobody is ever blocked from closing a deal
-             because their reason is new.
+Not stored, deliberately. Keeping every full body would multiply the size of the email
+store many times over for text almost nobody reads - and that store is already large
+enough to need chunked saving.
 
-    ADMIN    gets a tick box on that free-text option: "Add this to the lost-reason list
-             for everyone". Admins can also add or remove reasons through the API.
+Only fetched when it is actually needed:
 
-Write access is admin only on purpose. A list everyone can edit stops being a list - you
-end up with "Price", "price" and "Too expensive" as three reasons and the Lost Reasons
-analysis is worthless. Saving also trims, drops blanks and removes duplicates
-case-insensitively.
+    email of 90 chars    no "more" at all
+    email of 250 chars   "more" expands instantly, no request - we already have it all
+    email of 400 chars   "more" fetches the rest
 
-The API now sends your ROLE to the CRM, which it did not before - that is what the gate
-reads.
-
-STILL TO DO: there is no admin SCREEN for editing the list yet, only the API behind it and
-the add-from-modal route. Say the word and I will put a proper editor on /crm-scores or
-wherever suits.
+So the common case costs nothing.
 
 
-3. LIST VIEW COLUMNS - ALL OF THEM
-------------------------------------
-The column chooser used a hand-written list, so anything added to the deal since could be
-seen on a project and never chosen as a column - MCD, Lost Reason, the contact's phone and
-email, the company's address and registration number.
-
-It is now built from the schema, covering Summary, Details, Customer Contact and
-Organization, labelled with their group so "Email (Customer Contact)" and "Email
-(Organization)" are tellable apart.
+PLAIN TEXT, ON PURPOSE
+----------------------
+The body is requested as text rather than HTML. An email body is untrusted input from
+outside the business - rendering its HTML would mean sanitising it properly first, and
+plain text reads perfectly well in a card. Formatting and images are what "Open in
+Outlook" is for.
 
 
-4. INLINE EDITING IN LIST VIEW
-------------------------------
-Editable in place: Estimator Responsible, General Information, Project Stage, Size: m2,
-Project Score.
-
-Deliberately those five and no more - they are what gets corrected in bulk while scanning.
-Anything else is a trip into the project, where there is room for context. Clicking a
-field no longer opens the deal underneath it.
-
-
-5. PROJECT SCORE 1-10
----------------------
-Was 0-10. Now 1-10 in both the deal and Add Project - one schema change covers both, since
-both build their inputs from it.
-
-NOTE: 0 is no longer selectable. Nothing in your imported data uses it (the scores run
-1-9), and any deal somehow holding a 0 keeps and displays it rather than being blanked.
-
-
-6. THE COMPLETE ACTIVITY MODAL NO LONGER VANISHES
----------------------------------------------------
-Clicking outside it used to close it and lose what you had typed. It now closes only on
-Cancel, the x at the top right, or Escape.
-
-Applied to the Edit activity modal as well - same problem, same typed work, and there was
-no reason for the two to behave differently.
+WHEN IT CANNOT LOAD
+-------------------
+A message deleted or moved in Outlook since it was filed will not be there any more. You
+get a plain message saying so with an Open in Outlook link, rather than a spinner that
+never stops.

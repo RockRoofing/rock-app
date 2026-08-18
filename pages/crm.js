@@ -1129,8 +1129,40 @@ function recipientLine(m) {
 
 function EmailCard({ m, children }) {
   const [open, setOpen] = useState(false);
+  // THE FULL BODY, fetched the first time it is asked for.
+  //
+  // What the sync stores is Graph's own short extract, capped at 400 characters, so
+  // "more" could only ever expand to that - it showed the start of the email and stopped.
+  // Keeping every full body would multiply the size of the email store for text almost
+  // nobody reads, so it is fetched per message instead, and only once.
+  const [full, setFull] = useState(null);
+  const [loadingFull, setLoadingFull] = useState(false);
+  const [fullErr, setFullErr] = useState('');
+
   const preview = String(m.preview || '').trim();
-  const long = preview.length > 180;
+  // 400 is where the stored preview is cut, so anything at or near it is almost certainly
+  // longer than what we hold - offer to fetch the rest.
+  const maybeTruncated = preview.length >= 380;
+  const long = preview.length > 180 || maybeTruncated;
+  const shown = full != null ? full : preview;
+
+  const expand = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (full != null || !maybeTruncated || !m.mailbox) return;
+    setLoadingFull(true); setFullErr('');
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'email-body', mailbox: m.mailbox, messageId: m.id }),
+      }).then((r) => r.json());
+      if (d && d.ok) setFull(String(d.body || '').trim());
+      else setFullErr(d?.error || 'Could not load the rest of this email.');
+    } catch (e) {
+      setFullErr('Could not load the rest of this email.');
+    }
+    setLoadingFull(false);
+  };
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
@@ -1141,8 +1173,10 @@ function EmailCard({ m, children }) {
       {recipientLine(m) && <div style={{ fontSize: 11, color: C.dim, marginTop: 2, wordBreak: 'break-word' }}>{recipientLine(m)}</div>}
       {preview && (
         <div style={{ fontSize: 12.5, color: C.text, marginTop: 6, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
-          {open || !long ? preview : preview.slice(0, 180) + '\u2026'}
-          {long && <button onClick={() => setOpen((v) => !v)} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>{open ? 'less' : 'more'}</button>}
+          {open || !long ? shown : preview.slice(0, 180) + '\u2026'}
+          {loadingFull && <span style={{ color: C.dim }}> loading the rest&#8230;</span>}
+          {fullErr && <div style={{ color: C.lost, fontSize: 11.5, marginTop: 4 }}>{fullErr} <a href={m.webLink} target="_blank" rel="noreferrer" style={{ color: C.link }}>Open in Outlook</a></div>}
+          {long && <button onClick={expand} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>{open ? 'less' : 'more'}</button>}
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
