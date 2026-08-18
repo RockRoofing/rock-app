@@ -816,7 +816,11 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
       )}
 
       {/* Summary + Certificate (shown at the top) */}
-      <SummaryBlock sum={sum} app={app} />
+      {/* SummaryBlock is a SEPARATE component - the Retention section and the two
+          release lines live in it, so everything they touch has to be passed in. The
+          crash was prevReleases being read here while only existing in the editor. */}
+      <SummaryBlock sum={sum} app={app} prevReleases={prevReleases} locked={locked}
+        onToggleRelease={(field, val) => { setApp(a => ({ ...a, [field]: val })); setDirty(true) }} />
 
       {/* Contract Works */}
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', marginBottom: 16 }}>
@@ -1038,7 +1042,7 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
   )
 }
 
-function SummaryBlock({ sum, app }) {
+function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleRelease }) {
   const row = (label, c) => (
     <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
       <td style={{ padding: '8px 12px', fontSize: 13 }}>{label}</td>
@@ -1099,8 +1103,8 @@ function SummaryBlock({ sum, app }) {
           const on = !!app[field]
           return (
             <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 6, borderRadius: 8, border: `1px solid ${on ? '#bbf7d0' : '#e5e7eb'}`, background: on ? '#f0fdf4' : '#fff', cursor: (locked || claimedBefore) ? 'default' : 'pointer' }}>
-              <input type="checkbox" checked={on} disabled={locked || claimedBefore}
-                onChange={(e) => { setApp(a => ({ ...a, [field]: e.target.checked })); setDirty(true) }} />
+              <input type="checkbox" checked={on} disabled={locked || claimedBefore || !onToggleRelease}
+                onChange={(e) => onToggleRelease && onToggleRelease(field, e.target.checked)} />
               <span style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1a2e', minWidth: 70 }}>{label}</span>
               <span style={{ fontSize: 13, color: on ? '#166534' : '#888' }}>{fmt(sum.halfRetention)}</span>
               {claimedBefore && <span style={{ fontSize: 11, color: '#888' }}>already claimed on an earlier application</span>}
