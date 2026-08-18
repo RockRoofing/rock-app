@@ -1,32 +1,51 @@
-pkg485 - status flips to Sent, and you land back on the list
-============================================================
+pkg486 - the applications list disagreed with the application
+=============================================================
 
-Deploy after pkg484. One changed file: pages/applications.js. No new files.
-
-
-WHY THE BADGE STAYED ON DRAFT
--------------------------------
-The server was doing its job - it marks the application sent and returns it. The parent's
-list was updated too.
-
-The EDITOR was not. Since pkg444 it keeps its own copy of the application, so that a save
-landing mid-typing cannot overwrite what you are entering, and that copy is only refreshed
-when a DIFFERENT application is opened. The same one coming back marked sent was
-deliberately ignored.
-
-So the record was correct, the list behind you was correct, and the badge in front of you
-was wrong.
-
-Now updated on both routes - emailed to the customer, and marked as sent by hand.
+Deploy after pkg485. One changed file: pages/applications.js. No new files.
 
 
-AND IT TAKES YOU BACK TO THE LIST
------------------------------------
-After either route: the message shows briefly, then you land on that project's
-applications table, refetched.
+YES, AND THE APPLICATION ITSELF IS RIGHT
+------------------------------------------
+I checked every line of the certificate on your screenshot and it is internally correct:
 
-The row already shows a green Sent badge and its button changes from Open to View, so the
-action is visibly done rather than something you have to go and confirm.
+    Gross      134,139.33 = 131,752.21 measured + 2,387.12 variations
+    MCD 2.5%     3,353.48
+    Sub-total  130,785.85
+    Ret 3%       3,923.58   (half = 1,961.79, which is what the release claims)
+    Released     1,961.79
+    Total      128,824.06 = 130,785.85 - 3,923.58 + 1,961.79
 
-The 400ms pause is deliberate - "Application sent." needs a moment on screen or the view
-changes before you have registered that anything happened.
+This cert 10,979.21 follows from those. The retention section, the release and the
+certificate all agree.
+
+THE LIST WAS WRONG. It showed App 2's gross as 131,752.21 and this cert as 8,686.68.
+
+
+TWO CAUSES, BOTH IN THE LIST
+------------------------------
+VARIATIONS are only FROZEN onto an application when it is sent. Until then they are built
+live from the tracker - which the editor does and the list did not. So a draft's gross in
+the list excluded its variations, and both your applications showed the same 131,752.21
+despite differing by £2,387.12.
+
+RELEASES need the previous application to know which half was already claimed. The list
+was not passing it.
+
+The list now builds the application exactly as the editor does. The two agree.
+
+
+SOMETHING IN YOUR DATA, NOT THE CODE
+--------------------------------------
+"Previously certified (gross)" on App 2 is 124,604.65. That is App 1's NET total - what
+the customer pays. Its GROSS is 131,752.21.
+
+The field is the gross figure: the certificate works down from gross to net, so a net
+figure entered there makes this certificate £4,467.27 too high.
+
+    entered  124,604.65  ->  this cert 10,979.21
+    correct  131,752.21  ->  this cert  4,219.41
+
+Worth correcting before this one goes out.
+
+And App 1 is ticked FINAL ACCOUNT with App 2 sitting after it. Probably left over from
+testing, but a final account should be the last one.

@@ -347,8 +347,25 @@ export default function ApplicationsPage() {
                     <tbody>
                       {displayApps.map(a => {
                         const isFirst = sortedApps.length > 0 && sortedApps[0].id === a.id
+                        const prevApp = prevAppForApp(sortedApps, a)
                         const prevCert = isFirst ? 0 : (a.prevCertGross != null ? a.prevCertGross : prevGrossForApp(sortedApps, a))
-                        const sum = computeApplicationSummary(a, prevCert)
+                        // VARIATIONS AND RELEASES, same as the editor.
+                        //
+                        // This computed from `a` straight off the record, which was wrong
+                        // twice over:
+                        //
+                        //   VARIATIONS are only FROZEN onto the application when it is
+                        //   sent. Until then a.variations is empty, so a draft's gross
+                        //   here excluded them - the list showed the same gross for two
+                        //   applications that differ by £2,387 of variations, and a
+                        //   different "this cert" from the one on the application itself.
+                        //
+                        //   RELEASES need the previous application, or a half claimed
+                        //   last month is counted again in this cert.
+                        //
+                        // Built the same way the editor builds it, so the two agree.
+                        const listApp = { ...a, variations: buildAppVariations(a, trackerVariations) }
+                        const sum = computeApplicationSummary(listApp, prevCert, prevApp)
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{appNumberFor(a)}</td>
@@ -358,7 +375,7 @@ export default function ApplicationsPage() {
                                   release can be picked out without opening every
                                   application to find which one it was. Same wording as
                                   the PDF and the email, from the same function. */}
-                              {describeApplication(a, { prevReleases: prevAppForApp(sortedApps, a) }).tags.map(t => (
+                              {describeApplication(a, { prevReleases: prevApp }).tags.map(t => (
                                 <span key={t} style={{
                                   marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 700,
                                   background: t === 'FINAL ACCOUNT' ? '#ccfbf1' : '#e0e7ff',
