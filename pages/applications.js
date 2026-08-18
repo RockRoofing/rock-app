@@ -336,11 +336,25 @@ export default function ApplicationsPage() {
                 {sortedApps.length === 0 ? (
                   <div style={{ padding: 24, color: '#aaa', fontSize: 13 }}>No applications yet.</div>
                 ) : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  // Twelve columns need somewhere to go. width:100% alone makes a table
+                  // SHRINK to fit rather than overflow, so the figures would squeeze until
+                  // they wrapped - the same fault the retention register had. A minimum
+                  // width forces the overflow and gives it a scrollbar.
+                  <div style={{ overflowX: 'auto' }}>
+                  <table style={{ minWidth: 1100, width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
-                        {['App No.', 'Month', 'App date', 'Status', 'Gross to date', 'This cert (net)', ''].map((h, i) => (
-                          <th key={i} style={{ padding: '9px 12px', textAlign: i >= 4 && i <= 5 ? 'right' : 'left', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
+                        {/* The whole certificate, left to right, ending at what the
+                            customer owes for that application. Reading it off the list is
+                            the common question - "what is due on app 12" - and it meant
+                            opening each one. */}
+                        {[
+                          ['App No.', 'left'], ['Month', 'left'], ['App date', 'left'], ['Status', 'left'],
+                          ['Gross to date', 'right'], ['MCD', 'right'], ['Retention', 'right'],
+                          ['Ret. released', 'right'], ['Prev. cert', 'right'],
+                          ['This cert (net)', 'right'], ['Payment due', 'left'], ['', 'left'],
+                        ].map(([h, align], i) => (
+                          <th key={i} style={{ padding: '9px 12px', textAlign: align, fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -388,7 +402,13 @@ export default function ApplicationsPage() {
                               <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: (a.status && a.status !== 'draft') ? '#dcfce7' : '#fef9c3', color: (a.status && a.status !== 'draft') ? '#16a34a' : '#a16207' }}>{(a.status && a.status !== 'draft') ? 'Sent' : 'Draft'}</span>
                             </td>
                             <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.grossCurrent)}</td>
+                            {/* Cumulative figures, matching the certificate's Current column. */}
+                            <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', color: '#b91c1c' }}>{sum.current.mcd ? `(${fmt(sum.current.mcd)})` : '—'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', color: '#b91c1c' }}>{sum.current.retention ? `(${fmt(sum.current.retention)})` : '—'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', color: '#166534' }}>{sum.current.released ? fmt(sum.current.released) : '—'}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', color: '#6b7280' }}>{fmt(sum.previously.total)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13, textAlign: 'right', fontWeight: 700 }}>{fmt(sum.thisCert.total)}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 12.5, whiteSpace: 'nowrap', color: '#374151' }}>{a.paymentDate ? fmtDate(a.paymentDate) : '—'}</td>
                             <td style={{ padding: '9px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                               <button onClick={() => setOpenId(a.id)} style={{ background: '#f0f2f5', border: '1px solid #e5e7eb', borderRadius: 6, padding: '5px 12px', fontSize: 12, cursor: 'pointer', color: '#374151', fontWeight: 600 }}>{(a.status && a.status !== 'draft') ? 'View' : 'Open'}</button>
                               {(!a.status || a.status === 'draft') && <button onClick={() => deleteApp(a)} style={{ background: '#fff', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: '#dc2626', fontWeight: 600, marginLeft: 6 }}>Delete</button>}
@@ -398,6 +418,7 @@ export default function ApplicationsPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </>

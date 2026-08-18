@@ -1,64 +1,41 @@
-pkg489 - discount defaults to measured work only
-================================================
+pkg490 - the applications table now reads through to what is due
+================================================================
 
-Deploy after pkg488.
-
-CHANGED FILES (replace)
------------------------
-  pages/api/applications.js
-  pages/project/[id].js          <- literal [id] folder
-
-NEW FILES: none.
+Deploy after pkg489. One changed file: pages/applications.js. No new files.
 
 
-THE DEFAULT IS NOW OFF FOR BOTH
----------------------------------
-    [ ] Apply the discount to variations
-    [ ] Apply the discount to materials on site
+THE COLUMNS
+-----------
+    App No. | Month | App date | Status | Gross to date | MCD | Retention |
+    Ret. released | Prev. cert | This cert (net) | Payment due
 
-So a new project discounts the measured work only, and the certificate reads:
+The certificate, left to right, ending at what the customer owes for that application -
+which is the question people actually ask of this table, and it meant opening each one to
+answer it.
 
-    Gross measured work
-    MCD
-    Sub-total
-    Variations & materials
-    Sub-total
-    Retention
-    Total
+Deductions are shown in brackets and red, the release in green, the previous certificate
+in grey. This cert stays bold: it is the answer.
 
-Tick either box to bring that element back under the discount.
+Payment due comes from the application's own date, so you can see what is owed and when
+without opening anything.
 
 
-WHAT I DID NOT FLIP, AND WHY IT MATTERS
------------------------------------------
-The CALCULATION still treats a missing flag as "discount applies to everything".
+THE FIGURES MATCH THE APPLICATION
+-----------------------------------
+Same calculation, same variations built live from the tracker, same release handling as
+pkg486. A row reads exactly as the certificate inside it:
 
-Applications sent before this setting existed have no flag stored. Had I flipped the
-calculation default, every one of them would have re-priced itself on the new basis - and
-the PDF for a certificate the customer received last year would print different figures
-from the one they have. Those are settled documents.
-
-So:
-
-    old application, no flag      whole account      unchanged, £199,536.75
-    new application               measured only      £200,039.77
-    project with a box ticked     whole account      £199,536.75
-
-Verified on your J1 numbers.
+    Gross to date   £210,982.56
+    MCD            (£4,755.99)
+    Retention      (£6,186.80)
+    Ret. released    £3,095.15
+    Prev. cert     £175,508.68
+    This cert       £27,626.24
 
 
-DRAFTS FOLLOW THE PROJECT
--------------------------
-A draft picks up a change to the setting; a sent application keeps the basis it was sent
-on.
-
-Without that, changing the setting would appear to do nothing on any draft already
-started - you would have had to delete it and begin again to see the effect. Applications
-pre-dating the setting are excluded from this and stay as they are.
-
-
-ONE THING TO EXPECT
--------------------
-Any DRAFT created between pkg488 and this deploy was stamped with the old default and will
-now switch to measured-only when you open it, and the figures will change. That is
-correct, but worth knowing rather than discovering.
+AND IT SCROLLS
+--------------
+Twelve columns needed somewhere to go. A table set to width:100% SHRINKS to fit rather
+than overflowing, so the figures would have squeezed until they wrapped - the fault the
+retention register had. Minimum width 1,100px inside a scrolling container, so it
+overflows properly and gets a scrollbar when the window is narrow.
