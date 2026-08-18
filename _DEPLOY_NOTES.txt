@@ -1,60 +1,44 @@
-pkg452 - one timeline, and Complete activity on the deal
-========================================================
+pkg453 - one place to read, one place to write
+==============================================
 
-Deploy after pkg451. One changed file: pages/crm.js. No new files.
-
-
-1. ONE TIMELINE INSTEAD OF TWO LISTS
-------------------------------------
-Email and history were two separate stacks - all the mail, then all the history. Following
-what actually happened on a project meant reading both and holding the dates in your head:
-a reply and the note written about it sat a screen apart.
-
-They are now one list, newest first, with filter chips across the top:
-
-    Everything 24 | Emails 11 | Activities 6 | Notes 4 | Changes 3
-
-The counts are live. "Changes" is the catch-all - stage moves, value edits, won/lost,
-mentions - so a new kind of history entry turns up there rather than disappearing from
-every filter.
-
-Switching a filter hides rows. It never reorders or reloads, so you do not lose your place.
-
-The Email section above is unchanged and still there. That is deliberate: it is where you
-work THROUGH mail - allocate, move, remove - while the timeline is for reading what
-happened in order. Same data, two jobs.
+Deploy after pkg452. One changed file: pages/crm.js. No new files.
 
 
-2. COMPLETE ACTIVITY, THE SAME EVERYWHERE
+WHAT THE DEAL LOOKS LIKE NOW
+----------------------------
+    Activities to do        unchanged
+    Notes                   the box to WRITE a note. Nothing listed underneath.
+    Timeline                everything, in order, filterable
+
+The Email section is gone. The list of saved notes under the Notes box is gone. Both were
+showing the same records the timeline shows.
+
+
+NOTES ARE YELLOW IN THE TIMELINE
+--------------------------------
+Same yellow card and border they had in the Notes section, so they still read as something
+a person wrote rather than something the system recorded. Comment threads come with them -
+you can still comment, edit and delete a note from the timeline.
+
+
+THE EMAIL ACTIONS CAME WITH THE EMAILS
+----------------------------------------
+Move and Remove are on the email cards in the timeline, with the same project picker.
+
+That mattered more than it looks: removing the section without them would have left a
+misfiled email correctable only from the review queue - which it has already left by being
+filed. There would have been no way to fix one at all.
+
+
+ALSO REMOVED
+------------
+The DealEmails component itself, now that nothing renders it. A component nothing renders
+is a component nobody maintains, and it would have drifted out of step with the timeline
+version within a month.
+
+
+ONE THING TO SANITY-CHECK AFTER DEPLOYING
 -------------------------------------------
-Pressing Done on an activity in the deal used to just tick it. No note of what happened,
-no follow-up. The Activities page has always asked both.
-
-The deal now opens the same modal:
-
-    What happened? (call notes, email summary, outcome)
-    Set the next activity - what, when, who
-
-Two routes to the same action behaving differently is how outcomes go unrecorded - Edita
-completing from the Activities page left a record, the same person completing from the
-deal left nothing.
-
-
-3. "WHAT HAPPENED" IS VISIBLE IN THE TIMELINE
------------------------------------------------
-A recorded outcome now shows as its own block under the activity:
-
-    Activity completed: Call
-    ┃ WHAT HAPPENED
-    ┃ Spoke to Dave, pricing agreed, sending revised quote Friday
-
-Rather than being dropped in as plain text indistinguishable from the activity's own
-description. Applies to completions from both screens.
-
-
-ONE THING WORTH KNOWING
------------------------
-The follow-up activity is created a moment AFTER the completion is recorded, deliberately.
-Created in the same instant they share a timestamp and the timeline sorts them
-arbitrarily - so "completed the call" could appear below "call them again", which reads
-backwards.
+Open a project with plenty of history and confirm the Emails filter shows the same mail the
+old section did. The timeline fetches it the same way, but it is a different code path and
+worth ten seconds of your time.

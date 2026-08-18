@@ -774,7 +774,11 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
   const isNote = h.type === 'note';
   const isActivity = h.type === 'activity';
   return (
-    <div style={{ display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
+    <div style={isNote
+      // Notes keep the yellow they had in the Notes section, so they still read as
+      // something somebody wrote rather than something the system recorded.
+      ? { display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8, background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8 }
+      : { display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
       <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: `1px solid ${C.line}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}{(h.type === 'note' || h.type === 'activity') && h.author ? <span style={{ color: C.dim }}> · {h.author}</span> : ''}</div>
@@ -836,8 +840,9 @@ const timelineBucket = (h) => {
 };
 
 function HistoryFeed(props) {
-  const { emails = [], ...rest } = props;
+  const { emails = [], onMoveEmail, onRemoveEmail, pickerDeals = [], ...rest } = props;
   const [filter, setFilter] = useState('all');
+  const [moveFor, setMoveFor] = useState(null);
 
   // Emails carried into the same shape as a history entry so one sort covers both.
   const emailEntries = (emails || []).map((m) => ({
@@ -869,7 +874,31 @@ function HistoryFeed(props) {
         })}
       </div>
       {shown.map((h) => h.__email
-        ? <div key={h.id} style={{ marginBottom: 8 }}><EmailCard m={h.__email} /></div>
+        ? (
+          <div key={h.id} style={{ marginBottom: 8 }}>
+            <EmailCard m={h.__email}>
+              <div style={{ flex: 1 }} />
+              {/* Move and Remove came from the old Email section. Losing them with the
+                  section would have meant a misfiled email could only be corrected from
+                  the review queue, which it is no longer in once filed. */}
+              {onMoveEmail && (
+                <button onClick={() => setMoveFor((v) => v === h.__email.id ? null : h.__email.id)}
+                  title="File this email against a different project"
+                  style={{ background: 'none', border: 'none', color: C.link, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Move</button>
+              )}
+              {onRemoveEmail && (
+                <button onClick={() => onRemoveEmail(h.__email)}
+                  title="Take this email off the project altogether"
+                  style={{ background: 'none', border: 'none', color: C.dim, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
+              )}
+            </EmailCard>
+            {moveFor === h.__email.id && (
+              <div style={{ marginTop: -4, marginBottom: 10 }}>
+                <ProjectPicker deals={pickerDeals} onPick={(d) => { onMoveEmail(h.__email, d); setMoveFor(null); }} onCancel={() => setMoveFor(null)} />
+              </div>
+            )}
+          </div>
+        )
         : <HistoryItem key={h.id} h={h} {...rest} />)}
       {shown.length === 0 && (
         <div style={{ fontSize: 13, color: C.dim, padding: '16px 0' }}>
@@ -973,98 +1002,10 @@ function EmailCard({ m, children }) {
 
 // Emails filed against one project. Loads its own data - the deals list is already 6.4MB
 // and email must not ride along with it.
-function DealEmails({ dealId, deals, onEmailsLoaded }) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-  const [note, setNote] = useState('');
-  const [moveFor, setMoveFor] = useState(null);
-
-  useEffect(() => {
-    let dead = false;
-    setLoading(true); setErr('');
-    fetch('/api/crm', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'emails', dealId: String(dealId) }),
-    })
-      .then((r) => r.json())
-      .then((d) => { if (dead) return; if (d && d.ok) { setItems(d.items || []); if (onEmailsLoaded) onEmailsLoaded(d.items || []); } else setErr(d?.error || 'Could not load email'); })
-      .catch(() => { if (!dead) setErr('Could not load email'); })
-      .finally(() => { if (!dead) setLoading(false); });
-    return () => { dead = true; };
-  }, [dealId]);
-
-  // Filed against the WRONG project - far commoner than an email that should not be on a
-  // project at all. It gets its own action because Remove is not a route to the same
-  // place: removing does not put the email back in the queue for you to re-file.
-  const move = async (m, target) => {
-    const before = items;
-    setMoveFor(null); setNote('');
-    setItems((prev) => prev.filter((x) => x.id !== m.id));
-    try {
-      const d = await fetch('/api/crm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'move-email', messageId: m.id, fromDealId: String(dealId), toDealId: String(target.id) }),
-      }).then((r) => r.json());
-      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
-      setNote(`Moved to ${target.title || target.id}.`);
-    } catch (e) {
-      setItems(before);
-      setNote(`That did not save - the email has been put back. ${e.message || ''}`.trim());
-    }
-  };
-
-  // Should not be on a project at all. Removing also tells the sync to leave it alone -
-  // without that it would simply be re-filed on the next run and the removal would look
-  // like it had not worked.
-  const unfile = async (m) => {
-    const ok = window.confirm('Take this email off the project?\n\nIt stays in Outlook. The sync will not file it again, here or anywhere else, until you undo it.\n\nIf it simply belongs on a DIFFERENT project, use Move instead.');
-    if (!ok) return;
-    const before = items;
-    setItems((prev) => prev.filter((x) => x.id !== m.id));
-    setNote('');
-    try {
-      const d = await fetch('/api/crm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'unfile-email', messageId: m.id, dealId: String(dealId) }),
-      }).then((r) => r.json());
-      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
-      setNote('Removed.');
-    } catch {
-      setItems(before);
-      setNote('That did not save - the email has been put back.');
-    }
-  };
-
-  return (
-    <div>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Email</div>
-      <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>
-        Filed automatically from the synced mailboxes. To file one by hand, BCC crm@rockroofing.co.uk with <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>[CRM-{dealId}]</span> in the subject.
-      </div>
-      <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 8, padding: 12 }}>
-        {note && <div style={{ fontSize: 12.5, color: C.dim, marginBottom: 8 }}>{note}</div>}
-        {loading && <div style={{ fontSize: 13, color: C.dim }}>Loading&#8230;</div>}
-        {!loading && err && <div style={{ fontSize: 13, color: C.lost }}>{err}</div>}
-        {!loading && !err && !items.length && <div style={{ fontSize: 13, color: C.dim }}>No email filed against this project yet.</div>}
-        {!loading && !err && items.map((m) => (
-          <div key={m.id}>
-            <EmailCard m={m}>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => setMoveFor((v) => v === m.id ? null : m.id)} title="File this email against a different project" style={{ background: 'none', border: 'none', color: C.link, fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Move</button>
-              <button onClick={() => unfile(m)} title="Take this email off the project altogether" style={{ background: 'none', border: 'none', color: C.dim, fontSize: 11.5, cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>Remove</button>
-            </EmailCard>
-            {moveFor === m.id && (
-              <div style={{ marginTop: -4, marginBottom: 10 }}>
-                <ProjectPicker deals={(deals || []).filter((d) => String(d.id) !== String(dealId))} onPick={(d) => move(m, d)} onCancel={() => setMoveFor(null)} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+// DealEmails removed. It rendered the Email section on the deal, which has been folded
+// into the timeline - the cards, the Move and Remove actions and the project picker all
+// live there now. Kept out rather than left unused: a component nothing renders is a
+// component nobody maintains.
 
 // Pick a project for an email that could not be matched. Searches title, company and
 // contact, because you will remember any one of the three.
@@ -1422,11 +1363,56 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
 function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
-  // Emails lifted out of DealEmails so the timeline below can interleave them with
-  // history. DealEmails still renders its own section - this is the same data, shown
-  // twice on purpose: the Email block for working through mail, the timeline for
-  // following what happened in order.
+  // Filed email for the timeline. The Email section that used to fetch this has gone, so
+  // the fetch lives here - one request when the deal opens, same as before.
   const [dealEmails, setDealEmails] = useState([]);
+  useEffect(() => {
+    let dead = false;
+    setDealEmails([]);
+    fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'emails', dealId: String(deal.id) }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (!dead && d && d.ok) setDealEmails(d.items || []); })
+      .catch(() => {});
+    return () => { dead = true; };
+  }, [deal.id]);
+
+  // Move a filed email to another project, or take it off projects altogether. Both were
+  // on the old Email section; the timeline needs them or a misfiled email can only be
+  // corrected from the review queue, which it has already left.
+  const moveEmail = async (m, target) => {
+    const before = dealEmails;
+    setDealEmails((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'move-email', messageId: m.id, fromDealId: String(deal.id), toDealId: String(target.id) }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+    } catch {
+      setDealEmails(before);
+      alert('That email did not move - it has been put back.');
+    }
+  };
+
+  const removeEmail = async (m) => {
+    const ok = window.confirm('Take this email off the project?\n\nIt stays in Outlook. The sync will not file it again, here or anywhere else, until you undo it.\n\nIf it simply belongs on a DIFFERENT project, use Move instead.');
+    if (!ok) return;
+    const before = dealEmails;
+    setDealEmails((prev) => prev.filter((x) => x.id !== m.id));
+    try {
+      const d = await fetch('/api/crm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unfile-email', messageId: m.id, dealId: String(deal.id) }),
+      }).then((r) => r.json());
+      if (!d || !d.ok) throw new Error(d?.error || 'Failed');
+    } catch {
+      setDealEmails(before);
+      alert('That email was not removed - it has been put back.');
+    }
+  };
   const [completingAct, setCompletingAct] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
@@ -1456,7 +1442,6 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
   const toggle = (g) => setCollapsed((p) => ({ ...p, [g]: !p[g] }));
   const groupFields = (g) => schema.filter((f) => f.group === g);
   const openActs = (deal.activities || []).filter((a) => !a.done).sort((a, b) => a.due.localeCompare(b.due));
-  const noteHistory = deal.history.filter((h) => h.type === 'note').sort((a, b) => new Date(b.ts) - new Date(a.ts));
   const summaryFields = groupFields('summary').map((f) => f.key === 'organization' ? { ...f, search: 'org' } : f.key === 'contact_person' ? { ...f, search: 'contact' } : f);
 
   const statusTint = deal.status === 'won' ? C.wonTint : deal.status === 'lost' ? C.lostTint : C.card;
@@ -1563,18 +1548,9 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
             <MentionInput value={noteText} onChange={setNoteText} users={users} placeholder="Take a note… (type @ to notify someone)" rows={2} />
             <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
           </div>
-          {/* saved notes with comment threads, staying in Notes section */}
-          {noteHistory.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              {noteHistory.map((h) => (
-                <div key={h.id} style={{ background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 10, marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>{h.author || 'Unassigned user'} <span style={{ fontWeight: 400, color: C.dim }}>· {dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span></div>
-                  <div style={{ fontSize: 13, color: C.text, whiteSpace: 'pre-wrap', marginTop: 3 }}>{h.body}</div>
-                  <CommentThread comments={h.comments} onAdd={(body) => onCommentNote(deal.id, h.id, body)} onEdit={(cid, body) => onEditComment(deal.id, h.id, cid, body)} onDelete={(cid) => onDeleteComment(deal.id, h.id, cid)} users={users} />
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Saved notes are NOT listed here any more - they are in the timeline below,
+              in the same yellow, with their comment threads. One place to read, one place
+              to write. */}
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
@@ -1598,15 +1574,16 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
               onConfirm={(reason) => { onSetLostReason(deal.id, reason); onSetStatus(deal.id, 'lost'); setLostFor(null); }} />
           )}
 
-          {/* Email - loads on its own, keyed to the deal */}
-          <DealEmails dealId={deal.id} deals={allDeals} onEmailsLoaded={setDealEmails} />
-
-          <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
+          {/* The Email section has gone - filed mail is in the timeline below, with its
+              Move and Remove actions carried across, and the Emails filter to see only
+              mail. */}
 
           {/* History */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Timeline</div>
           <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>Everything on this project in order, newest first — email, activities, notes and changes. Notes and activities stay editable.</div>
           <HistoryFeed history={deal.history} emails={dealEmails} users={users}
+            onMoveEmail={moveEmail} onRemoveEmail={removeEmail}
+            pickerDeals={(allDeals || []).filter((d) => String(d.id) !== String(deal.id))}
             onEdit={(hid, body) => onEditHistory(deal.id, hid, body)}
             onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
             onDelete={(hid) => onDeleteHistory(deal.id, hid)}
