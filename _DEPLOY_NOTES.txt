@@ -1,58 +1,42 @@
-pkg491 - the 2nd retention release cancelled itself out
-=======================================================
+pkg492 - "CR not locked" on a project whose rates ARE locked
+============================================================
 
-Deploy after pkg490.
-
-CHANGED FILES (replace)
------------------------
-  lib/applications.js
-  lib/applicationPdf.js
-  pages/applications.js
-  pages/api/applications.js
-
-NEW FILES: none.
+Deploy after pkg491. One changed file: pages/applications.js. No new files.
 
 
-NO, IT IS NOT RIGHT - AND YOU FOUND IT FROM THE ONE FIGURE THAT GAVE IT AWAY
-------------------------------------------------------------------------------
-    Retention released    Current £1,962.68   Previously £1,962.68   This cert £0.00
+THE CAUSE
+---------
+The Upcoming Applications table is fetched ONCE, when the page first loads.
 
-Current is the position on the job SO FAR. Two halves have been released by this point, so
-it should read £3,925.37. It showed one half - and cancelled against the previous column,
-so the certificate claimed nothing.
+Contracted rates are locked on a DIFFERENT page. Lock them, come back here, and you are
+looking at the state as it was when this page loaded - so a project you have just locked
+still reads "CR not locked", and the row stays blocked.
 
-The cause: "released" was read from THIS application's tick boxes only. App 3 has the 2nd
-half ticked and not the 1st, so Current counted one half; Previously counted the 1st from
-app 2; the difference was zero.
-
-Released to date is now cumulative - this application's halves OR any released earlier.
-
-    current    £3,925.37
-    previously £1,962.68
-    this cert  £1,962.68     <- the 2nd release, correctly claimed
-
-Checked against your actual figures.
+Nothing was wrong with the lock. I checked the save path: it writes locked:true to the
+project and clears the dashboard cache. The data was right and the screen was old.
 
 
-AND YOUR SUGGESTION, WHICH IS THE RIGHT ONE
----------------------------------------------
-Both halves now appear in the summary once either has been released:
+FIXED TWO WAYS
+--------------
+IT REFRESHES WHEN YOU COME BACK. On window focus and when the tab becomes visible again,
+which covers returning from Contracted Rates whether you opened it in this tab or another.
 
-    1st Release Retention (released previously)    £1,962.68
-    2nd Release Retention                          £1,962.68
+AND THERE IS A RECHECK LINK on the blocked row itself, beside the warning:
 
-A certificate headed "2nd Retention Release" with no sign the first ever happened invites
-the obvious question from the customer. Now it answers it.
+    CR not locked  Recheck
 
-Same on screen, where a half released earlier is labelled and its tick box locked.
+That matters because this warning BLOCKS the row - no application number, no date, no way
+to raise it. A blocked row with no way to clear it except reloading the page is the sort
+of thing people work around rather than report.
 
 
-ALSO FIXED, THE UNDERLYING CAUSE
-----------------------------------
-A new application did not inherit the release flags from the one before it. pkg473 assumed
-a claimed half stayed ticked and locked - nothing was carrying it forward, so it appeared
-un-claimed and could have been claimed a second time.
+IF RECHECK DOES NOT CLEAR IT
+-----------------------------
+Then the rates genuinely are not locked, and the message is right. Two things it
+distinguishes between:
 
-Now carried forward at creation. The cumulative reading above means your EXISTING
-applications are already correct without it - I verified that on app 3 as it stands - but
-the flags being right matters for what the tick boxes show.
+    "CR not set up"   no contracted rates on the project at all
+    "CR not locked"   rates are there, the Lock has not been pressed
+
+The second is the common one - rates uploaded and edited, but never locked, which is also
+what stops them populating the contract value and budgets.

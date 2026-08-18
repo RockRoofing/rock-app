@@ -123,6 +123,26 @@ export default function ApplicationsPage() {
     loadUpcoming()
   })() }, [])
 
+  // REFRESH THE UPCOMING TABLE WHEN YOU COME BACK TO IT.
+  //
+  // loadUpcoming() ran once, on mount. Contracted rates are locked on a DIFFERENT page,
+  // so returning here showed the state as it was when this page first loaded - "CR not
+  // locked" on a project whose rates you had just locked, and no way to clear it short of
+  // a hard reload.
+  //
+  // Refreshed on focus and when the tab becomes visible again, which covers coming back
+  // from Contracted Rates in the same tab or another one.
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) loadUpcoming() }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function load(pid) {
     if (!pid) return
     setLoading(true); setMsg('')
@@ -510,7 +530,18 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
                   </td>
                   <td style={{ padding: '9px 14px', fontSize: 13, color: '#374151' }}>{needsCR ? '—' : fmtD(r.valDate)}</td>
                   <td style={{ padding: '9px 14px', fontSize: 12 }}>
-                    {needsCR ? <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'CR not set up' : 'CR not locked'}</span>
+                    {/* A stale warning here BLOCKS the row, so there has to be a way to
+                        clear it without reloading the page. The table is fetched once on
+                        mount and rates are locked on another page - if you have just
+                        locked them, Recheck is the honest answer. */}
+                    {needsCR ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: '#dc2626', fontWeight: 700, fontSize: 11 }}>{r.crStatus === 'none' ? 'CR not set up' : 'CR not locked'}</span>
+                        <button onClick={() => { setUpcoming(u => ({ ...u, loading: true })); loadUpcoming() }}
+                          title="Re-check. If you have just locked the rates, this picks it up."
+                          style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontSize: 11, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Recheck</button>
+                      </span>
+                    )
                       : r.status === 'dismissed' ? <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: '#6b7280' }}>Dismissed</span>
                       : <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: r.status === 'draft' ? '#fef9c3' : '#eef2ff', color: r.status === 'draft' ? '#a16207' : '#4f46e5' }}>{r.status === 'draft' ? 'Draft ready' : 'Due to raise'}</span>}
                   </td>
