@@ -1140,16 +1140,23 @@ function EmailCard({ m, children }) {
   const [fullErr, setFullErr] = useState('');
 
   const preview = String(m.preview || '').trim();
-  // 400 is where the stored preview is cut, so anything at or near it is almost certainly
-  // longer than what we hold - offer to fetch the rest.
-  const maybeTruncated = preview.length >= 380;
-  const long = preview.length > 180 || maybeTruncated;
+
+  // WHY THIS IS NOT A LENGTH TEST.
+  //
+  // My first attempt only fetched the full body when the stored preview looked truncated
+  // at 400 characters. It never was: Microsoft caps bodyPreview at 255, so the test could
+  // not fire and "more" kept showing the same short extract.
+  //
+  // The stored preview is Graph's SUMMARY of the email, never the email. So if we can
+  // fetch, we offer to - no guessing from its length.
+  const canFetch = !!(m.mailbox && m.id);
+  const long = canFetch || preview.length > 180;
   const shown = full != null ? full : preview;
 
   const expand = async () => {
     if (open) { setOpen(false); return; }
     setOpen(true);
-    if (full != null || !maybeTruncated || !m.mailbox) return;
+    if (full != null || !canFetch) return;
     setLoadingFull(true); setFullErr('');
     try {
       const d = await fetch('/api/crm', {
@@ -1171,12 +1178,21 @@ function EmailCard({ m, children }) {
       </div>
       <div style={{ fontSize: 12, color: C.dim, marginTop: 3 }}>{emailPerson(m.from, m.fromName)}</div>
       {recipientLine(m) && <div style={{ fontSize: 11, color: C.dim, marginTop: 2, wordBreak: 'break-word' }}>{recipientLine(m)}</div>}
-      {preview && (
+      {/* Shown when there is a preview OR when we can fetch the body. An email whose
+          preview came back empty - which happens - used to render no body block at all
+          and no way to open it. */}
+      {(preview || canFetch) && (
         <div style={{ fontSize: 12.5, color: C.text, marginTop: 6, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
-          {open || !long ? shown : preview.slice(0, 180) + '\u2026'}
+          {open || !long
+            ? (shown || <span style={{ color: C.dim, fontStyle: 'italic' }}>No preview stored - press below to read it.</span>)
+            : preview.slice(0, 180) + '\u2026'}
           {loadingFull && <span style={{ color: C.dim }}> loading the rest&#8230;</span>}
           {fullErr && <div style={{ color: C.lost, fontSize: 11.5, marginTop: 4 }}>{fullErr} <a href={m.webLink} target="_blank" rel="noreferrer" style={{ color: C.link }}>Open in Outlook</a></div>}
-          {long && <button onClick={expand} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>{open ? 'less' : 'more'}</button>}
+          {long && (
+            <button onClick={expand} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>
+              {open ? 'less' : (canFetch ? 'read full email' : 'more')}
+            </button>
+          )}
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
