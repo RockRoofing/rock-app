@@ -1,7 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get, saveProject } from '../../lib/db'
 import { buildApplicationPDF } from '../../lib/applicationPdf'
-import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
+import { describeApplication, computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 
 // POST /api/application-send
 // Body: { projectId, appId, to:[..], cc:[..], replyTo, subject, text, markSent }
