@@ -1,42 +1,39 @@
-pkg476 - a project opened in a new tab showed no activities
-===========================================================
+pkg477 - application full width, three cards across
+===================================================
 
-Deploy after pkg475. One changed file: pages/crm.js. No new files.
-
-
-WHY ONLY IN A NEW TAB
----------------------
-That detail was the whole diagnosis, so thank you for it.
-
-Opening a project loads two things: the deal list (crm:deals, about 6.4MB) and that
-project's activities and notes (tiny). loadDealSubs merged the second into the first with
-
-    setDeals(prev => prev.map(d => d.id !== id ? d : { ...d, activities: [...] }))
-
-FROM THE BOARD the deals are already in memory, so the merge lands.
-
-IN A NEW TAB both fetches start together, and the small one regularly wins. The map then
-matches nothing, does nothing - and worse, the "already loaded" flag had been set on the
-first line of the function, so it never tried again.
-
-The result is a project with no activities, showing the blank "add activity" form. The
-activity was never lost; this page had simply never received it.
+Deploy after pkg476. One changed file: pages/applications.js. No new files.
 
 
-FIXED
------
-The flag is only set once there is actually a deal to merge into. If the deals have not
-arrived, the request is remembered and retried the moment they do.
+THE LAYOUT
+----------
+    Summary          Retention          Certificate
 
-Tested: deferred on a new tab, retried when the deals land, merged once, and a second call
-is still a no-op.
+Side by side, instead of Summary and Certificate paired with Retention as a full-width
+band beneath them.
 
-Nothing else changes. From the board it behaves exactly as before, because the deals were
-always there.
+Retention sits in the MIDDLE deliberately - it is the bridge between what has been done
+and what is being certified, and both neighbours reference it.
+
+It is also now styled to match the other two: same card, same corner radius, same header
+bar. It was built as a standalone panel and looked like something that had wandered in.
 
 
-WORTH KNOWING
--------------
-This will have affected notes, filed email and the timeline in the same way, not just
-activities - anything loadDealSubs brings in. If a project opened from a link has ever
-looked emptier than it should, this was why.
+THE PAGE IS WIDER
+-----------------
+1280 was right for two blocks. With three it squeezed the tables until the figures
+wrapped. Now 2000, still centred, so the columns do not stretch absurdly on a very wide
+monitor.
+
+
+IT COLLAPSES RATHER THAN CRUSHES
+----------------------------------
+The grid fits as many 340px columns as will go, so it drops to two and then one on a
+narrow window instead of squashing three four-column tables into nothing.
+
+Checked at the widths people actually use:
+
+    1366px   3 columns, ~428px each
+    1512px   3 columns, ~477px each
+    1920px   3 columns, ~613px each
+
+So a laptop still gets all three side by side, which is the point.

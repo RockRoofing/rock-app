@@ -247,7 +247,10 @@ export default function ApplicationsPage() {
       <Head><title>Rock Roofing — Applications · v29</title></Head>
       <div style={{ minHeight: '100vh', background: '#f5f6f8' }}>
         <CommercialNav active="/applications" />
-        <div style={{ padding: 24, maxWidth: 1280, margin: '0 auto' }}>
+        {/* Full width. 1280 was fine when this was two blocks side by side; with three
+            it squeezed the tables until the figures wrapped. Capped at 2000 so the
+            columns do not stretch absurdly on a very wide monitor. */}
+        <div style={{ padding: 24, maxWidth: 2000, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 13, color: '#555', fontWeight: 600 }}>Select Project — Upcoming Applications</label>
             <ProjectSearchSelect projects={projects} value={projectId} onPick={(pid) => pickProject(pid)} minWidth={340} />
@@ -1055,7 +1058,16 @@ function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleR
   )
   const th = { padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+    // Summary | Retention | Certificate, side by side. Retention sits in the middle
+    // deliberately: it is the bridge between what has been done and what is being
+    // certified, and both neighbours reference it.
+    //
+    // Retention is the narrowest of the three - it is two tick boxes and a total, where
+    // the others are four-column tables.
+    // auto-fit with a 340px minimum: three across on a wide screen, two then one as it
+    // narrows. A fixed three-column grid would have crushed the tables on a laptop, which
+    // is what most of these are opened on.
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16, marginBottom: 16, alignItems: 'start' }}>
       {/* top block */}
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <div style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#1a1a2e', borderBottom: '1px solid #eee' }}>Summary</div>
@@ -1083,11 +1095,12 @@ function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleR
           </tbody>
         </table>
       </div>
-      {/* RETENTION SECTION.
-          Sits at the end, after the works, because a release is claimed against the whole
-          job rather than against any line in it. */}
-      <div style={{ background: '#fff', borderRadius: 10, padding: 16, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Retention</div>
+      {/* RETENTION - the middle column. Styled to match its two neighbours: same card,
+          same radius, same header bar, so the three read as one row rather than a panel
+          that wandered in. */}
+      <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <div style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#1a1a2e', borderBottom: '1px solid #eee' }}>Retention</div>
+        <div style={{ padding: 16 }}>
         <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
           Retention on the final account is {fmt(sum.retentionOnFinal)} at {app.retentionPct || 0}%.
           Each half is {fmt(sum.halfRetention)}. Tick a half when it falls due and it is added to this application.
@@ -1118,6 +1131,7 @@ function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleR
             Total retention released to date: <strong>{fmt(sum.releasedTotal)}</strong> of {fmt(sum.retentionOnFinal)}.
           </div>
         )}
+        </div>
       </div>
 
       {/* certificate block */}
