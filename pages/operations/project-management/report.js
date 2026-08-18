@@ -258,7 +258,10 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
     }
     setSaving(true)
     try {
-      const report = { ...f, status: asComplete ? 'complete' : 'draft', approvalDate: asComplete ? todayISO() : f.approvalDate }
+      // Keep what was typed. This forced today's date on submit, which silently threw
+      // away an edit made two lines above it - only defaulting to today when the field
+      // was genuinely left empty.
+      const report = { ...f, status: asComplete ? 'complete' : 'draft', approvalDate: f.approvalDate || todayISO() }
       if (id) report.id = id
       const r = await fetch('/api/project-reports', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ report }) })
       const d = await r.json()
@@ -338,9 +341,18 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
         <div style={{ fontSize: 12.5, color: '#555', marginBottom: 12 }}>I can confirm that the information I have provided is true and that I have completed all sections accurately and diligently.</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
           <div><div style={{ fontSize: 12, fontWeight: 600 }}>Name <span style={{ color: '#dc2626' }}>*</span></div><input value={f.approvalName || ''} onChange={e => set({ approvalName: e.target.value })} style={{ ...input, marginTop: 4 }} /></div>
-          <div><div style={{ fontSize: 12, fontWeight: 600 }}>Date</div><input value={f.status === 'complete' ? (f.approvalDate || todayISO()) : todayISO()} disabled style={{ ...input, marginTop: 4, background: '#f0f0f0', color: '#888' }} /></div>
+          {/* EDITABLE. It was stamped with today and locked, which is wrong whenever the
+              report is written up after the fact - a Friday walk round typed on Monday
+              was dated Monday, and the Commercial Scorecard counts reports by this date,
+              so it landed in the wrong week. */}
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>Date</div>
+            <input type="date" value={f.approvalDate || todayISO()}
+              onChange={e => set({ approvalDate: e.target.value })}
+              style={{ ...input, marginTop: 4 }} />
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Date is stamped as the submission date on completion.</div>
+        <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Defaults to today. Change it if the report is being written up for an earlier visit &mdash; this is the date it counts against on the Commercial Scorecard.</div>
       </div>
 
       {err && <div style={{ color: '#dc2626', fontSize: 13, marginTop: 14 }}>{err}</div>}

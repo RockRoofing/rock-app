@@ -74,6 +74,10 @@ export default function Dashboard() {
   const [vcForm, setVcForm] = useState({ dealId: '', dealTitle: '', organizationName: '', oldValue: '', newValue: '', changeDate: new Date().toISOString().split('T')[0], estimator: '', notes: '' })
   const [savingVc, setSavingVc] = useState(false)
   const [drCustName, setDrCustName] = useState('All')
+  // Strike rate by customer. Its own filter rather than a global one: strike rate against
+  // a named main contractor is a question you ask on this page and nowhere else, and
+  // adding it to the shared bar would silently narrow six other pages.
+  const [srCompany, setSrCompany] = useState('All')
   const [drSalesPerson, setDrSalesPerson] = useState('All')
   const [ppStages, setPpStages] = useState([])
   const [ppFilters, setPpFilters] = useState({ customerType: 'All', estimator: 'All', salesPerson: 'All', status: 'All', leadSource: 'All', region: 'All', custName: 'All', systemPriced: 'All' })
@@ -183,6 +187,7 @@ export default function Dashboard() {
   // cannot narrow a count of what was added - they can only make it wrong. Hidden here,
   // untouched everywhere else.
   const isDR = page === 'Deals Researched'
+  const isStrike = page === 'Strike Rate'
 
   const filterBar = (
     <div style={{ marginBottom: 20, padding: '12px 16px', background: '#f8f8f7', borderRadius: 8, border: '0.5px solid #e1e0d9' }}>
@@ -235,6 +240,20 @@ export default function Dashboard() {
             ))}
           </div>
         </div>}
+        {isStrike && (
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>Customer</label>
+            <select value={srCompany} onChange={e => setSrCompany(e.target.value)}
+              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, minWidth: 200 }}>
+              <option value="All">All customers</option>
+              {[...new Set(deals
+                .filter(d => (d.status === 'won' || d.status === 'lost') && d.value > 0)
+                .map(d => d.organizationName).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b))
+                .map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
         <div>
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>{isDR ? 'Date added from' : 'From'}</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: 12, padding: '4px 6px', border: '0.5px solid #d0d0cc', borderRadius: 6, fontFamily: 'inherit' }} />
@@ -802,7 +821,9 @@ export default function Dashboard() {
       const STAGE2_ONWARDS = ['Stage 2','Review','MC Unsecured - Not Priced','MC Unsecured','MC Secured','Negotiating','Variations']
       
       // Only include deals with a value > 0
-      const baseFiltered = applyFilters(filterDealsByDate(deals.filter(d => (d.status === 'won' || d.status === 'lost') && d.value > 0), 'closeTime'))
+      let baseFiltered = applyFilters(filterDealsByDate(deals.filter(d => (d.status === 'won' || d.status === 'lost') && d.value > 0), 'closeTime'))
+      // Customer filter, this page only.
+      if (srCompany !== 'All') baseFiltered = baseFiltered.filter(d => (d.organizationName || '') === srCompany)
       
       const closed = baseFiltered.filter(d => {
         // Default: only deals decided from Stage 2 onwards (using projectStage custom field)

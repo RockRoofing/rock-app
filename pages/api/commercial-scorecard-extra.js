@@ -118,14 +118,27 @@ export default async function handler(req, res) {
           if (dk >= start && dk <= end && cellStatus(cell) === 'actual') { required.add(projectNo); break }
         }
       }
-      // Completed: of those required, how many have >=1 report dated in the week.
+      // Completed against the required list, for the percentage.
       let completed = 0
       for (const projectNo of required) {
         const dates = reportDates[projectNo] || []
         if (dates.some(dt => dt >= start && dt <= end)) completed++
       }
+      // EVERY report written in the week, whatever the Gantt says.
+      //
+      // "Required" is derived from projects with an ACTUAL day allocated that week. If
+      // nobody has marked the Gantt actual, required is 0, the percentage is null, and
+      // the card shows nothing at all - even though reports were written. And a report on
+      // a project with no actual day was invisible either way.
+      //
+      // The count is what was asked for: how many were done. The percentage stays as it
+      // was, for weeks where the Gantt says what was expected.
+      let completedAll = 0
+      for (const dates of Object.values(reportDates)) {
+        if (dates.some(dt => dt >= start && dt <= end)) completedAll++
+      }
       const req = required.size
-      weeklyReports.push({ key, required: req, completed, pct: req === 0 ? null : Math.round((completed / req) * 100) })
+      weeklyReports.push({ key, required: req, completed, completedAll, pct: req === 0 ? null : Math.round((completed / req) * 100) })
     }
   }
 

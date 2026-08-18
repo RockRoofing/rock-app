@@ -1,39 +1,61 @@
-pkg477 - application full width, three cards across
-===================================================
+pkg478 - three things
+=====================
 
-Deploy after pkg476. One changed file: pages/applications.js. No new files.
+Deploy after pkg477.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/api/commercial-scorecard-extra.js
+  pages/commercial-scorecard.js
+  pages/sales-crm.js
+  pages/operations/project-management/report.js
 
-THE LAYOUT
-----------
-    Summary          Retention          Certificate
-
-Side by side, instead of Summary and Certificate paired with Retention as a full-width
-band beneath them.
-
-Retention sits in the MIDDLE deliberately - it is the bridge between what has been done
-and what is being certified, and both neighbours reference it.
-
-It is also now styled to match the other two: same card, same corner radius, same header
-bar. It was built as a standalone panel and looked like something that had wandered in.
+NEW FILES: none.
 
 
-THE PAGE IS WIDER
------------------
-1280 was right for two blocks. With three it squeezed the tables until the figures
-wrapped. Now 2000, still centred, so the columns do not stretch absurdly on a very wide
-monitor.
+1. WEEKLY REPORTS NOT SHOWING
+-----------------------------
+The metric is a PERCENTAGE of required, and "required" is derived from projects with an
+ACTUAL day allocated on the Gantt that week.
+
+No actual days that week -> required is 0 -> percentage is null -> the card shows nothing,
+however many reports were written. And a report on a project with no actual day was not
+counted at all, even when there was a requirement.
+
+The page then made it worse by only looking at weeks where required > 0, so it skipped
+those weeks entirely rather than showing them.
+
+Now:
+  - the API also returns completedAll: every report written that week, whatever the Gantt
+    says
+  - with a requirement, the card shows the percentage exactly as before
+  - without one, it shows the COUNT, and says why there is no percentage:
+    "Latest week: 4 completed. No projects marked on site on the Gantt, so there is
+     nothing to measure against."
+
+Worth knowing: if you want the percentage back, the Gantt needs days marked ACTUAL for the
+projects on site. That is what defines "required".
 
 
-IT COLLAPSES RATHER THAN CRUSHES
-----------------------------------
-The grid fits as many 340px columns as will go, so it drops to two and then one on a
-narrow window instead of squashing three four-column tables into nothing.
+2. EDITABLE DATE ON THE WEEKLY PROJECT REPORT
+-----------------------------------------------
+The Approval date was stamped with today and greyed out. Now a normal date field,
+defaulting to today.
 
-Checked at the widths people actually use:
+This matters more than it looks: a Friday walk round typed up on Monday was dated Monday,
+and the Commercial Scorecard counts reports BY THIS DATE - so it landed in the wrong week
+and the metric above under-reported.
 
-    1366px   3 columns, ~428px each
-    1512px   3 columns, ~477px each
-    1920px   3 columns, ~613px each
+I also had to stop the submit overwriting it. It forced today's date on completion, which
+would have silently thrown away whatever you had just typed.
 
-So a laptop still gets all three side by side, which is the point.
+
+3. CUSTOMER FILTER ON STRIKE RATE
+-----------------------------------
+A "Customer" dropdown on the Strike Rate page, listing every main contractor with a
+decided deal. Pick one and the whole page - rate, values, chart, detail - is that customer
+only.
+
+Deliberately NOT added to the shared filter bar. Strike rate against a named contractor is
+a question you ask here and nowhere else; putting it in the global bar would have quietly
+narrowed six other pages.

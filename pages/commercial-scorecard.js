@@ -275,8 +275,13 @@ export default function CommercialScorecard() {
   const weeklyReportsTrend = (extra?.weeklyReports || []).filter(w => w.pct != null).map(w => ({ month: w.key.slice(5), value: w.pct / 100 }))
   const weeklyTaskLatest = weeklyTaskTrend.length ? weeklyTaskTrend[weeklyTaskTrend.length - 1].value : null
   const monthlyTaskLatest = monthlyTaskTrend.length ? monthlyTaskTrend[monthlyTaskTrend.length - 1].value : null
-  const latestReports = (extra?.weeklyReports || []).filter(w => w.required > 0).slice(-1)[0]
-  const weeklyReportsLatest = latestReports ? latestReports.pct / 100 : null
+  // The most recent week we have at all, not the most recent week with a requirement.
+  // Filtering on required > 0 meant a week where nobody had marked the Gantt actual was
+  // skipped entirely, and the card fell back to an older week or showed nothing.
+  const latestReports = (extra?.weeklyReports || []).slice(-1)[0]
+  const weeklyReportsLatest = (latestReports && latestReports.pct != null) ? latestReports.pct / 100 : null
+  const weeklyReportsCount = latestReports ? (latestReports.completedAll ?? latestReports.completed ?? 0) : null
+  const weeklyReportsRequired = latestReports ? latestReports.required : null
 
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
   const CARD_HEIGHT = 210
@@ -674,9 +679,16 @@ export default function CommercialScorecard() {
                 {renderCard({
                   key: 'weeklyReports',
                   label: 'No. of Weekly Project Reports',
-                  sub: latestReports ? `Latest week: ${latestReports.completed}/${latestReports.required} projects on site reported` : 'Reports completed vs projects on site each week',
-                  value: weeklyReportsLatest,
-                  format: pct,
+                  // With a requirement, show the percentage. Without one - nobody marked
+                  // the Gantt actual that week - show the COUNT rather than a blank card,
+                  // because reports were still written and that is the thing being asked.
+                  sub: !latestReports
+                    ? 'Reports completed vs projects on site each week'
+                    : weeklyReportsRequired > 0
+                      ? `Latest week: ${latestReports.completed}/${latestReports.required} projects on site reported`
+                      : `Latest week: ${weeklyReportsCount} completed. No projects marked on site on the Gantt, so there is nothing to measure against.`,
+                  value: weeklyReportsRequired > 0 ? weeklyReportsLatest : weeklyReportsCount,
+                  format: weeklyReportsRequired > 0 ? pct : (v) => (v == null ? '—' : String(v)),
                   target: targets.weeklyReports != null ? targets.weeklyReports : 1,
                   targetKey: 'weeklyReports',
                   trendData: weeklyReportsTrend,
