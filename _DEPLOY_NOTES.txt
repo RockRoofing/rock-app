@@ -1,51 +1,84 @@
-pkg486 - the applications list disagreed with the application
-=============================================================
+pkg488 - what the discount applies to, configurable per project
+===============================================================
 
-Deploy after pkg485. One changed file: pages/applications.js. No new files.
+Deploy after pkg487.
 
+CHANGED FILES (replace)
+-----------------------
+  lib/applications.js
+  lib/applicationPdf.js
+  pages/applications.js
+  pages/api/applications.js
+  pages/project/[id].js          <- literal [id] folder
 
-YES, AND THE APPLICATION ITSELF IS RIGHT
-------------------------------------------
-I checked every line of the certificate on your screenshot and it is internally correct:
-
-    Gross      134,139.33 = 131,752.21 measured + 2,387.12 variations
-    MCD 2.5%     3,353.48
-    Sub-total  130,785.85
-    Ret 3%       3,923.58   (half = 1,961.79, which is what the release claims)
-    Released     1,961.79
-    Total      128,824.06 = 130,785.85 - 3,923.58 + 1,961.79
-
-This cert 10,979.21 follows from those. The retention section, the release and the
-certificate all agree.
-
-THE LIST WAS WRONG. It showed App 2's gross as 131,752.21 and this cert as 8,686.68.
+NEW FILES: none.
 
 
-TWO CAUSES, BOTH IN THE LIST
-------------------------------
-VARIATIONS are only FROZEN onto an application when it is sent. Until then they are built
-live from the tracker - which the editor does and the list did not. So a draft's gross in
-the list excluded its variations, and both your applications showed the same 131,752.21
-despite differing by £2,387.12.
+TWO TICK BOXES IN EDIT PROJECT DETAILS
+----------------------------------------
+Under the MCD %:
 
-RELEASES need the previous application to know which half was already claimed. The list
-was not passing it.
+    [x] Apply the discount to variations
+    [x] Apply the discount to materials on site
 
-The list now builds the application exactly as the editor does. The two agree.
+Both default to ON, which is exactly how every application to date has been calculated.
+Nothing changes until you untick something.
 
 
-SOMETHING IN YOUR DATA, NOT THE CODE
---------------------------------------
-"Previously certified (gross)" on App 2 is 124,604.65. That is App 1's NET total - what
-the customer pays. Its GROSS is 131,752.21.
+THE CERTIFICATE REORDERS TO MATCH
+-----------------------------------
+Both ticked - as it is today:
 
-The field is the gross figure: the certificate works down from gross to net, so a net
-figure entered there makes this certificate £4,467.27 too high.
+    Gross              210,982.56
+    MCD 2.5%             5,274.56
+    Sub-total          205,707.99
+    Retention 3%         6,171.24
+    Total              199,536.75
 
-    entered  124,604.65  ->  this cert 10,979.21
-    correct  131,752.21  ->  this cert  4,219.41
+Both unticked - your QS's layout:
 
-Worth correcting before this one goes out.
+    Gross measured work    190,239.41
+    MCD 2.5%                 4,755.99
+    Sub-total              185,483.42
+    Variations & materials  20,743.15
+    Sub-total              206,226.57
+    Retention 3%             6,186.80
+    Total                  200,039.77
 
-And App 1 is ticked FINAL ACCOUNT with App 2 sitting after it. Probably left over from
-testing, but a final account should be the last one.
+    £503 more, because the discount is no longer charged on the variations and the
+    materials.
+
+Tick one and not the other and only that element moves below the discount, labelled
+accordingly. Retention is always last, on everything.
+
+Screen and PDF both follow.
+
+
+SENT CERTIFICATES CANNOT CHANGE
+---------------------------------
+The setting is stamped onto each application when it is CREATED, the same way mcdPct and
+retentionPct already are. Change the project setting and it affects new applications only.
+
+That mattered: the certificate is recalculated from the record every time it is opened, so
+without this a sent certificate would silently re-price itself the moment somebody changed
+a project setting - including the PDF, months after the customer received it.
+
+
+ONE THING I COULD NOT DO CLEANLY
+----------------------------------
+The "Previously Cert." column is a single gross number, so it cannot be split into
+measured / variations / materials on its own.
+
+Where the previous application is in the system, its real split is used, scaled to
+whatever gross is actually entered. Where it is a figure typed in by hand - a project
+part-certified before it came into the app - the whole amount is treated as the MCD base.
+That is the old behaviour and the more conservative of the two: it discounts more, not
+less.
+
+
+STILL WORTH ASKING YOUR QS
+--------------------------
+Their sheet shows MCD of 4,436.67 where 2.5% of the line above it is 4,755.98 - and the
+previous column is out by a similar proportion. Either the discount is being charged on a
+smaller base than the measured work shown, or that spreadsheet has a stale formula. Worth
+knowing which before this basis is used in anger.

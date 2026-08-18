@@ -243,6 +243,10 @@ export default async function handler(req, res) {
         // application on every project silently applied no discount - and every figure
         // downstream of it was then wrong by the value of the MCD.
         mcdPct: mcdPct != null ? mcdPct : (prev && prev.mcdPct != null ? prev.mcdPct : (rates.mcdPct != null ? rates.mcdPct : 0)),
+        // Stamped on at creation, like the percentages. A sent certificate must not change
+        // basis because somebody later altered the project setting.
+        mcdOnVariations: project.mcdOnVariations !== false,
+        mcdOnMaterials: project.mcdOnMaterials !== false,
         // Fraction -> percentage. Defaulting to 5 when nothing is set was a guess that
         // looked like a real answer; 0 with the project's own figure preferred is honest.
         retentionPct: retentionPct != null ? retentionPct : (prev && prev.retentionPct != null ? prev.retentionPct : (rates.retentionPct != null ? rates.retentionPct * 100 : 0)),

@@ -1747,6 +1747,27 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
         <input type="number" min="0" max="100" step="0.01" inputMode="decimal"
           value={mcdDisplay === '' ? '' : mcdDisplay}
           onChange={f('mcdPct')} style={inputStyle} placeholder="0.00" />
+        {/* WHAT THE DISCOUNT APPLIES TO. Some subcontracts discount the whole account;
+            others discount the contract sum only, valuing variations separately and
+            charging nothing on materials being stored. Both default to on, which is how
+            every existing application was calculated. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '2px 0 10px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#374151', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.mcdOnVariations !== false}
+              onChange={e => setForm({ ...form, mcdOnVariations: e.target.checked })} />
+            Apply the discount to <strong>variations</strong>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#374151', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.mcdOnMaterials !== false}
+              onChange={e => setForm({ ...form, mcdOnMaterials: e.target.checked })} />
+            Apply the discount to <strong>materials on site</strong>
+          </label>
+          <div style={{ fontSize: 11, color: '#999' }}>
+            Untick either and the certificate reorders: the discount comes off the measured work,
+            then variations and materials are added, then retention. Applies to NEW applications -
+            ones already sent keep the basis they were sent on.
+          </div>
+        </div>
         <div style={{ fontSize: 11.5, color: '#888', marginTop: -6, marginBottom: 10 }}>
           {mcdFromIhm && <span style={{ color: '#1c704f' }}>From the Internal Handover Minutes. </span>}
           Two decimal places. Deducted from the gross on every application <strong>before</strong>

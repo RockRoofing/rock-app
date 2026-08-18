@@ -597,6 +597,22 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
   // "Previously certified" gross is entered MANUALLY (blank until typed). The first
   // application has no prior, so it's fixed at £0.
   const [prevCertGross, setPrevCertGross] = useState(() => (isFirstApp ? '0' : (app.prevCertGross != null ? String(app.prevCertGross) : '')))
+  // The previous application's GROSS, shown beside the field as a prompt. This is the
+  // figure that belongs there, and having it on screen is worth more than any wording -
+  // it is only typed by hand when the app cannot work it out, which is exactly when
+  // somebody is reading off a paper certificate and reaches for the wrong line.
+  //
+  // Built the same way the editor builds its own summary, variations included, so a draft
+  // predecessor gives the right number rather than one missing its variations.
+  const prevAppGross = useMemo(() => {
+    if (isFirstApp || !prevReleases) return null
+    try {
+      const built = { ...prevReleases, variations: buildAppVariations(prevReleases, trackerVariations) }
+      const g = computeApplicationSummary(built, 0).grossCurrent
+      return (g != null && isFinite(g) && g > 0) ? g : null
+    } catch { return null }
+  }, [prevReleases, trackerVariations, isFirstApp])
+
   const prevCertEntered = isFirstApp || (prevCertGross !== '' && prevCertGross != null && !isNaN(parseFloat(prevCertGross)))
   const prevCertValue = isFirstApp ? 0 : (prevCertEntered ? parseFloat(prevCertGross) : 0)
   const isSent = !!app.status && app.status !== 'draft'
@@ -886,6 +902,32 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
             <div style={{ fontSize: 11.5, color: prevCertEntered ? '#94a3b8' : '#b45309' }}>
               {prevCertEntered ? 'Used as the "Previously Cert." column. This certificate = current − previously.' : '⚠ Insert the previously certified amount — you can’t submit or send until this is entered.'}
             </div>
+            {/* GROSS, not net. The easiest mistake on this page: the number staring at you
+                from the last application is its TOTAL, and putting that here computes MCD
+                and retention from the wrong base - every line of this certificate comes
+                out too high. Worth saying at the point of entry rather than in a manual. */}
+            <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4, lineHeight: 1.5 }}>
+              <strong>Gross</strong> &mdash; <strong>before</strong> MCD and <strong>before</strong> retention.
+              Take the <strong>Gross</strong> row from the previous application&rsquo;s certificate, not its Total.
+              {prevAppGross != null && (
+                <> The previous application&rsquo;s gross was <strong>{fmt(prevAppGross)}</strong>.</>
+              )}
+            </div>
+            {/* Flag a mismatch rather than only describing the rule. The wrong figure
+                looks perfectly reasonable - it is a real number off a real certificate -
+                so the only way to catch it is to compare. */}
+            {prevAppGross != null && prevCertEntered && Math.abs(parseFloat(prevCertGross) - prevAppGross) > 1 && (
+              <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 5, lineHeight: 1.5 }}>
+                &#9888; This does not match the previous application&rsquo;s gross of <strong>{fmt(prevAppGross)}</strong>.
+                {' '}If you have entered its <em>Total</em> by mistake, every line of this certificate will be too high.
+                {!locked && (
+                  <button onClick={() => { setPrevCertGross(String(prevAppGross)); setDirty(true) }}
+                    style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, color: '#2563eb', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
+                    Use {fmt(prevAppGross)}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1222,7 +1264,30 @@ function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleR
           <tbody>
             {/* "Retention Released" sits between the deduction and the total, which is
                 where it happens: retention comes off, the released half goes back on. */}
-            {[['Gross', 'gross'], [`MCD @ ${app.mcdPct}%`, 'mcd'], ['Sub-Total', 'subTotal'], [`Retention @ ${app.retentionPct}%`, 'retention'], ...(sum.releasedTotal > 0 ? [['Retention Released', 'released']] : []), ['Total', 'total']].map(([label, key]) => (
+            {/* The rows follow how MCD is applied. Discount the whole account and it reads
+                as it always did. Discount the measured work only and the variations and
+                materials appear BELOW the discount, with a second sub-total - which is
+                the order they are actually calculated in. */}
+            {(sum.mcdSplit
+              ? [
+                  ['Gross measured work', 'mcdBase'],
+                  [`MCD @ ${app.mcdPct}%`, 'mcd'],
+                  ['Sub-Total', 'subTotal'],
+                  [sum.mcdOnVars ? 'Materials on site' : (sum.mcdOnMos ? 'Variations' : 'Variations & materials'), 'after'],
+                  ['Sub-Total', 'netBeforeRet'],
+                  [`Retention @ ${app.retentionPct}%`, 'retention'],
+                  ...(sum.releasedTotal > 0 ? [['Retention Released', 'released']] : []),
+                  ['Total', 'total'],
+                ]
+              : [
+                  ['Gross', 'gross'],
+                  [`MCD @ ${app.mcdPct}%`, 'mcd'],
+                  ['Sub-Total', 'subTotal'],
+                  [`Retention @ ${app.retentionPct}%`, 'retention'],
+                  ...(sum.releasedTotal > 0 ? [['Retention Released', 'released']] : []),
+                  ['Total', 'total'],
+                ]
+            ).map(([label, key]) => (
               <tr key={key} style={{ borderBottom: '1px solid #f0f0f0', ...(key === 'total' ? { background: '#f8f9fa', fontWeight: 700 } : {}) }}>
                 <td style={{ padding: '8px 12px', fontSize: 13 }}>{label}</td>
                 <td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.current[key])}</td>
