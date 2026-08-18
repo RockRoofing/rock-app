@@ -773,13 +773,26 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
   const [showComments, setShowComments] = useState(false);
   const isNote = h.type === 'note';
   const isActivity = h.type === 'activity';
+  // COLOUR BY KIND, so the timeline can be scanned rather than read.
+  //
+  // The colours are the ones each kind already uses elsewhere on the page - notes the
+  // yellow of the Notes box, activities the blue of Activities to do - so nothing new has
+  // to be learned. Changes keep the plain grey feed styling they had; an email card
+  // brings its own white.
+  const rowStyle = isNote
+    ? { background: C.noteSaved, border: `1px solid ${C.noteBorder}` }
+    : isActivity
+      ? { background: C.activityBg, border: `1px solid ${C.activityBorder}` }
+      : { background: C.feedBg, border: `1px solid ${C.line}` };
+
   return (
-    <div style={isNote
-      // Notes keep the yellow they had in the Notes section, so they still read as
-      // something somebody wrote rather than something the system recorded.
-      ? { display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8, background: C.noteSaved, border: `1px solid ${C.noteBorder}`, borderRadius: 8 }
-      : { display: 'flex', gap: 10, padding: '10px 0', borderBottom: `1px solid ${C.line}` }}>
-      <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: `1px solid ${C.line}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
+    <div style={{
+      display: 'flex', gap: 10, padding: '10px 12px', marginBottom: 8,
+      borderRadius: 8, ...rowStyle,
+    }}>
+      {/* The icon keeps its white disc but borrows the row's border, so it reads as part
+          of the card rather than a hole punched in a tinted background. */}
+      <span style={{ width: 26, height: 26, borderRadius: '50%', background: '#fff', border: rowStyle.border, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>{historyIcon(h.type)}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: C.text, lineHeight: 1.4 }}>{h.text}{(h.type === 'note' || h.type === 'activity') && h.author ? <span style={{ color: C.dim }}> · {h.author}</span> : ''}</div>
         {editing ? (

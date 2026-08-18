@@ -1,44 +1,28 @@
-pkg453 - one place to read, one place to write
-==============================================
+pkg454 - the timeline colour-coded by kind
+==========================================
 
-Deploy after pkg452. One changed file: pages/crm.js. No new files.
-
-
-WHAT THE DEAL LOOKS LIKE NOW
-----------------------------
-    Activities to do        unchanged
-    Notes                   the box to WRITE a note. Nothing listed underneath.
-    Timeline                everything, in order, filterable
-
-The Email section is gone. The list of saved notes under the Notes box is gone. Both were
-showing the same records the timeline shows.
+Deploy after pkg453. One changed file: pages/crm.js. No new files.
 
 
-NOTES ARE YELLOW IN THE TIMELINE
---------------------------------
-Same yellow card and border they had in the Notes section, so they still read as something
-a person wrote rather than something the system recorded. Comment threads come with them -
-you can still comment, edit and delete a note from the timeline.
+THE FOUR KINDS
+--------------
+    Emails       white          unchanged - the email card was already white
+    Activities   blue           the same blue as "Activities to do" at the top
+    Notes        yellow         the same yellow as the Notes box
+    Changes      grey           the feed grey they already had
+
+The colours are the ones each kind already uses elsewhere on the page, so nothing new has
+to be learned - a yellow block is a note wherever you see it.
+
+Rows are now cards rather than divider-separated lines: same padding, same corner radius
+and same spacing as the email cards, so the four sit consistently in one column.
 
 
-THE EMAIL ACTIONS CAME WITH THE EMAILS
+ONE SMALL THING WORTH THE EXTRA MINUTE
 ----------------------------------------
-Move and Remove are on the email cards in the timeline, with the same project picker.
+The round icon on each row is a white disc. On a plain background that was invisible; on a
+tinted card it read as a hole punched through it.
 
-That mattered more than it looks: removing the section without them would have left a
-misfiled email correctable only from the review queue - which it has already left by being
-filed. There would have been no way to fix one at all.
-
-
-ALSO REMOVED
-------------
-The DealEmails component itself, now that nothing renders it. A component nothing renders
-is a component nobody maintains, and it would have drifted out of step with the timeline
-version within a month.
-
-
-ONE THING TO SANITY-CHECK AFTER DEPLOYING
--------------------------------------------
-Open a project with plenty of history and confirm the Emails filter shows the same mail the
-old section did. The timeline fetches it the same way, but it is a different code path and
-worth ten seconds of your time.
+It now borrows its row's border colour, so it belongs to the card. Trivial on its own, but
+with four colours down the page the alternative looks like a rendering fault rather than a
+design.
