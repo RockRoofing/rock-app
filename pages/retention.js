@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import * as XLSX from 'xlsx'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
@@ -122,6 +123,89 @@ export default function RetentionPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm, setAddForm] = useState(EMPTY_ENTRY)
   const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+
+  // IMPORT FROM A SPREADSHEET.
+  //
+  // Column headings are matched by NAME, so the file can be in any column order and extra
+  // columns are ignored - the export people actually have is never the shape you would
+  // design. Ref is the only required one: it is what a re-upload matches on, so a
+  // corrected figure updates the row rather than creating a second copy of it.
+  async function importFile(file) {
+    if (!file) return
+    setUploading(true); setImportMsg('')
+    try {
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
+      if (!rows.length) { setImportMsg('That file has no rows.'); setUploading(false); return }
+
+      // "Ret %" arrives as either 0.05 or 5 depending on how the sheet was formatted.
+      // Anything above 1 is read as a percentage, since a 300% retention is not a thing.
+      const pct = (v) => {
+        const n = parseFloat(v); if (isNaN(n)) return ''
+        return n > 1 ? n / 100 : n
+      }
+      const num = (v) => { const n = parseFloat(v); return isNaN(n) ? '' : n }
+      // Dates arrive three ways and only one of them is a Date:
+      //   a real Date          when the cell is formatted as a date and cellDates is on
+      //   an EXCEL SERIAL      45356 - days since 1899-12-30. new Date(45356) gives the
+      //                        year 45356, which is how "+045356-01-01" got into the
+      //                        first version of this
+      //   the text "TBC"       a real answer in these sheets, and not a date at all
+      const dat = (v) => {
+        if (v == null || v === '') return ''
+        if (v instanceof Date) return v.toISOString().slice(0, 10)
+        const t = String(v).trim()
+        if (!t || /^tbc$/i.test(t)) return ''
+        // Excel serial. Bounded so a stray number in a date column is not read as one:
+        // 20000 is 1954, 60000 is 2064.
+        const n = Number(t)
+        if (!isNaN(n) && n > 20000 && n < 60000) {
+          return new Date(Date.UTC(1899, 11, 30) + n * 86400000).toISOString().slice(0, 10)
+        }
+        const d = new Date(t)
+        return isNaN(d) ? '' : d.toISOString().slice(0, 10)
+      }
+      const pick = (r, ...names) => { for (const n of names) if (r[n] != null && r[n] !== '') return r[n]; return null }
+
+      const entries = rows
+        .filter((r) => pick(r, 'Ref', 'ourRef'))
+        .map((r) => ({
+          ourRef: String(pick(r, 'Ref', 'ourRef')).trim(),
+          customerName: String(pick(r, 'Customer', 'customerName') || '').trim(),
+          projectName: String(pick(r, 'Project', 'projectName') || '').trim(),
+          finalAccount: num(pick(r, 'Final Account', 'finalAccount')),
+          projectValue: num(pick(r, 'Gross AFA', 'Final Account')),
+          appliedFor: num(pick(r, 'Applied for')),
+          retentionPct: pct(pick(r, 'Ret %', 'retentionPct')),
+          pcType: String(pick(r, 'PC Type') || '').trim(),
+          qsName: String(pick(r, 'QS', 'qsName') || '').trim(),
+          release1Value: num(pick(r, '1st Value')),
+          release1Date: dat(pick(r, '1st Date')),
+          release2Value: num(pick(r, '2nd Value')),
+          release2Date: dat(pick(r, '2nd Date')),
+          vatType: String(pick(r, 'VAT Type') || '').trim(),
+          totalPaid: num(pick(r, 'Total Paid')),
+          comments: String(pick(r, 'Comments') || '').trim(),
+          trackerOnly: true,
+        }))
+
+      if (!entries.length) { setImportMsg('No rows with a Ref were found - that column is required.'); setUploading(false); return }
+
+      const res = await fetch('/api/retention', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Import failed')
+      setEntries(d.entries || [])
+      setImportMsg(`Imported ${entries.length} row${entries.length === 1 ? '' : 's'} — ${d.added} added, ${d.updated} updated.`)
+    } catch (e) {
+      setImportMsg(`Could not import that file. ${e.message || ''}`.trim())
+    }
+    setUploading(false)
+  }
   const [sortKey, setSortKey] = useState('ref')   // default sort by Ref
   const [sortDir, setSortDir] = useState('asc')
   const [filter, setFilter] = useState(() => new Set(['live'])) // multi-select: live | defects | complete
@@ -392,11 +476,23 @@ export default function RetentionPage() {
     <>
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+        {importMsg && (
+          <div style={{ margin: '10px 0', padding: '8px 12px', borderRadius: 8, fontSize: 13, background: importMsg.startsWith('Imported') ? '#e8f5ee' : '#fff4e5', border: `1px solid ${importMsg.startsWith('Imported') ? '#1c704f' : '#f0c98a'}`, color: '#1a1a2e' }}>
+            {importMsg}
+            <button onClick={() => setImportMsg('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 15, lineHeight: 1 }}>&times;</button>
+          </div>
+        )}
         {!embed && (
         <CommercialNav active="/retention" right={<>
           <SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />
           <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
             style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>+ Add Manual Entry</button>
+          <label style={{ background: '#1a1a2e', color: '#fff', borderRadius: 6, padding: '6px 14px', cursor: uploading ? 'default' : 'pointer', fontSize: 13, opacity: uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+            {uploading ? 'Importing…' : 'Import spreadsheet'}
+            <input type="file" accept=".xlsx,.xls,.csv" disabled={uploading}
+              onChange={(e) => { importFile(e.target.files && e.target.files[0]); e.target.value = '' }}
+              style={{ display: 'none' }} />
+          </label>
         </>} />
         )}
 

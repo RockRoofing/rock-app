@@ -24,6 +24,33 @@ export default async function handler(req, res) {
   }
 
   if (req.method === 'POST') {
+    // BULK IMPORT.
+    //
+    // Nine rows one at a time is nine round trips and nine cache clears, and a failure
+    // half way leaves you not knowing which landed. One request, one write.
+    //
+    // Matched on REF. Re-uploading the same file updates those rows rather than creating
+    // a second set - the commonest reason to upload again is that a figure was wrong.
+    if (Array.isArray(req.body?.entries)) {
+      const incoming = req.body.entries.filter(e => e && String(e.ourRef || '').trim())
+      let all = []
+      try { const d = await redis.get(KEY); if (d) all = d } catch {}
+
+      let added = 0, updated = 0
+      for (const e of incoming) {
+        const ref = String(e.ourRef).trim().toLowerCase()
+        const i = all.findIndex(x => String(x.ourRef || '').trim().toLowerCase() === ref)
+        if (i >= 0) { all[i] = { ...all[i], ...e, id: all[i].id }; updated++ }
+        else {
+          all.push({ ...e, id: `ret_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, manual: true, trackerOnly: true })
+          added++
+        }
+      }
+      await redis.set(KEY, all)
+      try { await redis.del('dashboard:cache') } catch {}
+      return res.json({ entries: all, added, updated })
+    }
+
     const { entry } = req.body
     if (!entry) return res.status(400).json({ error: 'Missing entry' })
     let entries = []

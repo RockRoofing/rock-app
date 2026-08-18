@@ -1,52 +1,61 @@
-pkg464 - "read full email" actually reads the full email
-========================================================
+pkg465 - import retention entries from a spreadsheet
+====================================================
 
-Deploy after pkg463. One changed file: pages/crm.js. No new files.
-pkg463 must be in first - it added the fetch this now calls.
+Deploy after pkg464.
+
+CHANGED FILES (replace)
+-----------------------
+  pages/retention.js
+  pages/api/retention.js
+
+NEW FILES: none.
 
 
-MY MISTAKE IN pkg463
+HOW TO USE IT
+-------------
+Retention page, "Import spreadsheet" beside + Add Manual Entry. Pick your file. It reports
+how many rows were added and how many updated.
+
+I built the button rather than seeding your nine rows directly, because you will do this
+again and a one-off seed would have meant coming back to me next time.
+
+
+IT READS YOUR FILE AS IT IS
+---------------------------
+Tested against retentions_upload_for_app_-_Formatted.xlsx - all nine rows parse.
+
+    Ref, Customer, Project, Gross AFA, Final Account, Applied for, Ret %, PC Type, QS,
+    1st Value, 1st Date, 2nd Value, 2nd Date, VAT Type, Total Paid, Comments
+
+Columns are matched by NAME, so order does not matter and extra columns are ignored.
+Ref is the only one that must be there.
+
+Three things it handles that would otherwise have gone wrong:
+
+  RET %      arrives as 0.05 in your file but as 5 in others. Anything above 1 is read as
+             a percentage - a 300% retention is not a thing.
+
+  DATES      Excel stores these as serial numbers - 45356, not a date. Read straight,
+             new Date(45356) gives the year 45356, and the first version of this produced
+             "+045356-01-01". Converted properly now, and checked against your file:
+             J124 comes out as 05/03/2024 and 05/03/2025.
+
+  "TBC"      a real answer in your sheet, in the date columns. Kept as blank rather than
+             being turned into a date. Four of your nine rows use it.
+
+
+RE-UPLOADING IS SAFE
 --------------------
-The fetch was built and wired correctly. It just never ran.
+Rows are matched on REF. Upload a corrected file and those rows are UPDATED, not
+duplicated - which matters, because the usual reason to upload again is that a figure was
+wrong.
 
-I only triggered it when the stored preview looked truncated at 400 characters:
-
-    const maybeTruncated = preview.length >= 380
-
-Microsoft caps bodyPreview at 255. It can never reach 380, so the condition was never
-true and "more" carried on showing the same short extract. The 400-character slice I was
-guarding against had never been doing the truncating either - Graph had already done it.
-
-I should have checked what bodyPreview actually returns rather than assuming my own cap
-was the limiting one.
+One request and one write for the whole file, rather than one per row. Nine round trips
+with a failure half way would have left you not knowing which had landed.
 
 
-FIXED - NO GUESSING FROM LENGTH
----------------------------------
-The stored preview is Graph's SUMMARY of an email, never the email. So if we can fetch the
-body, we offer to - the button now reads "read full email" and always works.
-
-Press it and you get the whole thing, fetched from Outlook and kept for as long as the
-page is open. Works the same in the Emails tab and on a deal's timeline.
-
-Also fixed: an email whose preview came back EMPTY rendered no body block at all, so there
-was nothing to click. It now shows the button with "No preview stored - press below to
-read it."
-
-Older records with no mailbox saved against them keep the old behaviour, since there is
-nothing to fetch with.
-
-
-ON YOUR WIDER POINT
+WHAT THESE ROWS ARE
 -------------------
-You are right that if reading mail in the CRM is a main feature, fetching one email at a
-time is the wrong shape. It needs Outlook reachable, it is a request per email, and the
-bodies cannot be searched - so "find the email where they agreed the price" still means
-going to Outlook.
-
-The alternative is storing bodies at sync time: instant, searchable, offline. It costs
-storage and needs a re-run over the mail already filed.
-
-Worth deciding once you have used this for a few days. If people are genuinely reading
-mail here rather than glancing at it, storing them is the right answer and I will do it
-properly.
+Imported as tracker-only entries - manual rows that live in the register and are not tied
+to a Xero project. That is right for these nine: they are older jobs still owed retention
+but no longer in progress in Xero. They behave exactly like a row added by hand.
