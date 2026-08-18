@@ -787,7 +787,15 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
               <button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button>
             </div>
           </div>
-        ) : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>)}
+        ) : (h.outcome
+          // WHAT HAPPENED, shown as its own block rather than as plain body text, so a
+          // recorded outcome reads differently from the activity's own description. This
+          // is what you write in the Complete activity box.
+          ? <div style={{ marginTop: 5, background: '#f7f9fc', borderLeft: `3px solid ${C.link}`, borderRadius: 4, padding: '6px 9px' }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim, letterSpacing: 0.3 }}>WHAT HAPPENED</div>
+              <div style={{ fontSize: 13, color: '#444', whiteSpace: 'pre-wrap', marginTop: 2 }}>{h.outcome}</div>
+            </div>
+          : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>))}
 
         <div style={{ fontSize: 11, color: C.dim, marginTop: 3, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>
@@ -801,12 +809,73 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
     </div>
   );
 }
+// ONE TIMELINE. Email and history interleaved, newest first.
+//
+// They were two separate lists - all the email, then all the history - so following what
+// actually happened on a project meant reading two stacks and holding the dates in your
+// head. A reply and the note written about it sat a screen apart.
+//
+// The filter is a view of one list, not four lists: switching it never changes the order
+// or the content, only what is hidden.
+const TIMELINE_FILTERS = [
+  ['all', 'Everything'],
+  ['emails', 'Emails'],
+  ['activities', 'Activities'],
+  ['notes', 'Notes'],
+  ['other', 'Changes'],
+];
+
+// Which bucket a history entry belongs to. 'other' is the catch-all - stage moves, value
+// edits, won/lost, mentions - so a new history type appears somewhere rather than
+// vanishing from every filter.
+const timelineBucket = (h) => {
+  if (h.__email) return 'emails';
+  if (h.type === 'activity') return 'activities';
+  if (h.type === 'note') return 'notes';
+  return 'other';
+};
+
 function HistoryFeed(props) {
-  const sorted = [...props.history].sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const { emails = [], ...rest } = props;
+  const [filter, setFilter] = useState('all');
+
+  // Emails carried into the same shape as a history entry so one sort covers both.
+  const emailEntries = (emails || []).map((m) => ({
+    id: `em_${m.id}`, type: 'email', ts: m.date, __email: m,
+  }));
+  const merged = [...props.history, ...emailEntries]
+    .sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const shown = filter === 'all' ? merged : merged.filter((h) => timelineBucket(h) === filter);
+
+  const counts = merged.reduce((acc, h) => { const b = timelineBucket(h); acc[b] = (acc[b] || 0) + 1; return acc; }, {});
+
   return (
     <div>
-      {sorted.map((h) => <HistoryItem key={h.id} h={h} {...props} />)}
-      {sorted.length === 0 && <div style={{ fontSize: 13, color: C.dim, padding: '16px 0' }}>No history yet.</div>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {TIMELINE_FILTERS.map(([key, label]) => {
+          const n = key === 'all' ? merged.length : (counts[key] || 0);
+          const on = filter === key;
+          return (
+            <button key={key} onClick={() => setFilter(key)}
+              style={{
+                background: on ? C.link : '#fff', color: on ? '#fff' : C.dim,
+                border: `1px solid ${on ? C.link : C.line}`, borderRadius: 14,
+                padding: '3px 11px', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}>
+              {label} {n > 0 && <span style={{ opacity: 0.75 }}>{n}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {shown.map((h) => h.__email
+        ? <div key={h.id} style={{ marginBottom: 8 }}><EmailCard m={h.__email} /></div>
+        : <HistoryItem key={h.id} h={h} {...rest} />)}
+      {shown.length === 0 && (
+        <div style={{ fontSize: 13, color: C.dim, padding: '16px 0' }}>
+          {merged.length === 0 ? 'Nothing here yet.' : 'Nothing of that kind on this project.'}
+        </div>
+      )}
     </div>
   );
 }
@@ -904,7 +973,7 @@ function EmailCard({ m, children }) {
 
 // Emails filed against one project. Loads its own data - the deals list is already 6.4MB
 // and email must not ride along with it.
-function DealEmails({ dealId, deals }) {
+function DealEmails({ dealId, deals, onEmailsLoaded }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -919,7 +988,7 @@ function DealEmails({ dealId, deals }) {
       body: JSON.stringify({ action: 'emails', dealId: String(dealId) }),
     })
       .then((r) => r.json())
-      .then((d) => { if (dead) return; if (d && d.ok) setItems(d.items || []); else setErr(d?.error || 'Could not load email'); })
+      .then((d) => { if (dead) return; if (d && d.ok) { setItems(d.items || []); if (onEmailsLoaded) onEmailsLoaded(d.items || []); } else setErr(d?.error || 'Could not load email'); })
       .catch(() => { if (!dead) setErr('Could not load email'); })
       .finally(() => { if (!dead) setLoading(false); });
     return () => { dead = true; };
@@ -1353,6 +1422,12 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
 function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
+  // Emails lifted out of DealEmails so the timeline below can interleave them with
+  // history. DealEmails still renders its own section - this is the same data, shown
+  // twice on purpose: the Email block for working through mail, the timeline for
+  // following what happened in order.
+  const [dealEmails, setDealEmails] = useState([]);
+  const [completingAct, setCompletingAct] = useState(null);
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
@@ -1472,7 +1547,12 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
                 <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>Assigning someone else emails them (email would send in live version). Assigning yourself sends no email.</div>
               </div>
             )}
-            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={!!a.due && a.due < today} me={me} users={users} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => { onCompleteActivity(deal.id, id); setFlash(true); setAdding(true); }} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
+            {/* Done opens the SAME modal as the Activities page - "what happened?" plus
+                the next activity. It used to just tick the box, so completing from the
+                deal recorded nothing about the call and set nothing to follow it. Two
+                routes to the same action behaving differently is how outcomes go
+                unrecorded. */}
+            {openActs.map((a) => <ActivityRow key={a.id} activity={a} overdue={!!a.due && a.due < today} me={me} users={users} onEdit={(id, t, d, who) => onEditActivity(deal.id, id, t, d, who)} onComplete={(id) => setCompletingAct(openActs.find((x) => x.id === id) || null)} onDelete={(id) => onDeleteActivity(deal.id, id)} />)}
           </div>
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
@@ -1498,6 +1578,19 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
+          {completingAct && (
+            <CompleteActivityModal
+              row={{ ...completingAct, project: deal.title }}
+              today={today}
+              onClose={() => setCompletingAct(null)}
+              onDone={(outcome, next) => {
+                const act = completingAct;
+                setCompletingAct(null);
+                onCompleteActivity(deal.id, act.id, outcome, next);
+                setFlash(true);
+              }} />
+          )}
+
           {lostFor != null && (
             <LostReasonModal
               schema={schema}
@@ -1506,14 +1599,14 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
           )}
 
           {/* Email - loads on its own, keyed to the deal */}
-          <DealEmails dealId={deal.id} deals={allDeals} />
+          <DealEmails dealId={deal.id} deals={allDeals} onEmailsLoaded={setDealEmails} />
 
           <div style={{ borderTop: `3px solid #fff`, margin: '20px 0' }} />
 
           {/* History */}
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>History</div>
-          <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>All activity, newest first · notes & activities editable, deletable, commentable</div>
-          <HistoryFeed history={deal.history} users={users}
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Timeline</div>
+          <div style={{ fontSize: 11, color: C.dim, marginBottom: 8 }}>Everything on this project in order, newest first — email, activities, notes and changes. Notes and activities stay editable.</div>
+          <HistoryFeed history={deal.history} emails={dealEmails} users={users}
             onEdit={(hid, body) => onEditHistory(deal.id, hid, body)}
             onEditActivity={(hid, body, ts) => onEditHistoryActivity(deal.id, hid, body, ts)}
             onDelete={(hid) => onDeleteHistory(deal.id, hid)}
@@ -2570,13 +2663,34 @@ function CRMPageInner() {
     if (act && act.imported) persistImportedActivities(id, next);
     return { ...d, activities: next };
   });
-  const completeActivity = (id, aid) => {
+  // outcome and nextAct are optional - the Activities page and now the deal both pass
+  // them. The history line records WHAT HAPPENED where there is one, falling back to the
+  // activity's own text so an older completion still reads sensibly.
+  const completeActivity = (id, aid, outcome, nextAct) => {
     patch(id, (d) => {
       const act = d.activities.find((a) => a.id === aid);
       const next = d.activities.map((a) => a.id === aid ? { ...a, done: true } : a);
       if (act && act.imported) persistImportedActivities(id, next);
-      return { ...d, activities: next, history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${act ? act.text : ''}`, body: act ? act.text : '' }] };
+      const said = (outcome || '').trim();
+      return {
+        ...d,
+        activities: next,
+        history: [...d.history, {
+          id: uid(), type: 'activity', ts: nowIso(),
+          text: `Activity completed: ${act ? act.text : ''}`,
+          body: said || (act ? act.text : ''),
+          outcome: said || undefined,
+        }],
+      };
     });
+    // Set the follow-up after the completion, so the two land in the right order in the
+    // timeline rather than sharing a timestamp and sorting arbitrarily.
+    if (nextAct && nextAct.text && nextAct.text.trim()) {
+      setTimeout(() => addActivity(id, nextAct.text.trim(), nextAct.due || today, nextAct.assignee || null), 0);
+    }
+    // Keep the Activities list in step - it reads its own list and would otherwise still
+    // show the completed one until the next refresh.
+    setOpenActivities((prev) => prev.filter((r) => !(String(r.dealId) === String(id) && r.id === aid)));
   };
   const deleteActivity = (id, aid) => patch(id, (d) => {
     const act = d.activities.find((a) => a.id === aid);
@@ -2851,7 +2965,17 @@ function CRMPageInner() {
       document.removeEventListener('visibilitychange', onFocus);
       if (t) clearInterval(t);
     };
-  }, [view, loaded]);
+    // openId is in the deps ON PURPOSE.
+    //
+    // Opening a deal does not change `view` - it stays 'activities' underneath - so this
+    // effect never re-ran when you came back, and the list still showed activities you
+    // had just amended or deleted. Adding openId makes closing a deal a change this
+    // effect notices, so it refreshes on the way back.
+    //
+    // The filters are safe: person, customer, search and the sort all live on this
+    // component, not inside the table, and refreshActivityState only replaces the
+    // activity data. Whatever you had filtered to is still filtered when you return.
+  }, [view, loaded, openId]);
 
   // Activities imported BEFORE the flat open-list existed have no aggregate to read, so
   // the tab would sit empty until the next import. The per-deal summary still knows which
@@ -3062,7 +3186,7 @@ function CRMPageInner() {
       if (outcome && outcome.trim()) {
         patch(Number(dealId), (d) => ({
           ...d,
-          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim() }],
+          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim(), outcome: outcome.trim() }],
         }));
       }
 

@@ -1,61 +1,60 @@
-pkg451 - the actual root cause: two names for one date
-======================================================
+pkg452 - one timeline, and Complete activity on the deal
+========================================================
 
-Deploy after pkg450.
+Deploy after pkg451. One changed file: pages/crm.js. No new files.
 
-CHANGED FILES (replace)
+
+1. ONE TIMELINE INSTEAD OF TWO LISTS
+------------------------------------
+Email and history were two separate stacks - all the mail, then all the history. Following
+what actually happened on a project meant reading both and holding the dates in your head:
+a reply and the note written about it sat a screen apart.
+
+They are now one list, newest first, with filter chips across the top:
+
+    Everything 24 | Emails 11 | Activities 6 | Notes 4 | Changes 3
+
+The counts are live. "Changes" is the catch-all - stage moves, value edits, won/lost,
+mentions - so a new kind of history entry turns up there rather than disappearing from
+every filter.
+
+Switching a filter hides rows. It never reorders or reloads, so you do not lose your place.
+
+The Email section above is unchanged and still there. That is deliberate: it is where you
+work THROUGH mail - allocate, move, remove - while the timeline is for reading what
+happened in order. Same data, two jobs.
+
+
+2. COMPLETE ACTIVITY, THE SAME EVERYWHERE
+-------------------------------------------
+Pressing Done on an activity in the deal used to just tick it. No note of what happened,
+no follow-up. The Activities page has always asked both.
+
+The deal now opens the same modal:
+
+    What happened? (call notes, email summary, outcome)
+    Set the next activity - what, when, who
+
+Two routes to the same action behaving differently is how outcomes go unrecorded - Edita
+completing from the Activities page left a record, the same person completing from the
+deal left nothing.
+
+
+3. "WHAT HAPPENED" IS VISIBLE IN THE TIMELINE
+-----------------------------------------------
+A recorded outcome now shows as its own block under the activity:
+
+    Activity completed: Call
+    ┃ WHAT HAPPENED
+    ┃ Spoke to Dave, pricing agreed, sending revised quote Friday
+
+Rather than being dropped in as plain text indistinguishable from the activity's own
+description. Applies to completions from both screens.
+
+
+ONE THING WORTH KNOWING
 -----------------------
-  pages/crm.js
-  pages/crm-scores.js
-  pages/api/crm.js
-
-NEW FILES: none.
-
-
-THIS IS THE ONE. NOT MINE, AND IT HAS BEEN THERE ALL ALONG
-------------------------------------------------------------
-An activity's due date is stored under one of TWO field names, depending on where it came
-from:
-
-    imported from Pipedrive   ->  dueDate
-    created in the CRM        ->  due
-
-The deal sends its own objects straight through when it saves, and those use `due`.
-
-The Activities list reads  dueDate || due  - finds it either way.
-The deal view read         dueDate         - and nothing else.
-
-So a CRM-created activity lost its date the instant the deal was reopened. The list showed
-19 Aug; the deal said "No due date". Same record, two screens, two answers - exactly your
-two screenshots.
-
-    CRM-created   deal shows ""            list shows "2026-08-20"
-    imported      deal shows "2026-08-19"  list shows "2026-08-19"
-
-That is the whole thing. Every symptom this evening - dates not sticking, the deal
-disagreeing with the list, editing twice to make it hold - comes back to this line.
-
-
-FIXED IN BOTH DIRECTIONS
-------------------------
-The deal now reads  dueDate || due, like every other reader.
-The save now WRITES BOTH names, so no reader can miss it and none can pick up a stale one.
-
-
-REPAIR THE EXISTING ONES - ONE CLICK
---------------------------------------
-Activities already saved carry only one name. Go to /crm-scores and press
-"Repair activity due dates".
-
-It gives every activity the same date under both names, touches nothing already correct,
-and is safe to run twice. It reports how many it fixed and across how many projects.
-
-Do this straight after deploying - until you do, CRM-created activities will still show
-blank on the deal.
-
-
-ON THE POOL MOTORS DUPLICATE
-----------------------------
-Those two "Call" activities are two real records - one Edita's, one James's. Not one shown
-twice. Once the repair has run, both will show their dates on the deal as well as the
-list, and you can delete whichever is not wanted.
+The follow-up activity is created a moment AFTER the completion is recorded, deliberately.
+Created in the same instant they share a timestamp and the timeline sorts them
+arbitrarily - so "completed the call" could appear below "call them again", which reads
+backwards.
