@@ -1,44 +1,41 @@
-pkg459 - date range filter on the Activities tab
-================================================
+pkg460 - open a project in a new tab
+====================================
 
-Deploy after pkg458. One changed file: pages/crm.js. No new files.
-
-
-WHAT YOU GET
-------------
-Two date boxes beside the search:
-
-    Due [from] to [to]   clear
-
-Both blank by default. Fill in either or both - from on its own is "everything due from
-here", to on its own is "everything due up to here". A "clear" link appears once one is
-set.
+Deploy after pkg459. One changed file: pages/crm.js. No new files.
 
 
-NOT REMEMBERED, AS YOU ASKED
-------------------------------
-The range resets on every visit and is not saved anywhere. It is session state only.
+WHY IT WAS NOT POSSIBLE
+-----------------------
+The rows used onClick handlers, not links. A browser can only offer "Open in a new tab" on
+an actual anchor, so right-click gave nothing, and neither did ctrl-click, cmd-click or
+middle-click.
 
-Your reasoning was right and worth writing down: a remembered date range would hide
-activities on a later visit with nothing on screen to explain why, and an empty list reads
-as "nothing to do" rather than "you filtered this out in June".
-
-
-ONE DECISION I MADE - TELL ME IF IT IS WRONG
-----------------------------------------------
-An activity with NO DUE DATE is kept whatever the range.
-
-It is not outside the range - it has no date to be outside of - and hiding it would bury
-exactly the ones that need a date setting. Those are the activities most likely to be
-forgotten, so filtering by date should not be what makes them disappear.
-
-If you would rather a date range excluded undated activities, it is one line.
+The deep link already existed - /crm?deal=1234 has worked since the mention emails were
+built. Nothing was pointing at it.
 
 
-AND THE EMPTY MESSAGE NOW NAMES THE RIGHT FILTER
---------------------------------------------------
-It used to say "Clear the person or customer filter to see the rest" whatever was actually
-applied. With a date range on, that sends you looking in the wrong place.
+WHERE IT WORKS NOW
+------------------
+    Activities tab   the Project column
+    List view        the Title column
+    Pipeline         the title on each card
 
-It now mentions the date range when one is set, and also counts the search boxes - both of
-which could empty the table while that message pointed at the dropdowns.
+All three are ordinary links now, so every gesture your browser normally offers works:
+right-click menu, ctrl or cmd click, middle click, shift for a new window, and dragging
+the link to the tab bar.
+
+A PLAIN left click behaves exactly as before - it opens the project in place, no page
+reload. Only modified clicks are handed to the browser.
+
+
+ONE DELIBERATE LIMIT ON THE PIPELINE CARDS
+--------------------------------------------
+Only the TITLE is a link, not the whole card.
+
+The card is draggable. If the drag surface were an anchor the browser would try to drag
+the LINK - offering to drop a URL somewhere - instead of moving the deal between stages.
+The rest of the card still opens the project on a normal click, so the only thing you lose
+is right-clicking the blank part of a card.
+
+Same reasoning in List view: the title cell is the link, the rest of the row keeps its
+click handler.

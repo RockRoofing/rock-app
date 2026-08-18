@@ -525,7 +525,13 @@ function BoardCard({ deal, onOpen, onDragStart, today }) {
   return (
     <div draggable onDragStart={(e) => onDragStart(e, deal.id)} onClick={() => onOpen(deal.id)} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 6, padding: '9px 10px', marginBottom: 8, cursor: 'pointer', fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-        <div style={{ fontWeight: 600, color: C.text, lineHeight: 1.3, marginBottom: 3 }}>{deal.title}</div>
+        {/* The title is a link so a card can be opened in a new tab too. It is deliberately
+            NOT the whole card: the card is draggable, and making the drag surface an
+            anchor makes the browser try to drag the LINK rather than move the deal
+            between stages. */}
+        <DealLink id={deal.id} onOpen={onOpen} title="Open the project — right-click or ctrl-click for a new tab"
+          style={{ fontWeight: 600, color: C.text, lineHeight: 1.3, marginBottom: 3, display: 'block' }}
+        >{deal.title}</DealLink>
         <div style={{ flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}>
           <MissingFlag deal={deal} size={14} />
           {st && <Dot state={st} size={14} />}
@@ -822,6 +828,35 @@ function NoteImages({ images, onRemove }) {
       </div>
       {zoom && <ImageLightbox src={zoom} onClose={() => setZoom(null)} />}
     </>
+  );
+}
+
+
+// A REAL LINK TO A DEAL.
+//
+// Rows used onClick handlers, so the browser had nothing to offer on right-click - no
+// "Open in new tab", no middle-click, no cmd-click. For somebody working several projects
+// at once that means closing and reopening all day.
+//
+// This is an ordinary anchor pointing at the deep link, so the browser does its normal
+// thing. A PLAIN left click is intercepted and handled in-page as before, which keeps the
+// app feeling like an app; anything with a modifier, or a middle click, is left alone.
+function DealLink({ id, onOpen, style, children, title }) {
+  return (
+    <a
+      href={`/crm?deal=${encodeURIComponent(id)}`}
+      title={title}
+      onClick={(e) => {
+        if (e.defaultPrevented) return;
+        // Let the browser handle new-tab and new-window gestures.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        onOpen(id);
+      }}
+      style={{ color: C.link, textDecoration: 'none', ...style }}>
+      {children}
+    </a>
   );
 }
 
@@ -1815,7 +1850,16 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
                   {stt && <Dot state={stt} size={13} />}
                 </span>
               </td>
-              {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{displayCell(d, k)}</td>)}
+              {columns.map((k) => (
+                <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>
+                  {/* The TITLE cell is a real link so it can be opened in a new tab. The
+                      rest of the row keeps its click handler, so clicking anywhere still
+                      opens the project in place. */}
+                  {k === 'title'
+                    ? <DealLink id={d.id} onOpen={onOpen} title="Open the project — right-click or ctrl-click for a new tab" style={{ color: 'inherit' }}>{displayCell(d, k)}</DealLink>
+                    : displayCell(d, k)}
+                </td>
+              ))}
             </tr>
           ); })}
         </tbody>
@@ -3851,7 +3895,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
                       </button>
                     </td>
                     <td style={td}>
-                      <button onClick={() => onOpen(r.dealId)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left' }}>{r.project}</button>
+                      <DealLink id={r.dealId} onOpen={onOpen} title="Open the project — right-click or ctrl-click for a new tab" style={{ font: 'inherit', textAlign: 'left', cursor: 'pointer' }}>{r.project}</DealLink>
                     </td>
                     <td style={{ ...td, whiteSpace: 'nowrap', color: C.dim }}>{r.stage || '\u2014'}</td>
                     <td style={{ ...td, color: r.done ? C.dim : C.text, textDecoration: r.done ? 'line-through' : 'none' }}>{r.text}</td>
