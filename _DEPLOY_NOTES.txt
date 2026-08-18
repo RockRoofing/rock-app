@@ -1,51 +1,43 @@
-pkg467 - two faults in the retention import. Re-upload after deploying.
-=======================================================================
+pkg471 - VAT Type, and an audit of every other column
+=====================================================
 
-Deploy after pkg466. One changed file: pages/retention.js. No new files.
-
-
-ALL NINE ROWS LANDED - but two columns are wrong
---------------------------------------------------
-J124, J195, J199, J204, J205, J212, J217, J231 and J236 are all on the register, with the
-right customers, projects, values and QS. The TBC rows correctly show no date.
-
-Two things came in wrong.
+Deploy after pkg470. One changed file: pages/retention.js. No new files.
 
 
-1. RETENTION SHOWS 0% ON ALL NINE
+VAT TYPE - the same mistake again
 -----------------------------------
-The register stores retention as a WHOLE percentage - 5 means 5%. Xero rows are converted
-on the way in with retentionPct * 100, and the cell renders with toFixed(0).
+The column is read as vatRateLabel. I wrote it as vatType. Third time in this import:
+Gross AFA, Total Paid, and now this - each written under a name nothing reads, so the
+value imported fine and the cell showed a dash.
 
-Your sheet holds fractions - 0.05 - and I stored them as they were. 0.05 rendered with
-toFixed(0) is "0%".
-
-Worse than cosmetic: 0 is the value that means NO RETENTION, which is what switches the
-release columns to N/A. So the register currently believes there is nothing to collect on
-any of the nine.
-
-Both formats are now accepted - a value at or below 1 is treated as a fraction and
-multiplied up, anything above is already a percentage.
+Rather than fix it and wait to be told about the next one, I have now compared EVERY cell
+in the row against every field the import writes. That should have been the first thing I
+did.
 
 
-2. DATES ARE A DAY EARLY
-------------------------
-J195 shows 29/04/2026; your sheet says 30/04.
+THE AUDIT - what the row reads and the import did not write
+-------------------------------------------------------------
+    vatRateLabel            FIXED - this is VAT Type
+    retentionOwed           FIXED - the two release values added together
+    retention612Allocated   FIXED - your "612 Allocated" column
 
-SheetJS builds dates in LOCAL time, so 30 April becomes midnight local. In BST that is
-23:00 UTC on the 29th, and toISOString() then returns the 29th. Every date landed a day
-early.
+    afaSource               correctly absent - says where the AFA came from, and for a
+                            manual row the answer is "you typed it"
+    mcdPct, mcdValue,       correctly absent - MCD lives on the project in Commercial.
+    mcdRecorded             These rows have no project, so they show 0.00% (default).
+    pcDateTBC,              correctly absent - flags from project details, which a
+    defectsDateTBC          tracker-only row does not have
 
-It passed my testing because this machine runs on UTC, where the shift is zero. A date in
-a spreadsheet has no timezone - it is just a day - so it now reads the calendar fields
-directly instead of converting through UTC.
+So three genuine misses, all fixed, and six that are absent for good reason.
 
 
-WHAT TO DO
-----------
-Deploy, then IMPORT THE SAME FILE AGAIN.
+IF GROSS AFA AND TOTAL PAID ARE STILL BLANK
+---------------------------------------------
+Those two were fixed in pkg469. If they are still empty, either pkg469 is not deployed or
+the file has not been imported again since it was.
 
-Rows match on Ref, so the nine are updated in place - no duplicates, nothing else touched.
-The retention percentages and dates will correct themselves.
+The import only writes what is in the file at the time it runs - correcting the code does
+not go back and repair rows already stored. Re-import after deploying and the nine rows
+update in place on Ref.
 
-Then spot-check J124: 5%, releases 05/03/2024 and 05/03/2025.
+Worth doing in one go now, so all four columns land together.

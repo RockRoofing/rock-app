@@ -195,8 +195,17 @@ export default function RetentionPage() {
           customerName: String(pick(r, 'Customer', 'customerName') || '').trim(),
           projectName: String(pick(r, 'Project', 'projectName') || '').trim(),
           finalAccount: num(pick(r, 'Final Account', 'finalAccount')),
+          // FIELD NAMES MATTER MORE THAN LABELS. These three were written under names the
+          // page does not read - projectValue, appliedFor and totalPaid - so the values
+          // imported fine and displayed as blank.
+          //   Gross AFA  -> afaGross      (was projectValue)
+          //   Invoiced   -> invoicedNet   (was not mapped at all)
+          //   Total Paid -> paid          (was totalPaid)
+          afaGross: num(pick(r, 'Gross AFA', 'afaGross')),
           projectValue: num(pick(r, 'Gross AFA', 'Final Account')),
           appliedFor: num(pick(r, 'Applied for')),
+          invoicedNet: num(pick(r, 'Invoiced', 'invoicedNet')),
+          invoiced: num(pick(r, 'Invoiced', 'invoicedNet')),
           retentionPct: pct(pick(r, 'Ret %', 'retentionPct')),
           pcType: String(pick(r, 'PC Type') || '').trim(),
           qsName: String(pick(r, 'QS', 'qsName') || '').trim(),
@@ -204,8 +213,16 @@ export default function RetentionPage() {
           release1Date: dat(pick(r, '1st Date')),
           release2Value: num(pick(r, '2nd Value')),
           release2Date: dat(pick(r, '2nd Date')),
-          vatType: String(pick(r, 'VAT Type') || '').trim(),
-          totalPaid: num(pick(r, 'Total Paid')),
+          // The column is read as vatRateLabel, not vatType. Same mistake as Gross AFA and
+          // Total Paid: written under a name nothing reads, so it imported and showed as
+          // a dash. Both names are written so either reader finds it.
+          vatRateLabel: String(pick(r, 'VAT Type', 'vatRateLabel') || '').trim(),
+          vatType: String(pick(r, 'VAT Type', 'vatRateLabel') || '').trim(),
+          // Retention owed on a tracker-only row: the two release values are the whole of
+          // it, and there is no Xero project to compute it from.
+          retentionOwed: (num(pick(r, '1st Value')) || 0) + (num(pick(r, '2nd Value')) || 0),
+          retention612Allocated: num(pick(r, '612 Allocated')),
+          paid: num(pick(r, 'Total Paid', 'paid')),
           comments: String(pick(r, 'Comments') || '').trim(),
           trackerOnly: true,
         }))
@@ -422,10 +439,15 @@ export default function RetentionPage() {
   })
   const manualIds = new Set(entries.map(e => e.xeroId).filter(Boolean))
   const hiddenEntrySet = new Set(hiddenIds.map(String))
-  const allEntries = [
+  // EVERY row on the register, before the status filter and the search. The counts on two
+  // of the summary cards are about the business, not about what is currently on screen -
+  // "how many projects are live" should not change because somebody ticked a filter.
+  const everyEntry = [
     ...xeroEntries.filter(x => !manualIds.has(x.xeroId) && !entries.find(e => e.id === x.xeroId)),
     ...mergedEntries
-  ].filter(e => !(e.xeroId && hiddenEntrySet.has(String(e.xeroId)))).filter(e => {
+  ].filter(e => !(e.xeroId && hiddenEntrySet.has(String(e.xeroId))))
+
+  const allEntries = everyEntry.filter(e => {
     // Multi-select status filter: show a row if its status is among the ticked
     // filters. No filters ticked -> show nothing (prompt shown separately).
     if (!filter || filter.size === 0) return true
@@ -474,8 +496,19 @@ export default function RetentionPage() {
 
   const totals = {
     total: allEntries.reduce((s, e) => s + (parseFloat(e.release1Value || 0) + parseFloat(e.release2Value || 0)), 0),
-    remaining: allEntries.reduce((s, e) => s + (calcTotalDue(e) ? calcTotalRemaining(e) : 0), 0),
-    closed: allEntries.filter(isClosed).length,
+    // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
+    //
+    // It was Total Due minus Total Paid - inc VAT, and measuring what had been RECEIVED
+    // rather than what is left to claim. That made it depend on the manual Total Paid
+    // column, so a project nobody had updated read as fully outstanding.
+    //
+    // Final Account minus Invoiced comes from Xero on one side and the application on the
+    // other, so it is live without anybody maintaining it. Same figure as the Account
+    // Remaining column, summed.
+    remaining: allEntries.reduce((s, e) => s + calcAccountRemaining(e), 0),
+    // These two count the whole register, NOT the filtered view - see everyEntry above.
+    defects: everyEntry.filter(e => retStatusOf(e) === 'defects').length,
+    live: everyEntry.filter(e => retStatusOf(e) === 'live').length,
   }
 
   const inputStyle = { padding: '5px 8px', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
@@ -504,31 +537,42 @@ export default function RetentionPage() {
         {!embed && (
         <CommercialNav active="/retention" right={<>
           <SyncBar show={['invoices']} months={12} onDone={() => loadAll()} />
-          <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
-            style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer', fontSize: 13 }}>+ Add Manual Entry</button>
-          <label style={{ background: '#1a1a2e', color: '#fff', borderRadius: 6, padding: '6px 14px', cursor: uploading ? 'default' : 'pointer', fontSize: 13, opacity: uploading ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-            {uploading ? 'Importing…' : 'Import spreadsheet'}
-            <input type="file" accept=".xlsx,.xls,.csv" disabled={uploading}
-              onChange={(e) => { importFile(e.target.files && e.target.files[0]); e.target.value = '' }}
-              style={{ display: 'none' }} />
-          </label>
+          {/* Add and Import have moved down beside the summary cards - they are actions
+              on this page, not navigation, and the nav bar is shared. */}
         </>} />
         )}
 
         <div style={{ padding: 24 }}>
-          {/* Summary cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
-            {[
-              { label: 'Total Retention', value: fmtC(totals.total), color: '#1a1a2e' },
-              { label: 'Total Remaining (to be paid)', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a' },
-              { label: 'Closed', value: totals.closed, raw: true, color: '#16a34a' },
-              { label: 'Projects shown', value: allEntries.length, raw: true },
-            ].map(card => (
-              <div key={card.label} style={{ background: '#fff', borderRadius: 10, padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>{card.label}</div>
-                <div style={{ fontSize: card.raw ? 28 : 20, fontWeight: 700, color: card.color }}>{card.value}</div>
-              </div>
-            ))}
+          {/* Summary cards, with the page's own actions stacked at the right. Cards are
+              smaller than they were - four headline figures do not need to be the tallest
+              thing on a page whose point is the table below. */}
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
+              {[
+                { label: 'Total Retention', value: fmtC(totals.total), color: '#1a1a2e' },
+                { label: 'Remaining to Claim', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a',
+                  tip: 'Final Account minus Invoiced, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
+                { label: 'In Defects Liability', value: totals.defects, raw: true, color: '#ca8a04',
+                  tip: 'Every project on the register at Defects Liability. Does not change with the filters.' },
+                { label: 'Live Projects', value: totals.live, raw: true,
+                  tip: 'Every project on the register still Live. Does not change with the filters.' },
+              ].map(card => (
+                <div key={card.label} title={card.tip || undefined} style={{ background: '#fff', borderRadius: 8, padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)', cursor: card.tip ? 'help' : 'default' }}>
+                  <div style={{ fontSize: 10.5, color: '#888', marginBottom: 2 }}>{card.label}</div>
+                  <div style={{ fontSize: card.raw ? 20 : 16, fontWeight: 700, color: card.color }}>{card.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, minWidth: 168 }}>
+              <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
+                style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>+ Add Manual Entry</button>
+              <label style={{ background: '#1a1a2e', color: '#fff', borderRadius: 8, padding: '9px 14px', cursor: uploading ? 'default' : 'pointer', fontSize: 13, fontWeight: 600, opacity: uploading ? 0.5 : 1, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                {uploading ? 'Importing…' : 'Import spreadsheet'}
+                <input type="file" accept=".xlsx,.xls,.csv" disabled={uploading}
+                  onChange={(e) => { importFile(e.target.files && e.target.files[0]); e.target.value = '' }}
+                  style={{ display: 'none' }} />
+              </label>
+            </div>
           </div>
 
           {/* Add form */}
