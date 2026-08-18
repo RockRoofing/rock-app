@@ -14,6 +14,7 @@ import { getDealEmails, getUnallocated, allocateEmail, dismissEmail, unfileEmail
 // the built-in sample data so the page isn't empty.
 const DEALS_KEY = 'crm:deals'
 const SCHEMA_KEY = 'crm:field-schema'
+const LOST_REASONS_KEY = 'crm:lost-reasons'
 const ORGS_KEY = 'crm:orgs'
 const CONTACTS_KEY = 'crm:contacts'
 // Activities and notes are stored PER DEAL - crm:activities:<dealId> - so opening a deal
@@ -165,6 +166,9 @@ export default async function handler(req, res) {
       me: {
         name: [acc.user.firstName, acc.user.lastName].filter(Boolean).join(' ') || acc.user.name || acc.user.username || '',
         username: acc.user.username || '',
+        // Needed so the CRM can gate admin-only actions - managing the lost-reason list.
+        // Normalised, so a legacy role value cannot accidentally read as admin.
+        role: normRole(acc.user.role),
       },
       deletedOrgs: Array.isArray(delOrgs) ? delOrgs : [],
       deletedContacts: Array.isArray(delContacts) ? delContacts : [],
@@ -393,6 +397,57 @@ export default async function handler(req, res) {
     if (body.action === 'mention-diagnose') {
       const out = await diagnoseMentions(String(body.body || '@'))
       return res.json(out)
+    }
+
+    // LOST REASONS - a managed list rather than a hard-coded one.
+    //
+    // Reading is open to anyone: everyone marking a deal lost needs the list. WRITING is
+    // admin only, because a list everybody can edit stops being a list - you end up with
+    // "Price", "price" and "Too expensive" as three separate reasons and the Lost Reasons
+    // analysis becomes meaningless.
+    if (body.action === 'lost-reasons') {
+      const stored = await get(LOST_REASONS_KEY)
+      const list = Array.isArray(stored) && stored.length
+        ? stored
+        : (DEFAULT_FIELD_SCHEMA.find(f => f.key === 'lost_reason')?.options || [])
+      return res.json({ ok: true, reasons: list })
+    }
+
+    if (body.action === 'save-lost-reasons') {
+      if (normRole(acc.user.role) !== 'admin') {
+        return res.status(403).json({ error: 'Only an admin can change the lost-reason list.' })
+      }
+      const reasons = Array.isArray(body.reasons) ? body.reasons : []
+      // Trimmed, blanks dropped, duplicates removed case-insensitively - the whole point
+      // of a managed list is that the same reason cannot exist twice.
+      const seen = new Set()
+      const clean = []
+      for (const r of reasons) {
+        const t = String(r || '').trim()
+        if (!t) continue
+        const k = t.toLowerCase()
+        if (seen.has(k)) continue
+        seen.add(k); clean.push(t)
+      }
+      await set(LOST_REASONS_KEY, clean)
+      return res.json({ ok: true, reasons: clean })
+    }
+
+    // Add one reason without needing the whole list - used by the Mark lost modal when
+    // somebody types a reason that is not on it yet.
+    if (body.action === 'add-lost-reason') {
+      if (normRole(acc.user.role) !== 'admin') {
+        return res.status(403).json({ error: 'Only an admin can add to the lost-reason list.' })
+      }
+      const reason = String(body.reason || '').trim()
+      if (!reason) return res.status(400).json({ error: 'reason required' })
+      const stored = await get(LOST_REASONS_KEY)
+      const list = Array.isArray(stored) && stored.length
+        ? stored
+        : (DEFAULT_FIELD_SCHEMA.find(f => f.key === 'lost_reason')?.options || [])
+      if (!list.some(r => String(r).toLowerCase() === reason.toLowerCase())) list.push(reason)
+      await set(LOST_REASONS_KEY, list)
+      return res.json({ ok: true, reasons: list })
     }
 
     if (body.action === 'emails') {

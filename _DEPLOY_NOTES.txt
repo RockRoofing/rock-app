@@ -1,35 +1,82 @@
-pkg461 - no missing-info flag on variations
-===========================================
+pkg462 - six changes
+====================
 
-Deploy after pkg460. One changed file: pages/crm.js. No new files.
+Deploy after pkg461.
 
-Deals in the Variations stage no longer carry the red missing-information flag, on the
-kanban or in List view.
+CHANGED FILES (replace)
+-----------------------
+  pages/crm.js
+  pages/api/crm.js
+  lib/crmFieldSchema.js
 
-
-WHY IT WAS WRONG
-----------------
-A variation is extra work on a job already won. The credit checks, project score, lead
-source, site location and the rest were all done on the parent project - asking for them
-again on a £2,000 add-on is asking for something that already exists somewhere else.
-
-It was worse than just noise. Variations sit LATE in the stage order, after MC Unsecured,
-so they were picking up the full Received list AND, being past Negotiating in the
-ordering, could pick up the Negotiating list on top. Every variation carried a flag it
-could never clear - and a flag that can never be cleared is how people learn to ignore the
-flag everywhere else.
+NEW FILES: none.
 
 
-NOTHING ELSE CHANGED
---------------------
-Checked every stage:
+1. CLEAR FILTERS NOW CLEARS THE SAVED LISTS
+---------------------------------------------
+Tender Review and MC Secured/Negotiating were left on. They are the filters most likely to
+be hiding something - they cut the board to four stages - so a Clear Filters that leaves
+them set is not clearing the filters. The Activities date range is cleared too.
 
-    Project In          no flag, as before (earlier than Received)
-    Received            flags, as before
-    MC Unsecured        flags, as before
-    Variations          NO FLAG - the change
-    MC Secured          flags, as before
-    Negotiating         flags, both lists, as before
 
-MC Secured sits after Variations in the stage order and is unaffected - worth stating,
-because a change based on position rather than the stage itself would have caught it.
+2. LOST REASONS ARE NOW A MANAGED LIST
+----------------------------------------
+The list is stored rather than hard-coded, and the Mark lost modal reads it.
+
+    ANYONE   can pick a reason, or choose "Something else..." and type one. It is
+             recorded on the deal either way - nobody is ever blocked from closing a deal
+             because their reason is new.
+
+    ADMIN    gets a tick box on that free-text option: "Add this to the lost-reason list
+             for everyone". Admins can also add or remove reasons through the API.
+
+Write access is admin only on purpose. A list everyone can edit stops being a list - you
+end up with "Price", "price" and "Too expensive" as three reasons and the Lost Reasons
+analysis is worthless. Saving also trims, drops blanks and removes duplicates
+case-insensitively.
+
+The API now sends your ROLE to the CRM, which it did not before - that is what the gate
+reads.
+
+STILL TO DO: there is no admin SCREEN for editing the list yet, only the API behind it and
+the add-from-modal route. Say the word and I will put a proper editor on /crm-scores or
+wherever suits.
+
+
+3. LIST VIEW COLUMNS - ALL OF THEM
+------------------------------------
+The column chooser used a hand-written list, so anything added to the deal since could be
+seen on a project and never chosen as a column - MCD, Lost Reason, the contact's phone and
+email, the company's address and registration number.
+
+It is now built from the schema, covering Summary, Details, Customer Contact and
+Organization, labelled with their group so "Email (Customer Contact)" and "Email
+(Organization)" are tellable apart.
+
+
+4. INLINE EDITING IN LIST VIEW
+------------------------------
+Editable in place: Estimator Responsible, General Information, Project Stage, Size: m2,
+Project Score.
+
+Deliberately those five and no more - they are what gets corrected in bulk while scanning.
+Anything else is a trip into the project, where there is room for context. Clicking a
+field no longer opens the deal underneath it.
+
+
+5. PROJECT SCORE 1-10
+---------------------
+Was 0-10. Now 1-10 in both the deal and Add Project - one schema change covers both, since
+both build their inputs from it.
+
+NOTE: 0 is no longer selectable. Nothing in your imported data uses it (the scores run
+1-9), and any deal somehow holding a 0 keeps and displays it rather than being blanked.
+
+
+6. THE COMPLETE ACTIVITY MODAL NO LONGER VANISHES
+---------------------------------------------------
+Clicking outside it used to close it and lose what you had typed. It now closes only on
+Cancel, the x at the top right, or Escape.
+
+Applied to the Edit activity modal as well - same problem, same typed work, and there was
+no reason for the two to behave differently.

@@ -124,6 +124,29 @@ const LIST_FIELDS = [
 ];
 const DEFAULT_COLUMNS = ['title','organization','contact_person','value','stageId','next_activity','estimator_responsible','status'];
 
+// EVERY FIELD ON THE DEAL, offered as a column.
+//
+// LIST_FIELDS above is a hand-written list, so anything added to the schema since - MCD,
+// Lost Reason, the contact's phone and email, the company's address and registration
+// number - could be seen on a deal and never chosen as a column.
+//
+// Built from the schema, grouped as the deal groups them, with the hand-written entries
+// kept first because they are the ones people use and their labels are better ("Tender
+// Return date" rather than the schema's own wording).
+const GROUP_LABEL = { summary: 'Summary', details: 'Details', person: 'Customer Contact', organization: 'Organization' };
+function buildListFields(schema) {
+  const out = [...LIST_FIELDS];
+  const have = new Set(out.map(([k]) => k));
+  for (const g of ['summary', 'details', 'person', 'organization']) {
+    for (const f of (schema || [])) {
+      if (f.group !== g || have.has(f.key)) continue;
+      have.add(f.key);
+      out.push([f.key, `${f.label} (${GROUP_LABEL[g] || g})`]);
+    }
+  }
+  return out;
+}
+
 // Company / Contact list columns
 const COMPANY_FIELDS = [['name','Company name'],['org_address','Address'],['org_phone','Phone'],['org_website','Website'],['org_email','Email'],['org_reg_number','Registration Number'],['supply_chain_approved','Supply Chain Approved?'],['deals','Deals'],['open_value','Open value'],['won','Won'],['lost','Lost']];
 const DEFAULT_COMPANY_COLUMNS = COMPANY_FIELDS.map((f) => f[0]);
@@ -1453,11 +1476,44 @@ function EmailsNavButton({ active, onClick, refreshKey }) {
 // Asks why, before marking a deal Lost. Not optional dressing: the Sales dashboard's
 // Lost Reasons panel is only as good as what gets recorded here, and a field nobody is
 // prompted for is a field nobody fills in.
-function LostReasonModal({ schema, onCancel, onConfirm }) {
-  const options = (schema || []).find((f) => f.key === 'lost_reason')?.options || [];
+function LostReasonModal({ schema, me, onCancel, onConfirm }) {
+  // The MANAGED list, not the schema's copy. The schema is the fallback for a CRM that
+  // has never had the list saved.
+  const fallback = (schema || []).find((f) => f.key === 'lost_reason')?.options || [];
+  const [options, setOptions] = useState(fallback);
   const [reason, setReason] = useState('');
   const [other, setOther] = useState('');
+  const [addToList, setAddToList] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const isAdmin = me?.role === 'admin';
   const chosen = reason === '__other' ? other.trim() : reason;
+
+  useEffect(() => {
+    fetch('/api/crm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'lost-reasons' }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (d && d.ok && Array.isArray(d.reasons) && d.reasons.length) setOptions(d.reasons); })
+      .catch(() => {});
+  }, []);
+
+  const confirm = async () => {
+    // Adding to the list is a separate, admin-only step. The reason is recorded on the
+    // deal either way, so a non-admin is never blocked from closing a deal just because
+    // their reason is a new one.
+    if (addToList && isAdmin && chosen) {
+      setSaving(true);
+      try {
+        await fetch('/api/crm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add-lost-reason', reason: chosen }),
+        });
+      } catch { /* the deal still closes with the reason on it */ }
+      setSaving(false);
+    }
+    onConfirm(chosen);
+  };
 
   return (
     <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
@@ -1472,8 +1528,20 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
         </select>
 
         {reason === '__other' && (
-          <input autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="In your own words"
-            style={{ ...miniInput, width: '100%', marginBottom: 10 }} />
+          <>
+            <input autoFocus value={other} onChange={(e) => setOther(e.target.value)} placeholder="In your own words"
+              style={{ ...miniInput, width: '100%', marginBottom: 8 }} />
+            {isAdmin ? (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: C.dim, marginBottom: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={addToList} onChange={(e) => setAddToList(e.target.checked)} />
+                Add this to the lost-reason list for everyone
+              </label>
+            ) : (
+              <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 10 }}>
+                Recorded on this deal. An admin can add it to the list for everyone.
+              </div>
+            )}
+          </>
         )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6 }}>
@@ -1481,7 +1549,7 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
           {/* Skipping is allowed - blocking someone from closing a deal because a
               dropdown is empty would just teach them to pick anything. */}
           <button onClick={() => onConfirm('')} style={{ ...ghostBtn, color: C.dim }}>Mark lost without a reason</button>
-          <button disabled={!chosen} onClick={() => onConfirm(chosen)}
+          <button disabled={!chosen || saving} onClick={confirm}
             style={{ ...primaryBtn, background: C.lost, opacity: chosen ? 1 : 0.45 }}>Mark lost</button>
         </div>
       </div>
@@ -1789,6 +1857,7 @@ function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, sch
           {lostFor != null && (
             <LostReasonModal
               schema={schema}
+              me={me}
               onCancel={() => setLostFor(null)}
               onConfirm={(reason) => { onSetLostReason(deal.id, reason); onSetStatus(deal.id, 'lost'); setLostFor(null); }} />
           )}
@@ -1838,7 +1907,12 @@ function ResizeHandle({ onMouseDown }) {
   return <span onMouseDown={onMouseDown} onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 0, right: 0, width: 6, height: '100%', cursor: 'col-resize', userSelect: 'none' }} />;
 }
 
-function ListView({ deals, columns, sort, onSort, onOpen, today }) {
+// Columns you can change without opening the deal. Kept deliberately short: these are the
+// ones that get corrected in bulk while scanning the list. Anything else is a trip into
+// the project, where there is room for context.
+const INLINE_EDITABLE = new Set(['estimator_responsible', 'general_info', 'project_stage', 'size_m2', 'project_score']);
+
+function ListView({ deals, columns, sort, onSort, onOpen, today, schema = [], users = [], onEditField }) {
   const { widths, startResize } = useColWidths(columns);
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
@@ -1867,7 +1941,17 @@ function ListView({ deals, columns, sort, onSort, onOpen, today }) {
                       opens the project in place. */}
                   {k === 'title'
                     ? <DealLink id={d.id} onOpen={onOpen} title="Open the project — right-click or ctrl-click for a new tab" style={{ color: 'inherit' }}>{displayCell(d, k)}</DealLink>
-                    : displayCell(d, k)}
+                    : INLINE_EDITABLE.has(k) && onEditField
+                      // stopPropagation, or clicking into the field would open the deal
+                      // underneath it.
+                      ? <span onClick={(e) => e.stopPropagation()}>
+                          <EditableField
+                            field={(schema || []).find((f) => f.key === k) || { key: k, type: 'text' }}
+                            value={d.fields[k]}
+                            users={users}
+                            onSave={(key, val) => onEditField(d.id, key, val)} />
+                        </span>
+                      : displayCell(d, k)}
                 </td>
               ))}
             </tr>
@@ -2049,6 +2133,11 @@ function CRMPageInner() {
     setColumns(DEFAULT_COLUMNS); setCompanyCols(DEFAULT_COMPANY_COLUMNS); setContactCols(DEFAULT_CONTACT_COLUMNS);
     setSort({ key: 'created', dir: 'desc' }); setEntitySort({ key: 'deals', dir: 'desc' });
     setActSort({ key: 'due', dir: 'asc' }); setActPerson(''); setActCustomer(''); setActShowDone(false);
+    setActFrom(''); setActTo('');
+    // The saved lists - Tender Review and MC Secured/Negotiating - were left on. They are
+    // the filters most likely to be hiding something, since they cut the board to four
+    // stages, so a "Clear Filters" that leaves them set is not clearing the filters.
+    setSavedFilter(null);
     setQuery('');
     try { window.localStorage.removeItem(PREFS_KEY); } catch {}
   }
@@ -3484,7 +3573,7 @@ function CRMPageInner() {
       <FontLoader />
       {confetti && <Confetti onDone={() => setConfetti(false)} />}
       {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-      {chooser === 'list' && <ColumnChooser title="Choose columns" fields={LIST_FIELDS} columns={columns} onToggle={(k) => setColumns((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
+      {chooser === 'list' && <ColumnChooser title="Choose columns" fields={buildListFields(schema)} columns={columns} onToggle={(k) => setColumns((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
       {chooser === 'companies' && <ColumnChooser title="Choose columns" fields={COMPANY_FIELDS} columns={companyCols} onToggle={(k) => setCompanyCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
       {chooser === 'contacts' && <ColumnChooser title="Choose columns" fields={CONTACT_FIELDS} columns={contactCols} onToggle={(k) => setContactCols((p) => p.includes(k) ? p.filter((c) => c !== k) : [...p, k])} onClose={() => setChooser(null)} />}
 
@@ -3608,7 +3697,7 @@ function CRMPageInner() {
             {shownStages.map((s, i) => <BoardColumn key={s.id} stage={s} deals={byStage[s.id] || []} onOpen={openDealById} onDragStart={onDragStart} onDrop={onDrop} today={today} isFirst={i === 0} />)}
           </div>
         )}
-        {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} />}
+        {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} schema={schema} users={users} onEditField={editField} />}
         {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteCompany} noun="company" />}
         {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteContact} noun="contact" />}
         {view === 'activities' && (
@@ -3943,6 +4032,12 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // offers to set the follow-up in the same step rather than leaving the project with nothing
 // booked - which is how deals go quiet.
 function CompleteActivityModal({ row, today, onClose, onDone }) {
+  // Escape closes it. The backdrop deliberately does not - see the note on the overlay.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const [outcome, setOutcome] = useState('');
   // Empty, with "Call" shown as grey placeholder text. So it reads as a prompt to write
   // something rather than a value already filled in - but leaving it alone still saves the
@@ -3955,9 +4050,16 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
   const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
   const lbl = { fontSize: 12, fontWeight: 700, color: C.dim, display: 'block', marginBottom: 5 };
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+    // NO CLOSE ON BACKDROP CLICK. There is typed work in here - what happened on the
+    // call, the next activity - and losing it to a stray click beside the box means
+    // typing it all again. Cancel, the x, or Escape.
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 620, maxWidth: '100%', padding: 22 }}>
-        <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Complete activity</h3>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Complete activity</h3>
+          <button onClick={onClose} title="Close without saving"
+            style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: '#999', cursor: 'pointer', padding: 0 }}>&times;</button>
+        </div>
         <div style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>{row.project} &middot; {row.text}</div>
 
         <label style={lbl}>What happened? (call notes, email summary, outcome)</label>
@@ -4010,15 +4112,27 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
 // Clicking the activity text opens this - a full-size box, because these are call and email
 // notes, not a one-line label squeezed into a table cell.
 function EditActivityModal({ row, onClose, onSave, me, users }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const [text, setText] = useState(row.text || '');
   const [due, setDue] = useState(row.due || '');
   const [assignee, setAssignee] = useState(row.assignee || '');
   const inp = { width: '100%', boxSizing: 'border-box', padding: '9px 11px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13.5, fontFamily: 'inherit' };
   const lbl = { fontSize: 12, fontWeight: 700, color: C.dim, display: 'block', marginBottom: 5 };
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
+    // NO CLOSE ON BACKDROP CLICK. There is typed work in here - what happened on the
+    // call, the next activity - and losing it to a stray click beside the box means
+    // typing it all again. Cancel, the x, or Escape.
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 680, maxWidth: '100%', padding: 22 }}>
-        <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Edit activity</h3>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Edit activity</h3>
+          <button onClick={onClose} title="Close without saving"
+            style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: '#999', cursor: 'pointer', padding: 0 }}>&times;</button>
+        </div>
         <div style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>{row.project}</div>
 
         <label style={lbl}>Activity</label>
