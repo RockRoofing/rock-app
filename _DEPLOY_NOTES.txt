@@ -1,43 +1,80 @@
-pkg471 - VAT Type, and an audit of every other column
-=====================================================
+pkg473 - retention release on the application
+=============================================
 
-Deploy after pkg470. One changed file: pages/retention.js. No new files.
+Deploy after pkg472.
 
+CHANGED FILES (replace)
+-----------------------
+  lib/applications.js
+  pages/applications.js
+  pages/retention.js
+  pages/api/dashboard.js
 
-VAT TYPE - the same mistake again
------------------------------------
-The column is read as vatRateLabel. I wrote it as vatType. Third time in this import:
-Gross AFA, Total Paid, and now this - each written under a name nothing reads, so the
-value imported fine and the cell showed a dash.
-
-Rather than fix it and wait to be told about the next one, I have now compared EVERY cell
-in the row against every field the import writes. That should have been the first thing I
-did.
+NEW FILES: none.
 
 
-THE AUDIT - what the row reads and the import did not write
--------------------------------------------------------------
-    vatRateLabel            FIXED - this is VAT Type
-    retentionOwed           FIXED - the two release values added together
-    retention612Allocated   FIXED - your "612 Allocated" column
+THE RETENTION SECTION
+---------------------
+A new block at the end of the application, after the works:
 
-    afaSource               correctly absent - says where the AFA came from, and for a
-                            manual row the answer is "you typed it"
-    mcdPct, mcdValue,       correctly absent - MCD lives on the project in Commercial.
-    mcdRecorded             These rows have no project, so they show 0.00% (default).
-    pcDateTBC,              correctly absent - flags from project details, which a
-    defectsDateTBC          tracker-only row does not have
+    Retention
+    Retention on the final account is £5,850.00 at 3%. Each half is £2,925.00.
 
-So three genuine misses, all fixed, and six that are absent for good reason.
+    [ ] 1st Half   £2,925.00
+    [ ] 2nd Half   £2,925.00
+
+Tick a half when it falls due and it is added to that application.
+
+Each half is measured against the retention on the FINAL ACCOUNT, not on the work
+certified so far - a release claimed at 90% complete is still half of the whole pot, which
+is what the contract says.
 
 
-IF GROSS AFA AND TOTAL PAID ARE STILL BLANK
----------------------------------------------
-Those two were fixed in pkg469. If they are still empty, either pkg469 is not deployed or
-the file has not been imported again since it was.
+IN THE SUMMARY
+--------------
+Two lines under Materials On Site, filled straight from the section above:
 
-The import only writes what is in the file at the time it runs - correcting the code does
-not go back and repair rows already stored. Re-import after deploying and the nine rows
-update in place on Ref.
+    1st Release Retention    £2,925.00      (grey and "not claimed" until ticked)
+    2nd Release Retention    £0.00
 
-Worth doing in one go now, so all four columns land together.
+The right-hand column always shows what the half is worth, so the amounts are visible
+before anything is claimed.
+
+
+ON THE CERTIFICATE
+------------------
+A "Retention Released" line appears between Retention and Total when something is claimed -
+which is where it happens: retention comes off, the released half goes back on.
+
+    Gross              £200,000.00
+    MCD @ 2.5%           £5,000.00
+    Sub-Total          £195,000.00
+    Retention @ 3%       £5,850.00
+    Retention Released   £2,925.00
+    Total              £192,075.00
+
+
+CLAIMED ONCE, NOT EVERY MONTH
+-------------------------------
+A half ticked on one application stays ticked on the next, but it does NOT appear again in
+"This Cert" - the certificate only ever claims what has not already been claimed. The tick
+box for a half claimed earlier is locked and labelled, because unticking it would not
+un-claim the money, it would just make the certificate wrong.
+
+
+THROUGH TO THE RETENTION TRACKER
+---------------------------------
+Retention Owed now reads: retention on the invoiced value LESS whatever has been claimed
+back. Claim both halves and it goes to zero, instead of the register carrying on chasing
+money that has been applied for.
+
+Worked through end to end on a £200,000 job at 2.5% MCD and 3% retention: owed £5,850
+before, £0.00 after both halves.
+
+
+ONE THING WORTH KNOWING
+-----------------------
+There was already a "retentionReleased" in dashboard.js meaning something different -
+retention DUE by date, once the PC and defects dates have passed. Mine is retention
+CLAIMED, and it is called retentionClaimed for that reason. Due and claimed are not the
+same thing and one quietly overwriting the other would have been hard to spot.

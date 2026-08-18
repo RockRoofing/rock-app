@@ -187,6 +187,7 @@ export default async function handler(req, res) {
       // application on this project (by sequence). Gross = the application total
       // before MCD/retention deductions.
       let appliedForLatest = 0
+      let retentionClaimed = 0
       // FINAL ACCOUNT FROM THE APPLICATION.
       //
       // The application is the better source: it holds the measured contract sum and the
@@ -207,6 +208,12 @@ export default async function handler(req, res) {
           for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
           const sum = computeApplicationSummary(latest, prevGross)
           appliedForLatest = sum.grossCurrent || sum.applicationTotal || 0
+          // Retention CLAIMED BACK on applications - the halves ticked in the Retention
+          // section. Deliberately NOT called retentionReleased: that name is already used
+          // further down for something different, retention DUE by date (PC + defects
+          // passed). Due and claimed are not the same thing, and conflating them would
+          // have quietly written one over the other.
+          retentionClaimed = sum.releasedTotal || 0
           // measured contract sum + variations at final value, GROSS of MCD.
           const afaApp = sum.anticipatedFinalAccount
           if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
@@ -361,6 +368,7 @@ export default async function handler(req, res) {
         cmResolved: true,
         estimatorResolved: true,
         appliedForLatest,
+        retentionClaimed,
         // Same fix as contractsManager above, which was done and this was not.
         // It read settings.estimator only - a legacy flat field almost nothing writes
         // any more. Edit Project Details writes to peopleOverride.estimator and falls

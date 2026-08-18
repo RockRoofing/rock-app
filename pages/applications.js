@@ -169,10 +169,13 @@ export default function ApplicationsPage() {
     const d = new Date(y, m, 1) // next month
     setNewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }, [sortedApps, settings])
-  function prevGrossFor(app) {
-    // previous = the application with the highest seq below this one's seq
+  function prevAppFor(app) {
     let prev = null
     for (const a of sortedApps) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
+    return prev
+  }
+  function prevGrossFor(app) {
+    const prev = prevAppFor(app)
     if (!prev) return 0
     return computeApplicationSummary(prev, 0).grossCurrent
   }
@@ -279,6 +282,7 @@ export default function ApplicationsPage() {
               appNumber={appNumberFor(openApp)}
               isFirstApp={sortedApps.length > 0 && sortedApps[0].id === openApp.id}
               prevGross={prevGrossFor(openApp)}
+              prevReleases={prevAppFor(openApp)}
               projectId={projectId}
               me={me}
               settings={settings}
@@ -501,7 +505,7 @@ function PctInput({ value, onCommit, width = 58, max = 100, style }) {
   )
 }
 
-function ApplicationEditor({ app: appProp, appNumber, prevGross, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
+function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, isFirstApp, projectId, me, settings = {}, trackerVariations = [], projectPOs = [], hiddenPOs = [], onHiddenPOsChange, onBack, onDelete, onSaved, onVariationChange }) {
   // The application is now EDITABLE state, not a read-only prop. Its dates and period
   // were fixed at creation, so getting the month wrong meant deleting a finished
   // application and doing the whole thing again.
@@ -547,7 +551,7 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, isFirstApp, pro
   const vars = useMemo(() => buildAppVariations({ ...app, variationData }, trackerVariations), [app, variationData, trackerVariations])
 
   const workApp = { ...app, contractWorks: rows, variations: vars, materials: mats }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevCertValue), [rows, vars, mats, prevCertValue, app.mcdPct, app.retentionPct])
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevCertValue, prevReleases), [rows, vars, mats, prevCertValue, app.mcdPct, app.retentionPct, app.retentionRelease1, app.retentionRelease2, prevReleases])
 
   const setPct = (id, v) => {
     const n = v === '' ? 0 : Math.max(0, Math.min(100, parseFloat(v) || 0))
@@ -1057,17 +1061,70 @@ function SummaryBlock({ sum, app }) {
             <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Measured Work</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredContractSum)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredToDate)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.measuredContractSum)}</td></tr>
             <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Variations</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsToDate)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.variationsFinal)}</td></tr>
             <tr style={{ borderBottom: '1px solid #f0f0f0' }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Materials On Site</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.materialsOnSite)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}></td></tr>
+            {/* Retention release, mirrored from the Retention section below. Shown even
+                when nothing is ticked, so it is visible that the halves exist and how
+                much each is worth. */}
+            {[[1, sum.release1Value, app.retentionRelease1], [2, sum.release2Value, app.retentionRelease2]].map(([n, val, on]) => (
+              <tr key={n} style={{ borderBottom: '1px solid #f0f0f0', color: on ? '#166534' : '#999' }}>
+                <td style={{ padding: '8px 12px', fontSize: 13 }}>
+                  {n === 1 ? '1st' : '2nd'} Release Retention
+                  {!on && <span style={{ fontSize: 11, color: '#bbb' }}> — not claimed</span>}
+                </td>
+                <td style={{ padding: '8px 12px' }}></td>
+                <td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right', fontWeight: on ? 700 : 400 }}>{on ? fmt(val) : fmt(0)}</td>
+                <td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right', color: '#bbb' }}>{fmt(sum.halfRetention)}</td>
+              </tr>
+            ))}
             <tr style={{ background: '#f8f9fa', fontWeight: 700 }}><td style={{ padding: '8px 12px', fontSize: 13 }}>Application Total</td><td style={{ padding: '8px 12px' }}></td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.applicationTotal)}</td><td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.anticipatedFinalAccount)}</td></tr>
           </tbody>
         </table>
       </div>
+      {/* RETENTION SECTION.
+          Sits at the end, after the works, because a release is claimed against the whole
+          job rather than against any line in it. */}
+      <div style={{ background: '#fff', borderRadius: 10, padding: 16, marginBottom: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e', marginBottom: 4 }}>Retention</div>
+        <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>
+          Retention on the final account is {fmt(sum.retentionOnFinal)} at {app.retentionPct || 0}%.
+          Each half is {fmt(sum.halfRetention)}. Tick a half when it falls due and it is added to this application.
+        </div>
+        {[
+          [1, 'retentionRelease1', '1st Half', sum.release1Value],
+          [2, 'retentionRelease2', '2nd Half', sum.release2Value],
+        ].map(([n, field, label, val]) => {
+          // A half already claimed on an EARLIER application stays ticked and is locked -
+          // unticking it here would not un-claim it, it would just make this certificate
+          // wrong.
+          const claimedBefore = !!(prevReleases && prevReleases[field])
+          const on = !!app[field]
+          return (
+            <label key={field} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', marginBottom: 6, borderRadius: 8, border: `1px solid ${on ? '#bbf7d0' : '#e5e7eb'}`, background: on ? '#f0fdf4' : '#fff', cursor: (locked || claimedBefore) ? 'default' : 'pointer' }}>
+              <input type="checkbox" checked={on} disabled={locked || claimedBefore}
+                onChange={(e) => { setApp(a => ({ ...a, [field]: e.target.checked })); setDirty(true) }} />
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#1a1a2e', minWidth: 70 }}>{label}</span>
+              <span style={{ fontSize: 13, color: on ? '#166534' : '#888' }}>{fmt(sum.halfRetention)}</span>
+              {claimedBefore && <span style={{ fontSize: 11, color: '#888' }}>already claimed on an earlier application</span>}
+              <span style={{ flex: 1 }} />
+              {on && !claimedBefore && <span style={{ fontSize: 12, fontWeight: 700, color: '#166534' }}>+{fmt(val)} on this certificate</span>}
+            </label>
+          )
+        })}
+        {sum.releasedTotal > 0 && (
+          <div style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+            Total retention released to date: <strong>{fmt(sum.releasedTotal)}</strong> of {fmt(sum.retentionOnFinal)}.
+          </div>
+        )}
+      </div>
+
       {/* certificate block */}
       <div style={{ background: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
         <div style={{ padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#1a1a2e', borderBottom: '1px solid #eee' }}>Certificate</div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr style={{ background: '#f8f9fa' }}><th style={{ ...th, textAlign: 'left' }}></th><th style={th}>Current</th><th style={th}>Previously Cert</th><th style={th}>This Cert</th></tr></thead>
           <tbody>
-            {[['Gross', 'gross'], [`MCD @ ${app.mcdPct}%`, 'mcd'], ['Sub-Total', 'subTotal'], [`Retention @ ${app.retentionPct}%`, 'retention'], ['Total', 'total']].map(([label, key]) => (
+            {/* "Retention Released" sits between the deduction and the total, which is
+                where it happens: retention comes off, the released half goes back on. */}
+            {[['Gross', 'gross'], [`MCD @ ${app.mcdPct}%`, 'mcd'], ['Sub-Total', 'subTotal'], [`Retention @ ${app.retentionPct}%`, 'retention'], ...(sum.releasedTotal > 0 ? [['Retention Released', 'released']] : []), ['Total', 'total']].map(([label, key]) => (
               <tr key={key} style={{ borderBottom: '1px solid #f0f0f0', ...(key === 'total' ? { background: '#f8f9fa', fontWeight: 700 } : {}) }}>
                 <td style={{ padding: '8px 12px', fontSize: 13 }}>{label}</td>
                 <td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right' }}>{fmt(sum.current[key])}</td>

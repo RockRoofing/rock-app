@@ -124,6 +124,10 @@ export default function RetentionPage() {
   const [addForm, setAddForm] = useState(EMPTY_ENTRY)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // The scroll box sizes itself through flex now - see the page wrapper. An earlier
+  // version measured its offset and set maxHeight; two mechanisms doing one job is how
+  // they end up disagreeing, so the measuring has gone.
+  const scrollBoxRef = useRef(null)
   const [importMsg, setImportMsg] = useState('')
 
   // IMPORT FROM A SPREADSHEET.
@@ -317,7 +321,11 @@ export default function RetentionPage() {
           paid: p.paid || 0,
           appliedFor: p.appliedForLatest ? String(p.appliedForLatest) : '',
           appliedForLatest: p.appliedForLatest || 0,
-          retentionOwed: p.totalRetention || 0,               // invoiced (200-sales) × retention %
+          // Still HELD: retention on the invoiced value, less anything already claimed
+          // back through an application's Retention section. Without the deduction the
+          // register keeps chasing money that has been applied for.
+          retentionOwed: Math.max(0, (p.totalRetention || 0) - (p.retentionClaimed || 0)),
+          retentionClaimed: p.retentionClaimed || 0,
           retention612Allocated: p.retention612Allocated || 0, // actually deducted to code 612
           afaGross: p.afaGross != null ? p.afaGross : null,     // before MCD
           afaSource: p.afaSource || '',
@@ -421,7 +429,7 @@ export default function RetentionPage() {
       return {
         ...e,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
-        retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
+        retentionOwed: x.retentionOwed, retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
         afaGross: x.afaGross, afaSource: x.afaSource, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
         finalAccount: e.finalAccount || x.finalAccount,
         projectValue: e.projectValue || x.projectValue,
@@ -527,7 +535,18 @@ export default function RetentionPage() {
   return (
     <>
       <Head><title>Rock Roofing — Retention Tracker</title></Head>
-      <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      {/* THE PAGE ITSELF DOES NOT SCROLL.
+          Measuring the table's height was not enough on its own: while the page could
+          scroll, scrolling down moved the box - and its horizontal bar - out of view,
+          which is exactly the symptom. Locking the page to the viewport and letting only
+          the table scroll means the bar is always where you left it. */}
+      <div style={embed
+        // EMBEDDED (?embed=1) this page sits in an iframe on Project Financials, which
+        // sizes itself to the content. Locking it to 100vh there would cap the table at
+        // the iframe's height and clip it, so the embed keeps the old behaviour and lets
+        // the host page do the scrolling.
+        ? { minHeight: '100vh', background: '#f0f2f5' }
+        : { height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f0f2f5' }}>
         {importMsg && (
           <div style={{ margin: '10px 0', padding: '8px 12px', borderRadius: 8, fontSize: 13, background: importMsg.startsWith('Imported') ? '#e8f5ee' : '#fff4e5', border: `1px solid ${importMsg.startsWith('Imported') ? '#1c704f' : '#f0c98a'}`, color: '#1a1a2e' }}>
             {importMsg}
@@ -542,11 +561,11 @@ export default function RetentionPage() {
         </>} />
         )}
 
-        <div style={{ padding: 24 }}>
+        <div style={embed ? { padding: 24 } : { padding: 24, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Summary cards, with the page's own actions stacked at the right. Cards are
               smaller than they were - four headline figures do not need to be the tallest
               thing on a page whose point is the table below. */}
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch', flexShrink: 0 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
                 { label: 'Total Retention', value: fmtC(totals.total), color: '#1a1a2e' },
@@ -641,7 +660,9 @@ export default function RetentionPage() {
           {/* overflow:hidden stays. It rounds the corners, and it does NOT interfere with
               the sticky header: the scroll box below has overflow:auto, so that is the
               nearest scrollport and the header sticks to it, not to this. */}
-          <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+          <div style={embed
+            ? { background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden' }
+            : { background: '#fff', borderRadius: 10, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', overflow: 'hidden', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading...</div>
             ) : allEntries.length === 0 ? (
@@ -658,13 +679,18 @@ export default function RetentionPage() {
               // the horizontal bar stays pinned at the bottom of the visible area, and
               // the header can be made sticky against the top of the box rather than the
               // page.
-              <div style={{
-                maxHeight: 'calc(100vh - 300px)',
-                minHeight: 320,
-                overflow: 'auto',
-                WebkitOverflowScrolling: 'touch',
-                position: 'relative',
-              }}>
+              //
+              // MEASURED, NOT GUESSED. This was a flat "100vh - 300px". 300 was my estimate
+              // of the page header, filters and summary cards above it - and it was too
+              // small, so the bottom of the box (and its scrollbar with it) sat below the
+              // fold and you had to scroll the page down to reach it.
+              //
+              // tableTop is the box's real distance from the top of the window, remeasured
+              // on load, on resize, and whenever the filters change height. No estimate to
+              // get wrong, and it stays right if anything is ever added above.
+              <div ref={scrollBoxRef} style={embed
+                ? { maxHeight: '70vh', overflow: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }
+                : { flex: 1, minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch', position: 'relative' }}>
                 <table style={{ minWidth: TABLE_MIN_WIDTH, width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #eee' }}>
@@ -679,7 +705,7 @@ export default function RetentionPage() {
                         ['Invoiced', 'right', 'Total invoiced on the project: sum of the Sales (account code 200) lines from Xero. NET of VAT, and INCLUDING retention (retention is posted to a separate account, so the Sales total already includes it). From Xero for synced projects, or the imported Xero CSV.', 'invoiced'],
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
-                        ['Retention Owed', 'right', 'Retention owed based on invoiced value: invoiced (Sales, code 200) × retention %.', 'retentionOwed'],
+                        ['Retention Owed', 'right', 'Retention still held: invoiced (Sales, code 200) \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
                         ['612 Allocated', 'right', 'Retention actually deducted on invoices under account code 612. Re-sync invoices to populate.', 'r612'],
                         ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
