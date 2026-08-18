@@ -1,54 +1,37 @@
-pkg480 - Final Account flag on an application
-=============================================
+pkg481 - bulk delete on Contracted Rates
+========================================
 
-Deploy after pkg479.
-
-CHANGED FILES (replace)
------------------------
-  lib/applicationPdf.js
-  pages/applications.js
-  pages/api/application-pdf.js
-  pages/api/application-send.js
-
-NEW FILES: none.
+Deploy after pkg480. One changed file: pages/contracted-rates.js. No new files.
 
 
-THE TICK BOX
+WHAT YOU GET
 ------------
-Beside the application number and period:
+A "Delete 11 lines" button in the selection bar, beside the format and move buttons that
+were already there. Tick the rows, press it, gone.
 
-    Application  14  — August 2026   [x] Final Account
-
-Tick it and nothing structural changes. It keeps its number, its period, its dates and its
-place in the sequence - because it IS an application for payment, the last one. Anything
-else would have broken the numbering.
+Only shown when the document is editable - a locked set of rates cannot be bulk deleted
+any more than it can be bulk edited.
 
 
-WHAT CHANGES ON THE PDF
------------------------
-    title       "Final Account" instead of "Application for Payment"
-    banner      "FINAL ACCOUNT - this is the last application on this project"
-    footer      "Final Account 14" instead of "Application 14"
-    filename    "Final Account 14 - J178 Gas Lane.pdf"
-
-The banner says it twice on purpose. A document titled Final Account that still reads
-"Application no. 14" invites the question, so the page answers it.
-
-The filename matters more than it looks - that PDF ends up in somebody's Downloads folder
-next to eleven others called "Application n".
-
-The emailed attachment is named the same way, so the copy the customer receives matches
-the one the QS has on file.
-
-
-IN THE LIST
------------
-A FINAL ACCOUNT badge beside the period, so it can be picked out without opening every
-application to find which one it was.
-
-
-ONE SMALL THING WORTH THE MINUTE
+THE CONFIRMATION NAMES THE VALUE
 ----------------------------------
-The extra banner line needed extra vertical space in the PDF. Without it the project name
-printed on top of it - the cursor moves 30pt after the title and the banner sits 36pt
-down. Now 44pt when the flag is set, checked at both settings.
+    Delete 11 lines?
+
+    Total rate on those lines: £40,000.00.
+
+    Use strike-through instead if you want to keep them on the document.
+
+Deleting eleven lines worth £40,000 is a different thing from deleting one, and the
+selection is easy to lose track of once it spans both sides of the line - the bar is
+sticky, so you can be scrolled a long way from what is ticked.
+
+The strike-through reminder is the same one the single-line delete gives. Most of the time
+somebody wants the line off the quote but still on the record, and that is what strike is
+for.
+
+
+THE SELECTION IS CLEARED AFTERWARDS
+-------------------------------------
+It points at lines that no longer exist. Left alone the bar would sit there saying
+"11 selected" over nothing, and the next format or move button pressed would do nothing
+with no explanation.

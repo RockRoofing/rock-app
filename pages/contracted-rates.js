@@ -181,6 +181,27 @@ export default function ContractedRatesPage() {
   }
   const remove = (id) => { if (!confirm('Delete this line? (Use strike-through instead if you want to keep it on the document.)')) return; setItems(list => list.filter(x => x.id !== id)); setDirty(true) }
 
+  // BULK DELETE.
+  //
+  // The confirmation names the count and the value, because deleting eleven lines worth
+  // £40,000 by mistake is a different thing from deleting one, and the selection is easy
+  // to lose track of once it spans both sides of the line.
+  const bulkRemove = () => {
+    const ids = items.filter(x => selected.has(x.id)).map(x => x.id)
+    if (!ids.length) return
+    const value = items.filter(x => selected.has(x.id)).reduce((s2, x) => s2 + (Number(x.rate) || 0), 0)
+    const msg = `Delete ${ids.length} line${ids.length === 1 ? '' : 's'}?`
+      + (value ? `\n\nTotal rate on those lines: ${fmt(value)}.` : '')
+      + '\n\nUse strike-through instead if you want to keep them on the document.'
+    if (!confirm(msg)) return
+    const gone = new Set(ids)
+    setItems(list => list.filter(x => !gone.has(x.id)))
+    // Clear the selection - it now points at lines that no longer exist, and leaving it
+    // set would show "11 selected" over an empty selection.
+    setSelected(new Set())
+    setDirty(true)
+  }
+
   // Move all selected items currently in `fromSection` to the other side,
   // appended (in their current order) after the last item of the target section.
   const bulkMove = (fromSection) => {
@@ -710,6 +731,13 @@ export default function ContractedRatesPage() {
                       {editable && hasBelowSel && (
                         <button onClick={() => openVariation(belowSelIds)} style={{ background: '#0f766e', border: 'none', color: '#fff', borderRadius: 6, padding: '5px 14px', fontSize: 12.5, cursor: 'pointer', fontWeight: 700 }}>
                           ➜ Combine {belowSelIds.length} below-line item{belowSelIds.length === 1 ? '' : 's'} into one variation
+                        </button>
+                      )}
+                      {editable && (
+                        <button onClick={bulkRemove}
+                          title="Delete every selected line"
+                          style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 6, padding: '4px 12px', fontSize: 12.5, cursor: 'pointer', fontWeight: 700 }}>
+                          Delete {overallSel.count} line{overallSel.count === 1 ? '' : 's'}
                         </button>
                       )}
                       <button onClick={clearSel} style={{ background: '#fff', border: '1px solid #c7d2fe', color: '#4f46e5', borderRadius: 6, padding: '4px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Deselect rows</button>
