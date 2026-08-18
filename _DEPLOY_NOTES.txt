@@ -1,41 +1,35 @@
-pkg460 - open a project in a new tab
-====================================
+pkg461 - no missing-info flag on variations
+===========================================
 
-Deploy after pkg459. One changed file: pages/crm.js. No new files.
+Deploy after pkg460. One changed file: pages/crm.js. No new files.
 
-
-WHY IT WAS NOT POSSIBLE
------------------------
-The rows used onClick handlers, not links. A browser can only offer "Open in a new tab" on
-an actual anchor, so right-click gave nothing, and neither did ctrl-click, cmd-click or
-middle-click.
-
-The deep link already existed - /crm?deal=1234 has worked since the mention emails were
-built. Nothing was pointing at it.
+Deals in the Variations stage no longer carry the red missing-information flag, on the
+kanban or in List view.
 
 
-WHERE IT WORKS NOW
-------------------
-    Activities tab   the Project column
-    List view        the Title column
-    Pipeline         the title on each card
+WHY IT WAS WRONG
+----------------
+A variation is extra work on a job already won. The credit checks, project score, lead
+source, site location and the rest were all done on the parent project - asking for them
+again on a £2,000 add-on is asking for something that already exists somewhere else.
 
-All three are ordinary links now, so every gesture your browser normally offers works:
-right-click menu, ctrl or cmd click, middle click, shift for a new window, and dragging
-the link to the tab bar.
+It was worse than just noise. Variations sit LATE in the stage order, after MC Unsecured,
+so they were picking up the full Received list AND, being past Negotiating in the
+ordering, could pick up the Negotiating list on top. Every variation carried a flag it
+could never clear - and a flag that can never be cleared is how people learn to ignore the
+flag everywhere else.
 
-A PLAIN left click behaves exactly as before - it opens the project in place, no page
-reload. Only modified clicks are handed to the browser.
 
+NOTHING ELSE CHANGED
+--------------------
+Checked every stage:
 
-ONE DELIBERATE LIMIT ON THE PIPELINE CARDS
---------------------------------------------
-Only the TITLE is a link, not the whole card.
+    Project In          no flag, as before (earlier than Received)
+    Received            flags, as before
+    MC Unsecured        flags, as before
+    Variations          NO FLAG - the change
+    MC Secured          flags, as before
+    Negotiating         flags, both lists, as before
 
-The card is draggable. If the drag surface were an anchor the browser would try to drag
-the LINK - offering to drop a URL somewhere - instead of moving the deal between stages.
-The rest of the card still opens the project on a normal click, so the only thing you lose
-is right-clicking the blank part of a card.
-
-Same reasoning in List view: the title cell is the link, the rest of the row keeps its
-click handler.
+MC Secured sits after Variations in the stage order and is unaffected - worth stating,
+because a change based on position rather than the stage itself would have caught it.

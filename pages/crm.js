@@ -76,6 +76,16 @@ const isBlank = (v, key) => {
 // Returns the labels of everything missing, or an empty array.
 function missingInfo(deal) {
   if (!deal || deal.status !== 'open') return [];   // closed deals are history, not work
+  // VARIATIONS ARE NEVER FLAGGED.
+  //
+  // A variation is extra work on a job already won. The credit checks, project score,
+  // lead source and the rest were all done on the parent project - asking for them again
+  // on a £2,000 add-on is asking for something that already exists somewhere else.
+  //
+  // Variations sit LATE in the stage order, so they were picking up the full Received
+  // list and, being late, the Negotiating list on top of it. Every one of them carried a
+  // red flag it could never clear, which is exactly how people learn to ignore the flag.
+  if (deal.stageId === 'stage_variations') return [];
   const idx = STAGE_INDEX[deal.stageId];
   if (idx == null || idx < STAGE_INDEX.stage_received) return [];
   const f = deal.fields || {};
