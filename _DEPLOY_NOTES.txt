@@ -1,44 +1,52 @@
-pkg474 - fixes the crash opening an application
-===============================================
+pkg475 - automatic replies logged against the project
+=====================================================
 
-Deploy after pkg473. One changed file: pages/applications.js. No new files.
-
-URGENT - pkg473 broke the application editor. This is the fix.
+Deploy after pkg474. One changed file: lib/crmEmailSync.js. No new files.
 
 
-THE ERROR
----------
-    ReferenceError: prevReleases is not defined
-        at Array.map
+WHY YOURS VANISHED
+------------------
+"Automatic reply:" is in the junk filter, alongside out-of-office, bounce-backs, spam,
+read receipts and calendar accepted/declined. Junk is dropped BEFORE matching, which is
+why it appeared neither on the deal nor in the review queue.
 
-The Retention section and the two release lines went into SummaryBlock - which is a
-SEPARATE component from the application editor, not part of it. I read prevReleases,
-locked, setApp and setDirty in there; none of them exist in that component.
-
-The editor holds them. SummaryBlock only ever received sum and app.
-
-It compiles cleanly because JavaScript has no idea those names will be missing until the
-code runs - the same class of fault as the useMemo import in pkg430. My build check does
-not catch it and neither does the prerender, because this component only renders when you
-open an application.
+Not a fault - that filter is there because on a real month junk was the bulk of everything
+landing in the queue.
 
 
-FIXED
------
-SummaryBlock now takes what it needs:
+WHAT CHANGES
+------------
+An automatic reply on a conversation WE HAVE ALREADY FILED is now kept and logged against
+that project, marked "automatic reply on a filed thread".
 
-    prevReleases      to know which half was claimed on an earlier application
-    locked            to disable the tick boxes on a sent application
-    onToggleRelease   a callback, so the editor still owns the state
+The junk check now runs AFTER the thread lookup rather than before it, which is the whole
+change: whether we know the conversation now decides what happens.
 
-The callback matters: the tick boxes now ASK the editor to change the application rather
-than reaching for state they cannot see, which is what went wrong.
+    Automatic reply, thread we know     -> filed on the project
+    Automatic reply, thread we do not   -> dropped, as before
+    RE: on a known thread               -> filed, unchanged
+
+So "Danny is on annual leave until 01.09.26" lands on the tender you are chasing, and the
+review queue stays as clean as it was - none of this ever reaches the queue.
 
 
-AND I HAVE ADDED A CHECK FOR IT
---------------------------------
-I scope-checked every identifier in SummaryBlock against what it receives and what exists
-at module level. Nothing else is missing - the only hits were words inside comments.
+TWO THAT STAY OUT WHATEVER THE THREAD
+---------------------------------------
+    [SPAM]      spam can land in a real conversation, and filing it because we recognise
+                the thread would be worse than dropping it
+    Read:       a read receipt tells you nothing you cannot see from the email itself
+    [postmaster]
 
-That check is what I should have run before shipping pkg473, given the section was added
-to a component I had not looked at closely.
+UNDELIVERABLE and out-of-office are kept on a known thread, deliberately. A bounce-back on
+a live tender is exactly the sort of thing you want to see - it means your email never
+arrived.
+
+
+THE SYNC REPORTS IT
+-------------------
+Each run now returns an "autoReplies" count per mailbox and overall, so you can see how
+many are being kept rather than having to guess.
+
+Only applies going forward. The one from Danny was discarded at the time and is not
+recoverable - if you want it on the project, forward it to crm@rockroofing.co.uk with
+[CRM-nnnn] in the subject.
