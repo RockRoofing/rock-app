@@ -1,41 +1,58 @@
-pkg490 - the applications table now reads through to what is due
-================================================================
+pkg491 - the 2nd retention release cancelled itself out
+=======================================================
 
-Deploy after pkg489. One changed file: pages/applications.js. No new files.
+Deploy after pkg490.
 
+CHANGED FILES (replace)
+-----------------------
+  lib/applications.js
+  lib/applicationPdf.js
+  pages/applications.js
+  pages/api/applications.js
 
-THE COLUMNS
------------
-    App No. | Month | App date | Status | Gross to date | MCD | Retention |
-    Ret. released | Prev. cert | This cert (net) | Payment due
-
-The certificate, left to right, ending at what the customer owes for that application -
-which is the question people actually ask of this table, and it meant opening each one to
-answer it.
-
-Deductions are shown in brackets and red, the release in green, the previous certificate
-in grey. This cert stays bold: it is the answer.
-
-Payment due comes from the application's own date, so you can see what is owed and when
-without opening anything.
+NEW FILES: none.
 
 
-THE FIGURES MATCH THE APPLICATION
------------------------------------
-Same calculation, same variations built live from the tracker, same release handling as
-pkg486. A row reads exactly as the certificate inside it:
+NO, IT IS NOT RIGHT - AND YOU FOUND IT FROM THE ONE FIGURE THAT GAVE IT AWAY
+------------------------------------------------------------------------------
+    Retention released    Current £1,962.68   Previously £1,962.68   This cert £0.00
 
-    Gross to date   £210,982.56
-    MCD            (£4,755.99)
-    Retention      (£6,186.80)
-    Ret. released    £3,095.15
-    Prev. cert     £175,508.68
-    This cert       £27,626.24
+Current is the position on the job SO FAR. Two halves have been released by this point, so
+it should read £3,925.37. It showed one half - and cancelled against the previous column,
+so the certificate claimed nothing.
+
+The cause: "released" was read from THIS application's tick boxes only. App 3 has the 2nd
+half ticked and not the 1st, so Current counted one half; Previously counted the 1st from
+app 2; the difference was zero.
+
+Released to date is now cumulative - this application's halves OR any released earlier.
+
+    current    £3,925.37
+    previously £1,962.68
+    this cert  £1,962.68     <- the 2nd release, correctly claimed
+
+Checked against your actual figures.
 
 
-AND IT SCROLLS
---------------
-Twelve columns needed somewhere to go. A table set to width:100% SHRINKS to fit rather
-than overflowing, so the figures would have squeezed until they wrapped - the fault the
-retention register had. Minimum width 1,100px inside a scrolling container, so it
-overflows properly and gets a scrollbar when the window is narrow.
+AND YOUR SUGGESTION, WHICH IS THE RIGHT ONE
+---------------------------------------------
+Both halves now appear in the summary once either has been released:
+
+    1st Release Retention (released previously)    £1,962.68
+    2nd Release Retention                          £1,962.68
+
+A certificate headed "2nd Retention Release" with no sign the first ever happened invites
+the obvious question from the customer. Now it answers it.
+
+Same on screen, where a half released earlier is labelled and its tick box locked.
+
+
+ALSO FIXED, THE UNDERLYING CAUSE
+----------------------------------
+A new application did not inherit the release flags from the one before it. pkg473 assumed
+a claimed half stayed ticked and locked - nothing was carrying it forward, so it appeared
+un-claimed and could have been claimed a second time.
+
+Now carried forward at creation. The cumulative reading above means your EXISTING
+applications are already correct without it - I verified that on app 3 as it stands - but
+the flags being right matters for what the tick boxes show.

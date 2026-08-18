@@ -193,6 +193,11 @@ export default async function handler(req, res) {
         mcdPct: rates.mcdPct,
         mcdOnVariations: project.mcdOnVariations === true,
         mcdOnMaterials: project.mcdOnMaterials === true,
+        // A half released on an earlier application stays released. Carried forward so
+        // the tick box shows it, locked, rather than looking un-claimed and inviting
+        // somebody to claim it twice.
+        retentionRelease1: !!(prev && prev.retentionRelease1),
+        retentionRelease2: !!(prev && prev.retentionRelease2),
         finalPaymentDays: project.finalPaymentDays != null ? project.finalPaymentDays : null,
         customerName: project.customerName || '',
         customerEmail: project.customerEmail || '',

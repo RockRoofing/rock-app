@@ -1223,11 +1223,12 @@ function SummaryBlock({ sum, app, prevReleases = null, locked = false, onToggleR
             {/* Retention release, mirrored from the Retention section below. Shown even
                 when nothing is ticked, so it is visible that the halves exist and how
                 much each is worth. */}
-            {[[1, sum.release1Value, app.retentionRelease1], [2, sum.release2Value, app.retentionRelease2]].map(([n, val, on]) => (
+            {[[1, sum.release1Value, sum.rel1, sum.rel1New], [2, sum.release2Value, sum.rel2, sum.rel2New]].map(([n, val, on, isNew]) => (
               <tr key={n} style={{ borderBottom: '1px solid #f0f0f0', color: on ? '#166534' : '#999' }}>
                 <td style={{ padding: '8px 12px', fontSize: 13 }}>
                   {n === 1 ? '1st' : '2nd'} Release Retention
                   {!on && <span style={{ fontSize: 11, color: '#bbb' }}> — not claimed</span>}
+                  {on && !isNew && <span style={{ fontSize: 11, color: '#888' }}> — released previously</span>}
                 </td>
                 <td style={{ padding: '8px 12px' }}></td>
                 <td style={{ padding: '8px 12px', fontSize: 13, textAlign: 'right', fontWeight: on ? 700 : 400 }}>{on ? fmt(val) : fmt(0)}</td>
