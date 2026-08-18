@@ -127,6 +127,23 @@ export default async function handler(req, res) {
     const project = (await getProject(projectId)) || {}
     const rates = await resolveProjectRates(projectId, project)
 
+    // DRAFTS FOLLOW THE PROJECT; SENT APPLICATIONS DO NOT.
+    //
+    // The basis is stamped on at creation so a sent certificate cannot re-price itself.
+    // But a DRAFT should pick up a change made after it was started - otherwise changing
+    // the setting appears to do nothing until you delete the draft and begin again.
+    //
+    // Applications with no flag at all pre-date this setting entirely and are left alone:
+    // they were calculated with the discount on everything, and that is how they must
+    // stay.
+    for (const a of (Array.isArray(project.applications) ? project.applications : [])) {
+      const sent = a.status && a.status !== 'draft'
+      if (sent) continue
+      if (a.mcdOnVariations === undefined && a.mcdOnMaterials === undefined) continue
+      a.mcdOnVariations = project.mcdOnVariations === true
+      a.mcdOnMaterials = project.mcdOnMaterials === true
+    }
+
     // One-time backfill: assign permanent appNumbers to any sent applications that
     // predate this field, so numbering is correct and persists.
     if (Array.isArray(project.applications)) {
@@ -174,6 +191,8 @@ export default async function handler(req, res) {
         dateOverrides: project.dateOverrides || {},
         retentionPct: rates.retentionPct,
         mcdPct: rates.mcdPct,
+        mcdOnVariations: project.mcdOnVariations === true,
+        mcdOnMaterials: project.mcdOnMaterials === true,
         finalPaymentDays: project.finalPaymentDays != null ? project.finalPaymentDays : null,
         customerName: project.customerName || '',
         customerEmail: project.customerEmail || '',
@@ -245,8 +264,11 @@ export default async function handler(req, res) {
         mcdPct: mcdPct != null ? mcdPct : (prev && prev.mcdPct != null ? prev.mcdPct : (rates.mcdPct != null ? rates.mcdPct : 0)),
         // Stamped on at creation, like the percentages. A sent certificate must not change
         // basis because somebody later altered the project setting.
-        mcdOnVariations: project.mcdOnVariations !== false,
-        mcdOnMaterials: project.mcdOnMaterials !== false,
+        //
+        // Default OFF: the discount comes off the measured work only, which is the normal
+        // reading of a main contractor's discount and what your QS works to.
+        mcdOnVariations: project.mcdOnVariations === true,
+        mcdOnMaterials: project.mcdOnMaterials === true,
         // Fraction -> percentage. Defaulting to 5 when nothing is set was a guess that
         // looked like a real answer; 0 with the project's own figure preferred is honest.
         retentionPct: retentionPct != null ? retentionPct : (prev && prev.retentionPct != null ? prev.retentionPct : (rates.retentionPct != null ? rates.retentionPct * 100 : 0)),

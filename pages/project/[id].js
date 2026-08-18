@@ -1753,19 +1753,20 @@ function DetailsForm({ form, setForm, addVariation, updateVariation, removeVaria
             every existing application was calculated. */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '2px 0 10px' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#374151', cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.mcdOnVariations !== false}
+            <input type="checkbox" checked={form.mcdOnVariations === true}
               onChange={e => setForm({ ...form, mcdOnVariations: e.target.checked })} />
             Apply the discount to <strong>variations</strong>
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#374151', cursor: 'pointer' }}>
-            <input type="checkbox" checked={form.mcdOnMaterials !== false}
+            <input type="checkbox" checked={form.mcdOnMaterials === true}
               onChange={e => setForm({ ...form, mcdOnMaterials: e.target.checked })} />
             Apply the discount to <strong>materials on site</strong>
           </label>
           <div style={{ fontSize: 11, color: '#999' }}>
-            Untick either and the certificate reorders: the discount comes off the measured work,
-            then variations and materials are added, then retention. Applies to NEW applications -
-            ones already sent keep the basis they were sent on.
+            Both OFF by default: the discount comes off the measured work, then variations and
+            materials are added, then retention. Tick one to discount that element as well.
+            Applies to drafts and new applications &mdash; anything already SENT keeps the basis
+            it was sent on.
           </div>
         </div>
         <div style={{ fontSize: 11.5, color: '#888', marginTop: -6, marginBottom: 10 }}>

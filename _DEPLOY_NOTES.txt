@@ -1,84 +1,64 @@
-pkg488 - what the discount applies to, configurable per project
-===============================================================
+pkg489 - discount defaults to measured work only
+================================================
 
-Deploy after pkg487.
+Deploy after pkg488.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/applications.js
-  lib/applicationPdf.js
-  pages/applications.js
   pages/api/applications.js
   pages/project/[id].js          <- literal [id] folder
 
 NEW FILES: none.
 
 
-TWO TICK BOXES IN EDIT PROJECT DETAILS
-----------------------------------------
-Under the MCD %:
-
-    [x] Apply the discount to variations
-    [x] Apply the discount to materials on site
-
-Both default to ON, which is exactly how every application to date has been calculated.
-Nothing changes until you untick something.
-
-
-THE CERTIFICATE REORDERS TO MATCH
------------------------------------
-Both ticked - as it is today:
-
-    Gross              210,982.56
-    MCD 2.5%             5,274.56
-    Sub-total          205,707.99
-    Retention 3%         6,171.24
-    Total              199,536.75
-
-Both unticked - your QS's layout:
-
-    Gross measured work    190,239.41
-    MCD 2.5%                 4,755.99
-    Sub-total              185,483.42
-    Variations & materials  20,743.15
-    Sub-total              206,226.57
-    Retention 3%             6,186.80
-    Total                  200,039.77
-
-    £503 more, because the discount is no longer charged on the variations and the
-    materials.
-
-Tick one and not the other and only that element moves below the discount, labelled
-accordingly. Retention is always last, on everything.
-
-Screen and PDF both follow.
-
-
-SENT CERTIFICATES CANNOT CHANGE
+THE DEFAULT IS NOW OFF FOR BOTH
 ---------------------------------
-The setting is stamped onto each application when it is CREATED, the same way mcdPct and
-retentionPct already are. Change the project setting and it affects new applications only.
+    [ ] Apply the discount to variations
+    [ ] Apply the discount to materials on site
 
-That mattered: the certificate is recalculated from the record every time it is opened, so
-without this a sent certificate would silently re-price itself the moment somebody changed
-a project setting - including the PDF, months after the customer received it.
+So a new project discounts the measured work only, and the certificate reads:
 
+    Gross measured work
+    MCD
+    Sub-total
+    Variations & materials
+    Sub-total
+    Retention
+    Total
 
-ONE THING I COULD NOT DO CLEANLY
-----------------------------------
-The "Previously Cert." column is a single gross number, so it cannot be split into
-measured / variations / materials on its own.
-
-Where the previous application is in the system, its real split is used, scaled to
-whatever gross is actually entered. Where it is a figure typed in by hand - a project
-part-certified before it came into the app - the whole amount is treated as the MCD base.
-That is the old behaviour and the more conservative of the two: it discounts more, not
-less.
+Tick either box to bring that element back under the discount.
 
 
-STILL WORTH ASKING YOUR QS
---------------------------
-Their sheet shows MCD of 4,436.67 where 2.5% of the line above it is 4,755.98 - and the
-previous column is out by a similar proportion. Either the discount is being charged on a
-smaller base than the measured work shown, or that spreadsheet has a stale formula. Worth
-knowing which before this basis is used in anger.
+WHAT I DID NOT FLIP, AND WHY IT MATTERS
+-----------------------------------------
+The CALCULATION still treats a missing flag as "discount applies to everything".
+
+Applications sent before this setting existed have no flag stored. Had I flipped the
+calculation default, every one of them would have re-priced itself on the new basis - and
+the PDF for a certificate the customer received last year would print different figures
+from the one they have. Those are settled documents.
+
+So:
+
+    old application, no flag      whole account      unchanged, £199,536.75
+    new application               measured only      £200,039.77
+    project with a box ticked     whole account      £199,536.75
+
+Verified on your J1 numbers.
+
+
+DRAFTS FOLLOW THE PROJECT
+-------------------------
+A draft picks up a change to the setting; a sent application keeps the basis it was sent
+on.
+
+Without that, changing the setting would appear to do nothing on any draft already
+started - you would have had to delete it and begin again to see the effect. Applications
+pre-dating the setting are excluded from this and stay as they are.
+
+
+ONE THING TO EXPECT
+-------------------
+Any DRAFT created between pkg488 and this deploy was stamped with the old default and will
+now switch to measured-only when you open it, and the figures will change. That is
+correct, but worth knowing rather than discovering.
