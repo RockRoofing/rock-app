@@ -1,61 +1,46 @@
-pkg478 - three things
-=====================
+pkg479 - retention release on the application PDF
+=================================================
 
-Deploy after pkg477.
+Deploy after pkg478.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/commercial-scorecard-extra.js
-  pages/commercial-scorecard.js
-  pages/sales-crm.js
-  pages/operations/project-management/report.js
+  lib/applicationPdf.js
+  pages/api/application-pdf.js
+  pages/api/application-send.js
 
 NEW FILES: none.
 
 
-1. WEEKLY REPORTS NOT SHOWING
------------------------------
-The metric is a PERCENTAGE of required, and "required" is derived from projects with an
-ACTUAL day allocated on the Gantt that week.
+ON THE PDF
+----------
+Summary block, under Materials On Site:
 
-No actual days that week -> required is 0 -> percentage is null -> the card shows nothing,
-however many reports were written. And a report on a project with no actual day was not
-counted at all, even when there was a requirement.
+    1st Release Retention        £2,925.00      £2,925.00
+    2nd Release Retention        £2,925.00      £2,925.00
 
-The page then made it worse by only looking at weeks where required > 0, so it skipped
-those weeks entirely rather than showing them.
+Certificate block, between Retention and Total:
 
-Now:
-  - the API also returns completedAll: every report written that week, whatever the Gantt
-    says
-  - with a requirement, the card shows the percentage exactly as before
-  - without one, it shows the COUNT, and says why there is no percentage:
-    "Latest week: 4 completed. No projects marked on site on the Gantt, so there is
-     nothing to measure against."
+    Retention (3%)               £5,850.00
+    Retention released           £5,850.00
+    Total due                  £195,000.00
 
-Worth knowing: if you want the percentage back, the Gantt needs days marked ACTUAL for the
-projects on site. That is what defines "required".
+The certificate row matters most: without it the Total on a document going to the customer
+would not add up from the lines above it, and that is the first thing anyone checks.
+
+A half that has NOT been claimed is not printed. An unclaimed release is a nil line on a
+claim document, and this is read as a claim rather than a checklist.
 
 
-2. EDITABLE DATE ON THE WEEKLY PROJECT REPORT
------------------------------------------------
-The Approval date was stamped with today and greyed out. Now a normal date field,
-defaulting to today.
+A BUG CAUGHT BEFORE IT SHIPPED
+--------------------------------
+The PDF recalculates the certificate from scratch, and it was not being given the PREVIOUS
+application. Without that it cannot tell which half was already claimed, so it counted
+both again:
 
-This matters more than it looks: a Friday walk round typed up on Monday was dated Monday,
-and the Commercial Scorecard counts reports BY THIS DATE - so it landed in the wrong week
-and the metric above under-reported.
+    with the previous application     this certificate releases £2,925
+    without it                        this certificate releases £5,850
 
-I also had to stop the submit overwriting it. It forced today's date on completion, which
-would have silently thrown away whatever you had just typed.
-
-
-3. CUSTOMER FILTER ON STRIKE RATE
------------------------------------
-A "Customer" dropdown on the Strike Rate page, listing every main contractor with a
-decided deal. Pick one and the whole page - rate, values, chart, detail - is that customer
-only.
-
-Deliberately NOT added to the shared filter bar. Strike rate against a named contractor is
-a question you ask here and nowhere else; putting it in the global bar would have quietly
-narrowed six other pages.
+The screen was already right - pkg473 passes it there - so the PDF would have disagreed
+with what the QS was looking at, on the document that goes out. Now passed to both the
+download and the emailed copy, so all three agree.

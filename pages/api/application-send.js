@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     const appNumber = app.appNumber || (backfillAppNumbers(apps).maxSent + 1)
     const bytes = await buildApplicationPDF({
       appNumber,
-      app, prevGross,
+      app, prevGross, prevReleases: prev || null,
       trackerVariations: project.variations || [],
       project: { jobNo, name, customerName: project.customerName || '' },
       logoUrl: `${origin}/rock-logo.jpg`,
