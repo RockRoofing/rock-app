@@ -1,52 +1,42 @@
-pkg475 - automatic replies logged against the project
-=====================================================
+pkg476 - a project opened in a new tab showed no activities
+===========================================================
 
-Deploy after pkg474. One changed file: lib/crmEmailSync.js. No new files.
-
-
-WHY YOURS VANISHED
-------------------
-"Automatic reply:" is in the junk filter, alongside out-of-office, bounce-backs, spam,
-read receipts and calendar accepted/declined. Junk is dropped BEFORE matching, which is
-why it appeared neither on the deal nor in the review queue.
-
-Not a fault - that filter is there because on a real month junk was the bulk of everything
-landing in the queue.
+Deploy after pkg475. One changed file: pages/crm.js. No new files.
 
 
-WHAT CHANGES
-------------
-An automatic reply on a conversation WE HAVE ALREADY FILED is now kept and logged against
-that project, marked "automatic reply on a filed thread".
+WHY ONLY IN A NEW TAB
+---------------------
+That detail was the whole diagnosis, so thank you for it.
 
-The junk check now runs AFTER the thread lookup rather than before it, which is the whole
-change: whether we know the conversation now decides what happens.
+Opening a project loads two things: the deal list (crm:deals, about 6.4MB) and that
+project's activities and notes (tiny). loadDealSubs merged the second into the first with
 
-    Automatic reply, thread we know     -> filed on the project
-    Automatic reply, thread we do not   -> dropped, as before
-    RE: on a known thread               -> filed, unchanged
+    setDeals(prev => prev.map(d => d.id !== id ? d : { ...d, activities: [...] }))
 
-So "Danny is on annual leave until 01.09.26" lands on the tender you are chasing, and the
-review queue stays as clean as it was - none of this ever reaches the queue.
+FROM THE BOARD the deals are already in memory, so the merge lands.
 
+IN A NEW TAB both fetches start together, and the small one regularly wins. The map then
+matches nothing, does nothing - and worse, the "already loaded" flag had been set on the
+first line of the function, so it never tried again.
 
-TWO THAT STAY OUT WHATEVER THE THREAD
----------------------------------------
-    [SPAM]      spam can land in a real conversation, and filing it because we recognise
-                the thread would be worse than dropping it
-    Read:       a read receipt tells you nothing you cannot see from the email itself
-    [postmaster]
-
-UNDELIVERABLE and out-of-office are kept on a known thread, deliberately. A bounce-back on
-a live tender is exactly the sort of thing you want to see - it means your email never
-arrived.
+The result is a project with no activities, showing the blank "add activity" form. The
+activity was never lost; this page had simply never received it.
 
 
-THE SYNC REPORTS IT
--------------------
-Each run now returns an "autoReplies" count per mailbox and overall, so you can see how
-many are being kept rather than having to guess.
+FIXED
+-----
+The flag is only set once there is actually a deal to merge into. If the deals have not
+arrived, the request is remembered and retried the moment they do.
 
-Only applies going forward. The one from Danny was discarded at the time and is not
-recoverable - if you want it on the project, forward it to crm@rockroofing.co.uk with
-[CRM-nnnn] in the subject.
+Tested: deferred on a new tab, retried when the deals land, merged once, and a second call
+is still a no-op.
+
+Nothing else changes. From the board it behaves exactly as before, because the deals were
+always there.
+
+
+WORTH KNOWING
+-------------
+This will have affected notes, filed email and the timeline in the same way, not just
+activities - anything loadDealSubs brings in. If a project opened from a link has ever
+looked emptier than it should, this was why.

@@ -2108,6 +2108,19 @@ function CRMPageInner() {
   }, []);
   const router = useRouter();
   const [deals, setDeals] = useState([]);
+  // Deals wanted before the deal list had arrived, retried once it has.
+  const pendingSubs = useRef(new Set());
+  // A live handle on deals, so loadDealSubs can test for one without being re-created on
+  // every render.
+  const dealsRef = useRef([]);
+  useEffect(() => {
+    dealsRef.current = deals;
+    // Anything asked for before the deals arrived: try it again now they have.
+    if (!deals.length || !pendingSubs.current.size) return;
+    const waiting = [...pendingSubs.current];
+    pendingSubs.current.clear();
+    for (const id of waiting) loadDealSubs(Number(id));
+  }, [deals]);
   const [orgsData, setOrgsData] = useState([]);
   const [contactsData, setContactsData] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -2388,7 +2401,23 @@ function CRMPageInner() {
   // shape the deal view already uses (text/due) so nothing downstream needs to change.
   const loadedSubs = useRef({});
   async function loadDealSubs(id) {
-    if (!id || loadedSubs.current[id]) return;
+    if (!id) return;
+    // ONLY MARK IT DONE ONCE THE DEAL EXISTS TO MERGE INTO.
+    //
+    // This set the flag first and merged with prev.map(). Opening a project in a NEW TAB
+    // starts both fetches at once - and crm:deals is about 6.4MB while the sub-records
+    // are tiny, so the subs regularly won. The map then matched no deal, did nothing, and
+    // the flag stopped it ever trying again: the project opened with no activities and
+    // the blank "add activity" form showing.
+    //
+    // From the board it always worked, because the deals were already in memory. Hence
+    // "only when opened in a new tab".
+    if (loadedSubs.current[id]) return;
+    if (!dealsRef.current.some((d) => String(d.id) === String(id))) {
+      // Deals are still loading. Remember what was wanted and come back to it.
+      pendingSubs.current.add(String(id));
+      return;
+    }
     loadedSubs.current[id] = true;
     try {
       const [a, n] = await Promise.all([
