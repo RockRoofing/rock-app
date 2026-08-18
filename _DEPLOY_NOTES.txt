@@ -1,50 +1,44 @@
-pkg458 - the toolbar search now narrows the Activities list too
-===============================================================
+pkg459 - date range filter on the Activities tab
+================================================
 
-Deploy after pkg457. One changed file: pages/crm.js. No new files.
-
-
-TO YOUR QUESTION FIRST - THEY WERE NOT DUPLICATES
----------------------------------------------------
-    TOOLBAR SEARCH     a jump-to. Matches project titles and company names, offers up to
-                       eight suggestions, opens the one you pick. Filters nothing.
-
-    ACTIVITIES SEARCH  a filter. Narrows the rows in front of you, matching across
-                       project, activity text, assignee, company and customer name.
-
-Different jobs, which is why both exist. But you are right that while you are ON the
-Activities tab, typing a project name in the toolbar and having the list ignore you is
-odd.
+Deploy after pkg458. One changed file: pages/crm.js. No new files.
 
 
-WHAT CHANGED
+WHAT YOU GET
 ------------
-The toolbar search now narrows the Activities list as well as offering its suggestions.
-Both behaviours at once - the dropdown still appears, and you can still click through to
-open a project.
+Two date boxes beside the search:
 
-The two boxes AND together, which is the useful way round:
+    Due [from] to [to]   clear
 
-    toolbar "pool"                 -> Pool Motors, Poole, Liverpool Road
-    toolbar "pool" + activities "high" -> 131 High Street, Poole
-
-The toolbar picks the project, the Activities box narrows within it.
+Both blank by default. Fill in either or both - from on its own is "everything due from
+here", to on its own is "everything due up to here". A "clear" link appears once one is
+set.
 
 
-AND IT SAYS SO
---------------
-A chip appears beside Refresh: Search: "pool" with an x.
+NOT REMEMBERED, AS YOU ASKED
+------------------------------
+The range resets on every visit and is not saved anywhere. It is session state only.
 
-A filter you cannot see is how an empty table becomes a mystery - you would clear the
-Activities box, still see nothing, and have no idea the toolbar was the cause. The x
-clears the toolbar box from where you are looking.
+Your reasoning was right and worth writing down: a remembered date range would hide
+activities on a later visit with nothing on screen to explain why, and an empty list reads
+as "nothing to do" rather than "you filtered this out in June".
 
 
-NOT CHANGED
------------
-The Emails tab has its own search too, filtering on subject, sender and preview. Left
-alone - say if you want the toolbar feeding that one as well.
+ONE DECISION I MADE - TELL ME IF IT IS WRONG
+----------------------------------------------
+An activity with NO DUE DATE is kept whatever the range.
 
-And the toolbar search still only finds PROJECTS and COMPANIES, not contacts. Searching a
-contact's name there finds nothing even though the CRM knows them. That is a real gap
-rather than a duplication, and worth doing if people expect it to be a general search.
+It is not outside the range - it has no date to be outside of - and hiding it would bury
+exactly the ones that need a date setting. Those are the activities most likely to be
+forgotten, so filtering by date should not be what makes them disappear.
+
+If you would rather a date range excluded undated activities, it is one line.
+
+
+AND THE EMPTY MESSAGE NOW NAMES THE RIGHT FILTER
+--------------------------------------------------
+It used to say "Clear the person or customer filter to see the rest" whatever was actually
+applied. With a date range on, that sends you looking in the wrong place.
+
+It now mentions the date range when one is set, and also counts the search boxes - both of
+which could empty the table while that message pointed at the dropdowns.

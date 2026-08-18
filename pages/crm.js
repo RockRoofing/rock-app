@@ -1950,6 +1950,14 @@ function CRMPageInner() {
   const [actSort, setActSort] = useState({ key: 'due', dir: 'asc' });
   const [actPerson, setActPerson] = useState('');
   const [actCustomer, setActCustomer] = useState('');
+  // DATE RANGE - deliberately NOT remembered.
+  //
+  // Every other filter here is session state too, but this one matters more: a remembered
+  // date range would hide activities on a later visit with nothing on screen to explain
+  // why, and the natural reading of an empty list is "nothing to do" rather than "you
+  // filtered it out in June".
+  const [actFrom, setActFrom] = useState('');
+  const [actTo, setActTo] = useState('');
   const [actShowDone, setActShowDone] = useState(false);
   const [actSearch, setActSearch] = useState('');
 
@@ -3270,6 +3278,12 @@ function CRMPageInner() {
     // one narrows within it.
     const navQ = query.trim().toLowerCase();
     if (navQ) rows = rows.filter((r) => match(r, navQ));
+
+    // Date range, on the DUE date. An activity with no due date is kept whatever the
+    // range - it is not "outside" the range, it has no date to be outside of, and hiding
+    // it would bury exactly the ones that need a date setting.
+    if (actFrom) rows = rows.filter((r) => !r.due || r.due >= actFrom);
+    if (actTo) rows = rows.filter((r) => !r.due || r.due <= actTo);
     // A remembered filter that no longer matches ANYTHING is ignored rather than obeyed.
     // Saved filters persist between visits, so a person who is no longer on any activity -
     // or who never was, if you assigned nobody - would otherwise silently empty the table
@@ -3289,7 +3303,7 @@ function CRMPageInner() {
       if (!bv) return -1;
       return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true });
     });
-  }, [activityRows, actPerson, actCustomer, actSort, actSearch, query]);
+  }, [activityRows, actPerson, actCustomer, actSort, actSearch, query, actFrom, actTo]);
 
   const live = deals.find((d) => d.id === openId) || null;
   if (live) {
@@ -3557,6 +3571,7 @@ function CRMPageInner() {
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState}
             search={actSearch} setSearch={setActSearch} me={me} users={users}
             navQuery={query} onClearNavQuery={() => setQuery('')}
+            from={actFrom} setFrom={setActFrom} to={actTo} setTo={setActTo}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -3725,7 +3740,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users, navQuery = '', onClearNavQuery }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users, navQuery = '', onClearNavQuery, from = '', setFrom, to = '', setTo }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -3752,6 +3767,20 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         </label>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities..."
           style={{ ...sel, minWidth: 200 }} />
+        {/* Due-date range. Blank by default and never remembered - see the note where the
+            state is declared. */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 11.5, color: '#888' }}>Due</span>
+          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} title="Due on or after"
+            style={{ ...sel, padding: '5px 6px' }} />
+          <span style={{ fontSize: 11.5, color: '#888' }}>to</span>
+          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} title="Due on or before"
+            style={{ ...sel, padding: '5px 6px' }} />
+          {(from || to) && (
+            <button onClick={() => { setFrom(''); setTo(''); }} title="Clear the date range"
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: C.link, fontSize: 11.5, fontWeight: 600 }}>clear</button>
+          )}
+        </span>
         <button onClick={onRefresh} title="Check for activities added by other people" style={{ ...sel, cursor: 'pointer' }}>Refresh</button>
         {/* The nav search narrows this list too, and a filter you cannot see is how an
             empty table becomes a mystery. Shown as a removable chip. */}
@@ -3788,7 +3817,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
       </div>
 
       {!rows.length ? (
-        <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer)}
+        <EmptyActivities loading={loading} summary={summary} filtered={!!(person || customer || from || to || search.trim() || navQuery.trim())} dateFiltered={!!(from || to)}
           deals={deals} openList={openList} dealsAreSeed={dealsAreSeed} onRetry={onRetry} />
       ) : (
         <div style={{ background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, overflow: 'auto', flex: 1, minHeight: 0 }}>
@@ -3975,7 +4004,7 @@ function EditActivityModal({ row, onClose, onSave, me, users }) {
 // An empty table is ambiguous - nothing imported, or nothing outstanding? This works it
 // out from the per-deal summary and says which, so nobody has to guess whether the import
 // failed.
-function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAreSeed, onRetry }) {
+function EmptyActivities({ loading, summary, filtered, dateFiltered, deals, openList, dealsAreSeed, onRetry }) {
   const box = { background: '#fff', border: '1px solid ' + C.line, borderRadius: 10, padding: 28, textAlign: 'center', fontSize: 13.5, color: C.dim };
   if (loading) return <div style={box}>Loading activities...</div>;
 
@@ -3985,7 +4014,18 @@ function EmptyActivities({ loading, summary, filtered, deals, openList, dealsAre
   const openActs = vals.reduce((n, v) => n + (v?.open || 0), 0);
 
   if (filtered) {
-    return <div style={box}>No activities match those filters.<div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>Clear the person or customer filter to see the rest.</div></div>;
+    // Name the filter that is actually on. Telling somebody to clear the person filter
+    // when it is the date range hiding everything sends them looking in the wrong place.
+    return (
+      <div style={box}>
+        No activities match those filters.
+        <div style={{ fontSize: 12, marginTop: 6, color: '#aaa' }}>
+          {dateFiltered
+            ? 'Clear the Due date range, or the person, customer or search filters, to see the rest.'
+            : 'Clear the person, customer or search filters to see the rest.'}
+        </div>
+      </div>
+    );
   }
 
   if (!totalActs) {
