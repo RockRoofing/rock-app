@@ -4,18 +4,22 @@
 // copied into eight separate files, which is exactly why they ended up looking different
 // from each other. Change it here and it changes everywhere.
 //
-// Matches the Operations portal: gold, 17px, warning icon, plain text (not a button).
+// Gold, warning icon, plain text (not a button), sized to sit in a nav bar.
+//
+// It was 17px, which is larger than every nav item beside it - the CRM was already
+// overriding it back down to 13, which is the clue that the shared size was wrong rather
+// than that one page was special. 13 matches the nav links themselves.
 //
 // The Site App has its own version in pages/forms/index.js and is deliberately DIFFERENT
 // (orange, underlined, sized for a phone) - do not fold that one in here.
 
 export const reportLinkStyle = {
   color: '#ca8a04',
-  fontSize: 17,
+  fontSize: 13,
   fontFamily: 'inherit',
   background: 'none',
   border: 'none',
-  padding: '6px 12px',
+  padding: '4px 10px',
   borderRadius: 6,
   whiteSpace: 'nowrap',
   cursor: 'pointer',

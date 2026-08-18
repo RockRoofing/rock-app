@@ -1,61 +1,39 @@
-pkg465 - import retention entries from a spreadsheet
-====================================================
+pkg466 - Report app improvement back to its original size
+=========================================================
 
-Deploy after pkg464.
+Deploy after pkg465.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/retention.js
-  pages/api/retention.js
+  components/ReportImprovementLink.js
+  pages/crm.js
 
 NEW FILES: none.
 
 
-HOW TO USE IT
--------------
-Retention page, "Import spreadsheet" beside + Add Manual Entry. Pick your file. It reports
-how many rows were added and how many updated.
+WHAT CHANGED
+------------
+17px back to 13px, and the padding from 6/12 back to 4/10. It now matches the nav links
+sitting beside it.
 
-I built the button rather than seeding your nine rows directly, because you will do this
-again and a one-off seed would have meant coming back to me next time.
-
-
-IT READS YOUR FILE AS IT IS
----------------------------
-Tested against retentions_upload_for_app_-_Formatted.xlsx - all nine rows parse.
-
-    Ref, Customer, Project, Gross AFA, Final Account, Applied for, Ret %, PC Type, QS,
-    1st Value, 1st Date, 2nd Value, 2nd Date, VAT Type, Total Paid, Comments
-
-Columns are matched by NAME, so order does not matter and extra columns are ignored.
-Ref is the only one that must be there.
-
-Three things it handles that would otherwise have gone wrong:
-
-  RET %      arrives as 0.05 in your file but as 5 in others. Anything above 1 is read as
-             a percentage - a 300% retention is not a thing.
-
-  DATES      Excel stores these as serial numbers - 45356, not a date. Read straight,
-             new Date(45356) gives the year 45356, and the first version of this produced
-             "+045356-01-01". Converted properly now, and checked against your file:
-             J124 comes out as 05/03/2024 and 05/03/2025.
-
-  "TBC"      a real answer in your sheet, in the date columns. Kept as blank rather than
-             being turned into a date. Four of your nine rows use it.
+One change covers the whole portal - Pre-Contract, Commercial, Operations, Bookkeeping,
+Business, Design, the portal home page and the project page all use the one shared
+component. That was the point of pulling it into a single file: the styles used to be
+copied into eight places, which is how they drifted apart before.
 
 
-RE-UPLOADING IS SAFE
---------------------
-Rows are matched on REF. Upload a corrected file and those rows are UPDATED, not
-duplicated - which matters, because the usual reason to upload again is that a figure was
-wrong.
+THE CLUE THAT IT WAS WRONG
+--------------------------
+The CRM was already overriding it back down to 13. I added that override in pkg394 to make
+it sit properly in the CRM's toolbar - which should have told me the shared size was wrong
+rather than that one page was special.
 
-One request and one write for the whole file, rather than one per row. Nine round trips
-with a failure half way would have left you not knowing which had landed.
+That override is now removed, so the CRM uses the shared size like everything else. An
+override on one page is exactly how these end up different again.
 
 
-WHAT THESE ROWS ARE
--------------------
-Imported as tracker-only entries - manual rows that live in the register and are not tied
-to a Xero project. That is right for these nine: they are older jobs still owed retention
-but no longer in progress in Xero. They behave exactly like a row added by hand.
+NOT CHANGED
+-----------
+The Site App has its own version - orange, underlined, 15.5px, centred - because it is
+sized for a phone rather than a nav bar. Left alone on purpose, and there is a comment in
+the shared file saying so.

@@ -3693,7 +3693,9 @@ function CRMPageInner() {
         {/* Far right of the toolbar. Shared component, so it looks and behaves exactly
             as it does on every other portal page - the modal itself is mounted globally
             in _app.js, so nothing else is needed here. */}
-        <ReportImprovementLink style={{ fontSize: 13, color: '#ca8a04', padding: '4px 10px' }} />
+        {/* No size override - the shared component is the right size now. An override
+            here is how the two drifted apart in the first place. */}
+        <ReportImprovementLink />
       </div>
 
       {/* filter bar (only for deal views) */}
