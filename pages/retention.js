@@ -140,11 +140,18 @@ export default function RetentionPage() {
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null })
       if (!rows.length) { setImportMsg('That file has no rows.'); setUploading(false); return }
 
-      // "Ret %" arrives as either 0.05 or 5 depending on how the sheet was formatted.
-      // Anything above 1 is read as a percentage, since a 300% retention is not a thing.
+      // WHOLE PERCENTAGES, not fractions.
+      //
+      // The register stores 5 for 5% - Xero rows are converted on the way in with
+      // retentionPct * 100, and the cell renders with toFixed(0). I stored 0.05, which
+      // rounds to "0%", and worse, 0 is the value that means "no retention" and switches
+      // the release columns to N/A.
+      //
+      // Your sheet uses fractions, others use whole numbers, so both are accepted:
+      // anything at or below 1 is a fraction and multiplied up.
       const pct = (v) => {
         const n = parseFloat(v); if (isNaN(n)) return ''
-        return n > 1 ? n / 100 : n
+        return n <= 1 ? n * 100 : n
       }
       const num = (v) => { const n = parseFloat(v); return isNaN(n) ? '' : n }
       // Dates arrive three ways and only one of them is a Date:
@@ -153,19 +160,31 @@ export default function RetentionPage() {
       //                        year 45356, which is how "+045356-01-01" got into the
       //                        first version of this
       //   the text "TBC"       a real answer in these sheets, and not a date at all
+      // NEVER toISOString() ON A DATE FROM A SPREADSHEET.
+      //
+      // SheetJS builds these in LOCAL time, so 30/04/2026 becomes midnight local. In BST
+      // that is 23:00 UTC the previous day, and toISOString() then returns 2026-04-29 -
+      // every date landed a day early. It looked right in testing here only because this
+      // machine runs on UTC.
+      //
+      // Read off the local calendar fields instead. A date in a spreadsheet has no
+      // timezone; it is just a day.
+      const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const dat = (v) => {
         if (v == null || v === '') return ''
-        if (v instanceof Date) return v.toISOString().slice(0, 10)
+        if (v instanceof Date) return isNaN(v) ? '' : ymd(v)
         const t = String(v).trim()
         if (!t || /^tbc$/i.test(t)) return ''
         // Excel serial. Bounded so a stray number in a date column is not read as one:
-        // 20000 is 1954, 60000 is 2064.
+        // 20000 is 1954, 60000 is 2064. Built from UTC parts then read as calendar
+        // fields, so no shift either way.
         const n = Number(t)
         if (!isNaN(n) && n > 20000 && n < 60000) {
-          return new Date(Date.UTC(1899, 11, 30) + n * 86400000).toISOString().slice(0, 10)
+          const base = new Date(Date.UTC(1899, 11, 30) + n * 86400000)
+          return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}-${String(base.getUTCDate()).padStart(2, '0')}`
         }
         const d = new Date(t)
-        return isNaN(d) ? '' : d.toISOString().slice(0, 10)
+        return isNaN(d) ? '' : ymd(d)
       }
       const pick = (r, ...names) => { for (const n of names) if (r[n] != null && r[n] !== '') return r[n]; return null }
 

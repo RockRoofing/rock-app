@@ -1,39 +1,51 @@
-pkg466 - Report app improvement back to its original size
-=========================================================
+pkg467 - two faults in the retention import. Re-upload after deploying.
+=======================================================================
 
-Deploy after pkg465.
-
-CHANGED FILES (replace)
------------------------
-  components/ReportImprovementLink.js
-  pages/crm.js
-
-NEW FILES: none.
+Deploy after pkg466. One changed file: pages/retention.js. No new files.
 
 
-WHAT CHANGED
-------------
-17px back to 13px, and the padding from 6/12 back to 4/10. It now matches the nav links
-sitting beside it.
+ALL NINE ROWS LANDED - but two columns are wrong
+--------------------------------------------------
+J124, J195, J199, J204, J205, J212, J217, J231 and J236 are all on the register, with the
+right customers, projects, values and QS. The TBC rows correctly show no date.
 
-One change covers the whole portal - Pre-Contract, Commercial, Operations, Bookkeeping,
-Business, Design, the portal home page and the project page all use the one shared
-component. That was the point of pulling it into a single file: the styles used to be
-copied into eight places, which is how they drifted apart before.
+Two things came in wrong.
 
 
-THE CLUE THAT IT WAS WRONG
---------------------------
-The CRM was already overriding it back down to 13. I added that override in pkg394 to make
-it sit properly in the CRM's toolbar - which should have told me the shared size was wrong
-rather than that one page was special.
+1. RETENTION SHOWS 0% ON ALL NINE
+-----------------------------------
+The register stores retention as a WHOLE percentage - 5 means 5%. Xero rows are converted
+on the way in with retentionPct * 100, and the cell renders with toFixed(0).
 
-That override is now removed, so the CRM uses the shared size like everything else. An
-override on one page is exactly how these end up different again.
+Your sheet holds fractions - 0.05 - and I stored them as they were. 0.05 rendered with
+toFixed(0) is "0%".
+
+Worse than cosmetic: 0 is the value that means NO RETENTION, which is what switches the
+release columns to N/A. So the register currently believes there is nothing to collect on
+any of the nine.
+
+Both formats are now accepted - a value at or below 1 is treated as a fraction and
+multiplied up, anything above is already a percentage.
 
 
-NOT CHANGED
------------
-The Site App has its own version - orange, underlined, 15.5px, centred - because it is
-sized for a phone rather than a nav bar. Left alone on purpose, and there is a comment in
-the shared file saying so.
+2. DATES ARE A DAY EARLY
+------------------------
+J195 shows 29/04/2026; your sheet says 30/04.
+
+SheetJS builds dates in LOCAL time, so 30 April becomes midnight local. In BST that is
+23:00 UTC on the 29th, and toISOString() then returns the 29th. Every date landed a day
+early.
+
+It passed my testing because this machine runs on UTC, where the shift is zero. A date in
+a spreadsheet has no timezone - it is just a day - so it now reads the calendar fields
+directly instead of converting through UTC.
+
+
+WHAT TO DO
+----------
+Deploy, then IMPORT THE SAME FILE AGAIN.
+
+Rows match on Ref, so the nine are updated in place - no duplicates, nothing else touched.
+The retention percentages and dates will correct themselves.
+
+Then spot-check J124: 5%, releases 05/03/2024 and 05/03/2025.
