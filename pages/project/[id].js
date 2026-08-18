@@ -160,8 +160,12 @@ export default function ProjectPage() {
     let effMcd = form.mcdPct
     if (effMcd === '' || effMcd == null) effMcd = (people?.mcdPct != null ? people.mcdPct : null)
     else effMcd = parseFloat(effMcd)
+    // Strip what this form does not own. The server refuses these too, but sending them
+    // at all is what caused the problem - a stale copy of the contracted rates, posted
+    // back by a form that never touches them, silently unlocked them.
+    const { contractedRates, applications, ...formOwned } = form
     const payload = {
-      ...form,
+      ...formOwned,
       retentionPct: (effRet != null && !isNaN(effRet)) ? effRet : (form.retentionPct || 0),
       mcdPct: (effMcd != null && !isNaN(effMcd)) ? effMcd : null,
     }

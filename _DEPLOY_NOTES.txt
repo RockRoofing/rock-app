@@ -1,42 +1,56 @@
-pkg492 - "CR not locked" on a project whose rates ARE locked
-============================================================
+pkg493 - the contracted rates lock was being silently reverted
+==============================================================
 
-Deploy after pkg491. One changed file: pages/applications.js. No new files.
+Deploy after pkg492.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/api/project/[id]/settings.js     <- literal [id] folder
+  pages/project/[id].js                  <- literal [id] folder
 
-THE CAUSE
----------
-The Upcoming Applications table is fetched ONCE, when the page first loads.
-
-Contracted rates are locked on a DIFFERENT page. Lock them, come back here, and you are
-looking at the state as it was when this page loaded - so a project you have just locked
-still reads "CR not locked", and the row stays blocked.
-
-Nothing was wrong with the lock. I checked the save path: it writes locked:true to the
-project and clears the dashboard cache. The data was right and the screen was old.
+NEW FILES: none.
 
 
-FIXED TWO WAYS
---------------
-IT REFRESHES WHEN YOU COME BACK. On window focus and when the tab becomes visible again,
-which covers returning from Contracted Rates whether you opened it in this tab or another.
-
-AND THERE IS A RECHECK LINK on the blocked row itself, beside the warning:
-
-    CR not locked  Recheck
-
-That matters because this warning BLOCKS the row - no application number, no date, no way
-to raise it. A blocked row with no way to clear it except reloading the page is the sort
-of thing people work around rather than report.
+I WAS WRONG IN pkg492
+---------------------
+I said it was a stale screen. It was not - the lock really was being turned back off.
 
 
-IF RECHECK DOES NOT CLEAR IT
------------------------------
-Then the rates genuinely are not locked, and the message is right. Two things it
-distinguishes between:
+WHAT WAS HAPPENING
+------------------
+/api/project/[id] returns the WHOLE project record as "settings" - including
+contractedRates and applications.
 
-    "CR not set up"   no contracted rates on the project at all
-    "CR not locked"   rates are there, the Lock has not been pressed
+The Project Details form loads that, and on save posts the whole thing back. The settings
+endpoint merges whatever it is given. So:
 
-The second is the common one - rates uploaded and edited, but never locked, which is also
-what stops them populating the contract value and budgets.
+    1. lock the contracted rates            locked = true
+    2. save Project Details from a page
+       loaded before the lock               posts back its stale copy
+    3. merge overwrites contractedRates     locked = false again
+
+Applications then correctly refused to create one. The contracted rates page still SHOWED
+them locked, because it was holding its own state - which is why it looked like the app
+was wrong about a lock that was plainly there.
+
+Anything saved from Project Details would do it: a date, the MCD, an estimator.
+
+
+FIXED IN BOTH DIRECTIONS
+------------------------
+The endpoint now REFUSES contractedRates and applications whatever it is sent - they are
+owned by their own pages. Everything else merges exactly as before.
+
+And the form no longer sends them, so the situation does not arise.
+
+Applications is on that list for the same reason and it is the more serious of the two: a
+stale copy posted back from Project Details would have undone a certificate.
+
+
+AFTER DEPLOYING
+---------------
+Go to Contracted Rates for that project and press Lock once more. The lock will hold this
+time. Then the application will create.
+
+Worth checking any other project that has refused an application recently - the same thing
+will have happened to it.
