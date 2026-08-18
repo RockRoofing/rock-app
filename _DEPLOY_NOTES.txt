@@ -1,28 +1,37 @@
-pkg454 - the timeline colour-coded by kind
-==========================================
+pkg456 - notes now record who wrote them
+========================================
 
-Deploy after pkg453. One changed file: pages/crm.js. No new files.
-
-
-THE FOUR KINDS
---------------
-    Emails       white          unchanged - the email card was already white
-    Activities   blue           the same blue as "Activities to do" at the top
-    Notes        yellow         the same yellow as the Notes box
-    Changes      grey           the feed grey they already had
-
-The colours are the ones each kind already uses elsewhere on the page, so nothing new has
-to be learned - a yellow block is a note wherever you see it.
-
-Rows are now cards rather than divider-separated lines: same padding, same corner radius
-and same spacing as the email cards, so the four sit consistently in one column.
+Deploy after pkg455. One changed file: pages/crm.js. No new files.
 
 
-ONE SMALL THING WORTH THE EXTRA MINUTE
-----------------------------------------
-The round icon on each row is a white disc. On a plain background that was invisible; on a
-tinted card it read as a hole punched through it.
+THE CAUSE
+---------
+addNote never set an author. Nothing to display, so it fell back to "Unassigned user" -
+on every note, including the one you had just typed.
 
-It now borrows its row's border colour, so it belongs to the card. Trivial on its own, but
-with four colours down the page the alternative looks like a rendering fault rather than a
-design.
+Comments already recorded it. Notes and activities did not, which is why one showed a name
+and the other did not.
+
+
+FIXED, AND NOT ONLY NOTES
+-------------------------
+Now recorded on:
+
+    a note you add
+    an activity you create
+    an activity you complete       (from the deal or the Activities page)
+    an activity you reopen
+
+All from the logged-in portal user - the same source the comment thread already used, so
+the two cannot disagree about who you are.
+
+
+OLDER ENTRIES
+-------------
+Notes written before this have no author stored and there is no way to work out who wrote
+them. The timeline HIDES the name in that case rather than inventing one, so they simply
+show the date - which is what they always effectively meant.
+
+The comment thread said "Unassigned user" for the same reason. That now reads "Unknown":
+unassigned sounds like a setting somebody failed to fill in, unknown is what it actually
+is. Nothing to repair - new entries carry the name from here on.

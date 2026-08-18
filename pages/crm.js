@@ -12,6 +12,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import * as XLSX from 'xlsx';
+import { upload } from '@vercel/blob/client';
 import { mapPipedriveRows, mapOrganizationRows, mapPeopleRows, mapActivityRows, mapNoteRows, groupByDeal, detectExportType } from '../lib/crmImportMap';
 import { SEED_DEALS } from '../lib/crmSeedDeals';
 import { ORGS, CONTACTS } from '../lib/crmDirectory';
@@ -474,7 +475,10 @@ function CommentThread({ comments, onAdd, onEdit, onDelete, users }) {
       {(comments || []).map((c) => (
         <div key={c.id} style={{ marginBottom: 6 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span>{c.author || 'Unassigned user'}</span>
+            {/* Comments written before the author was recorded have none. "Unknown"
+                is honest; "Unassigned user" reads like a setting somebody failed to
+                fill in. */}
+            <span>{c.author || 'Unknown'}</span>
             <span style={{ fontWeight: 400, color: C.dim }}>&middot; {dateTime(c.ts)}{c.edited ? ' (edited)' : ''}</span>
             {editingId !== c.id && (
               <>
@@ -762,6 +766,65 @@ function ActivityRow({ activity, onEdit, onComplete, onDelete, overdue, me, user
   );
 }
 
+
+// ===========================================================================
+// Images on notes
+// ===========================================================================
+// Pasted screenshots are uploaded to blob storage and the note keeps only the URL.
+// Storing the image itself on the deal is not an option: crm:deals is already ~6.4MB and
+// a single screenshot base64-encoded would be larger than the whole rest of the record.
+
+async function uploadPastedImage(file) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const ext = (file.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  const res = await upload(`crm-notes/${stamp}.${ext}`, file, {
+    access: 'public',
+    handleUploadUrl: '/api/blob-upload',
+    contentType: file.type || 'image/png',
+  });
+  return { url: res.url, name: file.name || `pasted.${ext}`, type: file.type || 'image/png' };
+}
+
+// Full-size view. Click anywhere or press Escape to close - a modal you can only leave by
+// finding a small x is worse than no modal.
+function ImageLightbox({ src, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.82)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, cursor: 'zoom-out' }}>
+      <img src={src} alt="" onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,.5)', cursor: 'default' }} />
+      <a href={src} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+        style={{ position: 'fixed', top: 16, right: 20, color: '#fff', fontSize: 13, textDecoration: 'underline' }}>Open original</a>
+    </div>
+  );
+}
+
+function NoteImages({ images, onRemove }) {
+  const [zoom, setZoom] = useState(null);
+  if (!images || !images.length) return null;
+  return (
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        {images.map((img, i) => (
+          <div key={img.url || i} style={{ position: 'relative' }}>
+            <img src={img.url} alt={img.name || ''} onClick={() => setZoom(img.url)}
+              style={{ width: 120, height: 90, objectFit: 'cover', borderRadius: 6, border: `1px solid ${C.line}`, cursor: 'zoom-in', display: 'block' }} />
+            {onRemove && (
+              <button onClick={() => onRemove(i)} title="Remove this image"
+                style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', border: 'none', background: C.lost, color: '#fff', fontSize: 12, lineHeight: 1, cursor: 'pointer' }}>&times;</button>
+            )}
+          </div>
+        ))}
+      </div>
+      {zoom && <ImageLightbox src={zoom} onClose={() => setZoom(null)} />}
+    </>
+  );
+}
+
 // ===========================================================================
 // History feed (combined edit for activities incl date + reopen; comments on notes)
 // ===========================================================================
@@ -804,15 +867,26 @@ function HistoryItem({ h, onEdit, onEditActivity, onDelete, onReopen, onComment,
               <button onClick={() => setEditing(false)} style={ghostBtn}>Cancel</button>
             </div>
           </div>
-        ) : (h.outcome
-          // WHAT HAPPENED, shown as its own block rather than as plain body text, so a
-          // recorded outcome reads differently from the activity's own description. This
-          // is what you write in the Complete activity box.
-          ? <div style={{ marginTop: 5, background: '#f7f9fc', borderLeft: `3px solid ${C.link}`, borderRadius: 4, padding: '6px 9px' }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim, letterSpacing: 0.3 }}>WHAT HAPPENED</div>
-              <div style={{ fontSize: 13, color: '#444', whiteSpace: 'pre-wrap', marginTop: 2 }}>{h.outcome}</div>
-            </div>
-          : (h.body && <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>))}
+        ) : (
+          // Body, then whichever extra this entry carries. Written as one block rather
+          // than nested ternaries - three of them stacked was already unreadable and is
+          // how the last paren went missing.
+          <>
+            {h.body && !h.outcome && (
+              <div style={{ fontSize: 13, color: '#444', marginTop: 3, whiteSpace: 'pre-wrap' }}>{h.body}</div>
+            )}
+            {h.outcome && (
+              // WHAT HAPPENED, its own block so a recorded outcome reads differently from
+              // the activity's own description. This is what you write in the Complete
+              // activity box.
+              <div style={{ marginTop: 5, background: '#f7f9fc', borderLeft: `3px solid ${C.link}`, borderRadius: 4, padding: '6px 9px' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: C.dim, letterSpacing: 0.3 }}>WHAT HAPPENED</div>
+                <div style={{ fontSize: 13, color: '#444', whiteSpace: 'pre-wrap', marginTop: 2 }}>{h.outcome}</div>
+              </div>
+            )}
+            {h.images && h.images.length > 0 && <NoteImages images={h.images} />}
+          </>
+        )}
 
         <div style={{ fontSize: 11, color: C.dim, marginTop: 3, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <span>{dateTime(h.ts)}{h.edited ? ' · edited' : ''}</span>
@@ -1427,6 +1501,34 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
     }
   };
   const [completingAct, setCompletingAct] = useState(null);
+  const [noteImages, setNoteImages] = useState([]);
+  const [noteUploading, setNoteUploading] = useState(0);
+  const [noteUploadErr, setNoteUploadErr] = useState('');
+
+  // Paste a screenshot straight into the note box.
+  //
+  // Uploaded to blob storage and the note keeps only the URL. Anything that is not an
+  // image is left alone, so pasting text still behaves exactly as it did.
+  const handleNotePaste = async (e) => {
+    const files = [...(e.clipboardData?.items || [])]
+      .filter((it) => it.kind === 'file' && String(it.type).startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter(Boolean);
+    if (!files.length) return;
+    e.preventDefault();
+    setNoteUploadErr('');
+    setNoteUploading((n) => n + files.length);
+    for (const f of files) {
+      try {
+        const img = await uploadPastedImage(f);
+        setNoteImages((prev) => [...prev, img]);
+      } catch (err) {
+        setNoteUploadErr(`That image did not upload. ${err?.message || ''}`.trim());
+      } finally {
+        setNoteUploading((n) => Math.max(0, n - 1));
+      }
+    }
+  };
   const [adding, setAdding] = useState(false);
   const [newText, setNewText] = useState('');
   const [newDue, setNewDue] = useState('');
@@ -1557,9 +1659,21 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
 
           {/* Notes */}
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>Notes</div>
-          <div style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12 }}>
-            <MentionInput value={noteText} onChange={setNoteText} users={users} placeholder="Take a note… (type @ to notify someone)" rows={2} />
-            <div style={{ textAlign: 'right', marginTop: 6 }}><button disabled={!noteText.trim()} onClick={() => { onAddNote(deal.id, noteText.trim()); setNoteText(''); }} style={{ ...primaryBtn, opacity: noteText.trim() ? 1 : 0.5 }}>Add note</button></div>
+          <div
+            onPaste={handleNotePaste}
+            style={{ background: C.note, border: `1px solid ${C.noteBorder}`, borderRadius: 8, padding: 12 }}>
+            <MentionInput value={noteText} onChange={setNoteText} users={users} placeholder="Take a note… (type @ to notify someone, or paste a screenshot)" rows={2} />
+            <NoteImages images={noteImages} onRemove={(i) => setNoteImages((p) => p.filter((_, n) => n !== i))} />
+            {noteUploading > 0 && <div style={{ fontSize: 11.5, color: C.dim, marginTop: 6 }}>Uploading {noteUploading} image{noteUploading === 1 ? '' : 's'}&#8230;</div>}
+            {noteUploadErr && <div style={{ fontSize: 11.5, color: C.lost, marginTop: 6 }}>{noteUploadErr}</div>}
+            <div style={{ textAlign: 'right', marginTop: 6 }}>
+              {/* An image on its own is a valid note - a screenshot of a drawing markup
+                  often says more than a sentence would. So the button enables on either. */}
+              <button
+                disabled={(!noteText.trim() && !noteImages.length) || noteUploading > 0}
+                onClick={() => { onAddNote(deal.id, noteText.trim(), noteImages); setNoteText(''); setNoteImages([]); }}
+                style={{ ...primaryBtn, opacity: ((noteText.trim() || noteImages.length) && !noteUploading) ? 1 : 0.5 }}>Add note</button>
+            </div>
           </div>
           {/* Saved notes are NOT listed here any more - they are in the timeline below,
               in the same yellow, with their comment threads. One place to read, one place
@@ -2501,10 +2615,16 @@ function CRMPageInner() {
     return names;
   };
 
-  const addNote = (id, body) => {
+  const addNote = (id, body, images) => {
     const m = extractMentions(body, users);
     patch(id, (d) => {
-      const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [] }];
+      // images is a list of { url, name, type } - the files themselves live in blob
+      // storage. Kept out of the body text on purpose: a note is still plain text, so
+      // searching, mentions and the daily email all work unchanged.
+      // WHO WROTE IT. The note carried no author at all, so every one displayed as
+      // "Unassigned user" - including the one you had just typed. me is the logged-in
+      // portal user, the same source the comment thread already uses.
+      const ev = [{ id: uid(), type: 'note', ts: nowIso(), text: 'Note added', body, comments: [], author: me?.name || '', images: (images && images.length) ? images : undefined }];
       if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Mentioned: ${m.join(', ')}` });
       return { ...d, history: [...d.history, ...ev] };
     });
@@ -2551,12 +2671,12 @@ function CRMPageInner() {
   const editHistory = (id, hid, body) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, edited: true } : h) }));
   const editHistoryActivity = (id, hid, body, ts) => patch(id, (d) => ({ ...d, history: d.history.map((h) => h.id === hid ? { ...h, body, ts, edited: true } : h) }));
   const deleteHistory = (id, hid) => patch(id, (d) => ({ ...d, history: d.history.filter((h) => h.id !== hid) }));
-  const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text }] }; });
+  const reopenActivity = (id, hid) => patch(id, (d) => { const h = d.history.find((x) => x.id === hid); const text = h ? (h.body || h.text) : 'Activity'; return { ...d, activities: [...d.activities, { id: uid(), text, due: today, done: false }], history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity reopened: ${text}`, body: text, author: me?.name || '' }] }; });
   const addActivity = (id, text, due, assignee) => {
     const m = extractMentions(text, users);
     patch(id, (d) => {
-      const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: null };
-      const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text }];
+      const a = { id: uid(), text, due, done: false, assignee: assignee || null, author: me?.name || null };
+      const ev = [{ id: uid(), type: 'activity', ts: nowIso(), text: `Activity set: ${text} (due ${shortDate(due)})${assignee ? `, assigned to ${assignee}` : ''}`, body: text, author: me?.name || '' }];
       if (m.length) ev.push({ id: uid(), type: 'mention', ts: nowIso(), text: `Mentioned: ${m.join(', ')}` });
       return { ...d, activities: [...d.activities, a], history: [...d.history, ...ev] };
     });
@@ -2670,6 +2790,7 @@ function CRMPageInner() {
           text: `Activity completed: ${act ? act.text : ''}`,
           body: said || (act ? act.text : ''),
           outcome: said || undefined,
+          author: me?.name || '',
         }],
       };
     });
@@ -3176,7 +3297,7 @@ function CRMPageInner() {
       if (outcome && outcome.trim()) {
         patch(Number(dealId), (d) => ({
           ...d,
-          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim(), outcome: outcome.trim() }],
+          history: [...d.history, { id: uid(), type: 'activity', ts: nowIso(), text: `Activity completed: ${row.text}`, body: outcome.trim(), outcome: outcome.trim(), author: me?.name || '' }],
         }));
       }
 
