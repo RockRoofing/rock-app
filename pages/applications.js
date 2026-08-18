@@ -4,7 +4,7 @@ import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import ProjectSearchSelect from '../components/ProjectSearchSelect'
 import ProjectDatesModal from '../components/ProjectDatesModal'
-import { computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate, isMeasurableWorks } from '../lib/applications'
+import { describeApplication, computeApplicationSummary, worksValueToDate, resolveAppDates, buildAppVariations, materialLineTotal, materialValueToDate, isMeasurableWorks } from '../lib/applications'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtDate = (s) => { if (!s) return '—'; const d = new Date(s + (s.length === 10 ? 'T00:00:00' : '')); return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
@@ -354,11 +354,17 @@ export default function ApplicationsPage() {
                             <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{appNumberFor(a)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>
                               {a.monthLabel || monthLabel(a.monthKey)}
-                              {/* Visible in the list, so the final account can be picked
-                                  out without opening every application to find it. */}
-                              {a.isFinalAccount && (
-                                <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: '#ccfbf1', color: '#0f766e', fontSize: 10.5, fontWeight: 700 }}>FINAL ACCOUNT</span>
-                              )}
+                              {/* Markers in the list, so a final account or a retention
+                                  release can be picked out without opening every
+                                  application to find which one it was. Same wording as
+                                  the PDF and the email, from the same function. */}
+                              {describeApplication(a, { prevReleases: prevAppForApp(sortedApps, a) }).tags.map(t => (
+                                <span key={t} style={{
+                                  marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 10.5, fontWeight: 700,
+                                  background: t === 'FINAL ACCOUNT' ? '#ccfbf1' : '#e0e7ff',
+                                  color: t === 'FINAL ACCOUNT' ? '#0f766e' : '#4338ca',
+                                }}>{t}</span>
+                              ))}
                             </td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{fmtDate(a.appDate)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 12 }}>
@@ -386,9 +392,15 @@ export default function ApplicationsPage() {
   )
 }
 
-function prevGrossForApp(sortedApps, app) {
+// The application before this one, by seq. Needed by the list badges as well as the
+// gross, so it is its own function rather than buried inside prevGrossForApp.
+function prevAppForApp(sortedApps, app) {
   let prev = null
   for (const a of sortedApps) { if ((a.seq || 0) < (app.seq || 0)) prev = a }
+  return prev
+}
+function prevGrossForApp(sortedApps, app) {
+  const prev = prevAppForApp(sortedApps, app)
   return prev ? computeApplicationSummary(prev, 0).grossCurrent : 0
 }
 
@@ -774,7 +786,7 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
         {onDelete && <button onClick={onDelete} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Delete</button>}
       </div>
 
-      {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
+      {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} prevReleases={prevReleases} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
 
@@ -1280,7 +1292,7 @@ function AddMaterialsModal({ pos, addedPONumbers = [], addedLineKeys = [], hidde
 // - To: exactly ONE recipient (customer contact or Rock Roofing portal user).
 // - CC: any number (customer contacts and/or portal users), plus free-text.
 // - Message from an editable template with placeholders filled in.
-function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, isSent, onClose, onSent }) {
+function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, isSent, prevReleases = null, onClose, onSent }) {
   const [portalUsers, setPortalUsers] = useState([])
   useEffect(() => { (async () => {
     try { const d = await fetch('/api/portal-auth?action=directory').then(r => r.json()); setPortalUsers(d.users || []) } catch {}
@@ -1312,10 +1324,22 @@ function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, is
   const custName = (custContacts[0]?.name || settings.customerName || 'there').split(' ')[0] || 'there'
   const signer = { name: me?.name || '', email: me?.email || '', phone: me?.phone || '' }
 
-  const defaultSubject = `Application for Payment ${appNo} - ${monthName} ${year}`
+  // One description for the subject, the body and the PDF - see describeApplication.
+  const desc = describeApplication(app, { prevReleases })
+  const defaultSubject = `${desc.titleFull} ${appNo} - ${monthName} ${year}`
+  // Spelled out in the body as well as the subject. A retention release is a claim the
+  // customer has to recognise and approve, and a subject line alone is easy to skim past.
+  const releaseLine = desc.releases.length
+    ? `This application includes the ${desc.releases.join(' and the ').toLowerCase()}.\n\n`
+    : ''
+  const finalLine = desc.isFinal
+    ? `This is our final account for this project.\n\n`
+    : ''
   const defaultBody =
     `Hi ${custName},\n\n` +
-    `Please find attached our application for payment ${appNo} for ${monthName}.\n\n` +
+    `Please find attached our ${desc.isFinal ? 'final account' : 'application for payment'} ${appNo} for ${monthName}.\n\n` +
+    finalLine +
+    releaseLine +
     `Feel free to call if there is anything you would like to discuss.\n\n` +
     `Kind Regards,\n\n` +
     `${signer.name}\n` +

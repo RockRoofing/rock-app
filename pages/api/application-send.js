@@ -53,7 +53,7 @@ export default async function handler(req, res) {
     const b64 = Buffer.from(bytes).toString('base64')
     // Matches the download - the attachment the customer receives should be named the
     // same as the one the QS has on file.
-    const fname = `${app.isFinalAccount ? 'Final Account' : 'Application'} ${app.seq || ''} - ${(jobNo || name || 'application')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
+    const fname = `${describeApplication(app, { prevReleases: prev || null }).title} ${app.seq || ''} - ${(jobNo || name || 'application')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
 
     const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
     const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

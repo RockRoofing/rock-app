@@ -1,37 +1,71 @@
-pkg481 - bulk delete on Contracted Rates
-========================================
+pkg483 - final account and retention release, said consistently everywhere
+==========================================================================
 
-Deploy after pkg480. One changed file: pages/contracted-rates.js. No new files.
+Deploy after pkg482.
 
+CHANGED FILES (replace)
+-----------------------
+  lib/applications.js
+  lib/applicationPdf.js
+  pages/applications.js
+  pages/api/application-pdf.js
+  pages/api/application-send.js
 
-WHAT YOU GET
-------------
-A "Delete 11 lines" button in the selection bar, beside the format and move buttons that
-were already there. Tick the rows, press it, gone.
-
-Only shown when the document is editable - a locked set of rates cannot be bulk deleted
-any more than it can be bulk edited.
-
-
-THE CONFIRMATION NAMES THE VALUE
-----------------------------------
-    Delete 11 lines?
-
-    Total rate on those lines: £40,000.00.
-
-    Use strike-through instead if you want to keep them on the document.
-
-Deleting eleven lines worth £40,000 is a different thing from deleting one, and the
-selection is easy to lose track of once it spans both sides of the line - the bar is
-sticky, so you can be scrolled a long way from what is ticked.
-
-The strike-through reminder is the same one the single-line delete gives. Most of the time
-somebody wants the line off the quote but still on the record, and that is what strike is
-for.
+NEW FILES: none.
 
 
-THE SELECTION IS CLEARED AFTERWARDS
--------------------------------------
-It points at lines that no longer exist. Left alone the bar would sit there saying
-"11 selected" over nothing, and the next format or move button pressed would do nothing
-with no explanation.
+ONE DESCRIPTION, FOUR PLACES
+------------------------------
+describeApplication() in lib/applications.js decides what an application IS, and the email
+subject, the email body, the PDF title, the PDF banner, the filename and the list badges
+all read from it.
+
+Written separately they would have said four slightly different things about the same
+document - and the one that reaches the customer is the one that matters.
+
+
+THE RULES, AS SPECIFIED
+-----------------------
+FINAL ACCOUNT ONLY WHEN THE FLAG IS TICKED. Releasing retention does not make an
+application a final account. That is a statement about the contract and only you get to
+make it.
+
+    releasing 1st retention, not ticked final
+        subject   1st Retention Release 14 - August 2026
+        PDF       "1st Retention Release", banner "Includes the 1st retention release"
+        file      1st Retention Release 14 - J178 Gas Lane.pdf
+        list      1ST RETENTION
+
+    final account that also releases the 2nd half
+        subject   Final Account (incl. 2nd Retention Release) 14 - August 2026
+        PDF       "Final Account", banner names both
+        file      Final Account 14 - J178 Gas Lane.pdf
+        list      FINAL ACCOUNT   2ND RETENTION
+
+    ordinary application
+        unchanged in every respect
+
+
+THE EMAIL BODY SAYS IT TOO
+--------------------------
+    This is our final account for this project.
+    This application includes the 1st retention release.
+
+Not just the subject. A retention release is a claim the customer has to recognise and
+approve, and a subject line is easy to skim past.
+
+
+ONLY THE HALF BEING CLAIMED NOW
+---------------------------------
+A half claimed last month is not mentioned again. It stays ticked on the application - it
+has to, or the certificate would double-count it - but it is not news to the customer and
+does not belong in this month's subject line.
+
+That distinction runs through all four outputs, which is the main reason they share one
+function rather than each working it out.
+
+
+IN THE LIST
+-----------
+Up to three markers beside the period: FINAL ACCOUNT in teal, 1ST RETENTION and 2ND
+RETENTION in indigo. Same wording as the documents.

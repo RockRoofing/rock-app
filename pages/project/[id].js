@@ -165,11 +165,35 @@ export default function ProjectPage() {
       retentionPct: (effRet != null && !isNaN(effRet)) ? effRet : (form.retentionPct || 0),
       mcdPct: (effMcd != null && !isNaN(effMcd)) ? effMcd : null,
     }
-    await fetch(`/api/project/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    setSettings(payload)
-    setEditMode(false)
-    setSaving(false)
-    load()
+    // SAVE, THEN CHECK, THEN REFRESH - in that order.
+    //
+    // This fired the POST, set the local state, and called load() without awaiting it or
+    // checking the response. load() re-reads through the dashboard cache, and if the
+    // refetch got there before the write had settled it returned the PREVIOUS settings
+    // and overwrote the correct values on screen.
+    //
+    // That is why it was intermittent, and why a single date would go missing while the
+    // others stuck: whatever came back from load() won.
+    //
+    // A failed save was also silent - the form closed, the banner stayed, and the only
+    // clue was a field that had not changed.
+    try {
+      const res = await fetch(`/api/project/${id}/settings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || `Save failed (${res.status})`)
+      }
+      setSettings(payload)
+      setEditMode(false)
+      // Awaited, so nothing else runs against half-written data.
+      await load()
+    } catch (e) {
+      alert(`Those details did not save. Nothing has been changed.\n\n${e.message || ''}`.trim())
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function generateReport() {
