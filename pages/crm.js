@@ -3257,8 +3257,19 @@ function CRMPageInner() {
 
   const activitiesShown = useMemo(() => {
     let rows = activityRows;
+    const match = (r, term) => `${r.project} ${r.text} ${r.assignee} ${r.company} ${r.customer}`.toLowerCase().includes(term);
+
     const q = actSearch.trim().toLowerCase();
-    if (q) rows = rows.filter((r) => `${r.project} ${r.text} ${r.assignee} ${r.company} ${r.customer}`.toLowerCase().includes(q));
+    if (q) rows = rows.filter((r) => match(r, q));
+
+    // THE NAV SEARCH NARROWS THIS LIST TOO.
+    //
+    // It is a jump-to box - type a project name and it offers to open it - but while you
+    // are on Activities it is reasonable to expect the list to follow. So it filters as
+    // well, and the two boxes AND together: the nav one picks the project, the activities
+    // one narrows within it.
+    const navQ = query.trim().toLowerCase();
+    if (navQ) rows = rows.filter((r) => match(r, navQ));
     // A remembered filter that no longer matches ANYTHING is ignored rather than obeyed.
     // Saved filters persist between visits, so a person who is no longer on any activity -
     // or who never was, if you assigned nobody - would otherwise silently empty the table
@@ -3278,7 +3289,7 @@ function CRMPageInner() {
       if (!bv) return -1;
       return mul * av.localeCompare(bv, 'en-GB', { sensitivity: 'base', numeric: true });
     });
-  }, [activityRows, actPerson, actCustomer, actSort, actSearch]);
+  }, [activityRows, actPerson, actCustomer, actSort, actSearch, query]);
 
   const live = deals.find((d) => d.id === openId) || null;
   if (live) {
@@ -3545,6 +3556,7 @@ function CRMPageInner() {
             staleFilter={activityStaleFilter}
             refreshedAt={actRefreshedAt} onRefresh={refreshActivityState}
             search={actSearch} setSearch={setActSearch} me={me} users={users}
+            navQuery={query} onClearNavQuery={() => setQuery('')}
             onClearFilters={() => { setActPerson(''); setActCustomer(''); }}
             deals={deals} openList={openActivities} dealsAreSeed={dealsAreSeed}
             onRetry={() => { healedRef.current = false; setActivitySummary((p) => ({ ...p })); }} />
@@ -3713,7 +3725,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users }) {
+function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users, navQuery = '', onClearNavQuery }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -3741,6 +3753,17 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search activities..."
           style={{ ...sel, minWidth: 200 }} />
         <button onClick={onRefresh} title="Check for activities added by other people" style={{ ...sel, cursor: 'pointer' }}>Refresh</button>
+        {/* The nav search narrows this list too, and a filter you cannot see is how an
+            empty table becomes a mystery. Shown as a removable chip. */}
+        {navQuery.trim() && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: C.activityBg, border: `1px solid ${C.activityBorder}`, borderRadius: 14, padding: '3px 10px', fontSize: 11.5, color: C.text, whiteSpace: 'nowrap' }}>
+            Search: &ldquo;{navQuery.trim()}&rdquo;
+            {onClearNavQuery && (
+              <button onClick={onClearNavQuery} title="Clear the search box in the toolbar"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: C.dim, fontSize: 13, lineHeight: 1 }}>&times;</button>
+            )}
+          </span>
+        )}
         {refreshedAt && <span style={{ fontSize: 11, color: '#aaa' }}>updated {new Date(refreshedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: UK_TZ })}</span>}
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12.5, color: C.dim, textAlign: 'right' }}>

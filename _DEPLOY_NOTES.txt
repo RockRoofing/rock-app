@@ -1,44 +1,50 @@
-pkg457 - contact and company details showing on the deal
-========================================================
+pkg458 - the toolbar search now narrows the Activities list too
+===============================================================
 
-Deploy after pkg456. One changed file: pages/crm.js. No new files.
-
-
-WHY THEY WERE BLANK
--------------------
-The data was there. Nothing was reading it.
-
-A DEAL stores the contact's NAME and the company's NAME - that is all. The phone, email,
-job role, address, website and registration number live on the CONTACT and COMPANY
-records, which is where the Pipedrive People and Organizations exports put them.
-
-The two side boxes on the deal only ever read the deal's own fields, so every one of those
-showed "-" while the same information sat one click away under Contacts and Companies.
+Deploy after pkg457. One changed file: pages/crm.js. No new files.
 
 
-FIXED
------
-Both boxes now fall back to the master record, matched on name.
+TO YOUR QUESTION FIRST - THEY WERE NOT DUPLICATES
+---------------------------------------------------
+    TOOLBAR SEARCH     a jump-to. Matches project titles and company names, offers up to
+                       eight suggestions, opens the one you pick. Filters nothing.
 
-    Customer Contact   phone, email, job role
-    Organization       address, phone, website, email, registration number
+    ACTIVITIES SEARCH  a filter. Narrows the rows in front of you, matching across
+                       project, activity text, assignee, company and customer name.
 
-The DEAL WINS where it has a value. Anything typed on the deal is a deliberate override
-for that job - a site contact's mobile is often not the number on the company record - so
-it is never replaced by the master.
-
-Matching ignores case and stray spaces, since the name is the only link between the two
-and " Watkin Jones & Son Ltd " should still find it.
-
-Each box says "Blank fields filled from the contact record" underneath when it has one, so
-it is clear where a value came from rather than looking like it was typed on the deal.
+Different jobs, which is why both exist. But you are right that while you are ON the
+Activities tab, typing a project name in the toolbar and having the list ignore you is
+odd.
 
 
-A LIMITATION WORTH KNOWING
---------------------------
-The link is the NAME. Rename a company and its deals stop finding its details - the same
-fragility I flagged in pkg384 about linking by name rather than id.
+WHAT CHANGED
+------------
+The toolbar search now narrows the Activities list as well as offering its suggestions.
+Both behaviours at once - the dropdown still appears, and you can still click through to
+open a project.
 
-It has not caused a problem yet and fixing it properly means giving companies and contacts
-their own stable ids, which is a real piece of work rather than a patch. Worth doing at
-some point; not worth doing in the middle of this.
+The two boxes AND together, which is the useful way round:
+
+    toolbar "pool"                 -> Pool Motors, Poole, Liverpool Road
+    toolbar "pool" + activities "high" -> 131 High Street, Poole
+
+The toolbar picks the project, the Activities box narrows within it.
+
+
+AND IT SAYS SO
+--------------
+A chip appears beside Refresh: Search: "pool" with an x.
+
+A filter you cannot see is how an empty table becomes a mystery - you would clear the
+Activities box, still see nothing, and have no idea the toolbar was the cause. The x
+clears the toolbar box from where you are looking.
+
+
+NOT CHANGED
+-----------
+The Emails tab has its own search too, filtering on subject, sender and preview. Left
+alone - say if you want the toolbar feeding that one as well.
+
+And the toolbar search still only finds PROJECTS and COMPANIES, not contacts. Searching a
+contact's name there finds nothing even though the CRM knows them. That is a real gap
+rather than a duplication, and worth doing if people expect it to be a general search.
