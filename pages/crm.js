@@ -1447,7 +1447,7 @@ function LostReasonModal({ schema, onCancel, onConfirm }) {
 // ===========================================================================
 // Deal view
 // ===========================================================================
-function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
+function DealView({ deal, allDeals, orgsData = [], contactsData = [], today, schema, me, users, onSetLostReason, onBack, onMove, onSetStatus, onAddNote, onCommentNote, onEditComment, onDeleteComment, onEditHistory, onEditHistoryActivity, onDeleteHistory, onReopenActivity, onAddActivity, onEditActivity, onCompleteActivity, onDeleteActivity, onEditField, onManageFields, onDeleteDeal }) {
   const [noteText, setNoteText] = useState('');
   const [lostFor, setLostFor] = useState(null);   // deal id awaiting a lost reason
   // Filed email for the timeline. The Email section that used to fetch this has gone, so
@@ -1501,6 +1501,41 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
     }
   };
   const [completingAct, setCompletingAct] = useState(null);
+  // THE MASTER RECORDS BEHIND THIS DEAL.
+  //
+  // A deal stores the contact's NAME and the company's NAME. The phone, email, job role,
+  // address, website and registration number live on the Contact and Company records -
+  // that is where the Pipedrive People and Organizations exports put them.
+  //
+  // These side boxes only ever read deal.fields, so those details were sitting in the CRM
+  // and showing as "-" on every deal. Matched on name, case- and space-insensitively,
+  // because that is the only link there is between the two.
+  const dealContact = useMemo(() => {
+    const n = String(deal.fields?.contact_person || '').trim().toLowerCase();
+    if (!n) return null;
+    return (contactsData || []).find((c) => String(c.name || '').trim().toLowerCase() === n) || null;
+  }, [contactsData, deal.fields?.contact_person]);
+
+  const dealOrg = useMemo(() => {
+    const n = String(deal.fields?.organization || '').trim().toLowerCase();
+    if (!n) return null;
+    return (orgsData || []).find((o) => String(o.name || '').trim().toLowerCase() === n) || null;
+  }, [orgsData, deal.fields?.organization]);
+
+  // Deal first, master record second. Anything typed on the deal is a deliberate
+  // override for this job and must win - a site contact's mobile can differ from the
+  // number on the company record.
+  const contactVal = (key) => {
+    const v = deal.fields?.[key];
+    if (v != null && String(v).trim() !== '' && String(v).trim() !== '-') return v;
+    return dealContact?.[key] ?? '';
+  };
+  const orgVal = (key) => {
+    const v = deal.fields?.[key];
+    if (v != null && String(v).trim() !== '' && String(v).trim() !== '-') return v;
+    return dealOrg?.[key] ?? '';
+  };
+
   const [noteImages, setNoteImages] = useState([]);
   const [noteUploading, setNoteUploading] = useState(0);
   const [noteUploadErr, setNoteUploadErr] = useState('');
@@ -1610,11 +1645,23 @@ function DealView({ deal, allDeals, today, schema, me, users, onSetLostReason, o
             <div style={sideRow}><span style={sideKey}>Name</span><EditableField field={{ key: 'contact_person', type: 'text', search: 'contact' }} value={deal.fields.contact_person} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
             <div style={sideRow}><span style={sideKey}>First name</span><span style={sideVal}>{firstName(deal.fields.contact_person) || '-'}</span></div>
             <div style={sideRow}><span style={sideKey}>Last name</span><span style={sideVal}>{lastName(deal.fields.contact_person) || '-'}</span></div>
-            {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
+            {groupFields('person').filter((f) => f.key !== 'contact_person').map((f) => (
+              <div key={f.key + f.label} style={sideRow}>
+                <span style={sideKey}>{f.label}</span>
+                <EditableField field={f} value={contactVal(f.key)} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
+              </div>
+            ))}
+            {dealContact && <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>Blank fields filled from the contact record.</div>}
           </SideBox>
           <SideBox title="Organization" collapsed={collapsed.organization} onToggle={() => toggle('organization')}>
             <div style={sideRow}><span style={sideKey}>Company name</span><EditableField field={{ key: 'organization', type: 'text', search: 'org' }} value={deal.fields.organization} onSave={(k, v) => onEditField(deal.id, k, v)} /></div>
-            {groupFields('organization').map((f) => <div key={f.key + f.label} style={sideRow}><span style={sideKey}>{f.label}</span><EditableField field={f} value={deal.fields[f.key]} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} /></div>)}
+            {groupFields('organization').map((f) => (
+              <div key={f.key + f.label} style={sideRow}>
+                <span style={sideKey}>{f.label}</span>
+                <EditableField field={f} value={orgVal(f.key)} onSave={(k, v) => onEditField(deal.id, k, v)} users={users} />
+              </div>
+            ))}
+            {dealOrg && <div style={{ fontSize: 10, color: C.dim, marginTop: 4 }}>Blank fields filled from the company record.</div>}
           </SideBox>
           <button onClick={onManageFields} style={{ ...ghostBtn, width: '100%', marginTop: 4 }}>⚙ Customise fields</button>
         </div>
@@ -3240,7 +3287,7 @@ function CRMPageInner() {
         <FontLoader />
         {confetti && <Confetti onDone={() => setConfetti(false)} />}
         {showFieldMgr && <FieldManager schema={schema} onClose={() => setShowFieldMgr(false)} onAdd={addField} onRemove={removeField} />}
-        <DealView deal={live} allDeals={deals} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
+        <DealView deal={live} allDeals={deals} orgsData={orgsData} contactsData={contactsData} onSetLostReason={setLostReason} today={today} schema={schema} me={me} users={users} onBack={closeDeal} onMove={moveDeal} onSetStatus={setStatus} onAddNote={addNote} onCommentNote={commentNote} onEditComment={editComment} onDeleteComment={deleteComment} onEditHistory={editHistory} onEditHistoryActivity={editHistoryActivity} onDeleteHistory={deleteHistory} onReopenActivity={reopenActivity} onAddActivity={addActivity} onEditActivity={editActivity} onCompleteActivity={completeActivity} onDeleteActivity={deleteActivity} onEditField={editField} onManageFields={() => setShowFieldMgr(true)} onDeleteDeal={deleteDeal} />
       </div>
     );
   }
