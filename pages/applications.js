@@ -549,6 +549,22 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
   // Follow the prop when a genuinely different application is opened, but do NOT clobber
   // in-progress edits when the same one is re-rendered after a save.
   useEffect(() => { setApp(a => (a.id === appProp.id ? a : { ...appProp })) }, [appProp.id])
+  // STATUS IS THE SERVER'S TO SET, NOT THE EDITOR'S.
+  //
+  // The guard above deliberately ignores the prop for the application already open, which
+  // is right for the fields you are typing into - a save coming back must not overwrite
+  // them. But it also ignored the status, so sending an application left the badge saying
+  // Draft until the page was reloaded.
+  //
+  // Only these fields are taken from the prop: nothing here is user-editable, so there is
+  // no edit to lose.
+  useEffect(() => {
+    setApp(a => {
+      if (a.id !== appProp.id) return a
+      if (a.status === appProp.status && a.sentAt === appProp.sentAt && a.appNumber === appProp.appNumber) return a
+      return { ...a, status: appProp.status, sentAt: appProp.sentAt, sentBy: appProp.sentBy, appNumber: appProp.appNumber }
+    })
+  }, [appProp.status, appProp.sentAt, appProp.appNumber, appProp.id])
   const [rows, setRows] = useState(() => appProp.contractWorks.map(r => ({ ...r })))
   // Per-application variation data (pct + attachments), keyed by varKey.
   const [variationData, setVariationData] = useState(() => ({ ...(app.variationData || {}) }))
@@ -710,7 +726,21 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
       onSaved(d.application); setDirty(false)
       if (submit) {
         const s = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'submit', projectId, id: app.id, author: me?.name || '' }) }).then(r => r.json())
-        if (s.ok) { onSaved(s.application); setUnlocked(false); setMsg('Marked as sent.') }
+        if (s.ok) {
+          onSaved(s.application)
+          // The editor keeps its OWN copy of the application (so a save cannot clobber
+          // what you are typing), and that copy is only refreshed when a DIFFERENT
+          // application is opened. Without this line the badge at the top stayed on
+          // "Draft" after sending, because the parent's list had updated and the
+          // editor's copy had not.
+          setApp(a => ({ ...a, ...s.application }))
+          setUnlocked(false)
+          setDirty(false)
+          setMsg('Marked as sent.')
+          // Back to the list, so the action is visibly done. Deferred a tick so the
+          // "Marked as sent." message renders before the view changes.
+          setTimeout(() => onBack && onBack(), 400)
+        }
       } else setMsg('Saved.')
     } catch { setMsg('Save failed.') }
     setSaving(false)
@@ -786,7 +816,12 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
         {onDelete && <button onClick={onDelete} style={{ background: '#fff', border: '1px solid #fecaca', color: '#dc2626', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Delete</button>}
       </div>
 
-      {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} prevReleases={prevReleases} onClose={() => setShowSend(false)} onSent={(updated) => { setShowSend(false); if (updated) onSaved(updated); setMsg('Application sent.') }} />}
+      {showSend && <SendApplicationModal app={app} appNumber={appNumber} projectId={projectId} settings={settings} me={me} isSent={isSent} prevReleases={prevReleases} onClose={() => setShowSend(false)} onSent={(updated) => {
+        setShowSend(false)
+        if (updated) { onSaved(updated); setApp(a => ({ ...a, ...updated })) }
+        setMsg('Application sent.')
+        setTimeout(() => onBack && onBack(), 400)
+      }} />}
 
       {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') ? '#dc2626' : '#0f766e', marginBottom: 12 }}>{msg}</div>}
 

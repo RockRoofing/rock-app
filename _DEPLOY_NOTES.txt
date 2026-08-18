@@ -1,30 +1,32 @@
-pkg484 - fixes "describeApplication is not defined" when sending
-================================================================
+pkg485 - status flips to Sent, and you land back on the list
+============================================================
 
-Deploy after pkg483. One changed file: pages/api/application-send.js.
-
-URGENT - pkg483 broke sending an application. This is the fix.
+Deploy after pkg484. One changed file: pages/applications.js. No new files.
 
 
-THE CAUSE
----------
-I used describeApplication() to name the PDF attachment and never imported it into that
-file.
+WHY THE BADGE STAYED ON DRAFT
+-------------------------------
+The server was doing its job - it marks the application sent and returns it. The parent's
+list was updated too.
 
-The two endpoints load their imports differently, and I patched both with the same
-find-and-replace without checking:
+The EDITOR was not. Since pkg444 it keeps its own copy of the application, so that a save
+landing mid-typing cannot overwrite what you are entering, and that copy is only refreshed
+when a DIFFERENT application is opened. The same one coming back marked sent was
+deliberately ignored.
 
-    application-pdf.js    const { ... } = await import('../../lib/applications')   dynamic
-    application-send.js   import { ... } from '../../lib/applications'             static
+So the record was correct, the list behind you was correct, and the badge in front of you
+was wrong.
 
-My edit matched the dynamic line, so the PDF download picked up the import and the SEND
-did not. Downloading worked; emailing threw.
-
-The import is now on the static line where it belongs.
+Now updated on both routes - emailed to the customer, and marked as sent by hand.
 
 
-AND I HAVE CHECKED THE REST
-----------------------------
-Every file that calls describeApplication now either imports it or defines it - five
-files, all verified rather than assumed. That is the check I should have run when the
-function was introduced, since it was added to five places at once.
+AND IT TAKES YOU BACK TO THE LIST
+-----------------------------------
+After either route: the message shows briefly, then you land on that project's
+applications table, refetched.
+
+The row already shows a green Sent badge and its button changes from Open to View, so the
+action is visibly done rather than something you have to go and confirm.
+
+The 400ms pause is deliberate - "Application sent." needs a moment on screen or the view
+changes before you have registered that anything happened.
