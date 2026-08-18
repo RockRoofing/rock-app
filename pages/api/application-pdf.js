@@ -40,7 +40,9 @@ export default async function handler(req, res) {
       project: { jobNo, name, customerName: project.customerName || '' },
       logoUrl: `${origin}/rock-logo.jpg`,
     })
-    const fname = `Application ${app.seq || ''} - ${(jobNo || name || 'application')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
+    // The filename says it too - this is the copy that ends up in somebody's Downloads
+    // folder next to eleven others called "Application n".
+    const fname = `${app.isFinalAccount ? 'Final Account' : 'Application'} ${app.seq || ''} - ${(jobNo || name || 'application')}.pdf`.replace(/[^a-zA-Z0-9 .-]/g, '')
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${fname}"`)
     return res.send(Buffer.from(bytes))

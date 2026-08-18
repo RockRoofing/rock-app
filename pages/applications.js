@@ -352,7 +352,14 @@ export default function ApplicationsPage() {
                         return (
                           <tr key={a.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '9px 12px', fontSize: 13, fontWeight: 700 }}>{appNumberFor(a)}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 13 }}>{a.monthLabel || monthLabel(a.monthKey)}</td>
+                            <td style={{ padding: '9px 12px', fontSize: 13 }}>
+                              {a.monthLabel || monthLabel(a.monthKey)}
+                              {/* Visible in the list, so the final account can be picked
+                                  out without opening every application to find it. */}
+                              {a.isFinalAccount && (
+                                <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 10, background: '#ccfbf1', color: '#0f766e', fontSize: 10.5, fontWeight: 700 }}>FINAL ACCOUNT</span>
+                              )}
+                            </td>
                             <td style={{ padding: '9px 12px', fontSize: 13 }}>{fmtDate(a.appDate)}</td>
                             <td style={{ padding: '9px 12px', fontSize: 12 }}>
                               <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: (a.status && a.status !== 'draft') ? '#dcfce7' : '#fef9c3', color: (a.status && a.status !== 'draft') ? '#16a34a' : '#a16207' }}>{(a.status && a.status !== 'draft') ? 'Sent' : 'Draft'}</span>
@@ -746,6 +753,15 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
             style={{ padding: '3px 6px', border: '1px solid #d5d9e0', borderRadius: 5, fontSize: 14, fontWeight: 700, fontFamily: 'inherit', background: '#fff' }}>
             {periodOptions.map(k => <option key={k} value={k}>{monthLabel(k)}</option>)}
           </select>
+          {/* FINAL ACCOUNT. A flag on the application, not a different kind of document -
+              it keeps its number, its period and its dates, and only how it presents
+              itself changes. Marking it any other way would break the numbering. */}
+          <label title="Mark this as the final account. The number, period and dates stay as they are; the PDF is titled Final Account."
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 10, padding: '3px 10px', borderRadius: 14, border: `1px solid ${app.isFinalAccount ? '#0f766e' : '#d5d9e0'}`, background: app.isFinalAccount ? '#ccfbf1' : '#fff', cursor: locked ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 700, color: app.isFinalAccount ? '#0f766e' : '#666', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={!!app.isFinalAccount} disabled={locked}
+              onChange={(e) => { setApp(a => ({ ...a, isFinalAccount: e.target.checked })); setDirty(true) }} />
+            Final Account
+          </label>
         </div>
         <span style={{ padding: '2px 8px', borderRadius: 5, fontWeight: 700, fontSize: 11, background: isSent ? '#dcfce7' : '#fef9c3', color: isSent ? '#16a34a' : '#a16207' }}>{isSent ? (unlocked ? 'Sent — editing' : 'Sent') : 'Draft'}</span>
         <div style={{ flex: 1 }} />

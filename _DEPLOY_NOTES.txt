@@ -1,46 +1,54 @@
-pkg479 - retention release on the application PDF
-=================================================
+pkg480 - Final Account flag on an application
+=============================================
 
-Deploy after pkg478.
+Deploy after pkg479.
 
 CHANGED FILES (replace)
 -----------------------
   lib/applicationPdf.js
+  pages/applications.js
   pages/api/application-pdf.js
   pages/api/application-send.js
 
 NEW FILES: none.
 
 
-ON THE PDF
-----------
-Summary block, under Materials On Site:
+THE TICK BOX
+------------
+Beside the application number and period:
 
-    1st Release Retention        £2,925.00      £2,925.00
-    2nd Release Retention        £2,925.00      £2,925.00
+    Application  14  — August 2026   [x] Final Account
 
-Certificate block, between Retention and Total:
-
-    Retention (3%)               £5,850.00
-    Retention released           £5,850.00
-    Total due                  £195,000.00
-
-The certificate row matters most: without it the Total on a document going to the customer
-would not add up from the lines above it, and that is the first thing anyone checks.
-
-A half that has NOT been claimed is not printed. An unclaimed release is a nil line on a
-claim document, and this is read as a claim rather than a checklist.
+Tick it and nothing structural changes. It keeps its number, its period, its dates and its
+place in the sequence - because it IS an application for payment, the last one. Anything
+else would have broken the numbering.
 
 
-A BUG CAUGHT BEFORE IT SHIPPED
---------------------------------
-The PDF recalculates the certificate from scratch, and it was not being given the PREVIOUS
-application. Without that it cannot tell which half was already claimed, so it counted
-both again:
+WHAT CHANGES ON THE PDF
+-----------------------
+    title       "Final Account" instead of "Application for Payment"
+    banner      "FINAL ACCOUNT - this is the last application on this project"
+    footer      "Final Account 14" instead of "Application 14"
+    filename    "Final Account 14 - J178 Gas Lane.pdf"
 
-    with the previous application     this certificate releases £2,925
-    without it                        this certificate releases £5,850
+The banner says it twice on purpose. A document titled Final Account that still reads
+"Application no. 14" invites the question, so the page answers it.
 
-The screen was already right - pkg473 passes it there - so the PDF would have disagreed
-with what the QS was looking at, on the document that goes out. Now passed to both the
-download and the emailed copy, so all three agree.
+The filename matters more than it looks - that PDF ends up in somebody's Downloads folder
+next to eleven others called "Application n".
+
+The emailed attachment is named the same way, so the copy the customer receives matches
+the one the QS has on file.
+
+
+IN THE LIST
+-----------
+A FINAL ACCOUNT badge beside the period, so it can be picked out without opening every
+application to find which one it was.
+
+
+ONE SMALL THING WORTH THE MINUTE
+----------------------------------
+The extra banner line needed extra vertical space in the PDF. Without it the project name
+printed on top of it - the cursor moves 30pt after the title and the banner sits 36pt
+down. Now 44pt when the flag is set, checked at both settings.
