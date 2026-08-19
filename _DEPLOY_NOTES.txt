@@ -1,53 +1,43 @@
-pkg509 - Bookkeeping views cleaned up, and a WIP PDF
-====================================================
+pkg510 - a busy cursor while the WIP saves
+==========================================
 
-Deploy after pkg508.
-
-CHANGED FILES (replace)
------------------------
-  pages/wip.js
-  pages/retention.js
-
-NEW FILES (create)
-------------------
-  lib/wipPdf.js
-  pages/api/wip-pdf.js
+Deploy after pkg509. One changed file: pages/wip.js. No new files.
 
 
-THE BOOKKEEPING FRAMES SHOW THE PAGE AND NOTHING ELSE
--------------------------------------------------------
-WIP: the Commercial nav is gone - it was still rendering inside the frame, which is both a
-second navigation bar and a way out of the read-only view. The title and the Total WIP
-card are gone too.
-
-RETENTION: the four summary cards are gone. Its nav was already hidden.
-
-Two things deliberately KEPT in both:
-
-  THE MONTH SELECTOR on WIP. A view of one month with no way to change it would be worse
-  than useless.
-
-  THE SIGN-OFF BANNER. WIP COMPLETE / WIP NOT COMPLETE is the single thing Accounts most
-  need from that tab. The total has moved onto that banner, so removing the card loses
-  nothing.
-
-Both remain view-only: no margin editors, no Zero buttons, no manual adjustments, no
-project links.
+WHY IT WAS NEEDED
+-----------------
+pkg504 took the loading screen away so the page stops jumping to the top. That was right,
+but it left NOTHING to say a click had registered. On a slow save that reads as "nothing
+happened", and the natural response is to click again.
 
 
-DOWNLOAD PDF
-------------
-A button beside the month selector, on the full page AND in the Bookkeeping tab. Accounts
-can see the figures there, so refusing them the download would be a distinction with no
-purpose.
+THE CURSOR
+----------
+It turns to the busy pointer while a change is saving, and back when it lands.
 
-Landscape A4, one row per project: job, name, valuation date, post-valuation costs,
-adjustments, margin, profit in WIP, WIP. Totals at the foot, and the sign-off state across
-the top in red or green.
+The cursor is the honest place for this. It follows the pointer, so it is visible wherever
+on a long page you were working - a spinner at the top of the screen would be somewhere
+you are not looking, which is the problem pkg504 was fixing in the first place.
 
-A SUMMARY, not the whole screen. The page lists every post-valuation cost line for every
-project - hundreds of rows on a busy month, and a document nobody would print. What a WIP
-PDF is for is the figure per project and the total.
 
-Built from the same /api/wip the page reads, so the PDF and the screen cannot disagree.
-Paginates with the headings repeated.
+IT COVERS THE SAVE, NOT JUST THE REFRESH
+------------------------------------------
+The write is the slower half, and it is the half that happens while somebody is wondering
+whether their click landed. Every save on the page goes through it:
+
+    margin save and clear override
+    Zero and Un-zero
+    manual adjustments, added and removed
+
+Manual adjustments already tracked their own busy state for the button; that is now
+mirrored to the cursor rather than the two saying different things.
+
+
+A COUNTER, NOT A FLAG
+---------------------
+Two quick edits in a row would otherwise have the first one finishing and clearing the
+cursor while the second was still running. Counted up and down, so the cursor stays busy
+until everything has settled.
+
+Decremented in a finally, so a save that throws cannot leave the cursor stuck, and cleared
+on unmount so it cannot follow you to another page.

@@ -147,8 +147,28 @@ export default function WipPage() {
   //
   // Same request, same data, no flag. React re-renders the rows whose numbers changed and
   // leaves the scroll position alone.
+  // A BUSY CURSOR WHILE IT SAVES.
+  //
+  // pkg504 took the loading screen away so the page stops jumping to the top - which is
+  // right, but it left nothing at all to say a click had registered. On a slow save that
+  // reads as "nothing happened", and people click again.
+  //
+  // The cursor is the honest place for it: it follows the pointer, so it is visible
+  // wherever on a long page you happened to be working, and it needs no layout.
+  //
+  // Counted rather than a boolean - two quick edits in a row would otherwise have the
+  // first one finishing and clearing the cursor while the second is still going.
+  const [busy, setBusy] = useState(0)
+  useEffect(() => {
+    const prev = document.body.style.cursor
+    document.body.style.cursor = busy > 0 ? 'progress' : ''
+    return () => { document.body.style.cursor = prev }
+  }, [busy])
+
   async function refresh() {
+    setBusy(b => b + 1)
     try { const d = await fetch(`/api/wip?month=${month}`).then(r => r.json()); setData(d) } catch {}
+    setBusy(b => Math.max(0, b - 1))
   }
   useEffect(() => { if (ok) load() }, [ok, month])
 
@@ -276,7 +296,7 @@ export default function WipPage() {
               No WIP to show for {monthLabel(month)}. Projects appear here when there are post-valuation costs, credit notes, or manual adjustments in the month.
             </div>
           ) : (
-            projects.map(p => <ProjectSection key={p.id} p={p} month={month} onChange={refresh} readOnly={embed} />)
+            projects.map(p => <ProjectSection key={p.id} p={p} month={month} onChange={refresh} onBusy={setBusy} readOnly={embed} />)
           )}
         </div>
         {datesModal && <ProjectDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); refresh() }} />}
@@ -285,7 +305,14 @@ export default function WipPage() {
   )
 }
 
-function ProjectSection({ p, month, onChange, readOnly = false }) {
+function ProjectSection({ p, month, onChange, onBusy, readOnly = false }) {
+  // Every save in here goes through this, so the cursor covers the WRITE as well as the
+  // refresh that follows it - the write is the slower half, and it is the half that
+  // happens while somebody is wondering whether their click landed.
+  const withBusy = async (fn) => {
+    if (onBusy) onBusy(b => b + 1)
+    try { return await fn() } finally { if (onBusy) onBusy(b => Math.max(0, b - 1)) }
+  }
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState('asc')
   const [marginEdit, setMarginEdit] = useState(p.margin != null ? (p.margin * 100).toFixed(1) : '')
@@ -311,6 +338,7 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
 
   async function saveMargin() {
     setSavingMargin(true)
+    await withBusy(async () => {
     try {
       await fetch(`/api/project/${p.id}/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -318,6 +346,7 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
       })
       await onChange()
     } catch {}
+    })
     setSavingMargin(false)
   }
 
@@ -341,13 +370,15 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
     if (isZeroed) {
       if (!confirm(`Remove the zeroing on ${p.jobNo || p.name}?\n\nThe project's real WIP comes back.`)) return
       setZeroing(true)
-      try {
+      await withBusy(async () => {
+    try {
         await fetch(`/api/project/${p.id}/wip-adjustments`, {
           method: 'DELETE', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ adjId: zeroAdj.id }),
         })
         await onChange()
       } catch {}
+    })
       setZeroing(false)
       return
     }
@@ -355,23 +386,26 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
     if (Math.abs(current) < 0.01) { alert('This project is already at £0.'); return }
     if (!confirm(`Write ${p.jobNo || p.name} down to £0?\n\nCurrent WIP ${fmtC(current)}. An adjustment of ${fmtC(-current)} will be added, and can be removed again later.`)) return
     setZeroing(true)
-    try {
-      await fetch(`/api/project/${p.id}/wip-adjustments`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        // margin 0 is the important part: the calculation grosses every adjustment up
-        // at its own margin, and 0 passes the amount through at face value - so -wipValue
-        // cancels the project exactly. A 'cost' type with the project margin would
-        // overshoot and leave a negative.
-        body: JSON.stringify({ month, type: 'Cost', description: ZERO_TAG, amount: -current, margin: 0 }),
-      })
-      await onChange()
-    } catch {}
+    await withBusy(async () => {
+      try {
+        await fetch(`/api/project/${p.id}/wip-adjustments`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          // margin 0 is the important part: the calculation grosses every adjustment up
+          // at its own margin, and 0 passes the amount through at face value - so
+          // -wipValue cancels the project exactly. A 'cost' type with the project margin
+          // would overshoot and leave a negative.
+          body: JSON.stringify({ month, type: 'Cost', description: ZERO_TAG, amount: -current, margin: 0 }),
+        })
+        await onChange()
+      } catch {}
+    })
     setZeroing(false)
   }
 
   // Clear the project's WIP margin override -> reverts to the calculated (live) margin.
   async function clearMargin() {
     setSavingMargin(true)
+    await withBusy(async () => {
     try {
       await fetch(`/api/project/${p.id}/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -379,6 +413,7 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
       })
       await onChange()
     } catch {}
+    })
     setSavingMargin(false)
   }
 
@@ -478,7 +513,7 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
               </table>
             </div>
           )}
-          {!readOnly && <ManualAdjustments p={p} month={month} onChange={onChange} />}
+          {!readOnly && <ManualAdjustments p={p} month={month} onChange={onChange} onBusy={onBusy} />}
         </div>
 
         {/* RIGHT: credit notes */}
@@ -517,12 +552,19 @@ function ProjectSection({ p, month, onChange, readOnly = false }) {
   )
 }
 
-function ManualAdjustments({ p, month, onChange }) {
+function ManualAdjustments({ p, month, onChange, onBusy }) {
   const [desc, setDesc] = useState('')
   const [amount, setAmount] = useState('')
   const projMarginPct = p.margin != null ? (p.margin * 100).toFixed(1) : ''
   const [margin, setMargin] = useState(projMarginPct)
   const [busy, setBusy] = useState(false)
+
+  // This component already tracked its own busy state for the button. Mirroring it to the
+  // page means the cursor says the same thing, rather than the two disagreeing.
+  useEffect(() => {
+    if (!onBusy) return
+    if (busy) { onBusy(b => b + 1); return () => onBusy(b => Math.max(0, b - 1)) }
+  }, [busy])
 
   useEffect(() => { setMargin(p.margin != null ? (p.margin * 100).toFixed(1) : '') }, [p.margin])
 
