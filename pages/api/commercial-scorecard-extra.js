@@ -109,13 +109,29 @@ export default async function handler(req, res) {
       const key = iso(d)
       if (key < startWeek || key > weekKey(today)) continue
       const { start, end } = weekRange(key)
-      // Required projects: those with an 'actual' planning day in this week.
+      // WORKED ON = ALLOCATED ON A DAY THAT HAS PASSED.
+      //
+      // This required an explicitly 'actual' cell. Three problems with that:
+      //
+      //   - an allocation stored in the older format is a plain ARRAY of names, which
+      //     reads as 'confirmed' and could never be actual
+      //   - a cell with no status at all defaults to 'confirmed'
+      //   - 'actual' is a retrospective tick somebody has to remember to apply, and where
+      //     it is not applied the week silently required nothing
+      //
+      // So a week that had plainly been worked asked for no reports. For a week in the
+      // PAST, labour allocated to a project is the honest record of having worked on it -
+      // provisional or confirmed, it is what happened. One day or five, one report.
       const required = new Set()
       for (const [pk, days] of Object.entries(alloc)) {
         if (!pk.startsWith('L:')) continue
         const projectNo = pk.slice(2)
         for (const [dk, cell] of Object.entries(days || {})) {
-          if (dk >= start && dk <= end && cellStatus(cell) === 'actual') { required.add(projectNo); break }
+          if (dk < start || dk > end) continue
+          if (!cell) continue
+          // An empty array is an allocation with nobody on it - not worked.
+          if (Array.isArray(cell) && !cell.length) continue
+          required.add(projectNo); break
         }
       }
       // Completed against the required list, for the percentage.
@@ -124,15 +140,7 @@ export default async function handler(req, res) {
         const dates = reportDates[projectNo] || []
         if (dates.some(dt => dt >= start && dt <= end)) completed++
       }
-      // EVERY report written in the week, whatever the Gantt says.
-      //
-      // "Required" is derived from projects with an ACTUAL day allocated that week. If
-      // nobody has marked the Gantt actual, required is 0, the percentage is null, and
-      // the card shows nothing at all - even though reports were written. And a report on
-      // a project with no actual day was invisible either way.
-      //
-      // The count is what was asked for: how many were done. The percentage stays as it
-      // was, for weeks where the Gantt says what was expected.
+      // Every report written in the week, whether or not that project shows on the Gantt.
       let completedAll = 0
       for (const dates of Object.values(reportDates)) {
         if (dates.some(dt => dt >= start && dt <= end)) completedAll++
@@ -142,5 +150,26 @@ export default async function handler(req, res) {
     }
   }
 
-  return res.json({ weeklyTask, monthlyTask, weeklyReports })
+  // BY MONTH, which is what the scorecard card shows.
+  //
+  // Required for a month = the sum of each WEEK's required count. A project worked in
+  // three weeks of a four-week month needs three reports, not one - so the weeks are
+  // added, not de-duplicated.
+  //
+  // A week is assigned to the month containing its THURSDAY, the same key the weeks are
+  // built on. A week split across a month end belongs to one month or the other, and the
+  // Thursday is the established convention for deciding which.
+  const monthlyReports = {}
+  for (const w of weeklyReports) {
+    const mk = String(w.key).slice(0, 7)
+    if (!monthlyReports[mk]) monthlyReports[mk] = { key: mk, required: 0, completed: 0, weeks: 0 }
+    monthlyReports[mk].required += w.required
+    monthlyReports[mk].completed += w.completed
+    monthlyReports[mk].weeks += 1
+  }
+  const monthlyReportsArr = Object.values(monthlyReports)
+    .sort((a, b) => a.key.localeCompare(b.key))
+    .map(m => ({ ...m, pct: m.required === 0 ? null : Math.round((m.completed / m.required) * 100) }))
+
+  return res.json({ weeklyTask, monthlyTask, weeklyReports, monthlyReports: monthlyReportsArr })
 }

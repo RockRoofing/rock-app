@@ -1,48 +1,60 @@
-pkg495 - URGENT. I broke this in pkg491. Here is the actual cause.
-==================================================================
+pkg496 - project reports required, taken properly from the Gantt
+================================================================
 
-Deploy after pkg494. One changed file: pages/api/applications.js.
+Deploy after pkg495.
 
-
-YOU WERE RIGHT - IT WAS FINE A COUPLE OF DEPLOYMENTS AGO
-----------------------------------------------------------
-pkg491 carried the retention-release flags forward onto a new application. That edit
-landed in the WRONG BLOCK. It went into the settings object the page fetches on load,
-where the variable it reads does not exist:
-
-    retentionRelease1: !!(prev && prev.retentionRelease1)
-
-`prev` is declared inside the CREATE branch. In the GET branch it is nothing, so the whole
-request threw a ReferenceError - every time you opened a project on the Applications page.
-
-With that request failing, the page never received the project's settings, so it never
-saw the contracted rates lock, and refused to create an application.
-
-Nothing was ever wrong with your rates. Unlocking and re-locking could not have helped,
-and I sent you round that loop twice. Sorry.
-
-Moved to the create branch, where prev is declared 47 lines above it and the carry-forward
-does what pkg491 intended.
-
-
-MY TWO PREVIOUS ANSWERS
+CHANGED FILES (replace)
 -----------------------
-pkg492 said it was a stale screen. pkg493 said the Project Details form was overwriting
-the lock.
+  pages/api/commercial-scorecard-extra.js
+  pages/commercial-scorecard.js
 
-Neither was the cause here. Both are real faults and worth keeping - the settings endpoint
-COULD overwrite the lock, and the table WAS only refreshing on mount - but they were not
-what you were hitting.
+NEW FILES: none.
 
 
-A DIAGNOSTIC, SO WE DO NOT DO THIS AGAIN
-------------------------------------------
-If the lock is ever not seen, this reports what the server actually holds, and writes
-nothing. Console on any portal page:
+WHY IT STOPPED WORKING
+----------------------
+"Required" only counted a project if its Gantt cell was explicitly marked ACTUAL.
 
-    fetch('/api/applications',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'cr-debug',projectId:'PUT_THE_XERO_ID_HERE'})})
-      .then(r=>r.json()).then(console.log)
+    allocation stored as an array of names (the older format)   reads as 'confirmed'
+    cell with no status set                                     defaults to 'confirmed'
+    cell marked confirmed or provisional                        not counted
 
-It returns whether rates exist, how many items, the raw value of `locked` and its type,
-when it was saved and by whom, and whether create would be allowed.
+So only a cell somebody had retrospectively ticked as actual counted. Everywhere that tick
+was not applied - which is most of the Gantt - the week required nothing, and the card had
+nothing to measure.
+
+
+THE RULE NOW, AS YOU DESCRIBED IT
+-----------------------------------
+Labour allocated to a project on a day that has passed means we worked on it. Provisional,
+confirmed or actual - for a week in the past it is the record of what happened.
+
+    one day in a week    = one report
+    five days in a week  = one report
+    worked 3 of 4 weeks  = three reports
+
+An allocation with nobody on it is not counted - an empty cell is not work.
+
+Weeks are Monday to Sunday, which they already were.
+
+
+AND IT IS NOW A MONTHLY FIGURE
+--------------------------------
+Required for a month is the SUM of each week's requirement, not a de-duplicated project
+count - a project worked in three weeks needs three reports.
+
+Checked against your example:
+
+    week of 03 Aug   J178, J190   2 reports
+    week of 10 Aug   J178         1
+    week of 17 Aug   J178         1
+    week of 24 Aug   none         0
+                                  4 required in August
+
+Completed is tallied the same way, from Weekly Project Reports dated in each week.
+
+The trend line is monthly too. It was a run of WEEKS labelled as though they were months,
+which is why it never lined up with the cards beside it.
+
+A week is assigned to the month containing its Thursday - the same key the weeks are
+already built on, and the usual convention for a week that straddles a month end.

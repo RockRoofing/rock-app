@@ -272,15 +272,18 @@ export default function CommercialScorecard() {
   const monthlyTaskTrend = (extra?.monthlyTask || []).map(m => {
     const [y, mm] = m.key.split('-'); return { month: new Date(+y, +mm - 1, 1).toLocaleString('en-GB', { month: 'short' }), value: m.pct / 100 }
   })
-  const weeklyReportsTrend = (extra?.weeklyReports || []).filter(w => w.pct != null).map(w => ({ month: w.key.slice(5), value: w.pct / 100 }))
+  // By MONTH, matching every other card on this page. The weekly figures are still
+  // returned and still drive nothing else - the trend was a run of weeks labelled as
+  // though they were months, which is why it never lined up with the cards beside it.
+  const weeklyReportsTrend = (extra?.monthlyReports || []).filter(m => m.pct != null).map(m => ({ month: m.key.slice(5), value: m.pct / 100 }))
   const weeklyTaskLatest = weeklyTaskTrend.length ? weeklyTaskTrend[weeklyTaskTrend.length - 1].value : null
   const monthlyTaskLatest = monthlyTaskTrend.length ? monthlyTaskTrend[monthlyTaskTrend.length - 1].value : null
   // The most recent week we have at all, not the most recent week with a requirement.
   // Filtering on required > 0 meant a week where nobody had marked the Gantt actual was
   // skipped entirely, and the card fell back to an older week or showed nothing.
-  const latestReports = (extra?.weeklyReports || []).slice(-1)[0]
+  const latestReports = (extra?.monthlyReports || []).slice(-1)[0]
   const weeklyReportsLatest = (latestReports && latestReports.pct != null) ? latestReports.pct / 100 : null
-  const weeklyReportsCount = latestReports ? (latestReports.completedAll ?? latestReports.completed ?? 0) : null
+  const weeklyReportsCount = latestReports ? (latestReports.completed ?? 0) : null
   const weeklyReportsRequired = latestReports ? latestReports.required : null
 
   const s = { fontFamily: 'system-ui,-apple-system,sans-serif', fontSize: 14, color: '#1a1a19' }
@@ -683,10 +686,10 @@ export default function CommercialScorecard() {
                   // the Gantt actual that week - show the COUNT rather than a blank card,
                   // because reports were still written and that is the thing being asked.
                   sub: !latestReports
-                    ? 'Reports completed vs projects on site each week'
+                    ? 'Reports completed vs projects worked on, week by week'
                     : weeklyReportsRequired > 0
-                      ? `Latest week: ${latestReports.completed}/${latestReports.required} projects on site reported`
-                      : `Latest week: ${weeklyReportsCount} completed. No projects marked on site on the Gantt, so there is nothing to measure against.`,
+                      ? `${latestReports.completed} of ${latestReports.required} required across ${latestReports.weeks} week${latestReports.weeks === 1 ? '' : 's'} — one per project per week worked`
+                      : `${weeklyReportsCount} completed. No labour allocated on the Gantt this month, so there is nothing to measure against.`,
                   value: weeklyReportsRequired > 0 ? weeklyReportsLatest : weeklyReportsCount,
                   format: weeklyReportsRequired > 0 ? pct : (v) => (v == null ? '—' : String(v)),
                   target: targets.weeklyReports != null ? targets.weeklyReports : 1,
