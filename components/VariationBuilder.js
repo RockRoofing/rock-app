@@ -286,6 +286,8 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
       + (variation.description ? `Description: ${variation.description}\n` : '')
       + `Value: ${money(Number(variation.materials) + Number(variation.labour) + Number(variation.profit))}\n\n`
       + (alreadySent ? `Could you confirm your instruction so we can programme the works.\n\n` : `Please confirm your instruction to proceed.\n\n`)
+      // Bolded in the HTML by the send endpoint, which matches on this exact line.
+      + `We are unable to proceed without your instruction via the below instruct button.\n\n`
       + `Kind regards\n`
       // The sender's own details, so the customer can pick up the phone rather than
       // hunting for a number or replying and waiting.
@@ -479,11 +481,15 @@ export default function VariationBuilder({ projects, onSaved }) {
   // number ACTUALLY SENT, and a draft carries it provisionally until it goes.
   const nextSentNumber = useMemo(() => {
     const vars = project?.variations || project?.settings?.variations || []
-    const sentNums = vars
-      .filter(v => v.builder?.firstSentAt)
+    // EVERY variation on the tracker, not just the sent ones.
+    //
+    // I had this following sends, so an unsent draft did not burn a number. That was
+    // wrong: the tracker is the register, and a number that already exists on it cannot
+    // be handed out again - two V03s on one project is worse than a gap in the sequence.
+    const nums = vars
       .map(v => parseInt(String(v.varNumber || '').replace(/[^0-9]/g, '')))
       .filter(x => !isNaN(x))
-    return (sentNums.length ? Math.max(...sentNums) : 0) + 1
+    return (nums.length ? Math.max(...nums) : 0) + 1
   }, [project])
   const nextSentLabel = `V${String(nextSentNumber).padStart(2, '0')}`
 
@@ -513,6 +519,11 @@ export default function VariationBuilder({ projects, onSaved }) {
     try {
       const settings = project.settings || {}
       const existing = Array.isArray(settings.variations) ? settings.variations : []
+      // Whoever raised it FIRST stays on it. Editing a variation should not quietly
+      // reassign it to whoever happened to open it.
+      const prior = existing.find(v => String(v.varNumber) === String(header.varNumber))
+      const raisedByExisting = prior?.builder?.raisedBy || null
+      const raisedRecordAt = prior?.builder?.raisedAt || null
       const record = {
         // The four fields every other page reads. Everything downstream - the anticipated
         // final account, applications, cash flow, project financials, retention - works
@@ -530,6 +541,10 @@ export default function VariationBuilder({ projects, onSaved }) {
           subContractRef: project.orderRef || settings.orderRef || settings.customerOrderRef || '',
           items, clarifications: clar,
           builtAt: Date.now(),
+          // Kept on the variation so the document can say who priced it long after the
+          // fact - and so it still says the right person if somebody else edits it later.
+          raisedAt: (raisedRecordAt || Date.now()),
+          raisedBy: raisedByExisting || { name: me?.name || '', email: me?.email || '', phone: me?.phone || '' },
         },
       }
       // Replace when editing, append when new - matched on the variation number, which
@@ -563,13 +578,9 @@ export default function VariationBuilder({ projects, onSaved }) {
   // not sent is a variation the customer does not know about - and the send needs a saved
   // record to build the PDF from.
   async function saveAndSend() {
-    // Take the number at the point of sending. A draft that has sat for a fortnight while
-    // two others went out should not go to the customer as V03 when V03 and V04 have
-    // already been sent.
-    if (!raisedAlreadySent && header.varNumber !== nextSentLabel) {
-      setHeader(h => ({ ...h, varNumber: nextSentLabel }))
-    }
-    const ok = await save(raisedAlreadySent ? null : nextSentLabel)
+    // The number is whatever the tracker gave it when it was raised - not reassigned at
+    // send time, which would renumber a draft somebody had already referred to.
+    const ok = await save()
     if (ok) setSendOpen(true)
   }
 
@@ -666,9 +677,7 @@ export default function VariationBuilder({ projects, onSaved }) {
               <div>
                 <div style={lbl}>Variation No.</div>
                 <input value={header.varNumber} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} />
-                {!raisedAlreadySent && (
-                  <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Provisional &mdash; numbers follow the order variations are sent.</div>
-                )}
+                <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Next number on the tracker for this project.</div>
               </div>
               <div><div style={lbl}>Date</div><input type="date" value={header.date} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
               <div>

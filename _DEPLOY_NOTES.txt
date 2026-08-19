@@ -1,46 +1,64 @@
-pkg519 - the Gantt scrollbar stays on screen
-============================================
+pkg520 - variation numbering, email wording, logo and footer
+============================================================
 
-Deploy after pkg518. One changed file:
-  pages/operations/project-management/planning.js
+Deploy after pkg519.
 
-No new files.
+CHANGED FILES (replace)
+-----------------------
+  lib/variationPdf.js
+  lib/wipPdf.js
+  components/VariationBuilder.js
+  pages/api/variation-send.js
+  pages/api/cron/variation-reminders.js
 
-
-THE CAUSE
----------
-The Gantt was capped at a flat "100vh - 220px" - 220 being somebody's estimate of how far
-down the page the box starts.
-
-It is not a fixed number. The controls above it wrap onto a second row on a narrower
-window, and the warning banners appear and disappear, so the box starts anywhere from
-about 300px to about 410px down. Whenever 220 was too small the box ran past the bottom of
-the window, taking its horizontal scrollbar with it - so you had to scroll the page down
-to find the bar, then scroll back up to see what you had moved.
-
-Same fault the retention register had, and the same fix.
+NEW FILES: none.
 
 
-MEASURED, NOT GUESSED
----------------------
-The box now measures its own distance from the top of the window and sizes itself to fill
-what is left, less 16px so the bar is not flush with the edge.
+1. NUMBERING FOLLOWS THE TRACKER
+----------------------------------
+The next number is now the highest on the TRACKER plus one, whatever raised it and whether
+or not it has been sent.
 
-Remeasured on load, on resize, and whenever anything above it changes height - so wrapping
-the controls or showing a banner adjusts it rather than breaking it.
+I had this following sends in pkg517, so an abandoned draft did not burn a number. You are
+right that it was wrong: the tracker is the register, and handing out a number that
+already exists on it gives you two V03s on one project - which is worse than a gap in the
+sequence.
 
-
-AND WHEN THE PAGE SCROLLS
--------------------------
-It remeasures on scroll too, throttled through requestAnimationFrame.
-
-That was the part a height alone would not have fixed: this page sits inside the Operations
-shell and the page itself can still scroll, which moves the box up the window and would
-have put the bar out of sight again.
-
-A floor of 120px stops the box collapsing to nothing if it scrolls right up.
+It also no longer renumbers at send time, so a draft somebody has already referred to in
+an email keeps the number they quoted.
 
 
-UNCHANGED
----------
-The sticky date header at the top of the Gantt. It was already correct and is untouched.
+2. THE EMAIL SAYS IT PLAINLY
+------------------------------
+Added above the button, in bold:
+
+    We are unable to proceed without your instruction via the below instruct button.
+
+On the first send and on the automatic reminder. Bolded by matching the line itself, so it
+stays bold even if the rest of the message is edited before sending.
+
+
+3. THE LOGO WAS SQUASHED
+--------------------------
+The file is SQUARE - 565 x 565 - and was being drawn 92 wide by 46 tall. Half its proper
+height, which is why it looked wrong.
+
+Now scaled from the image: fixed height, width follows. Correct whatever the file is
+replaced with later.
+
+THE WIP PDF HAD THE SAME FAULT - 70 x 34 on the same square logo - and is fixed too. The
+application PDF was already scaling properly and is untouched.
+
+
+4. THE FOOTER NAMES WHO RAISED IT
+-----------------------------------
+    Raised 19/08/2026 at 14:32 by Roman Jarosz
+    0121 827 0433   ·   roman@rockroofing.co.uk
+    Any queries on this variation, please contact us using the details above.
+
+"Produced from the Rock Roofing portal" told the customer nothing they could act on. A
+variation they want to query should carry the name and number of the person who priced it.
+
+Recorded on the variation when it is raised, so the document still names the right person
+months later - and WHOEVER RAISED IT FIRST STAYS ON IT. Editing a variation does not
+quietly reassign it to whoever happened to open it.

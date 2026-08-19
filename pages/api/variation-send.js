@@ -84,8 +84,13 @@ export default async function handler(req, res) {
     const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const htmlFor = (addr) => {
       const link = `${origin}/instruct/${createInstructToken({ projectId, varNumber, email: addr })}`
+      // The one line that has to be noticed gets bolded in the HTML. Matched on its own
+      // text so it stays bold even if the rest of the message is edited before sending.
+      const NOTICE = 'We are unable to proceed without your instruction via the below instruct button.'
+      const bodyHtml = esc(text).replace(/\n/g, '<br>')
+        .replace(esc(NOTICE), `<strong>${esc(NOTICE)}</strong>`)
       return `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
-        + esc(text).replace(/\n/g, '<br>')
+        + bodyHtml
         + `<div style="margin:24px 0">`
         + `<a href="${link}" style="display:inline-block;background:#15803d;color:#fff;text-decoration:none;`
         + `padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">Instruct variation ${esc(varNumber)}</a>`

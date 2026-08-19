@@ -67,6 +67,7 @@ export default async function handler(req, res) {
               + (v.description ? `Description: ${v.description}\n` : '')
               + `Value: ${money}\n\n`
               + `Could you confirm your instruction so we can programme the works.\n\n`
+              + `We are unable to proceed without your instruction via the below instruct button.\n\n`
               + `Kind regards\nRock Roofing Limited`
             await fetch('https://api.resend.com/emails', {
               method: 'POST',
@@ -79,6 +80,8 @@ export default async function handler(req, res) {
                 text,
                 html: `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
                   + esc(text).replace(/\n/g, '<br>')
+                    .replace(esc('We are unable to proceed without your instruction via the below instruct button.'),
+                      `<strong>${esc('We are unable to proceed without your instruction via the below instruct button.')}</strong>`)
                   + `<div style="margin:24px 0"><a href="${link}" style="display:inline-block;background:#15803d;color:#fff;`
                   + `text-decoration:none;padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">`
                   + `Instruct variation ${esc(v.varNumber)}</a></div>`
