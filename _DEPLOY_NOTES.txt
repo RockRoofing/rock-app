@@ -1,70 +1,69 @@
-pkg521 - the digital instruction, shown everywhere
-==================================================
+pkg522 - variations were being overwritten. Deploy this.
+========================================================
 
-Deploy after pkg520.
+Deploy after pkg521.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/variationPdf.js
   components/VariationBuilder.js
-  pages/variations.js
+  pages/api/variation-send.js
   pages/api/variation-instruct.js
-  pages/instruct/[token].js          <- literal [token] brackets
+  pages/api/project/[id]/settings.js     <- literal [id] folder
+  pages/instruct/[token].js              <- literal [token] folder
 
 
-THE INSTRUCTION NOW CARRIES WHO THEY ARE
-------------------------------------------
-The page asks for name, ROLE and COMPANY. Only the name is required, but a signature on a
-variation is worth more when it says who signed it - "Jack Belshaw, Senior Quantity
-Surveyor, Barnfield Construction" stands up in a way that "Jack" does not.
+1. THE OVERWRITE - this is the one that matters
+-------------------------------------------------
+The builder read the project's existing variations from settings.variations only.
 
-The email address is still taken from the LINK, not typed. That is the part that makes it
-evidence.
+The dashboard returns them on project.variations, and the tracker mirrors them onto
+settings. So on any project where they came back the first way, the builder saw an EMPTY
+list - and saving a new variation wrote a list of ONE over everything already there.
+
+That is why previous variations were disappearing. It now reads both.
+
+AND A BACKSTOP AT THE SERVER. The settings endpoint refuses a POST that would reduce the
+variation count by more than one:
+
+    5 -> 6   allowed
+    5 -> 4   allowed (that is a deletion)
+    5 -> 1   REFUSED
+
+Refused rather than merged: merging would hide the caller's bug and leave two versions of
+the truth. Any caller that gets it wrong now fails loudly instead of quietly destroying
+the history.
+
+Variations lost before this deploy are gone from the app and would need re-entering - the
+sent PDFs are still whatever went to the customer.
 
 
-ON THE PDF
-----------
-A bordered block above the footer:
+2. THE INSTRUCTION PAGE FILLS ITSELF IN
+-----------------------------------------
+Name, role and company are prefilled from the handover for whoever the link was sent to,
+and it says so - "Filled in from our records, please correct anything that is wrong."
 
-    INSTRUCTED
+Somebody confirming a variation should not have to type their own job title, and a
+prefilled field comes back correct far more often than an empty one.
+
+
+3. ONE PERSON IN "TO", THE REST IN "COPY IN"
+----------------------------------------------
+To is now a dropdown - one customer contact. The instruct link is issued to that address
+and the instruction records who used it, so it has to be one person or the record names an
+address rather than a person.
+
+Everyone else - the customer's other contacts AND the Rock team - goes in Copy in, in two
+labelled groups. They receive the variation and the confirmation, but cannot instruct it.
+
+
+4. THE INSTRUCTION IS CONFIRMED BACK TO EVERYONE
+--------------------------------------------------
+When the customer instructs, everyone on the original - to, cc and the sender - receives:
+
+    Subject: Instructed: Variation V01 - J205 Pets Choice
     Instructed by Jack Belshaw, Senior Quantity Surveyor, Barnfield Construction
     on 21/08/2026 at 09:14
     via the authenticated link sent to jack.belshaw@barnfieldconstruction.co.uk
-    Recorded from 82.14.220.7. This is a digital instruction and is retained as a
-    record of authorisation.
 
-Printed on the document itself rather than held only in the portal. The point of capturing
-an instruction is that it can be produced later, and a record that exists only on a screen
-we control is worth less than one on the document both sides hold.
-
-Underneath it, as before: Raised 19/08/2026 at 14:32 by Roman Jarosz, with his number and
-email.
-
-
-ON BOTH SCREENS
----------------
-VIEW on the tracker, and the variation opened in the builder, both show the same block -
-and both show it plainly when there is NOT one:
-
-    INSTRUCTED                      who, when, which address
-    SENT - NOT YET INSTRUCTED       when it went, to whom, when it was chased
-    DRAFT - NOT SENT
-
-"No instruction" is the answer to "can we start", and it is what somebody opens the window
-to check.
-
-The builder also gets a Download PDF link on the open variation, so the document with its
-instruction is one click from where you are working.
-
-
-THE LEFT-HAND LIST
-------------------
-Already marks instructed - the blue INSTRUCTED badge went in with pkg517, alongside SENT,
-DRAFT and TRACKER. Nothing needed there.
-
-
-ONE THING TO KNOW
------------------
-Variations instructed BEFORE this deploy have no role or company recorded - there was
-nowhere to enter them. They will show the name, the date and the email address, which is
-still the substance of it. Anything instructed from here carries all of it.
+with the PDF attached, showing the instruction ON the document. Both sides then hold the
+same signed copy, which is the whole point of capturing it. Recipients are deduplicated.

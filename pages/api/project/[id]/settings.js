@@ -36,6 +36,24 @@ export default async function handler(req, res) {
   const incoming = { ...req.body }
   for (const k of OWNED_ELSEWHERE) delete incoming[k]
 
+  // A SHRINKING VARIATIONS LIST IS ALMOST ALWAYS A BUG.
+  //
+  // Variations are only ever added and edited; the one place that deletes them removes a
+  // single row. So a POST carrying FEWER than we already hold means the caller built its
+  // list from the wrong place - which is exactly what the Variation Builder was doing,
+  // silently writing one variation over a project's whole history.
+  //
+  // Refused rather than merged: merging would paper over the caller's bug and leave two
+  // versions of the truth. A deletion of one row still passes, because that is a
+  // difference of one.
+  if (Array.isArray(incoming.variations) && Array.isArray(existing.variations)) {
+    if (incoming.variations.length < existing.variations.length - 1) {
+      return res.status(409).json({
+        error: `Refused: this would reduce the variations on this project from ${existing.variations.length} to ${incoming.variations.length}.`,
+      })
+    }
+  }
+
   await saveProject(id, { ...existing, ...incoming })
   await clearCache()
   res.json({ ok: true })

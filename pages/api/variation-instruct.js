@@ -45,7 +45,16 @@ export default async function handler(req, res) {
     }
 
     const b = variation.builder || {}
+    // WHO THIS LINK WAS SENT TO, looked up on the handover so the page can fill their
+    // details in for them. Somebody confirming a variation should not have to type their
+    // own job title - and a prefilled field is far more likely to come back correct than
+    // an empty one.
+    const contact = (project.customerContacts || [])
+      .find(c => String(c.email || '').toLowerCase() === String(t.email || '').toLowerCase()) || null
     return res.json({
+      sentTo: t.email || '',
+      contact: contact ? { name: contact.name || '', role: contact.title || '' } : null,
+      customerCompany: project.customerCompany || project.customer || '',
       varNumber: variation.varNumber,
       projectName: [project.jobNo, project.name].filter(Boolean).join(' - '),
       description: variation.description || '',
@@ -107,6 +116,43 @@ export default async function handler(req, res) {
     const tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
     if (url && tok) await new Redis({ url, token: tok }).del('dashboard:cache')
   } catch {}
+
+  // CONFIRM IT BACK TO EVERYONE WHO WAS ON THE ORIGINAL, with the document carrying the
+  // instruction on it. Both sides then hold the same signed copy, which is the point of
+  // capturing it - and the person who instructed gets a receipt without having to ask.
+  try {
+    const RESEND_KEY = process.env.RESEND_API_KEY
+    const b = variation.builder || {}
+    const audience = [...new Set([...(b.sentTo || []), ...(b.sentCc || []), b.sentBy].filter(Boolean))]
+    if (RESEND_KEY && audience.length) {
+      const proto = req.headers['x-forwarded-proto'] || 'https'
+      const withInstruction = { ...variation, instructed: 'yes', builder: { ...b, instruction } }
+      const bytes = await buildVariationPDF({ variation: withInstruction, project, logoUrl: `${proto}://${req.headers.host}/rock-logo.jpg` })
+      const label = [project.jobNo, project.name].filter(Boolean).join(' - ')
+      const who = [instruction.byName, instruction.byRole, instruction.byCompany].filter(Boolean).join(', ')
+      const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
+      const text = `Variation ${variation.varNumber} for ${label} has been instructed.\n\n`
+        + `Instructed by ${who}\n`
+        + `on ${new Date(instruction.at).toLocaleString('en-GB')}\n`
+        + (instruction.byEmail ? `via the authenticated link sent to ${instruction.byEmail}\n` : '')
+        + `\nThe variation is attached, showing the instruction on it.\n\n`
+        + `Kind regards\nRock Roofing Limited`
+      await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM, to: audience,
+          subject: `Instructed: Variation ${variation.varNumber} - ${label}`,
+          ...(b.sentBy ? { reply_to: b.sentBy } : {}),
+          text,
+          attachments: [{
+            filename: `Variation ${variation.varNumber} - INSTRUCTED.pdf`.replace(/[^a-zA-Z0-9 .-]/g, ''),
+            content: Buffer.from(bytes).toString('base64'),
+          }],
+        }),
+      })
+    }
+  } catch { /* the instruction is recorded; the confirmation is secondary */ }
 
   return res.json({ ok: true, instruction })
 }

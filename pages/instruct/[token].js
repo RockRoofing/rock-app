@@ -23,7 +23,15 @@ export default function InstructVariation() {
     if (!token) return
     fetch(`/api/variation-instruct?token=${encodeURIComponent(token)}`)
       .then(r => r.json())
-      .then(d => setState({ loading: false, ...d }))
+      .then(d => {
+        setState({ loading: false, ...d })
+        // Filled in from the handover for whoever this link was sent to. Somebody
+        // confirming a variation should not have to type their own job title, and a
+        // prefilled field comes back correct far more often than an empty one.
+        if (d.contact?.name) setName(d.contact.name)
+        if (d.contact?.role) setRole(d.contact.role)
+        if (d.customerCompany) setCompany(d.customerCompany)
+      })
       .catch(() => setState({ loading: false, error: 'Could not load this variation.' }))
   }, [token])
 
@@ -110,7 +118,8 @@ export default function InstructVariation() {
                 ))}
               </div>
               <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>
-                Recorded with the instruction, alongside the email address this link was sent to.
+                {state.contact?.name ? 'Filled in from our records — please correct anything that is wrong. ' : ''}
+                Recorded with the instruction, alongside {state.sentTo || 'the email address this link was sent to'}.
               </div>
 
               <button onClick={instruct} disabled={busy || !name.trim()}

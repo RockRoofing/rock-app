@@ -247,7 +247,10 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
   // it a reminder is how customers stop reading them.
   const alreadySent = !!variation.builder?.firstSentAt
   const contacts = (project.customerContacts || []).filter(c => c.email)
-  const [to, setTo] = useState(() => (contacts[0]?.email ? [contacts[0].email] : []))
+  // ONE recipient. The instruct link is issued to the address it is sent to and the
+  // instruction records who clicked it - so "to" has to be one person, or the record says
+  // an address rather than a person. Everyone else goes in CC.
+  const [to, setTo] = useState(() => contacts[0]?.email || '')
   const [cc, setCc] = useState([])
   const [extra, setExtra] = useState('')
   const [team, setTeam] = useState([])
@@ -270,7 +273,7 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
   // Who it is addressed to: the first ticked contact's FIRST NAME. "Hi Jack," rather than
   // "Hi," - it is a letter to a person, and the name is one we already hold.
   const firstName = (() => {
-    const c = contacts.find(x => to.includes(x.email))
+    const c = contacts.find(x => x.email === to)
     return String(c?.name || '').trim().split(/\s+/)[0] || ''
   })()
 
@@ -301,8 +304,10 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
   const toggle = (list, setList, v) => setList(list.includes(v) ? list.filter(x => x !== v) : [...list, v])
 
   async function send() {
-    const all = [...to, ...extra.split(/[,;\s]+/).filter(x => x.includes('@'))]
-    if (!all.length) { setErr('Pick at least one recipient.'); return }
+    const typed = extra.split(/[,;\s]+/).filter(x => x.includes('@'))
+    const all = [to, ...typed].filter(Boolean)
+    if (!all.length) { setErr('Pick who is instructing this.'); return }
+    if (all.length > 1) { setErr('Only one person can be in To - put the others in Copy in.'); return }
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/variation-send', {
@@ -337,17 +342,35 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
           <button onClick={onClose} style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
         </div>
 
-        <div style={hdr}>To - customer</div>
+        <div style={hdr}>To - who instructs it</div>
         {contacts.length === 0 && <div style={{ fontSize: 12.5, color: '#c2410c' }}>No customer contacts with an email on this project&rsquo;s handover. Type an address below.</div>}
-        {contacts.map(c => (
-          <label key={c.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
-            <input type="checkbox" checked={to.includes(c.email)} onChange={() => toggle(to, setTo, c.email)} />
-            {c.name}{c.title ? ` (${c.title})` : ''} <span style={{ color: '#888' }}>{c.email}</span>
-          </label>
-        ))}
-        <input value={extra} onChange={e => setExtra(e.target.value)} placeholder="Other addresses, comma separated" style={{ ...inp, marginTop: 6 }} />
+        {contacts.length > 0 && (
+          <select value={to} onChange={e => setTo(e.target.value)} style={inp}>
+            <option value="">Select…</option>
+            {contacts.map(c => <option key={c.email} value={c.email}>{c.name}{c.title ? ` (${c.title})` : ''} — {c.email}</option>)}
+          </select>
+        )}
+        <input value={extra} onChange={e => setExtra(e.target.value)} placeholder={contacts.length ? 'Or type a different address' : 'Their email address'} style={{ ...inp, marginTop: 6 }} />
+        <div style={{ fontSize: 11.5, color: '#888', marginTop: 4 }}>
+          One person. The instruct link is issued to this address and the instruction records who used it.
+        </div>
 
         <div style={hdr}>Copy in</div>
+        <div style={{ fontSize: 11.5, color: '#888', marginBottom: 4 }}>They receive the variation and the instruction when it comes back, but cannot instruct it.</div>
+        {contacts.filter(c => c.email !== to).length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 3 }}>Customer</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+              {contacts.filter(c => c.email !== to).map(c => (
+                <label key={c.email} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={cc.includes(c.email)} onChange={() => toggle(cc, setCc, c.email)} />
+                  {c.name}{c.title ? ` (${c.title})` : ''}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 3 }}>Rock Roofing</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxHeight: 110, overflowY: 'auto' }}>
           {team.map(u => (
             <label key={u.email} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
@@ -526,7 +549,15 @@ export default function VariationBuilder({ projects, onSaved }) {
     setSaving(true); setMsg('')
     try {
       const settings = project.settings || {}
-      const existing = Array.isArray(settings.variations) ? settings.variations : []
+      // BOTH PLACES. The dashboard returns variations on the project itself; the tracker
+      // mirrors them onto settings. This only looked at settings, so on any project where
+      // they came back on project.variations `existing` was EMPTY - and saving a new
+      // variation wrote a list of one over everything already there.
+      //
+      // That is why previous variations were disappearing.
+      const existing = Array.isArray(settings.variations) && settings.variations.length
+        ? settings.variations
+        : (Array.isArray(project.variations) ? project.variations : [])
       // Whoever raised it FIRST stays on it. Editing a variation should not quietly
       // reassign it to whoever happened to open it.
       const prior = existing.find(v => String(v.varNumber) === String(header.varNumber))

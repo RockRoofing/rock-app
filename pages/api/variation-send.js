@@ -138,6 +138,10 @@ export default async function handler(req, res) {
           firstSentAt: (v.builder || {}).firstSentAt || Date.now(),
           sentAt: Date.now(),
           sentTo: recipients, sentBy: replyTo || '',
+          // Kept so the instruction confirmation can go back to exactly the people who
+          // were on the original - the person who instructed it is not always the one
+          // who needs to know it has been.
+          sentCc: ccList,
           ...(reminder ? { lastReminderAt: Date.now(), reminderCount: ((v.builder || {}).reminderCount || 0) + 1 } : {}),
         },
       }))
