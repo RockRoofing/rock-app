@@ -4048,7 +4048,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
               <tr style={{ background: '#faf9f7', borderBottom: '1px solid ' + C.line }}>
-                <th style={{ ...th, cursor: 'default', width: 78, whiteSpace: 'nowrap' }}>Mark Done</th>
+                <th style={{ ...th, cursor: 'default', width: 96, whiteSpace: 'nowrap' }}>Make Contact</th>
                 <th style={{ ...th, cursor: 'default', width: 60, whiteSpace: 'nowrap' }}>Edit</th>
                 {ACT_COLS.map(([k, label]) => (
                   <th key={k} style={th} onClick={() => onSort(k)}>{label}{arrow(k)}</th>
@@ -4097,6 +4097,11 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 
       {completing && (
         <CompleteActivityModal row={completing} today={today}
+          // The deal behind the row, so the panel can show who this is, what the project
+          // is worth and what has already been said - which is what you need in front of
+          // you while the phone is ringing.
+          deal={(deals || []).find(d => String(d.id) === String(completing.dealId)) || null}
+          users={users}
           onClose={() => setCompleting(null)}
           onDone={(outcome, next) => { setCompleting(null); onComplete(completing, outcome, next); }} />
       )}
@@ -4112,7 +4117,67 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // Marking done is the moment you know what happens next, so this captures the outcome and
 // offers to set the follow-up in the same step rather than leaving the project with nothing
 // booked - which is how deals go quiet.
-function CompleteActivityModal({ row, today, onClose, onDone }) {
+
+// The left-hand column of the Make Contact panel: who you are ringing, what it is worth,
+// and the details you would otherwise go hunting for. Read-only - this is a place to look
+// while you talk, not another place to edit from.
+function ContactPanel({ deal }) {
+  const f = deal.fields || {};
+  const box = { background: C.feedBg, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 };
+  const hdr = { fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 };
+  const row = (k, v, href) => {
+    if (v == null || String(v).trim() === '' || String(v).trim() === '-') return null;
+    return (
+      <div key={k} style={sideRow}>
+        <span style={sideKey}>{k}</span>
+        <span style={{ textAlign: 'right', wordBreak: 'break-word', fontWeight: 600, color: C.text }}>
+          {href ? <a href={href} style={{ color: C.link, textDecoration: 'none' }}>{v}</a> : v}
+        </span>
+      </div>
+    );
+  };
+  const money = (n) => (n == null || n === '' ? null : '£' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 }));
+  const phone = f.contact_phone || f.org_phone || '';
+  const email = f.contact_email || f.org_email || '';
+
+  return (
+    <>
+      <div style={box}>
+        <div style={hdr}>Summary</div>
+        {row('Value', money(deal.value))}
+        {row('Stage', deal.stageName)}
+        {row('Organisation', f.organization)}
+        {row('Contact', f.contact_person)}
+        {/* Tap-to-call and mailto: this panel is open because somebody is about to make
+            contact, so the number should be one click, not one copy and paste. */}
+        {row('Phone', phone, phone ? `tel:${String(phone).replace(/\s+/g, '')}` : null)}
+        {row('Email', email, email ? `mailto:${email}` : null)}
+        {row('Job role', f.contact_job_role)}
+        {row('Owner', deal.owner)}
+      </div>
+
+      <div style={box}>
+        <div style={hdr}>Project details</div>
+        {row('Project score', f.project_score)}
+        {row('Tender return', f.tender_return_date)}
+        {row('Region', f.region)}
+        {row('Project type', f.project_type)}
+        {row('Estimator', f.estimator_responsible)}
+        {row('Lead source', f.lead_source)}
+        {row('Site location', f.site_location)}
+        {row('Size m2', f.size_m2)}
+        {f.general_info && (
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+            <div style={{ fontSize: 11, color: C.dim, marginBottom: 3 }}>General information</div>
+            <div style={{ fontSize: 12.5, color: C.text, whiteSpace: 'pre-wrap' }}>{f.general_info}</div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+function CompleteActivityModal({ row, today, deal = null, users = [], onClose, onDone }) {
   // Escape closes it. The backdrop deliberately does not - see the note on the overlay.
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -4135,13 +4200,24 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
     // call, the next activity - and losing it to a stray click beside the box means
     // typing it all again. Cancel, the x, or Escape.
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 600, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '6vh 16px', overflowY: 'auto' }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 620, maxWidth: '100%', padding: 22 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: deal ? 1180 : 620, maxWidth: '100%', padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-          <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Complete activity</h3>
+          <h3 style={{ margin: '0 0 2px', fontSize: 17 }}>Make contact</h3>
           <button onClick={onClose} title="Close without saving"
             style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: '#999', cursor: 'pointer', padding: 0 }}>&times;</button>
         </div>
         <div style={{ fontSize: 13, color: C.dim, marginBottom: 16 }}>{row.project} &middot; {row.text}</div>
+
+        {/* Two columns once we know the deal: who and what on the left, the call itself on
+            the right. Wider, because the point is to have everything in front of you
+            rather than opening the project in another tab to find the phone number. */}
+        <div style={deal ? { display: 'grid', gridTemplateColumns: 'minmax(0,320px) minmax(0,1fr)', gap: 20, alignItems: 'start' } : undefined}>
+        {deal && (
+          <div style={{ minWidth: 0 }}>
+            <ContactPanel deal={deal} />
+          </div>
+        )}
+        <div style={{ minWidth: 0 }}>
 
         <label style={lbl}>What happened? (call notes, email summary, outcome)</label>
         <textarea value={outcome} onChange={(e) => setOutcome(e.target.value)} rows={6}
@@ -4185,6 +4261,20 @@ function CompleteActivityModal({ row, today, onClose, onDone }) {
             Done &amp; set next
           </button>
         </div>
+        </div>
+        </div>
+
+        {/* THE TIMELINE, underneath. What has already been said to this customer - email,
+            notes, previous calls - so you are not phoning them blind. Read-only here: this
+            is a place to look while you talk, not another place to edit from. */}
+        {deal && (
+          <div style={{ marginTop: 18, borderTop: '1px solid ' + C.line, paddingTop: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Timeline</div>
+            <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+              <HistoryFeed history={deal.history || []} emails={[]} users={users} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

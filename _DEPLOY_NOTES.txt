@@ -1,49 +1,49 @@
-pkg497 - Bookkeeping exports, and the Retention tab made view-only
-==================================================================
+pkg498 - "Make Contact" panel on the Activities tab
+===================================================
 
-Deploy after pkg496.
-
-CHANGED FILES (replace)
------------------------
-  pages/bookkeeping.js
-  pages/retention.js
-
-NEW FILES: none.
+Deploy after pkg497. One changed file: pages/crm.js. No new files.
 
 
-1. EXPORT TO EXCEL
-------------------
-An "Export to Excel (142)" button at the right of the filter bar, on Costs (Bills), Sales
-Invoices, Direct Wages and Overheads.
-
-It exports WHAT IS ON SCREEN, not the whole tab. The filters are the point of this page -
-a month, a supplier, a code - and exporting everything regardless would mean redoing that
-work in Excel, and would produce a different answer from the totals shown above the table.
-
-Columns: Date, Reference, Supplier, Description, Project, Account code, Account name,
-Category, Assigned, Amount. Widths set so nothing is a column of hashes.
-
-A TOTAL row at the bottom, so the file agrees with the screen at a glance.
-
-The filename says what it is and what it was filtered to:
-
-    Costs (Bills) - 2026-08 - SIG.xlsx
-
-Disabled when the filters leave nothing to export, rather than producing an empty file.
+THE COLUMN
+----------
+"Mark Done" is now "Make Contact", which is what the button is actually for - you press it
+because you are about to ring somebody, not because you have finished.
 
 
-2. THE RETENTION TAB IS NOW VIEW-ONLY
----------------------------------------
-Removed from the embedded view:
+THE PANEL
+---------
+Wider (1,180px) and in two columns, with the timeline underneath:
 
-    + Add Manual Entry          Bookkeeping views this register, it does not maintain it
-    Import spreadsheet          same
-    Project links on the refs   no route out into Project Financials
-    "Project details incomplete" banner
+    SUMMARY                    WHAT HAPPENED?
+    Value, stage, organisation  (call notes, outcome)
+    contact, phone, email
+    job role, owner            SET THE NEXT ACTIVITY
+                                what / when / who
+    PROJECT DETAILS
+    score, tender return,
+    region, project type,
+    estimator, lead source,
+    site location, size m2,
+    general information
 
-That last one is worth explaining: it is a row of links INTO projects, prompting somebody
-to go and fix them. That is work for the commercial team, and every link on it was a way
-out of the read-only view.
+    ---------------- TIMELINE ----------------
+    email, notes, previous calls and changes, newest first
 
-The full page at /retention is unchanged - everything still works there for whoever owns
-it.
+So everything you need while the phone is ringing is in front of you, instead of opening
+the project in another tab to find the number and then losing your place.
+
+Phone and email are links - tel: and mailto:. The panel is open because somebody is about
+to make contact; the number should be one click, not a copy and paste.
+
+
+READ-ONLY ON THE LEFT AND BELOW
+---------------------------------
+Deliberately. This is somewhere to LOOK while you talk. The only things you type are what
+happened and what comes next, which is what the panel was always for - a second place to
+edit the deal would be a way to change something by accident mid-call.
+
+
+UNCHANGED WHERE IT SHOULD BE
+------------------------------
+Opened from inside a deal, the panel has no project to show you - you are already looking
+at it. There it stays exactly as it was, at its original width.
