@@ -16,6 +16,8 @@ export default function InstructVariation() {
   const [state, setState] = useState({ loading: true })
   const [busy, setBusy] = useState(false)
   const [name, setName] = useState('')
+  const [role, setRole] = useState('')
+  const [company, setCompany] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -30,7 +32,7 @@ export default function InstructVariation() {
     try {
       const r = await fetch('/api/variation-instruct', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, name }),
+        body: JSON.stringify({ token, name, role, company }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Failed')
@@ -65,7 +67,7 @@ export default function InstructVariation() {
             <div style={{ fontSize: 17, fontWeight: 700, color: '#15803d' }}>Variation {state.varNumber} instructed</div>
             <div style={{ fontSize: 13.5, color: '#444', marginTop: 8, lineHeight: 1.6 }}>
               Thank you. {state.projectName} &mdash; {state.description || 'variation'} at <strong>{money(state.value)}</strong> has been instructed
-              {state.instruction?.byName ? ` by ${state.instruction.byName}` : ''}
+              {state.instruction?.byName ? ` by ${[state.instruction.byName, state.instruction.byRole, state.instruction.byCompany].filter(Boolean).join(', ')}` : ''}
               {state.instruction?.at ? ` on ${new Date(state.instruction.at).toLocaleString('en-GB')}` : ''}.
             </div>
             <div style={{ fontSize: 12.5, color: '#888', marginTop: 12 }}>
@@ -96,10 +98,18 @@ export default function InstructVariation() {
             </a>
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eee' }}>
-              <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>Your name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="Who is instructing this"
-                style={{ padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, width: '100%', maxWidth: 320, boxSizing: 'border-box', fontFamily: 'inherit' }} />
-              <div style={{ fontSize: 11.5, color: '#888', marginTop: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
+                {[['Your name', name, setName, 'Who is instructing this', true],
+                  ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor', false],
+                  ['Your company', company, setCompany, 'e.g. Barnfield Construction', false]].map(([l, v, set, ph, req]) => (
+                  <div key={l}>
+                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l}{req ? ' *' : ''}</label>
+                    <input value={v} onChange={e => set(e.target.value)} placeholder={ph}
+                      style={{ padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>
                 Recorded with the instruction, alongside the email address this link was sent to.
               </div>
 

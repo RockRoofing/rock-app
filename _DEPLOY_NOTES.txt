@@ -1,64 +1,70 @@
-pkg520 - variation numbering, email wording, logo and footer
-============================================================
+pkg521 - the digital instruction, shown everywhere
+==================================================
 
-Deploy after pkg519.
+Deploy after pkg520.
 
 CHANGED FILES (replace)
 -----------------------
   lib/variationPdf.js
-  lib/wipPdf.js
   components/VariationBuilder.js
-  pages/api/variation-send.js
-  pages/api/cron/variation-reminders.js
-
-NEW FILES: none.
-
-
-1. NUMBERING FOLLOWS THE TRACKER
-----------------------------------
-The next number is now the highest on the TRACKER plus one, whatever raised it and whether
-or not it has been sent.
-
-I had this following sends in pkg517, so an abandoned draft did not burn a number. You are
-right that it was wrong: the tracker is the register, and handing out a number that
-already exists on it gives you two V03s on one project - which is worse than a gap in the
-sequence.
-
-It also no longer renumbers at send time, so a draft somebody has already referred to in
-an email keeps the number they quoted.
+  pages/variations.js
+  pages/api/variation-instruct.js
+  pages/instruct/[token].js          <- literal [token] brackets
 
 
-2. THE EMAIL SAYS IT PLAINLY
-------------------------------
-Added above the button, in bold:
+THE INSTRUCTION NOW CARRIES WHO THEY ARE
+------------------------------------------
+The page asks for name, ROLE and COMPANY. Only the name is required, but a signature on a
+variation is worth more when it says who signed it - "Jack Belshaw, Senior Quantity
+Surveyor, Barnfield Construction" stands up in a way that "Jack" does not.
 
-    We are unable to proceed without your instruction via the below instruct button.
-
-On the first send and on the automatic reminder. Bolded by matching the line itself, so it
-stays bold even if the rest of the message is edited before sending.
-
-
-3. THE LOGO WAS SQUASHED
---------------------------
-The file is SQUARE - 565 x 565 - and was being drawn 92 wide by 46 tall. Half its proper
-height, which is why it looked wrong.
-
-Now scaled from the image: fixed height, width follows. Correct whatever the file is
-replaced with later.
-
-THE WIP PDF HAD THE SAME FAULT - 70 x 34 on the same square logo - and is fixed too. The
-application PDF was already scaling properly and is untouched.
+The email address is still taken from the LINK, not typed. That is the part that makes it
+evidence.
 
 
-4. THE FOOTER NAMES WHO RAISED IT
------------------------------------
-    Raised 19/08/2026 at 14:32 by Roman Jarosz
-    0121 827 0433   ·   roman@rockroofing.co.uk
-    Any queries on this variation, please contact us using the details above.
+ON THE PDF
+----------
+A bordered block above the footer:
 
-"Produced from the Rock Roofing portal" told the customer nothing they could act on. A
-variation they want to query should carry the name and number of the person who priced it.
+    INSTRUCTED
+    Instructed by Jack Belshaw, Senior Quantity Surveyor, Barnfield Construction
+    on 21/08/2026 at 09:14
+    via the authenticated link sent to jack.belshaw@barnfieldconstruction.co.uk
+    Recorded from 82.14.220.7. This is a digital instruction and is retained as a
+    record of authorisation.
 
-Recorded on the variation when it is raised, so the document still names the right person
-months later - and WHOEVER RAISED IT FIRST STAYS ON IT. Editing a variation does not
-quietly reassign it to whoever happened to open it.
+Printed on the document itself rather than held only in the portal. The point of capturing
+an instruction is that it can be produced later, and a record that exists only on a screen
+we control is worth less than one on the document both sides hold.
+
+Underneath it, as before: Raised 19/08/2026 at 14:32 by Roman Jarosz, with his number and
+email.
+
+
+ON BOTH SCREENS
+---------------
+VIEW on the tracker, and the variation opened in the builder, both show the same block -
+and both show it plainly when there is NOT one:
+
+    INSTRUCTED                      who, when, which address
+    SENT - NOT YET INSTRUCTED       when it went, to whom, when it was chased
+    DRAFT - NOT SENT
+
+"No instruction" is the answer to "can we start", and it is what somebody opens the window
+to check.
+
+The builder also gets a Download PDF link on the open variation, so the document with its
+instruction is one click from where you are working.
+
+
+THE LEFT-HAND LIST
+------------------
+Already marks instructed - the blue INSTRUCTED badge went in with pkg517, alongside SENT,
+DRAFT and TRACKER. Nothing needed there.
+
+
+ONE THING TO KNOW
+-----------------
+Variations instructed BEFORE this deploy have no role or company recorded - there was
+nowhere to enter them. They will show the name, the date and the email address, which is
+still the substance of it. Anything instructed from here carries all of it.

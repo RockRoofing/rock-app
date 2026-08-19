@@ -116,6 +116,37 @@ function ViewVariationModal({ row, onClose }) {
           </div>
         )}
 
+        {/* THE DIGITAL INSTRUCTION - or plainly that there is not one yet. Both matter:
+            "no instruction" is the answer to "can we start", and it is the thing somebody
+            opens this window to check. */}
+        <div style={{ marginTop: 18, padding: '12px 14px', borderRadius: 8, border: `1px solid ${b.instruction ? '#a7f3d0' : '#fde68a'}`, background: b.instruction ? '#f0fdf4' : '#fffbeb' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: b.instruction ? '#15803d' : '#92400e', letterSpacing: 0.3 }}>
+            {b.instruction ? 'INSTRUCTED' : 'NOT YET INSTRUCTED'}
+          </div>
+          {b.instruction ? (
+            <div style={{ fontSize: 12.5, color: '#1a1a2e', marginTop: 5, lineHeight: 1.7 }}>
+              <div><strong>{[b.instruction.byName, b.instruction.byRole, b.instruction.byCompany].filter(Boolean).join(', ')}</strong></div>
+              <div style={{ color: '#555' }}>
+                {new Date(b.instruction.at).toLocaleString('en-GB')}
+                {b.instruction.byEmail ? ` · via the link sent to ${b.instruction.byEmail}` : ''}
+              </div>
+              {b.instruction.ip && <div style={{ color: '#888', fontSize: 11.5 }}>Recorded from {b.instruction.ip}</div>}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: '#92400e', marginTop: 4 }}>
+              {b.firstSentAt
+                ? `Sent ${new Date(b.firstSentAt).toLocaleDateString('en-GB')}${b.reminderSentAt ? `, chased ${new Date(b.reminderSentAt).toLocaleDateString('en-GB')}` : ''} — no instruction received.`
+                : 'Not yet sent to the customer.'}
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: '#666', marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+            Raised {b.raisedAt ? new Date(b.raisedAt).toLocaleString('en-GB') : (b.date ? new Date(b.date).toLocaleDateString('en-GB') : '—')}
+            {b.raisedBy?.name ? ` by ${b.raisedBy.name}` : ''}
+            {b.raisedBy?.email ? ` · ${b.raisedBy.email}` : ''}
+            {b.raisedBy?.phone ? ` · ${b.raisedBy.phone}` : ''}
+          </div>
+        </div>
+
         <div style={{ marginTop: 18, borderTop: '1px solid #eee', paddingTop: 12 }}>
           <button onClick={() => setShowWorkings(v => !v)}
             style={{ background: showWorkings ? '#1a1a2e' : '#fff', color: showWorkings ? '#fff' : '#1a1a2e', border: '1px solid #1a1a2e', borderRadius: 8, padding: '7px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>

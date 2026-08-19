@@ -493,6 +493,14 @@ export default function VariationBuilder({ projects, onSaved }) {
   }, [project])
   const nextSentLabel = `V${String(nextSentNumber).padStart(2, '0')}`
 
+  // The builder detail of whichever variation is open, so its status can be shown above
+  // the form.
+  const openVar = useMemo(() => {
+    if (!editingVar) return null
+    const v = existingVars.find(x => String(x.varNumber) === String(editingVar))
+    return v?.builder || null
+  }, [existingVars, editingVar])
+
   useEffect(() => {
     if (!project) return
     setHeader(h => ({ ...h, varNumber: nextSentLabel }))
@@ -670,6 +678,46 @@ export default function VariationBuilder({ projects, onSaved }) {
         </div>
 
         <div style={{ minWidth: 0 }}>
+          {/* The status of the one being worked on: raised by whom, sent when, instructed
+              by whom. It was only visible on the tracker, which meant opening a second
+              page to answer "have they come back on this yet". */}
+          {openVar && (
+            <div style={{
+              background: openVar.instruction ? '#f0fdf4' : (openVar.firstSentAt ? '#fffbeb' : '#f8f9fa'),
+              border: `1px solid ${openVar.instruction ? '#a7f3d0' : (openVar.firstSentAt ? '#fde68a' : LINE)}`,
+              borderRadius: 10, padding: '12px 14px', marginBottom: 14,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.3, color: openVar.instruction ? '#15803d' : (openVar.firstSentAt ? '#92400e' : '#666') }}>
+                  {openVar.instruction ? 'INSTRUCTED' : (openVar.firstSentAt ? 'SENT — NOT YET INSTRUCTED' : 'DRAFT — NOT SENT')}
+                </div>
+                <button onClick={() => downloadPdf(header.varNumber)}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                  Download PDF
+                </button>
+              </div>
+              {openVar.instruction && (
+                <div style={{ fontSize: 12.5, color: INK, marginTop: 5, lineHeight: 1.7 }}>
+                  <strong>{[openVar.instruction.byName, openVar.instruction.byRole, openVar.instruction.byCompany].filter(Boolean).join(', ')}</strong>
+                  <div style={{ color: '#555' }}>
+                    {new Date(openVar.instruction.at).toLocaleString('en-GB')}
+                    {openVar.instruction.byEmail ? ` · via the link sent to ${openVar.instruction.byEmail}` : ''}
+                  </div>
+                </div>
+              )}
+              {!openVar.instruction && openVar.firstSentAt && (
+                <div style={{ fontSize: 12.5, color: '#92400e', marginTop: 4 }}>
+                  Sent {new Date(openVar.firstSentAt).toLocaleDateString('en-GB')} to {(openVar.sentTo || []).join(', ')}
+                  {openVar.reminderSentAt ? `, chased ${new Date(openVar.reminderSentAt).toLocaleDateString('en-GB')}` : ''}.
+                </div>
+              )}
+              <div style={{ fontSize: 11.5, color: '#666', marginTop: 8 }}>
+                Raised {openVar.raisedAt ? new Date(openVar.raisedAt).toLocaleString('en-GB') : '—'}
+                {openVar.raisedBy?.name ? ` by ${openVar.raisedBy.name}` : ''}
+              </div>
+            </div>
+          )}
+
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div><div style={lbl}>Project</div><div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div></div>
