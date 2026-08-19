@@ -12,7 +12,22 @@ import { getProject, get } from '../../lib/db'
 export default async function handler(req, res) {
   if (!requireRole(req, res, ['post-contract', 'management', 'admin'])) return
 
-  const { projectId } = req.query
+  const { projectId, jobNo } = req.query
+
+  // TWO RECORDS PER PROJECT is the thing to check. Settings are stored under the tracking
+  // option id OR the job number, and a variation written against one is invisible to a
+  // reader that finds the other first.
+  if (jobNo) {
+    const byJob = (await getProject(jobNo)) || {}
+    return res.json({
+      ok: true, lookedUpBy: 'jobNo', key: jobNo,
+      count: Array.isArray(byJob.variations) ? byJob.variations.length : 0,
+      variations: (byJob.variations || []).map(v => ({
+        varNumber: v.varNumber, description: (v.description || '').slice(0, 60),
+        instructed: v.instructed || 'no', builtInBuilder: !!v.builder,
+      })),
+    })
+  }
 
   if (projectId) {
     const project = (await getProject(projectId)) || {}

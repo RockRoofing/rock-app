@@ -1,63 +1,60 @@
-pkg523 - one rule for where variations live, and a way to check
-===============================================================
+pkg524 - the missing variations, and Contracted Rates variations
+================================================================
 
-Deploy after pkg522.
+Deploy after pkg523.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/variationInstruct.js
-  components/VariationBuilder.js
-  pages/variations.js
-
-NEW FILE (create)
------------------
+  pages/api/dashboard.js
   pages/api/variation-debug.js
+  pages/contracted-rates.js
+  components/VariationBuilder.js
+
+NEW FILES: none.
 
 
-ANSWER FIRST: THEY MAY WELL STILL BE THERE
---------------------------------------------
-Variations live in TWO places - on the project record, and mirrored onto settings. I found
-NINE readers across the tracker and the builder, each with its own precedence:
+V01 AND V02 - FOUND IT, AND pkg523 COULD NOT HAVE WORKED
+----------------------------------------------------------
+Project settings are looked up by TWO KEYS:
 
-    line 227   project first
-    line 284   settings first
-    line 410   project first
-    line 766   project first
+    const settings = allSettings[id] || allSettings[cp.jobNo] || {}
 
-Some preferred one copy, some the other. So two parts of the same page could legitimately
-disagree about how many variations a project has - and an overwrite of ONE copy makes them
-vanish from a reader that prefers it while the other copy sits there untouched.
+The tracking option id, OR the job number. Two records can exist for the same project, and
+the dashboard returned whichever matched FIRST - so a variation written against the
+job-number record is invisible the moment an id record exists.
 
-ONE RULE NOW: whichever list has more rows wins.
+That is V01 and V02: written against one record, V03 against the other.
 
-Not "project first" or "settings first" - either of those loses data whenever the other
-copy is the fuller one, which is precisely what happened. Tested: with one copy wiped and
-the other intact, all the variations come back.
+pkg523 was the right idea in the wrong place. It compared two lists on the CLIENT, and the
+dashboard only ever sends one - so the recovery could never fire. Resolved on the server
+now, where both records exist.
 
-So there is a real chance this deploy restores them on its own.
+BOTH ARE MERGED, on variation number. Neither is dropped, and where the same number
+appears in both the richer record wins - the one carrying its workings.
+
+    job-number record: V01, V02
+    id record:         V03
+    now returned:      V01, V02, V03
+
+Nothing was ever lost. It was reading the wrong record.
+
+TO CONFIRM ON YOUR DATA, console on any portal page:
+
+    fetch('/api/variation-debug?jobNo=J205').then(r=>r.json()).then(console.log)
+
+That reads the job-number record directly. Writes nothing.
 
 
-CHECK BEFORE ASSUMING THE WORST
----------------------------------
-Console on any portal page:
+CONTRACTED RATES VARIATIONS ARE NOW REAL VARIATIONS
+-----------------------------------------------------
+Turning schedule lines into a variation created a row of numbers and no paperwork - no
+document, nothing to send, nothing to instruct, and nothing for the tracker's View to
+show.
 
-    fetch('/api/variation-debug').then(r=>r.json()).then(console.log)
+It now builds the same record the Variation Builder does: the schedule lines become the
+variation's items at their contracted rates, with the standard clarifications, the
+sub-contract ref, and who raised it.
 
-Every project with variations, and how many are in EACH place:
-
-    { projectId, jobNo, name, onProject: 7, onSettings: 1 }
-
-If onProject and onSettings differ, nothing has been lost - a reader was looking in the
-wrong place, and this package fixes that.
-If BOTH are low, those records are genuinely gone and would need re-entering.
-
-For one project:
-
-    fetch('/api/variation-debug?projectId=PUT_THE_XERO_ID_HERE')
-      .then(r=>r.json()).then(console.log)
-
-That lists every variation in both places - number, description, value, whether it was
-built in the builder and when it was sent. It writes nothing.
-
-Run it before doing anything else, and tell me what it says. It settles in ten seconds
-what I have twice now had to guess at.
+And the SEND WINDOW OPENS STRAIGHT AFTER - the same window, the same email, the same
+instruct button, the same instruction coming back. One send flow, so a variation raised
+from the rate schedule is indistinguishable from one built by hand.

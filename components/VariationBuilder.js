@@ -243,7 +243,10 @@ export function calc(d) {
 // Recipients follow the same idea as the Outstanding Invoices report: the customer's own
 // people are offered as tick boxes, the Rock team can be copied, and anything not on
 // either list can be typed.
-function SendVariationModal({ project, variation, me, onClose, onSent }) {
+// Exported so Contracted Rates can use the same window. One send flow, so a variation
+// raised from the rate schedule goes out looking exactly like one built here - same
+// email, same instruct button, same record coming back.
+export function SendVariationModal({ project, variation, me, onClose, onSent }) {
   // A chase reads differently from a first send. Sending the same email again and calling
   // it a reminder is how customers stop reading them.
   const alreadySent = !!variation.builder?.firstSentAt

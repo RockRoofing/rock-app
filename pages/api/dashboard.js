@@ -395,7 +395,41 @@ export default async function handler(req, res) {
         defectsDate: settings.defectsDate || '',
         completionDate: settings.completionDate || settings.pcDate || '',
         retentionComments: settings.retentionComments || '',
-        variations: settings.variations || [],
+        // BOTH COPIES, fuller one wins.
+        //
+        // This sent settings.variations only. Variations have historically been written
+        // to two places - settings.variations and project.variations - so where the
+        // settings copy was overwritten, the client received the short list and the
+        // originals looked lost while sitting intact on the project record.
+        //
+        // Resolved here rather than on the client, because the client never receives the
+        // second copy to compare against.
+        // BOTH RECORDS, fuller list wins.
+        //
+        // Project settings are looked up by tracking option id OR by job number:
+        //   allSettings[id] || allSettings[cp.jobNo]
+        //
+        // Two records can therefore exist for one project, and this returned whichever
+        // matched FIRST. A variation written against the job-number record is invisible
+        // if an id record also exists - which is what "V01 and V02 are not showing" is.
+        //
+        // Nothing was lost. It was reading the wrong one.
+        variations: (() => {
+          const byId = Array.isArray(allSettings[id]?.variations) ? allSettings[id].variations : []
+          const byJob = Array.isArray(allSettings[cp.jobNo]?.variations) ? allSettings[cp.jobNo].variations : []
+          if (!byJob.length) return byId
+          if (!byId.length) return byJob
+          // Both hold rows: merge on variation number so neither is dropped.
+          const seen = new Map()
+          for (const v of [...byJob, ...byId]) {
+            const k = String(v.varNumber || '').trim().toUpperCase() || Math.random()
+            const prev = seen.get(k)
+            // Prefer the richer record - one built in the builder carries its workings.
+            if (!prev || (!prev.builder && v.builder)) seen.set(k, v)
+          }
+          return [...seen.values()].sort((a, b) =>
+            String(a.varNumber || '').localeCompare(String(b.varNumber || ''), undefined, { numeric: true }))
+        })(),
         applicationDay: settings.applicationDay || null,
         paymentDay: settings.paymentDay || null,
         dateOverrides: settings.dateOverrides || {},

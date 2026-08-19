@@ -284,6 +284,7 @@ export default function ContractedRatesPage() {
   // Turn a below-the-line item into a variation on the project (variation tracker).
   const [varBusy, setVarBusy] = useState(null)
   const [varModal, setVarModal] = useState(null)  // { items:[...], varNumber, description }
+  const [sendVar, setSendVar] = useState(null)    // variation just created, awaiting send
 
   // Open the variation modal for a single item or a group of items.
   // Next variation number for this project: V01, V02, … based on existing ones.
@@ -340,6 +341,30 @@ export default function ContractedRatesPage() {
             // can reproduce them exactly.
             sourceItems: list.map(x => ({ code: x.code || '', description: x.description || '', qty: x.qty ?? null, unit: x.unit || '', rate: x.rate ?? null })),
             instructed: false,
+            // THE BUILDER BLOCK. Without it there is no document to send, nothing to
+            // instruct and nothing for the tracker's View to show - a variation raised
+            // from the rate schedule was a row of numbers and no paperwork.
+            builder: {
+              date: new Date().toISOString().slice(0, 10),
+              subContractRef: selProject?.orderRef || '',
+              requestedBy: '',
+              raisedAt: Date.now(),
+              raisedBy: { name: me?.name || '', email: me?.email || '', phone: me?.phone || '' },
+              // The schedule lines become the variation's items, priced as they are on the
+              // contracted rates - which is the point of raising it this way.
+              items: list.map(x => ({
+                description: x.description || '',
+                qty: x.qty ?? 1,
+                unit: x.unit || '',
+                rate: x.rate ?? 0,
+                total: lineRateTotal(x),
+                materialsTotal: lineMatTotal(x),
+                labourTotal: lineLabTotal(x),
+                profit: Math.max(0, lineRateTotal(x) - lineMatTotal(x) - lineLabTotal(x)),
+                fromContractedRates: true,
+              })),
+              clarifications: BASE_CLARIFICATIONS.slice(),
+            },
             materials: String(Math.round(matTotal * 100) / 100),
             labour: String(Math.round(labTotal * 100) / 100),
             profit: String(Math.round(profit * 100) / 100),
@@ -351,6 +376,10 @@ export default function ContractedRatesPage() {
       setMsg(`Added ${varNumber} to variations (not instructed).`)
       setVarModal(null)
       setSelected(new Set())
+      // Straight into the send window, as the builder does. A variation the customer has
+      // not seen is one they cannot instruct.
+      const created = (d.variations || []).find(v => String(v.varNumber) === String(varNumber))
+      if (created) setSendVar(created)
     } catch (e) { setMsg('Could not create the variation.') }
     setVarBusy(null)
   }
@@ -780,6 +809,15 @@ export default function ContractedRatesPage() {
       </div>
 
       {/* Turn item(s) into a variation */}
+      {sendVar && (
+        <SendVariationModal
+          project={{ ...(selProject || {}), xeroId: projectId }}
+          variation={sendVar}
+          me={me}
+          onClose={() => setSendVar(null)}
+          onSent={(m) => { setSendVar(null); setMsg(m) }} />
+      )}
+
       {varModal && (
         <div onClick={() => setVarModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 24, width: 520, maxWidth: '100%', maxHeight: '88vh', overflow: 'auto' }}>
