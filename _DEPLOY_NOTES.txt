@@ -1,36 +1,77 @@
-pkg503 - timeline moved under the activity
-==========================================
+pkg504 - notification reply-to, and WIP items 1-4
+=================================================
 
-Deploy after pkg502. One changed file: pages/crm.js. No new files.
+Deploy after pkg503.
 
+CHANGED FILES (replace)
+-----------------------
+  pages/wip.js
+  pages/bookkeeping.js
+  pages/admin/notifications.js
+  pages/api/wip.js
+  lib/notifications.js
 
-THE LAYOUT
-----------
-    DEAL                  WHAT HAPPENED?
-    SUMMARY               (call notes)
-    PROJECT DETAILS
-    CUSTOMER CONTACT      SET THE NEXT ACTIVITY
-    ORGANISATION          what / when / who
+NEW FILE (create)
+-----------------
+  pages/api/wip-lock.js
 
-                          TIMELINE
-                          email, notes, previous calls
-
-The timeline is now inside the right-hand column, directly under the activity, instead of
-below both columns. So the details stay beside it for its whole length rather than being
-pushed above it with a tall empty space alongside.
+Your message stopped at "5." - send it and I will pick it up.
 
 
-THE DETAILS COLUMN IS STICKY
-------------------------------
-It stays on screen while you scroll the timeline next to it.
+REPLY-TO ON NOTIFICATIONS
+-------------------------
+"Replies go to" in the notification builder. Set it and replies reach a person instead of
+the sending subdomain, which is not a mailbox.
 
-That matters more here than it sounds: the left column is much shorter than the right once
-the timeline is in there, so without this the phone number would scroll out of view
-exactly when you were reading back through what was last said - which is the moment you
-want both.
+Every notification now carries a footer saying where replies go - or, if the field is
+blank, that they are not monitored. That matters more than the field itself: somebody
+replying "yes, done that" currently believes they have responded.
 
-Capped at 82% of the window height with its own scroll, for a project carrying all 34
-fields.
 
-The timeline gets a little more room too - 380px rather than 320px - now that it is not
-competing with anything below it.
+1. LOCK THE WIP AND TELL ACCOUNTS
+-----------------------------------
+A banner at the top of the WIP page, in the two colours you asked for:
+
+    WIP NOT COMPLETE   red    "Accounts have not been told these figures are final."
+    WIP COMPLETE       green  "Signed off by James on 19/08/2026 at £412,880.14."
+
+The button emails everyone with Bookkeeping access - accounts, management and admin, read
+from the actual role map rather than a guessed field - with the month, the total and who
+signed it off. It reports how many people were notified.
+
+A LOCK IS A RECORD, NOT A RESTRICTION. It does not stop the commercial team editing
+afterwards; a genuine correction found on the 3rd should not need an unlock ceremony. But
+reopening is explicit and confirms, so a signed-off month cannot be quietly changed.
+
+
+2. WIP IN BOOKKEEPING, VIEW ONLY
+----------------------------------
+New WIP tab, same pattern as Retention. Accounts see the figures and the sign-off status;
+the margin editors, the Zero buttons and the manual adjustments are not rendered.
+
+The accounts role can reach the embed and NOT the full page - checked both ways.
+
+
+3. ZERO A PROJECT
+-----------------
+A "Zero" button beside the margin on each project. One click writes it down to £0 for
+unclaimable costs, instead of working out the offsetting figure and fiddling the margin.
+
+It posts ONE adjustment at margin 0, which is the important detail: the calculation grosses
+every adjustment up at its own margin, and 0 passes the amount through at face value - so
+-wipValue cancels exactly. A normal cost adjustment at the project margin would overshoot.
+
+Proven: £53,846.15 WIP, zeroed, comes out at £0.00.
+
+It shows in the adjustments list rather than being a hidden flag, so a written-down project
+is visibly written down, and "Un-zero" removes it.
+
+
+4. NO MORE JUMPING TO THE TOP
+-------------------------------
+Every edit called load(), which set a loading flag, unmounted the whole table and rebuilt
+it - so you lost your place on every single change.
+
+Edits now use a quiet refresh: same request, same data, no loading flag. React updates the
+numbers that changed and leaves the scroll position alone. The month selector keeps its
+spinner, because that genuinely is a new page of data.

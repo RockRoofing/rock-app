@@ -182,6 +182,13 @@ export default function NotificationsBuilder() {
 
               {/* Content */}
               <Field label="Email subject"><input value={editing.subject} onChange={e => set({ subject: e.target.value })} style={inp} placeholder="e.g. Weekly Commercial Tasks reminder" /></Field>
+              {/* REPLY-TO. Without one, a reply goes to the sending subdomain, which is
+                  not a mailbox - so somebody answers "yes, done that" and it disappears
+                  with no bounce and no sign anything went wrong. */}
+              <Field label="Replies go to">
+                <input type="email" value={editing.replyTo || ''} onChange={e => set({ replyTo: e.target.value })}
+                  style={inp} placeholder="e.g. dori@rockroofing.co.uk — leave blank and replies go nowhere" />
+              </Field>
               <Field label="Email body"><textarea value={editing.body} onChange={e => set({ body: e.target.value })} rows={5} style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} placeholder="The message that will be emailed…" /></Field>
 
               {msg && <div style={{ fontSize: 12.5, color: msg.includes('fail') || msg.includes('Give') ? '#dc2626' : '#0f766e', margin: '4px 0 10px' }}>{msg}</div>}

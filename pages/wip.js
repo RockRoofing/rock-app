@@ -53,7 +53,7 @@ export default function WipPage() {
         })
         setCarriedIds(ids => [...ids, a.id])
       }
-      await load()
+      await refresh()
     } catch {}
     setCarrying(null)
   }
@@ -61,15 +61,68 @@ export default function WipPage() {
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
       if (!d.user) { router.replace('/login'); return }
-      if (!['post-contract', 'management', 'admin'].includes(d.user.role)) { router.replace('/'); return }
+      // Accounts can view the embed, but not the full page - they have no business
+      // editing adjustments or signing the month off.
+      const viewing = new URLSearchParams(window.location.search).get('embed') === '1'
+      const allowed = viewing
+        ? ['post-contract', 'management', 'admin', 'accounts']
+        : ['post-contract', 'management', 'admin']
+      if (!allowed.includes(d.user.role)) { router.replace('/'); return }
+      setMe(d.user)
       setOk(true)
     }).catch(() => router.replace('/login'))
   }, [])
+
+  const [me, setMe] = useState(null)
+  // READ-ONLY EMBED (?embed=1), for the Bookkeeping portal. Same figures, none of the
+  // controls - Accounts need to see the WIP, not maintain it.
+  const [embed, setEmbed] = useState(false)
+  useEffect(() => {
+    try { setEmbed(new URLSearchParams(window.location.search).get('embed') === '1') } catch {}
+  }, [])
+  const lock = data?.lock || null
+  const [locking, setLocking] = useState(false)
+
+  // Lock the month and tell Accounts. A record rather than a restriction - see the note
+  // on the endpoint - so a correction found afterwards is still possible, but unlocking
+  // is deliberate and leaves a trace.
+  async function toggleLock() {
+    const label = new Date(`${month}-01T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    if (lock) {
+      if (!confirm(`Unlock ${label} WIP?\n\nAccounts have already been told it was complete.`)) return
+    } else {
+      if (!confirm(`Mark ${label} WIP complete?\n\nTotal ${fmtC(data?.totalWip || 0)}.\n\nEveryone with Bookkeeping access will be emailed.`)) return
+    }
+    setLocking(true)
+    try {
+      const r = await fetch('/api/wip-lock', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, action: lock ? 'unlock' : 'lock', by: me?.name || '', totalWip: data?.totalWip || 0 }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Failed')
+      await refresh()
+      if (!lock) alert(d.notified?.length ? `Marked complete. ${d.notified.length} people notified.` : 'Marked complete. Nobody has Bookkeeping access to notify.')
+    } catch (e) { alert(`Could not update: ${e.message || ''}`.trim()) }
+    setLocking(false)
+  }
 
   async function load() {
     setLoading(true)
     try { const d = await fetch(`/api/wip?month=${month}`).then(r => r.json()); setData(d) } catch {}
     setLoading(false)
+  }
+
+  // REFRESH WITHOUT THE LOADING SCREEN.
+  //
+  // load() sets loading, which unmounts the whole table and rebuilds it - so every edit
+  // threw you back to the top of the page and you had to find your place again. On a
+  // month with fifty projects that is the difference between a minute's work and ten.
+  //
+  // Same request, same data, no flag. React re-renders the rows whose numbers changed and
+  // leaves the scroll position alone.
+  async function refresh() {
+    try { const d = await fetch(`/api/wip?month=${month}`).then(r => r.json()); setData(d) } catch {}
   }
   useEffect(() => { if (ok) load() }, [ok, month])
 
@@ -104,6 +157,42 @@ export default function WipPage() {
               </div>
             </div>
           </div>
+
+          {/* WHETHER THIS MONTH IS SIGNED OFF. At the top, in the two colours, because
+              the question "is the WIP done yet" is the one Accounts keep asking and the
+              answer was not written down anywhere. */}
+          {(
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+            background: lock ? '#ecfdf5' : '#fef2f2',
+            border: `1px solid ${lock ? '#a7f3d0' : '#fecaca'}`,
+            borderRadius: 10, padding: '12px 16px', marginBottom: 16,
+          }}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: lock ? '#15803d' : '#dc2626' }}>
+                {lock ? 'WIP COMPLETE' : 'WIP NOT COMPLETE'}
+              </div>
+              <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+                {lock
+                  ? `Signed off${lock.lockedBy ? ` by ${lock.lockedBy}` : ''} on ${new Date(lock.lockedAt).toLocaleDateString('en-GB')} at ${fmtC(lock.totalWip)}.`
+                  : 'Accounts have not been told these figures are final.'}
+              </div>
+            </div>
+            {/* The STATUS shows in the embed - it is the thing Accounts most need to
+                know - but the button does not. Signing the month off is the commercial
+                team's call. */}
+            {!embed && (
+            <button onClick={toggleLock} disabled={locking}
+              style={{
+                background: lock ? '#fff' : '#15803d', color: lock ? '#666' : '#fff',
+                border: `1px solid ${lock ? '#ddd' : '#15803d'}`, borderRadius: 8,
+                padding: '9px 16px', fontSize: 13.5, fontWeight: 700, cursor: locking ? 'default' : 'pointer', whiteSpace: 'nowrap',
+              }}>
+              {locking ? 'Working…' : (lock ? 'Reopen this month' : 'Mark WIP complete & notify Accounts')}
+            </button>
+            )}
+          </div>
+          )}
 
           {/* Missing application/valuation dates — same as Applications / Calendar */}
           {(data?.missingDates || []).length > 0 && (
@@ -147,16 +236,16 @@ export default function WipPage() {
               No WIP to show for {monthLabel(month)}. Projects appear here when there are post-valuation costs, credit notes, or manual adjustments in the month.
             </div>
           ) : (
-            projects.map(p => <ProjectSection key={p.id} p={p} month={month} onChange={load} />)
+            projects.map(p => <ProjectSection key={p.id} p={p} month={month} onChange={refresh} readOnly={embed} />)
           )}
         </div>
-        {datesModal && <ProjectDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); load() }} />}
+        {datesModal && <ProjectDatesModal project={datesModal} onClose={() => setDatesModal(null)} onSaved={() => { setDatesModal(null); refresh() }} />}
       </div>
     </>
   )
 }
 
-function ProjectSection({ p, month, onChange }) {
+function ProjectSection({ p, month, onChange, readOnly = false }) {
   const [sortCol, setSortCol] = useState('date')
   const [sortDir, setSortDir] = useState('asc')
   const [marginEdit, setMarginEdit] = useState(p.margin != null ? (p.margin * 100).toFixed(1) : '')
@@ -190,6 +279,54 @@ function ProjectSection({ p, month, onChange }) {
       await onChange()
     } catch {}
     setSavingMargin(false)
+  }
+
+  // ZEROING A PROJECT.
+  //
+  // Posts ONE adjustment that cancels whatever the WIP currently is, tagged so it can be
+  // recognised and removed again. Deliberately an adjustment rather than a flag on the
+  // project:
+  //
+  //   - it shows in the adjustments list, so the write-down is visible rather than a
+  //     project mysteriously reading zero
+  //   - it carries the project's own margin, so the gross-up cancels exactly - the same
+  //     sign-symmetry the WIP calculation already relies on
+  //   - it is reversible by deleting one row
+  const ZERO_TAG = 'Zeroed - unclaimable costs'
+  const zeroAdj = (p.adjustments || []).find(a => a.description === ZERO_TAG)
+  const isZeroed = !!zeroAdj
+  const [zeroing, setZeroing] = useState(false)
+
+  async function zeroProject() {
+    if (isZeroed) {
+      if (!confirm(`Remove the zeroing on ${p.jobNo || p.name}?\n\nThe project's real WIP comes back.`)) return
+      setZeroing(true)
+      try {
+        await fetch(`/api/project/${p.id}/wip-adjustments`, {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adjId: zeroAdj.id }),
+        })
+        await onChange()
+      } catch {}
+      setZeroing(false)
+      return
+    }
+    const current = Number(p.wipValue) || 0
+    if (Math.abs(current) < 0.01) { alert('This project is already at £0.'); return }
+    if (!confirm(`Write ${p.jobNo || p.name} down to £0?\n\nCurrent WIP ${fmtC(current)}. An adjustment of ${fmtC(-current)} will be added, and can be removed again later.`)) return
+    setZeroing(true)
+    try {
+      await fetch(`/api/project/${p.id}/wip-adjustments`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // margin 0 is the important part: the calculation grosses every adjustment up
+        // at its own margin, and 0 passes the amount through at face value - so -wipValue
+        // cancels the project exactly. A 'cost' type with the project margin would
+        // overshoot and leave a negative.
+        body: JSON.stringify({ month, type: 'Cost', description: ZERO_TAG, amount: -current, margin: 0 }),
+      })
+      await onChange()
+    } catch {}
+    setZeroing(false)
   }
 
   // Clear the project's WIP margin override -> reverts to the calculated (live) margin.
@@ -229,6 +366,11 @@ function ProjectSection({ p, month, onChange }) {
         <div style={{ textAlign: 'right' }}>
           <span style={{ fontSize: 11, color: '#888' }}>Project WIP </span>
           <span style={{ fontSize: 18, fontWeight: 800, color: '#16a34a' }}>{fmtC(p.wipValue)}</span>
+          {readOnly ? (
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              Margin {p.margin != null ? (p.margin * 100).toFixed(1) + '%' : '—'}
+            </div>
+          ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', marginTop: 4 }}>
             <span style={{ fontSize: 11, color: '#888' }}>Margin</span>
             <input type="number" value={marginEdit} onChange={e => setMarginEdit(e.target.value)} placeholder="—"
@@ -236,7 +378,16 @@ function ProjectSection({ p, month, onChange }) {
             <span style={{ fontSize: 11, color: '#888' }}>%</span>
             <button onClick={saveMargin} disabled={savingMargin} style={{ background: '#f0f2f5', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#333' }}>{savingMargin ? '…' : 'Save'}</button>
             {p.marginIsOverride && <button onClick={clearMargin} disabled={savingMargin} title="Clear override — revert to calculated margin" style={{ background: 'none', border: '1px solid #ddd', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: '#666' }}>Clear override</button>}
+            {/* ZERO. For costs we have incurred and cannot claim - rather than working out
+                the offsetting figure by hand and fiddling the margin until the number
+                comes right. */}
+            <button onClick={zeroProject} disabled={savingMargin || zeroing}
+              title={isZeroed ? 'Remove the zeroing adjustment and restore the real WIP' : 'Write this project down to £0 WIP'}
+              style={{ background: isZeroed ? '#fff7ed' : '#fff', border: `1px solid ${isZeroed ? '#fdba74' : '#ddd'}`, borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: isZeroed ? '#c2410c' : '#333', fontWeight: 600 }}>
+              {zeroing ? '…' : (isZeroed ? 'Un-zero' : 'Zero')}
+            </button>
           </div>
+          )}
           <div style={{ fontSize: 10, color: p.marginIsOverride ? '#b45309' : '#aaa', marginTop: 2 }}>
             {p.marginIsOverride
               ? `override (calculated: ${p.calculatedMargin != null ? (p.calculatedMargin * 100).toFixed(1) + '%' : '—'})`
@@ -287,7 +438,7 @@ function ProjectSection({ p, month, onChange }) {
               </table>
             </div>
           )}
-          <ManualAdjustments p={p} month={month} onChange={onChange} />
+          {!readOnly && <ManualAdjustments p={p} month={month} onChange={onChange} />}
         </div>
 
         {/* RIGHT: credit notes */}

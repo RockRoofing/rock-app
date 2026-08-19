@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx'
 
 // One list of tabs, used by the tab strip and by the export filename. Two copies would
 // drift, and the file somebody saves is the one that has to say what it is.
-const TABS = [['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention']]
+const TABS = [['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention'], ['wip', 'WIP']]
 const TAB_LABELS = Object.fromEntries(TABS)
 import Link from 'next/link'
 import ReportImprovementLink from '../components/ReportImprovementLink'
@@ -422,6 +422,14 @@ export default function BookkeepingPage() {
               {tab === 'retention' ? (
                 <div style={{ margin: -16 }}>
                   <iframe src="/retention?embed=1" title="Retention Tracker (read-only)"
+                    style={{ width: '100%', height: 'calc(100vh - 220px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
+                </div>
+              ) : tab === 'wip' ? (
+                // Read-only WIP, the same pattern as Retention. Accounts see the figures
+                // and whether the month has been signed off; the margin editors, the Zero
+                // buttons and the manual adjustments are not rendered in the embed.
+                <div style={{ margin: -16 }}>
+                  <iframe src="/wip?embed=1" title="WIP (read-only)"
                     style={{ width: '100%', height: 'calc(100vh - 220px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
                 </div>
               ) : (<>

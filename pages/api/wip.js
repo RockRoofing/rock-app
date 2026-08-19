@@ -150,5 +150,9 @@ export default async function handler(req, res) {
 
   out.sort((a, b) => (a.jobNo || a.name).localeCompare(b.jobNo || b.name, undefined, { numeric: true }))
 
-  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, totalWipProfit, missingDates })
+  // Whether this month's WIP has been signed off, so the page can say so and Bookkeeping
+  // knows the figures are final rather than mid-edit.
+  const lock = (await redis.get(`wip:lock:${month}`).catch(() => null)) || null
+
+  return res.json({ month, monthEnd: monthEndStr, projects: out, totalWip, totalWipProfit, missingDates, lock })
 }
