@@ -562,9 +562,10 @@ export default function RetentionPage() {
         )}
 
         <div style={embed ? { padding: 24 } : { padding: 24, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          {/* Summary cards, with the page's own actions stacked at the right. Cards are
-              smaller than they were - four headline figures do not need to be the tallest
-              thing on a page whose point is the table below. */}
+          {/* Summary cards and the page's own actions. Hidden in the EMBED: Bookkeeping
+              wants the register itself, and four tiles above it eat the height the table
+              needs inside a frame. */}
+          {!embed && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch', flexShrink: 0 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
@@ -598,6 +599,7 @@ export default function RetentionPage() {
             </div>
             )}
           </div>
+          )}
 
           {/* Add form */}
           {showAddForm && (

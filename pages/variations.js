@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
+import VariationBuilder from '../components/VariationBuilder'
 import { useRouter } from 'next/router'
 
 // Pence-accurate throughout. Variations are individually small and have to add up to
@@ -37,6 +38,7 @@ export default function VariationTracker() {
   const router = useRouter()
   const isEmbed = router.query.embed === 'true'
   const [projects, setProjects] = useState([])
+  const [subTab, setSubTab] = useState('tracker')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -332,6 +334,25 @@ export default function VariationTracker() {
         )}
 
         <div style={{ padding: 24 }}>
+          {/* Two sub-tabs. The tracker is the register of every variation however it was
+              raised; the builder is one way of raising one. Variations added straight to
+              the tracker, or from a project, are unaffected. */}
+          {!isEmbed && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+              {[['tracker', 'Variation Tracker'], ['builder', 'Variation Builder']].map(([id, label]) => (
+                <button key={id} onClick={() => setSubTab(id)}
+                  style={{
+                    background: subTab === id ? '#1a1a2e' : '#fff', color: subTab === id ? '#fff' : '#555',
+                    border: `1px solid ${subTab === id ? '#1a1a2e' : '#ddd'}`, borderRadius: 8,
+                    padding: '8px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                  }}>{label}</button>
+              ))}
+            </div>
+          )}
+
+          {subTab === 'builder' && !isEmbed ? (
+            <VariationBuilder projects={projects} onSaved={loadProjects} />
+          ) : (<>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a1a2e' }}>Variation Tracker</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -497,6 +518,7 @@ export default function VariationTracker() {
               </div>
             )}
           </div>
+          </>)}
         </div>
 
         {/* Edit Variation Modal */}

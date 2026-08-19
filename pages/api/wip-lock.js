@@ -1,5 +1,5 @@
 import { requireRole } from '../../lib/portalAuth'
-import { getAllUsers } from '../../lib/db'
+import { getPortalUsers } from '../../lib/db'
 import { canAccessArea } from '../../lib/roles'
 
 // Locking a month's WIP.
@@ -33,8 +33,9 @@ export default async function handler(req, res) {
   // Tell everyone who works from these figures. Anyone with bookkeeping access - that is
   // who is waiting on it, and the whole point of the button is that they stop asking.
   let notified = []
+  let notifyError = null
   try {
-    const users = await getAllUsers()
+    const users = await getPortalUsers()
     const to = (users || [])
       // The real access map, not a guess. canAccessArea('bookkeeping') is accounts,
       // management and admin - exactly the people who work from these figures.
@@ -59,7 +60,13 @@ export default async function handler(req, res) {
       })
       notified = to
     }
-  } catch { /* the lock still stands even if the email fails */ }
+  } catch (e) {
+    // The lock still stands if the email fails - but SAY SO. This swallowed the error
+    // silently, and the wrong import name meant it reported "nobody has Bookkeeping
+    // access" when the real problem was that the lookup had thrown. A quiet catch turned
+    // a typo into a plausible-sounding business answer.
+    notifyError = e?.message || 'Notification failed'
+  }
 
-  return res.json({ ok: true, lock, notified })
+  return res.json({ ok: true, lock, notified, notifyError })
 }

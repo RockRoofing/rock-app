@@ -82,6 +82,25 @@ export default function WipPage() {
   }, [])
   const lock = data?.lock || null
   const [locking, setLocking] = useState(false)
+  const [pdfing, setPdfing] = useState(false)
+
+  // Download rather than open in a tab: this is a document to file or send on, and in the
+  // Bookkeeping frame a new tab is the only way it can be opened at all.
+  async function downloadPdf() {
+    setPdfing(true)
+    try {
+      const r = await fetch(`/api/wip-pdf?month=${month}`)
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Failed (${r.status})`)
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `WIP ${monthLabel(month)}.pdf`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+    } catch (e) { alert(`Could not download: ${e.message || ''}`.trim()) }
+    setPdfing(false)
+  }
 
   // Lock the month and tell Accounts. A record rather than a restriction - see the note
   // on the endpoint - so a correction found afterwards is still possible, but unlocking
@@ -102,7 +121,14 @@ export default function WipPage() {
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Failed')
       await refresh()
-      if (!lock) alert(d.notified?.length ? `Marked complete. ${d.notified.length} people notified.` : 'Marked complete. Nobody has Bookkeeping access to notify.')
+      if (!lock) {
+        // Distinguish "there is nobody to tell" from "telling them failed". The first is
+        // a fact about your users; the second is a fault, and reporting one as the other
+        // is what hid a wrong import name behind a believable message.
+        if (d.notifyError) alert(`Marked complete, but the notification failed:\n\n${d.notifyError}`)
+        else if (d.notified?.length) alert(`Marked complete. ${d.notified.length} notified: ${d.notified.join(', ')}`)
+        else alert('Marked complete. No portal user has Accounts, Management or Admin access, so there was nobody to notify.')
+      }
     } catch (e) { alert(`Could not update: ${e.message || ''}`.trim()) }
     setLocking(false)
   }
@@ -134,27 +160,41 @@ export default function WipPage() {
     <>
       <Head><title>WIP · Rock Roofing</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-        <CommercialNav active="/wip" />
+        {/* No nav in the embed - Bookkeeping reaches this through their own tabs, and a
+            second navigation bar inside the frame is a way out of the read-only view. */}
+        {!embed && <CommercialNav active="/wip" />}
         <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
 
           {/* Header: total WIP + month filter */}
+          {/* The title and the Total WIP card are dropped in the embed - Bookkeeping has
+              its own tab heading above the frame, and the total is on the status banner
+              below. The MONTH SELECTOR stays: a view of one month with no way to change
+              it would be worse than useless. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14, marginBottom: 18 }}>
-            <div>
-              <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Work in Progress</h1>
-              <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>Figures as at valuation date · {monthLabel(month)}</div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '10px 18px', textAlign: 'right' }}>
-                <div style={{ fontSize: 11, color: '#888' }}>Total WIP</div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a' }}>{fmtC(data?.totalWip)}</div>
-                <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Profit in WIP: <strong style={{ color: '#0f766e' }}>{fmtC(data?.totalWipProfit)}</strong></div>
+            {!embed && (
+              <div>
+                <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Work in Progress</h1>
+                <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>Figures as at valuation date · {monthLabel(month)}</div>
               </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: embed ? 0 : 'auto' }}>
+              {!embed && (
+                <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '10px 18px', textAlign: 'right' }}>
+                  <div style={{ fontSize: 11, color: '#888' }}>Total WIP</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a' }}>{fmtC(data?.totalWip)}</div>
+                  <div style={{ fontSize: 11, color: '#888', marginTop: 2 }}>Profit in WIP: <strong style={{ color: '#0f766e' }}>{fmtC(data?.totalWipProfit)}</strong></div>
+                </div>
+              )}
               <div>
                 <div style={{ fontSize: 11, color: '#888', marginBottom: 3 }}>Figures as at valuation date (month)</div>
                 <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, background: '#fff' }}>
                   {monthOptions().map(mk => <option key={mk} value={mk}>{monthLabel(mk)}</option>)}
                 </select>
               </div>
+              <button onClick={downloadPdf} disabled={pdfing}
+                style={{ background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: pdfing ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                {pdfing ? 'Building…' : 'Download PDF'}
+              </button>
             </div>
           </div>
 
@@ -175,7 +215,7 @@ export default function WipPage() {
               <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
                 {lock
                   ? `Signed off${lock.lockedBy ? ` by ${lock.lockedBy}` : ''} on ${new Date(lock.lockedAt).toLocaleDateString('en-GB')} at ${fmtC(lock.totalWip)}.`
-                  : 'Accounts have not been told these figures are final.'}
+                  : `Total WIP ${fmtC(data?.totalWip)} · profit ${fmtC(data?.totalWipProfit)}. Accounts have not been told these figures are final.`}
               </div>
             </div>
             {/* The STATUS shows in the embed - it is the thing Accounts most need to

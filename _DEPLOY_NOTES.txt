@@ -1,55 +1,53 @@
-pkg506 - "Proposed Final Account and Interim Application for Payment"
-=====================================================================
+pkg509 - Bookkeeping views cleaned up, and a WIP PDF
+====================================================
 
-Deploy after pkg505.
+Deploy after pkg508.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/applications.js
-  lib/applicationPdf.js
-  pages/applications.js
-  pages/api/application-pdf.js
-  pages/api/application-send.js
+  pages/wip.js
+  pages/retention.js
 
-NEW FILES: none.
-
-
-WHAT THE CUSTOMER NOW SEES
---------------------------
-PDF heading and email subject:
-
-    Proposed Final Account and Interim Application for Payment 14 - August 2026
-
-Email body:
-
-    Please find attached our proposed final account and interim application for
-    payment 14 for August.
-
-    This is our proposed final account for this project. The payment claimed is
-    interim and remains subject to agreement.
+NEW FILES (create)
+------------------
+  lib/wipPdf.js
+  pages/api/wip-pdf.js
 
 
-TWO OTHER PLACES SAID THE OPPOSITE
-------------------------------------
-Worth flagging, because the wording only works if everything agrees.
+THE BOOKKEEPING FRAMES SHOW THE PAGE AND NOTHING ELSE
+-------------------------------------------------------
+WIP: the Commercial nav is gone - it was still rendering inside the frame, which is both a
+second navigation bar and a way out of the read-only view. The title and the Total WIP
+card are gone too.
 
-The PDF banner read "FINAL ACCOUNT - this is the last application on this project", and
-the email body read "This is our final account for this project." Both assert finality -
-which is the one thing the new wording is careful not to do.
+RETENTION: the four summary cards are gone. Its nav was already hidden.
 
-Both now say proposed, and that the payment is interim.
+Two things deliberately KEPT in both:
+
+  THE MONTH SELECTOR on WIP. A view of one month with no way to change it would be worse
+  than useless.
+
+  THE SIGN-OFF BANNER. WIP COMPLETE / WIP NOT COMPLETE is the single thing Accounts most
+  need from that tab. The total has moved onto that banner, so removing the card loses
+  nothing.
+
+Both remain view-only: no margin editors, no Zero buttons, no manual adjustments, no
+project links.
 
 
-SHORT FORM WHERE THE LONG ONE WILL NOT FIT
---------------------------------------------
-    filename    Proposed Final Account 14 - J178 Gas Lane.pdf
-    list badge  FINAL ACCOUNT
+DOWNLOAD PDF
+------------
+A button beside the month selector, on the full page AND in the Bookkeeping tab. Accounts
+can see the figures there, so refusing them the download would be a distinction with no
+purpose.
 
-58 characters is unusable in a filename and impossible in a badge. The documents the
-customer reads carry the full phrase; the places only you see carry the short one.
+Landscape A4, one row per project: job, name, valuation date, post-valuation costs,
+adjustments, margin, profit in WIP, WIP. Totals at the foot, and the sign-off state across
+the top in red or green.
 
+A SUMMARY, not the whole screen. The page lists every post-valuation cost line for every
+project - hundreds of rows on a busy month, and a document nobody would print. What a WIP
+PDF is for is the figure per project and the total.
 
-THE HEADING SCALES TO FIT
--------------------------
-At 20pt the full title runs off the page. It now shrinks until it fits the width available
-- about 14pt - rather than being cut off. Floor of 11pt so it stays readable.
+Built from the same /api/wip the page reads, so the PDF and the screen cannot disagree.
+Paginates with the headings repeated.
