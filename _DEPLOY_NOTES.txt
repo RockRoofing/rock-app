@@ -1,67 +1,55 @@
-pkg512 - Variation Builder corrections
-======================================
+pkg513 - the WIP PDF now shows the build-up behind each project
+===============================================================
 
-Deploy after pkg511.
-
-CHANGED FILES (replace)
------------------------
-  components/VariationBuilder.js
-  pages/api/dashboard.js
-
-NEW FILES: none.
+Deploy after pkg512. One changed file: lib/wipPdf.js. No new files.
 
 
-1. MARK-UP, NOT MARGIN - and it matters
------------------------------------------
-You were right, and the difference is real money:
+THE SHAPE
+---------
+    PAGE 1        the summary, exactly as it was - one row per project, totals, sign-off
+    PAGE 2 on     one page per project, showing where its figure came from
 
-    20% MARK-UP on £1,000 of cost   sell £1,200.00   profit £200
-    20% MARGIN  on £1,000 of cost   sell £1,250.00   profit £250
+The summary answers "what is the WIP". The pages behind it answer "why", which is the
+question anybody reviewing it asks next - and the reason a summary on its own tends to
+come straight back with "where has that come from".
 
-£50 per £1,000. The builder was computing the second and calling it the first.
-
-Now cost x (1 + mark-up). Checked: 25% mark-up on £2,173.20 of cost gives £543.30 of
-profit, which is 25.0% OF COST.
-
-
-2. NO DEFAULT MARK-UP
----------------------
-The box starts empty and outlined red. The window will not close - not on the x, not on
-Save, not on Escape - until a figure is entered, and the Save button is greyed until it is.
-
-A mark-up that arrives pre-filled is a mark-up nobody checks. 20% sitting there on a job
-priced at 30% is money given away without anyone deciding to.
-
-New items no longer seed one either, which is what would have defeated the rule.
+A page per project, so a single job can be printed or sent on its own.
 
 
-3. UNITS ARE A DROPDOWN
------------------------
-m2, m, nr, item. No typing.
+WHAT IS ON A PROJECT PAGE
+-------------------------
+    J178 - Gas Lane
+    Valuation date 31/07/2026  ·  margin 22.0%
 
-Free text produced "m2", "M2", "sqm" and "sq m" on four lines of the same variation, which
-is the sort of thing that only shows up when somebody totals a remeasure.
+    Post-valuation costs (3)
+    03/08/2026  SIG Roofing    INV-8841  5000 Materials     Materials   £12,400.55
+    07/08/2026  Wienerberger   INV-2231  5000 Materials     Materials    £8,800.20
+    11/08/2026  Rock Labour    WK32      6000 Direct wages  Labour       £6,200.00
+                                              Total post-valuation costs £27,400.75
 
-Starts blank, so a unit is chosen rather than accepted.
+    Manual adjustments (1)
+                Zeroed - unclaimable costs                    0%        -£5,000.00
+
+    Build-up
+    Post-valuation costs                                                £27,400.75
+    Manual adjustments                                                  -£5,000.00
+    Grossed up at 22.0% margin                                           £6,318.16
+    WIP                                                                 £28,718.91
+
+The build-up reconciles to the front page exactly - checked on the test document.
+
+Manual adjustments include any "Zeroed" write-down, which is precisely what somebody
+reviewing the WIP needs to see rather than a project quietly reading nil.
 
 
-4. MATERIALS AND LABOUR ROWS HAVE A UNIT
-------------------------------------------
-Same dropdown on every line, so the workings read properly: 130 m2 of membrane, 6 nr of
-tape, 3 nr of labour.
+TWO THINGS THE TEST DOCUMENT CAUGHT
+-------------------------------------
+THE POUND SIGN WAS BEING STRIPPED. Sanitising to printable ASCII turned every "£" into a
+hyphen, so £27,400.75 printed as "-27,400.75" - which on a page of costs reads as a
+negative number rather than a currency symbol. The application PDF already keeps £ for the
+same reason; this one now does too.
 
+NEGATIVES read -£5,000.00 rather than £-5,000.00.
 
-5. REQUESTED BY
----------------
-Now offers the customer's own people from the handover, with their job titles, plus the
-company and the QS:
-
-    Jack Belshaw (Senior QS)
-    Chris Lee (PM)
-    Barnfield Construction Ltd
-    Nathan Rewbury
-
-Still free text - the person who rang up is not always on the handover.
-
-This needed the dashboard to expose customerContacts, which it was resolving from the IHM
-and then discarding. That is the second changed file.
+Long values are trimmed to their column rather than running into the next one, and both
+the cost list and the adjustments repeat their headings across a page break.
