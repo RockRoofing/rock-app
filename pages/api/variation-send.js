@@ -1,6 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
 import { buildVariationPDF } from '../../lib/variationPdf'
+import { createInstructToken } from '../../lib/variationInstruct'
 
 // Variation PDF and send.
 //
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { projectId, varNumber, to, cc, replyTo, subject, text } = req.body || {}
+  const { projectId, varNumber, to, cc, replyTo, subject, text, reminder } = req.body || {}
   const recipients = (Array.isArray(to) ? to : [to]).filter(Boolean)
   if (!recipients.length) return res.status(400).json({ error: 'At least one recipient is required' })
   if (!subject) return res.status(400).json({ error: 'Subject is required' })
@@ -75,19 +76,44 @@ export default async function handler(req, res) {
       .replace(/[^a-zA-Z0-9 .-]/g, '')
     const ccList = (Array.isArray(cc) ? cc : [cc]).filter(Boolean)
 
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: FROM, to: recipients, subject,
-        ...(ccList.length ? { cc: ccList } : {}),
-        // Replies go to the person who sent it, not to a sending subdomain nobody reads -
-        // a customer querying a variation must reach the person who raised it.
-        ...(replyTo ? { reply_to: replyTo } : {}),
-        text,
-        attachments: [{ filename: fname, content: b64 }],
-      }),
-    })
+    // ONE EMAIL PER RECIPIENT, so each carries a link issued to THAT address. A single
+    // email to four people would give four identical links, and the instruction would only
+    // ever be able to say "someone at the customer clicked it".
+    const proto = req.headers['x-forwarded-proto'] || 'https'
+    const origin = `${proto}://${req.headers.host}`
+    const esc = (x) => String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const htmlFor = (addr) => {
+      const link = `${origin}/instruct/${createInstructToken({ projectId, varNumber, email: addr })}`
+      return `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
+        + esc(text).replace(/\n/g, '<br>')
+        + `<div style="margin:24px 0">`
+        + `<a href="${link}" style="display:inline-block;background:#15803d;color:#fff;text-decoration:none;`
+        + `padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">Instruct variation ${esc(varNumber)}</a>`
+        + `</div>`
+        + `<div style="font-size:12px;color:#888">`
+        + `This link is unique to you and records your instruction against this variation. `
+        + `If the button does not work, use this address:<br>${esc(link)}`
+        + `</div></div>`
+    }
+
+    let last = null
+    for (const addr of recipients) {
+      const r = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: FROM, to: [addr], subject,
+          // Only the first recipient carries the cc, or the team gets one copy each.
+          ...(ccList.length && addr === recipients[0] ? { cc: ccList } : {}),
+          ...(replyTo ? { reply_to: replyTo } : {}),
+          text, html: htmlFor(addr),
+          attachments: [{ filename: fname, content: b64 }],
+        }),
+      })
+      last = r
+      if (!r.ok) break
+    }
+    const r = last
     const d = await r.json()
     if (!r.ok) throw new Error(d?.message || 'Send failed')
 
@@ -100,7 +126,15 @@ export default async function handler(req, res) {
       const vars = Array.isArray(fresh.variations) ? fresh.variations : []
       const next = vars.map(v => String(v.varNumber) !== String(varNumber) ? v : ({
         ...v,
-        builder: { ...(v.builder || {}), sentAt: Date.now(), sentTo: recipients, sentBy: replyTo || '' },
+        builder: {
+          ...(v.builder || {}),
+          // firstSentAt is the clock the reminder runs off, and it does NOT move when a
+          // reminder goes out - otherwise chasing would push the next chase back for ever.
+          firstSentAt: (v.builder || {}).firstSentAt || Date.now(),
+          sentAt: Date.now(),
+          sentTo: recipients, sentBy: replyTo || '',
+          ...(reminder ? { lastReminderAt: Date.now(), reminderCount: ((v.builder || {}).reminderCount || 0) + 1 } : {}),
+        },
       }))
       await saveProject(projectId, { ...fresh, variations: next })
     } catch { /* the email has gone; the flag is secondary */ }

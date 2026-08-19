@@ -1,94 +1,78 @@
-pkg515 - Variation Builder and Tracker: everything you listed
+pkg516 - instruct links, reminders, and instruction recording
 =============================================================
 
-Deploy after pkg514.
+Deploy after pkg515.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/variationPdf.js
   components/VariationBuilder.js
-  pages/variations.js
   pages/api/variation-send.js
-  pages/api/dashboard.js
+  vercel.json
 
-NEW FILES: none.
-
-
-THE SUB-CONTRACT REF - it was never going to work
----------------------------------------------------
-There is no "subContractRef" anywhere in the app. The field is called ORDERREF, resolved
-from the handover, and Outstanding Invoices already prints it as [Sub-Contract Ref].
-
-I was reading a name that does not exist, so it was always going to come back blank. Now
-resolved the same way Outstanding Invoices resolves it, and it says "not set on the
-handover" rather than "not set in Project Details", which was also wrong.
+NEW FILES (create)
+------------------
+  lib/variationInstruct.js
+  pages/api/variation-instruct.js
+  pages/api/cron/variation-reminders.js
+  pages/instruct/[token].js          <- literal [token] brackets, in a new "instruct" folder
 
 
-THE BUILDER IS NOW TWO PANES
-------------------------------
-    LEFT    every variation on this project, newest first, each with a DRAFT or SENT
-            badge, its description and its value. Click one and it opens on the right -
-            items, workings and clarifications all come back, so a draft can be finished
-            rather than started again.
-            "+ Raise new variation" at the foot.
-
-    RIGHT   the one being worked on.
-
-Saving an existing variation now REPLACES it rather than adding a second with the same
-number, and the form no longer clears itself after a save - an edit you wanted to check or
-send used to vanish the moment it was written.
-
-
-VIEW ON THE TRACKER
+THE INSTRUCT BUTTON
 -------------------
-A View button on any variation that came from the builder. It shows what the CUSTOMER got:
-header, priced items, total, clarifications - plus when it was sent and to whom, and a
-Download PDF link.
+Every variation email now carries a green "Instruct variation V01" button.
 
-"Show workings" underneath opens the build-up: every materials and labour line, the waste,
-the mark-up and the totals per item. Hidden by default, so the top half can be read back
-during a call without the customer's copy being cluttered with our costs.
+It opens a page showing what they are instructing - project, ref, description, value, and
+a link to the PDF - with a name box and an Instruct button.
 
+NOT A ONE-CLICK INSTRUCTION, deliberately. A link that instructed on click would be
+quicker, and would also mean a mis-click, an email scanner or a link preview could commit
+us to work. There is a page, and a button on it.
 
-REQUESTED BY
-------------
-A real dropdown of the CUSTOMER'S people only - it was also offering the company name and
-our own QS, who do not request variations. "Someone else..." opens a text box for anybody
-not on the handover.
+ONE EMAIL PER RECIPIENT, each with its own link carrying that person's address. Four
+people on one email would share one link and the instruction could only ever say "somebody
+at the customer clicked it".
 
 
-THE WORKINGS WILL NOT CLOSE HALF DONE
----------------------------------------
-It now names exactly what is missing:
+WHAT GETS RECORDED
+------------------
+    when it was instructed
+    the name they typed
+    THE EMAIL ADDRESS THE LINK WAS ISSUED TO - not one typed on the page
+    their IP address and browser
 
-    "This item still needs a description, a quantity, a unit, a mark-up %, at least one
-     materials or labour line."
-
-All five are required. Each of these ends up on a document going to a customer, and an
-item with neither materials nor labour behind it is priced from nothing.
-
-
-THE DOCUMENT
-------------
-    LOGO      now on it. It was looking for LOGO_URL, which is not set - it now serves
-              /rock-logo.jpg from the site, exactly as the application PDF does.
-    BLACK     no red anywhere. Red on a document going out reads as a warning.
-    ROWS      double height, so descriptions are not stacked on top of each other.
-    SPACING   more air between the last item and the total box.
+The signed link is what makes this evidence rather than a name in a box. Tested: a token
+edited to point at a different variation is rejected.
 
 
-THE EMAIL
+IT UPDATES EVERYWHERE
+---------------------
+Instructing sets instructed: 'yes' - the field the tracker, the anticipated final account,
+applications, cash flow and project financials all already read. So it updates all of them
+with no further work, and the dashboard cache is cleared so it shows immediately.
+
+
+REMINDERS
 ---------
-    "Hi Jack," - the first name of whoever is ticked to receive it.
-    Signed off with your name, Rock Roofing Limited, your phone and your email.
-    Replies go to you. That was already the case and is unchanged.
+MANUAL: on a variation already sent, the button becomes "Send reminder to customer" and
+the email rewrites itself as a chase - "Following up on variation V01, sent on 19/08/2026.
+We have not yet received your instruction."
+
+AUTOMATIC: a cron at 9am on weekdays chases anything sent 3 WORKING days ago and not
+instructed. Working days, so a Thursday send is chased the following Tuesday rather than
+landing on a Sunday.
+
+SENT ONCE. Something still not instructed after that is a conversation to have, not
+another email to ignore.
+
+Test it safely first:  /api/cron/variation-reminders?dry=1
+That reports exactly what it would send, and sends nothing.
 
 
-RAISE AND SEND
---------------
-The button is now "Raise & send to customer" - or "Save & send to customer" when editing.
-It saves, then opens the send window. A variation that is raised and not sent is one the
-customer does not know about.
+STILL TO DO - the application attachment
+------------------------------------------
+You asked for the variation and its instruction to be appended to the application document
+automatically. That is not in this package.
 
-Sending now records WHEN and TO WHOM on the variation, which is what drives the DRAFT/SENT
-badge in the left-hand list.
+It needs the application PDF to merge in other PDFs, which it does not currently do, and I
+would rather build that once you have instructed a few variations through this and we know
+the instruction record is right. Everything it needs is now being captured.

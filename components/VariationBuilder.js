@@ -243,6 +243,9 @@ export function calc(d) {
 // people are offered as tick boxes, the Rock team can be copied, and anything not on
 // either list can be typed.
 function SendVariationModal({ project, variation, me, onClose, onSent }) {
+  // A chase reads differently from a first send. Sending the same email again and calling
+  // it a reminder is how customers stop reading them.
+  const alreadySent = !!variation.builder?.firstSentAt
   const contacts = (project.customerContacts || []).filter(c => c.email)
   const [to, setTo] = useState(() => (contacts[0]?.email ? [contacts[0].email] : []))
   const [cc, setCc] = useState([])
@@ -272,14 +275,17 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
   })()
 
   useEffect(() => {
-    setSubject(`Variation ${variation.varNumber} - ${projLabel}`)
+    setSubject(`${alreadySent ? 'Reminder: ' : ''}Variation ${variation.varNumber} - ${projLabel}`)
     setText(
       `Hi${firstName ? ` ${firstName}` : ''},\n\n`
-      + `Please find attached variation ${variation.varNumber} for ${projLabel}.\n\n`
+      + (alreadySent
+        ? `Following up on variation ${variation.varNumber} for ${projLabel}, sent on ${new Date(variation.builder.firstSentAt).toLocaleDateString('en-GB')}.\n\n`
+          + `We have not yet received your instruction. The variation is attached again for convenience.\n\n`
+        : `Please find attached variation ${variation.varNumber} for ${projLabel}.\n\n`)
       + (b.subContractRef ? `Sub-Contract Ref: ${b.subContractRef}\n` : '')
       + (variation.description ? `Description: ${variation.description}\n` : '')
       + `Value: ${money(Number(variation.materials) + Number(variation.labour) + Number(variation.profit))}\n\n`
-      + `Please confirm your instruction to proceed.\n\n`
+      + (alreadySent ? `Could you confirm your instruction so we can programme the works.\n\n` : `Please confirm your instruction to proceed.\n\n`)
       + `Kind regards\n`
       // The sender's own details, so the customer can pick up the phone rather than
       // hunting for a number or replying and waiting.
@@ -305,7 +311,7 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
           // Replies reach the person who sent it. A customer querying a variation has to
           // get back to whoever raised it, not to a sending address nobody reads.
           replyTo: me?.email || '',
-          subject, text,
+          subject, text, reminder: alreadySent,
         }),
       })
       const d = await r.json()
@@ -323,7 +329,7 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
       <div style={{ background: '#fff', borderRadius: 14, width: 720, maxWidth: '100%', padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Send {variation.varNumber}</h3>
+            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>{alreadySent ? 'Send reminder' : 'Send'} {variation.varNumber}</h3>
             <div style={{ fontSize: 12.5, color: '#888' }}>{projLabel} · the PDF is attached automatically</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
@@ -361,7 +367,7 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
           <button onClick={onClose} style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
           <button onClick={send} disabled={sending}
             style={{ background: GREEN, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13.5, fontWeight: 700, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}>
-            {sending ? 'Sending…' : 'Send variation'}
+            {sending ? 'Sending…' : (alreadySent ? 'Send reminder to customer' : 'Send variation')}
           </button>
         </div>
       </div>
@@ -383,6 +389,11 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [sendOpen, setSendOpen] = useState(false)
   const [reqOther, setReqOther] = useState(false)
   const [editingVar, setEditingVar] = useState(null)   // varNumber being edited, or null for new
+  // Whether the one on screen has already gone out - drives the wording throughout.
+  const raisedAlreadySent = useMemo(() => {
+    const v = (project?.variations || []).find(x => String(x.varNumber) === String(editingVar))
+    return !!v?.builder?.firstSentAt
+  }, [project, editingVar])
   const [me, setMe] = useState(null)
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => setMe(d.user || null)).catch(() => {})
@@ -717,7 +728,7 @@ export default function VariationBuilder({ projects, onSaved }) {
             )}
             <button onClick={saveAndSend} disabled={saving}
               style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Saving…' : (editingVar ? 'Save & send to customer' : 'Raise & send to customer')}
+              {saving ? 'Saving…' : (raisedAlreadySent ? 'Save & send reminder to customer' : (editingVar ? 'Save & send to customer' : 'Raise & send to customer'))}
             </button>
           </div>
         </div>

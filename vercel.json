@@ -60,6 +60,10 @@
     {
       "path": "/api/cron/gp-snapshot",
       "schedule": "0 3 22 * *"
+    },
+    {
+      "path": "/api/cron/variation-reminders",
+      "schedule": "0 9 * * 1-5"
     }
   ]
 }
