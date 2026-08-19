@@ -1,56 +1,48 @@
-pkg493 - the contracted rates lock was being silently reverted
-==============================================================
+pkg495 - URGENT. I broke this in pkg491. Here is the actual cause.
+==================================================================
 
-Deploy after pkg492.
+Deploy after pkg494. One changed file: pages/api/applications.js.
 
-CHANGED FILES (replace)
+
+YOU WERE RIGHT - IT WAS FINE A COUPLE OF DEPLOYMENTS AGO
+----------------------------------------------------------
+pkg491 carried the retention-release flags forward onto a new application. That edit
+landed in the WRONG BLOCK. It went into the settings object the page fetches on load,
+where the variable it reads does not exist:
+
+    retentionRelease1: !!(prev && prev.retentionRelease1)
+
+`prev` is declared inside the CREATE branch. In the GET branch it is nothing, so the whole
+request threw a ReferenceError - every time you opened a project on the Applications page.
+
+With that request failing, the page never received the project's settings, so it never
+saw the contracted rates lock, and refused to create an application.
+
+Nothing was ever wrong with your rates. Unlocking and re-locking could not have helped,
+and I sent you round that loop twice. Sorry.
+
+Moved to the create branch, where prev is declared 47 lines above it and the carry-forward
+does what pkg491 intended.
+
+
+MY TWO PREVIOUS ANSWERS
 -----------------------
-  pages/api/project/[id]/settings.js     <- literal [id] folder
-  pages/project/[id].js                  <- literal [id] folder
+pkg492 said it was a stale screen. pkg493 said the Project Details form was overwriting
+the lock.
 
-NEW FILES: none.
-
-
-I WAS WRONG IN pkg492
----------------------
-I said it was a stale screen. It was not - the lock really was being turned back off.
+Neither was the cause here. Both are real faults and worth keeping - the settings endpoint
+COULD overwrite the lock, and the table WAS only refreshing on mount - but they were not
+what you were hitting.
 
 
-WHAT WAS HAPPENING
-------------------
-/api/project/[id] returns the WHOLE project record as "settings" - including
-contractedRates and applications.
+A DIAGNOSTIC, SO WE DO NOT DO THIS AGAIN
+------------------------------------------
+If the lock is ever not seen, this reports what the server actually holds, and writes
+nothing. Console on any portal page:
 
-The Project Details form loads that, and on save posts the whole thing back. The settings
-endpoint merges whatever it is given. So:
+    fetch('/api/applications',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'cr-debug',projectId:'PUT_THE_XERO_ID_HERE'})})
+      .then(r=>r.json()).then(console.log)
 
-    1. lock the contracted rates            locked = true
-    2. save Project Details from a page
-       loaded before the lock               posts back its stale copy
-    3. merge overwrites contractedRates     locked = false again
-
-Applications then correctly refused to create one. The contracted rates page still SHOWED
-them locked, because it was holding its own state - which is why it looked like the app
-was wrong about a lock that was plainly there.
-
-Anything saved from Project Details would do it: a date, the MCD, an estimator.
-
-
-FIXED IN BOTH DIRECTIONS
-------------------------
-The endpoint now REFUSES contractedRates and applications whatever it is sent - they are
-owned by their own pages. Everything else merges exactly as before.
-
-And the form no longer sends them, so the situation does not arise.
-
-Applications is on that list for the same reason and it is the more serious of the two: a
-stale copy posted back from Project Details would have undone a certificate.
-
-
-AFTER DEPLOYING
----------------
-Go to Contracted Rates for that project and press Lock once more. The lock will hold this
-time. Then the application will create.
-
-Worth checking any other project that has refused an application recently - the same thing
-will have happened to it.
+It returns whether rates exist, how many items, the raw value of `locked` and its type,
+when it was saved and by whom, and whether create would be allowed.

@@ -193,11 +193,6 @@ export default async function handler(req, res) {
         mcdPct: rates.mcdPct,
         mcdOnVariations: project.mcdOnVariations === true,
         mcdOnMaterials: project.mcdOnMaterials === true,
-        // A half released on an earlier application stays released. Carried forward so
-        // the tick box shows it, locked, rather than looking un-claimed and inviting
-        // somebody to claim it twice.
-        retentionRelease1: !!(prev && prev.retentionRelease1),
-        retentionRelease2: !!(prev && prev.retentionRelease2),
         finalPaymentDays: project.finalPaymentDays != null ? project.finalPaymentDays : null,
         customerName: project.customerName || '',
         customerEmail: project.customerEmail || '',
@@ -214,6 +209,27 @@ export default async function handler(req, res) {
     const project = (await getProject(projectId)) || {}
     const rates = await resolveProjectRates(projectId, project)
     const apps = Array.isArray(project.applications) ? project.applications : []
+
+    // DIAGNOSTIC. Reports exactly what the server holds for this project's contracted
+    // rates. Writes nothing. Added because I have twice guessed at why the lock is not
+    // being seen, and guessing is not working.
+    if (action === 'cr-debug') {
+      const cr = project.contractedRates
+      const keys = Object.keys(project || {})
+      return res.json({
+        ok: true,
+        projectIdUsed: String(projectId),
+        contractedRatesPresent: !!cr,
+        itemCount: cr && Array.isArray(cr.items) ? cr.items.length : 0,
+        lockedRaw: cr ? cr.locked : undefined,
+        lockedType: cr ? typeof cr.locked : 'n/a',
+        savedAt: cr && cr.savedAt ? new Date(cr.savedAt).toISOString() : null,
+        savedBy: cr ? (cr.savedBy || '') : '',
+        wouldBlockCreate: !cr || !Array.isArray(cr.items) || !cr.items.length ? 'no rates'
+          : (!cr.locked ? 'not locked' : 'no - create would be allowed'),
+        projectKeys: keys,
+      })
+    }
 
     if (action === 'create') {
       const cr = project.contractedRates
@@ -274,6 +290,11 @@ export default async function handler(req, res) {
         // reading of a main contractor's discount and what your QS works to.
         mcdOnVariations: project.mcdOnVariations === true,
         mcdOnMaterials: project.mcdOnMaterials === true,
+        // A half released on an earlier application stays released. Carried forward so
+        // the tick box shows it, locked, rather than looking un-claimed and inviting
+        // somebody to claim it twice.
+        retentionRelease1: !!(prev && prev.retentionRelease1),
+        retentionRelease2: !!(prev && prev.retentionRelease2),
         // Fraction -> percentage. Defaulting to 5 when nothing is set was a guess that
         // looked like a real answer; 0 with the project's own figure preferred is honest.
         retentionPct: retentionPct != null ? retentionPct : (prev && prev.retentionPct != null ? prev.retentionPct : (rates.retentionPct != null ? rates.retentionPct * 100 : 0)),

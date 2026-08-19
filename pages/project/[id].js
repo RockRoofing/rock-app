@@ -100,6 +100,14 @@ export default function ProjectPage() {
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState('overview')
   const [editMode, setEditMode] = useState(false)
+  // Escape closes the edit panel. The backdrop deliberately does not - see the note on
+  // the overlay.
+  useEffect(() => {
+    if (!editMode) return
+    const onKey = (e) => { if (e.key === 'Escape') setEditMode(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editMode])
   const [form, setForm] = useState({})
   const [generating, setGenerating] = useState(false)
   const [teamMembers, setTeamMembers] = useState([])
@@ -347,11 +355,16 @@ export default function ProjectPage() {
             </div>
 
             {editMode && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }} onClick={() => setEditMode(false)}>
+              // NO CLOSE ON BACKDROP CLICK.
+              // This is a long form - dates, budgets, MCD, people - and a click landing
+              // beside it threw away everything typed since the last save, with no
+              // warning and no undo. The x at the top right closes it, or Escape.
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px', overflowY: 'auto' }}>
               <div style={{ background: '#fff', borderRadius: 12, padding: 32, width: '100%', maxWidth: 1100, boxShadow: '0 20px 60px rgba(0,0,0,0.3)', marginTop: 20 }} onClick={e => e.stopPropagation()}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
                   <h3 style={{ margin: 0, fontSize: 16 }}>Project Details</h3>
-                  <button onClick={() => setEditMode(false)} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888', lineHeight: 1 }}>×</button>
+                  <button onClick={() => setEditMode(false)} title="Close without saving"
+                    style={{ fontSize: 22, border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, width: 34, height: 34, cursor: 'pointer', color: '#6b7280', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
                 </div>
                 <DetailsForm form={form} setForm={setForm} addVariation={addVariation} updateVariation={updateVariation} removeVariation={removeVariation} afa={afa} currentMargin={atDate.margin} teamMembers={teamMembers} onAddMember={() => setShowAddMember(true)} onRemoveMember={removeTeamMember} people={people} allUsers={allUsers} />
                 <button onClick={save} disabled={saving} style={{ marginTop: 20, width: '100%', background: '#1a1a2e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', cursor: 'pointer', fontSize: 14 }}>
