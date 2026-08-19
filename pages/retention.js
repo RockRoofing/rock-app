@@ -582,6 +582,10 @@ export default function RetentionPage() {
                 </div>
               ))}
             </div>
+            {/* READ-ONLY IN THE EMBED. Bookkeeping views this register; it does not
+                maintain it. Adding a manual row or importing a spreadsheet from there
+                would put commercial data in without the commercial team knowing. */}
+            {!embed && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0, minWidth: 168 }}>
               <button onClick={() => { setShowAddForm(true); setAddForm(EMPTY_ENTRY) }}
                 style={{ background: '#e63946', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>+ Add Manual Entry</button>
@@ -592,6 +596,7 @@ export default function RetentionPage() {
                   style={{ display: 'none' }} />
               </label>
             </div>
+            )}
           </div>
 
           {/* Add form */}
@@ -613,6 +618,10 @@ export default function RetentionPage() {
               seen.add(e.xeroId); return true
             })
             if (incomplete.length === 0) return null
+            // Hidden in the embed. It is a row of links INTO projects, prompting somebody
+            // to go and fix them - which is work for the commercial team, not for
+            // Bookkeeping, and every one of them is a way out of the read-only view.
+            if (embed) return null
             return (
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 14px', marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠ Project details incomplete — update in all locations:</span>
@@ -818,7 +827,11 @@ export default function RetentionPage() {
                             {/* Ref */}
                             <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1a1a2e', whiteSpace: 'nowrap' }}>
                               {entry.manual === false && entry.xeroId
-                                ? <Link href={`/project/${entry.xeroId}`} style={{ color: '#2563eb' }}>{entry.ourRef}</Link>
+                                ? (embed
+                                    // No route out of the embed: Bookkeeping should not
+                                    // land in Project Financials from here.
+                                    ? <span>{entry.ourRef}</span>
+                                    : <Link href={`/project/${entry.xeroId}`} style={{ color: '#2563eb' }}>{entry.ourRef}</Link>)
                                 : entry.ourRef || '—'}
                               {!entry.manual && <span style={{ marginLeft: 4, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 4px' }}>Xero</span>}
                               {(() => {

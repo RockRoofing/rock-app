@@ -1,60 +1,49 @@
-pkg496 - project reports required, taken properly from the Gantt
-================================================================
+pkg497 - Bookkeeping exports, and the Retention tab made view-only
+==================================================================
 
-Deploy after pkg495.
+Deploy after pkg496.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/commercial-scorecard-extra.js
-  pages/commercial-scorecard.js
+  pages/bookkeeping.js
+  pages/retention.js
 
 NEW FILES: none.
 
 
-WHY IT STOPPED WORKING
-----------------------
-"Required" only counted a project if its Gantt cell was explicitly marked ACTUAL.
+1. EXPORT TO EXCEL
+------------------
+An "Export to Excel (142)" button at the right of the filter bar, on Costs (Bills), Sales
+Invoices, Direct Wages and Overheads.
 
-    allocation stored as an array of names (the older format)   reads as 'confirmed'
-    cell with no status set                                     defaults to 'confirmed'
-    cell marked confirmed or provisional                        not counted
+It exports WHAT IS ON SCREEN, not the whole tab. The filters are the point of this page -
+a month, a supplier, a code - and exporting everything regardless would mean redoing that
+work in Excel, and would produce a different answer from the totals shown above the table.
 
-So only a cell somebody had retrospectively ticked as actual counted. Everywhere that tick
-was not applied - which is most of the Gantt - the week required nothing, and the card had
-nothing to measure.
+Columns: Date, Reference, Supplier, Description, Project, Account code, Account name,
+Category, Assigned, Amount. Widths set so nothing is a column of hashes.
 
+A TOTAL row at the bottom, so the file agrees with the screen at a glance.
 
-THE RULE NOW, AS YOU DESCRIBED IT
------------------------------------
-Labour allocated to a project on a day that has passed means we worked on it. Provisional,
-confirmed or actual - for a week in the past it is the record of what happened.
+The filename says what it is and what it was filtered to:
 
-    one day in a week    = one report
-    five days in a week  = one report
-    worked 3 of 4 weeks  = three reports
+    Costs (Bills) - 2026-08 - SIG.xlsx
 
-An allocation with nobody on it is not counted - an empty cell is not work.
-
-Weeks are Monday to Sunday, which they already were.
+Disabled when the filters leave nothing to export, rather than producing an empty file.
 
 
-AND IT IS NOW A MONTHLY FIGURE
---------------------------------
-Required for a month is the SUM of each week's requirement, not a de-duplicated project
-count - a project worked in three weeks needs three reports.
+2. THE RETENTION TAB IS NOW VIEW-ONLY
+---------------------------------------
+Removed from the embedded view:
 
-Checked against your example:
+    + Add Manual Entry          Bookkeeping views this register, it does not maintain it
+    Import spreadsheet          same
+    Project links on the refs   no route out into Project Financials
+    "Project details incomplete" banner
 
-    week of 03 Aug   J178, J190   2 reports
-    week of 10 Aug   J178         1
-    week of 17 Aug   J178         1
-    week of 24 Aug   none         0
-                                  4 required in August
+That last one is worth explaining: it is a row of links INTO projects, prompting somebody
+to go and fix them. That is work for the commercial team, and every link on it was a way
+out of the read-only view.
 
-Completed is tallied the same way, from Weekly Project Reports dated in each week.
-
-The trend line is monthly too. It was a run of WEEKS labelled as though they were months,
-which is why it never lined up with the cards beside it.
-
-A week is assigned to the month containing its Thursday - the same key the weeks are
-already built on, and the usual convention for a week that straddles a month end.
+The full page at /retention is unchanged - everything still works there for whoever owns
+it.

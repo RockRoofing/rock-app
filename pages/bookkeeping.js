@@ -1,4 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
+import * as XLSX from 'xlsx'
+
+// One list of tabs, used by the tab strip and by the export filename. Two copies would
+// drift, and the file somebody saves is the one that has to say what it is.
+const TABS = [['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention']]
+const TAB_LABELS = Object.fromEntries(TABS)
 import Link from 'next/link'
 import ReportImprovementLink from '../components/ReportImprovementLink'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -244,6 +250,38 @@ export default function BookkeepingPage() {
   const assignedCount = filtered.filter(r => r.categorised).length
   const unassignedCount = filtered.length - assignedCount
 
+  // EXPORT WHAT IS ON SCREEN, not the whole tab.
+  //
+  // The filters are the point of this page - a month, a supplier, a code. Exporting
+  // everything regardless would mean re-doing that work in Excel, and would quietly
+  // produce a different answer from the totals shown above the table.
+  function exportTab() {
+    const label = TAB_LABELS[tab] || tab
+    const rowsOut = filtered.map(r => ({
+      Date: r.date || '',
+      Reference: r.reference || r.invoiceNumber || '',
+      Supplier: r.supplier || r.contact || '',
+      Description: r.description || '',
+      Project: r.project || r.projectName || '',
+      'Account code': r.accountCode || '',
+      'Account name': r.accountName || '',
+      Category: r.category || '',
+      Assigned: r.categorised ? 'Yes' : 'No',
+      Amount: r.amount != null ? r.amount : (r.total || 0),
+    }))
+    // A total row, so the spreadsheet agrees with the screen at a glance.
+    rowsOut.push({})
+    rowsOut.push({ Description: `TOTAL (${filtered.length} rows)`, Amount: total })
+
+    const ws = XLSX.utils.json_to_sheet(rowsOut)
+    ws['!cols'] = [{ wch: 11 }, { wch: 16 }, { wch: 30 }, { wch: 42 }, { wch: 22 }, { wch: 12 }, { wch: 22 }, { wch: 20 }, { wch: 9 }, { wch: 14 }]
+    const wb = XLSX.utils.book_new()
+    // Sheet names cannot contain brackets, and are capped at 31 characters.
+    XLSX.utils.book_append_sheet(wb, ws, label.replace(/[\\/?*\[\]:]/g, '').slice(0, 31))
+    const bits = [label, month || 'all months', supplier || null].filter(Boolean)
+    XLSX.writeFile(wb, `${bits.join(' - ')}.xlsx`.replace(/[^a-zA-Z0-9 .()-]/g, ''))
+  }
+
   useEffect(() => { setPage(1) }, [tab, month, supplier, codes, catFilter, assigned])
   const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
   const pageRows = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
@@ -373,7 +411,7 @@ export default function BookkeepingPage() {
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
-              {[['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention']].map(([id, label]) => (
+              {TABS.map(([id, label]) => (
                 <button key={id} onClick={() => switchTab(id)}
                   style={{ padding: '9px 16px', fontSize: 13, fontWeight: tab === id ? 700 : 500, border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer',
                     background: tab === id ? '#fff' : '#e8e8ea', color: tab === id ? INK : '#777' }}>{label}</button>
@@ -415,6 +453,14 @@ export default function BookkeepingPage() {
                     <option value="materials">Materials</option>
                   </select>
                 )}
+
+                {/* Export sits with the filters because it exports what they produce. */}
+                <div style={{ flex: 1 }} />
+                <button onClick={exportTab} disabled={!filtered.length}
+                  title={filtered.length ? `Export these ${filtered.length} rows to Excel` : 'Nothing to export'}
+                  style={{ background: filtered.length ? '#1c704f' : '#e5e7eb', color: filtered.length ? '#fff' : '#9ca3af', border: 'none', borderRadius: 7, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: filtered.length ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                  Export to Excel{filtered.length ? ` (${filtered.length})` : ''}
+                </button>
 
                 {/* Multi-select account codes (not on invoices) */}
                 {!isInvoiceTab && <CodeMultiSelect options={codeOptions} selected={codes} onChange={setCodes} />}
