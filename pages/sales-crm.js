@@ -154,7 +154,9 @@ export default function Dashboard() {
   }
 
   const applyFilters = (arr) => arr.filter(d => {
-    if (!matchFilter(d.customerType, filters.customerType)) return false
+    // Not filtered any more - the control has gone, and a value left over in somebody's
+    // saved preferences would otherwise keep hiding deals with nothing on screen to
+    // explain why.
     if (!matchFilter(d.estimator, filters.estimator)) return false
     if (!matchFilter(d.salesPerson, filters.salesPerson)) return false
     if (!matchFilter(d.leadSource, filters.leadSource)) return false
@@ -194,7 +196,10 @@ export default function Dashboard() {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
         {[
           ...(isDR ? [] : [
-            { label: 'Customer type', key: 'customerType', opts: uniq(deals, 'customerType') },
+            // Customer type removed - it was rarely populated and the distinction it drew
+            // is better answered by the Customer filter on Strike Rate and by the company
+            // history. The underlying field is untouched on the deals; only the filter has
+            // gone, so nothing is lost if you want it back.
             { label: 'Estimator', key: 'estimator', opts: uniq(deals, 'estimator') },
             { label: 'Status', key: 'status', opts: ['All','won','lost','open'] },
           ]),
@@ -240,20 +245,6 @@ export default function Dashboard() {
             ))}
           </div>
         </div>}
-        {isStrike && (
-          <div>
-            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>Customer</label>
-            <select value={srCompany} onChange={e => setSrCompany(e.target.value)}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #ddd', borderRadius: 4, minWidth: 200 }}>
-              <option value="All">All customers</option>
-              {[...new Set(deals
-                .filter(d => (d.status === 'won' || d.status === 'lost') && d.value > 0)
-                .map(d => d.organizationName).filter(Boolean))]
-                .sort((a, b) => a.localeCompare(b))
-                .map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
         <div>
           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 2 }}>{isDR ? 'Date added from' : 'From'}</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: 12, padding: '4px 6px', border: '0.5px solid #d0d0cc', borderRadius: 6, fontFamily: 'inherit' }} />
@@ -895,6 +886,26 @@ export default function Dashboard() {
       return (
         <div>
           <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Shows strike rates for decided deals by decision date. Trend shows rolling 6-month strike rate.</p>
+          {/* CUSTOMER FILTER.
+              It has to live HERE. This page does not render the shared filter bar at all -
+              it has its own block below - so the filter I put in the shared bar could
+              never have appeared on it. */}
+          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 12, color: '#555', fontWeight: 600 }}>Customer</label>
+            <select value={srCompany} onChange={e => setSrCompany(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: 12.5, border: '1px solid #d0d0cc', borderRadius: 6, minWidth: 260, background: '#fff', fontFamily: 'inherit' }}>
+              <option value="All">All customers</option>
+              {[...new Set(deals
+                .filter(d => (d.status === 'won' || d.status === 'lost') && d.value > 0)
+                .map(d => d.organizationName).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b))
+                .map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {srCompany !== 'All' && (
+              <button onClick={() => setSrCompany('All')}
+                style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>clear</button>
+            )}
+          </div>
           <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f8f8f7', borderRadius: 8, border: '0.5px solid #e1e0d9' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               {[

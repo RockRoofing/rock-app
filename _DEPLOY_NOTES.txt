@@ -1,58 +1,42 @@
-pkg500 - company project history
-================================
+pkg501 - the Customer filter, actually on the Strike Rate page this time
+========================================================================
 
-Deploy after pkg499. One changed file: pages/crm.js. No new files.
-
-
-CLICK THE COMPANY NAME
-----------------------
-On the Companies list, the name is now a link. It opens everything we have ever had with
-that company:
-
-    Barnfield Construction
-    4 projects · strike rate 62.2% by value · won £67,534 · lost £41,000
-
-    WON  2 · £67,534
-      Pets Choice            04 Mar 2026    £3,894     Joe
-      Accrington Community   12 Nov 2025    £63,640    Joe
-
-    LOST  1 · £41,000
-      Blackburn Depot        20 Jan 2026    £41,000    Price
-
-    STILL TENDERED  1 · £120,000
-      Burnley Phase 2        Negotiating    £120,000
-
-The list showed counts - "Won 2, Lost 1" - and no way to see which jobs they were.
+Deploy after pkg500. One changed file: pages/sales-crm.js. No new files.
 
 
-THE DETAIL IN EACH GROUP IS DIFFERENT ON PURPOSE
---------------------------------------------------
-    Won and Lost      the date it closed
-    Still tendered    the stage it is at, because a close date would be a guess
-    Lost              the lost reason instead of the estimator, which is the thing you
-                      actually want to know about a job you did not get
+WHY pkg478's FILTER NEVER APPEARED
+------------------------------------
+I added it to the shared filter bar. The Strike Rate page does not render that bar at all -
+it has its own filter block, which is why the date range and the score buttons on it look
+different from the other pages.
 
-Strike rate is by VALUE, matching how it is measured everywhere else on the portal.
+So the control existed, was correctly gated to the Strike Rate page, and was attached to
+something that page never draws. It could not have shown up.
 
-
-EVERY PROJECT IS A LINK
------------------------
-Real links, so right-click and ctrl-click open them in a new tab exactly as they do on the
-board and the activities list. A normal click closes the panel and opens the project.
+I should have checked where that page's filters come from rather than assuming every page
+used the shared one.
 
 
-CLOSES ON THE X OR ESCAPE ONLY
---------------------------------
-Never on a click outside, as you asked. You open this to read it, often while part-way
-down a long list, and a stray click should not shut it.
+NOW IT IS ON THE PAGE ITSELF
+------------------------------
+    Customer  [All customers            v]   clear
+
+Directly above the existing filter block. Pick a contractor and the whole page - rate,
+values, chart, detail - is that customer only.
+
+Listing every organisation with a decided deal above £0, since strike rate is only
+meaningful on work that has been won or lost.
+
+The version in the shared bar has been removed, so there is only one of them.
 
 
-ONE THING WORTH KNOWING
------------------------
-Projects are matched to a company by NAME. If a contractor is recorded as both "Barnfield
-Construction" and "Barnfield Construction Ltd" they will appear as two companies with
-their history split between them.
+CUSTOMER TYPE REMOVED
+---------------------
+Gone from the shared filter bar, and no longer applied to the data.
 
-That is the name-as-identity problem I have flagged a few times. It shows up plainly here
-for the first time - if a company's history looks short, check the list for a near-
-duplicate above or below it.
+That second part matters: the filters are remembered between visits, so leaving the
+filtering in place with the control gone would have meant anybody with "Main Contractor"
+saved kept seeing a narrowed set with nothing on screen to explain it.
+
+The field itself is untouched on the deals - only the filter has gone, so it can come back
+if you want it. Projects Priced has its own separate filter set and is unaffected.
