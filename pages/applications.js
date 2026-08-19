@@ -883,7 +883,7 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
           {/* FINAL ACCOUNT. A flag on the application, not a different kind of document -
               it keeps its number, its period and its dates, and only how it presents
               itself changes. Marking it any other way would break the numbering. */}
-          <label title="Mark this as the final account. The number, period and dates stay as they are; the PDF is titled Final Account."
+          <label title="Mark this as the final account. The number, period and dates stay as they are; the PDF and email are titled &quot;Proposed Final Account and Interim Application for Payment&quot;."
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 10, padding: '3px 10px', borderRadius: 14, border: `1px solid ${app.isFinalAccount ? '#0f766e' : '#d5d9e0'}`, background: app.isFinalAccount ? '#ccfbf1' : '#fff', cursor: locked ? 'default' : 'pointer', fontSize: 12.5, fontWeight: 700, color: app.isFinalAccount ? '#0f766e' : '#666', whiteSpace: 'nowrap' }}>
             <input type="checkbox" checked={!!app.isFinalAccount} disabled={locked}
               onChange={(e) => { setApp(a => ({ ...a, isFinalAccount: e.target.checked })); setDirty(true) }} />
@@ -1502,12 +1502,13 @@ function SendApplicationModal({ app, appNumber, projectId, settings = {}, me, is
   const releaseLine = desc.releases.length
     ? `This application includes the ${desc.releases.join(' and the ').toLowerCase()}.\n\n`
     : ''
+  // Same care as the document: proposed, and the payment is interim.
   const finalLine = desc.isFinal
-    ? `This is our final account for this project.\n\n`
+    ? `This is our proposed final account for this project. The payment claimed is interim and remains subject to agreement.\n\n`
     : ''
   const defaultBody =
     `Hi ${custName},\n\n` +
-    `Please find attached our ${desc.isFinal ? 'final account' : 'application for payment'} ${appNo} for ${monthName}.\n\n` +
+    `Please find attached our ${desc.isFinal ? 'proposed final account and interim application for payment' : 'application for payment'} ${appNo} for ${monthName}.\n\n` +
     finalLine +
     releaseLine +
     `Feel free to call if there is anything you would like to discuss.\n\n` +

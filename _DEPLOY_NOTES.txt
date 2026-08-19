@@ -1,60 +1,55 @@
-pkg505 - email body in green, and filing to won/lost projects
-=============================================================
+pkg506 - "Proposed Final Account and Interim Application for Payment"
+=====================================================================
 
-Deploy after pkg504.
+Deploy after pkg505.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/crm.js
-  lib/crmEmailSync.js
+  lib/applications.js
+  lib/applicationPdf.js
+  pages/applications.js
+  pages/api/application-pdf.js
+  pages/api/application-send.js
 
 NEW FILES: none.
 
 
-1. THE MESSAGE ITSELF IN GREEN
---------------------------------
-The part somebody actually wrote is in the CRM green (#1c704f). Everything the email drags
-along with it - the quoted thread below, the signature block, the legal footer - is grey
-underneath, separated by a line.
+WHAT THE CUSTOMER NOW SEES
+--------------------------
+PDF heading and email subject:
 
-    Hi Roman,                                            <- green
-    Forgot to mention, we agreed the separate visit.
-    Kind Regards
-    Jack Belshaw
-    Senior Quantity Surveyor
-    ------------------------------------------------
-    01282 442 300                                        <- grey
-    From: Roman Jarosz <roman@rockroofing.co.uk>
-    Sent: 16 August 2026
+    Proposed Final Account and Interim Application for Payment 14 - August 2026
 
-Split on the first marker that ends a message: "From:", "On ... wrote:", Outlook's
-divider, "Sent from my iPhone". A sign-off keeps the two lines after it, so "Regards /
-Jack Belshaw / Senior QS" stays with the message rather than being cut mid-signature.
+Email body:
 
-Where it cannot tell, it errs towards MORE green. A sentence cut off half way is worse
-than a line of signature carried into it.
+    Please find attached our proposed final account and interim application for
+    payment 14 for August.
 
-One EmailCard serves both the deal timeline and the Emails tab, so both change together.
+    This is our proposed final account for this project. The payment claimed is
+    interim and remains subject to agreement.
 
 
-2. FILING TO WON AND LOST PROJECTS
+TWO OTHER PLACES SAID THE OPPOSITE
 ------------------------------------
-Two separate blocks, both fixed:
+Worth flagging, because the wording only works if everything agrees.
 
-THE PROJECT PICKER listed open deals only. Won and lost projects now appear, marked with a
-WON or LOST badge so an email is not filed against a job that finished two years ago in
-mistake for the live one of the same name. Open deals still come first before you type.
+The PDF banner read "FINAL ACCOUNT - this is the last application on this project", and
+the email body read "This is our final account for this project." Both assert finality -
+which is the one thing the new wording is careful not to do.
 
-THE SYNC validated every match against open deals only. So a deliberate [CRM-972] to a job
-we had already won was rejected, and mail on a filed thread stopped landing the moment the
-deal closed - which is exactly when the invoice chasing starts.
+Both now say proposed, and that the payment is interim.
 
 
-ONE THING I DELIBERATELY DID NOT CHANGE
------------------------------------------
-Matching by SUBJECT is still open-projects-only.
+SHORT FORM WHERE THE LONG ONE WILL NOT FIT
+--------------------------------------------
+    filename    Proposed Final Account 14 - J178 Gas Lane.pdf
+    list badge  FINAL ACCOUNT
 
-A reference or a known thread is somebody saying where an email goes. A title match is the
-system guessing - and letting a closed project start capturing mail on a name it shares
-with a live one would be a guess that gets worse over time, as the list of closed projects
-grows and the live ones stay few.
+58 characters is unusable in a filename and impossible in a badge. The documents the
+customer reads carry the full phrase; the places only you see carry the short one.
+
+
+THE HEADING SCALES TO FIT
+-------------------------
+At 20pt the full title runs off the page. It now shrinks until it fits the width available
+- about 14pt - rather than being cut off. Floor of 11pt so it stays readable.
