@@ -389,11 +389,6 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [sendOpen, setSendOpen] = useState(false)
   const [reqOther, setReqOther] = useState(false)
   const [editingVar, setEditingVar] = useState(null)   // varNumber being edited, or null for new
-  // Whether the one on screen has already gone out - drives the wording throughout.
-  const raisedAlreadySent = useMemo(() => {
-    const v = (project?.variations || []).find(x => String(x.varNumber) === String(editingVar))
-    return !!v?.builder?.firstSentAt
-  }, [project, editingVar])
   const [me, setMe] = useState(null)
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => setMe(d.user || null)).catch(() => {})
@@ -408,17 +403,45 @@ export default function VariationBuilder({ projects, onSaved }) {
 
   const project = useMemo(() => (projects || []).find(p => String(p.xeroId) === String(projectId)) || null, [projects, projectId])
 
+  // Whether the one on screen has already gone out - drives the wording throughout.
+  //
+  // MUST sit after `project`. useMemo runs its callback during render, so declaring this
+  // above the const it reads put `project` in the temporal dead zone and threw a
+  // ReferenceError on every render of the builder. It compiled cleanly, because nothing
+  // can know at build time that a const declared later would be read earlier.
+  const raisedAlreadySent = useMemo(() => {
+    const v = (project?.variations || []).find(x => String(x.varNumber) === String(editingVar))
+    return !!v?.builder?.firstSentAt
+  }, [project, editingVar])
+
   // Everything already raised on this project. Newest first: the one somebody wants is
   // almost always the last one.
   const existingVars = useMemo(() => {
     const vs = project?.variations || project?.settings?.variations || []
-    return [...vs].sort((a, b) => String(b.varNumber || '').localeCompare(String(a.varNumber || ''), undefined, { numeric: true }))
+    // Newest at the top. Sent variations order by WHEN THEY WENT - which is the order the
+    // customer knows them in - and anything not yet sent sits above them, because that is
+    // what still needs doing.
+    return [...vs].sort((a, b) => {
+      const as = a.builder?.firstSentAt || 0, bs = b.builder?.firstSentAt || 0
+      if (!as && bs) return -1
+      if (as && !bs) return 1
+      if (as && bs) return bs - as
+      return String(b.varNumber || '').localeCompare(String(a.varNumber || ''), undefined, { numeric: true })
+    })
   }, [project])
 
   // Open one for editing. Everything comes back - items, workings, clarifications - so a
   // draft can be finished later rather than started again.
   function openVariation(v) {
     const b = v.builder || {}
+    if (!v.builder) {
+      // Raised straight onto the tracker, so there are no items or workings to load.
+      // Opening it would show an empty builder and saving would overwrite the figures
+      // somebody typed on the tracker with nothing.
+      setMsg(`${v.varNumber} was added on the tracker rather than built here, so there are no workings to open. Edit it on the Variation Tracker.`)
+      setEditingVar(v.varNumber)
+      return
+    }
     setEditingVar(v.varNumber)
     setRaised(null)
     setHeader({
@@ -435,9 +458,11 @@ export default function VariationBuilder({ projects, onSaved }) {
   function newVariation() {
     setEditingVar(null)
     setRaised(null)
-    const nums = existingVars.map(v => parseInt(String(v.varNumber || '').replace(/[^0-9]/g, ''))).filter(x => !isNaN(x))
-    const next = (nums.length ? Math.max(...nums) : 0) + 1
-    setHeader({ varNumber: `V${String(next).padStart(2, '0')}`, date: todayISO(), requestedBy: '', description: '' })
+    setReqOther(false)
+    // The same sent-based number as everywhere else. This had its own copy of the
+    // calculation, counting every variation raised - so it disagreed with the header the
+    // moment a draft existed.
+    setHeader({ varNumber: nextSentLabel, date: todayISO(), requestedBy: '', description: '' })
     setItems([])
     setClar(BASE_CLARIFICATIONS.slice())
     setMsg('')
@@ -447,13 +472,25 @@ export default function VariationBuilder({ projects, onSaved }) {
 
   // Next number from the LAST variation on this project, whether it was built here or
   // added straight to the tracker - variations do not have to come through the builder.
+  // NUMBERED WHEN IT GOES OUT, not when it is raised.
+  //
+  // A draft that is never sent used to consume V03 for ever, so the customer's numbering
+  // had gaps in it that meant nothing to them. The next number now follows the highest
+  // number ACTUALLY SENT, and a draft carries it provisionally until it goes.
+  const nextSentNumber = useMemo(() => {
+    const vars = project?.variations || project?.settings?.variations || []
+    const sentNums = vars
+      .filter(v => v.builder?.firstSentAt)
+      .map(v => parseInt(String(v.varNumber || '').replace(/[^0-9]/g, '')))
+      .filter(x => !isNaN(x))
+    return (sentNums.length ? Math.max(...sentNums) : 0) + 1
+  }, [project])
+  const nextSentLabel = `V${String(nextSentNumber).padStart(2, '0')}`
+
   useEffect(() => {
     if (!project) return
-    const vars = project.variations || project.settings?.variations || []
-    const nums = vars.map(v => parseInt(String(v.varNumber || '').replace(/[^0-9]/g, ''))).filter(x => !isNaN(x))
-    const next = (nums.length ? Math.max(...nums) : 0) + 1
-    setHeader(h => ({ ...h, varNumber: `V${String(next).padStart(2, '0')}` }))
-  }, [project])
+    setHeader(h => ({ ...h, varNumber: nextSentLabel }))
+  }, [project, nextSentLabel])
 
   const totals = useMemo(() => items.reduce((a, it) => ({
     materials: a.materials + n(it.materialsTotal),
@@ -469,7 +506,7 @@ export default function VariationBuilder({ projects, onSaved }) {
     setEditing(items.length)
   }
 
-  async function save() {
+  async function save(forceNumber) {
     if (!project) { setMsg('Pick a project first.'); return false }
     if (!items.length) { setMsg('Add at least one item.'); return false }
     setSaving(true); setMsg('')
@@ -480,7 +517,7 @@ export default function VariationBuilder({ projects, onSaved }) {
         // The four fields every other page reads. Everything downstream - the anticipated
         // final account, applications, cash flow, project financials, retention - works
         // off these and needs no knowledge of the builder.
-        varNumber: header.varNumber,
+        varNumber: forceNumber || header.varNumber,
         description: header.description || (items[0]?.description || ''),
         instructed: 'no',
         materials: String(Math.round(totals.materials * 100) / 100),
@@ -526,7 +563,13 @@ export default function VariationBuilder({ projects, onSaved }) {
   // not sent is a variation the customer does not know about - and the send needs a saved
   // record to build the PDF from.
   async function saveAndSend() {
-    const ok = await save()
+    // Take the number at the point of sending. A draft that has sat for a fortnight while
+    // two others went out should not go to the customer as V03 when V03 and V04 have
+    // already been sent.
+    if (!raisedAlreadySent && header.varNumber !== nextSentLabel) {
+      setHeader(h => ({ ...h, varNumber: nextSentLabel }))
+    }
+    const ok = await save(raisedAlreadySent ? null : nextSentLabel)
     if (ok) setSendOpen(true)
   }
 
@@ -591,9 +634,15 @@ export default function VariationBuilder({ projects, onSaved }) {
                   }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: on ? '#4338ca' : INK }}>
                     {v.varNumber}
-                    <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: sent ? '#dcfce7' : '#fef9c3', color: sent ? '#166534' : '#a16207' }}>
-                      {sent ? 'SENT' : 'DRAFT'}
+                    {/* Three states, not two. A variation typed onto the tracker has no
+                        workings here, and saying "DRAFT" would suggest it can be opened
+                        and finished. */}
+                    <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: sent ? '#dcfce7' : (v.builder ? '#fef9c3' : '#f1f5f9'), color: sent ? '#166534' : (v.builder ? '#a16207' : '#64748b') }}>
+                      {sent ? 'SENT' : (v.builder ? 'DRAFT' : 'TRACKER')}
                     </span>
+                    {v.instructed === 'yes' && (
+                      <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: '#dbeafe', color: '#1d4ed8' }}>INSTRUCTED</span>
+                    )}
                   </div>
                   <div style={{ fontSize: 11.5, color: '#666', marginTop: 2, wordBreak: 'break-word' }}>{v.description || 'no description'}</div>
                   <div style={{ fontSize: 11.5, color: '#888', marginTop: 2 }}>{money(val)}</div>
@@ -614,7 +663,13 @@ export default function VariationBuilder({ projects, onSaved }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div><div style={lbl}>Project</div><div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div></div>
               <div><div style={lbl}>Sub-Contract Ref</div><div style={{ fontSize: 13.5, color: INK }}>{subContractRef || <span style={{ color: '#c2410c' }}>not set on the handover</span>}</div></div>
-              <div><div style={lbl}>Variation No.</div><input value={header.varNumber} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} /></div>
+              <div>
+                <div style={lbl}>Variation No.</div>
+                <input value={header.varNumber} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} />
+                {!raisedAlreadySent && (
+                  <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Provisional &mdash; numbers follow the order variations are sent.</div>
+                )}
+              </div>
               <div><div style={lbl}>Date</div><input type="date" value={header.date} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
               <div>
                 <div style={lbl}>Requested by</div>
@@ -738,7 +793,16 @@ export default function VariationBuilder({ projects, onSaved }) {
       {sendOpen && raised && (
         <SendVariationModal project={project} variation={raised.record} me={me}
           onClose={() => setSendOpen(false)}
-          onSent={(m) => { setSendOpen(false); setMsg(m) }} />
+          onSent={async (m) => {
+            setSendOpen(false)
+            // Refresh first, so the variation just sent is on the list with its SENT badge
+            // and its number counts towards the next one.
+            if (onSaved) await onSaved()
+            // Then a clean sheet. Leaving the sent variation on screen is what let a
+            // second Save turn it into the next variation instead of raising a new one.
+            newVariation()
+            setMsg(`${m} Ready for the next variation.`)
+          }} />
       )}
 
       {editing != null && items[editing] && (

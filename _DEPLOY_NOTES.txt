@@ -1,78 +1,41 @@
-pkg516 - instruct links, reminders, and instruction recording
-=============================================================
+pkg518 - fixes the Variation Builder crash
+==========================================
 
-Deploy after pkg515.
+Deploy after pkg517. One changed file: components/VariationBuilder.js. No new files.
 
-CHANGED FILES (replace)
------------------------
-  components/VariationBuilder.js
-  pages/api/variation-send.js
-  vercel.json
-
-NEW FILES (create)
-------------------
-  lib/variationInstruct.js
-  pages/api/variation-instruct.js
-  pages/api/cron/variation-reminders.js
-  pages/instruct/[token].js          <- literal [token] brackets, in a new "instruct" folder
+URGENT - pkg517 broke the builder. This is the fix.
 
 
-THE INSTRUCT BUTTON
--------------------
-Every variation email now carries a green "Instruct variation V01" button.
-
-It opens a page showing what they are instructing - project, ref, description, value, and
-a link to the PDF - with a name box and an Instruct button.
-
-NOT A ONE-CLICK INSTRUCTION, deliberately. A link that instructed on click would be
-quicker, and would also mean a mis-click, an email scanner or a link preview could commit
-us to work. There is a page, and a button on it.
-
-ONE EMAIL PER RECIPIENT, each with its own link carrying that person's address. Four
-people on one email would share one link and the instruction could only ever say "somebody
-at the customer clicked it".
-
-
-WHAT GETS RECORDED
-------------------
-    when it was instructed
-    the name they typed
-    THE EMAIL ADDRESS THE LINK WAS ISSUED TO - not one typed on the page
-    their IP address and browser
-
-The signed link is what makes this evidence rather than a name in a box. Tested: a token
-edited to point at a different variation is rejected.
-
-
-IT UPDATES EVERYWHERE
----------------------
-Instructing sets instructed: 'yes' - the field the tracker, the anticipated final account,
-applications, cash flow and project financials all already read. So it updates all of them
-with no further work, and the dashboard cache is cleared so it shows immediately.
-
-
-REMINDERS
+THE CAUSE
 ---------
-MANUAL: on a variation already sent, the button becomes "Send reminder to customer" and
-the email rewrites itself as a chase - "Following up on variation V01, sent on 19/08/2026.
-We have not yet received your instruction."
+I added raisedAlreadySent as a useMemo, and put it ABOVE the const it reads:
 
-AUTOMATIC: a cron at 9am on weekdays chases anything sent 3 WORKING days ago and not
-instructed. Working days, so a Thursday send is chased the following Tuesday rather than
-landing on a Sunday.
+    const raisedAlreadySent = useMemo(() => {
+      const v = (project?.variations || []) ...          <- project
+    }, [project, editingVar])
 
-SENT ONCE. Something still not instructed after that is a conversation to have, not
-another email to ignore.
+    ...
 
-Test it safely first:  /api/cron/variation-reminders?dry=1
-That reports exactly what it would send, and sends nothing.
+    const project = useMemo(...)                          <- declared 700 characters later
+
+useMemo runs its callback DURING RENDER, so `project` was still in the temporal dead zone
+and every render of the builder threw a ReferenceError.
+
+It compiled cleanly because nothing can know at build time that a const declared later
+would be read earlier. Same class of fault as pkg474 and pkg495 - the build catches
+neither.
 
 
-STILL TO DO - the application attachment
-------------------------------------------
-You asked for the variation and its instruction to be appended to the application document
-automatically. That is not in this package.
+FIXED
+-----
+Moved directly below `project`, where its dependency exists.
 
-It needs the application PDF to merge in other PDFs, which it does not currently do, and I
-would rather build that once you have instructed a few variations through this and we know
-the instruction record is right. Everything it needs is now being captured.
+And I checked the rest rather than fixing the one: every useMemo in the file now sits
+after everything it reads.
+
+    projects (prop) -> project -> raisedAlreadySent -> existingVars
+    -> nextSentNumber -> totals -> customerOptions
+
+That ordering check is the one worth keeping. A memo reading something declared below it
+is invisible to the compiler, invisible to the prerender, and only shows up when somebody
+opens the page.
