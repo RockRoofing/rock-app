@@ -9,6 +9,13 @@ import { buildVariationPDF } from '../../lib/variationPdf'
 //
 // One file for both, because the send has to build exactly the same document the download
 // gives you. Two files would drift.
+// The logo is served from the site itself, the same way the application PDF does it -
+// LOGO_URL was never set, which is why the variation came out without one.
+const logoFor = (req) => {
+  const proto = req.headers['x-forwarded-proto'] || 'https'
+  return `${proto}://${req.headers.host}/rock-logo.jpg`
+}
+
 async function loadVariation(projectId, varNumber) {
   const project = (await getProject(projectId)) || {}
   const vars = Array.isArray(project.variations) ? project.variations : []
@@ -36,7 +43,7 @@ export default async function handler(req, res) {
     const { project, variation, error } = await loadVariation(projectId, varNumber)
     if (error) return res.status(404).json({ error })
     try {
-      const bytes = await buildVariationPDF({ variation, project, logoUrl: process.env.LOGO_URL || '' })
+      const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })
       const fname = `Variation ${variation.varNumber} - ${[project.jobNo, project.name].filter(Boolean).join(' ')}.pdf`
         .replace(/[^a-zA-Z0-9 .-]/g, '')
       res.setHeader('Content-Type', 'application/pdf')
@@ -62,7 +69,7 @@ export default async function handler(req, res) {
   const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
 
   try {
-    const bytes = await buildVariationPDF({ variation, project, logoUrl: process.env.LOGO_URL || '' })
+    const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })
     const b64 = Buffer.from(bytes).toString('base64')
     const fname = `Variation ${variation.varNumber} - ${[project.jobNo, project.name].filter(Boolean).join(' ')}.pdf`
       .replace(/[^a-zA-Z0-9 .-]/g, '')
@@ -83,6 +90,21 @@ export default async function handler(req, res) {
     })
     const d = await r.json()
     if (!r.ok) throw new Error(d?.message || 'Send failed')
+
+    // Record that it went, and to whom. Without this the tracker cannot tell a draft from
+    // something the customer has already had - which is the difference between chasing an
+    // instruction and forgetting to ask for one.
+    try {
+      const { saveProject } = await import('../../lib/db')
+      const fresh = (await getProject(projectId)) || {}
+      const vars = Array.isArray(fresh.variations) ? fresh.variations : []
+      const next = vars.map(v => String(v.varNumber) !== String(varNumber) ? v : ({
+        ...v,
+        builder: { ...(v.builder || {}), sentAt: Date.now(), sentTo: recipients, sentBy: replyTo || '' },
+      }))
+      await saveProject(projectId, { ...fresh, variations: next })
+    } catch { /* the email has gone; the flag is secondary */ }
+
     return res.json({ ok: true, id: d.id, sentTo: recipients, cc: ccList })
   } catch (e) {
     return res.status(500).json({ error: e?.message || 'Could not send' })

@@ -1,67 +1,94 @@
-pkg514 - Variation Builder part 2: download and send
-====================================================
+pkg515 - Variation Builder and Tracker: everything you listed
+=============================================================
 
-Deploy after pkg513.
+Deploy after pkg514.
 
 CHANGED FILES (replace)
 -----------------------
-  components/VariationBuilder.js
-
-NEW FILES (create)
-------------------
   lib/variationPdf.js
+  components/VariationBuilder.js
+  pages/variations.js
   pages/api/variation-send.js
+  pages/api/dashboard.js
 
-No, the send half was not in pkg507 - I left it out on purpose so you could try the
-builder first. Here it is.
-
-
-THE PDF
--------
-Laid out like the sheet you sent: our details top left, the header block with Contract,
-Variation No, Sub-Contract Ref, Date, Description and Requested by in red, then the priced
-items, the total, and the clarifications lettered a to e underneath in red.
-
-    Item  Description                    Quantity  Unit  Rate     Total
-    1     Additional VCL to plant deck   120       m2    £22.64   £2,716.50
-    2     Perimeter detailing            38        m     £14.20     £539.60
-                                                          Total   £3,256.10
-
-IT DOES NOT SHOW THE WORKINGS. Those are how we arrived at the rate and are ours; the
-customer gets the rate, the quantity and the total - which is what the old document showed
-as well.
-
-Checked against a generated document: the PDF total and the figure on the tracker agree to
-the penny, because both come from the same items.
+NEW FILES: none.
 
 
-DOWNLOAD
---------
-"Download V01 PDF" appears once the variation is raised. It has to be saved first - the
-PDF is built server-side from the record, so there is nothing to build until it exists.
+THE SUB-CONTRACT REF - it was never going to work
+---------------------------------------------------
+There is no "subContractRef" anywhere in the app. The field is called ORDERREF, resolved
+from the handover, and Outstanding Invoices already prints it as [Sub-Contract Ref].
+
+I was reading a name that does not exist, so it was always going to come back blank. Now
+resolved the same way Outstanding Invoices resolves it, and it says "not set on the
+handover" rather than "not set in Project Details", which was also wrong.
 
 
-SEND
-----
-"Send to customer" opens the send window, built the same way as Outstanding Invoices:
+THE BUILDER IS NOW TWO PANES
+------------------------------
+    LEFT    every variation on this project, newest first, each with a DRAFT or SENT
+            badge, its description and its value. Click one and it opens on the right -
+            items, workings and clarifications all come back, so a draft can be finished
+            rather than started again.
+            "+ Raise new variation" at the foot.
 
-    TO        the customer's own contacts from the handover, as tick boxes, plus a box
-              for anybody not on it
-    COPY IN   the Rock team, from the portal directory
-    SUBJECT   Variation V01 - J205 Pets Choice
-    MESSAGE   written for you from the variation - number, project, sub-contract ref,
-              description and value, then "Please confirm your instruction to proceed"
+    RIGHT   the one being worked on.
 
-All editable before it goes.
-
-REPLIES COME BACK TO YOU - the portal user who sent it, not a sending address nobody
-reads. A customer querying a variation has to reach the person who raised it.
-
-The PDF is attached automatically, named "Variation V01 - J205 Pets Choice.pdf".
+Saving an existing variation now REPLACES it rather than adding a second with the same
+number, and the form no longer clears itself after a save - an edit you wanted to check or
+send used to vanish the moment it was written.
 
 
-ONE THING TO WATCH
-------------------
-If a project's handover has no customer contacts with email addresses, the To list will be
-empty and it says so plainly. Type an address in the box underneath - and it is worth
-filling the handover in, because the same contacts now feed "Requested by" as well.
+VIEW ON THE TRACKER
+-------------------
+A View button on any variation that came from the builder. It shows what the CUSTOMER got:
+header, priced items, total, clarifications - plus when it was sent and to whom, and a
+Download PDF link.
+
+"Show workings" underneath opens the build-up: every materials and labour line, the waste,
+the mark-up and the totals per item. Hidden by default, so the top half can be read back
+during a call without the customer's copy being cluttered with our costs.
+
+
+REQUESTED BY
+------------
+A real dropdown of the CUSTOMER'S people only - it was also offering the company name and
+our own QS, who do not request variations. "Someone else..." opens a text box for anybody
+not on the handover.
+
+
+THE WORKINGS WILL NOT CLOSE HALF DONE
+---------------------------------------
+It now names exactly what is missing:
+
+    "This item still needs a description, a quantity, a unit, a mark-up %, at least one
+     materials or labour line."
+
+All five are required. Each of these ends up on a document going to a customer, and an
+item with neither materials nor labour behind it is priced from nothing.
+
+
+THE DOCUMENT
+------------
+    LOGO      now on it. It was looking for LOGO_URL, which is not set - it now serves
+              /rock-logo.jpg from the site, exactly as the application PDF does.
+    BLACK     no red anywhere. Red on a document going out reads as a warning.
+    ROWS      double height, so descriptions are not stacked on top of each other.
+    SPACING   more air between the last item and the total box.
+
+
+THE EMAIL
+---------
+    "Hi Jack," - the first name of whoever is ticked to receive it.
+    Signed off with your name, Rock Roofing Limited, your phone and your email.
+    Replies go to you. That was already the case and is unchanged.
+
+
+RAISE AND SEND
+--------------
+The button is now "Raise & send to customer" - or "Save & send to customer" when editing.
+It saves, then opens the send window. A variation that is raised and not sent is one the
+customer does not know about.
+
+Sending now records WHEN and TO WHOM on the variation, which is what drives the DRAFT/SENT
+badge in the left-hand list.

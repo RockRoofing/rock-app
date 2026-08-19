@@ -34,11 +34,131 @@ function nextVarNumber(variations) {
   return `V${String(max + 1).padStart(2, '0')}`
 }
 
+
+// What the customer received, with the workings behind a toggle.
+//
+// The toggle is the point: the top half is exactly what went out, so it can be read back
+// during a phone call, and the workings are there when somebody asks how the rate was
+// arrived at - without putting them in front of the customer.
+function ViewVariationModal({ row, onClose }) {
+  const [showWorkings, setShowWorkings] = useState(false)
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const b = row.builder || {}
+  const items = b.items || []
+  const nn = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x }
+  const money = (v) => '£' + nn(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const total = items.reduce((s, it) => s + nn(it.total), 0)
+  const th = { padding: '7px 9px', fontSize: 10.5, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', textAlign: 'left' }
+  const td = { padding: '9px 9px', fontSize: 12.5, borderTop: '1px solid #eee', verticalAlign: 'top' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 900, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 16px', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 900, maxWidth: '100%', padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>{row.varNumber} &mdash; {row.projectName}</h3>
+            <div style={{ fontSize: 12.5, color: '#888' }}>
+              {b.sentAt ? `Sent ${new Date(b.sentAt).toLocaleDateString('en-GB')}${b.sentTo?.length ? ` to ${b.sentTo.join(', ')}` : ''}` : 'Not yet sent'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <a href={`/api/variation-send?projectId=${row.projectId}&varNumber=${encodeURIComponent(row.varNumber)}&download=1`}
+              style={{ fontSize: 12.5, color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>Download PDF</a>
+            <button onClick={onClose} style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, margin: '16px 0', padding: '12px 14px', background: '#f8f9fa', borderRadius: 8 }}>
+          {[['Contract', row.projectName], ['Sub-Contract Ref', b.subContractRef || row.subContractRef], ['Date', b.date ? new Date(b.date).toLocaleDateString('en-GB') : ''],
+            ['Requested by', b.requestedBy], ['Description', row.description]].map(([l, v]) => (
+            <div key={l}><div style={{ fontSize: 10.5, color: '#888' }}>{l}</div><div style={{ fontSize: 12.5, fontWeight: 600, color: '#1a1a2e' }}>{v || '—'}</div></div>
+          ))}
+        </div>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr style={{ background: '#f8f9fa' }}>
+            <th style={{ ...th, width: 44 }}>Item</th><th style={th}>Description</th>
+            <th style={{ ...th, width: 80 }}>Quantity</th><th style={{ ...th, width: 60 }}>Unit</th>
+            <th style={{ ...th, width: 90, textAlign: 'right' }}>Rate</th>
+            <th style={{ ...th, width: 110, textAlign: 'right' }}>Total</th>
+          </tr></thead>
+          <tbody>
+            {items.map((it, i) => (
+              <tr key={i}>
+                <td style={td}>{i + 1}</td>
+                <td style={td}>{it.description}</td>
+                <td style={td}>{nn(it.qty)}</td>
+                <td style={td}>{it.unit}</td>
+                <td style={{ ...td, textAlign: 'right' }}>{money(it.rate)}</td>
+                <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{money(it.total)}</td>
+              </tr>
+            ))}
+            <tr style={{ background: '#f8f9fa' }}>
+              <td style={{ ...td, fontWeight: 800 }} colSpan={5}>Total</td>
+              <td style={{ ...td, textAlign: 'right', fontWeight: 800, fontSize: 14 }}>{money(total)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {(b.clarifications || []).filter(Boolean).length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Clarifications</div>
+            {b.clarifications.filter(Boolean).map((c, i) => (
+              <div key={i} style={{ fontSize: 12, color: '#444', marginBottom: 3 }}>
+                <strong>{String.fromCharCode(97 + i)}</strong>&nbsp;&nbsp;{c}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 18, borderTop: '1px solid #eee', paddingTop: 12 }}>
+          <button onClick={() => setShowWorkings(v => !v)}
+            style={{ background: showWorkings ? '#1a1a2e' : '#fff', color: showWorkings ? '#fff' : '#1a1a2e', border: '1px solid #1a1a2e', borderRadius: 8, padding: '7px 16px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+            {showWorkings ? 'Hide workings' : 'Show workings'}
+          </button>
+          <span style={{ fontSize: 11.5, color: '#888', marginLeft: 10 }}>Our build-up. Not on the customer&rsquo;s copy.</span>
+
+          {showWorkings && items.map((it, i) => (
+            <div key={i} style={{ marginTop: 14, padding: '12px 14px', border: '1px solid #eee', borderRadius: 8 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>{i + 1}. {it.description} &mdash; {nn(it.qty)} {it.unit} @ {money(it.rate)}</div>
+              {[['Materials', it.materials, true], ['Labour', it.labour, false]].map(([label, rows, waste]) => (
+                (rows || []).length === 0 ? null : (
+                  <div key={label} style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>{label}</div>
+                    {rows.map((r, ri) => (
+                      <div key={ri} style={{ fontSize: 12, color: '#444', display: 'flex', justifyContent: 'space-between', gap: 10, padding: '2px 0' }}>
+                        <span>{r.description || '—'} · {nn(r.qty)} {r.unit || ''} @ {money(r.rate)}{waste && nn(r.wastePct) ? ` + ${nn(r.wastePct)}% waste` : ''}</span>
+                        <span style={{ fontWeight: 600 }}>{money(nn(r.qty) * nn(r.rate) * (waste ? 1 + nn(r.wastePct) / 100 : 1))}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ))}
+              <div style={{ display: 'flex', gap: 18, marginTop: 8, fontSize: 12, color: '#444', flexWrap: 'wrap' }}>
+                <span>Materials <strong>{money(it.materialsTotal)}</strong></span>
+                <span>Labour <strong>{money(it.labourTotal)}</strong></span>
+                <span>Mark-up {nn(it.markupPct)}% <strong>{money(it.profit)}</strong></span>
+                <span>Total <strong>{money(it.total)}</strong></span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function VariationTracker() {
   const router = useRouter()
   const isEmbed = router.query.embed === 'true'
   const [projects, setProjects] = useState([])
   const [subTab, setSubTab] = useState('tracker')
+  const [viewVar, setViewVar] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -272,6 +392,9 @@ export default function VariationTracker() {
         labour: fmtN(v.labour),
         profit: fmtN(v.profit),
         total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit),
+        // The builder detail, so View has something to show.
+        builder: v.builder || null,
+        subContractRef: p.orderRef || '',
       })
     }
   }
@@ -498,6 +621,13 @@ export default function VariationTracker() {
                         <td style={{ ...tdS, textAlign: 'right', color: r.profit >= 0 ? '#16a34a' : '#e63946' }}>{fmt(r.profit)}</td>
                         <td style={{ ...tdS, textAlign: 'right', fontWeight: 600 }}>{fmt(r.total)}</td>
                         <td style={{ ...tdS, whiteSpace: 'nowrap' }}>
+                          {/* View shows what the CUSTOMER got, with the workings behind a
+                              toggle. Only offered where there are workings to show - a
+                              variation typed straight onto the tracker has none. */}
+                          {r.builder && (
+                            <button onClick={e => { e.stopPropagation(); setViewVar(r) }}
+                              style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #c7d2fe', borderRadius: 4, background: '#eef2ff', cursor: 'pointer', marginRight: 4, color: '#4338ca', fontWeight: 600 }}>View</button>
+                          )}
                           <button onClick={e => { e.stopPropagation(); openEdit(r) }}
                             style={{ fontSize: 11, padding: '3px 8px', border: '1px solid #e5e5e5', borderRadius: 4, background: '#f8f9fa', cursor: 'pointer', marginRight: 4, color: '#555' }}>Edit</button>
                           <button onClick={e => { e.stopPropagation(); deleteVariation(r) }}
@@ -520,6 +650,8 @@ export default function VariationTracker() {
           </div>
           </>)}
         </div>
+
+        {viewVar && <ViewVariationModal row={viewVar} onClose={() => setViewVar(null)} />}
 
         {/* Edit Variation Modal */}
         {editModal && (

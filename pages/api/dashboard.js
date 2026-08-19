@@ -376,6 +376,15 @@ export default async function handler(req, res) {
         // screen and blank on Project Financials.
         estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || '',
         qsName: settings.qsName || '',
+        // The sub-contract reference. It is called orderRef on the project record - the
+        // Variation Builder was looking for "subContractRef", which is only the LABEL
+        // Outstanding Invoices prints it under, so it never found anything.
+        orderRef: resolvedPeople?.orderRef || settings.orderRef || settings.customerOrderRef || '',
+        // The sub-contract / order reference, resolved from the handover the same way
+        // Outstanding Invoices resolves it for [Sub-Contract Ref]. It was never on the
+        // project record under that name, which is why the Variation Builder found
+        // nothing to pull through.
+        orderRef: resolvedPeople?.orderRef || settings.orderRef || settings.customerOrderRef || '',
         // The customer's own people, from the handover. Needed by the Variation Builder
         // so "Requested by" offers who actually asked, rather than only the company.
         customerContacts: Array.isArray(resolvedPeople?.customerContacts)

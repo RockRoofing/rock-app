@@ -78,9 +78,23 @@ function WorkingsModal({ item, onSave, onClose }) {
   // The mark-up must be entered before this window will close. It is the one number that
   // cannot be inferred from anything else in here, and an item priced at cost is a
   // mistake that reaches the customer.
+  // WHAT AN ITEM NEEDS BEFORE IT CAN LEAVE THIS WINDOW.
+  //
+  // Every one of these ends up on a document going to a customer. A line with no
+  // description, no quantity or no unit is not a priced item, and an item with neither
+  // materials nor labour behind it is priced from nothing.
+  const priced = (rows) => (rows || []).some(r => n(r.qty) > 0 && n(r.rate) > 0)
+  const missing = []
+  if (!String(d.description || '').trim()) missing.push('a description')
+  if (!(n(d.qty) > 0)) missing.push('a quantity')
+  if (!d.unit) missing.push('a unit')
+  if (d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))) missing.push('a mark-up %')
+  if (!priced(d.materials) && !priced(d.labour)) missing.push('at least one materials or labour line')
   const needsMarkup = d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))
+  const incomplete = missing.length > 0
+
   const tryClose = () => {
-    if (needsMarkup) { alert('Enter a mark-up % before closing.\n\nWithout it the item is priced at cost.'); return }
+    if (incomplete) { alert(`This item still needs ${missing.join(', ')}.`); return }
     onSave(calc(d)); onClose()
   }
   const t = calc(d)
@@ -187,12 +201,12 @@ function WorkingsModal({ item, onSave, onClose }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 12, color: needsMarkup ? '#dc2626' : (saved ? GREEN : '#aaa') }}>
-            {needsMarkup ? 'Enter a mark-up % to finish' : (saved ? 'Saved' : 'Saves as you type')}
+          <span style={{ fontSize: 12, color: incomplete ? '#dc2626' : (saved ? GREEN : '#aaa') }}>
+            {incomplete ? `Still needs ${missing.join(', ')}` : (saved ? 'Saved' : 'Saves as you type')}
           </span>
-          <button onClick={tryClose} disabled={needsMarkup}
-            title={needsMarkup ? 'Enter a mark-up % first' : 'Save and close'}
-            style={{ background: needsMarkup ? '#e5e7eb' : GREEN, color: needsMarkup ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: needsMarkup ? 'default' : 'pointer' }}>
+          <button onClick={tryClose} disabled={incomplete}
+            title={incomplete ? `Still needs ${missing.join(', ')}` : 'Save and close'}
+            style={{ background: incomplete ? '#e5e7eb' : GREEN, color: incomplete ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: incomplete ? 'default' : 'pointer' }}>
             Save &amp; close
           </button>
         </div>
@@ -250,18 +264,31 @@ function SendVariationModal({ project, variation, me, onClose, onSent }) {
 
   // The email writes itself from the variation, so nobody has to retype the reference,
   // the number and the description - and so every one that goes out says the same things.
+  // Who it is addressed to: the first ticked contact's FIRST NAME. "Hi Jack," rather than
+  // "Hi," - it is a letter to a person, and the name is one we already hold.
+  const firstName = (() => {
+    const c = contacts.find(x => to.includes(x.email))
+    return String(c?.name || '').trim().split(/\s+/)[0] || ''
+  })()
+
   useEffect(() => {
     setSubject(`Variation ${variation.varNumber} - ${projLabel}`)
     setText(
-      `Hi,\n\n`
+      `Hi${firstName ? ` ${firstName}` : ''},\n\n`
       + `Please find attached variation ${variation.varNumber} for ${projLabel}.\n\n`
       + (b.subContractRef ? `Sub-Contract Ref: ${b.subContractRef}\n` : '')
       + (variation.description ? `Description: ${variation.description}\n` : '')
       + `Value: ${money(Number(variation.materials) + Number(variation.labour) + Number(variation.profit))}\n\n`
       + `Please confirm your instruction to proceed.\n\n`
-      + `Kind regards\n${me?.name || ''}`
+      + `Kind regards\n`
+      // The sender's own details, so the customer can pick up the phone rather than
+      // hunting for a number or replying and waiting.
+      + `${me?.name || ''}\n`
+      + `Rock Roofing Limited\n`
+      + (me?.phone ? `${me.phone}\n` : '')
+      + (me?.email ? `${me.email}\n` : '')
     )
-  }, [variation])
+  }, [variation, firstName, me])
 
   const toggle = (list, setList, v) => setList(list.includes(v) ? list.filter(x => x !== v) : [...list, v])
 
@@ -354,6 +381,8 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [raised, setRaised] = useState(null)     // the variation just saved
   const [sendOpen, setSendOpen] = useState(false)
+  const [reqOther, setReqOther] = useState(false)
+  const [editingVar, setEditingVar] = useState(null)   // varNumber being edited, or null for new
   const [me, setMe] = useState(null)
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => setMe(d.user || null)).catch(() => {})
@@ -367,6 +396,43 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [msg, setMsg] = useState('')
 
   const project = useMemo(() => (projects || []).find(p => String(p.xeroId) === String(projectId)) || null, [projects, projectId])
+
+  // Everything already raised on this project. Newest first: the one somebody wants is
+  // almost always the last one.
+  const existingVars = useMemo(() => {
+    const vs = project?.variations || project?.settings?.variations || []
+    return [...vs].sort((a, b) => String(b.varNumber || '').localeCompare(String(a.varNumber || ''), undefined, { numeric: true }))
+  }, [project])
+
+  // Open one for editing. Everything comes back - items, workings, clarifications - so a
+  // draft can be finished later rather than started again.
+  function openVariation(v) {
+    const b = v.builder || {}
+    setEditingVar(v.varNumber)
+    setRaised(null)
+    setHeader({
+      varNumber: v.varNumber || '',
+      date: b.date || todayISO(),
+      requestedBy: b.requestedBy || '',
+      description: v.description || '',
+    })
+    setItems((b.items || []).map(x => ({ ...x })))
+    setClar(b.clarifications?.length ? b.clarifications.slice() : BASE_CLARIFICATIONS.slice())
+    setMsg('')
+  }
+
+  function newVariation() {
+    setEditingVar(null)
+    setRaised(null)
+    const nums = existingVars.map(v => parseInt(String(v.varNumber || '').replace(/[^0-9]/g, ''))).filter(x => !isNaN(x))
+    const next = (nums.length ? Math.max(...nums) : 0) + 1
+    setHeader({ varNumber: `V${String(next).padStart(2, '0')}`, date: todayISO(), requestedBy: '', description: '' })
+    setItems([])
+    setClar(BASE_CLARIFICATIONS.slice())
+    setMsg('')
+  }
+  // Called orderRef on the record; "Sub-Contract Ref" is the label it prints under.
+  const subContractRef = project?.orderRef || project?.settings?.orderRef || project?.settings?.customerOrderRef || ''
 
   // Next number from the LAST variation on this project, whether it was built here or
   // added straight to the tracker - variations do not have to come through the builder.
@@ -393,8 +459,8 @@ export default function VariationBuilder({ projects, onSaved }) {
   }
 
   async function save() {
-    if (!project) { setMsg('Pick a project first.'); return }
-    if (!items.length) { setMsg('Add at least one item.'); return }
+    if (!project) { setMsg('Pick a project first.'); return false }
+    if (!items.length) { setMsg('Add at least one item.'); return false }
     setSaving(true); setMsg('')
     try {
       const settings = project.settings || {}
@@ -413,26 +479,44 @@ export default function VariationBuilder({ projects, onSaved }) {
         builder: {
           date: header.date,
           requestedBy: header.requestedBy,
-          subContractRef: settings.subContractRef || settings.subcontractRef || '',
+          subContractRef: project.orderRef || settings.orderRef || settings.customerOrderRef || '',
           items, clarifications: clar,
           builtAt: Date.now(),
         },
       }
+      // Replace when editing, append when new - matched on the variation number, which
+      // is what identifies it everywhere else.
+      const ix = existing.findIndex(v => String(v.varNumber) === String(record.varNumber))
+      const next = ix >= 0
+        ? existing.map((v, i) => i === ix ? { ...v, ...record } : v)
+        : [...existing, record]
       const r = await fetch(`/api/project/${project.xeroId}/settings`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...settings, variations: [...existing, record] }),
+        body: JSON.stringify({ ...settings, variations: next }),
       })
       if (!r.ok) throw new Error('Save failed')
       // Hold on to what was raised. Download and Send need a SAVED variation - the PDF
       // is built server-side from the record, so there is nothing to send until it
       // exists.
       setRaised({ varNumber: record.varNumber, record })
-      setMsg(`${header.varNumber} raised on ${project.jobNo || project.name}. It is now on the tracker and in the final account.`)
-      setItems([]); setHeader(h => ({ ...h, description: '', requestedBy: '' }))
-      setClar(BASE_CLARIFICATIONS.slice())
+      setMsg(`${header.varNumber} saved on ${project.jobNo || project.name}. It is on the tracker and in the final account.`)
+      // The form stays as it is. Clearing it after a save meant an edit you wanted to
+      // check, or send, vanished the moment it was written.
+      setEditingVar(record.varNumber)
       if (onSaved) await onSaved()
+      setSaving(false)
+      return true
     } catch (e) { setMsg(`Could not save: ${e.message || ''}`.trim()) }
     setSaving(false)
+    return false
+  }
+
+  // Save, then open the send window. One action, because a variation that is raised and
+  // not sent is a variation the customer does not know about - and the send needs a saved
+  // record to build the PDF from.
+  async function saveAndSend() {
+    const ok = await save()
+    if (ok) setSendOpen(true)
   }
 
   const inp = { padding: '7px 9px', border: `1px solid ${LINE}`, borderRadius: 7, fontSize: 13, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }
@@ -445,11 +529,12 @@ export default function VariationBuilder({ projects, onSaved }) {
   // company and the QS. A datalist rather than a select, deliberately - it offers the
   // names we hold AND lets you type somebody we do not, because the person who rang up
   // is not always on the handover.
+  // CUSTOMER PEOPLE ONLY. It was also offering the company name and our own QS, which are
+  // not people who request a variation - the customer's own contacts from the handover
+  // are.
   const customerOptions = useMemo(() => {
-    const st = project?.settings || {}
-    const contacts = (project?.customerContacts || []).map(c => c.title ? `${c.name} (${c.title})` : c.name)
-    const out = [...contacts, project?.customer, st.customerName, st.qsName, st.customerContact, st.siteContact]
-    return [...new Set(out.filter(Boolean).map(x => String(x).trim()))]
+    const names = (project?.customerContacts || []).map(c => String(c.name || '').trim()).filter(Boolean)
+    return [...new Set(names)]
   }, [project])
 
   return (
@@ -470,18 +555,80 @@ export default function VariationBuilder({ projects, onSaved }) {
           Pick a project to start building a variation.
         </div>
       ) : (
-        <>
+        // Variations already on this project down the left, the one being worked on to the
+        // right. Most of the time somebody is here to look at what was sent last month
+        // rather than to start something new.
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,260px) minmax(0,1fr)', gap: 16, alignItems: 'start' }}>
+        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, overflow: 'hidden', position: 'sticky', top: 0 }}>
+          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${LINE}`, fontSize: 13, fontWeight: 700, color: INK }}>
+            Variations on this project
+          </div>
+          <div style={{ maxHeight: '58vh', overflowY: 'auto' }}>
+            {existingVars.length === 0 && (
+              <div style={{ padding: 16, fontSize: 12.5, color: '#aaa' }}>None yet.</div>
+            )}
+            {existingVars.map(v => {
+              const on = editingVar === v.varNumber
+              const val = n(v.materials) + n(v.labour) + n(v.profit)
+              const sent = !!v.builder?.sentAt
+              return (
+                <button key={v.varNumber} onClick={() => openVariation(v)}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px',
+                    border: 'none', borderBottom: `1px solid ${LINE}`,
+                    background: on ? '#eef2ff' : '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: on ? '#4338ca' : INK }}>
+                    {v.varNumber}
+                    <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 9.5, fontWeight: 700, background: sent ? '#dcfce7' : '#fef9c3', color: sent ? '#166534' : '#a16207' }}>
+                      {sent ? 'SENT' : 'DRAFT'}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: '#666', marginTop: 2, wordBreak: 'break-word' }}>{v.description || 'no description'}</div>
+                  <div style={{ fontSize: 11.5, color: '#888', marginTop: 2 }}>{money(val)}</div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ padding: 10, borderTop: `1px solid ${LINE}` }}>
+            <button onClick={newVariation}
+              style={{ width: '100%', background: INK, color: '#fff', border: 'none', borderRadius: 7, padding: '9px 12px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              + Raise new variation
+            </button>
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div><div style={lbl}>Project</div><div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div></div>
-              <div><div style={lbl}>Sub-Contract Ref</div><div style={{ fontSize: 13.5, color: INK }}>{project.settings?.subContractRef || project.settings?.subcontractRef || <span style={{ color: '#c2410c' }}>not set in Project Details</span>}</div></div>
+              <div><div style={lbl}>Sub-Contract Ref</div><div style={{ fontSize: 13.5, color: INK }}>{subContractRef || <span style={{ color: '#c2410c' }}>not set on the handover</span>}</div></div>
               <div><div style={lbl}>Variation No.</div><input value={header.varNumber} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} /></div>
               <div><div style={lbl}>Date</div><input type="date" value={header.date} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
               <div>
                 <div style={lbl}>Requested by</div>
-                <input list="var-customers" value={header.requestedBy} onChange={e => setHeader({ ...header, requestedBy: e.target.value })} style={inp}
-                  placeholder={customerOptions.length ? 'Pick one, or type a name' : 'Customer name'} />
-                <datalist id="var-customers">{customerOptions.map(c => <option key={c} value={c} />)}</datalist>
+                {/* A real dropdown, with one option that opens a text box. A datalist
+                    looked like a text field and hid the names behind it, so nobody used
+                    them - but somebody who is not on the handover still has to be
+                    enterable. */}
+                {reqOther ? (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input autoFocus value={header.requestedBy} onChange={e => setHeader({ ...header, requestedBy: e.target.value })} style={inp} placeholder="Name" />
+                    {customerOptions.length > 0 && (
+                      <button onClick={() => { setReqOther(false); setHeader({ ...header, requestedBy: '' }) }}
+                        title="Back to the list"
+                        style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 7, padding: '0 10px', fontSize: 12, cursor: 'pointer', color: '#666' }}>list</button>
+                    )}
+                  </div>
+                ) : (
+                  <select value={header.requestedBy}
+                    onChange={e => { if (e.target.value === '__other') { setReqOther(true); setHeader({ ...header, requestedBy: '' }) } else setHeader({ ...header, requestedBy: e.target.value }) }}
+                    style={inp}>
+                    <option value="">{customerOptions.length ? 'Select…' : 'No customer contacts on the handover'}</option>
+                    {customerOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="__other">Someone else…</option>
+                  </select>
+                )}
               </div>
             </div>
             <div style={{ marginTop: 12 }}>
@@ -568,12 +715,13 @@ export default function VariationBuilder({ projects, onSaved }) {
                 </button>
               </>
             )}
-            <button onClick={save} disabled={saving}
+            <button onClick={saveAndSend} disabled={saving}
               style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
-              {saving ? 'Saving…' : 'Raise variation'}
+              {saving ? 'Saving…' : (editingVar ? 'Save & send to customer' : 'Raise & send to customer')}
             </button>
           </div>
-        </>
+        </div>
+        </div>
       )}
 
       {sendOpen && raised && (
