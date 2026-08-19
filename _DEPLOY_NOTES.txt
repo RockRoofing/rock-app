@@ -1,41 +1,46 @@
-pkg518 - fixes the Variation Builder crash
-==========================================
+pkg519 - the Gantt scrollbar stays on screen
+============================================
 
-Deploy after pkg517. One changed file: components/VariationBuilder.js. No new files.
+Deploy after pkg518. One changed file:
+  pages/operations/project-management/planning.js
 
-URGENT - pkg517 broke the builder. This is the fix.
+No new files.
 
 
 THE CAUSE
 ---------
-I added raisedAlreadySent as a useMemo, and put it ABOVE the const it reads:
+The Gantt was capped at a flat "100vh - 220px" - 220 being somebody's estimate of how far
+down the page the box starts.
 
-    const raisedAlreadySent = useMemo(() => {
-      const v = (project?.variations || []) ...          <- project
-    }, [project, editingVar])
+It is not a fixed number. The controls above it wrap onto a second row on a narrower
+window, and the warning banners appear and disappear, so the box starts anywhere from
+about 300px to about 410px down. Whenever 220 was too small the box ran past the bottom of
+the window, taking its horizontal scrollbar with it - so you had to scroll the page down
+to find the bar, then scroll back up to see what you had moved.
 
-    ...
-
-    const project = useMemo(...)                          <- declared 700 characters later
-
-useMemo runs its callback DURING RENDER, so `project` was still in the temporal dead zone
-and every render of the builder threw a ReferenceError.
-
-It compiled cleanly because nothing can know at build time that a const declared later
-would be read earlier. Same class of fault as pkg474 and pkg495 - the build catches
-neither.
+Same fault the retention register had, and the same fix.
 
 
-FIXED
------
-Moved directly below `project`, where its dependency exists.
+MEASURED, NOT GUESSED
+---------------------
+The box now measures its own distance from the top of the window and sizes itself to fill
+what is left, less 16px so the bar is not flush with the edge.
 
-And I checked the rest rather than fixing the one: every useMemo in the file now sits
-after everything it reads.
+Remeasured on load, on resize, and whenever anything above it changes height - so wrapping
+the controls or showing a banner adjusts it rather than breaking it.
 
-    projects (prop) -> project -> raisedAlreadySent -> existingVars
-    -> nextSentNumber -> totals -> customerOptions
 
-That ordering check is the one worth keeping. A memo reading something declared below it
-is invisible to the compiler, invisible to the prerender, and only shows up when somebody
-opens the page.
+AND WHEN THE PAGE SCROLLS
+-------------------------
+It remeasures on scroll too, throttled through requestAnimationFrame.
+
+That was the part a height alone would not have fixed: this page sits inside the Operations
+shell and the page itself can still scroll, which moves the box up the window and would
+have put the bar out of sight again.
+
+A floor of 120px stops the box collapsing to nothing if it scrolls right up.
+
+
+UNCHANGED
+---------
+The sticky date header at the top of the Gantt. It was already correct and is untouched.

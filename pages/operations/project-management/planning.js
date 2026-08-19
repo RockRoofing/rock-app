@@ -70,6 +70,42 @@ function cellColours(cd) {
 }
 
 export default function PlanningPage() {
+  // Height of the Gantt scroll box, measured from where it actually sits so its
+  // horizontal scrollbar is always on screen.
+  const ganttRef = useRef(null)
+  const [ganttMaxH, setGanttMaxH] = useState('calc(100vh - 220px)')
+  useEffect(() => {
+    const measure = () => {
+      const el = ganttRef.current
+      if (!el) return
+      const top = el.getBoundingClientRect().top
+      // 16px of breathing room, so the bar is not flush with the bottom edge.
+      setGanttMaxH(`calc(100vh - ${Math.max(120, Math.round(top))}px - 16px)`)
+    }
+    // Remeasure on SCROLL as well. The page can still scroll behind the Gantt, and
+    // scrolling moves the box up the window - so a height measured once would leave the
+    // bottom of the box, and its scrollbar, below the fold again. Throttled through
+    // requestAnimationFrame so it does not fire on every pixel.
+    let ticking = false
+    const onScroll = () => {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => { measure(); ticking = false })
+    }
+
+    measure()
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    // The controls wrap and the banners appear and disappear, both of which move the box.
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null
+    if (ro && document.body) ro.observe(document.body)
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', onScroll)
+      if (ro) ro.disconnect()
+    }
+  }, [])
+
   const [data, setData] = useState(null)
   const [ops, setOps] = useState([])
   const [comp, setComp] = useState({})   // opId -> { isSupervisor, hasCSCS, hasWAH }
@@ -449,7 +485,14 @@ export default function PlanningPage() {
       })()}
 
       <div style={{ border: '1px solid #ececec', borderRadius: 12, background: '#fff' }}>
-        <div style={{ overflow: 'auto', maxHeight: 'calc(100vh - 220px)', borderRadius: 12 }}>
+        {/* MEASURED, NOT GUESSED.
+            This was a flat "100vh - 220px". The controls above it wrap onto two rows on a
+            narrower window, and the warning banners come and go, so 220 was right on one
+            layout and wrong on the rest - and when it was too small the bottom of the box
+            sat below the fold, taking the horizontal scrollbar with it.
+            ganttMaxH is the box's real distance from the top of the window, remeasured on
+            load, on resize, and whenever anything above it changes height. */}
+        <div ref={ganttRef} style={{ overflow: 'auto', maxHeight: ganttMaxH, borderRadius: 12 }}>
           <div style={{ minWidth: NAME_W + DATE_W * 3 + VISITS_W + (view === 'day' ? days.length * CELL_W : weekGroups.length * WEEKCELL_W) }}>
 
             {/* Week/date header - sticky to the top of the scroll box */}
