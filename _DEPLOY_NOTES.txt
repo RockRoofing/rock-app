@@ -1,55 +1,67 @@
-pkg513 - the WIP PDF now shows the build-up behind each project
-===============================================================
+pkg514 - Variation Builder part 2: download and send
+====================================================
 
-Deploy after pkg512. One changed file: lib/wipPdf.js. No new files.
+Deploy after pkg513.
 
+CHANGED FILES (replace)
+-----------------------
+  components/VariationBuilder.js
 
-THE SHAPE
----------
-    PAGE 1        the summary, exactly as it was - one row per project, totals, sign-off
-    PAGE 2 on     one page per project, showing where its figure came from
+NEW FILES (create)
+------------------
+  lib/variationPdf.js
+  pages/api/variation-send.js
 
-The summary answers "what is the WIP". The pages behind it answer "why", which is the
-question anybody reviewing it asks next - and the reason a summary on its own tends to
-come straight back with "where has that come from".
-
-A page per project, so a single job can be printed or sent on its own.
-
-
-WHAT IS ON A PROJECT PAGE
--------------------------
-    J178 - Gas Lane
-    Valuation date 31/07/2026  ·  margin 22.0%
-
-    Post-valuation costs (3)
-    03/08/2026  SIG Roofing    INV-8841  5000 Materials     Materials   £12,400.55
-    07/08/2026  Wienerberger   INV-2231  5000 Materials     Materials    £8,800.20
-    11/08/2026  Rock Labour    WK32      6000 Direct wages  Labour       £6,200.00
-                                              Total post-valuation costs £27,400.75
-
-    Manual adjustments (1)
-                Zeroed - unclaimable costs                    0%        -£5,000.00
-
-    Build-up
-    Post-valuation costs                                                £27,400.75
-    Manual adjustments                                                  -£5,000.00
-    Grossed up at 22.0% margin                                           £6,318.16
-    WIP                                                                 £28,718.91
-
-The build-up reconciles to the front page exactly - checked on the test document.
-
-Manual adjustments include any "Zeroed" write-down, which is precisely what somebody
-reviewing the WIP needs to see rather than a project quietly reading nil.
+No, the send half was not in pkg507 - I left it out on purpose so you could try the
+builder first. Here it is.
 
 
-TWO THINGS THE TEST DOCUMENT CAUGHT
--------------------------------------
-THE POUND SIGN WAS BEING STRIPPED. Sanitising to printable ASCII turned every "£" into a
-hyphen, so £27,400.75 printed as "-27,400.75" - which on a page of costs reads as a
-negative number rather than a currency symbol. The application PDF already keeps £ for the
-same reason; this one now does too.
+THE PDF
+-------
+Laid out like the sheet you sent: our details top left, the header block with Contract,
+Variation No, Sub-Contract Ref, Date, Description and Requested by in red, then the priced
+items, the total, and the clarifications lettered a to e underneath in red.
 
-NEGATIVES read -£5,000.00 rather than £-5,000.00.
+    Item  Description                    Quantity  Unit  Rate     Total
+    1     Additional VCL to plant deck   120       m2    £22.64   £2,716.50
+    2     Perimeter detailing            38        m     £14.20     £539.60
+                                                          Total   £3,256.10
 
-Long values are trimmed to their column rather than running into the next one, and both
-the cost list and the adjustments repeat their headings across a page break.
+IT DOES NOT SHOW THE WORKINGS. Those are how we arrived at the rate and are ours; the
+customer gets the rate, the quantity and the total - which is what the old document showed
+as well.
+
+Checked against a generated document: the PDF total and the figure on the tracker agree to
+the penny, because both come from the same items.
+
+
+DOWNLOAD
+--------
+"Download V01 PDF" appears once the variation is raised. It has to be saved first - the
+PDF is built server-side from the record, so there is nothing to build until it exists.
+
+
+SEND
+----
+"Send to customer" opens the send window, built the same way as Outstanding Invoices:
+
+    TO        the customer's own contacts from the handover, as tick boxes, plus a box
+              for anybody not on it
+    COPY IN   the Rock team, from the portal directory
+    SUBJECT   Variation V01 - J205 Pets Choice
+    MESSAGE   written for you from the variation - number, project, sub-contract ref,
+              description and value, then "Please confirm your instruction to proceed"
+
+All editable before it goes.
+
+REPLIES COME BACK TO YOU - the portal user who sent it, not a sending address nobody
+reads. A customer querying a variation has to reach the person who raised it.
+
+The PDF is attached automatically, named "Variation V01 - J205 Pets Choice.pdf".
+
+
+ONE THING TO WATCH
+------------------
+If a project's handover has no customer contacts with email addresses, the To list will be
+empty and it says so plainly. Type an address in the box underneath - and it is worth
+filling the handover in, because the same contacts now feed "Requested by" as well.

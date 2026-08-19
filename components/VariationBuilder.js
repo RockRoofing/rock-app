@@ -222,6 +222,126 @@ export function calc(d) {
   }
 }
 
+
+// Send the variation to the customer, with the PDF attached.
+//
+// Recipients follow the same idea as the Outstanding Invoices report: the customer's own
+// people are offered as tick boxes, the Rock team can be copied, and anything not on
+// either list can be typed.
+function SendVariationModal({ project, variation, me, onClose, onSent }) {
+  const contacts = (project.customerContacts || []).filter(c => c.email)
+  const [to, setTo] = useState(() => (contacts[0]?.email ? [contacts[0].email] : []))
+  const [cc, setCc] = useState([])
+  const [extra, setExtra] = useState('')
+  const [team, setTeam] = useState([])
+  const [subject, setSubject] = useState('')
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    fetch('/api/portal-auth?action=directory').then(r => r.json())
+      .then(d => setTeam((d.users || []).filter(u => u.email)))
+      .catch(() => {})
+  }, [])
+
+  const b = variation.builder || {}
+  const projLabel = [project.jobNo, project.name].filter(Boolean).join(' - ')
+
+  // The email writes itself from the variation, so nobody has to retype the reference,
+  // the number and the description - and so every one that goes out says the same things.
+  useEffect(() => {
+    setSubject(`Variation ${variation.varNumber} - ${projLabel}`)
+    setText(
+      `Hi,\n\n`
+      + `Please find attached variation ${variation.varNumber} for ${projLabel}.\n\n`
+      + (b.subContractRef ? `Sub-Contract Ref: ${b.subContractRef}\n` : '')
+      + (variation.description ? `Description: ${variation.description}\n` : '')
+      + `Value: ${money(Number(variation.materials) + Number(variation.labour) + Number(variation.profit))}\n\n`
+      + `Please confirm your instruction to proceed.\n\n`
+      + `Kind regards\n${me?.name || ''}`
+    )
+  }, [variation])
+
+  const toggle = (list, setList, v) => setList(list.includes(v) ? list.filter(x => x !== v) : [...list, v])
+
+  async function send() {
+    const all = [...to, ...extra.split(/[,;\s]+/).filter(x => x.includes('@'))]
+    if (!all.length) { setErr('Pick at least one recipient.'); return }
+    setSending(true); setErr('')
+    try {
+      const r = await fetch('/api/variation-send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: project.xeroId, varNumber: variation.varNumber,
+          to: all, cc,
+          // Replies reach the person who sent it. A customer querying a variation has to
+          // get back to whoever raised it, not to a sending address nobody reads.
+          replyTo: me?.email || '',
+          subject, text,
+        }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || 'Send failed')
+      onSent(`Sent to ${d.sentTo.join(', ')}.`)
+    } catch (e) { setErr(e.message || 'Could not send') }
+    setSending(false)
+  }
+
+  const inp = { padding: '7px 9px', border: `1px solid ${LINE}`, borderRadius: 7, fontSize: 13, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }
+  const hdr = { fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.3, margin: '14px 0 6px' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 820, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '4vh 16px', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 720, maxWidth: '100%', padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Send {variation.varNumber}</h3>
+            <div style={{ fontSize: 12.5, color: '#888' }}>{projLabel} · the PDF is attached automatically</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
+        </div>
+
+        <div style={hdr}>To - customer</div>
+        {contacts.length === 0 && <div style={{ fontSize: 12.5, color: '#c2410c' }}>No customer contacts with an email on this project&rsquo;s handover. Type an address below.</div>}
+        {contacts.map(c => (
+          <label key={c.email} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '3px 0', cursor: 'pointer' }}>
+            <input type="checkbox" checked={to.includes(c.email)} onChange={() => toggle(to, setTo, c.email)} />
+            {c.name}{c.title ? ` (${c.title})` : ''} <span style={{ color: '#888' }}>{c.email}</span>
+          </label>
+        ))}
+        <input value={extra} onChange={e => setExtra(e.target.value)} placeholder="Other addresses, comma separated" style={{ ...inp, marginTop: 6 }} />
+
+        <div style={hdr}>Copy in</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, maxHeight: 110, overflowY: 'auto' }}>
+          {team.map(u => (
+            <label key={u.email} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
+              <input type="checkbox" checked={cc.includes(u.email)} onChange={() => toggle(cc, setCc, u.email)} />
+              {u.name || u.email}
+            </label>
+          ))}
+        </div>
+
+        <div style={hdr}>Subject</div>
+        <input value={subject} onChange={e => setSubject(e.target.value)} style={inp} />
+        <div style={hdr}>Message</div>
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={10} style={{ ...inp, resize: 'vertical', fontFamily: 'inherit' }} />
+
+        <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>Replies come back to {me?.email || 'you'}.</div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, justifyContent: 'flex-end' }}>
+          {err && <span style={{ fontSize: 13, color: '#dc2626' }}>{err}</span>}
+          <button onClick={onClose} style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: '9px 16px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={send} disabled={sending}
+            style={{ background: GREEN, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13.5, fontWeight: 700, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.6 : 1 }}>
+            {sending ? 'Sending…' : 'Send variation'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // The builder
 // ---------------------------------------------------------------------------
@@ -232,6 +352,18 @@ export default function VariationBuilder({ projects, onSaved }) {
   const [clar, setClar] = useState(BASE_CLARIFICATIONS.slice())
   const [editing, setEditing] = useState(null)   // index into items
   const [saving, setSaving] = useState(false)
+  const [raised, setRaised] = useState(null)     // the variation just saved
+  const [sendOpen, setSendOpen] = useState(false)
+  const [me, setMe] = useState(null)
+  useEffect(() => {
+    fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => setMe(d.user || null)).catch(() => {})
+  }, [])
+
+  function downloadPdf(varNumber) {
+    // Straight to the endpoint with download=1 - it is a document to file or attach, so a
+    // download rather than a tab.
+    window.location.href = `/api/variation-send?projectId=${project.xeroId}&varNumber=${encodeURIComponent(varNumber)}&download=1`
+  }
   const [msg, setMsg] = useState('')
 
   const project = useMemo(() => (projects || []).find(p => String(p.xeroId) === String(projectId)) || null, [projects, projectId])
@@ -291,6 +423,10 @@ export default function VariationBuilder({ projects, onSaved }) {
         body: JSON.stringify({ ...settings, variations: [...existing, record] }),
       })
       if (!r.ok) throw new Error('Save failed')
+      // Hold on to what was raised. Download and Send need a SAVED variation - the PDF
+      // is built server-side from the record, so there is nothing to send until it
+      // exists.
+      setRaised({ varNumber: record.varNumber, record })
       setMsg(`${header.varNumber} raised on ${project.jobNo || project.name}. It is now on the tracker and in the final account.`)
       setItems([]); setHeader(h => ({ ...h, description: '', requestedBy: '' }))
       setClar(BASE_CLARIFICATIONS.slice())
@@ -420,12 +556,30 @@ export default function VariationBuilder({ projects, onSaved }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end' }}>
             {msg && <span style={{ fontSize: 13, color: msg.startsWith('Could not') ? '#dc2626' : GREEN }}>{msg}</span>}
+            {raised && (
+              <>
+                <button onClick={() => downloadPdf(raised.varNumber)}
+                  style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, padding: '10px 16px', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', color: INK }}>
+                  Download {raised.varNumber} PDF
+                </button>
+                <button onClick={() => setSendOpen(true)}
+                  style={{ background: GREEN, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+                  Send to customer
+                </button>
+              </>
+            )}
             <button onClick={save} disabled={saving}
               style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
               {saving ? 'Saving…' : 'Raise variation'}
             </button>
           </div>
         </>
+      )}
+
+      {sendOpen && raised && (
+        <SendVariationModal project={project} variation={raised.record} me={me}
+          onClose={() => setSendOpen(false)}
+          onSent={(m) => { setSendOpen(false); setMsg(m) }} />
       )}
 
       {editing != null && items[editing] && (
