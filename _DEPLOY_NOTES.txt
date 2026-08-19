@@ -1,52 +1,36 @@
-pkg502 - the Make Contact panel now shows everything
-====================================================
+pkg503 - timeline moved under the activity
+==========================================
 
-Deploy after pkg501. One changed file: pages/crm.js. No new files.
-
-
-WHAT WAS WRONG WITH pkg498
---------------------------
-I hand-picked about fifteen fields I thought would be useful. That was the wrong approach
-twice over: anything I had not thought of was simply missing, and anything added to the
-deal in future would never appear here.
+Deploy after pkg502. One changed file: pages/crm.js. No new files.
 
 
-NOW BUILT FROM THE SCHEMA
--------------------------
-Every field on the deal, in the same four groups the deal itself uses. 34 fields:
+THE LAYOUT
+----------
+    DEAL                  WHAT HAPPENED?
+    SUMMARY               (call notes)
+    PROJECT DETAILS
+    CUSTOMER CONTACT      SET THE NEXT ACTIVITY
+    ORGANISATION          what / when / who
 
-    DEAL              value, stage, status, owner
-    SUMMARY           Value, Organization, Contact, Owner, Project Score
-    PROJECT DETAILS   Glenigan Project ID, Site Location, Region, Size m2, Credit Score,
-                      Credit Limit, Insured Credit Limit, Project Stage, Roofing Works
-                      On-Site, Estimator Responsible, Systems Priced, Description of
-                      Project Scope of Works, General Information, Sales Person, Project
-                      Start Date, Project Type, Lead Source, Lost Reason
-    CUSTOMER CONTACT  Name, Phone, Email, Job Role
-    ORGANISATION      Address, Phone, Website, Email, Registration Number, Supply Chain
-                      Approved?
+                          TIMELINE
+                          email, notes, previous calls
 
-Add a field to the deal and it appears here too, with no further work.
+The timeline is now inside the right-hand column, directly under the activity, instead of
+below both columns. So the details stay beside it for its whole length rather than being
+pushed above it with a tall empty space alongside.
 
 
-CONTACT AND ORGANISATION FALL BACK TO THE MASTER RECORDS
-----------------------------------------------------------
-Same resolution the deal view uses: a deal stores the contact's and company's NAME, while
-the phone, email, address and registration number live on the Contact and Company records.
-Anything typed on the deal wins; blanks fill from the master record.
+THE DETAILS COLUMN IS STICKY
+------------------------------
+It stays on screen while you scroll the timeline next to it.
 
-Without that, most of those two sections would have shown a dash on most projects - the
-same fault pkg457 fixed on the deal page.
+That matters more here than it sounds: the left column is much shorter than the right once
+the timeline is in there, so without this the phone number would scroll out of view
+exactly when you were reading back through what was last said - which is the moment you
+want both.
 
+Capped at 82% of the window height with its own scroll, for a project carrying all 34
+fields.
 
-ALL FOUR PHONE AND EMAIL FIELDS ARE LINKS
--------------------------------------------
-Contact phone, contact email, organisation phone, organisation email - tel: and mailto:.
-The panel is open because somebody is about to make contact, so any of the four should be
-one click.
-
-
-EMPTY FIELDS ARE STILL SKIPPED
---------------------------------
-Deliberately. 34 rows of dashes is not "everything", it is noise on a phone call. A group
-with nothing in it does not render at all.
+The timeline gets a little more room too - 380px rather than 320px - now that it is not
+competing with anything below it.

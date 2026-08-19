@@ -4402,7 +4402,11 @@ function CompleteActivityModal({ row, today, deal = null, users = [], schema = [
             rather than opening the project in another tab to find the phone number. */}
         <div style={deal ? { display: 'grid', gridTemplateColumns: 'minmax(0,320px) minmax(0,1fr)', gap: 20, alignItems: 'start' } : undefined}>
         {deal && (
-          <div style={{ minWidth: 0 }}>
+          // Sticky, so the phone number and the project details stay on screen while you
+          // scroll the timeline beside them. The left column is much shorter than the
+          // right once the timeline is in it, and details you have scrolled past are no
+          // use mid-call.
+          <div style={{ minWidth: 0, position: 'sticky', top: 0, maxHeight: '82vh', overflowY: 'auto', paddingRight: 4 }}>
             <ContactPanel deal={deal} schema={schema} orgsData={orgsData} contactsData={contactsData} />
           </div>
         )}
@@ -4450,20 +4454,23 @@ function CompleteActivityModal({ row, today, deal = null, users = [], schema = [
             Done &amp; set next
           </button>
         </div>
-        </div>
-        </div>
 
-        {/* THE TIMELINE, underneath. What has already been said to this customer - email,
-            notes, previous calls - so you are not phoning them blind. Read-only here: this
-            is a place to look while you talk, not another place to edit from. */}
+        {/* THE TIMELINE, INSIDE THE RIGHT COLUMN, directly under the activity.
+            It was below both columns, which pushed it under the details panel and left a
+            tall empty space beside it. Here it sits with the call itself - what you are
+            writing and what has already been said, one above the other - and the details
+            stay alongside for the whole length of it.
+            Read-only: a place to look while you talk, not another place to edit from. */}
         {deal && (
           <div style={{ marginTop: 18, borderTop: '1px solid ' + C.line, paddingTop: 14 }}>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Timeline</div>
-            <div style={{ maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+            <div style={{ maxHeight: 380, overflowY: 'auto', paddingRight: 4 }}>
               <HistoryFeed history={deal.history || []} emails={[]} users={users} />
             </div>
           </div>
         )}
+        </div>
+        </div>
       </div>
     </div>
   );
