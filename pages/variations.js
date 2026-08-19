@@ -3,7 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import VariationBuilder from '../components/VariationBuilder'
-import { projectVariations } from '../lib/variationInstruct'
+import { projectVariations, varNumberOf } from '../lib/variationInstruct'
 import { useRouter } from 'next/router'
 
 // Pence-accurate throughout. Variations are individually small and have to add up to
@@ -27,7 +27,7 @@ function stripJobNo(name, jobNo) {
 
 function nextVarNumber(variations) {
   const nums = (variations || [])
-    .map(v => v.varNumber || '')
+    .map(v => varNumberOf(v))
     .filter(Boolean)
     .map(n => parseInt(n.replace(/[^0-9]/g, '')))
     .filter(n => !isNaN(n))
@@ -417,7 +417,7 @@ export default function VariationTracker() {
         customer: p.customer || p.customerName || '—',
         estimator: p.estimator || '—',
         cm: p.contractsManager || '—',
-        varNumber: v.varNumber || '—',
+        varNumber: varNumberOf(v) || '—',
         description: v.description || '—',
         instructed: v.instructed,
         materials: fmtN(v.materials),

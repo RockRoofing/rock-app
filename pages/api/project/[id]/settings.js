@@ -46,10 +46,24 @@ export default async function handler(req, res) {
   // Refused rather than merged: merging would paper over the caller's bug and leave two
   // versions of the truth. A deletion of one row still passes, because that is a
   // difference of one.
-  if (Array.isArray(incoming.variations) && Array.isArray(existing.variations)) {
-    if (incoming.variations.length < existing.variations.length - 1) {
+  // WHICH ROWS SURVIVE, not how many.
+  //
+  // The count test I shipped allowed any reduction of one - and "two variations on the
+  // tracker, the builder posts one" is a reduction of one. It allowed the exact case that
+  // lost V01 and V02.
+  //
+  // A legitimate delete removes ONE row and keeps the rest. Anything that drops a
+  // variation the caller was not deleting is a caller reading the wrong list, and is
+  // refused by name so the loss is visible instead of silent.
+  if (Array.isArray(incoming.variations) && Array.isArray(existing.variations) && existing.variations.length) {
+    const key = (v) => `${String(v.varNumber || '').trim().toUpperCase()}|${String(v.description || '').trim().slice(0, 40)}`
+    const incomingKeys = new Set(incoming.variations.map(key))
+    const dropped = existing.variations.filter(v => !incomingKeys.has(key(v)))
+    if (dropped.length > 1) {
       return res.status(409).json({
-        error: `Refused: this would reduce the variations on this project from ${existing.variations.length} to ${incoming.variations.length}.`,
+        error: `Refused: this would drop ${dropped.length} variations (${dropped.map(v => v.varNumber || v.description || '?').join(', ')}). `
+          + `Deleting one at a time is fine; losing several means the caller built its list from the wrong place.`,
+        dropped: dropped.map(v => v.varNumber || ''),
       })
     }
   }

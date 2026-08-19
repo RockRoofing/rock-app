@@ -1,51 +1,66 @@
-pkg525 - find out where V01 and V02 actually are
-================================================
+pkg526 - the answer, and stopping it happening again
+====================================================
 
-Deploy after pkg524. One changed file: pages/api/variation-debug.js. No new files.
+Deploy after pkg525.
 
-This does not fix anything. It tells us what is stored, because I have now been wrong
-twice about where these live and a third guess is not worth your time.
+CHANGED FILES (replace)
+-----------------------
+  lib/variationInstruct.js
+  pages/variations.js
+  pages/api/project/[id]/settings.js     <- literal [id] folder
 
-
-RUN THIS
---------
-Console on any portal page:
-
-    fetch('/api/variation-debug?all=1').then(r=>r.json()).then(d=>console.log(JSON.stringify(d,null,2)))
-
-It scans EVERY project:* record in storage and lists each one that holds variations, with
-its raw key:
-
-    {
-      "redisKey": "project:12345-abcd-...",
-      "count": 1,
-      "numbers": ["V03"],
-      "descriptions": ["Additional VCL to plant deck"]
-    },
-    {
-      "redisKey": "project:J205",
-      "count": 2,
-      "numbers": ["V01", "V02"],
-      ...
-    }
-
-It writes nothing.
+NEW FILES: none.
 
 
-WHAT THE ANSWER TELLS US
-------------------------
-V01 AND V02 APPEAR UNDER A DIFFERENT KEY
-    They exist. The dashboard is reading the wrong record and I can point it at the right
-    one - a small change once I can see the actual key.
+V01 AND V02 ARE GONE. I AM SORRY.
+-----------------------------------
+The scan is unambiguous. 34 keys, 26 records with variations, all keyed by tracking option
+id - there is no job-number record anywhere, so my pkg524 theory was wrong as well.
 
-THEY APPEAR IN THE SAME RECORD AS V03
-    They exist and something downstream is filtering them out - the tracker only shows
-    live in-progress projects, so a variation on a project that is not INPROGRESS in Xero
-    would be hidden. Different fix entirely.
+Your project is project:f1313132. It holds ONE variation:
 
-THEY DO NOT APPEAR AT ALL
-    They were overwritten before pkg522's guard went in, and they need re-entering. I
-    would rather tell you that plainly than keep shipping fixes for a problem that is not
-    the one you have.
+    V03 - "Aluminium edge trim"
 
-Paste me whatever it prints and the next package will be the right one.
+V01 and V02 are in no record. They were overwritten when V03 was raised in the builder,
+before pkg522, and they are not recoverable from the app. They need re-entering on the
+tracker.
+
+Two other projects are in the same state - project:35e4f879 starts at V03, and
+project:cfe01a4a holds only V04. Worth checking those against your own records too.
+
+
+AND MY GUARD WOULD NOT HAVE STOPPED IT
+----------------------------------------
+pkg522 refused a POST that cut the count by MORE than one. Your case was two variations
+down to one - a reduction of exactly one, which it allowed.
+
+    2 -> 1    allowed        <- the case that lost your work
+    3 -> 1    refused
+
+The guard now checks WHICH ROWS SURVIVE, not how many:
+
+    builder posts only V03, tracker holds V01+V02    REFUSED, names V01 and V02
+    adds V03, keeps V01+V02                          allowed
+    deletes V02 deliberately                         allowed
+    drops two at once                                REFUSED
+
+A genuine delete removes one row and keeps the rest. Anything dropping a variation the
+caller was not deleting is a caller reading the wrong list, and now fails loudly.
+
+
+SOMETHING ELSE THE SCAN FOUND
+-----------------------------
+project:39002840 holds 13 variations with NO variation number at all - the numbers are
+written into the front of the description instead:
+
+    varNumber: ""     description: "V01 - Additional visit to accommodate for balcony..."
+
+Read literally those have no number, so the tracker shows blanks and the next-number
+calculation restarts at V01 on that project.
+
+The tracker now falls back to the number in the description, so those 13 display correctly
+without anything being re-keyed.
+
+That record also looks like a DUPLICATE of project:c59294a0 - same 13 descriptions, which
+has them properly numbered plus three more. Worth deciding which is the live one; I have
+not touched either.
