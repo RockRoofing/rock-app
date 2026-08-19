@@ -1,60 +1,51 @@
-pkg524 - the missing variations, and Contracted Rates variations
-================================================================
+pkg525 - find out where V01 and V02 actually are
+================================================
 
-Deploy after pkg523.
+Deploy after pkg524. One changed file: pages/api/variation-debug.js. No new files.
 
-CHANGED FILES (replace)
------------------------
-  pages/api/dashboard.js
-  pages/api/variation-debug.js
-  pages/contracted-rates.js
-  components/VariationBuilder.js
-
-NEW FILES: none.
+This does not fix anything. It tells us what is stored, because I have now been wrong
+twice about where these live and a third guess is not worth your time.
 
 
-V01 AND V02 - FOUND IT, AND pkg523 COULD NOT HAVE WORKED
-----------------------------------------------------------
-Project settings are looked up by TWO KEYS:
+RUN THIS
+--------
+Console on any portal page:
 
-    const settings = allSettings[id] || allSettings[cp.jobNo] || {}
+    fetch('/api/variation-debug?all=1').then(r=>r.json()).then(d=>console.log(JSON.stringify(d,null,2)))
 
-The tracking option id, OR the job number. Two records can exist for the same project, and
-the dashboard returned whichever matched FIRST - so a variation written against the
-job-number record is invisible the moment an id record exists.
+It scans EVERY project:* record in storage and lists each one that holds variations, with
+its raw key:
 
-That is V01 and V02: written against one record, V03 against the other.
+    {
+      "redisKey": "project:12345-abcd-...",
+      "count": 1,
+      "numbers": ["V03"],
+      "descriptions": ["Additional VCL to plant deck"]
+    },
+    {
+      "redisKey": "project:J205",
+      "count": 2,
+      "numbers": ["V01", "V02"],
+      ...
+    }
 
-pkg523 was the right idea in the wrong place. It compared two lists on the CLIENT, and the
-dashboard only ever sends one - so the recovery could never fire. Resolved on the server
-now, where both records exist.
-
-BOTH ARE MERGED, on variation number. Neither is dropped, and where the same number
-appears in both the richer record wins - the one carrying its workings.
-
-    job-number record: V01, V02
-    id record:         V03
-    now returned:      V01, V02, V03
-
-Nothing was ever lost. It was reading the wrong record.
-
-TO CONFIRM ON YOUR DATA, console on any portal page:
-
-    fetch('/api/variation-debug?jobNo=J205').then(r=>r.json()).then(console.log)
-
-That reads the job-number record directly. Writes nothing.
+It writes nothing.
 
 
-CONTRACTED RATES VARIATIONS ARE NOW REAL VARIATIONS
------------------------------------------------------
-Turning schedule lines into a variation created a row of numbers and no paperwork - no
-document, nothing to send, nothing to instruct, and nothing for the tracker's View to
-show.
+WHAT THE ANSWER TELLS US
+------------------------
+V01 AND V02 APPEAR UNDER A DIFFERENT KEY
+    They exist. The dashboard is reading the wrong record and I can point it at the right
+    one - a small change once I can see the actual key.
 
-It now builds the same record the Variation Builder does: the schedule lines become the
-variation's items at their contracted rates, with the standard clarifications, the
-sub-contract ref, and who raised it.
+THEY APPEAR IN THE SAME RECORD AS V03
+    They exist and something downstream is filtering them out - the tracker only shows
+    live in-progress projects, so a variation on a project that is not INPROGRESS in Xero
+    would be hidden. Different fix entirely.
 
-And the SEND WINDOW OPENS STRAIGHT AFTER - the same window, the same email, the same
-instruct button, the same instruction coming back. One send flow, so a variation raised
-from the rate schedule is indistinguishable from one built by hand.
+THEY DO NOT APPEAR AT ALL
+    They were overwritten before pkg522's guard went in, and they need re-entering. I
+    would rather tell you that plainly than keep shipping fixes for a problem that is not
+    the one you have.
+
+Paste me whatever it prints and the next package will be the right one.

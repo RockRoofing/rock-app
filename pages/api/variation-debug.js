@@ -59,6 +59,33 @@ export default async function handler(req, res) {
     })
   }
 
+  // EVERY KEY IN STORAGE THAT HOLDS A VARIATION, whatever it is keyed by.
+  //
+  // I have now twice been wrong about WHERE these live, so this stops theorising and
+  // lists every project:* record that contains variations, with its raw key. If V01 and
+  // V02 exist anywhere, this finds them.
+  if (req.query.all === '1') {
+    const { Redis } = await import('@upstash/redis')
+    const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
+    const tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN
+    if (!url || !tok) return res.status(500).json({ error: 'Storage not configured' })
+    const redis = new Redis({ url, token: tok })
+    const keys = await redis.keys('project:*')
+    const found = []
+    for (const k of keys) {
+      const v = await redis.get(k)
+      const list = Array.isArray(v?.variations) ? v.variations : []
+      if (!list.length) continue
+      found.push({
+        redisKey: k,
+        count: list.length,
+        numbers: list.map(x => x.varNumber || '(none)'),
+        descriptions: list.map(x => (x.description || '').slice(0, 40)),
+      })
+    }
+    return res.json({ ok: true, keysScanned: keys.length, recordsWithVariations: found.length, found })
+  }
+
   // Every project, so a wipe can be spotted at a glance rather than checked one by one.
   const { getAllProjectSettings } = await import('../../lib/db')
   const all = await getAllProjectSettings()
