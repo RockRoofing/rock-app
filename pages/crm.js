@@ -1173,6 +1173,56 @@ function cleanEmailBody(text) {
     .trim()
 }
 
+
+// WHAT THIS PERSON ACTUALLY WROTE, as opposed to what the email carries with it.
+//
+// A reply is mostly not new: the quoted thread below it, the signature block, the legal
+// footer. The new part is usually the first dozen lines, and it is the only part anybody
+// reads - so it gets the green and the rest stays grey.
+//
+// Split on the first thing that marks the end of the message. Erring towards showing too
+// much in green rather than too little: cutting a sentence off mid-flow is worse than
+// carrying a line of signature into it.
+const REPLY_MARKERS = [
+  /^\s*-{2,}\s*Original Message\s*-{2,}/im,
+  /^\s*_{5,}\s*$/m,                                  // Outlook's divider above a quoted reply
+  /^\s*From:\s.+$/m,                                 // the quoted header block
+  /^\s*On .{5,80}\bwrote:\s*$/m,                     // "On 17 August 2026, X wrote:"
+  /^\s*Sent from my \w+/im,
+  /^\s*\[EXTERNAL EMAIL\]/im,
+]
+// A sign-off ends the message, but the sign-off itself is part of it - so the split comes
+// AFTER the name that follows it.
+const SIGNOFF = /^\s*(kind regards|best regards|many thanks|regards|thanks|thank you|cheers|yours sincerely|yours faithfully)[,.!]?\s*$/im
+
+function splitEmailBody(text) {
+  const t = String(text || '')
+  if (!t.trim()) return { main: '', rest: '' }
+
+  let cut = t.length
+  for (const re of REPLY_MARKERS) {
+    const m = re.exec(t)
+    if (m && m.index > 0 && m.index < cut) cut = m.index
+  }
+
+  // Keep the sign-off and the name under it with the message.
+  const head = t.slice(0, cut)
+  const sm = SIGNOFF.exec(head)
+  if (sm) {
+    const after = head.indexOf('\n', sm.index + sm[0].length)
+    // Two lines past the sign-off covers "Regards / Jack Belshaw / Senior QS".
+    let end = after === -1 ? head.length : after
+    for (let i = 0; i < 2 && end < head.length; i++) {
+      const nx = head.indexOf('\n', end + 1)
+      if (nx === -1) { end = head.length; break }
+      end = nx
+    }
+    cut = Math.min(cut, end)
+  }
+
+  return { main: t.slice(0, cut).trim(), rest: t.slice(cut).trim() }
+}
+
 function EmailCard({ m, children }) {
   const [open, setOpen] = useState(false);
   // THE FULL BODY, fetched the first time it is asked for.
@@ -1230,8 +1280,22 @@ function EmailCard({ m, children }) {
       {(preview || canFetch) && (
         <div style={{ fontSize: 12.5, color: C.text, marginTop: 6, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
           {open || !long
-            ? (shown || <span style={{ color: C.dim, fontStyle: 'italic' }}>No preview stored - press below to read it.</span>)
-            : preview.slice(0, 180) + '\u2026'}
+            ? (shown
+                ? (() => {
+                    // The message in the CRM green, everything it drags along with it -
+                    // quoted thread, signature, footers - in grey underneath.
+                    const { main, rest } = splitEmailBody(shown);
+                    return (
+                      <>
+                        <div style={{ color: '#1c704f', fontWeight: 500 }}>{main || shown}</div>
+                        {main && rest && (
+                          <div style={{ color: '#9ca3af', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.faint}`, fontSize: 12 }}>{rest}</div>
+                        )}
+                      </>
+                    );
+                  })()
+                : <span style={{ color: C.dim, fontStyle: 'italic' }}>No preview stored - press below to read it.</span>)
+            : <span style={{ color: '#1c704f', fontWeight: 500 }}>{preview.slice(0, 180) + '\u2026'}</span>}
           {loadingFull && <span style={{ color: C.dim }}> loading the rest&#8230;</span>}
           {fullErr && <div style={{ color: C.lost, fontSize: 11.5, marginTop: 4 }}>{fullErr} <a href={m.webLink} target="_blank" rel="noreferrer" style={{ color: C.link }}>Open in Outlook</a></div>}
           {long && (
@@ -1262,29 +1326,44 @@ function EmailCard({ m, children }) {
 // contact, because you will remember any one of the three.
 function ProjectPicker({ deals, onPick, onCancel }) {
   const [q, setQ] = useState('');
+  // WON AND LOST PROJECTS TOO.
+  //
+  // This listed open deals only, so an email about a job we had already won - a query on
+  // site, a variation, an invoice chase - could not be filed against it at all.
+  //
+  // Open deals still come FIRST when nothing has been typed, because that is the common
+  // case. Search and everything is in scope.
   const matches = useMemo(() => {
     const s = q.trim().toLowerCase();
-    const open = (deals || []).filter((d) => d.status === 'open');
-    if (!s) return open.slice(0, 25);
-    return open.filter((d) => (
+    const all = deals || [];
+    const rank = (d) => (d.status === 'open' ? 0 : d.status === 'won' ? 1 : 2);
+    if (!s) return all.filter((d) => d.status === 'open').slice(0, 25);
+    return all.filter((d) => (
       String(d.title || '').toLowerCase().includes(s)
       || String(d.fields?.organization || '').toLowerCase().includes(s)
       || String(d.fields?.contact_person || '').toLowerCase().includes(s)
       || String(d.id) === s
-    )).slice(0, 25);
+    )).sort((a, b) => rank(a) - rank(b)).slice(0, 25);
   }, [q, deals]);
 
   return (
     <div style={{ marginTop: 8, border: `1px solid ${C.link}`, borderRadius: 8, padding: 10, background: C.activityBg }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input autoFocus placeholder="Search open projects&#8230;" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...miniInput, flex: 1 }} />
+        <input autoFocus placeholder="Search projects (won and lost too)&#8230;" value={q} onChange={(e) => setQ(e.target.value)} style={{ ...miniInput, flex: 1 }} />
         <button onClick={onCancel} style={ghostBtn}>Cancel</button>
       </div>
       <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 8, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 6 }}>
-        {!matches.length && <div style={{ fontSize: 12.5, color: C.dim, padding: 10 }}>No open project matches that.</div>}
+        {!matches.length && <div style={{ fontSize: 12.5, color: C.dim, padding: 10 }}>{q.trim() ? 'No project matches that.' : 'Type to search - won and lost projects are included.'}</div>}
         {matches.map((d) => (
           <div key={d.id} onClick={() => onPick(d)} style={{ padding: '8px 10px', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${C.faint}`, display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>{d.title || '(untitled)'}</span>
+            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>
+              {d.title || '(untitled)'}
+              {/* A closed project is marked, so an email is not filed against a job that
+                  finished two years ago in mistake for the live one of the same name. */}
+              {d.status && d.status !== 'open' && (
+                <span style={{ marginLeft: 6, padding: '1px 6px', borderRadius: 9, fontSize: 10, fontWeight: 700, background: d.status === 'won' ? '#dcfce7' : '#fee2e2', color: d.status === 'won' ? '#166534' : '#b91c1c' }}>{d.status.toUpperCase()}</span>
+              )}
+            </span>
             <span style={{ fontSize: 11, color: C.dim, whiteSpace: 'nowrap' }}>{d.fields?.organization || ''}</span>
           </div>
         ))}

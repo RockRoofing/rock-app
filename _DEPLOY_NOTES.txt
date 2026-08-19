@@ -1,77 +1,60 @@
-pkg504 - notification reply-to, and WIP items 1-4
-=================================================
+pkg505 - email body in green, and filing to won/lost projects
+=============================================================
 
-Deploy after pkg503.
+Deploy after pkg504.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/wip.js
-  pages/bookkeeping.js
-  pages/admin/notifications.js
-  pages/api/wip.js
-  lib/notifications.js
+  pages/crm.js
+  lib/crmEmailSync.js
 
-NEW FILE (create)
------------------
-  pages/api/wip-lock.js
-
-Your message stopped at "5." - send it and I will pick it up.
+NEW FILES: none.
 
 
-REPLY-TO ON NOTIFICATIONS
--------------------------
-"Replies go to" in the notification builder. Set it and replies reach a person instead of
-the sending subdomain, which is not a mailbox.
+1. THE MESSAGE ITSELF IN GREEN
+--------------------------------
+The part somebody actually wrote is in the CRM green (#1c704f). Everything the email drags
+along with it - the quoted thread below, the signature block, the legal footer - is grey
+underneath, separated by a line.
 
-Every notification now carries a footer saying where replies go - or, if the field is
-blank, that they are not monitored. That matters more than the field itself: somebody
-replying "yes, done that" currently believes they have responded.
+    Hi Roman,                                            <- green
+    Forgot to mention, we agreed the separate visit.
+    Kind Regards
+    Jack Belshaw
+    Senior Quantity Surveyor
+    ------------------------------------------------
+    01282 442 300                                        <- grey
+    From: Roman Jarosz <roman@rockroofing.co.uk>
+    Sent: 16 August 2026
 
+Split on the first marker that ends a message: "From:", "On ... wrote:", Outlook's
+divider, "Sent from my iPhone". A sign-off keeps the two lines after it, so "Regards /
+Jack Belshaw / Senior QS" stays with the message rather than being cut mid-signature.
 
-1. LOCK THE WIP AND TELL ACCOUNTS
------------------------------------
-A banner at the top of the WIP page, in the two colours you asked for:
+Where it cannot tell, it errs towards MORE green. A sentence cut off half way is worse
+than a line of signature carried into it.
 
-    WIP NOT COMPLETE   red    "Accounts have not been told these figures are final."
-    WIP COMPLETE       green  "Signed off by James on 19/08/2026 at £412,880.14."
-
-The button emails everyone with Bookkeeping access - accounts, management and admin, read
-from the actual role map rather than a guessed field - with the month, the total and who
-signed it off. It reports how many people were notified.
-
-A LOCK IS A RECORD, NOT A RESTRICTION. It does not stop the commercial team editing
-afterwards; a genuine correction found on the 3rd should not need an unlock ceremony. But
-reopening is explicit and confirms, so a signed-off month cannot be quietly changed.
-
-
-2. WIP IN BOOKKEEPING, VIEW ONLY
-----------------------------------
-New WIP tab, same pattern as Retention. Accounts see the figures and the sign-off status;
-the margin editors, the Zero buttons and the manual adjustments are not rendered.
-
-The accounts role can reach the embed and NOT the full page - checked both ways.
+One EmailCard serves both the deal timeline and the Emails tab, so both change together.
 
 
-3. ZERO A PROJECT
------------------
-A "Zero" button beside the margin on each project. One click writes it down to £0 for
-unclaimable costs, instead of working out the offsetting figure and fiddling the margin.
+2. FILING TO WON AND LOST PROJECTS
+------------------------------------
+Two separate blocks, both fixed:
 
-It posts ONE adjustment at margin 0, which is the important detail: the calculation grosses
-every adjustment up at its own margin, and 0 passes the amount through at face value - so
--wipValue cancels exactly. A normal cost adjustment at the project margin would overshoot.
+THE PROJECT PICKER listed open deals only. Won and lost projects now appear, marked with a
+WON or LOST badge so an email is not filed against a job that finished two years ago in
+mistake for the live one of the same name. Open deals still come first before you type.
 
-Proven: £53,846.15 WIP, zeroed, comes out at £0.00.
-
-It shows in the adjustments list rather than being a hidden flag, so a written-down project
-is visibly written down, and "Un-zero" removes it.
+THE SYNC validated every match against open deals only. So a deliberate [CRM-972] to a job
+we had already won was rejected, and mail on a filed thread stopped landing the moment the
+deal closed - which is exactly when the invoice chasing starts.
 
 
-4. NO MORE JUMPING TO THE TOP
--------------------------------
-Every edit called load(), which set a loading flag, unmounted the whole table and rebuilt
-it - so you lost your place on every single change.
+ONE THING I DELIBERATELY DID NOT CHANGE
+-----------------------------------------
+Matching by SUBJECT is still open-projects-only.
 
-Edits now use a quiet refresh: same request, same data, no loading flag. React updates the
-numbers that changed and leaves the scroll position alone. The month selector keeps its
-spinner, because that genuinely is a new page of data.
+A reference or a known thread is somebody saying where an email goes. A title match is the
+system guessing - and letting a closed project start capturing mail on a name it shares
+with a live one would be a guess that gets worse over time, as the list of closed projects
+grows and the live ones stay few.
