@@ -1127,6 +1127,52 @@ function recipientLine(m) {
   return `To: ${all.slice(0, 3).join(', ')} +${all.length - 3} more`;
 }
 
+
+// ===========================================================================
+// Tidying up an email body
+// ===========================================================================
+// Outlook's plain-text version of an HTML email carries a lot that nobody wants to read.
+// Every hyperlink gets its target repeated in angle brackets after it, inline images
+// become [cid:...] placeholders, and signature tools like Exclaimer append tracking URLs
+// that run to several hundred characters.
+//
+// Removed here rather than at sync time, so nothing is lost from the stored copy - if a
+// rule ever strips something it should not, the original is still there and "Open in
+// Outlook" always shows the real thing.
+const TRACKER_HINTS = /(exclaimer\.net|imprintmessageid|\/wf\/open|list-unsubscribe|utm_source=|awstrack\.me|sendgrid\.net|mailchimp|constantcontact|\.gif\?|pixel\?)/i
+
+function cleanEmailBody(text) {
+  let t = String(text || '')
+
+  // "01282 442 300 <tel:01282%20442%20300>" -> drop the bracketed repeat.
+  t = t.replace(/<(?:https?:\/\/|mailto:|tel:)[^>\s][^>]*>/gi, '')
+  // Inline image placeholders.
+  t = t.replace(/\[cid:[^\]]*\]/gi, '')
+
+  const out = []
+  for (const raw of t.split(/\r?\n/)) {
+    const line = raw.replace(/\s+$/, '')
+    const bare = line.trim()
+
+    // A line that is nothing but a very long URL is a tracking or signature link. The
+    // length test matters: a customer pasting a normal link is kept, because a real link
+    // somebody typed is part of what they said.
+    if (/^<?https?:\/\/\S+>?$/i.test(bare) && bare.length > 120) continue
+    // Known trackers go whatever their length, but only when the line is JUST the link -
+    // never when it sits inside a sentence.
+    if (TRACKER_HINTS.test(bare) && /^<?https?:\/\/\S*>?$/i.test(bare)) continue
+    // Exclaimer wraps across many lines; a fragment of query string on its own is not
+    // readable text.
+    if (/^[A-Za-z0-9_\-%&=+/.]{80,}>?$/.test(bare) && /[&=]/.test(bare)) continue
+
+    out.push(line)
+  }
+
+  return out.join('\n')
+    .replace(/\n{3,}/g, '\n\n')   // Outlook's HTML-to-text leaves big gaps
+    .trim()
+}
+
 function EmailCard({ m, children }) {
   const [open, setOpen] = useState(false);
   // THE FULL BODY, fetched the first time it is asked for.
@@ -1139,7 +1185,7 @@ function EmailCard({ m, children }) {
   const [loadingFull, setLoadingFull] = useState(false);
   const [fullErr, setFullErr] = useState('');
 
-  const preview = String(m.preview || '').trim();
+  const preview = cleanEmailBody(m.preview);
 
   // WHY THIS IS NOT A LENGTH TEST.
   //
@@ -1163,7 +1209,7 @@ function EmailCard({ m, children }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'email-body', mailbox: m.mailbox, messageId: m.id }),
       }).then((r) => r.json());
-      if (d && d.ok) setFull(String(d.body || '').trim());
+      if (d && d.ok) setFull(cleanEmailBody(d.body));
       else setFullErr(d?.error || 'Could not load the rest of this email.');
     } catch (e) {
       setFullErr('Could not load the rest of this email.');

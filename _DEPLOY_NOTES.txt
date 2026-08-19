@@ -1,49 +1,43 @@
-pkg498 - "Make Contact" panel on the Activities tab
-===================================================
+pkg499 - email bodies tidied up
+===============================
 
-Deploy after pkg497. One changed file: pages/crm.js. No new files.
-
-
-THE COLUMN
-----------
-"Mark Done" is now "Make Contact", which is what the button is actually for - you press it
-because you are about to ring somebody, not because you have finished.
+Deploy after pkg498. One changed file: pages/crm.js. No new files.
 
 
-THE PANEL
----------
-Wider (1,180px) and in two columns, with the timeline underneath:
+WHAT IS BEING STRIPPED
+----------------------
+Outlook's plain-text version of an HTML email carries a lot nobody wants to read:
 
-    SUMMARY                    WHAT HAPPENED?
-    Value, stage, organisation  (call notes, outcome)
-    contact, phone, email
-    job role, owner            SET THE NEXT ACTIVITY
-                                what / when / who
-    PROJECT DETAILS
-    score, tender return,
-    region, project type,
-    estimator, lead source,
-    site location, size m2,
-    general information
+    BRACKETED LINK REPEATS   every hyperlink has its target repeated after it -
+                             "01282 442 300 <tel:01282%20442%20300>"
+    INLINE IMAGE PLACEHOLDERS  [cid:image767571.jpg@FE6AC60D.0CC23966]
+    SIGNATURE TRACKING URLS  the Exclaimer link in your purple box, which runs to about
+                             600 characters across five lines
+    HUGE BLANK GAPS          collapsed to a single blank line
 
-    ---------------- TIMELINE ----------------
-    email, notes, previous calls and changes, newest first
-
-So everything you need while the phone is ringing is in front of you, instead of opening
-the project in another tab to find the number and then losing your place.
-
-Phone and email are links - tel: and mailto:. The panel is open because somebody is about
-to make contact; the number should be one click, not a copy and paste.
+Your example now reads exactly as the red box: the header, the message, the sign-off and
+the phone number. Nothing else.
 
 
-READ-ONLY ON THE LEFT AND BELOW
+WHAT IS DELIBERATELY KEPT
+-------------------------
+A NORMAL LINK SOMEBODY TYPED. "See our brochure: https://rockroofing.co.uk/..." stays -
+that is part of what they said. The length test is what separates them: a line that is
+nothing but a URL over 120 characters is a tracker, a short one is a person sharing
+something.
+
+A known tracker is dropped at any length, but only when the line is JUST that link -
+never when it appears inside a sentence.
+
+THE SENDER'S ADDRESS. "From: Jack Belshaw <Jack.Belshaw@barnfield...>" is untouched: the
+rule only matches brackets that START with http, mailto: or tel:, so a plain address in
+angle brackets is safe.
+
+
+CLEANED ON DISPLAY, NOT ON SYNC
 ---------------------------------
-Deliberately. This is somewhere to LOOK while you talk. The only things you type are what
-happened and what comes next, which is what the panel was always for - a second place to
-edit the deal would be a way to change something by accident mid-call.
+The stored copy is untouched. If a rule ever strips something it should not, the original
+is still there, and "Open in Outlook" always shows the real email.
 
-
-UNCHANGED WHERE IT SHOULD BE
-------------------------------
-Opened from inside a deal, the panel has no project to show you - you are already looking
-at it. There it stays exactly as it was, at its original width.
+That was the deciding factor - a cleaning rule applied at sync time would have quietly
+destroyed the only copy we hold.
