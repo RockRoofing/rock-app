@@ -1,69 +1,63 @@
-pkg522 - variations were being overwritten. Deploy this.
-========================================================
+pkg523 - one rule for where variations live, and a way to check
+===============================================================
 
-Deploy after pkg521.
+Deploy after pkg522.
 
 CHANGED FILES (replace)
 -----------------------
+  lib/variationInstruct.js
   components/VariationBuilder.js
-  pages/api/variation-send.js
-  pages/api/variation-instruct.js
-  pages/api/project/[id]/settings.js     <- literal [id] folder
-  pages/instruct/[token].js              <- literal [token] folder
+  pages/variations.js
+
+NEW FILE (create)
+-----------------
+  pages/api/variation-debug.js
 
 
-1. THE OVERWRITE - this is the one that matters
--------------------------------------------------
-The builder read the project's existing variations from settings.variations only.
+ANSWER FIRST: THEY MAY WELL STILL BE THERE
+--------------------------------------------
+Variations live in TWO places - on the project record, and mirrored onto settings. I found
+NINE readers across the tracker and the builder, each with its own precedence:
 
-The dashboard returns them on project.variations, and the tracker mirrors them onto
-settings. So on any project where they came back the first way, the builder saw an EMPTY
-list - and saving a new variation wrote a list of ONE over everything already there.
+    line 227   project first
+    line 284   settings first
+    line 410   project first
+    line 766   project first
 
-That is why previous variations were disappearing. It now reads both.
+Some preferred one copy, some the other. So two parts of the same page could legitimately
+disagree about how many variations a project has - and an overwrite of ONE copy makes them
+vanish from a reader that prefers it while the other copy sits there untouched.
 
-AND A BACKSTOP AT THE SERVER. The settings endpoint refuses a POST that would reduce the
-variation count by more than one:
+ONE RULE NOW: whichever list has more rows wins.
 
-    5 -> 6   allowed
-    5 -> 4   allowed (that is a deletion)
-    5 -> 1   REFUSED
+Not "project first" or "settings first" - either of those loses data whenever the other
+copy is the fuller one, which is precisely what happened. Tested: with one copy wiped and
+the other intact, all the variations come back.
 
-Refused rather than merged: merging would hide the caller's bug and leave two versions of
-the truth. Any caller that gets it wrong now fails loudly instead of quietly destroying
-the history.
-
-Variations lost before this deploy are gone from the app and would need re-entering - the
-sent PDFs are still whatever went to the customer.
+So there is a real chance this deploy restores them on its own.
 
 
-2. THE INSTRUCTION PAGE FILLS ITSELF IN
------------------------------------------
-Name, role and company are prefilled from the handover for whoever the link was sent to,
-and it says so - "Filled in from our records, please correct anything that is wrong."
+CHECK BEFORE ASSUMING THE WORST
+---------------------------------
+Console on any portal page:
 
-Somebody confirming a variation should not have to type their own job title, and a
-prefilled field comes back correct far more often than an empty one.
+    fetch('/api/variation-debug').then(r=>r.json()).then(console.log)
 
+Every project with variations, and how many are in EACH place:
 
-3. ONE PERSON IN "TO", THE REST IN "COPY IN"
-----------------------------------------------
-To is now a dropdown - one customer contact. The instruct link is issued to that address
-and the instruction records who used it, so it has to be one person or the record names an
-address rather than a person.
+    { projectId, jobNo, name, onProject: 7, onSettings: 1 }
 
-Everyone else - the customer's other contacts AND the Rock team - goes in Copy in, in two
-labelled groups. They receive the variation and the confirmation, but cannot instruct it.
+If onProject and onSettings differ, nothing has been lost - a reader was looking in the
+wrong place, and this package fixes that.
+If BOTH are low, those records are genuinely gone and would need re-entering.
 
+For one project:
 
-4. THE INSTRUCTION IS CONFIRMED BACK TO EVERYONE
---------------------------------------------------
-When the customer instructs, everyone on the original - to, cc and the sender - receives:
+    fetch('/api/variation-debug?projectId=PUT_THE_XERO_ID_HERE')
+      .then(r=>r.json()).then(console.log)
 
-    Subject: Instructed: Variation V01 - J205 Pets Choice
-    Instructed by Jack Belshaw, Senior Quantity Surveyor, Barnfield Construction
-    on 21/08/2026 at 09:14
-    via the authenticated link sent to jack.belshaw@barnfieldconstruction.co.uk
+That lists every variation in both places - number, description, value, whether it was
+built in the builder and when it was sent. It writes nothing.
 
-with the PDF attached, showing the instruction ON the document. Both sides then hold the
-same signed copy, which is the whole point of capturing it. Recipients are deduplicated.
+Run it before doing anything else, and tell me what it says. It settles in ten seconds
+what I have twice now had to guess at.

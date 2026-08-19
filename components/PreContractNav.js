@@ -12,6 +12,10 @@ export default function PreContractNav({ active, children }) {
     { key: 'financials', label: 'Project Financials', href: '/project-financials' },
     { key: 'handover', label: 'Internal Handover Minutes', href: '/handover' },
     { key: 'handover-docs', label: 'Handover Docs', href: '/pre-contract-handover-docs' },
+    // The same builder the commercial team uses, on its own page. Pre-contract raise
+    // variations too, and having to go through Commercial to do it is how they end up
+    // being raised on paper instead.
+    { key: 'variation-builder', label: 'Variation Builder', href: '/variation-builder' },
   ]
   return (
     <div style={{ background: '#1a1a19', padding: '0 24px', display: 'flex', alignItems: 'center', gap: 0, height: 52, overflowX: 'auto' }}>

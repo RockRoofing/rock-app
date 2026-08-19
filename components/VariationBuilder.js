@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { projectVariations } from '../lib/variationInstruct'
 
 // ---------------------------------------------------------------------------
 // Variation Builder
@@ -435,14 +436,14 @@ export default function VariationBuilder({ projects, onSaved }) {
   // ReferenceError on every render of the builder. It compiled cleanly, because nothing
   // can know at build time that a const declared later would be read earlier.
   const raisedAlreadySent = useMemo(() => {
-    const v = (project?.variations || []).find(x => String(x.varNumber) === String(editingVar))
+    const v = projectVariations(project).find(x => String(x.varNumber) === String(editingVar))
     return !!v?.builder?.firstSentAt
   }, [project, editingVar])
 
   // Everything already raised on this project. Newest first: the one somebody wants is
   // almost always the last one.
   const existingVars = useMemo(() => {
-    const vs = project?.variations || project?.settings?.variations || []
+    const vs = projectVariations(project)
     // Newest at the top. Sent variations order by WHEN THEY WENT - which is the order the
     // customer knows them in - and anything not yet sent sits above them, because that is
     // what still needs doing.
@@ -503,7 +504,7 @@ export default function VariationBuilder({ projects, onSaved }) {
   // had gaps in it that meant nothing to them. The next number now follows the highest
   // number ACTUALLY SENT, and a draft carries it provisionally until it goes.
   const nextSentNumber = useMemo(() => {
-    const vars = project?.variations || project?.settings?.variations || []
+    const vars = projectVariations(project)
     // EVERY variation on the tracker, not just the sent ones.
     //
     // I had this following sends, so an unsent draft did not burn a number. That was
@@ -555,9 +556,7 @@ export default function VariationBuilder({ projects, onSaved }) {
       // variation wrote a list of one over everything already there.
       //
       // That is why previous variations were disappearing.
-      const existing = Array.isArray(settings.variations) && settings.variations.length
-        ? settings.variations
-        : (Array.isArray(project.variations) ? project.variations : [])
+      const existing = projectVariations(project)
       // Whoever raised it FIRST stays on it. Editing a variation should not quietly
       // reassign it to whoever happened to open it.
       const prior = existing.find(v => String(v.varNumber) === String(header.varNumber))

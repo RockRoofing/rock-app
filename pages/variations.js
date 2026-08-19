@@ -3,6 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import VariationBuilder from '../components/VariationBuilder'
+import { projectVariations } from '../lib/variationInstruct'
 import { useRouter } from 'next/router'
 
 // Pence-accurate throughout. Variations are individually small and have to add up to
@@ -224,7 +225,7 @@ export default function VariationTracker() {
     // Find the project and variation index
     const project = projects.find(p => p.xeroId === r.projectId)
     if (!project) return
-    const vars = project.variations || project.settings?.variations || []
+    const vars = projectVariations(project)
     // Find by varNumber + description match
     const varIndex = vars.findIndex(v =>
       (v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) &&
@@ -281,7 +282,7 @@ export default function VariationTracker() {
     // optimistic local update so the change is instant and obvious
     setProjects(prev => prev.map(p => {
       if (p.xeroId !== r.projectId) return p
-      const vars = (p.settings?.variations || p.variations || []).map(v =>
+      const vars = projectVariations(p).map(v =>
         ((v.varNumber === r.varNumber || (!v.varNumber && r.varNumber === '—')) && v.description === r.description)
           ? { ...v, instructed: value } : v)
       const settings = { ...(p.settings || {}), variations: vars }
@@ -407,7 +408,7 @@ export default function VariationTracker() {
   // Build flat list of all variations across all live projects
   const allRows = []
   for (const p of projects) {
-    const variations = p.variations || p.settings?.variations || []
+    const variations = projectVariations(p)
     for (const v of variations) {
       allRows.push({
         projectId: p.xeroId,
@@ -472,7 +473,7 @@ export default function VariationTracker() {
 
   // For add modal: get selected project's existing variations to compute next var number
   const selectedProject = projects.find(p => p.xeroId === addProjectId)
-  const nextNum = selectedProject ? nextVarNumber(selectedProject.variations || selectedProject.settings?.variations || []) : 'V01'
+  const nextNum = selectedProject ? nextVarNumber(projectVariations(selectedProject)) : 'V01'
 
   return (
     <>
@@ -763,7 +764,7 @@ export default function VariationTracker() {
                 <select value={addProjectId} onChange={e => {
                   setAddProjectId(e.target.value)
                   const proj = projects.find(p => p.xeroId === e.target.value)
-                  const vars = proj?.variations || proj?.settings?.variations || []
+                  const vars = projectVariations(proj)
                   setAddForm(f => ({ ...f, varNumber: nextVarNumber(vars) }))
                 }} style={{ ...inputS }}>
                   <option value="">Select project...</option>
