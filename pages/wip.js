@@ -183,7 +183,12 @@ export default function WipPage() {
         {/* No nav in the embed - Bookkeeping reaches this through their own tabs, and a
             second navigation bar inside the frame is a way out of the read-only view. */}
         {!embed && <CommercialNav active="/wip" />}
-        <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+        {/* The 1400 cap centres the page on a wide monitor, which is right for the full
+            page. Inside the Bookkeeping frame it just wastes the width the frame already
+            gave us, so the embed runs full bleed with tighter padding. */}
+        <div style={embed
+          ? { padding: '12px 14px' }
+          : { padding: 24, maxWidth: 1400, margin: '0 auto' }}>
 
           {/* Header: total WIP + month filter */}
           {/* The title and the Total WIP card are dropped in the embed - Bookkeeping has

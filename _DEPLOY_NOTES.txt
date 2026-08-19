@@ -1,43 +1,43 @@
-pkg510 - a busy cursor while the WIP saves
-==========================================
+pkg511 - Retention and WIP tabs show the page and nothing else
+=============================================================
 
-Deploy after pkg509. One changed file: pages/wip.js. No new files.
+Deploy after pkg510.
+
+CHANGED FILES (replace)
+-----------------------
+  pages/bookkeeping.js
+  pages/wip.js
+
+NEW FILES: none.
 
 
-WHY IT WAS NEEDED
+GONE FROM THE RETENTION AND WIP TABS
+--------------------------------------
+    "Reconcile the app against Xero..." intro
+    "23 account codes have more in Xero than the app can see"
+    "N uncategorised account codes"
+    Uncategorised costs chart
+    Categorisation check panel
+
+All of it sat ABOVE the tab strip, so it rendered on every tab including these two. It is
+about matching bills and invoices to Xero and has nothing to say about the retention
+register or the WIP.
+
+The four reconciliation tabs - Costs, Sales Invoices, Direct Wages, Overheads - are
+completely unchanged.
+
+
+WIP IS FULL WIDTH
 -----------------
-pkg504 took the loading screen away so the page stops jumping to the top. That was right,
-but it left NOTHING to say a click had registered. On a slow save that reads as "nothing
-happened", and the natural response is to click again.
+Three things were narrowing it, and all three had to go:
 
+    the page's 24px side padding      -> 8px on these two tabs
+    the WIP page's own maxWidth 1400  -> no cap in the embed
+    the embed's 24px padding          -> 14px
 
-THE CURSOR
-----------
-It turns to the busy pointer while a change is saving, and back when it lands.
+On a 1920 screen that takes the usable table from about 1,400px to about 1,870px. Nearly
+470px more of the columns you were scrolling to reach.
 
-The cursor is the honest place for this. It follows the pointer, so it is visible wherever
-on a long page you were working - a spinner at the top of the screen would be somewhere
-you are not looking, which is the problem pkg504 was fixing in the first place.
-
-
-IT COVERS THE SAVE, NOT JUST THE REFRESH
-------------------------------------------
-The write is the slower half, and it is the half that happens while somebody is wondering
-whether their click landed. Every save on the page goes through it:
-
-    margin save and clear override
-    Zero and Un-zero
-    manual adjustments, added and removed
-
-Manual adjustments already tracked their own busy state for the button; that is now
-mirrored to the cursor rather than the two saying different things.
-
-
-A COUNTER, NOT A FLAG
----------------------
-Two quick edits in a row would otherwise have the first one finishing and clearing the
-cursor while the second was still running. Counted up and down, so the cursor stays busy
-until everything has settled.
-
-Decremented in a finally, so a save that throws cannot leave the cursor stuck, and cleared
-on unmount so it cannot follow you to another page.
+The frames are taller as well - with the header gone there is a lot more room, so
+100vh-150px rather than 100vh-220px. Retention gets the same, since the same header was
+above it.

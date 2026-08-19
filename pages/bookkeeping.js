@@ -5,6 +5,11 @@ import * as XLSX from 'xlsx'
 // drift, and the file somebody saves is the one that has to say what it is.
 const TABS = [['bills', 'Costs (Bills)'], ['invoices', 'Sales Invoices'], ['wages', 'Direct Wages'], ['ignored', 'Overheads'], ['retention', 'Retention'], ['wip', 'WIP']]
 const TAB_LABELS = Object.fromEntries(TABS)
+// Retention and WIP are windows onto another page. The reconciliation furniture above the
+// tabs - the intro, the accrual warnings, the uncategorised chart and the categorisation
+// check - is about matching bills and invoices to Xero, and has nothing to say about
+// either of them.
+const VIEW_ONLY_TABS = new Set(['retention', 'wip'])
 import Link from 'next/link'
 import ReportImprovementLink from '../components/ReportImprovementLink'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -358,21 +363,26 @@ export default function BookkeepingPage() {
         />
       )}
 
-      <div style={{ margin: '24px auto', padding: '0 24px' }}>
-        <p style={{ color: '#666', fontSize: 14, margin: '0 0 20px' }}>
-          Reconcile the app against Xero. Each tab shows both <strong>categorised</strong> items (attributed to a project) and <strong>uncategorised</strong> ones (no project tag in Xero). Costs are split by the account categorisation set in Admin.
-        </p>
+      {/* Full-bleed on the view-only tabs. WIP is a wide table inside a frame - the 24px
+          either side plus the card's own padding was costing it nearly 100px of the
+          columns it needs. */}
+      <div style={{ margin: '24px auto', padding: VIEW_ONLY_TABS.has(tab) ? '0 8px' : '0 24px' }}>
+        {!VIEW_ONLY_TABS.has(tab) && (
+          <p style={{ color: '#666', fontSize: 14, margin: '0 0 20px' }}>
+            Reconcile the app against Xero. Each tab shows both <strong>categorised</strong> items (attributed to a project) and <strong>uncategorised</strong> ones (no project tag in Xero). Costs are split by the account categorisation set in Admin.
+          </p>
+        )}
 
         {loading ? <div style={{ color: '#aaa', padding: 40 }}>Loading…</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
-            {(data.uncategorisedCodes || []).length > 0 && (
+            {!VIEW_ONLY_TABS.has(tab) && (data.uncategorisedCodes || []).length > 0 && (
               <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#b91c1c' }}>
                 <strong>⚠ {data.uncategorisedCodes.length} uncategorised account {data.uncategorisedCodes.length === 1 ? 'code' : 'codes'}</strong> — these are excluded from project costs until assigned in{' '}
                 <Link href="/admin/account-categorisation" style={{ color: '#b91c1c', fontWeight: 600 }}>Account Categorisation</Link>:
                 <span style={{ color: '#7f1d1d' }}> {data.uncategorisedCodes.map(c => `${c.code}${c.name ? ` (${c.name})` : ''}`).join(', ')}</span>
               </div>
             )}
-            {(data.reconGaps || []).length > 0 && (
+            {!VIEW_ONLY_TABS.has(tab) && (data.reconGaps || []).length > 0 && (
               <details style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
                 <summary style={{ fontSize: 13, color: '#92400e', fontWeight: 700, cursor: 'pointer' }}>
                   ⚠ {data.reconGaps.length} account {data.reconGaps.length === 1 ? 'code has' : 'codes have'} more in Xero than the app can see — possible accruals / manual journals not captured as bills or wages
@@ -407,7 +417,7 @@ export default function BookkeepingPage() {
                 </div>
               </details>
             )}
-            <ReconPanel data={data} month={month} tab={tab} onPickMonth={setMonth} />
+            {!VIEW_ONLY_TABS.has(tab) && <ReconPanel data={data} month={month} tab={tab} onPickMonth={setMonth} />}
 
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4, margin: '20px 0 0', flexWrap: 'wrap' }}>
@@ -422,15 +432,17 @@ export default function BookkeepingPage() {
               {tab === 'retention' ? (
                 <div style={{ margin: -16 }}>
                   <iframe src="/retention?embed=1" title="Retention Tracker (read-only)"
-                    style={{ width: '100%', height: 'calc(100vh - 220px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
+                    style={{ width: '100%', height: 'calc(100vh - 150px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
                 </div>
               ) : tab === 'wip' ? (
                 // Read-only WIP, the same pattern as Retention. Accounts see the figures
                 // and whether the month has been signed off; the margin editors, the Zero
                 // buttons and the manual adjustments are not rendered in the embed.
                 <div style={{ margin: -16 }}>
+                  {/* Taller too: with the reconciliation header gone there is a lot more
+                      room, and the WIP table is the thing people are here to read. */}
                   <iframe src="/wip?embed=1" title="WIP (read-only)"
-                    style={{ width: '100%', height: 'calc(100vh - 220px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
+                    style={{ width: '100%', height: 'calc(100vh - 150px)', border: 'none', borderRadius: '0 8px 8px 8px', background: '#f0f2f5' }} />
                 </div>
               ) : (<>
               {/* Filters */}
