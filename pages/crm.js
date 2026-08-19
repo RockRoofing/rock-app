@@ -2061,7 +2061,100 @@ function ListView({ deals, columns, sort, onSort, onOpen, today, schema = [], us
 // ===========================================================================
 // Companies / Contacts views (derived from deals)
 // ===========================================================================
-function EntityTable({ rows, fields, columns, sort, onSort, onDelete, noun }) {
+
+// Every project we have had with one company: won, lost, and still out. Opened from the
+// company name on the Companies list, which showed counts but no way to see WHICH jobs
+// they were.
+function CompanyHistoryModal({ company, deals, onOpenDeal, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const name = String(company || '').trim().toLowerCase();
+  const mine = (deals || []).filter((d) => String(d.fields?.organization || '').trim().toLowerCase() === name);
+
+  const money = (n) => '£' + Number(n || 0).toLocaleString('en-GB', { maximumFractionDigits: 0 });
+  const dateOf = (d) => d.closeTime || d.wonTime || d.lostTime || null;
+
+  // Won, lost, still out. Sorted newest first within each - the recent history is what
+  // somebody is checking before they ring.
+  const bucket = (st) => mine
+    .filter((d) => (st === 'open' ? d.status === 'open' : d.status === st))
+    .sort((a, b) => String(dateOf(b) || '').localeCompare(String(dateOf(a) || '')));
+  const groups = [
+    ['Won', bucket('won'), '#dcfce7', '#166534'],
+    ['Lost', bucket('lost'), '#fee2e2', '#b91c1c'],
+    ['Still tendered', bucket('open'), '#e0e7ff', '#4338ca'],
+  ];
+
+  const total = (list) => list.reduce((n, d) => n + (Number(d.fields?.value) || 0), 0);
+  const wonV = total(bucket('won')), lostV = total(bucket('lost'));
+  // Strike rate by value, which is how it is measured everywhere else on the portal.
+  const strike = (wonV + lostV) > 0 ? Math.round((wonV / (wonV + lostV)) * 1000) / 10 : null;
+
+  return (
+    // Closes on the x or Escape only - never on a click outside. You open this to read
+    // it, often while scrolling a long list, and a stray click should not shut it.
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 700, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '5vh 16px', overflowY: 'auto' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: 900, maxWidth: '100%', padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>{company}</h3>
+            <div style={{ fontSize: 12.5, color: C.dim }}>
+              {mine.length} project{mine.length === 1 ? '' : 's'}
+              {strike != null && <> &middot; strike rate <strong style={{ color: C.text }}>{strike}%</strong> by value</>}
+              {' '}&middot; won {money(wonV)} &middot; lost {money(lostV)}
+            </div>
+          </div>
+          <button onClick={onClose} title="Close"
+            style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
+        </div>
+
+        {mine.length === 0 && (
+          <div style={{ fontSize: 13, color: C.dim, padding: '24px 0' }}>No projects recorded against this company.</div>
+        )}
+
+        {groups.map(([label, list, bg, fg]) => list.length === 0 ? null : (
+          <div key={label} style={{ marginTop: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{ padding: '2px 9px', borderRadius: 10, background: bg, color: fg, fontSize: 11, fontWeight: 700 }}>{label.toUpperCase()}</span>
+              <span style={{ fontSize: 12, color: C.dim }}>{list.length} &middot; {money(total(list))}</span>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr style={{ background: C.feedBg }}>
+                {['Project', label === 'Still tendered' ? 'Stage' : 'Date', 'Value', label === 'Lost' ? 'Reason' : 'Estimator'].map((h, i) => (
+                  <th key={h} style={{ ...th, textAlign: i === 2 ? 'right' : 'left' }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {list.map((d) => (
+                  <tr key={d.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                    <td style={{ ...td }}>
+                      {/* A real link, so these open in a new tab the same way the board
+                          and the activities list do. */}
+                      <DealLink id={d.id} onOpen={onOpenDeal} title="Open this project">{d.title}</DealLink>
+                    </td>
+                    <td style={{ ...td, color: C.dim }}>
+                      {label === 'Still tendered' ? (d.stageName || '-') : (dateOf(d) ? shortDate(dateOf(d)) : '-')}
+                    </td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>{money(d.fields?.value)}</td>
+                    <td style={{ ...td, color: C.dim }}>
+                      {label === 'Lost' ? (d.fields?.lost_reason || '-') : (d.fields?.estimator_responsible || '-')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EntityTable({ rows, fields, columns, sort, onSort, onDelete, noun, onOpenName }) {
   const { widths, startResize } = useColWidths(columns);
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
@@ -2072,7 +2165,15 @@ function EntityTable({ rows, fields, columns, sort, onSort, onDelete, noun }) {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} style={{ borderBottom: `1px solid ${C.line}` }}>
-              {columns.map((k) => <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>{k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}</td>)}
+              {columns.map((k) => (
+                <td key={k} style={{ ...td, width: widths[k], borderRight: `1px solid ${C.faint}` }}>
+                  {/* The NAME opens the history. The counts beside it were the only sign
+                      of how much work this company has given us, with no way to see what. */}
+                  {k === 'name' && onOpenName
+                    ? <button onClick={() => onOpenName(r)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.link, cursor: 'pointer', textAlign: 'left', fontWeight: 600 }}>{r[k] ?? '-'}</button>
+                    : k === 'open_value' ? money0(r[k]) : (r[k] ?? '-')}
+                </td>
+              ))}
               {onDelete && (
                 <td style={{ ...td, width: 70, textAlign: 'center' }}>
                   <button onClick={() => onDelete(r)} title={`Remove this ${noun || 'record'}`}
@@ -2168,6 +2269,9 @@ function CRMPageInner() {
     for (const id of waiting) loadDealSubs(Number(id));
   }, [deals]);
   const [orgsData, setOrgsData] = useState([]);
+  // Company whose project history is open. Lives here, not in the deal view - it is
+  // opened from the Companies table.
+  const [companyHistory, setCompanyHistory] = useState(null);
   const [contactsData, setContactsData] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3825,7 +3929,14 @@ function CRMPageInner() {
           </div>
         )}
         {view === 'list' && <ListView deals={listRows} columns={columns} sort={sort} onSort={doSort} onOpen={openDealById} today={today} schema={schema} users={users} onEditField={editField} />}
-        {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteCompany} noun="company" />}
+        {view === 'companies' && <EntityTable rows={companyRows} fields={COMPANY_FIELDS} columns={companyCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteCompany} noun="company" onOpenName={(r) => setCompanyHistory(r.name)} />}
+        {companyHistory && (
+          <CompanyHistoryModal
+            company={companyHistory}
+            deals={deals}
+            onOpenDeal={(id) => { setCompanyHistory(null); openDealById(id); }}
+            onClose={() => setCompanyHistory(null)} />
+        )}
         {view === 'contacts' && <EntityTable rows={contactRows} fields={CONTACT_FIELDS} columns={contactCols} sort={entitySort} onSort={doEntitySort} onDelete={deleteContact} noun="contact" />}
         {view === 'activities' && (
           <ActivitiesTable

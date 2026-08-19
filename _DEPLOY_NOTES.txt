@@ -1,43 +1,58 @@
-pkg499 - email bodies tidied up
-===============================
+pkg500 - company project history
+================================
 
-Deploy after pkg498. One changed file: pages/crm.js. No new files.
+Deploy after pkg499. One changed file: pages/crm.js. No new files.
 
 
-WHAT IS BEING STRIPPED
+CLICK THE COMPANY NAME
 ----------------------
-Outlook's plain-text version of an HTML email carries a lot nobody wants to read:
+On the Companies list, the name is now a link. It opens everything we have ever had with
+that company:
 
-    BRACKETED LINK REPEATS   every hyperlink has its target repeated after it -
-                             "01282 442 300 <tel:01282%20442%20300>"
-    INLINE IMAGE PLACEHOLDERS  [cid:image767571.jpg@FE6AC60D.0CC23966]
-    SIGNATURE TRACKING URLS  the Exclaimer link in your purple box, which runs to about
-                             600 characters across five lines
-    HUGE BLANK GAPS          collapsed to a single blank line
+    Barnfield Construction
+    4 projects · strike rate 62.2% by value · won £67,534 · lost £41,000
 
-Your example now reads exactly as the red box: the header, the message, the sign-off and
-the phone number. Nothing else.
+    WON  2 · £67,534
+      Pets Choice            04 Mar 2026    £3,894     Joe
+      Accrington Community   12 Nov 2025    £63,640    Joe
 
+    LOST  1 · £41,000
+      Blackburn Depot        20 Jan 2026    £41,000    Price
 
-WHAT IS DELIBERATELY KEPT
--------------------------
-A NORMAL LINK SOMEBODY TYPED. "See our brochure: https://rockroofing.co.uk/..." stays -
-that is part of what they said. The length test is what separates them: a line that is
-nothing but a URL over 120 characters is a tracker, a short one is a person sharing
-something.
+    STILL TENDERED  1 · £120,000
+      Burnley Phase 2        Negotiating    £120,000
 
-A known tracker is dropped at any length, but only when the line is JUST that link -
-never when it appears inside a sentence.
-
-THE SENDER'S ADDRESS. "From: Jack Belshaw <Jack.Belshaw@barnfield...>" is untouched: the
-rule only matches brackets that START with http, mailto: or tel:, so a plain address in
-angle brackets is safe.
+The list showed counts - "Won 2, Lost 1" - and no way to see which jobs they were.
 
 
-CLEANED ON DISPLAY, NOT ON SYNC
----------------------------------
-The stored copy is untouched. If a rule ever strips something it should not, the original
-is still there, and "Open in Outlook" always shows the real email.
+THE DETAIL IN EACH GROUP IS DIFFERENT ON PURPOSE
+--------------------------------------------------
+    Won and Lost      the date it closed
+    Still tendered    the stage it is at, because a close date would be a guess
+    Lost              the lost reason instead of the estimator, which is the thing you
+                      actually want to know about a job you did not get
 
-That was the deciding factor - a cleaning rule applied at sync time would have quietly
-destroyed the only copy we hold.
+Strike rate is by VALUE, matching how it is measured everywhere else on the portal.
+
+
+EVERY PROJECT IS A LINK
+-----------------------
+Real links, so right-click and ctrl-click open them in a new tab exactly as they do on the
+board and the activities list. A normal click closes the panel and opens the project.
+
+
+CLOSES ON THE X OR ESCAPE ONLY
+--------------------------------
+Never on a click outside, as you asked. You open this to read it, often while part-way
+down a long list, and a stray click should not shut it.
+
+
+ONE THING WORTH KNOWING
+-----------------------
+Projects are matched to a company by NAME. If a contractor is recorded as both "Barnfield
+Construction" and "Barnfield Construction Ltd" they will appear as two companies with
+their history split between them.
+
+That is the name-as-identity problem I have flagged a few times. It shows up plainly here
+for the first time - if a company's history looks short, check the list for a near-
+duplicate above or below it.
