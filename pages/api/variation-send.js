@@ -87,15 +87,30 @@ export default async function handler(req, res) {
       // The one line that has to be noticed gets bolded in the HTML. Matched on its own
       // text so it stays bold even if the rest of the message is edited before sending.
       const NOTICE = 'We are unable to proceed without your instruction via the below instruct button.'
-      const bodyHtml = esc(text).replace(/\n/g, '<br>')
-        .replace(esc(NOTICE), `<strong>${esc(NOTICE)}</strong>`)
-      return `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
-        + bodyHtml
-        + `<div style="margin:24px 0">`
+      const button = `<div style="margin:22px 0">`
         + `<a href="${link}" style="display:inline-block;background:#15803d;color:#fff;text-decoration:none;`
         + `padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">Instruct variation ${esc(varNumber)}</a>`
         + `</div>`
-        + `<div style="font-size:12px;color:#888">`
+
+      // THE BUTTON GOES ABOVE THE SIGN-OFF, not after it.
+      //
+      // Appending it to the whole body put it below "Kind regards" and the sender's
+      // details - so the one thing the email exists to get clicked sat underneath the
+      // signature, which is where people stop reading.
+      //
+      // Split on the sign-off. If the wording has been edited and there is no "Kind
+      // regards" to find, it falls back to the end rather than losing the button.
+      const SIGNOFF = /\n(Kind regards|Best regards|Regards|Many thanks|Thanks|Cheers|Yours sincerely|Yours faithfully)\b/i
+      const m = SIGNOFF.exec(text)
+      const head = m ? text.slice(0, m.index) : text
+      const tail = m ? text.slice(m.index) : ''
+      const asHtml = (t) => esc(t).replace(/\n/g, '<br>').replace(esc(NOTICE), `<strong>${esc(NOTICE)}</strong>`)
+
+      return `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
+        + asHtml(head)
+        + button
+        + (tail ? asHtml(tail) : '')
+        + `<div style="margin-top:18px;font-size:12px;color:#888">`
         + `This link is unique to you and records your instruction against this variation. `
         + `If the button does not work, use this address:<br>${esc(link)}`
         + `</div></div>`

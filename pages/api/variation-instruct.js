@@ -71,10 +71,16 @@ export default async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).end()
 
-  const { token, name, role, company } = req.body || {}
+  const { token, name, firstName, lastName, role, company } = req.body || {}
   const { t, project, variation, error } = await load(token)
   if (error) return res.status(400).json({ error })
-  if (!String(name || '').trim()) return res.status(400).json({ error: 'Please enter your name.' })
+  // Enforced HERE as well as on the page. A browser check is a convenience; this is the
+  // record that would be produced if an instruction were ever disputed, so it has to be
+  // complete whatever posted it.
+  const missing = [
+    ['first name', firstName], ['last name', lastName], ['role', role], ['company', company],
+  ].filter(([, v]) => !String(v || '').trim()).map(([l]) => l)
+  if (missing.length) return res.status(400).json({ error: `Please enter your ${missing.join(', ')}.` })
 
   // Already instructed - report it rather than overwriting who did it and when.
   if (variation.instructed === 'yes') {
@@ -83,7 +89,9 @@ export default async function handler(req, res) {
 
   const instruction = {
     at: Date.now(),
-    byName: String(name).trim(),
+    byName: String(name || `${firstName} ${lastName}`).trim(),
+    byFirstName: String(firstName).trim(),
+    byLastName: String(lastName).trim(),
     // Role and company, asked for on the page. A signature on a variation is worth more
     // when it says WHO signed it - "Jack Belshaw, Senior QS, Barnfield Construction"
     // stands up in a way that "Jack" does not.

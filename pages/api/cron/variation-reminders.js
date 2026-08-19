@@ -78,14 +78,23 @@ export default async function handler(req, res) {
                 // Replies go back to whoever raised it, as they do on the original.
                 ...(b.sentBy ? { reply_to: b.sentBy } : {}),
                 text,
-                html: `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
-                  + esc(text).replace(/\n/g, '<br>')
-                    .replace(esc('We are unable to proceed without your instruction via the below instruct button.'),
-                      `<strong>${esc('We are unable to proceed without your instruction via the below instruct button.')}</strong>`)
-                  + `<div style="margin:24px 0"><a href="${link}" style="display:inline-block;background:#15803d;color:#fff;`
-                  + `text-decoration:none;padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">`
-                  + `Instruct variation ${esc(v.varNumber)}</a></div>`
-                  + `<div style="font-size:12px;color:#888">This link is unique to you and records your instruction.<br>${esc(link)}</div></div>`,
+                // Button ABOVE the sign-off, same as the first send. Split on "Kind
+                // regards" so it does not end up under the signature where people have
+                // stopped reading.
+                html: (() => {
+                  const NOTICE = 'We are unable to proceed without your instruction via the below instruct button.'
+                  const asHtml = (t) => esc(t).replace(/\n/g, '<br>').replace(esc(NOTICE), `<strong>${esc(NOTICE)}</strong>`)
+                  const m = /\n(Kind regards|Best regards|Regards|Many thanks|Thanks|Cheers|Yours sincerely|Yours faithfully)\b/i.exec(text)
+                  const head = m ? text.slice(0, m.index) : text
+                  const tail = m ? text.slice(m.index) : ''
+                  return `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;color:#1a1a2e;line-height:1.6">`
+                    + asHtml(head)
+                    + `<div style="margin:22px 0"><a href="${link}" style="display:inline-block;background:#15803d;color:#fff;`
+                    + `text-decoration:none;padding:13px 26px;border-radius:8px;font-weight:700;font-size:15px">`
+                    + `Instruct variation ${esc(v.varNumber)}</a></div>`
+                    + (tail ? asHtml(tail) : '')
+                    + `<div style="margin-top:18px;font-size:12px;color:#888">This link is unique to you and records your instruction.<br>${esc(link)}</div></div>`
+                })(),
                 attachments: [{ filename: fname, content: b64 }],
               }),
             })

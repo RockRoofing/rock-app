@@ -15,7 +15,8 @@ export default function InstructVariation() {
   const { token } = router.query
   const [state, setState] = useState({ loading: true })
   const [busy, setBusy] = useState(false)
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
   const [role, setRole] = useState('')
   const [company, setCompany] = useState('')
 
@@ -28,7 +29,14 @@ export default function InstructVariation() {
         // Filled in from the handover for whoever this link was sent to. Somebody
         // confirming a variation should not have to type their own job title, and a
         // prefilled field comes back correct far more often than an empty one.
-        if (d.contact?.name) setName(d.contact.name)
+        if (d.contact?.name) {
+          // Split what we hold into first and last. The handover stores one name field,
+          // so the last word is the surname and everything before it the forename -
+          // wrong for a double-barrelled surname, which is exactly why both are editable.
+          const parts = String(d.contact.name).trim().split(/\s+/)
+          setFirstName(parts.slice(0, -1).join(' ') || parts[0] || '')
+          setLastName(parts.length > 1 ? parts[parts.length - 1] : '')
+        }
         if (d.contact?.role) setRole(d.contact.role)
         if (d.customerCompany) setCompany(d.customerCompany)
       })
@@ -40,7 +48,7 @@ export default function InstructVariation() {
     try {
       const r = await fetch('/api/variation-instruct', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, name, role, company }),
+        body: JSON.stringify({ token, name: `${firstName} ${lastName}`.trim(), firstName, lastName, role, company }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Failed')
@@ -48,6 +56,9 @@ export default function InstructVariation() {
     } catch (e) { setState(s => ({ ...s, error: e.message })) }
     setBusy(false)
   }
+
+  // Every field filled before the button will work.
+  const complete = [firstName, lastName, role, company].every(v => String(v).trim())
 
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const box = { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', maxWidth: 720, margin: '0 auto' }
@@ -107,28 +118,39 @@ export default function InstructVariation() {
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eee' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
-                {[['Your name', name, setName, 'Who is instructing this', true],
-                  ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor', false],
-                  ['Your company', company, setCompany, 'e.g. Barnfield Construction', false]].map(([l, v, set, ph, req]) => (
+                {/* ALL FOUR REQUIRED. This is the signature on a variation - a record
+                    naming "Jack" from an unnamed company is worth far less than one
+                    naming Jack Belshaw, Senior Quantity Surveyor, Barnfield Construction,
+                    and it is the record we would produce if the instruction were ever
+                    disputed. */}
+                {[['First name', firstName, setFirstName, 'Jack'],
+                  ['Last name', lastName, setLastName, 'Belshaw'],
+                  ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor'],
+                  ['Your company', company, setCompany, 'e.g. Barnfield Construction']].map(([l, v, set, ph]) => (
                   <div key={l}>
-                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l}{req ? ' *' : ''}</label>
+                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l} *</label>
                     <input value={v} onChange={e => set(e.target.value)} placeholder={ph}
-                      style={{ padding: '9px 11px', border: '1px solid #ddd', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                      style={{ padding: '9px 11px', border: `1px solid ${String(v).trim() ? '#ddd' : '#fca5a5'}`, background: String(v).trim() ? '#fff' : '#fef2f2', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
                   </div>
                 ))}
               </div>
+              {!complete && (
+                <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 8, fontWeight: 600 }}>
+                  Please complete every field before instructing.
+                </div>
+              )}
               <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>
                 {state.contact?.name ? 'Filled in from our records — please correct anything that is wrong. ' : ''}
                 Recorded with the instruction, alongside {state.sentTo || 'the email address this link was sent to'}.
               </div>
 
-              <button onClick={instruct} disabled={busy || !name.trim()}
+              <button onClick={instruct} disabled={busy || !complete}
                 style={{
                   display: 'block', marginTop: 16,
-                  background: (busy || !name.trim()) ? '#e5e7eb' : '#15803d',
-                  color: (busy || !name.trim()) ? '#9ca3af' : '#fff',
+                  background: (busy || !complete) ? '#e5e7eb' : '#15803d',
+                  color: (busy || !complete) ? '#9ca3af' : '#fff',
                   border: 'none', borderRadius: 8, padding: '12px 26px', fontSize: 15, fontWeight: 700,
-                  cursor: (busy || !name.trim()) ? 'default' : 'pointer',
+                  cursor: (busy || !complete) ? 'default' : 'pointer',
                 }}>
                 {busy ? 'Recording…' : `Instruct variation ${state.varNumber}`}
               </button>

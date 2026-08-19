@@ -1,66 +1,44 @@
-pkg526 - the answer, and stopping it happening again
+pkg528 - the instruct button sits above the sign-off
 ====================================================
 
-Deploy after pkg525.
+Deploy after pkg527.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/variationInstruct.js
-  pages/variations.js
-  pages/api/project/[id]/settings.js     <- literal [id] folder
+  pages/api/variation-send.js
+  pages/api/cron/variation-reminders.js
 
 NEW FILES: none.
 
 
-V01 AND V02 ARE GONE. I AM SORRY.
------------------------------------
-The scan is unambiguous. 34 keys, 26 records with variations, all keyed by tracking option
-id - there is no job-number record anywhere, so my pkg524 theory was wrong as well.
+WHAT CHANGED
+------------
+    Hi Jack,
 
-Your project is project:f1313132. It holds ONE variation:
+    Please find attached variation V01 for J205 - Pets Choice.
+    Value: £2,716.50
 
-    V03 - "Aluminium edge trim"
+    Please confirm your instruction to proceed.
+    We are unable to proceed without your instruction via the below instruct button.
 
-V01 and V02 are in no record. They were overwritten when V03 was raised in the builder,
-before pkg522, and they are not recoverable from the app. They need re-entering on the
-tracker.
+    [ Instruct variation V01 ]
 
-Two other projects are in the same state - project:35e4f879 starts at V03, and
-project:cfe01a4a holds only V04. Worth checking those against your own records too.
+    Kind regards
+    Roman Jarosz
+    Rock Roofing Limited
+    0121 827 0433
 
+The button was being appended after the whole message, which put it below the sign-off and
+the sender's details - so the one thing the email exists to get clicked was sitting
+underneath the signature, which is where people stop reading.
 
-AND MY GUARD WOULD NOT HAVE STOPPED IT
-----------------------------------------
-pkg522 refused a POST that cut the count by MORE than one. Your case was two variations
-down to one - a reduction of exactly one, which it allowed.
-
-    2 -> 1    allowed        <- the case that lost your work
-    3 -> 1    refused
-
-The guard now checks WHICH ROWS SURVIVE, not how many:
-
-    builder posts only V03, tracker holds V01+V02    REFUSED, names V01 and V02
-    adds V03, keeps V01+V02                          allowed
-    deletes V02 deliberately                         allowed
-    drops two at once                                REFUSED
-
-A genuine delete removes one row and keeps the rest. Anything dropping a variation the
-caller was not deleting is a caller reading the wrong list, and now fails loudly.
+Both emails: the first send and the automatic reminder.
 
 
-SOMETHING ELSE THE SCAN FOUND
------------------------------
-project:39002840 holds 13 variations with NO variation number at all - the numbers are
-written into the front of the description instead:
+HOW IT FINDS THE PLACE
+----------------------
+It splits the message at the sign-off - Kind regards, Best regards, Regards, Many thanks,
+Thanks, Cheers, Yours sincerely, Yours faithfully.
 
-    varNumber: ""     description: "V01 - Additional visit to accommodate for balcony..."
-
-Read literally those have no number, so the tracker shows blanks and the next-number
-calculation restarts at V01 on that project.
-
-The tracker now falls back to the number in the description, so those 13 display correctly
-without anything being re-keyed.
-
-That record also looks like a DUPLICATE of project:c59294a0 - same 13 descriptions, which
-has them properly numbered plus three more. Worth deciding which is the live one; I have
-not touched either.
+The message is editable before sending, so this cannot assume the exact wording. If none
+of those is found, the button falls back to the end of the email rather than disappearing.

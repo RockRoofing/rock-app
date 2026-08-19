@@ -522,6 +522,13 @@ export default function VariationBuilder({ projects, onSaved }) {
 
   // The builder detail of whichever variation is open, so its status can be shown above
   // the form.
+  // The full variation record behind whatever is open, for the send window - openVar is
+  // only its builder block.
+  const sendableVar = useMemo(() => {
+    if (!editingVar) return null
+    return existingVars.find(x => String(x.varNumber) === String(editingVar)) || null
+  }, [existingVars, editingVar])
+
   const openVar = useMemo(() => {
     if (!editingVar) return null
     const v = existingVars.find(x => String(x.varNumber) === String(editingVar))
@@ -724,10 +731,26 @@ export default function VariationBuilder({ projects, onSaved }) {
                 <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.3, color: openVar.instruction ? '#15803d' : (openVar.firstSentAt ? '#92400e' : '#666') }}>
                   {openVar.instruction ? 'INSTRUCTED' : (openVar.firstSentAt ? 'SENT — NOT YET INSTRUCTED' : 'DRAFT — NOT SENT')}
                 </div>
-                <button onClick={() => downloadPdf(header.varNumber)}
-                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
-                  Download PDF
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* SEND REMINDER, without touching the variation.
+                      Only where it has gone out and NOT come back - there is nothing to
+                      chase on a draft, and chasing something already instructed is how
+                      you annoy a customer who has done what you asked.
+                      Separate from "Save & send" deliberately: chasing should not require
+                      saving, because saving a variation the customer already holds means
+                      the copy they have and the copy we have can differ. */}
+                  {openVar.firstSentAt && !openVar.instruction && (
+                    <button onClick={() => setSendOpen(true)}
+                      title={`Chase ${(openVar.sentTo || []).join(', ')}`}
+                      style={{ background: '#92400e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+                      Send reminder
+                    </button>
+                  )}
+                  <button onClick={() => downloadPdf(header.varNumber)}
+                    style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>
+                    Download PDF
+                  </button>
+                </div>
               </div>
               {openVar.instruction && (
                 <div style={{ fontSize: 12.5, color: INK, marginTop: 5, lineHeight: 1.7 }}>
@@ -880,8 +903,11 @@ export default function VariationBuilder({ projects, onSaved }) {
         </div>
       )}
 
-      {sendOpen && raised && (
-        <SendVariationModal project={project} variation={raised.record} me={me}
+      {/* The variation to send: the one just saved, or - when the reminder button is used
+          on a variation opened from the list - that one. It only worked after a save
+          before, so Send reminder opened nothing at all. */}
+      {sendOpen && (raised?.record || sendableVar) && (
+        <SendVariationModal project={project} variation={raised?.record || sendableVar} me={me}
           onClose={() => setSendOpen(false)}
           onSent={async (m) => {
             setSendOpen(false)
