@@ -3941,6 +3941,7 @@ function CRMPageInner() {
         {view === 'activities' && (
           <ActivitiesTable
             rows={activitiesShown} total={activityRows.length}
+            schema={schema} orgsData={orgsData} contactsData={contactsData}
             people={actPeople} customers={actCustomers}
             person={actPerson} setPerson={setActPerson}
             customer={actCustomer} setCustomer={setActCustomer}
@@ -4121,7 +4122,7 @@ const ACT_COLS = [
 // simply grows tall is CUT OFF with no way to reach the rest. ListView and EntityTable
 // each manage their own scrolling; this one has to do the same - hence the column layout
 // with a scrollable table area and a header row that stays put.
-function ActivitiesTable({ rows, total, people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users, navQuery = '', onClearNavQuery, from = '', setFrom, to = '', setTo }) {
+function ActivitiesTable({ rows, total, schema = [], orgsData = [], contactsData = [], people, customers, person, setPerson, customer, setCustomer, showDone, setShowDone, sort, onSort, today, onOpen, loading, summary, deals, openList, dealsAreSeed, onRetry, onComplete, onEdit, onClearFilters, staleFilter, refreshedAt, onRefresh, search, setSearch, me, users, navQuery = '', onClearNavQuery, from = '', setFrom, to = '', setTo }) {
   const [completing, setCompleting] = useState(null);   // row being marked done
   const [editing, setEditing] = useState(null);         // row being edited in the big box
   const sel = { padding: '7px 10px', border: '1px solid ' + C.line, borderRadius: 8, fontSize: 13, fontFamily: 'inherit', background: '#fff' };
@@ -4258,7 +4259,7 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
           // is worth and what has already been said - which is what you need in front of
           // you while the phone is ringing.
           deal={(deals || []).find(d => String(d.id) === String(completing.dealId)) || null}
-          users={users}
+          users={users} schema={schema} orgsData={orgsData} contactsData={contactsData}
           onClose={() => setCompleting(null)}
           onDone={(outcome, next) => { setCompleting(null); onComplete(completing, outcome, next); }} />
       )}
@@ -4278,63 +4279,94 @@ function ActivitiesTable({ rows, total, people, customers, person, setPerson, cu
 // The left-hand column of the Make Contact panel: who you are ringing, what it is worth,
 // and the details you would otherwise go hunting for. Read-only - this is a place to look
 // while you talk, not another place to edit from.
-function ContactPanel({ deal }) {
+function ContactPanel({ deal, schema = [], orgsData = [], contactsData = [] }) {
   const f = deal.fields || {};
   const box = { background: C.feedBg, border: `1px solid ${C.line}`, borderRadius: 10, padding: '12px 14px', marginBottom: 12 };
   const hdr = { fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 8 };
-  const row = (k, v, href) => {
+
+  // THE MASTER RECORDS BEHIND THE DEAL, exactly as the deal view resolves them (pkg457):
+  // a deal stores the contact's and company's NAME; the phone, email, address and the
+  // rest live on those records. Matched on name, case- and space-insensitively.
+  const dealContact = useMemo(() => {
+    const n = String(f.contact_person || '').trim().toLowerCase();
+    if (!n) return null;
+    return (contactsData || []).find((c) => String(c.name || '').trim().toLowerCase() === n) || null;
+  }, [contactsData, f.contact_person]);
+  const dealOrg = useMemo(() => {
+    const n = String(f.organization || '').trim().toLowerCase();
+    if (!n) return null;
+    return (orgsData || []).find((o) => String(o.name || '').trim().toLowerCase() === n) || null;
+  }, [orgsData, f.organization]);
+
+  // Deal first, master record second - anything typed on the deal is a deliberate
+  // override for this job.
+  const val = (key, group) => {
+    const v = f[key];
+    if (v != null && String(v).trim() !== '' && String(v).trim() !== '-') return v;
+    if (group === 'person') return dealContact?.[key] ?? '';
+    if (group === 'organization') return dealOrg?.[key] ?? '';
+    return '';
+  };
+
+  const money = (n) => (n == null || n === '' ? null : '£' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 }));
+  const line = (k, v, href) => {
     if (v == null || String(v).trim() === '' || String(v).trim() === '-') return null;
     return (
       <div key={k} style={sideRow}>
         <span style={sideKey}>{k}</span>
         <span style={{ textAlign: 'right', wordBreak: 'break-word', fontWeight: 600, color: C.text }}>
-          {href ? <a href={href} style={{ color: C.link, textDecoration: 'none' }}>{v}</a> : v}
+          {href ? <a href={href} style={{ color: C.link, textDecoration: 'none' }}>{v}</a> : String(v)}
         </span>
       </div>
     );
   };
-  const money = (n) => (n == null || n === '' ? null : '£' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 }));
-  const phone = f.contact_phone || f.org_phone || '';
-  const email = f.contact_email || f.org_email || '';
+
+  // EVERY FIELD IN THE GROUP, from the schema - not a hand-picked list.
+  //
+  // The first version named the fields I thought were useful, which meant anything added
+  // to the schema since would never appear here, and anything I had not thought of was
+  // simply missing. Built from the schema, this panel cannot fall behind the deal.
+  //
+  // Empty fields are skipped: on a phone call a list of dashes is noise.
+  const groupRows = (group) => (schema || [])
+    .filter((fl) => fl.group === group)
+    .map((fl) => {
+      const v = val(fl.key, group);
+      // Phone and email are one click - the panel is open because somebody is about to
+      // make contact.
+      const href = /phone/i.test(fl.key) && v ? `tel:${String(v).replace(/\s+/g, '')}`
+        : /email/i.test(fl.key) && v ? `mailto:${v}` : null;
+      return line(fl.label, v, href);
+    })
+    .filter(Boolean);
+
+  const sections = [
+    ['Summary', groupRows('summary')],
+    ['Project details', groupRows('details')],
+    ['Customer contact', groupRows('person')],
+    ['Organisation', groupRows('organization')],
+  ];
 
   return (
     <>
       <div style={box}>
-        <div style={hdr}>Summary</div>
-        {row('Value', money(deal.value))}
-        {row('Stage', deal.stageName)}
-        {row('Organisation', f.organization)}
-        {row('Contact', f.contact_person)}
-        {/* Tap-to-call and mailto: this panel is open because somebody is about to make
-            contact, so the number should be one click, not one copy and paste. */}
-        {row('Phone', phone, phone ? `tel:${String(phone).replace(/\s+/g, '')}` : null)}
-        {row('Email', email, email ? `mailto:${email}` : null)}
-        {row('Job role', f.contact_job_role)}
-        {row('Owner', deal.owner)}
+        <div style={hdr}>Deal</div>
+        {line('Value', money(deal.value))}
+        {line('Stage', deal.stageName)}
+        {line('Status', deal.status)}
+        {line('Owner', deal.owner)}
       </div>
-
-      <div style={box}>
-        <div style={hdr}>Project details</div>
-        {row('Project score', f.project_score)}
-        {row('Tender return', f.tender_return_date)}
-        {row('Region', f.region)}
-        {row('Project type', f.project_type)}
-        {row('Estimator', f.estimator_responsible)}
-        {row('Lead source', f.lead_source)}
-        {row('Site location', f.site_location)}
-        {row('Size m2', f.size_m2)}
-        {f.general_info && (
-          <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
-            <div style={{ fontSize: 11, color: C.dim, marginBottom: 3 }}>General information</div>
-            <div style={{ fontSize: 12.5, color: C.text, whiteSpace: 'pre-wrap' }}>{f.general_info}</div>
-          </div>
-        )}
-      </div>
+      {sections.map(([title, rows]) => rows.length === 0 ? null : (
+        <div key={title} style={box}>
+          <div style={hdr}>{title}</div>
+          {rows}
+        </div>
+      ))}
     </>
   );
 }
 
-function CompleteActivityModal({ row, today, deal = null, users = [], onClose, onDone }) {
+function CompleteActivityModal({ row, today, deal = null, users = [], schema = [], orgsData = [], contactsData = [], onClose, onDone }) {
   // Escape closes it. The backdrop deliberately does not - see the note on the overlay.
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -4371,7 +4403,7 @@ function CompleteActivityModal({ row, today, deal = null, users = [], onClose, o
         <div style={deal ? { display: 'grid', gridTemplateColumns: 'minmax(0,320px) minmax(0,1fr)', gap: 20, alignItems: 'start' } : undefined}>
         {deal && (
           <div style={{ minWidth: 0 }}>
-            <ContactPanel deal={deal} />
+            <ContactPanel deal={deal} schema={schema} orgsData={orgsData} contactsData={contactsData} />
           </div>
         )}
         <div style={{ minWidth: 0 }}>

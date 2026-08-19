@@ -1,42 +1,52 @@
-pkg501 - the Customer filter, actually on the Strike Rate page this time
-========================================================================
+pkg502 - the Make Contact panel now shows everything
+====================================================
 
-Deploy after pkg500. One changed file: pages/sales-crm.js. No new files.
-
-
-WHY pkg478's FILTER NEVER APPEARED
-------------------------------------
-I added it to the shared filter bar. The Strike Rate page does not render that bar at all -
-it has its own filter block, which is why the date range and the score buttons on it look
-different from the other pages.
-
-So the control existed, was correctly gated to the Strike Rate page, and was attached to
-something that page never draws. It could not have shown up.
-
-I should have checked where that page's filters come from rather than assuming every page
-used the shared one.
+Deploy after pkg501. One changed file: pages/crm.js. No new files.
 
 
-NOW IT IS ON THE PAGE ITSELF
-------------------------------
-    Customer  [All customers            v]   clear
-
-Directly above the existing filter block. Pick a contractor and the whole page - rate,
-values, chart, detail - is that customer only.
-
-Listing every organisation with a decided deal above £0, since strike rate is only
-meaningful on work that has been won or lost.
-
-The version in the shared bar has been removed, so there is only one of them.
+WHAT WAS WRONG WITH pkg498
+--------------------------
+I hand-picked about fifteen fields I thought would be useful. That was the wrong approach
+twice over: anything I had not thought of was simply missing, and anything added to the
+deal in future would never appear here.
 
 
-CUSTOMER TYPE REMOVED
----------------------
-Gone from the shared filter bar, and no longer applied to the data.
+NOW BUILT FROM THE SCHEMA
+-------------------------
+Every field on the deal, in the same four groups the deal itself uses. 34 fields:
 
-That second part matters: the filters are remembered between visits, so leaving the
-filtering in place with the control gone would have meant anybody with "Main Contractor"
-saved kept seeing a narrowed set with nothing on screen to explain it.
+    DEAL              value, stage, status, owner
+    SUMMARY           Value, Organization, Contact, Owner, Project Score
+    PROJECT DETAILS   Glenigan Project ID, Site Location, Region, Size m2, Credit Score,
+                      Credit Limit, Insured Credit Limit, Project Stage, Roofing Works
+                      On-Site, Estimator Responsible, Systems Priced, Description of
+                      Project Scope of Works, General Information, Sales Person, Project
+                      Start Date, Project Type, Lead Source, Lost Reason
+    CUSTOMER CONTACT  Name, Phone, Email, Job Role
+    ORGANISATION      Address, Phone, Website, Email, Registration Number, Supply Chain
+                      Approved?
 
-The field itself is untouched on the deals - only the filter has gone, so it can come back
-if you want it. Projects Priced has its own separate filter set and is unaffected.
+Add a field to the deal and it appears here too, with no further work.
+
+
+CONTACT AND ORGANISATION FALL BACK TO THE MASTER RECORDS
+----------------------------------------------------------
+Same resolution the deal view uses: a deal stores the contact's and company's NAME, while
+the phone, email, address and registration number live on the Contact and Company records.
+Anything typed on the deal wins; blanks fill from the master record.
+
+Without that, most of those two sections would have shown a dash on most projects - the
+same fault pkg457 fixed on the deal page.
+
+
+ALL FOUR PHONE AND EMAIL FIELDS ARE LINKS
+-------------------------------------------
+Contact phone, contact email, organisation phone, organisation email - tel: and mailto:.
+The panel is open because somebody is about to make contact, so any of the four should be
+one click.
+
+
+EMPTY FIELDS ARE STILL SKIPPED
+--------------------------------
+Deliberately. 34 rows of dashes is not "everything", it is noise on a phone call. A group
+with nothing in it does not render at all.
