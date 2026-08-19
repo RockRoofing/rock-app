@@ -1,43 +1,67 @@
-pkg511 - Retention and WIP tabs show the page and nothing else
-=============================================================
+pkg512 - Variation Builder corrections
+======================================
 
-Deploy after pkg510.
+Deploy after pkg511.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/bookkeeping.js
-  pages/wip.js
+  components/VariationBuilder.js
+  pages/api/dashboard.js
 
 NEW FILES: none.
 
 
-GONE FROM THE RETENTION AND WIP TABS
---------------------------------------
-    "Reconcile the app against Xero..." intro
-    "23 account codes have more in Xero than the app can see"
-    "N uncategorised account codes"
-    Uncategorised costs chart
-    Categorisation check panel
+1. MARK-UP, NOT MARGIN - and it matters
+-----------------------------------------
+You were right, and the difference is real money:
 
-All of it sat ABOVE the tab strip, so it rendered on every tab including these two. It is
-about matching bills and invoices to Xero and has nothing to say about the retention
-register or the WIP.
+    20% MARK-UP on £1,000 of cost   sell £1,200.00   profit £200
+    20% MARGIN  on £1,000 of cost   sell £1,250.00   profit £250
 
-The four reconciliation tabs - Costs, Sales Invoices, Direct Wages, Overheads - are
-completely unchanged.
+£50 per £1,000. The builder was computing the second and calling it the first.
+
+Now cost x (1 + mark-up). Checked: 25% mark-up on £2,173.20 of cost gives £543.30 of
+profit, which is 25.0% OF COST.
 
 
-WIP IS FULL WIDTH
------------------
-Three things were narrowing it, and all three had to go:
+2. NO DEFAULT MARK-UP
+---------------------
+The box starts empty and outlined red. The window will not close - not on the x, not on
+Save, not on Escape - until a figure is entered, and the Save button is greyed until it is.
 
-    the page's 24px side padding      -> 8px on these two tabs
-    the WIP page's own maxWidth 1400  -> no cap in the embed
-    the embed's 24px padding          -> 14px
+A mark-up that arrives pre-filled is a mark-up nobody checks. 20% sitting there on a job
+priced at 30% is money given away without anyone deciding to.
 
-On a 1920 screen that takes the usable table from about 1,400px to about 1,870px. Nearly
-470px more of the columns you were scrolling to reach.
+New items no longer seed one either, which is what would have defeated the rule.
 
-The frames are taller as well - with the header gone there is a lot more room, so
-100vh-150px rather than 100vh-220px. Retention gets the same, since the same header was
-above it.
+
+3. UNITS ARE A DROPDOWN
+-----------------------
+m2, m, nr, item. No typing.
+
+Free text produced "m2", "M2", "sqm" and "sq m" on four lines of the same variation, which
+is the sort of thing that only shows up when somebody totals a remeasure.
+
+Starts blank, so a unit is chosen rather than accepted.
+
+
+4. MATERIALS AND LABOUR ROWS HAVE A UNIT
+------------------------------------------
+Same dropdown on every line, so the workings read properly: 130 m2 of membrane, 6 nr of
+tape, 3 nr of labour.
+
+
+5. REQUESTED BY
+---------------
+Now offers the customer's own people from the handover, with their job titles, plus the
+company and the QS:
+
+    Jack Belshaw (Senior QS)
+    Chris Lee (PM)
+    Barnfield Construction Ltd
+    Nathan Rewbury
+
+Still free text - the person who rang up is not always on the handover.
+
+This needed the dashboard to expose customerContacts, which it was resolving from the IHM
+and then discarding. That is the second changed file.

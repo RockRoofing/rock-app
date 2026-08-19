@@ -32,6 +32,10 @@ export const BASE_CLARIFICATIONS = [
 
 const letter = (i) => String.fromCharCode(97 + i)   // a, b, c...
 
+// The only units we price in. A free-text box produced "m2", "M2", "sqm" and "sq m" on
+// four lines of the same variation.
+const UNITS = ['m2', 'm', 'nr', 'item']
+
 // ---------------------------------------------------------------------------
 // Workings
 // ---------------------------------------------------------------------------
@@ -42,17 +46,19 @@ function WorkingsModal({ item, onSave, onClose }) {
   const [d, setD] = useState(() => ({
     description: item.description || '',
     qty: item.qty ?? 1,
-    unit: item.unit || 'item',
-    marginPct: item.marginPct ?? 20,
-    materials: item.materials?.length ? item.materials.map(x => ({ ...x })) : [{ description: '', qty: '', rate: '', wastePct: '' }],
-    labour: item.labour?.length ? item.labour.map(x => ({ ...x })) : [{ description: '', qty: '', rate: '' }],
+    unit: item.unit || '',
+    // NO DEFAULT. A mark-up that arrives pre-filled is a mark-up nobody checks, and 20%
+    // on a job priced at 30% is money given away without anyone deciding to.
+    markupPct: item.markupPct ?? '',
+    materials: item.materials?.length ? item.materials.map(x => ({ ...x })) : [{ description: '', qty: '', unit: '', rate: '', wastePct: '' }],
+    labour: item.labour?.length ? item.labour.map(x => ({ ...x })) : [{ description: '', qty: '', unit: '', rate: '' }],
   }))
   const [saved, setSaved] = useState(false)
 
   // Escape closes. A click outside does NOT - there is a lot of typing in here and losing
   // it to a stray click would be the worst thing this window could do.
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') { onSave(calc(d)); onClose() } }
+    const onKey = (e) => { if (e.key === 'Escape') tryClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   })
@@ -65,10 +71,18 @@ function WorkingsModal({ item, onSave, onClose }) {
     ...prev, [kind]: prev[kind].map((r, ix) => ix === i ? { ...r, ...patch } : r),
   }))
   const addRow = (kind) => setD(prev => ({
-    ...prev, [kind]: [...prev[kind], kind === 'materials' ? { description: '', qty: '', rate: '', wastePct: '' } : { description: '', qty: '', rate: '' }],
+    ...prev, [kind]: [...prev[kind], kind === 'materials' ? { description: '', qty: '', unit: '', rate: '', wastePct: '' } : { description: '', qty: '', unit: '', rate: '' }],
   }))
   const delRow = (kind, i) => setD(prev => ({ ...prev, [kind]: prev[kind].filter((_, ix) => ix !== i) }))
 
+  // The mark-up must be entered before this window will close. It is the one number that
+  // cannot be inferred from anything else in here, and an item priced at cost is a
+  // mistake that reaches the customer.
+  const needsMarkup = d.markupPct === '' || d.markupPct == null || isNaN(parseFloat(d.markupPct))
+  const tryClose = () => {
+    if (needsMarkup) { alert('Enter a mark-up % before closing.\n\nWithout it the item is priced at cost.'); return }
+    onSave(calc(d)); onClose()
+  }
   const t = calc(d)
 
   const inp = { padding: '5px 7px', border: `1px solid ${LINE}`, borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }
@@ -83,7 +97,7 @@ function WorkingsModal({ item, onSave, onClose }) {
             <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Workings</h3>
             <div style={{ fontSize: 12.5, color: '#888' }}>Price the item up. The rate on the variation is worked out from what you enter here.</div>
           </div>
-          <button onClick={() => { onSave(t); onClose() }} title="Close - your workings are saved"
+          <button onClick={tryClose} title="Close - your workings are saved"
             style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 8, width: 34, height: 34, fontSize: 22, lineHeight: 1, color: '#6b7280', cursor: 'pointer' }}>&times;</button>
         </div>
 
@@ -93,8 +107,19 @@ function WorkingsModal({ item, onSave, onClose }) {
             <input value={d.description} onChange={e => set({ description: e.target.value })} style={inp} placeholder="e.g. Additional VCL to plant deck" />
           </div>
           <div><div style={th}>Quantity</div><input type="number" value={d.qty} onChange={e => set({ qty: e.target.value })} style={inp} /></div>
-          <div><div style={th}>Unit</div><input value={d.unit} onChange={e => set({ unit: e.target.value })} style={inp} placeholder="m2 / item / no." /></div>
-          <div><div style={th}>Margin %</div><input type="number" value={d.marginPct} onChange={e => set({ marginPct: e.target.value })} style={inp} /></div>
+          <div>
+            <div style={th}>Unit</div>
+            <select value={d.unit} onChange={e => set({ unit: e.target.value })} style={inp}>
+              <option value="">-</option>
+              {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={th}>Mark-up %</div>
+            <input type="number" value={d.markupPct} onChange={e => set({ markupPct: e.target.value })}
+              placeholder="required"
+              style={{ ...inp, borderColor: needsMarkup ? '#dc2626' : LINE, background: needsMarkup ? '#fef2f2' : '#fff' }} />
+          </div>
         </div>
 
         {[['materials', 'Materials', true], ['labour', 'Labour', false]].map(([kind, label, hasWaste]) => (
@@ -105,8 +130,9 @@ function WorkingsModal({ item, onSave, onClose }) {
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr style={{ background: '#f8f9fa' }}>
-                <th style={{ ...th, width: '46%' }}>Description</th>
-                <th style={{ ...th, width: 90 }}>Qty</th>
+                <th style={{ ...th, width: '40%' }}>Description</th>
+                <th style={{ ...th, width: 80 }}>Qty</th>
+                <th style={{ ...th, width: 80 }}>Unit</th>
                 <th style={{ ...th, width: 110 }}>Rate</th>
                 {hasWaste && <th style={{ ...th, width: 90 }}>Waste %</th>}
                 <th style={{ ...th, width: 110, textAlign: 'right' }}>Total</th>
@@ -120,6 +146,12 @@ function WorkingsModal({ item, onSave, onClose }) {
                     <tr key={i}>
                       <td style={td}><input value={r.description} onChange={e => setRow(kind, i, { description: e.target.value })} style={inp} /></td>
                       <td style={td}><input type="number" value={r.qty} onChange={e => setRow(kind, i, { qty: e.target.value })} style={inp} /></td>
+                      <td style={td}>
+                        <select value={r.unit || ''} onChange={e => setRow(kind, i, { unit: e.target.value })} style={inp}>
+                          <option value="">-</option>
+                          {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </td>
                       <td style={td}><input type="number" value={r.rate} onChange={e => setRow(kind, i, { rate: e.target.value })} style={inp} /></td>
                       {hasWaste && <td style={td}><input type="number" value={r.wastePct} onChange={e => setRow(kind, i, { wastePct: e.target.value })} style={inp} placeholder="0" /></td>}
                       <td style={{ ...td, textAlign: 'right', fontSize: 12.5, paddingTop: 10, fontWeight: 600 }}>{money(tot)}</td>
@@ -143,7 +175,7 @@ function WorkingsModal({ item, onSave, onClose }) {
           {[
             ['Materials (incl. waste)', t.materialsTotal],
             ['Labour', t.labourTotal],
-            [`Margin @ ${n(d.marginPct)}%`, t.profit],
+            [needsMarkup ? 'Mark-up - not set' : `Mark-up @ ${n(d.markupPct)}%`, t.profit],
             ['Item total', t.total],
             [`Rate per ${d.unit || 'unit'}`, t.rate],
           ].map(([l, v], i) => (
@@ -155,9 +187,12 @@ function WorkingsModal({ item, onSave, onClose }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, justifyContent: 'flex-end' }}>
-          <span style={{ fontSize: 12, color: saved ? GREEN : '#aaa' }}>{saved ? 'Saved' : 'Saves as you type'}</span>
-          <button onClick={() => { onSave(t); onClose() }}
-            style={{ background: GREEN, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+          <span style={{ fontSize: 12, color: needsMarkup ? '#dc2626' : (saved ? GREEN : '#aaa') }}>
+            {needsMarkup ? 'Enter a mark-up % to finish' : (saved ? 'Saved' : 'Saves as you type')}
+          </span>
+          <button onClick={tryClose} disabled={needsMarkup}
+            title={needsMarkup ? 'Enter a mark-up % first' : 'Save and close'}
+            style={{ background: needsMarkup ? '#e5e7eb' : GREEN, color: needsMarkup ? '#9ca3af' : '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13.5, fontWeight: 700, cursor: needsMarkup ? 'default' : 'pointer' }}>
             Save &amp; close
           </button>
         </div>
@@ -173,10 +208,11 @@ export function calc(d) {
   const materialsTotal = (d.materials || []).reduce((s, r) => s + (n(r.qty) * n(r.rate)) * (1 + n(r.wastePct) / 100), 0)
   const labourTotal = (d.labour || []).reduce((s, r) => s + n(r.qty) * n(r.rate), 0)
   const cost = materialsTotal + labourTotal
-  const m = n(d.marginPct) / 100
-  // Margin ON THE SELL, not a mark-up on cost: 20% margin means 20% of the final figure,
-  // which is how margin is treated everywhere else in the portal.
-  const total = m > 0 && m < 1 ? cost / (1 - m) : cost
+  // MARK-UP ON COST, not margin on the sell. 20% mark-up on £1,000 of cost is £1,200, and
+  // the profit in it is 16.7% of the sell - which is a different figure from a 20% margin
+  // and the one the estimators work to when pricing a variation.
+  const m = n(d.markupPct) / 100
+  const total = cost * (1 + m)
   const profit = total - cost
   const qty = n(d.qty) || 1
   return {
@@ -218,7 +254,9 @@ export default function VariationBuilder({ projects, onSaved }) {
   }), { materials: 0, labour: 0, profit: 0, total: 0 }), [items])
 
   function addItem() {
-    setItems(prev => [...prev, calc({ description: '', qty: 1, unit: 'item', marginPct: 20, materials: [], labour: [] })])
+    // No unit and no mark-up: both must be chosen. Seeding them is what makes a default
+    // stick, which is the thing this change was for.
+    setItems(prev => [...prev, calc({ description: '', qty: 1, unit: '', markupPct: '', materials: [], labour: [] })])
     setEditing(items.length)
   }
 
@@ -267,9 +305,15 @@ export default function VariationBuilder({ projects, onSaved }) {
   const td = { padding: '8px 10px', fontSize: 13, borderTop: `1px solid ${LINE}` }
 
   // Customers to pick from: the project's own contacts, from the handover.
+  // Who can have asked for this: the customer's own people from the handover, plus the
+  // company and the QS. A datalist rather than a select, deliberately - it offers the
+  // names we hold AND lets you type somebody we do not, because the person who rang up
+  // is not always on the handover.
   const customerOptions = useMemo(() => {
-    const s = project?.settings || {}
-    return [s.customerName, s.qsName, s.customerContact, s.siteContact].filter(Boolean)
+    const st = project?.settings || {}
+    const contacts = (project?.customerContacts || []).map(c => c.title ? `${c.name} (${c.title})` : c.name)
+    const out = [...contacts, project?.customer, st.customerName, st.qsName, st.customerContact, st.siteContact]
+    return [...new Set(out.filter(Boolean).map(x => String(x).trim()))]
   }, [project])
 
   return (
@@ -299,7 +343,8 @@ export default function VariationBuilder({ projects, onSaved }) {
               <div><div style={lbl}>Date</div><input type="date" value={header.date} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
               <div>
                 <div style={lbl}>Requested by</div>
-                <input list="var-customers" value={header.requestedBy} onChange={e => setHeader({ ...header, requestedBy: e.target.value })} style={inp} placeholder="Customer name" />
+                <input list="var-customers" value={header.requestedBy} onChange={e => setHeader({ ...header, requestedBy: e.target.value })} style={inp}
+                  placeholder={customerOptions.length ? 'Pick one, or type a name' : 'Customer name'} />
                 <datalist id="var-customers">{customerOptions.map(c => <option key={c} value={c} />)}</datalist>
               </div>
             </div>

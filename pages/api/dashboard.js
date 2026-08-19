@@ -376,6 +376,11 @@ export default async function handler(req, res) {
         // screen and blank on Project Financials.
         estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || '',
         qsName: settings.qsName || '',
+        // The customer's own people, from the handover. Needed by the Variation Builder
+        // so "Requested by" offers who actually asked, rather than only the company.
+        customerContacts: Array.isArray(resolvedPeople?.customerContacts)
+          ? resolvedPeople.customerContacts.map(c => ({ name: c.name || '', title: c.title || '', email: c.email || '' })).filter(c => c.name)
+          : [],
         qsEmail: settings.qsEmail || '',
         customerEmail: settings.customerEmail || '',
         customerContact: settings.customerContact || '',
