@@ -571,6 +571,11 @@ export default function VariationBuilder({ projects, onSaved }) {
   async function save(forceNumber) {
     if (!project) { setMsg('Pick a project first.'); return false }
     if (!items.length) { setMsg('Add at least one item.'); return false }
+    // Who asked for it. It reaches the customer on the document - "Requested by -" is the
+    // first thing a QS queries, because a variation nobody asked for is one they will not
+    // pay for.
+    if (!String(header.requestedBy || '').trim()) { setMsg('Who requested this variation? It goes on the document.'); return false }
+    if (!String(header.description || '').trim()) { setMsg('Add a variation description - it goes on the document and in the email.'); return false }
     // LOCKED ONCE INSTRUCTED.
     //
     // The customer has authorised a specific scope at a specific value, and that

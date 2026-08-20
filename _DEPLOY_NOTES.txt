@@ -1,41 +1,53 @@
-pkg534 - emails read in full, chain behind the toggle
-=====================================================
+pkg535 - the instruction page: no suggested names, no half-filled form
+======================================================================
 
-Deploy after pkg533. One changed file: pages/crm.js. No new files.
+Deploy after pkg534.
 
+CHANGED FILES (replace)
+-----------------------
+  components/VariationBuilder.js
+  pages/instruct/[token].js          <- literal [token] folder
 
-WHAT CHANGES
-------------
-    ALWAYS SHOWN, in the CRM green
-        what this person actually wrote - greeting, message, sign-off, name.
-        No truncation, no button to press.
-
-    BEHIND "read full email", in a lighter green
-        the quoted thread underneath - "From: ... Sent: ... " and everything below it.
-
-Your Clarendon Road example now reads in full on the card: "Hi Jennie, I am looking for a
-bit of advice... 38 lm to suit a 520mm wall... Many thanks, Niall". Nothing to click.
-
-The button reads "read full email" / "hide earlier emails", and only appears when there IS
-a chain underneath - offering it on a message with nothing below promises something and
-then shows nothing.
+NEW FILES: none.
 
 
-THE BODY NOW LOADS ITSELF
--------------------------
-It used to show Graph's 255-character preview and make you press a button per email just
-to find out what it said. Each card now fetches its own body as it appears.
+1. REAL NAMES WERE THE PLACEHOLDERS
+-------------------------------------
+The boxes read "Jack" and "Belshaw" in grey - my placeholder text from pkg527. On a form
+whose entire purpose is recording WHO is instructing, a suggested name is the last thing
+to put in front of somebody.
 
-THREE AT A TIME. The Emails tab is fifty cards, and fifty simultaneous Graph requests get
-throttled - so they go through a queue. Results are cached for the session, so scrolling
-back, or opening a deal showing the same email, costs nothing.
+Now "First name...", "Last name...", "Your role...", "Your company...".
 
 
-WORTH SAYING
-------------
-This is now a request per email rather than per click. It is queued and cached, so it
-should feel quick, but it is more traffic to Microsoft than before.
+2. THE FORM CONTRADICTED ITSELF
+---------------------------------
+Your screenshot says "We do not hold your details for this project, so please enter them"
+- and the company box was already filled from the project.
 
-The proper fix, if reading mail here becomes routine, is storing bodies at sync time -
-instant, searchable, and no per-view cost. That is the thing I flagged in pkg464 and it is
-looking more worthwhile with every change you have asked for. Say the word.
+The prefill ran regardless of whether we actually held the person. Now it only runs when
+we do:
+
+    SENT TO A HANDOVER CONTACT     details shown as FIXED TEXT, not inputs, and the
+                                   server uses its own copy whatever is posted
+    SENT TO A TYPED ADDRESS        all four boxes empty, nothing suggested
+
+Your test went to a gmail address that is not on the handover, which is why you got the
+entry form - that part was right. It just should not have arrived part-filled.
+
+
+3. "REQUESTED BY -" ON THE DOCUMENT
+-------------------------------------
+Also in your screenshot. Nothing required it, so a variation could go to a customer with
+that field blank.
+
+Requested by and the variation description are now both required before it can be raised.
+A variation nobody asked for is one a QS will not pay for, and "Requested by -" is the
+first thing they query.
+
+
+STILL OUTSTANDING
+-----------------
+Anyone holding the To recipient's own link can use it. That is the one-time code we
+discussed - they click, we email a six-digit code to that address, they enter it. Say the
+word.

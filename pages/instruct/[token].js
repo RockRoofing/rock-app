@@ -26,19 +26,23 @@ export default function InstructVariation() {
       .then(r => r.json())
       .then(d => {
         setState({ loading: false, ...d })
-        // Filled in from the handover for whoever this link was sent to. Somebody
-        // confirming a variation should not have to type their own job title, and a
-        // prefilled field comes back correct far more often than an empty one.
-        if (d.contact?.name) {
-          // Split what we hold into first and last. The handover stores one name field,
-          // so the last word is the surname and everything before it the forename -
-          // wrong for a double-barrelled surname, which is exactly why both are editable.
+        // ONLY WHEN WE HOLD THE PERSON. Prefilling ran whatever d.onFile said, so a form
+        // that had just told somebody "we do not hold your details" arrived with the
+        // project's company name already in it - contradicting itself, and part-filling a
+        // record that is supposed to be theirs.
+        //
+        // On file: these are shown as fixed text, not as inputs, and the server uses its
+        // own copy regardless. Not on file: nothing is suggested at all.
+        if (d.onFile && d.contact?.name) {
+          // The handover holds one name field, so the last word is the surname. Wrong for
+          // a double-barrelled one - but these are display-only when on file, and the
+          // server sends the same split, so the two cannot disagree.
           const parts = String(d.contact.name).trim().split(/\s+/)
           setFirstName(parts.slice(0, -1).join(' ') || parts[0] || '')
           setLastName(parts.length > 1 ? parts[parts.length - 1] : '')
+          setRole(d.contact.role || '')
+          setCompany(d.customerCompany || '')
         }
-        if (d.contact?.role) setRole(d.contact.role)
-        if (d.customerCompany) setCompany(d.customerCompany)
       })
       .catch(() => setState({ loading: false, error: 'Could not load this variation.' }))
   }, [token])
@@ -138,10 +142,14 @@ export default function InstructVariation() {
                       We do not hold your details for this project, so please enter them.
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
-                      {[['First name', firstName, setFirstName, 'Jack'],
-                        ['Last name', lastName, setLastName, 'Belshaw'],
-                        ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor'],
-                        ['Your company', company, setCompany, 'e.g. Barnfield Construction']].map(([l, v, set, ph]) => (
+                      {/* NO REAL NAMES AS PLACEHOLDERS. "Jack" and "Belshaw" sat greyed in
+                          the boxes looking like a suggestion of who to be - on a form
+                          whose entire purpose is recording who is instructing, that is
+                          the last thing to prompt. */}
+                      {[['First name', firstName, setFirstName, 'First name…'],
+                        ['Last name', lastName, setLastName, 'Last name…'],
+                        ['Your role', role, setRole, 'Your role…'],
+                        ['Your company', company, setCompany, 'Your company…']].map(([l, v, set, ph]) => (
                         <div key={l}>
                           <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l} *</label>
                           <input value={v} onChange={e => set(e.target.value)} placeholder={ph}
