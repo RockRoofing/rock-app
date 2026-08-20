@@ -1,44 +1,49 @@
-pkg528 - the instruct button sits above the sign-off
-====================================================
+pkg529 - "J1 - J1 - Test" on emails and documents
+=================================================
 
-Deploy after pkg527.
+Deploy after pkg528.
 
 CHANGED FILES (replace)
 -----------------------
+  lib/variationInstruct.js
+  lib/variationPdf.js
+  lib/wipPdf.js
+  pages/wip.js
+  pages/variations.js
   pages/api/variation-send.js
+  pages/api/variation-instruct.js
   pages/api/cron/variation-reminders.js
 
 NEW FILES: none.
 
 
-WHAT CHANGED
-------------
-    Hi Jack,
+THE CAUSE
+---------
+The project NAME from Xero is the whole tracking option - "J1 - Test" - and jobNo is
+extracted from the front of it:
 
-    Please find attached variation V01 for J205 - Pets Choice.
-    Value: £2,716.50
+    name:  "J1 - Test"
+    jobNo: "J1"        <- taken from the name
 
-    Please confirm your instruction to proceed.
-    We are unable to proceed without your instruction via the below instruct button.
+Nine places joined the two with " - ", which repeats the number every time.
 
-    [ Instruct variation V01 ]
+It is not just your test project. Every project doubles:
 
-    Kind regards
-    Roman Jarosz
-    Rock Roofing Limited
-    0121 827 0433
-
-The button was being appended after the whole message, which put it below the sign-off and
-the sender's details - so the one thing the email exists to get clicked was sitting
-underneath the signature, which is where people stop reading.
-
-Both emails: the first send and the automatic reminder.
+    "J1 - Test"          ->  J1 - J1 - Test
+    "J178 - Gas Lane"    ->  J178 - J178 - Gas Lane
+    "J205. Pets Choice"  ->  J205 - J205. Pets Choice
 
 
-HOW IT FINDS THE PLACE
-----------------------
-It splits the message at the sign-off - Kind regards, Best regards, Regards, Many thanks,
-Thanks, Cheers, Yours sincerely, Yours faithfully.
+FIXED IN ONE PLACE
+------------------
+A projectLabel() helper strips a leading job number from the name before joining, and all
+nine call sites use it:
 
-The message is editable before sending, so this cannot assume the exact wording. If none
-of those is found, the button falls back to the end of the email rather than disappearing.
+    J1    "J1 - Test"           ->  J1 - Test
+    J205  "J205. Pets Choice"   ->  J205 - Pets Choice     (handles a full stop too)
+    J205  "Pets Choice"         ->  J205 - Pets Choice     (name without the number)
+    none  "Bensham Lane"        ->  Bensham Lane
+
+It covers the variation emails, the variation PDF, the instruction page and its
+confirmation email, the reminders, the PDF filenames, and the WIP page and PDF - all of
+which had the same fault.

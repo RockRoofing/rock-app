@@ -3,7 +3,7 @@ import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
 import VariationBuilder from '../components/VariationBuilder'
-import { projectVariations, varNumberOf } from '../lib/variationInstruct'
+import { projectVariations, varNumberOf, projectLabel } from '../lib/variationInstruct'
 import { useRouter } from 'next/router'
 
 // Pence-accurate throughout. Variations are individually small and have to add up to
@@ -606,7 +606,7 @@ export default function VariationTracker() {
                       <td style={{ ...tdS, whiteSpace: 'nowrap' }} colSpan={2}>
                         <select value={inlineAdd.projectId} onChange={e => setInlineAdd(a => ({ ...a, projectId: e.target.value }))} style={{ ...inlineCell, minWidth: 220 }}>
                           <option value="">Select project…</option>
-                          {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
+                          {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>)}
                         </select>
                       </td>
                       <td style={{ ...tdS, whiteSpace: 'nowrap', color: '#888' }}>{inlineProject ? (inlineProject.customer || inlineProject.customerName || '—') : '—'}</td>

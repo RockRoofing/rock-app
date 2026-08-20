@@ -1,7 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject, get } from '../../lib/db'
 import { buildVariationPDF } from '../../lib/variationPdf'
-import { createInstructToken } from '../../lib/variationInstruct'
+import { createInstructToken, projectLabel } from '../../lib/variationInstruct'
 
 // Variation PDF and send.
 //
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     if (error) return res.status(404).json({ error })
     try {
       const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })
-      const fname = `Variation ${variation.varNumber} - ${[project.jobNo, project.name].filter(Boolean).join(' ')}.pdf`
+      const fname = `Variation ${variation.varNumber} - ${projectLabel(project.jobNo, project.name)}.pdf`
         .replace(/[^a-zA-Z0-9 .-]/g, '')
       res.setHeader('Content-Type', 'application/pdf')
       res.setHeader('Content-Disposition', `${req.query.download ? 'attachment' : 'inline'}; filename="${fname}"`)
@@ -72,7 +72,7 @@ export default async function handler(req, res) {
   try {
     const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })
     const b64 = Buffer.from(bytes).toString('base64')
-    const fname = `Variation ${variation.varNumber} - ${[project.jobNo, project.name].filter(Boolean).join(' ')}.pdf`
+    const fname = `Variation ${variation.varNumber} - ${projectLabel(project.jobNo, project.name)}.pdf`
       .replace(/[^a-zA-Z0-9 .-]/g, '')
     const ccList = (Array.isArray(cc) ? cc : [cc]).filter(Boolean)
 

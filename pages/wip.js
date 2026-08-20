@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { projectLabel } from '../lib/variationInstruct'
 import { useRouter } from 'next/router'
 import Head from 'next/head'
 import CommercialNav from '../components/CommercialNav'
@@ -285,7 +286,7 @@ export default function WipPage() {
                     <div key={p.id + a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, background: carried ? '#dcfce7' : '#fff', border: `1px solid ${carried ? '#86efac' : '#fde68a'}`, borderRadius: 8, padding: '6px 10px' }}>
                       <button onClick={() => carryForward(p, a)} disabled={carrying === a.id} title={carried ? 'Remove from this month' : 'Carry into this month'}
                         style={{ width: 22, height: 22, borderRadius: '50%', border: 'none', cursor: carrying === a.id ? 'default' : 'pointer', background: carried ? '#16a34a' : '#d1d5db', color: '#fff', fontSize: 13, fontWeight: 700, lineHeight: 1, flexShrink: 0, opacity: carrying === a.id ? 0.5 : 1 }}>✓</button>
-                      <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</span>
+                      <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{projectLabel(p.jobNo, p.name)}</span>
                       <span style={{ flex: 1, color: carried ? '#166534' : '#7c5e10' }}>{a.description || 'Adjustment'}</span>
                       <span style={{ fontWeight: 700, color: carried ? '#166534' : '#7c5e10' }}>{fmtC(a.amount)}</span>
                       {carried && <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>carried ✓</span>}

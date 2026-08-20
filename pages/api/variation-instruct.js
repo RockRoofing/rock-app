@@ -1,4 +1,5 @@
 import { getProject, saveProject, get } from '../../lib/db'
+import { projectLabel } from '../../lib/variationInstruct'
 import { verifyInstructToken } from '../../lib/variationInstruct'
 import { buildVariationPDF } from '../../lib/variationPdf'
 
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
       contact: contact ? { name: contact.name || '', role: contact.title || '' } : null,
       customerCompany: project.customerCompany || project.customer || '',
       varNumber: variation.varNumber,
-      projectName: [project.jobNo, project.name].filter(Boolean).join(' - '),
+      projectName: projectLabel(project.jobNo, project.name),
       description: variation.description || '',
       subContractRef: b.subContractRef || '',
       date: b.date ? new Date(b.date).toLocaleDateString('en-GB') : '',
@@ -136,7 +137,7 @@ export default async function handler(req, res) {
       const proto = req.headers['x-forwarded-proto'] || 'https'
       const withInstruction = { ...variation, instructed: 'yes', builder: { ...b, instruction } }
       const bytes = await buildVariationPDF({ variation: withInstruction, project, logoUrl: `${proto}://${req.headers.host}/rock-logo.jpg` })
-      const label = [project.jobNo, project.name].filter(Boolean).join(' - ')
+      const label = projectLabel(project.jobNo, project.name)
       const who = [instruction.byName, instruction.byRole, instruction.byCompany].filter(Boolean).join(', ')
       const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
       const text = `Variation ${variation.varNumber} for ${label} has been instructed.\n\n`

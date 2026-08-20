@@ -1,5 +1,5 @@
 import { getAllProjectSettings, saveProject, getProject, get } from '../../../lib/db'
-import { createInstructToken, addWorkingDays } from '../../../lib/variationInstruct'
+import { createInstructToken, addWorkingDays, projectLabel } from '../../../lib/variationInstruct'
 import { buildVariationPDF } from '../../../lib/variationPdf'
 
 // Chases variations the customer has not instructed.
@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 
         const row = Array.isArray(cache) ? cache.find(p => String(p.xeroId) === String(projectId)) : null
         const project = { ...proj, jobNo: row?.jobNo || '', name: row?.name || '' }
-        const label = [project.jobNo, project.name].filter(Boolean).join(' - ')
+        const label = projectLabel(project.jobNo, project.name)
         const value = (parseFloat(v.materials) || 0) + (parseFloat(v.labour) || 0) + (parseFloat(v.profit) || 0)
         const money = '£' + value.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
