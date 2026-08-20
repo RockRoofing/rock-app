@@ -194,7 +194,7 @@ function ReportModal({ id, projects, meName, allReports, onClose, onSaved }) {
       // All variations for this project (instructed and not)
       const proj = (dashR.projects || []).find(x => x.jobNo === no || x.projectNo === no || (p?.name && (x.name === p.name || x.projectName === p.name)))
       const vars = (proj?.settings?.variations || proj?.variations || [])
-        .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: !!v.instructed, total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
+        .map(v => ({ varNumber: v.varNumber || '—', description: v.description || '', instructed: (v.instructed === 'yes' || v.instructed === true), total: fmtN(v.materials) + fmtN(v.labour) + fmtN(v.profit) }))
 
       // ── Issues ────────────────────────────────────────────────────────────
       // Show issues for THIS project that have been sent to the customer.

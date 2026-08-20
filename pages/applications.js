@@ -1068,7 +1068,8 @@ function ApplicationEditor({ app: appProp, appNumber, prevGross, prevReleases, i
               {vars.length === 0 && <tr><td colSpan={7} style={{ ...td, color: '#aaa' }}>No variations on this project.</td></tr>}
               {vars.map(v => {
                 const val = varValue(v)
-                const instructed = !!v.instructed
+                // !!'no' is true - instructed is a string now.
+                const instructed = (v.instructed === 'yes' || v.instructed === true)
                 const vtd = instructed ? val * num(v.pctComplete) / 100 : 0
                 const greyLine = instructed ? {} : { color: '#9ca3af' }
                 return (

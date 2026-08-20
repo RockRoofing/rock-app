@@ -22,7 +22,9 @@ export default async function handler(req, res) {
       item: v.item || v.itemNo || '',
       qty: v.qty != null ? v.qty : '',
       unit: v.unit || '',
-      instructed: !!v.instructed,
+      // 'yes'/'no' now, not a boolean - and !!'no' is true, which would show every
+      // variation as instructed.
+      instructed: (v.instructed === 'yes' || v.instructed === true),
     }))
     if (!cr) return res.json({ contractedRates: null, variations })
     return res.json({

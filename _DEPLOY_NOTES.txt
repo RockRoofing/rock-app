@@ -1,63 +1,55 @@
-pkg536 - the remaining J1 - J1, and the instruction name
+pkg538 - instructed variations now reach the application
 ========================================================
 
-Deploy after pkg535.
+Deploy after pkg537.
 
 CHANGED FILES (replace)
 -----------------------
-  components/VariationBuilder.js
-  components/ProjectDatesModal.js
-  pages/contracted-rates.js
+  lib/applicationPdf.js
+  lib/applications.js
   pages/applications.js
-  pages/operations/project-management/deliveries.js
-  pages/api/variation-instruct.js
-  pages/instruct/[token].js          <- literal [token] folder
+  pages/api/contracted-rates-view.js
+  pages/operations/project-management/report.js
 
 NEW FILES: none.
 
 
-1. "Variation V08 - J1 - J1 - TEST"
--------------------------------------
-pkg529 replaced nine of these and missed the send window, which builds its own label - so
-the subject and the body both still doubled.
+THE CODE WAS ALREADY THERE - IT COULD NEVER FIRE
+--------------------------------------------------
+applicationPdf.js already generates a variation document for anything instructed and
+appends it. The test it uses is:
 
-Sweeping properly this time found EIGHT MORE, in five files: the project dropdowns on
-Contracted Rates, Applications, Deliveries, the Variation Builder, and the project dates
-modal. Every one of them was showing "J1 - J1 - TEST".
+    v.instructed !== 'yes' || !v.builder
 
-All now use the same helper.
+But BOTH functions that prepare variations for an application rebuilt them field by field
+and threw away exactly those two things:
 
+    instructed: !!v.instructed     ->  true, not 'yes'
+    builder                        ->  dropped entirely
 
-2. WHY YOUR DETAILS DID NOT PULL THROUGH
-------------------------------------------
-They did not because that link went to jgmcveigh@gmail.com, which is not one of the
-project's contacts. The entry form was correct - it just did not say WHY.
+So the condition failed twice over, and no document was ever generated. Nothing was wrong
+with the variations or the instructions - the application was being handed a stripped copy.
 
-It now distinguishes the two cases:
-
-    "jgmcveigh@gmail.com is not one of the contacts we hold for this project..."
-    "We do not hold any contacts for this project..."
-
-One means you are not on the handover, the other means nobody is. Very different problems.
-
-ALSO FIXED: the match was case-insensitive but not trimmed. A trailing space on an address
-in the handover is invisible on screen and broke it completely.
+Both now keep the builder block and 'yes'/'no' as written.
 
 
-3. THE NAME IS NO LONGER SPLIT
---------------------------------
-You are right that Project Details holds ONE name field. I was guessing where the surname
-began, which:
+THE SECOND ONE WAS WORSE
+------------------------
+buildAppVariations is what gets FROZEN onto an application when it is sent. A sent
+application kept a variation with no builder and no proper instructed flag - so its
+document and its digital instruction could never be reproduced, even after this fix.
 
-    "Jack van der Berg"  ->  first "Jack van der", last "Berg"
-    "Jennie"             ->  last name EMPTY, failing the required check
+Applications already sent will still carry the stripped copy. Anything sent from here
+carries the lot.
 
-Where we hold the person, the name is now shown exactly as recorded, with no boxes at all:
 
-    Instructing as
-    Jack Belshaw
-    Senior Quantity Surveyor, Barnfield Construction
+AND THREE PLACES THAT WOULD HAVE GONE WRONG
+---------------------------------------------
+Making instructed a string breaks every truthiness test on it, because !!'no' is TRUE:
 
-First and last name boxes only appear for somebody typing their own details, where they
-can put them in the right boxes themselves. The server does the same, so the two cannot
-disagree.
+    Contracted Rates view
+    Project Report
+    Applications page
+
+All three would have shown EVERY variation as instructed. Fixed with the same explicit
+test. No others remain in the codebase.

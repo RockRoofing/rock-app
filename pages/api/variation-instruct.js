@@ -2,6 +2,8 @@ import { getProject, saveProject, get } from '../../lib/db'
 import { projectLabel } from '../../lib/variationInstruct'
 import { verifyInstructToken } from '../../lib/variationInstruct'
 import { buildVariationPDF } from '../../lib/variationPdf'
+import { resolveProjectPeople } from '../../lib/projectPeople'
+import { getPortalUsers } from '../../lib/db'
 
 // The customer-facing instruction endpoint.
 //
@@ -26,7 +28,36 @@ async function load(token) {
     const row = Array.isArray(cache) ? cache.find(p => String(p.xeroId) === String(t.projectId)) : null
     jobNo = row?.jobNo || ''; name = row?.name || ''
   } catch {}
-  return { t, project: { ...project, jobNo, name }, variation }
+
+  // THE CUSTOMER CONTACTS HAVE TO BE RESOLVED, not read off the record.
+  //
+  // getProject() returns what is STORED. customerContacts is not stored - the dashboard
+  // works it out from the handover and the project's people override each time it runs.
+  //
+  // So project.customerContacts was always undefined here, contact was always null, and
+  // the page told EVERY recipient "we do not hold your details" - not just an address off
+  // the handover. Same resolution the dashboard uses.
+  let customerContacts = [], customerCompany = ''
+  try {
+    // jobNo comes from the dashboard cache above. If that cache is cold the lookup finds
+    // no handover and we fall back to asking - which is right, but worth knowing it is a
+    // dependency rather than a failure of the data.
+    const opsProjects = (await get('ops:projects')) || []
+    const users = await getPortalUsers()
+    const people = resolveProjectPeople({
+      jobNo, opsProjects, users,
+      override: project.peopleOverride || {},
+    })
+    customerContacts = Array.isArray(people?.customerContacts) ? people.customerContacts : []
+    // Belt and braces: contacts typed into Edit Project Details live on the override and
+    // should stand even if the handover cannot be found.
+    if (!customerContacts.length && Array.isArray(project.peopleOverride?.customerContacts)) {
+      customerContacts = project.peopleOverride.customerContacts
+    }
+    customerCompany = people?.customerCompany || project.customerName || ''
+  } catch { /* the page still works, it just has to ask */ }
+
+  return { t, project: { ...project, jobNo, name, customerContacts, customerCompany }, variation }
 }
 
 const valueOf = (v) => (parseFloat(v.materials) || 0) + (parseFloat(v.labour) || 0) + (parseFloat(v.profit) || 0)
