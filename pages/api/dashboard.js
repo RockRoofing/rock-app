@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -391,6 +391,7 @@ export default async function handler(req, res) {
         // condition above.
         cmResolved: true,
         estimatorResolved: true,
+        qsResolved: true,
         appliedForLatest,
         retentionClaimed,
         // Same fix as contractsManager above, which was done and this was not.
@@ -399,7 +400,12 @@ export default async function handler(req, res) {
         // back to the IHM, so the two disagreed: the name was on the project details
         // screen and blank on Project Financials.
         estimator: resolvedPeople?.team?.estimator?.name || settings.estimator || '',
-        qsName: settings.qsName || '',
+        // Same fix again, third time. QS was left on the legacy flat settings.qsName,
+        // which almost nothing writes any more - Edit Project Details writes to
+        // peopleOverride.quantitySurveyor and falls back to the IHM. So qsName came
+        // back blank on most projects, and the Retention Tracker then fell back to the
+        // ESTIMATOR, showing the wrong person in the QS column.
+        qsName: resolvedPeople?.team?.quantitySurveyor?.name || settings.qsName || '',
         // The sub-contract / order reference, resolved from the handover the same way
         // Outstanding Invoices resolves it for [Sub-Contract Ref]. It was never on the
         // project record under that name, which is why the Variation Builder found
@@ -410,7 +416,12 @@ export default async function handler(req, res) {
         customerContacts: Array.isArray(resolvedPeople?.customerContacts)
           ? resolvedPeople.customerContacts.map(c => ({ name: c.name || '', title: c.title || '', email: c.email || '' })).filter(c => c.name)
           : [],
-        qsEmail: settings.qsEmail || '',
+        // Must follow the NAME above. Falling back to settings.qsEmail whenever the
+        // resolver has a QS would pair the shown name with a different person's
+        // address - the legacy flat pair is only used when the resolver has nobody.
+        qsEmail: resolvedPeople?.team?.quantitySurveyor?.name
+          ? (resolvedPeople.team.quantitySurveyor.email || '')
+          : (settings.qsEmail || ''),
         customerEmail: settings.customerEmail || '',
         customerContact: settings.customerContact || '',
         people: resolvedPeople,

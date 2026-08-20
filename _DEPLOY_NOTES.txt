@@ -1,142 +1,105 @@
-pkg539 - deleting a tracking category in Xero no longer deletes the project
-============================================================================
-
-Deploy after pkg538.
+pkg541 - Retention Tracker QS column shows the estimator
+========================================================
 
 
-NEW FILES - create these by hand in GitHub
-------------------------------------------
-  lib/projectRegistry.js
+NEW FILES
+---------
+  None.
 
 
 CHANGED FILES (replace)
 -----------------------
   pages/api/dashboard.js
-  pages/api/project/[id].js
-  pages/api/bookkeeping.js
-  pages/api/sync-invoices.js
   pages/retention.js
 
 
-WHAT WAS ACTUALLY WRONG
------------------------
-Xero was the ONLY register of which projects exist. Nothing on our side ever
-stored a project's name or job number - both came from the tracking option every
-single time. And every commercial surface enumerates from that one list:
+IMPORTANT - RELATIONSHIP TO pkg539
+----------------------------------
+These two files are the SAME two files that pkg539 changed, and they contain the
+pkg539 changes as well as this fix. They are complete files, so it does not
+matter which order you deploy them in - but you still need the rest of pkg539:
 
-  Project Financials, Retention, Applications, Cashflow, Application Calendar,
-  Commercial Scorecard, Bookkeeping, and the project page itself.
+  lib/projectRegistry.js        (new file)
+  pages/api/project/[id].js
+  pages/api/bookkeeping.js
+  pages/api/sync-invoices.js
 
-So deleting the option in Xero did not delete any data. project:<id> with its
-applications, contracted rates and variations, retention:entries, costs:* and
-invoiced:* were all still sitting in Redis, untouched. The app had simply lost
-the ability to LIST the project - which comes to the same thing when you are
-trying to chase a retention.
+If you deploy pkg539 first and then pkg541, the result is correct. If you deploy
+pkg541 first, deploy pkg539 but SKIP its dashboard.js and retention.js, or you
+will undo this fix.
 
-It looked like nothing had happened at first because the dashboard serves a
-4-hour cached snapshot. Clearing the applications, CRs and variations each drop
-that cache (all three handlers call it), which forced a rebuild from Xero - and
-the project was gone. Waiting four hours would have done the same.
+pkg540 (CRM copy buttons) touches a different file and is unaffected.
+
+
+WHAT WAS WRONG
+--------------
+Two faults stacked on top of each other, which is why some rows were right and
+some were wrong.
+
+FAULT 1 - dashboard.js was reading the wrong field.
+
+  qsName: settings.qsName || ''
+
+settings.qsName is a legacy flat field that almost nothing writes any more. Edit
+Project Details writes to peopleOverride.quantitySurveyor and falls back to the
+IHM, resolved through resolveProjectPeople(). So on nearly every project qsName
+came back BLANK.
+
+This is the third time this exact fault has been found. contractsManager was
+fixed, then estimator was fixed, and the comment on the estimator fix even says
+"same fix as contractsManager above, which was done and this was not". QS was
+sitting directly underneath and was missed both times.
+
+FAULT 2 - retention.js filled the blank with the wrong person.
+
+  qsName: p.qsName || p.estimator || ''
+
+So a blank QS silently became the ESTIMATOR - and on screen that is
+indistinguishable from a correct QS. The handful of projects that still have a
+legacy settings.qsName came through correctly. Everything else showed the
+estimator. Hence some right, some wrong.
 
 
 THE FIX
 -------
-lib/projectRegistry.js keeps our own register at the Redis key
-'projects:registry':
+dashboard.js   qsName now resolves the same way Edit Project Details does:
+               peopleOverride.quantitySurveyor -> IHM -> legacy settings.qsName.
 
-  { <trackingOptionId>: { name, jobNo, trackingCategoryId, firstSeen,
-                          lastSeenInXero } }
+               qsEmail follows the NAME. Falling back to settings.qsEmail while
+               the resolver supplies a different name would have paired the
+               displayed person with somebody else's address, so the legacy
+               email is only used when the resolver has nobody at all.
 
-Every dashboard rebuild records every project Xero returns. Anything we have
-seen before that Xero no longer returns is carried forward as a GHOST and still
-appears everywhere, flagged inXero:false. It only ever adds - an entry vanishing
-from Xero is precisely the case it exists to survive.
+               New cache marker qsResolved, so existing 4-hour snapshots rebuild
+               once instead of quietly serving the old estimator values. Without
+               a new marker this fix would sit in the code doing nothing.
 
-The register writes at most once a day, not on every rebuild.
+retention.js   Estimator fallback removed. Blank now means blank - nobody has
+               set a QS on that project, and it can be fixed on Edit Project
+               Details. Blank is honest; a wrong name is not.
 
-A ghost keeps EVERYTHING: applications, contracted rates, variations, retention,
-final account, project details, WIP. Its Xero-derived costs and invoices freeze
-at the last sync, which is correct - there is nothing left in Xero to sync
-against. The sync crons skip ghosts rather than overwriting good figures with
-zeros.
-
-
-PER FILE
---------
-dashboard.js       Unions the Xero options with the register, returns inXero and
-                   lastSeenInXero on every project, and carries a new cache
-                   marker so existing snapshots rebuild once instead of serving
-                   a list with no ghosts in it.
-
-project/[id].js    Used to 404 outright when the option was not in Xero, so the
-                   project page was dead even with all its data intact. Now falls
-                   back to the register.
-
-bookkeeping.js     Two things. It preferred the dashboard cache for its project
-                   list but read p.id - the dashboard keys projects by xeroId, so
-                   that matched nothing and it always fell through to Xero. Did
-                   not matter before, matters now. Also unions its Xero fallback
-                   with the register.
-
-retention.js       The blue "Xero" badge becomes an amber "Not in Xero" badge on
-                   a ghost, with a tooltip saying the figures are frozen. Without
-                   it somebody reads a frozen invoiced total as a current one.
+               There were TWO copies of that fallback in the file (line 293, the
+               add-a-project list, and line 318, the main list). Both fixed. The
+               column tooltip said "falls back to Estimator" and now does not.
 
 
-BOOKKEEPING - IS THE DATA KEPT?
--------------------------------
-Yes. Bookkeeping reads per-project figures straight out of Redis - costs:lines,
-costs:latest, invoiced:lines - and none of the sync jobs touch a ghost:
-
-  cron/deep-sync.js     walks `active` from the Xero cats list
-  cron/wip-sync.js      loops categoryProjects
-  sync-wages.js         same
-  xero/backfill-costs.js same
-
-All of them only ever `set` keys for projects they visit. Nothing enumerates and
-deletes. So a ghost's costs, invoices, wages and totals sit there permanently.
-Untagged bills/wages and the P&L benchmark are company-level and unaffected.
-
-ONE HOLE FOUND AND FIXED. sync-invoices.js matched invoices to projects by
-tracking NAME, built only from the live Xero list. Xero keeps the tracking name
-on historical transactions after the option is deleted, so those invoices still
-arrive tagged - but the name was no longer in the list, so they fell into
-__UNASSIGNED__ while the project's own stored lines stayed put. The same
-invoices would have counted TWICE in Bookkeeping. It now matches against the
-register as well.
-
-Ghosts are deliberately NOT added to the empty-bucket seed in that file. Seeding
-exists so a project whose only invoice was deleted gets reconciled - but if Xero
-ever did strip the tracking name on deletion, seeding a ghost would rewrite its
-lines from nothing and drop every in-window invoice. Unmatched has to leave the
-stored lines alone.
-
-
-WIP NEEDED NO CHANGE
---------------------
-/api/wip already enumerates from project settings rather than from Xero, so it
-survived deletion already - it just could not resolve a name. It resolves names
-from the dashboard cache first, so it picks ghosts up from this automatically.
-
-/api/wip-calculate deliberately still skips ghosts. It recalculates a month by
-fetching from Xero; for a deleted option that returns nothing, and writing that
-back would overwrite a good historic snapshot with zeros. Skipping preserves it.
-
-
-ONE THING TO BE AWARE OF
-------------------------
-You said marking a project Complete should hide it everywhere. That is only
-half true today:
-
-  Applications      filters on status INPROGRESS, so Complete does drop off it.
-  Project Financials has no such filter - Complete projects stay on it unless
-                    they are also in config:hidden-projects.
-
-Not changed here. Worth deciding when the archiving process gets built.
-
-
-NOT RECOVERABLE
+AFTER DEPLOYING
 ---------------
-The register starts empty and fills on the first rebuild, so it covers every
-project currently in Xero from now on. The one already deleted is not in it and
-its name and job number were never stored anywhere - as agreed, not restored.
+Expect MORE blanks in the QS column, not fewer. That is the point - those rows
+were showing the estimator. Fill them in on Edit Project Details (or the IHM)
+and they will come through.
+
+Outstanding Invoices and its PDF read the same dashboard qsName field, so they
+pick this up too.
+
+
+NOT CHANGED - WORTH KNOWING
+---------------------------
+Two other places still read the legacy flat settings.qsName directly and will
+show blank rather than the resolved QS:
+
+  pages/project/[id].js line 606   the team summary block on the project page
+  pages/api/project/[id]/report.js line 107   the QS row on the project report
+
+Same class of fault, different screens, and they show nothing rather than the
+wrong person - so I have left them alone. Say the word and they follow.

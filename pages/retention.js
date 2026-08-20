@@ -290,7 +290,8 @@ export default function RetentionPage() {
         finalAccount: p.afa || 0,
         retentionPct: (p.retentionPct || 0) * 100,
         completionDate: p.completionDate || p.pcDate || '',
-        qsName: p.qsName || p.estimator || '',
+        // Same as the main list below - no estimator fallback.
+        qsName: p.qsName || '',
         comments: p.retentionComments || '',
       })).sort((a, b) => (a.ourRef || '').localeCompare(b.ourRef || '', undefined, { numeric: true })))
       // (a retention % set), plus any that already have retention outstanding or
@@ -315,7 +316,11 @@ export default function RetentionPage() {
           retentionPct: (p.retentionPct || 0) * 100,
           completionDate: p.completionDate || p.pcDate || '',
           pcType: p.pcType || '',
-          qsName: p.qsName || p.estimator || '',
+          // NO fallback to the estimator. It used to read `p.qsName || p.estimator`,
+          // so any project without a QS quietly showed the estimator's name in the QS
+          // column - indistinguishable from a correct one. Blank is honest: it means
+          // nobody has set a QS on Edit Project Details, and it can be fixed there.
+          qsName: p.qsName || '',
           qsEmail: p.qsEmail || p.qsEmailSetting || '',
           comments: p.retentionComments || p.comment || '',
           invoiced: p.totalInvoiced || 0,
@@ -726,7 +731,7 @@ export default function RetentionPage() {
                         ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
-                        ['QS', 'left', 'Quantity Surveyor from project details (falls back to Estimator).', 'qs'],
+                        ['QS', 'left', 'Quantity Surveyor from Edit Project Details. Blank means none has been set on that project.', 'qs'],
                         ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not paid, green = settled.', null],
                         ['1st Date', 'left', 'Due date of the first retention release (manual).', 'r1date'],
                         ['2nd Value', 'right', 'Second retention release (half of total retention). Orange = due/not paid, green = settled.', null],
