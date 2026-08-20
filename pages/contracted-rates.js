@@ -4,6 +4,9 @@ import Link from 'next/link'
 import { upload } from '@vercel/blob/client'
 import CommercialNav from '../components/CommercialNav'
 import ProjectSearchSelect from '../components/ProjectSearchSelect'
+// The send window and the standard clarifications, shared with the Variation Builder so a
+// variation raised from the rate schedule goes out identically to one built by hand.
+import { SendVariationModal, BASE_CLARIFICATIONS } from '../components/VariationBuilder'
 import { computeRateTotals, sumItems, lineRateTotal, lineMatTotal, lineLabTotal } from '../lib/contractRatesParser'
 
 const fmt = (n) => '£' + (Number(n) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -40,7 +43,10 @@ export default function ContractedRatesPage() {
         fetch('/api/hidden-projects').then(r => r.json()).catch(() => ({})),
       ])
       const hiddenSet = new Set((hp?.hidden || []).map(String))
-      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates, retStatus: p.retStatus || 'live', hidden: hiddenSet.has(String(p.xeroId)) }))
+      // customerContacts and orderRef are carried through for the variation send window -
+      // without them it has nobody to send to and no sub-contract ref, which is what this
+      // mapping quietly dropped.
+      const ps = (d.projects || []).map(p => ({ xeroId: String(p.xeroId), jobNo: p.jobNo || '', name: p.name || '', neg: false, locked: !!p.contractedRatesLocked, hasRates: !!p.hasContractedRates, retStatus: p.retStatus || 'live', hidden: hiddenSet.has(String(p.xeroId)), customerContacts: p.customerContacts || [], orderRef: p.orderRef || '', customer: p.customer || '' }))
         .sort((a, b) => (a.jobNo || '').localeCompare(b.jobNo || '', undefined, { numeric: true }))
       // Negotiated projects (Pipedrive deals) - their id is the "N:<dealId>" key and
       // their rates are stored separately server-side.

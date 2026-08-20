@@ -1,46 +1,51 @@
-pkg531 - variation emails come from notifications, not accounts receivable
-==========================================================================
+pkg532 - Add variation from Contracted Rates
+============================================
 
-Deploy after pkg530.
+Deploy after pkg531.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/variation-send.js
-  pages/api/variation-instruct.js
-  pages/api/cron/variation-reminders.js
+  pages/contracted-rates.js
+  pages/api/contracted-rates.js
 
 NEW FILES: none.
 
 
-THE CAUSE
----------
-The sending address was chosen like this:
+FOUR FAULTS IN ONE FLOW - three of them mine from pkg524
+----------------------------------------------------------
 
-    COMMERCIAL_FROM_EMAIL || ACCOUNTS_FROM_EMAIL || FORMS_FROM_EMAIL
+1. THE IMPORT NEVER LANDED, so Add variation threw.
 
-COMMERCIAL_FROM_EMAIL is not set, so everything fell through to accounts receivable.
+   pkg524 appended the import to this line:
+       import { useState, useEffect, useMemo, useRef } from 'react'
+   but contracted-rates.js has no useRef. The replace matched nothing and failed silently,
+   so SendVariationModal and BASE_CLARIFICATIONS were used and never imported.
 
-Now NOTIFY_FROM_EMAIL, the same address the portal's other notifications use.
+   That is the third time a find-and-replace has half-applied and shipped. I check the
+   result now rather than the return code.
 
-ACCOUNTS_FROM_EMAIL is out of the chain entirely rather than left further down it. It was
-never the right address for a variation, and as a fallback it comes straight back the
-moment another variable is unset - which is precisely how this happened.
+2. THE API DROPPED THE BUILDER BLOCK. to-variation rebuilt the variation field by field
+   and did not carry it, so a variation raised from the rate schedule had no items, no
+   clarifications and nobody recorded as raising it - nothing to send, nothing to
+   instruct, nothing for View to show.
+
+3. INSTRUCTED WAS STORED AS A BOOLEAN. The endpoint wrote !!v.instructed while everything
+   downstream tests instructed === 'yes'. true === 'yes' is false, so a CR variation could
+   never have read as instructed - it would have sat outside the final account for ever.
+
+4. THE PAGE STRIPPED THE CUSTOMER CONTACTS. It maps each project down to seven fields, and
+   customerContacts and orderRef were not among them - so the send window would have
+   opened with no recipients and no sub-contract ref.
 
 
-I CHANGED ALL THREE, NOT JUST THE REMINDER
---------------------------------------------
-You asked about the reminders. The first send and the instruction confirmation had the
-same fault and the same address, and a variation arriving from accounts receivable invites
-the wrong reading of it - it is a request to authorise works, not a demand for payment.
+WHAT YOU GET NOW
+----------------
+Select lines on the Contracted Rates, press Add variation, and it:
 
-Say if you would rather the first send came from somewhere else and I will split them.
+    creates the variation with its items priced at the contracted rates
+    numbers it from the tracker
+    carries the standard clarifications, the sub-contract ref and who raised it
+    OPENS THE SAME SEND WINDOW as the Variation Builder
 
-Replies are unchanged: they still go to the person who raised the variation.
-
-
-LEFT ALONE, DELIBERATELY
-------------------------
-    application-send    still accounts receivable - it IS a payment application
-    chase-email-send    still accounts receivable - it IS chasing an invoice
-
-Those two are correct as they are.
+Same email, same instruct button, same instruction coming back. A variation raised here is
+indistinguishable from one built by hand.

@@ -167,10 +167,17 @@ export default async function handler(req, res) {
         description: v.description || '',
         descriptionFull: v.descriptionFull || v.description || '',
         sourceItems: Array.isArray(v.sourceItems) ? v.sourceItems : [],
-        instructed: !!v.instructed,
+        // 'yes' / 'no', not a boolean. Everything downstream tests instructed === 'yes',
+        // so a false here reads as not-instructed correctly but a true would never match.
+        instructed: (v.instructed === true || v.instructed === 'yes') ? 'yes' : 'no',
         materials: v.materials || '0',
         labour: v.labour || '0',
         profit: v.profit || '0',
+        // THE BUILDER BLOCK, carried through. This rebuilt the variation field by field
+        // and silently dropped it - so a variation raised from the rate schedule had no
+        // items, no clarifications and nobody recorded as raising it, which means no
+        // document to send and nothing to instruct.
+        ...(v.builder ? { builder: v.builder } : {}),
       })
       project.variations = vars
       await persistProject(projectId, project)
