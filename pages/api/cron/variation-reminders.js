@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     const proto = req.headers['x-forwarded-proto'] || 'https'
     const origin = `${proto}://${req.headers.host}`
     const RESEND_KEY = process.env.RESEND_API_KEY
-    const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
+    const FROM = process.env.NOTIFY_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
 
     for (const [projectId, proj] of Object.entries(all || {})) {
       const vars = Array.isArray(proj?.variations) ? proj.variations : []

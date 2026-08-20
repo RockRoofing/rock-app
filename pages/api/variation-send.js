@@ -67,7 +67,19 @@ export default async function handler(req, res) {
 
   const RESEND_KEY = process.env.RESEND_API_KEY
   if (!RESEND_KEY) return res.status(500).json({ error: 'Email is not configured' })
-  const FROM = process.env.COMMERCIAL_FROM_EMAIL || process.env.ACCOUNTS_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing Commercial <onboarding@resend.dev>'
+  // NOT accounts receivable.
+  //
+  // The chain used to be COMMERCIAL_FROM_EMAIL || ACCOUNTS_FROM_EMAIL || ..., and with
+  // COMMERCIAL unset every variation email went out from the accounts receivable address.
+  // A variation is a request to authorise works, not a demand for payment, and coming
+  // from accounts invites exactly the wrong reading of it.
+  //
+  // ACCOUNTS_FROM_EMAIL is out of the chain entirely - it was never the right address for
+  // this, and leaving it as a fallback means it comes back the moment another variable is
+  // unset.
+  //
+  // Replies still go to the person who raised it, which is unchanged.
+  const FROM = process.env.NOTIFY_FROM_EMAIL || process.env.FORMS_FROM_EMAIL || 'Rock Roofing <onboarding@resend.dev>'
 
   try {
     const bytes = await buildVariationPDF({ variation, project, logoUrl: logoFor(req) })

@@ -1,54 +1,46 @@
-pkg530 - an instructed variation is locked
-==========================================
+pkg531 - variation emails come from notifications, not accounts receivable
+==========================================================================
 
-Deploy after pkg529.
+Deploy after pkg530.
 
 CHANGED FILES (replace)
 -----------------------
-  components/VariationBuilder.js
-  pages/api/project/[id]/settings.js     <- literal [id] folder
+  pages/api/variation-send.js
+  pages/api/variation-instruct.js
+  pages/api/cron/variation-reminders.js
 
 NEW FILES: none.
 
 
-THE WORST OF IT, FIXED FIRST
-------------------------------
-Every save wrote instructed: 'no' unconditionally.
+THE CAUSE
+---------
+The sending address was chosen like this:
 
-So opening an instructed variation and pressing save would have WITHDRAWN the customer's
-instruction - silently, and taken it out of the anticipated final account with it. It now
-keeps 'yes' where it was already 'yes'.
+    COMMERCIAL_FROM_EMAIL || ACCOUNTS_FROM_EMAIL || FORMS_FROM_EMAIL
 
+COMMERCIAL_FROM_EMAIL is not set, so everything fell through to accounts receivable.
 
-LOCKED ON SCREEN
-----------------
-Open an instructed variation and you get:
+Now NOTIFY_FROM_EMAIL, the same address the portal's other notifications use.
 
-    Locked. This variation has been instructed by the customer and cannot be changed.
-    Raise a new variation for any change to the works or the value - that is also how
-    it reaches the account correctly. The workings can still be viewed.
-
-Everything is read-only: the number, date, requested by, description, the items, the
-clarifications. Add item and Remove are gone, Save is greyed, and Workings opens as
-"Workings (instructed - view only)".
-
-Download PDF and Send reminder still work, because neither changes anything.
+ACCOUNTS_FROM_EMAIL is out of the chain entirely rather than left further down it. It was
+never the right address for a variation, and as a fallback it comes straight back the
+moment another variable is unset - which is precisely how this happened.
 
 
-AND LOCKED ON THE SERVER
+I CHANGED ALL THREE, NOT JUST THE REMINDER
+--------------------------------------------
+You asked about the reminders. The first send and the instruction confirmation had the
+same fault and the same address, and a variation arriving from accounts receivable invites
+the wrong reading of it - it is a request to authorise works, not a demand for payment.
+
+Say if you would rather the first send came from somewhere else and I will split them.
+
+Replies are unchanged: they still go to the person who raised the variation.
+
+
+LEFT ALONE, DELIBERATELY
 ------------------------
-The screen is a convenience; this is the control. The settings endpoint now refuses any
-POST that changes or removes an instructed variation:
+    application-send    still accounts receivable - it IS a payment application
+    chase-email-send    still accounts receivable - it IS chasing an invoice
 
-    unchanged            allowed
-    value edited         REFUSED
-    description edited   REFUSED
-    reverted to draft    REFUSED
-    removed              REFUSED
-
-The customer authorised a specific scope at a specific value, and their instruction is the
-record we would produce if it were ever disputed. Editing it afterwards would leave their
-signature attached to figures they never agreed to.
-
-A change to instructed work is a new variation - which is also the only way it reaches the
-account properly.
+Those two are correct as they are.
