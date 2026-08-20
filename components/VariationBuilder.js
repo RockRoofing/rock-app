@@ -43,7 +43,7 @@ const UNITS = ['m2', 'm', 'nr', 'item']
 // Where the rate actually comes from. Materials and labour are priced line by line, waste
 // is added to materials only, and the margin is applied to the lot - which is why the
 // variation's "profit" figure is a product of the workings rather than something typed.
-function WorkingsModal({ item, onSave, onClose }) {
+function WorkingsModal({ item, onSave, onClose, readOnly = false }) {
   const [d, setD] = useState(() => ({
     description: item.description || '',
     qty: item.qty ?? 1,
@@ -65,7 +65,13 @@ function WorkingsModal({ item, onSave, onClose }) {
   })
 
   // Auto-save: every change is pushed up, so closing by any route keeps the work.
-  useEffect(() => { onSave(calc(d)); setSaved(true); const t = setTimeout(() => setSaved(false), 1200); return () => clearTimeout(t) }, [d])
+  // Read-only on an instructed variation: the workings can be looked at, not changed.
+  useEffect(() => {
+    if (readOnly) return
+    onSave(calc(d)); setSaved(true)
+    const t = setTimeout(() => setSaved(false), 1200)
+    return () => clearTimeout(t)
+  }, [d, readOnly])
 
   const set = (patch) => setD(prev => ({ ...prev, ...patch }))
   const setRow = (kind, i, patch) => setD(prev => ({
@@ -95,6 +101,7 @@ function WorkingsModal({ item, onSave, onClose }) {
   const incomplete = missing.length > 0
 
   const tryClose = () => {
+    if (readOnly) { onClose(); return }
     if (incomplete) { alert(`This item still needs ${missing.join(', ')}.`); return }
     onSave(calc(d)); onClose()
   }
@@ -109,7 +116,7 @@ function WorkingsModal({ item, onSave, onClose }) {
       <div style={{ background: '#fff', borderRadius: 14, width: 1080, maxWidth: '100%', padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Workings</h3>
+            <h3 style={{ margin: '0 0 2px', fontSize: 18 }}>Workings{readOnly ? ' (instructed - view only)' : ''}</h3>
             <div style={{ fontSize: 12.5, color: '#888' }}>Price the item up. The rate on the variation is worked out from what you enter here.</div>
           </div>
           <button onClick={tryClose} title="Close - your workings are saved"
@@ -529,6 +536,13 @@ export default function VariationBuilder({ projects, onSaved }) {
     return existingVars.find(x => String(x.varNumber) === String(editingVar)) || null
   }, [existingVars, editingVar])
 
+  // Whether the one on screen is locked. Instructed variations are read-only.
+  const lockedByInstruction = useMemo(() => {
+    if (!editingVar) return false
+    const v = existingVars.find(x => String(x.varNumber) === String(editingVar))
+    return v?.instructed === 'yes'
+  }, [existingVars, editingVar])
+
   const openVar = useMemo(() => {
     if (!editingVar) return null
     const v = existingVars.find(x => String(x.varNumber) === String(editingVar))
@@ -557,6 +571,19 @@ export default function VariationBuilder({ projects, onSaved }) {
   async function save(forceNumber) {
     if (!project) { setMsg('Pick a project first.'); return false }
     if (!items.length) { setMsg('Add at least one item.'); return false }
+    // LOCKED ONCE INSTRUCTED.
+    //
+    // The customer has authorised a specific scope at a specific value, and that
+    // instruction is the record we would produce if it were ever disputed. Editing the
+    // variation afterwards would leave their signature attached to figures they never
+    // agreed to.
+    //
+    // A change to instructed work is a new variation, which is also how it reaches the
+    // account correctly.
+    if (lockedByInstruction) {
+      setMsg(`${header.varNumber} has been instructed and cannot be changed. Raise a new variation for any change to it.`)
+      return false
+    }
     setSaving(true); setMsg('')
     try {
       const settings = project.settings || {}
@@ -578,7 +605,10 @@ export default function VariationBuilder({ projects, onSaved }) {
         // off these and needs no knowledge of the builder.
         varNumber: forceNumber || header.varNumber,
         description: header.description || (items[0]?.description || ''),
-        instructed: 'no',
+        // NEVER back to 'no'. This wrote 'no' unconditionally, so re-saving an instructed
+        // variation would have quietly withdrawn the customer's instruction - and the
+        // final account with it.
+        instructed: prior?.instructed === 'yes' ? 'yes' : 'no',
         materials: String(Math.round(totals.materials * 100) / 100),
         labour: String(Math.round(totals.labour * 100) / 100),
         profit: String(Math.round(totals.profit * 100) / 100),
@@ -721,6 +751,14 @@ export default function VariationBuilder({ projects, onSaved }) {
           {/* The status of the one being worked on: raised by whom, sent when, instructed
               by whom. It was only visible on the tracker, which meant opening a second
               page to answer "have they come back on this yet". */}
+          {lockedByInstruction && (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '11px 14px', marginBottom: 12, fontSize: 12.5, color: '#1d4ed8' }}>
+              <strong>Locked.</strong> This variation has been instructed by the customer and cannot be changed.
+              Raise a new variation for any change to the works or the value &mdash; that is also how it reaches the account correctly.
+              The workings can still be viewed.
+            </div>
+          )}
+
           {openVar && (
             <div style={{
               background: openVar.instruction ? '#f0fdf4' : (openVar.firstSentAt ? '#fffbeb' : '#f8f9fa'),
@@ -780,10 +818,10 @@ export default function VariationBuilder({ projects, onSaved }) {
               <div><div style={lbl}>Sub-Contract Ref</div><div style={{ fontSize: 13.5, color: INK }}>{subContractRef || <span style={{ color: '#c2410c' }}>not set on the handover</span>}</div></div>
               <div>
                 <div style={lbl}>Variation No.</div>
-                <input value={header.varNumber} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} />
+                <input value={header.varNumber} readOnly={lockedByInstruction} onChange={e => setHeader({ ...header, varNumber: e.target.value })} style={{ ...inp, fontWeight: 700 }} />
                 <div style={{ fontSize: 10.5, color: '#888', marginTop: 2 }}>Next number on the tracker for this project.</div>
               </div>
-              <div><div style={lbl}>Date</div><input type="date" value={header.date} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
+              <div><div style={lbl}>Date</div><input type="date" value={header.date} readOnly={lockedByInstruction} onChange={e => setHeader({ ...header, date: e.target.value })} style={inp} /></div>
               <div>
                 <div style={lbl}>Requested by</div>
                 {/* A real dropdown, with one option that opens a text box. A datalist
@@ -800,7 +838,7 @@ export default function VariationBuilder({ projects, onSaved }) {
                     )}
                   </div>
                 ) : (
-                  <select value={header.requestedBy}
+                  <select value={header.requestedBy} disabled={lockedByInstruction}
                     onChange={e => { if (e.target.value === '__other') { setReqOther(true); setHeader({ ...header, requestedBy: '' }) } else setHeader({ ...header, requestedBy: e.target.value }) }}
                     style={inp}>
                     <option value="">{customerOptions.length ? 'Select…' : 'No customer contacts on the handover'}</option>
@@ -812,7 +850,7 @@ export default function VariationBuilder({ projects, onSaved }) {
             </div>
             <div style={{ marginTop: 12 }}>
               <div style={lbl}>Variation Description</div>
-              <input value={header.description} onChange={e => setHeader({ ...header, description: e.target.value })} style={inp} placeholder="What this variation is for" />
+              <input value={header.description} readOnly={lockedByInstruction} onChange={e => setHeader({ ...header, description: e.target.value })} style={inp} placeholder="What this variation is for" />
             </div>
           </div>
 
@@ -840,8 +878,12 @@ export default function VariationBuilder({ projects, onSaved }) {
                     <td style={{ ...td, textAlign: 'right' }}>{money(it.rate)}</td>
                     <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>{money(it.total)}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <button onClick={() => setEditing(i)} style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer', color: '#333' }}>Workings</button>
-                      <button onClick={() => setItems(prev => prev.filter((_, ix) => ix !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, marginLeft: 6 }}>Remove</button>
+                      <button onClick={() => setEditing(i)} style={{ background: 'none', border: `1px solid ${LINE}`, borderRadius: 6, padding: '3px 10px', fontSize: 12, cursor: 'pointer', color: '#333' }}>
+                        {lockedByInstruction ? 'View workings' : 'Workings'}
+                      </button>
+                      {!lockedByInstruction && (
+                        <button onClick={() => setItems(prev => prev.filter((_, ix) => ix !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, marginLeft: 6 }}>Remove</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -855,8 +897,9 @@ export default function VariationBuilder({ projects, onSaved }) {
               </tbody>
             </table>
             <div style={{ padding: 10, borderTop: `1px solid ${LINE}` }}>
-              <button onClick={addItem}
-                style={{ background: GREEN, color: '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ Add item</button>
+              <button onClick={addItem} disabled={lockedByInstruction}
+                title={lockedByInstruction ? 'Instructed - raise a new variation for any change' : 'Add an item'}
+                style={{ background: lockedByInstruction ? '#e5e7eb' : GREEN, color: lockedByInstruction ? '#9ca3af' : '#fff', border: 'none', borderRadius: 7, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: lockedByInstruction ? 'default' : 'pointer' }}>+ Add item</button>
               {items.length > 0 && (
                 <span style={{ fontSize: 12, color: '#888', marginLeft: 12 }}>
                   materials {money(totals.materials)} · labour {money(totals.labour)} · profit {money(totals.profit)}
@@ -870,14 +913,18 @@ export default function VariationBuilder({ projects, onSaved }) {
             {clar.map((c, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 6 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: '#dc2626', width: 16, paddingTop: 7 }}>{letter(i)}</span>
-                <textarea value={c} rows={1} onChange={e => setClar(prev => prev.map((x, ix) => ix === i ? e.target.value : x))}
+                <textarea value={c} rows={1} readOnly={lockedByInstruction} onChange={e => setClar(prev => prev.map((x, ix) => ix === i ? e.target.value : x))}
                   style={{ ...inp, resize: 'vertical', fontSize: 12.5 }} />
-                <button onClick={() => setClar(prev => prev.filter((_, ix) => ix !== i))} title="Remove"
-                  style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, paddingTop: 4 }}>&times;</button>
+                {!lockedByInstruction && (
+                  <button onClick={() => setClar(prev => prev.filter((_, ix) => ix !== i))} title="Remove"
+                    style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 16, paddingTop: 4 }}>&times;</button>
+                )}
               </div>
             ))}
-            <button onClick={() => setClar(prev => [...prev, ''])}
-              style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>+ Add new…</button>
+            {!lockedByInstruction && (
+              <button onClick={() => setClar(prev => [...prev, ''])}
+                style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>+ Add new&hellip;</button>
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end' }}>
@@ -894,8 +941,9 @@ export default function VariationBuilder({ projects, onSaved }) {
                 </button>
               </>
             )}
-            <button onClick={saveAndSend} disabled={saving}
-              style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>
+            <button onClick={saveAndSend} disabled={saving || lockedByInstruction}
+              title={lockedByInstruction ? 'Instructed variations cannot be changed' : undefined}
+              style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 700, cursor: (saving || lockedByInstruction) ? 'default' : 'pointer', opacity: (saving || lockedByInstruction) ? 0.5 : 1 }}>
               {saving ? 'Saving…' : (raisedAlreadySent ? 'Save & send reminder to customer' : (editingVar ? 'Save & send to customer' : 'Raise & send to customer'))}
             </button>
           </div>
@@ -923,6 +971,7 @@ export default function VariationBuilder({ projects, onSaved }) {
 
       {editing != null && items[editing] && (
         <WorkingsModal
+          readOnly={lockedByInstruction}
           item={items[editing]}
           onSave={(v) => setItems(prev => prev.map((x, i) => i === editing ? v : x))}
           onClose={() => setEditing(null)} />

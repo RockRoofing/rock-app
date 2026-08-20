@@ -1,49 +1,54 @@
-pkg529 - "J1 - J1 - Test" on emails and documents
-=================================================
+pkg530 - an instructed variation is locked
+==========================================
 
-Deploy after pkg528.
+Deploy after pkg529.
 
 CHANGED FILES (replace)
 -----------------------
-  lib/variationInstruct.js
-  lib/variationPdf.js
-  lib/wipPdf.js
-  pages/wip.js
-  pages/variations.js
-  pages/api/variation-send.js
-  pages/api/variation-instruct.js
-  pages/api/cron/variation-reminders.js
+  components/VariationBuilder.js
+  pages/api/project/[id]/settings.js     <- literal [id] folder
 
 NEW FILES: none.
 
 
-THE CAUSE
----------
-The project NAME from Xero is the whole tracking option - "J1 - Test" - and jobNo is
-extracted from the front of it:
+THE WORST OF IT, FIXED FIRST
+------------------------------
+Every save wrote instructed: 'no' unconditionally.
 
-    name:  "J1 - Test"
-    jobNo: "J1"        <- taken from the name
-
-Nine places joined the two with " - ", which repeats the number every time.
-
-It is not just your test project. Every project doubles:
-
-    "J1 - Test"          ->  J1 - J1 - Test
-    "J178 - Gas Lane"    ->  J178 - J178 - Gas Lane
-    "J205. Pets Choice"  ->  J205 - J205. Pets Choice
+So opening an instructed variation and pressing save would have WITHDRAWN the customer's
+instruction - silently, and taken it out of the anticipated final account with it. It now
+keeps 'yes' where it was already 'yes'.
 
 
-FIXED IN ONE PLACE
-------------------
-A projectLabel() helper strips a leading job number from the name before joining, and all
-nine call sites use it:
+LOCKED ON SCREEN
+----------------
+Open an instructed variation and you get:
 
-    J1    "J1 - Test"           ->  J1 - Test
-    J205  "J205. Pets Choice"   ->  J205 - Pets Choice     (handles a full stop too)
-    J205  "Pets Choice"         ->  J205 - Pets Choice     (name without the number)
-    none  "Bensham Lane"        ->  Bensham Lane
+    Locked. This variation has been instructed by the customer and cannot be changed.
+    Raise a new variation for any change to the works or the value - that is also how
+    it reaches the account correctly. The workings can still be viewed.
 
-It covers the variation emails, the variation PDF, the instruction page and its
-confirmation email, the reminders, the PDF filenames, and the WIP page and PDF - all of
-which had the same fault.
+Everything is read-only: the number, date, requested by, description, the items, the
+clarifications. Add item and Remove are gone, Save is greyed, and Workings opens as
+"Workings (instructed - view only)".
+
+Download PDF and Send reminder still work, because neither changes anything.
+
+
+AND LOCKED ON THE SERVER
+------------------------
+The screen is a convenience; this is the control. The settings endpoint now refuses any
+POST that changes or removes an instructed variation:
+
+    unchanged            allowed
+    value edited         REFUSED
+    description edited   REFUSED
+    reverted to draft    REFUSED
+    removed              REFUSED
+
+The customer authorised a specific scope at a specific value, and their instruction is the
+record we would produce if it were ever disputed. Editing it afterwards would leave their
+signature attached to figures they never agreed to.
+
+A change to instructed work is a new variation - which is also the only way it reaches the
+account properly.

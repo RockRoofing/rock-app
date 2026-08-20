@@ -59,6 +59,23 @@ export default async function handler(req, res) {
     const key = (v) => `${String(v.varNumber || '').trim().toUpperCase()}|${String(v.description || '').trim().slice(0, 40)}`
     const incomingKeys = new Set(incoming.variations.map(key))
     const dropped = existing.variations.filter(v => !incomingKeys.has(key(v)))
+    // AN INSTRUCTED VARIATION CANNOT BE CHANGED. The screen locks it, but the screen is a
+    // convenience - this is the control. The customer authorised a scope at a value, and
+    // that is what their instruction attaches to.
+    const sig = (v) => JSON.stringify([v.varNumber, v.description, v.materials, v.labour, v.profit, v.instructed])
+    for (const was of existing.variations) {
+      if (was.instructed !== 'yes') continue
+      const now = incoming.variations.find(v => String(v.varNumber || '').trim().toUpperCase() === String(was.varNumber || '').trim().toUpperCase())
+      if (!now) {
+        return res.status(409).json({ error: `Refused: ${was.varNumber} has been instructed and cannot be removed.` })
+      }
+      if (sig(now) !== sig(was)) {
+        return res.status(409).json({
+          error: `Refused: ${was.varNumber} has been instructed and cannot be changed. Raise a new variation instead.`,
+        })
+      }
+    }
+
     if (dropped.length > 1) {
       return res.status(409).json({
         error: `Refused: this would drop ${dropped.length} variations (${dropped.map(v => v.varNumber || v.description || '?').join(', ')}). `
