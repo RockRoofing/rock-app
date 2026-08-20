@@ -1,5 +1,5 @@
-pkg541 - Retention Tracker QS column shows the estimator
-========================================================
+pkg542 - Cash Flow forecast pop-out seeds from the latest application
+=====================================================================
 
 
 NEW FILES
@@ -9,97 +9,90 @@ NEW FILES
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/dashboard.js
-  pages/retention.js
+  pages/project-cashflow.js
+  pages/api/project-cashflow.js
 
-
-IMPORTANT - RELATIONSHIP TO pkg539
-----------------------------------
-These two files are the SAME two files that pkg539 changed, and they contain the
-pkg539 changes as well as this fix. They are complete files, so it does not
-matter which order you deploy them in - but you still need the rest of pkg539:
-
-  lib/projectRegistry.js        (new file)
-  pages/api/project/[id].js
-  pages/api/bookkeeping.js
-  pages/api/sync-invoices.js
-
-If you deploy pkg539 first and then pkg541, the result is correct. If you deploy
-pkg541 first, deploy pkg539 but SKIP its dashboard.js and retention.js, or you
-will undo this fix.
-
-pkg540 (CRM copy buttons) touches a different file and is unaffected.
+Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
 WHAT WAS WRONG
 --------------
-Two faults stacked on top of each other, which is why some rows were right and
-some were wrong.
+The pop-out only ever looked at previous FORECASTS:
 
-FAULT 1 - dashboard.js was reading the wrong field.
+  const prev = (d.hypApps || []).sort(...).pop()
 
-  qsName: settings.qsName || ''
-
-settings.qsName is a legacy flat field that almost nothing writes any more. Edit
-Project Details writes to peopleOverride.quantitySurveyor and falls back to the
-IHM, resolved through resolveProjectPeople(). So on nearly every project qsName
-came back BLANK.
-
-This is the third time this exact fault has been found. contractsManager was
-fixed, then estimator was fixed, and the comment on the estimator fix even says
-"same fix as contractsManager above, which was done and this was not". QS was
-sitting directly underneath and was missed both times.
-
-FAULT 2 - retention.js filled the blank with the wrong person.
-
-  qsName: p.qsName || p.estimator || ''
-
-So a blank QS silently became the ESTIMATOR - and on screen that is
-indistinguishable from a correct QS. The handful of projects that still have a
-legacy settings.qsName came through correctly. Everything else showed the
-estimator. Hence some right, some wrong.
+It never read the project's real applications at all. So on a live job that had
+been applied for three times, opening a new forecast started every rate line at
+0% - as though nothing had been built - and you had to key the whole position in
+by hand.
 
 
-THE FIX
--------
-dashboard.js   qsName now resolves the same way Edit Project Details does:
-               peopleOverride.quantitySurveyor -> IHM -> legacy settings.qsName.
+WHAT IT DOES NOW
+----------------
+A new forecast seeds its percentages, MCD and retention from the latest REAL
+application on the project. With no applications, it starts from the contracted
+rates at 0%, as before.
 
-               qsEmail follows the NAME. Falling back to settings.qsEmail while
-               the resolver supplies a different name would have paired the
-               displayed person with somebody else's address, so the legacy
-               email is only used when the resolver has nobody at all.
-
-               New cache marker qsResolved, so existing 4-hour snapshots rebuild
-               once instead of quietly serving the old estimator values. Without
-               a new marker this fix would sit in the code doing nothing.
-
-retention.js   Estimator fallback removed. Blank now means blank - nobody has
-               set a QS on that project, and it can be fixed on Edit Project
-               Details. Blank is honest; a wrong name is not.
-
-               There were TWO copies of that fallback in the file (line 293, the
-               add-a-project list, and line 318, the main list). Both fixed. The
-               column tooltip said "falls back to Estimator" and now does not.
+The API now returns `latestApplication` - the highest-seq application on the
+project record, trimmed to just the fields the seed needs (the full contractWorks
+tree is large and none of the rest is wanted here).
 
 
-AFTER DEPLOYING
----------------
-Expect MORE blanks in the QS column, not fewer. That is the point - those rows
-were showing the estimator. Fill them in on Edit Project Details (or the IHM)
-and they will come through.
+ONE DECISION YOU MAY WANT TO OVERRULE
+-------------------------------------
+You said "latest application, else contracted rates". Taken literally that breaks
+the second forecast on a project.
 
-Outstanding Invoices and its PDF read the same dashboard qsName field, so they
-pick this up too.
+  Application 3 certifies at 40%.
+  You forecast April -> 60%.
+  You then open a forecast for May.
+
+Seeding strictly from the application would drop May back to 40% and silently
+undo April. So the rule I have built is WHICHEVER PERIOD ENDS LAST - the latest
+application, or a later forecast if one exists. A tie goes to the application,
+since that is the certified position.
+
+With no forecasts at all - your case - it is exactly what you asked for.
+
+Say the word if you want it strictly the application every time.
 
 
-NOT CHANGED - WORTH KNOWING
----------------------------
-Two other places still read the legacy flat settings.qsName directly and will
-show blank rather than the resolved QS:
+DETAILS WORTH KNOWING
+---------------------
+DRAFTS COUNT. The latest application is by seq, whatever its status. A draft is
+still the most recent view of percentage complete and this is a forecast. The
+banner names the application and its status so you can see which was used.
 
-  pages/project/[id].js line 606   the team summary block on the project page
-  pages/api/project/[id]/report.js line 107   the QS row on the project report
+ROWS MATCH ON ID THEN CODE. A real application's rows come from the same
+buildContractWorksFromRates() as the seed, so ids normally line up. If the rates
+have been re-uploaded since, they will not - and the code is then the only stable
+handle. Without that fallback every line would seed at 0% and look like a job
+that had never started.
 
-Same class of fault, different screens, and they show nothing rather than the
-wrong person - so I have left them alone. Say the word and they follow.
+NEGOTIATED PROJECTS (N:<dealId>) are not in Xero and have no real applications,
+so they still start from contracted rates. Unchanged, and correct.
+
+The project record is now read ONCE for both the rates and the applications,
+rather than the rates lookup fetching it on its own.
+
+
+ALSO FIXED WHILE IN THERE
+-------------------------
+This modal closed on a backdrop click and had no Escape handler - against your
+standing rule, and it holds a period, percentages across every rate line,
+materials lines and payment terms. A stray click outside it threw the lot away.
+Backdrop click no longer closes; Escape does.
+
+
+ON SCREEN
+---------
+A line at the top of a new forecast says where the percentages came from:
+
+  blue   "Percentages carried over from Application 4 (sent) - the latest
+          application on this project."
+  blue   "Percentages carried over from the previous forecast, which runs later
+          than the last application."
+  amber  "No applications yet - starting from the contracted rates at 0%."
+
+Without it a seeded figure and one somebody typed look identical. It does not
+show when editing an existing forecast, which loads its own saved values.

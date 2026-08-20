@@ -497,9 +497,21 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [labourSpread, setLabourSpread] = useState({}) // { 'YYYY-MM': pct }
   const [saving, setSaving] = useState(false)
   const [showList, setShowList] = useState(false)
+  // What the percentages on screen were seeded from, so the modal can say so rather
+  // than leaving you to guess whether a figure is real or a leftover.
+  const [seededFrom, setSeededFrom] = useState(null)
+
+  // Escape closes; a backdrop click does NOT. This modal holds a period, percentages
+  // across every rate line, materials lines and payment terms - a stray click outside
+  // it must not throw that away.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr('')
+    setLoading(true); setErr(''); setSeededFrom(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -520,12 +532,46 @@ function HypAppModal({ modal, onClose, onSaved }) {
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
         } else {
-          // NEW forecast: start from the most recent prior app's % complete (cumulative).
-          const prev = (d.hypApps || []).slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop()
-          if (prev && Array.isArray(prev.contractWorks)) {
-            const byId = new Map(prev.contractWorks.filter(r => r.kind === 'item').map(r => [r.id, r]))
-            for (const r of base) { if (r.kind === 'item') { const p = byId.get(r.id); if (p) r.pctComplete = p.pctComplete || 0 } }
-            setMcdPct(prev.mcdPct || 0); setRetPct(prev.retentionPct != null ? prev.retentionPct : 5)
+          // NEW forecast. Start from the latest REAL application - that is the last
+          // agreed picture of how complete the job is, and it is what a forecast
+          // should carry on from.
+          //
+          // If a forecast already exists for a LATER period than that application,
+          // that one wins instead. Otherwise a second forecast would jump backwards
+          // to the real application's percentages and undo the first one. So the rule
+          // is "whichever ends last", not "always the application".
+          //
+          // With neither, the rows stay at 0% straight off the contracted rates -
+          // the existing behaviour, and the right start for a job not yet applied for.
+          const app = d.latestApplication || null
+          const lastHyp = (d.hypApps || []).slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop() || null
+          const appEnd = app ? (app.endDate || '') : ''
+          const hypEnd = lastHyp ? (lastHyp.to || '') : ''
+          // Ties go to the real application - it is the certified position.
+          const useApp = !!app && (!lastHyp || appEnd >= hypEnd)
+          const src = useApp ? app : lastHyp
+
+          if (src) {
+            const works = (Array.isArray(src.contractWorks) ? src.contractWorks : []).filter(r => r && r.kind !== 'heading')
+            const byId = new Map(works.filter(r => r.id != null).map(r => [r.id, r]))
+            // Also match on code. A real application's rows come from the same
+            // buildContractWorksFromRates(), so ids normally line up - but if the rates
+            // have been re-uploaded since, they will not, and the code is the only
+            // stable handle. Seeding everything at 0% would look like a job that had
+            // never started.
+            const byCode = new Map(works.filter(r => r.code != null).map(r => [String(r.code), r]))
+            for (const r of base) {
+              if (r.kind !== 'item') continue
+              const p = byId.get(r.id) || byCode.get(String(r.code))
+              if (p) r.pctComplete = p.pctComplete || 0
+            }
+            if (src.mcdPct != null) setMcdPct(src.mcdPct || 0)
+            if (src.retentionPct != null) setRetPct(src.retentionPct)
+            setSeededFrom(useApp
+              ? { kind: 'application', label: `Application ${src.appNumber || src.seq || ''}`.trim(), status: src.status || '' }
+              : { kind: 'forecast', label: 'the previous forecast', status: '' })
+          } else {
+            setSeededFrom({ kind: 'rates', label: 'contracted rates', status: '' })
           }
         }
         setRows(base)
@@ -718,7 +764,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const fmtD = (s) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: 24 }} onMouseDown={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: 24 }}>
       <div onMouseDown={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, maxWidth: 1000, width: '100%', boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '16px 20px', borderBottom: '1px solid #eee' }}>
           <div>
@@ -741,6 +787,26 @@ function HypAppModal({ modal, onClose, onSaved }) {
           : err ? <div style={{ padding: 30, color: '#b45309' }}>{err}</div>
           : (
             <div style={{ padding: 20 }}>
+              {/* Say where the percentages came from. Without this a seeded figure and a
+                  figure somebody typed look identical. */}
+              {!editId && seededFrom && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  background: seededFrom.kind === 'rates' ? '#fffbeb' : '#f0f9ff',
+                  border: `1px solid ${seededFrom.kind === 'rates' ? '#fde68a' : '#bae6fd'}`,
+                  borderRadius: 10, padding: '8px 12px', marginBottom: 16, fontSize: 12.5,
+                  color: seededFrom.kind === 'rates' ? '#92400e' : '#075985',
+                }}>
+                  {seededFrom.kind === 'application' ? (
+                    <span><strong>Percentages carried over from {seededFrom.label}</strong>
+                      {seededFrom.status ? ` (${seededFrom.status})` : ''} - the latest application on this project. Enter where each item will be by the end of this period.</span>
+                  ) : seededFrom.kind === 'forecast' ? (
+                    <span><strong>Percentages carried over from {seededFrom.label}</strong>, which runs later than the last application.</span>
+                  ) : (
+                    <span><strong>No applications yet</strong> - starting from the contracted rates at 0%.</span>
+                  )}
+                </div>
+              )}
               {showList && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: INK, marginBottom: 8 }}>Saved forecasted applications for this project</div>

@@ -28,17 +28,48 @@ const HKEY = (key) => `cashflow:hyp-apps:${key}`
 //    passing the project's xeroId (when it exists in Xero). Without a xeroId we can't
 //    reach the live rates, so we return none and the UI explains the project must be
 //    added to Xero to build from its contracted rates.
-async function loadRates(redis, projectKey, xeroId) {
+async function loadRates(redis, projectKey, xeroId, project) {
   if (projectKey && projectKey.startsWith('N:')) {
     const dealId = projectKey.slice(2)
     const neg = (await redis.get(`crates:negotiated:${dealId}`).catch(() => null)) || {}
     return neg.contractedRates || null
   }
-  if (xeroId) {
-    const project = (await getProject(xeroId)) || {}
-    return project.contractedRates || null
-  }
+  if (xeroId) return (project || {}).contractedRates || null
   return null
+}
+
+// The most recent REAL application on the project - the thing a new forecast should
+// start from, because it is the last agreed picture of how complete the job is.
+//
+// "Most recent" is by seq, which is the order applications were raised. Drafts count:
+// a draft is still the latest view of percentage complete, and a forecast is a
+// forecast. Status is returned so the modal can say which one it used.
+//
+// Only the fields the seed actually needs come back. The full contractWorks tree on a
+// real application can be large and none of the rest of it is wanted here.
+function latestApplicationSeed(project) {
+  const apps = Array.isArray(project && project.applications) ? project.applications : []
+  if (!apps.length) return null
+  const latest = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0)).pop()
+  if (!latest) return null
+  return {
+    seq: latest.seq || 0,
+    appNumber: latest.appNumber || null,
+    status: latest.status || '',
+    monthKey: latest.monthKey || '',
+    monthLabel: latest.monthLabel || '',
+    appDate: latest.appDate || '',
+    valDate: latest.valDate || '',
+    // Where this application's period ENDS, for comparing against a forecast's `to`.
+    // Real applications carry no from/to - they are dated by valuation - so fall back
+    // through the dates we do have. monthKey is 'YYYY-MM', hence the -28.
+    endDate: latest.valDate || latest.appDate || (latest.monthKey ? `${latest.monthKey}-28` : ''),
+    mcdPct: latest.mcdPct != null ? latest.mcdPct : null,
+    retentionPct: latest.retentionPct != null ? latest.retentionPct : null,
+    contractWorks: (Array.isArray(latest.contractWorks) ? latest.contractWorks : [])
+      .filter(r => r && r.kind === 'item')
+      .map(r => ({ id: r.id, code: r.code, pctComplete: r.pctComplete || 0 })),
+  }
 }
 
 export default async function handler(req, res) {
@@ -67,8 +98,12 @@ export default async function handler(req, res) {
       return res.json({ all: out })
     }
     if (!projectKey) return res.status(400).json({ error: 'projectKey required' })
+    // One read of the project record, used for both the rates and the applications.
+    // Negotiated projects ("N:<dealId>") are not in Xero and have no real
+    // applications - contracted rates are all there is, which is the fallback.
+    const project = xeroId ? ((await getProject(xeroId)) || {}) : {}
     const [rates, hyp] = await Promise.all([
-      loadRates(redis, projectKey, xeroId),
+      loadRates(redis, projectKey, xeroId, project),
       redis.get(HKEY(projectKey)).then(v => v || []).catch(() => ([])),
     ])
     return res.json({
@@ -76,6 +111,7 @@ export default async function handler(req, res) {
       hasRates: !!(rates && Array.isArray(rates.items) && rates.items.length),
       seedContractWorks: rates && Array.isArray(rates.items) ? buildContractWorksFromRates(rates.items) : [],
       hypApps: Array.isArray(hyp) ? hyp : [],
+      latestApplication: latestApplicationSeed(project),
     })
   }
 
