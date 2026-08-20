@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { projectLabel } from '../lib/variationInstruct'
 import Head from 'next/head'
 import Link from 'next/link'
 import CommercialNav from '../components/CommercialNav'
@@ -277,7 +278,7 @@ export default function ApplicationsPage() {
             {false && (
             <select value={projectId} onChange={e => pickProject(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, minWidth: 340, background: '#fff' }}>
               <option value="">— Select a project —</option>
-              {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
+              {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>)}
             </select>
             )}
             {selProject && <Link href={`/contracted-rates`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Contracted Rates →</Link>}
@@ -288,7 +289,7 @@ export default function ApplicationsPage() {
               <span style={{ fontWeight: 700, marginRight: 8 }}>⚠ Missing dates:</span>
               {upcoming.missing.map((r, i) => (
                 <span key={r.xeroId}>
-                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
+                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{projectLabel(r.jobNo, r.name)}</button>
                   {i < upcoming.missing.length - 1 ? <span style={{ margin: '0 6px', color: '#b45309' }}>·</span> : null}
                 </span>
               ))}
@@ -509,7 +510,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
               const needsCR = r.crStatus && r.crStatus !== 'ok'
               const di = dueInfo(r.appDate)
               async function dismiss() {
-                if (!confirm(`Are you sure you don't have an application for works completed on site for this project this month?\n\n${[r.jobNo, r.name].filter(Boolean).join(' — ')}`)) return
+                if (!confirm(`Are you sure you don't have an application for works completed on site for this project this month?\n\n${projectLabel(r.jobNo, r.name)}`)) return
                 try {
                   await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'dismiss-month', projectId: r.xeroId, monthKey: r.monthKey || (r.appDate ? r.appDate.slice(0, 7) : '') }) })
                   if (onDismissed) onDismissed(r.xeroId)
@@ -517,7 +518,7 @@ function UpcomingTable({ rows, loading, onOpen, onDismissed }) {
               }
               return (
                 <tr key={r.xeroId} style={{ borderBottom: '1px solid #f0f0f0', opacity: r.status === 'dismissed' ? 0.55 : 1 }}>
-                  <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ') || r.xeroId}</td>
+                  <td style={{ padding: '9px 14px', fontSize: 13, fontWeight: 600 }}>{projectLabel(r.jobNo, r.name) || r.xeroId}</td>
                   <td style={{ padding: '9px 14px', fontSize: 13 }}>{needsCR ? '—' : r.nextSeq}</td>
                   <td style={{ padding: '9px 14px' }}>
                     {needsCR ? (

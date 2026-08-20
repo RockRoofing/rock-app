@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { projectLabel } from '../lib/variationInstruct'
 import Link from 'next/link'
 
 // The exact "set dates" box used by the Application Calendar: an amber missing-dates
@@ -58,7 +59,7 @@ export default function ProjectDatesModal({ project, onClose, onSaved }) {
       <div style={{ background: '#fff', borderRadius: 12, padding: 28, width: '100%', maxWidth: 620, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</h3>
+          <h3 style={{ margin: 0, fontSize: 16, color: '#1a1a2e' }}>{projectLabel(project.jobNo, project.name)}</h3>
           <button onClick={onClose} style={{ fontSize: 20, border: 'none', background: 'none', cursor: 'pointer', color: '#888' }}>×</button>
         </div>
 

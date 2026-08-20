@@ -266,7 +266,7 @@ export default function WipPage() {
               <span style={{ fontWeight: 700, marginRight: 8 }}>⚠ Missing dates:</span>
               {data.missingDates.map((r, i) => (
                 <span key={r.xeroId}>
-                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{[r.jobNo, r.name].filter(Boolean).join(' — ')}</button>
+                  <button onClick={() => setDatesModal({ xeroId: r.xeroId, jobNo: r.jobNo, name: r.name })} style={{ background: 'none', border: 'none', color: '#92400e', textDecoration: 'underline', cursor: 'pointer', fontSize: 13, padding: 0 }}>{projectLabel(r.jobNo, r.name)}</button>
                   {i < data.missingDates.length - 1 ? <span style={{ margin: '0 6px', color: '#b45309' }}>·</span> : null}
                 </span>
               ))}

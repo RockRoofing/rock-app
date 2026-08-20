@@ -1,53 +1,63 @@
-pkg535 - the instruction page: no suggested names, no half-filled form
-======================================================================
+pkg536 - the remaining J1 - J1, and the instruction name
+========================================================
 
-Deploy after pkg534.
+Deploy after pkg535.
 
 CHANGED FILES (replace)
 -----------------------
   components/VariationBuilder.js
+  components/ProjectDatesModal.js
+  pages/contracted-rates.js
+  pages/applications.js
+  pages/operations/project-management/deliveries.js
+  pages/api/variation-instruct.js
   pages/instruct/[token].js          <- literal [token] folder
 
 NEW FILES: none.
 
 
-1. REAL NAMES WERE THE PLACEHOLDERS
+1. "Variation V08 - J1 - J1 - TEST"
 -------------------------------------
-The boxes read "Jack" and "Belshaw" in grey - my placeholder text from pkg527. On a form
-whose entire purpose is recording WHO is instructing, a suggested name is the last thing
-to put in front of somebody.
+pkg529 replaced nine of these and missed the send window, which builds its own label - so
+the subject and the body both still doubled.
 
-Now "First name...", "Last name...", "Your role...", "Your company...".
+Sweeping properly this time found EIGHT MORE, in five files: the project dropdowns on
+Contracted Rates, Applications, Deliveries, the Variation Builder, and the project dates
+modal. Every one of them was showing "J1 - J1 - TEST".
 
-
-2. THE FORM CONTRADICTED ITSELF
----------------------------------
-Your screenshot says "We do not hold your details for this project, so please enter them"
-- and the company box was already filled from the project.
-
-The prefill ran regardless of whether we actually held the person. Now it only runs when
-we do:
-
-    SENT TO A HANDOVER CONTACT     details shown as FIXED TEXT, not inputs, and the
-                                   server uses its own copy whatever is posted
-    SENT TO A TYPED ADDRESS        all four boxes empty, nothing suggested
-
-Your test went to a gmail address that is not on the handover, which is why you got the
-entry form - that part was right. It just should not have arrived part-filled.
+All now use the same helper.
 
 
-3. "REQUESTED BY -" ON THE DOCUMENT
--------------------------------------
-Also in your screenshot. Nothing required it, so a variation could go to a customer with
-that field blank.
+2. WHY YOUR DETAILS DID NOT PULL THROUGH
+------------------------------------------
+They did not because that link went to jgmcveigh@gmail.com, which is not one of the
+project's contacts. The entry form was correct - it just did not say WHY.
 
-Requested by and the variation description are now both required before it can be raised.
-A variation nobody asked for is one a QS will not pay for, and "Requested by -" is the
-first thing they query.
+It now distinguishes the two cases:
+
+    "jgmcveigh@gmail.com is not one of the contacts we hold for this project..."
+    "We do not hold any contacts for this project..."
+
+One means you are not on the handover, the other means nobody is. Very different problems.
+
+ALSO FIXED: the match was case-insensitive but not trimmed. A trailing space on an address
+in the handover is invisible on screen and broke it completely.
 
 
-STILL OUTSTANDING
------------------
-Anyone holding the To recipient's own link can use it. That is the one-time code we
-discussed - they click, we email a six-digit code to that address, they enter it. Say the
-word.
+3. THE NAME IS NO LONGER SPLIT
+--------------------------------
+You are right that Project Details holds ONE name field. I was guessing where the surname
+began, which:
+
+    "Jack van der Berg"  ->  first "Jack van der", last "Berg"
+    "Jennie"             ->  last name EMPTY, failing the required check
+
+Where we hold the person, the name is now shown exactly as recorded, with no boxes at all:
+
+    Instructing as
+    Jack Belshaw
+    Senior Quantity Surveyor, Barnfield Construction
+
+First and last name boxes only appear for somebody typing their own details, where they
+can put them in the right boxes themselves. The server does the same, so the two cannot
+disagree.

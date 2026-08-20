@@ -15,6 +15,7 @@ export default function InstructVariation() {
   const { token } = router.query
   const [state, setState] = useState({ loading: true })
   const [busy, setBusy] = useState(false)
+  const [fullName, setFullName] = useState('')
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [role, setRole] = useState('')
@@ -33,13 +34,15 @@ export default function InstructVariation() {
         //
         // On file: these are shown as fixed text, not as inputs, and the server uses its
         // own copy regardless. Not on file: nothing is suggested at all.
+        // NOT SPLIT. Project Details holds ONE name field, and guessing where the
+        // surname starts gets "Jack van der Berg" wrong and leaves a one-word name with
+        // no last name at all - which would then fail the required check.
+        //
+        // Where we hold the person, the name is displayed exactly as recorded and there
+        // are no first/last boxes to fill. The split only exists for somebody typing
+        // their own details, where they can put them in the right boxes themselves.
         if (d.onFile && d.contact?.name) {
-          // The handover holds one name field, so the last word is the surname. Wrong for
-          // a double-barrelled one - but these are display-only when on file, and the
-          // server sends the same split, so the two cannot disagree.
-          const parts = String(d.contact.name).trim().split(/\s+/)
-          setFirstName(parts.slice(0, -1).join(' ') || parts[0] || '')
-          setLastName(parts.length > 1 ? parts[parts.length - 1] : '')
+          setFullName(d.contact.name)
           setRole(d.contact.role || '')
           setCompany(d.customerCompany || '')
         }
@@ -52,7 +55,7 @@ export default function InstructVariation() {
     try {
       const r = await fetch('/api/variation-instruct', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, name: `${firstName} ${lastName}`.trim(), firstName, lastName, role, company }),
+        body: JSON.stringify({ token, name: state.onFile ? fullName : `${firstName} ${lastName}`.trim(), firstName, lastName, role, company }),
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.error || 'Failed')
@@ -129,7 +132,7 @@ export default function InstructVariation() {
                 {state.onFile ? (
                   <div style={{ padding: '12px 14px', background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 8 }}>
                     <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Instructing as</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{firstName} {lastName}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{fullName}</div>
                     <div style={{ fontSize: 13, color: '#555' }}>{[role, company].filter(Boolean).join(', ')}</div>
                     <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{state.sentTo}</div>
                     <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>
@@ -139,7 +142,11 @@ export default function InstructVariation() {
                 ) : (
                   <>
                     <div style={{ fontSize: 12.5, color: '#92400e', marginBottom: 8 }}>
-                      We do not hold your details for this project, so please enter them.
+                      {state.contactsOnFile
+                        // Which of the two it is matters: one is "you are not on the
+                        // handover", the other is "nobody is".
+                        ? `${state.sentTo} is not one of the contacts we hold for this project, so please enter your details.`
+                        : 'We do not hold any contacts for this project, so please enter your details.'}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
                       {/* NO REAL NAMES AS PLACEHOLDERS. "Jack" and "Belshaw" sat greyed in

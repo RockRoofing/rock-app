@@ -50,8 +50,10 @@ export default async function handler(req, res) {
     // details in for them. Somebody confirming a variation should not have to type their
     // own job title - and a prefilled field is far more likely to come back correct than
     // an empty one.
-    const contact = (project.customerContacts || [])
-      .find(c => String(c.email || '').toLowerCase() === String(t.email || '').toLowerCase()) || null
+    // Trimmed as well as lower-cased. A trailing space on an address typed into the
+    // handover is invisible on screen and breaks the match completely.
+    const norm = (e) => String(e || '').trim().toLowerCase()
+    const contact = (project.customerContacts || []).find(c => norm(c.email) === norm(t.email)) || null
     return res.json({
       sentTo: t.email || '',
       contact: contact ? { name: contact.name || '', role: contact.title || '' } : null,
@@ -60,6 +62,10 @@ export default async function handler(req, res) {
       // page shows them rather than asking. Where we do not, everything must be typed -
       // an address somebody entered by hand tells us nothing about who owns it.
       onFile: !!(contact && contact.name),
+      // Diagnostic, shown on the page: whether the project has ANY contacts on file and
+      // whether this address is among them. "We do not hold your details" is not much use
+      // without saying which of those two is true.
+      contactsOnFile: (project.customerContacts || []).length,
       varNumber: variation.varNumber,
       projectName: projectLabel(project.jobNo, project.name),
       description: variation.description || '',
@@ -87,21 +93,27 @@ export default async function handler(req, res) {
   // Locking the fields in the browser stops honest mis-entry; it does not stop a crafted
   // request. The whole point of this record is who instructed it, so where we know that
   // already the answer comes from our data, not from the form.
-  const onFileContact = (project.customerContacts || [])
-    .find(c => String(c.email || '').toLowerCase() === String(t.email || '').toLowerCase()) || null
+  const normE = (e) => String(e || '').trim().toLowerCase()
+  const onFileContact = (project.customerContacts || []).find(c => normE(c.email) === normE(t.email)) || null
 
   let useFirst = firstName, useLast = lastName, useRole = role, useCompany = company
+  // The name AS RECORDED, not split. One field on the handover, one field here - a guess
+  // at where the surname begins is wrong for "Jack van der Berg" and leaves a one-word
+  // name failing the required check for a last name it never had.
+  let useName = `${useFirst} ${useLast}`.trim()
   if (onFileContact && onFileContact.name) {
-    const parts = String(onFileContact.name).trim().split(/\s+/)
-    useFirst = parts.slice(0, -1).join(' ') || parts[0] || ''
-    useLast = parts.length > 1 ? parts[parts.length - 1] : ''
+    useName = String(onFileContact.name).trim()
+    useFirst = useName
+    useLast = ''
     useRole = onFileContact.title || role || ''
     useCompany = project.customerCompany || project.customer || company || ''
   }
 
-  const missing = [
-    ['first name', useFirst], ['last name', useLast], ['role', useRole], ['company', useCompany],
-  ].filter(([, v]) => !String(v || '').trim()).map(([l]) => l)
+  // On file: the name is ours and complete by definition. Typed: both parts are required.
+  const missing = (onFileContact && onFileContact.name
+    ? [['role', useRole], ['company', useCompany]]
+    : [['first name', useFirst], ['last name', useLast], ['role', useRole], ['company', useCompany]]
+  ).filter(([, v]) => !String(v || '').trim()).map(([l]) => l)
   if (missing.length) return res.status(400).json({ error: `Please enter your ${missing.join(', ')}.` })
 
   // Already instructed - report it rather than overwriting who did it and when.
@@ -111,7 +123,7 @@ export default async function handler(req, res) {
 
   const instruction = {
     at: Date.now(),
-    byName: `${useFirst} ${useLast}`.trim(),
+    byName: useName,
     byFirstName: String(useFirst).trim(),
     byLastName: String(useLast).trim(),
     // Whether the identity came from our records or was typed. A dispute reads very

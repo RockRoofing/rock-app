@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
+import { projectLabel } from '../lib/variationInstruct'
 
 // Searchable project picker. Type to filter by job no / name; click to select.
 // projects: [{ xeroId, jobNo, name }]  value: selected xeroId  onPick(xeroId)
@@ -8,7 +9,7 @@ export default function ProjectSearchSelect({ projects = [], value = '', onPick,
   const boxRef = useRef(null)
 
   const selected = projects.find(p => String(p.xeroId) === String(value)) || null
-  const label = selected ? [selected.jobNo, selected.name].filter(Boolean).join(' — ') : ''
+  const label = selected ? projectLabel(selected.jobNo, selected.name) : ''
 
   useEffect(() => {
     function onDoc(e) { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false) }

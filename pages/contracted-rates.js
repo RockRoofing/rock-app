@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { projectLabel } from '../lib/variationInstruct'
 import Head from 'next/head'
 import Link from 'next/link'
 import { upload } from '@vercel/blob/client'
@@ -639,7 +640,7 @@ export default function ContractedRatesPage() {
                     <button key={p.xeroId} onClick={() => pickProject(p.xeroId)}
                       title={p.hasRates ? 'Rates uploaded but not locked' : 'No contracted rates yet'}
                       style={{ fontSize: 12, color: '#92400e', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0, fontFamily: 'inherit' }}>
-                      {[p.jobNo, p.name].filter(Boolean).join(' — ')}{p.hasRates ? '' : ' (none)'}
+                      {projectLabel(p.jobNo, p.name)}{p.hasRates ? '' : ' (none)'}
                     </button>
                   ))}
                 </div>
@@ -654,7 +655,7 @@ export default function ContractedRatesPage() {
             {false && (
             <select value={projectId} onChange={e => pickProject(e.target.value)} style={{ padding: '8px 12px', border: '1px solid #d5d9e0', borderRadius: 8, fontSize: 13, minWidth: 340, background: '#fff' }}>
               <option value="">— Select a project —</option>
-              {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
+              {projects.map(p => <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>)}
             </select>
             )}
             {selProject && !selProject.neg && <Link href={`/project/${projectId}`} style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none' }}>Open project →</Link>}

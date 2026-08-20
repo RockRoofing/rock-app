@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { projectVariations } from '../lib/variationInstruct'
+import { projectVariations, projectLabel } from '../lib/variationInstruct'
 
 // ---------------------------------------------------------------------------
 // Variation Builder
@@ -277,7 +277,9 @@ export function SendVariationModal({ project, variation, me, onClose, onSent }) 
   }, [])
 
   const b = variation.builder || {}
-  const projLabel = [project.jobNo, project.name].filter(Boolean).join(' - ')
+  // pkg529 replaced nine of these and missed this one - the send modal builds its own
+  // label, so the subject and the body both still read "J1 - J1 - TEST".
+  const projLabel = projectLabel(project.jobNo, project.name)
 
   // The email writes itself from the variation, so nobody has to retype the reference,
   // the number and the description - and so every one that goes out says the same things.
@@ -693,7 +695,7 @@ export default function VariationBuilder({ projects, onSaved }) {
           style={{ ...inp, maxWidth: 520 }}>
           <option value="">Select a project…</option>
           {(projects || []).map(p => (
-            <option key={p.xeroId} value={p.xeroId}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>
+            <option key={p.xeroId} value={p.xeroId}>{projectLabel(p.jobNo, p.name)}</option>
           ))}
         </select>
       </div>
@@ -819,7 +821,7 @@ export default function VariationBuilder({ projects, onSaved }) {
 
           <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: 16, marginBottom: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-              <div><div style={lbl}>Project</div><div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{[project.jobNo, project.name].filter(Boolean).join(' — ')}</div></div>
+              <div><div style={lbl}>Project</div><div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{projectLabel(project.jobNo, project.name)}</div></div>
               <div><div style={lbl}>Sub-Contract Ref</div><div style={{ fontSize: 13.5, color: INK }}>{subContractRef || <span style={{ color: '#c2410c' }}>not set on the handover</span>}</div></div>
               <div>
                 <div style={lbl}>Variation No.</div>

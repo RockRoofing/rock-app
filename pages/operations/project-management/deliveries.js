@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { projectLabel } from '../../../lib/variationInstruct'
 import OperationsShell, { PageHeading } from '../../../components/OperationsShell'
 import { INK, GOLD, th, td, Loading, EmptyCard, Modal, Lbl, inp2, primaryBtn, ghostBtn, linkBtn, fmtDate } from '../../../components/opsUI'
 import RowAttachments from '../../../components/RowAttachments'
@@ -124,7 +125,7 @@ export default function Deliveries() {
       {notice && <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', borderRadius: 8, padding: '9px 14px', fontSize: 13, marginBottom: 14 }}>{notice}</div>}
 
       <div style={{ background: '#fff', border: '1px solid #ececec', borderRadius: 12, padding: 14, marginBottom: 16, display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <F label="Project"><select value={fProject} onChange={e => { setFProject(e.target.value); setPage(0) }} style={sel}><option value="">All projects</option>{projectOptions.map(p => <option key={`${p.jobNo}|${p.name}`} value={`${p.jobNo}|${p.name}`}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}</select></F>
+        <F label="Project"><select value={fProject} onChange={e => { setFProject(e.target.value); setPage(0) }} style={sel}><option value="">All projects</option>{projectOptions.map(p => <option key={`${p.jobNo}|${p.name}`} value={`${p.jobNo}|${p.name}`}>{projectLabel(p.jobNo, p.name)}</option>)}</select></F>
         <F label="Status"><select value={fStatus} onChange={e => { setFStatus(e.target.value); setPage(0) }} style={sel}><option value="open">Open (not delivered)</option><option value="complete">Delivered</option><option value="all">All</option></select></F>
         {(fProject || fStatus !== 'open') && <button onClick={() => { setFProject(''); setFStatus('open'); setPage(0) }} style={ghostBtn}>Reset</button>}
         <div style={{ flex: 1 }} />
@@ -271,7 +272,7 @@ function DeliveryModal({ row, projectOptions, onClose, onSave }) {
       <Lbl>Project (Xero project name)</Lbl>
       <select value={`${f.projectNo || ''}|${f.projectName || ''}`} onChange={e => setProj(e.target.value)} style={inp2}>
         <option value="|">Select project…</option>
-        {projectOptions.map(p => <option key={`${p.jobNo}|${p.name}`} value={`${p.jobNo}|${p.name}`}>{[p.jobNo, p.name].filter(Boolean).join(' — ')}</option>)}
+        {projectOptions.map(p => <option key={`${p.jobNo}|${p.name}`} value={`${p.jobNo}|${p.name}`}>{projectLabel(p.jobNo, p.name)}</option>)}
       </select>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}><Lbl>PO number</Lbl><input value={f.poNumber || ''} onChange={e => setF({ ...f, poNumber: e.target.value })} style={inp2} /></div>
