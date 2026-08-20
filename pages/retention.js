@@ -306,6 +306,10 @@ export default function RetentionPage() {
           ourRef: p.jobNo || '',
           customerName: p.customer || '',
           projectName: p.name || '',
+          // False once the Xero tracking option has been DELETED. The row stays -
+          // the retention still has to be chased - but its invoiced/paid figures
+          // are frozen at the last sync, so the badge says so.
+          inXero: p.inXero !== false,
           projectValue: p.contractValue || 0,
           finalAccount: p.afa || 0,
           retentionPct: (p.retentionPct || 0) * 100,
@@ -428,6 +432,7 @@ export default function RetentionPage() {
       const x = xeroByXid.get(e.xeroId)
       return {
         ...e,
+        inXero: x.inXero !== false,
         invoiced: x.invoiced, invoicedNet: x.invoicedNet, vat: x.vat, vatRateLabel: x.vatRateLabel, paid: x.paid,
         retentionOwed: x.retentionOwed, retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
         afaGross: x.afaGross, afaSource: x.afaSource, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
@@ -835,7 +840,9 @@ export default function RetentionPage() {
                                     ? <span>{entry.ourRef}</span>
                                     : <Link href={`/project/${entry.xeroId}`} style={{ color: '#2563eb' }}>{entry.ourRef}</Link>)
                                 : entry.ourRef || '—'}
-                              {!entry.manual && <span style={{ marginLeft: 4, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 4px' }}>Xero</span>}
+                              {!entry.manual && (entry.inXero === false
+                                ? <span title="This project's tracking category has been deleted in Xero. Everything here is kept - applications, contracted rates, variations, retention - but the invoiced and paid figures are frozen at the last sync." style={{ marginLeft: 4, fontSize: 9, background: '#ffedd5', color: '#c2410c', borderRadius: 4, padding: '1px 4px', fontWeight: 700 }}>Not in Xero</span>
+                                : <span style={{ marginLeft: 4, fontSize: 9, background: '#eef2ff', color: '#4f46e5', borderRadius: 4, padding: '1px 4px' }}>Xero</span>)}
                               {(() => {
                                 const st = retStatusOf(entry)
                                 const meta = st === 'complete' ? { t: 'Complete', bg: '#dcfce7', c: '#166534' }

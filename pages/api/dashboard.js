@@ -2,6 +2,7 @@ import { getAllProjectSettings, getOpsProjects } from '../../lib/db'
 import { computeApplicationSummary } from '../../lib/applications'
 import { missingProjectFields } from '../../lib/projectComplete'
 import { getProjectsFromCategories } from '../../lib/xero'
+import { syncRegistry, ghostsFromRegistry } from '../../lib/projectRegistry'
 import { getTokens, saveTokens } from '../../lib/db'
 import { refreshXeroToken } from '../../lib/xero'
 
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'pcType' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -88,6 +89,23 @@ export default async function handler(req, res) {
     } catch {}
 
     const categoryProjects = await getProjectsFromCategories(tokens.access_token, tokens.tenant_id)
+
+    // PROJECT IDENTITY IS OURS, NOT XERO'S.
+    //
+    // This list used to BE the Xero tracking options and nothing else, so deleting
+    // an option in Xero deleted the project from every commercial surface - the data
+    // survived in Redis but nothing could list it. Record every project we see, then
+    // carry forward anything Xero has stopped returning as a GHOST (inXero: false).
+    // Its cost/invoice caches simply stop moving, which is right - there is nothing
+    // left in Xero to sync against.
+    let registry = {}
+    try { registry = await syncRegistry(redis, categoryProjects) } catch {}
+    const ghostProjects = ghostsFromRegistry(registry, categoryProjects)
+    const allCategoryProjects = [
+      ...categoryProjects.map(cp => ({ ...cp, inXero: true, lastSeenInXero: null })),
+      ...ghostProjects,
+    ]
+
     const allSettings = await getAllProjectSettings()
 
     // For resolving project people (team roles + customer contacts) from the IHM.
@@ -115,7 +133,7 @@ export default async function handler(req, res) {
       }
     } catch {}
 
-    const projects = await Promise.all(categoryProjects.map(async (cp) => {
+    const projects = await Promise.all(allCategoryProjects.map(async (cp) => {
       const id = cp.trackingOptionId
       const settings = allSettings[id] || allSettings[cp.jobNo] || {}
 
@@ -341,6 +359,12 @@ export default async function handler(req, res) {
         trackingCategoryId: cp.trackingCategoryId,
         jobNo: cp.jobNo,
         name: cp.name,
+        // Still in the Xero tracking category, or carried forward from our own
+        // register because the option was deleted there. A ghost keeps all of its
+        // applications, contracted rates, variations, retention and financials -
+        // its Xero-derived costs and invoices are simply frozen at the last sync.
+        inXero: cp.inXero !== false,
+        lastSeenInXero: cp.lastSeenInXero || null,
         status: stage,
         stageSource: 'retention',   // marker: stage now driven by Retention Tracker
         // Customer, PC type and the QS email all exist in Edit Project Details but were

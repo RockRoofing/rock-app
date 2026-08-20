@@ -205,6 +205,23 @@ export default async function handler(req, res) {
     const cats = await getProjectsFromCategories(tokens.access_token, tenantId)
     const nameToId = new Map()
     for (const cp of cats) nameToId.set((cp.name || '').trim().toLowerCase(), cp.trackingOptionId)
+    // Xero keeps the tracking NAME on historical transactions after the option
+    // itself is deleted, so those invoices still arrive tagged - but the name is no
+    // longer in `cats` and they would fall into __UNASSIGNED__ while the project's
+    // own stored lines stayed put, counting the same invoices twice in Bookkeeping.
+    // Match them against our own register too.
+    //
+    // Deliberately NOT added to the empty-bucket seed below: if Xero ever does strip
+    // the name, seeding would rewrite the project's lines from nothing and drop
+    // every in-window invoice. Unmatched must leave the stored lines alone.
+    try {
+      const { readRegistry, ghostsFromRegistry } = await import('../../lib/projectRegistry')
+      const ghosts = ghostsFromRegistry(await readRegistry(redis), cats)
+      for (const g of ghosts) {
+        const k = (g.name || '').trim().toLowerCase()
+        if (k && !nameToId.has(k)) nameToId.set(k, g.trackingOptionId)
+      }
+    } catch {}
 
     // One pass: fetch all sales invoices in the window, plus sales credit notes
     // (which reduce invoiced/sales and are negated), and merge them so every

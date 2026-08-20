@@ -1,55 +1,142 @@
-pkg538 - instructed variations now reach the application
-========================================================
+pkg539 - deleting a tracking category in Xero no longer deletes the project
+============================================================================
 
-Deploy after pkg537.
+Deploy after pkg538.
+
+
+NEW FILES - create these by hand in GitHub
+------------------------------------------
+  lib/projectRegistry.js
+
 
 CHANGED FILES (replace)
 -----------------------
-  lib/applicationPdf.js
-  lib/applications.js
-  pages/applications.js
-  pages/api/contracted-rates-view.js
-  pages/operations/project-management/report.js
-
-NEW FILES: none.
+  pages/api/dashboard.js
+  pages/api/project/[id].js
+  pages/api/bookkeeping.js
+  pages/api/sync-invoices.js
+  pages/retention.js
 
 
-THE CODE WAS ALREADY THERE - IT COULD NEVER FIRE
---------------------------------------------------
-applicationPdf.js already generates a variation document for anything instructed and
-appends it. The test it uses is:
+WHAT WAS ACTUALLY WRONG
+-----------------------
+Xero was the ONLY register of which projects exist. Nothing on our side ever
+stored a project's name or job number - both came from the tracking option every
+single time. And every commercial surface enumerates from that one list:
 
-    v.instructed !== 'yes' || !v.builder
+  Project Financials, Retention, Applications, Cashflow, Application Calendar,
+  Commercial Scorecard, Bookkeeping, and the project page itself.
 
-But BOTH functions that prepare variations for an application rebuilt them field by field
-and threw away exactly those two things:
+So deleting the option in Xero did not delete any data. project:<id> with its
+applications, contracted rates and variations, retention:entries, costs:* and
+invoiced:* were all still sitting in Redis, untouched. The app had simply lost
+the ability to LIST the project - which comes to the same thing when you are
+trying to chase a retention.
 
-    instructed: !!v.instructed     ->  true, not 'yes'
-    builder                        ->  dropped entirely
-
-So the condition failed twice over, and no document was ever generated. Nothing was wrong
-with the variations or the instructions - the application was being handed a stripped copy.
-
-Both now keep the builder block and 'yes'/'no' as written.
+It looked like nothing had happened at first because the dashboard serves a
+4-hour cached snapshot. Clearing the applications, CRs and variations each drop
+that cache (all three handlers call it), which forced a rebuild from Xero - and
+the project was gone. Waiting four hours would have done the same.
 
 
-THE SECOND ONE WAS WORSE
+THE FIX
+-------
+lib/projectRegistry.js keeps our own register at the Redis key
+'projects:registry':
+
+  { <trackingOptionId>: { name, jobNo, trackingCategoryId, firstSeen,
+                          lastSeenInXero } }
+
+Every dashboard rebuild records every project Xero returns. Anything we have
+seen before that Xero no longer returns is carried forward as a GHOST and still
+appears everywhere, flagged inXero:false. It only ever adds - an entry vanishing
+from Xero is precisely the case it exists to survive.
+
+The register writes at most once a day, not on every rebuild.
+
+A ghost keeps EVERYTHING: applications, contracted rates, variations, retention,
+final account, project details, WIP. Its Xero-derived costs and invoices freeze
+at the last sync, which is correct - there is nothing left in Xero to sync
+against. The sync crons skip ghosts rather than overwriting good figures with
+zeros.
+
+
+PER FILE
+--------
+dashboard.js       Unions the Xero options with the register, returns inXero and
+                   lastSeenInXero on every project, and carries a new cache
+                   marker so existing snapshots rebuild once instead of serving
+                   a list with no ghosts in it.
+
+project/[id].js    Used to 404 outright when the option was not in Xero, so the
+                   project page was dead even with all its data intact. Now falls
+                   back to the register.
+
+bookkeeping.js     Two things. It preferred the dashboard cache for its project
+                   list but read p.id - the dashboard keys projects by xeroId, so
+                   that matched nothing and it always fell through to Xero. Did
+                   not matter before, matters now. Also unions its Xero fallback
+                   with the register.
+
+retention.js       The blue "Xero" badge becomes an amber "Not in Xero" badge on
+                   a ghost, with a tooltip saying the figures are frozen. Without
+                   it somebody reads a frozen invoiced total as a current one.
+
+
+BOOKKEEPING - IS THE DATA KEPT?
+-------------------------------
+Yes. Bookkeeping reads per-project figures straight out of Redis - costs:lines,
+costs:latest, invoiced:lines - and none of the sync jobs touch a ghost:
+
+  cron/deep-sync.js     walks `active` from the Xero cats list
+  cron/wip-sync.js      loops categoryProjects
+  sync-wages.js         same
+  xero/backfill-costs.js same
+
+All of them only ever `set` keys for projects they visit. Nothing enumerates and
+deletes. So a ghost's costs, invoices, wages and totals sit there permanently.
+Untagged bills/wages and the P&L benchmark are company-level and unaffected.
+
+ONE HOLE FOUND AND FIXED. sync-invoices.js matched invoices to projects by
+tracking NAME, built only from the live Xero list. Xero keeps the tracking name
+on historical transactions after the option is deleted, so those invoices still
+arrive tagged - but the name was no longer in the list, so they fell into
+__UNASSIGNED__ while the project's own stored lines stayed put. The same
+invoices would have counted TWICE in Bookkeeping. It now matches against the
+register as well.
+
+Ghosts are deliberately NOT added to the empty-bucket seed in that file. Seeding
+exists so a project whose only invoice was deleted gets reconciled - but if Xero
+ever did strip the tracking name on deletion, seeding a ghost would rewrite its
+lines from nothing and drop every in-window invoice. Unmatched has to leave the
+stored lines alone.
+
+
+WIP NEEDED NO CHANGE
+--------------------
+/api/wip already enumerates from project settings rather than from Xero, so it
+survived deletion already - it just could not resolve a name. It resolves names
+from the dashboard cache first, so it picks ghosts up from this automatically.
+
+/api/wip-calculate deliberately still skips ghosts. It recalculates a month by
+fetching from Xero; for a deleted option that returns nothing, and writing that
+back would overwrite a good historic snapshot with zeros. Skipping preserves it.
+
+
+ONE THING TO BE AWARE OF
 ------------------------
-buildAppVariations is what gets FROZEN onto an application when it is sent. A sent
-application kept a variation with no builder and no proper instructed flag - so its
-document and its digital instruction could never be reproduced, even after this fix.
+You said marking a project Complete should hide it everywhere. That is only
+half true today:
 
-Applications already sent will still carry the stripped copy. Anything sent from here
-carries the lot.
+  Applications      filters on status INPROGRESS, so Complete does drop off it.
+  Project Financials has no such filter - Complete projects stay on it unless
+                    they are also in config:hidden-projects.
+
+Not changed here. Worth deciding when the archiving process gets built.
 
 
-AND THREE PLACES THAT WOULD HAVE GONE WRONG
----------------------------------------------
-Making instructed a string breaks every truthiness test on it, because !!'no' is TRUE:
-
-    Contracted Rates view
-    Project Report
-    Applications page
-
-All three would have shown EVERY variation as instructed. Fixed with the same explicit
-test. No others remain in the codebase.
+NOT RECOVERABLE
+---------------
+The register starts empty and fills on the first rebuild, so it covers every
+project currently in Xero from now on. The one already deleted is not in it and
+its name and job number were never stored anywhere - as agreed, not restored.

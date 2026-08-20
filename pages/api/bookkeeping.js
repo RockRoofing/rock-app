@@ -51,7 +51,14 @@ export default async function handler(req, res) {
     //    don't depend on the dashboard having been viewed recently. ──
     let projectList = []   // [{ id, name }]
     if (Array.isArray(dash) && dash.length) {
-      projectList = dash.filter(p => p.id && p.id !== '__UNASSIGNED__').map(p => ({ id: p.id, name: p.name || p.jobNo || '' }))
+      // The dashboard keys projects by xeroId/trackingOptionId - only the
+      // "__UNASSIGNED__" pseudo-project carries `id`. Reading `p.id` therefore
+      // matched nothing and this always fell through to Xero. It matters now,
+      // because the dashboard list includes projects deleted from Xero and the
+      // Xero list by definition does not.
+      projectList = dash
+        .map(p => ({ id: p.xeroId || p.trackingOptionId || p.id, name: p.name || p.jobNo || '' }))
+        .filter(p => p.id && p.id !== '__UNASSIGNED__')
     }
     if (projectList.length === 0) {
       const cachedList = await redis.get('projects:list').catch(() => null)
@@ -62,7 +69,14 @@ export default async function handler(req, res) {
           if (tokens?.refresh_token) {
             try { const nt = await refreshXeroToken(tokens.refresh_token); tokens = { ...tokens, ...nt }; await saveTokens(tokens) } catch {}
             const cats = await getProjectsFromCategories(tokens.access_token, tokens.tenant_id)
-            projectList = cats.map(cp => ({ id: cp.trackingOptionId, name: cp.name || cp.jobNo || '' }))
+            // Plus anything we have seen before that Xero no longer returns - its
+            // costs and invoices are still in Redis and must still be accounted for.
+            let ghosts = []
+            try {
+              const { readRegistry, ghostsFromRegistry } = await import('../../lib/projectRegistry')
+              ghosts = ghostsFromRegistry(await readRegistry(redis), cats)
+            } catch {}
+            projectList = [...cats, ...ghosts].map(cp => ({ id: cp.trackingOptionId, name: cp.name || cp.jobNo || '' }))
             await redis.set('projects:list', projectList, { ex: 60 * 60 })
           }
         } catch (e) { console.error('project list fetch failed:', e.message) }

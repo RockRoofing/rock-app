@@ -65,6 +65,20 @@ export default async function handler(req, res) {
       }
     }
 
+    // Last resort: our own project register. A project whose Xero tracking option
+    // has been DELETED is not in the categories list and may not be in a freshly
+    // rebuilt dashboard cache either - but we still hold its applications,
+    // contracted rates, variations and retention, so the page must still open.
+    if (!cp && redis) {
+      try {
+        const { identityFromRegistry } = await import('../../../lib/projectRegistry')
+        const fromReg = await identityFromRegistry(redis, id)
+        if (fromReg) cp = fromReg
+      } catch (e) {
+        console.error('Registry lookup failed:', e.message)
+      }
+    }
+
     if (!cp) return res.status(404).json({ error: 'Project not found' })
 
     const settings = await getProject(id) || {}
@@ -159,6 +173,8 @@ export default async function handler(req, res) {
         trackingOptionId: id,
         jobNo: cp.jobNo,
         name: cp.name,
+        inXero: cp.inXero !== false,
+        lastSeenInXero: cp.lastSeenInXero || null,
         status: cp.status === 'ARCHIVED' ? 'CLOSED' : 'INPROGRESS',
         customer: settings.customerName || '',
         costs: postValCostLines,
