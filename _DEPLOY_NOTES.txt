@@ -1,51 +1,41 @@
-pkg532 - Add variation from Contracted Rates
-============================================
+pkg534 - emails read in full, chain behind the toggle
+=====================================================
 
-Deploy after pkg531.
-
-CHANGED FILES (replace)
------------------------
-  pages/contracted-rates.js
-  pages/api/contracted-rates.js
-
-NEW FILES: none.
+Deploy after pkg533. One changed file: pages/crm.js. No new files.
 
 
-FOUR FAULTS IN ONE FLOW - three of them mine from pkg524
-----------------------------------------------------------
+WHAT CHANGES
+------------
+    ALWAYS SHOWN, in the CRM green
+        what this person actually wrote - greeting, message, sign-off, name.
+        No truncation, no button to press.
 
-1. THE IMPORT NEVER LANDED, so Add variation threw.
+    BEHIND "read full email", in a lighter green
+        the quoted thread underneath - "From: ... Sent: ... " and everything below it.
 
-   pkg524 appended the import to this line:
-       import { useState, useEffect, useMemo, useRef } from 'react'
-   but contracted-rates.js has no useRef. The replace matched nothing and failed silently,
-   so SendVariationModal and BASE_CLARIFICATIONS were used and never imported.
+Your Clarendon Road example now reads in full on the card: "Hi Jennie, I am looking for a
+bit of advice... 38 lm to suit a 520mm wall... Many thanks, Niall". Nothing to click.
 
-   That is the third time a find-and-replace has half-applied and shipped. I check the
-   result now rather than the return code.
-
-2. THE API DROPPED THE BUILDER BLOCK. to-variation rebuilt the variation field by field
-   and did not carry it, so a variation raised from the rate schedule had no items, no
-   clarifications and nobody recorded as raising it - nothing to send, nothing to
-   instruct, nothing for View to show.
-
-3. INSTRUCTED WAS STORED AS A BOOLEAN. The endpoint wrote !!v.instructed while everything
-   downstream tests instructed === 'yes'. true === 'yes' is false, so a CR variation could
-   never have read as instructed - it would have sat outside the final account for ever.
-
-4. THE PAGE STRIPPED THE CUSTOMER CONTACTS. It maps each project down to seven fields, and
-   customerContacts and orderRef were not among them - so the send window would have
-   opened with no recipients and no sub-contract ref.
+The button reads "read full email" / "hide earlier emails", and only appears when there IS
+a chain underneath - offering it on a message with nothing below promises something and
+then shows nothing.
 
 
-WHAT YOU GET NOW
-----------------
-Select lines on the Contracted Rates, press Add variation, and it:
+THE BODY NOW LOADS ITSELF
+-------------------------
+It used to show Graph's 255-character preview and make you press a button per email just
+to find out what it said. Each card now fetches its own body as it appears.
 
-    creates the variation with its items priced at the contracted rates
-    numbers it from the tracker
-    carries the standard clarifications, the sub-contract ref and who raised it
-    OPENS THE SAME SEND WINDOW as the Variation Builder
+THREE AT A TIME. The Emails tab is fifty cards, and fifty simultaneous Graph requests get
+throttled - so they go through a queue. Results are cached for the session, so scrolling
+back, or opening a deal showing the same email, costs nothing.
 
-Same email, same instruct button, same instruction coming back. A variation raised here is
-indistinguishable from one built by hand.
+
+WORTH SAYING
+------------
+This is now a request per email rather than per click. It is queued and cached, so it
+should feel quick, but it is more traffic to Microsoft than before.
+
+The proper fix, if reading mail here becomes routine, is storing bodies at sync time -
+instant, searchable, and no per-view cost. That is the thing I flagged in pkg464 and it is
+looking more worthwhile with every change you have asked for. Say the word.

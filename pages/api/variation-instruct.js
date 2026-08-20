@@ -56,6 +56,10 @@ export default async function handler(req, res) {
       sentTo: t.email || '',
       contact: contact ? { name: contact.name || '', role: contact.title || '' } : null,
       customerCompany: project.customerCompany || project.customer || '',
+      // ON FILE = we hold this person on the handover, so their details are fixed and the
+      // page shows them rather than asking. Where we do not, everything must be typed -
+      // an address somebody entered by hand tells us nothing about who owns it.
+      onFile: !!(contact && contact.name),
       varNumber: variation.varNumber,
       projectName: projectLabel(project.jobNo, project.name),
       description: variation.description || '',
@@ -78,8 +82,25 @@ export default async function handler(req, res) {
   // Enforced HERE as well as on the page. A browser check is a convenience; this is the
   // record that would be produced if an instruction were ever disputed, so it has to be
   // complete whatever posted it.
+  // WHERE WE HOLD THEM, THE SERVER USES ITS OWN COPY and ignores what was posted.
+  //
+  // Locking the fields in the browser stops honest mis-entry; it does not stop a crafted
+  // request. The whole point of this record is who instructed it, so where we know that
+  // already the answer comes from our data, not from the form.
+  const onFileContact = (project.customerContacts || [])
+    .find(c => String(c.email || '').toLowerCase() === String(t.email || '').toLowerCase()) || null
+
+  let useFirst = firstName, useLast = lastName, useRole = role, useCompany = company
+  if (onFileContact && onFileContact.name) {
+    const parts = String(onFileContact.name).trim().split(/\s+/)
+    useFirst = parts.slice(0, -1).join(' ') || parts[0] || ''
+    useLast = parts.length > 1 ? parts[parts.length - 1] : ''
+    useRole = onFileContact.title || role || ''
+    useCompany = project.customerCompany || project.customer || company || ''
+  }
+
   const missing = [
-    ['first name', firstName], ['last name', lastName], ['role', role], ['company', company],
+    ['first name', useFirst], ['last name', useLast], ['role', useRole], ['company', useCompany],
   ].filter(([, v]) => !String(v || '').trim()).map(([l]) => l)
   if (missing.length) return res.status(400).json({ error: `Please enter your ${missing.join(', ')}.` })
 
@@ -90,14 +111,17 @@ export default async function handler(req, res) {
 
   const instruction = {
     at: Date.now(),
-    byName: String(name || `${firstName} ${lastName}`).trim(),
-    byFirstName: String(firstName).trim(),
-    byLastName: String(lastName).trim(),
+    byName: `${useFirst} ${useLast}`.trim(),
+    byFirstName: String(useFirst).trim(),
+    byLastName: String(useLast).trim(),
+    // Whether the identity came from our records or was typed. A dispute reads very
+    // differently depending on which.
+    fromFile: !!(onFileContact && onFileContact.name),
     // Role and company, asked for on the page. A signature on a variation is worth more
     // when it says WHO signed it - "Jack Belshaw, Senior QS, Barnfield Construction"
     // stands up in a way that "Jack" does not.
-    byRole: String(role || '').trim(),
-    byCompany: String(company || '').trim(),
+    byRole: String(useRole || '').trim(),
+    byCompany: String(useCompany || '').trim(),
     // The address the LINK was issued to, not one typed on the page - that is what makes
     // this evidence rather than a name in a box.
     byEmail: t.email || '',

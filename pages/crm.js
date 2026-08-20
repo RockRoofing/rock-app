@@ -1223,6 +1223,44 @@ function splitEmailBody(text) {
   return { main: t.slice(0, cut).trim(), rest: t.slice(cut).trim() }
 }
 
+
+// FETCHING BODIES WITHOUT FLOODING GRAPH.
+//
+// Every email card now loads its own full body on mount, so the message reads in full
+// without anybody pressing anything. On the Emails tab that is fifty cards, and fifty
+// simultaneous Graph requests get throttled - so they go through a queue three at a time.
+//
+// Results are cached for the session: scrolling back up, or opening a deal that shows the
+// same email, costs nothing.
+const bodyCache = new Map();
+let bodyActive = 0;
+const bodyQueue = [];
+function pumpBodies() {
+  while (bodyActive < 3 && bodyQueue.length) {
+    const job = bodyQueue.shift();
+    bodyActive++;
+    job().finally(() => { bodyActive--; pumpBodies(); });
+  }
+}
+function fetchBody(mailbox, id) {
+  const key = `${mailbox}|${id}`;
+  if (bodyCache.has(key)) return Promise.resolve(bodyCache.get(key));
+  return new Promise((resolve) => {
+    bodyQueue.push(async () => {
+      try {
+        const d = await fetch('/api/crm', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'email-body', mailbox, messageId: id }),
+        }).then((r) => r.json());
+        const body = (d && d.ok) ? String(d.body || '') : null;
+        bodyCache.set(key, body);
+        resolve(body);
+      } catch { bodyCache.set(key, null); resolve(null); }
+    });
+    pumpBodies();
+  });
+}
+
 function EmailCard({ m, children }) {
   const [open, setOpen] = useState(false);
   // THE FULL BODY, fetched the first time it is asked for.
@@ -1246,8 +1284,33 @@ function EmailCard({ m, children }) {
   // The stored preview is Graph's SUMMARY of the email, never the email. So if we can
   // fetch, we offer to - no guessing from its length.
   const canFetch = !!(m.mailbox && m.id);
-  const long = canFetch || preview.length > 180;
+
+  // THE MESSAGE IN FULL, ON LOAD.
+  //
+  // It used to show Graph's 255-character preview and make you press "read full email" to
+  // see the rest - so reading down a project's mail meant a click per email just to find
+  // out what it said.
+  //
+  // The body is fetched as the card appears, and what somebody actually WROTE is shown
+  // straight away. The button now reveals the QUOTED CHAIN underneath it, which is a
+  // different question and much less often asked.
+  useEffect(() => {
+    if (!canFetch) return;
+    let dead = false;
+    setLoadingFull(true);
+    fetchBody(m.mailbox, m.id).then((body) => {
+      if (dead) return;
+      if (body != null) setFull(cleanEmailBody(body));
+      else setFullErr('Could not load this email.');
+      setLoadingFull(false);
+    });
+    return () => { dead = true; };
+  }, [m.mailbox, m.id]);
+
   const shown = full != null ? full : preview;
+  // main = what this person wrote. rest = the thread quoted underneath it.
+  const parts = splitEmailBody(shown);
+  const hasChain = !!parts.rest;
 
   const expand = async () => {
     if (open) { setOpen(false); return; }
@@ -1279,28 +1342,28 @@ function EmailCard({ m, children }) {
           and no way to open it. */}
       {(preview || canFetch) && (
         <div style={{ fontSize: 12.5, color: C.text, marginTop: 6, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>
-          {open || !long
-            ? (shown
-                ? (() => {
-                    // The message in the CRM green, everything it drags along with it -
-                    // quoted thread, signature, footers - in grey underneath.
-                    const { main, rest } = splitEmailBody(shown);
-                    return (
-                      <>
-                        <div style={{ color: '#1c704f', fontWeight: 500 }}>{main || shown}</div>
-                        {main && rest && (
-                          <div style={{ color: '#9ca3af', marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.faint}`, fontSize: 12 }}>{rest}</div>
-                        )}
-                      </>
-                    );
-                  })()
-                : <span style={{ color: C.dim, fontStyle: 'italic' }}>No preview stored - press below to read it.</span>)
-            : <span style={{ color: '#1c704f', fontWeight: 500 }}>{preview.slice(0, 180) + '\u2026'}</span>}
+          {/* WHAT THIS PERSON WROTE - always shown, always in the CRM green. No
+              truncation: it is the thing the card exists to display. */}
+          <div style={{ color: '#1c704f', fontWeight: 500 }}>
+            {parts.main || shown || (loadingFull
+              ? <span style={{ color: C.dim, fontStyle: 'italic' }}>Loading&#8230;</span>
+              : <span style={{ color: C.dim, fontStyle: 'italic' }}>No message body.</span>)}
+          </div>
+
+          {/* THE QUOTED CHAIN, behind the toggle. Lighter green so it reads as
+              background - it is what was said before, not what is being said now. */}
+          {open && hasChain && (
+            <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px solid ${C.faint}`, color: '#6aa88f', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+              {parts.rest}
+            </div>
+          )}
           {loadingFull && <span style={{ color: C.dim }}> loading the rest&#8230;</span>}
           {fullErr && <div style={{ color: C.lost, fontSize: 11.5, marginTop: 4 }}>{fullErr} <a href={m.webLink} target="_blank" rel="noreferrer" style={{ color: C.link }}>Open in Outlook</a></div>}
-          {long && (
+          {/* Only when there IS something underneath. Offering "read full email" on a
+              message with no chain promises something and then shows nothing. */}
+          {hasChain && (
             <button onClick={expand} style={{ background: 'none', border: 'none', color: C.link, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '0 4px', fontFamily: 'inherit' }}>
-              {open ? 'less' : (canFetch ? 'read full email' : 'more')}
+              {open ? 'hide earlier emails' : (hasChain ? 'read full email' : 'more')}
             </button>
           )}
         </div>

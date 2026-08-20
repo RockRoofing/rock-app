@@ -58,7 +58,8 @@ export default function InstructVariation() {
   }
 
   // Every field filled before the button will work.
-  const complete = [firstName, lastName, role, company].every(v => String(v).trim())
+  // On file: nothing to complete, the details are ours. Otherwise all four are required.
+  const complete = state.onFile || [firstName, lastName, role, company].every(v => String(v).trim())
 
   const money = (v) => '£' + (Number(v) || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const box = { background: '#fff', borderRadius: 12, padding: 24, boxShadow: '0 1px 3px rgba(0,0,0,0.08)', maxWidth: 720, margin: '0 auto' }
@@ -117,24 +118,41 @@ export default function InstructVariation() {
             </a>
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #eee' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
-                {/* ALL FOUR REQUIRED. This is the signature on a variation - a record
-                    naming "Jack" from an unnamed company is worth far less than one
-                    naming Jack Belshaw, Senior Quantity Surveyor, Barnfield Construction,
-                    and it is the record we would produce if the instruction were ever
-                    disputed. */}
-                {[['First name', firstName, setFirstName, 'Jack'],
-                  ['Last name', lastName, setLastName, 'Belshaw'],
-                  ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor'],
-                  ['Your company', company, setCompany, 'e.g. Barnfield Construction']].map(([l, v, set, ph]) => (
-                  <div key={l}>
-                    <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l} *</label>
-                    <input value={v} onChange={e => set(e.target.value)} placeholder={ph}
-                      style={{ padding: '9px 11px', border: `1px solid ${String(v).trim() ? '#ddd' : '#fca5a5'}`, background: String(v).trim() ? '#fff' : '#fef2f2', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              {/* FIXED WHERE WE HOLD THEM. If this person is on the handover, the
+                    details are ours and are shown rather than asked for - so nobody can
+                    put a customer's name against their own click. Where the address was
+                    typed by hand we hold nothing, so everything must be entered. */}
+                {state.onFile ? (
+                  <div style={{ padding: '12px 14px', background: '#f8f9fa', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Instructing as</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#1a1a2e' }}>{firstName} {lastName}</div>
+                    <div style={{ fontSize: 13, color: '#555' }}>{[role, company].filter(Boolean).join(', ')}</div>
+                    <div style={{ fontSize: 12, color: '#888', marginTop: 6 }}>{state.sentTo}</div>
+                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 8 }}>
+                      Taken from our records for this project. If anything here is wrong, please reply to the email rather than instructing.
+                    </div>
                   </div>
-                ))}
-              </div>
-              {!complete && (
+                ) : (
+                  <>
+                    <div style={{ fontSize: 12.5, color: '#92400e', marginBottom: 8 }}>
+                      We do not hold your details for this project, so please enter them.
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 10, maxWidth: 640 }}>
+                      {[['First name', firstName, setFirstName, 'Jack'],
+                        ['Last name', lastName, setLastName, 'Belshaw'],
+                        ['Your role', role, setRole, 'e.g. Senior Quantity Surveyor'],
+                        ['Your company', company, setCompany, 'e.g. Barnfield Construction']].map(([l, v, set, ph]) => (
+                        <div key={l}>
+                          <label style={{ fontSize: 12, color: '#666', display: 'block', marginBottom: 4 }}>{l} *</label>
+                          <input value={v} onChange={e => set(e.target.value)} placeholder={ph}
+                            style={{ padding: '9px 11px', border: `1px solid ${String(v).trim() ? '#ddd' : '#fca5a5'}`, background: String(v).trim() ? '#fff' : '#fef2f2', borderRadius: 8, fontSize: 14, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+              {!complete && !state.onFile && (
                 <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 8, fontWeight: 600 }}>
                   Please complete every field before instructing.
                 </div>
