@@ -478,6 +478,28 @@ function labourSchedule(fromISO, toISO, total, term) {
   return out
 }
 
+// Copy the percentages off a prior certificate (a real application or an earlier
+// forecast) onto a fresh set of seed rows.
+//
+// Prior records only reliably carry id / code / pctComplete. The rates, quantities
+// and totals must come from the CURRENT seed, so the prior is valued on today's
+// rates - otherwise "this period" would silently absorb any rate change as though
+// it were new work.
+//
+// id first, then code. Rows come from the same buildContractWorksFromRates() so ids
+// normally match, but a re-upload of the rates regenerates them and code is then the
+// only stable handle.
+function applyPriorPct(baseRows, priorWorks) {
+  const works = (Array.isArray(priorWorks) ? priorWorks : []).filter(r => r && r.kind !== 'heading')
+  const byId = new Map(works.filter(r => r.id != null).map(r => [r.id, r]))
+  const byCode = new Map(works.filter(r => r.code != null).map(r => [String(r.code), r]))
+  return (baseRows || []).map(r => {
+    if (r.kind !== 'item') return { ...r }
+    const p = byId.get(r.id) || byCode.get(String(r.code))
+    return { ...r, pctComplete: p ? (p.pctComplete || 0) : 0 }
+  })
+}
+
 function HypAppModal({ modal, onClose, onSaved }) {
   const { projectKey, projectName, xeroId, editId } = modal
   const [loading, setLoading] = useState(true)
@@ -485,6 +507,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [seed, setSeed] = useState([])            // contract works seeded from rates
   const [rates, setRates] = useState(null)
   const [hypApps, setHypApps] = useState([])      // previously saved forecast apps
+  const [latestApp, setLatestApp] = useState(null) // latest REAL application on the project
   const [rows, setRows] = useState([])            // this period's contract works (with pctComplete)
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
@@ -518,6 +541,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setSeed(d.seedContractWorks || [])
         setRates(d.contractedRates || null)
         setHypApps(d.hypApps || [])
+        setLatestApp(d.latestApplication || null)
         const base = (d.seedContractWorks || []).map(r => ({ ...r }))
         const editing = editId ? (d.hypApps || []).find(a => a.id === editId) : null
         if (editing) {
@@ -579,17 +603,51 @@ function HypAppModal({ modal, onClose, onSaved }) {
       }).catch(() => { setErr('Could not load.'); setLoading(false) })
   }, [projectKey, xeroId, editId])
 
-  // Previous cumulative gross so "this cert" reflects only the newly-added work this
-  // period. When editing, the "previous" app is the latest one dated BEFORE this
-  // period's start (excluding the app being edited itself).
+  // WHAT HAS ALREADY BEEN CLAIMED.
+  //
+  // The percentages on screen are cumulative value-to-date, not this period's work.
+  // Everything below the last certificate has already been applied for and must NOT
+  // be spread across this period's cash - only the increment is new money.
+  //
+  // This used to look at FORECASTS ONLY. On a live job with three real applications
+  // and no forecasts yet it returned nothing, so the entire value to date - all of it
+  // already claimed - was spread as this period's revenue.
+  //
+  // The prior is now whichever certificate ENDS LAST before this period starts:
+  // a real application or an earlier forecast. Same rule as the seeding, and it has
+  // to be the same rule, or the figure carried in and the figure deducted would
+  // disagree.
+  const prior = useMemo(() => {
+    const cands = []
+    for (const a of hypApps) {
+      if (a.id === editId) continue        // never treat the app being edited as its own prior
+      cands.push({ end: a.to || '', works: a.contractWorks || [], kind: 'forecast' })
+    }
+    if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], kind: 'application' })
+    // Only certificates that finish BEFORE this period starts count as already
+    // claimed. With no period set, fall back to the latest of everything.
+    const priors = cands.filter(c => !from || (c.end || '') < from)
+    const pool = priors.length ? priors : (from ? [] : cands)
+    if (!pool.length) return null
+    // Ties go to the application - it is the certified position, a forecast is not.
+    return pool.slice().sort((a, b) =>
+      (a.end || '').localeCompare(b.end || '') || (a.kind === 'application' ? 1 : -1)
+    ).pop()
+  }, [hypApps, latestApp, editId, from])
+
+  // Prior rows valued on TODAY's rates, so a rate change does not land in this period
+  // as if it were new work.
+  const priorRows = useMemo(() => (prior ? applyPriorPct(seed, prior.works) : []), [prior, seed])
+
+  // Previous cumulative gross, so "this cert" is only the newly-added work.
+  // Variations are deliberately excluded on both sides - the forecast carries none
+  // (workApp below passes variations: []), so including them here would understate
+  // the prior and inflate this period.
   const prevGross = useMemo(() => {
-    const others = hypApps.filter(a => a.id !== editId)
-    const priors = others.filter(a => !from || (a.to || '') < from).sort((a, b) => (a.to || '').localeCompare(b.to || ''))
-    const prev = priors.length ? priors[priors.length - 1] : (from ? null : others.slice().sort((a, b) => (a.to || '').localeCompare(b.to || '')).pop())
-    if (!prev) return 0
-    const s = computeApplicationSummary({ contractWorks: prev.contractWorks || [], variations: [], materials: [], mcdPct: prev.mcdPct || 0, retentionPct: prev.retentionPct != null ? prev.retentionPct : 5 }, 0)
+    if (!priorRows.length) return 0
+    const s = computeApplicationSummary({ contractWorks: priorRows, variations: [], materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
     return s.grossCurrent
-  }, [hypApps, editId, from])
+  }, [priorRows, mcdPct, retPct])
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -641,22 +699,22 @@ function HypAppModal({ modal, onClose, onSaved }) {
     return lab
   }, [rows, rates])
 
-  // Labour value to date on the PREVIOUS app (so labour this period is the increment).
+  // Labour value to date on the PREVIOUS certificate, so labour this period is the
+  // increment. Uses the same `prior` as prevGross above - it previously had its own
+  // forecasts-only lookup, which meant labour and revenue could disagree about what
+  // had already been claimed.
   const prevLabourToDate = useMemo(() => {
-    const others = hypApps.filter(a => a.id !== editId)
-    const priors = others.filter(a => !from || (a.to || '') < from).sort((a, b) => (a.to || '').localeCompare(b.to || ''))
-    const prev = priors.length ? priors[priors.length - 1] : null
-    if (!prev) return 0
+    if (!priorRows.length) return 0
     const items = (rates && Array.isArray(rates.items)) ? rates.items : []
     const byId = new Map(items.map(x => [x.id, x]))
     let lab = 0
-    for (const r of (prev.contractWorks || [])) {
+    for (const r of priorRows) {
       if (r.kind !== 'item') continue
       const src = byId.get(r.id); if (!src) continue
       lab += num(src.labRate) * num(src.qty) * (num(r.pctComplete) / 100)
     }
     return lab
-  }, [hypApps, editId, from, rates])
+  }, [priorRows, rates])
 
   const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
 

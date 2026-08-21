@@ -1,5 +1,10 @@
-pkg542 - Cash Flow forecast pop-out seeds from the latest application
-=====================================================================
+pkg542 (RE-ISSUED) - Cash Flow forecast: seed from the latest application,
+                     and spread only what has not already been claimed
+==========================================================================
+
+*** THIS REPLACES THE pkg542 SENT EARLIER. DO NOT DEPLOY THAT ONE. ***
+Same two files. The earlier version seeded the percentages correctly but then
+spread the WHOLE value to date as this period's cash. Fixed here.
 
 
 NEW FILES
@@ -15,73 +20,97 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-WHAT WAS WRONG
---------------
+PART 1 - SEEDING FROM THE LATEST APPLICATION
+--------------------------------------------
 The pop-out only ever looked at previous FORECASTS:
 
   const prev = (d.hypApps || []).sort(...).pop()
 
-It never read the project's real applications at all. So on a live job that had
-been applied for three times, opening a new forecast started every rate line at
-0% - as though nothing had been built - and you had to key the whole position in
+It never read the project's real applications. So on a live job applied for three
+times, a new forecast started every rate line at 0% and you keyed the position in
 by hand.
 
-
-WHAT IT DOES NOW
-----------------
-A new forecast seeds its percentages, MCD and retention from the latest REAL
-application on the project. With no applications, it starts from the contracted
-rates at 0%, as before.
-
-The API now returns `latestApplication` - the highest-seq application on the
-project record, trimmed to just the fields the seed needs (the full contractWorks
-tree is large and none of the rest is wanted here).
+It now seeds percentages, MCD and retention from the latest real application, and
+falls back to contracted rates at 0% when there are none. The API returns a new
+`latestApplication` - highest seq, trimmed to the fields the seed needs.
 
 
-ONE DECISION YOU MAY WANT TO OVERRULE
--------------------------------------
-You said "latest application, else contracted rates". Taken literally that breaks
-the second forecast on a project.
+PART 2 - THE BIT YOU CAUGHT
+---------------------------
+The percentages are CUMULATIVE value to date. Everything below the last
+certificate has already been applied for and must not be spread again.
 
-  Application 3 certifies at 40%.
-  You forecast April -> 60%.
-  You then open a forecast for May.
+prevGross - the figure that turns cumulative into "this cert" - looked at
+forecasts only:
 
-Seeding strictly from the application would drop May back to 40% and silently
-undo April. So the rule I have built is WHICHEVER PERIOD ENDS LAST - the latest
-application, or a later forecast if one exists. A tie goes to the application,
-since that is the certified position.
+  const others = hypApps.filter(a => a.id !== editId)
 
-With no forecasts at all - your case - it is exactly what you asked for.
+So on a live job with real applications and no forecasts yet it returned ZERO,
+and the entire value to date went out as this period's revenue. Seeding the
+percentages in Part 1 is exactly what exposed it: before, the rows started at 0%
+so there was nothing to double count.
 
-Say the word if you want it strictly the application every time.
+prevLabourToDate had the same forecasts-only lookup, so labour was over-stated
+the same way.
+
+Both now use one shared `prior` - whichever certificate ENDS LAST before this
+period starts, real application or earlier forecast. It has to be the same rule
+as the seeding, or the figure carried IN and the figure deducted would disagree.
+
+Worked through, with 2.5% MCD and 5% retention:
+
+  Value to date now          1,000.00
+  Already claimed              600.00
+  Increment                    400.00
+  This period (revenue)        370.50     <- 400 less MCD, less retention
+
+  What it did before           926.25     <- the whole job, re-spread
 
 
 DETAILS WORTH KNOWING
 ---------------------
-DRAFTS COUNT. The latest application is by seq, whatever its status. A draft is
-still the most recent view of percentage complete and this is a forecast. The
-banner names the application and its status so you can see which was used.
+THE PRIOR IS VALUED ON TODAY'S RATES. applyPriorPct() copies only the
+percentages off the prior certificate and re-values them against the current
+seed rows. If it used the prior's own stored totals, any rate change since would
+land in this period as though it were newly built work.
 
-ROWS MATCH ON ID THEN CODE. A real application's rows come from the same
-buildContractWorksFromRates() as the seed, so ids normally line up. If the rates
-have been re-uploaded since, they will not - and the code is then the only stable
-handle. Without that fallback every line would seed at 0% and look like a job
-that had never started.
+VARIATIONS ARE EXCLUDED ON BOTH SIDES. The forecast carries no variations
+(workApp passes variations: []), so counting them in the prior would understate
+what has been claimed and inflate this period.
 
-NEGOTIATED PROJECTS (N:<dealId>) are not in Xero and have no real applications,
-so they still start from contracted rates. Unchanged, and correct.
+TIES GO TO THE APPLICATION. If a forecast and an application end on the same
+date, the application wins - it is the certified position.
 
-The project record is now read ONCE for both the rates and the applications,
-rather than the rates lookup fetching it on its own.
+DRAFTS COUNT as the latest application. A draft is still the most recent view of
+percentage complete, and this is a forecast. The banner names which application
+was used and its status.
+
+ROWS MATCH ON ID THEN CODE, in both the seeding and the prior. Ids normally line
+up because both come from buildContractWorksFromRates(), but re-uploading the
+rates regenerates them and the code is then the only stable handle. Without the
+fallback every line would read 0% and look like a job that had never started.
+
+NEGOTIATED PROJECTS (N:<dealId>) have no real applications and still start from
+contracted rates. Unchanged, and correct.
+
+
+ONE DECISION YOU MAY WANT TO OVERRULE
+-------------------------------------
+"Latest application, else contracted rates" taken literally breaks the second
+forecast on a project: application 3 certifies at 40%, you forecast April to
+60%, then open May - and May would drop back to 40%, silently undoing April.
+
+So the rule is WHICHEVER PERIOD ENDS LAST. With no forecasts yet, which is your
+case, it behaves exactly as you asked. Say the word if you want it strictly the
+application every time.
 
 
 ALSO FIXED WHILE IN THERE
 -------------------------
-This modal closed on a backdrop click and had no Escape handler - against your
-standing rule, and it holds a period, percentages across every rate line,
-materials lines and payment terms. A stray click outside it threw the lot away.
-Backdrop click no longer closes; Escape does.
+The modal closed on a backdrop click and had no Escape handler - against your
+standing rule. It holds a period, percentages across every rate line, materials
+lines and payment terms, and a stray click outside threw the lot away. Backdrop
+no longer closes; Escape does.
 
 
 ON SCREEN
@@ -94,5 +123,14 @@ A line at the top of a new forecast says where the percentages came from:
           than the last application."
   amber  "No applications yet - starting from the contracted rates at 0%."
 
-Without it a seeded figure and one somebody typed look identical. It does not
+Otherwise a seeded figure and one somebody typed look identical. It does not
 show when editing an existing forecast, which loads its own saved values.
+
+
+WHAT TO CHECK ON DEPLOY
+-----------------------
+Open a forecast on a live job that has had applications. The percentages should
+arrive already filled in, and "Revenue this period" should be roughly the next
+slice of work - NOT the whole contract to date. Any forecasts you saved before
+this package were built on the old maths and are overstated; delete and redo
+them.
