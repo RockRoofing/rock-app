@@ -508,6 +508,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [rates, setRates] = useState(null)
   const [hypApps, setHypApps] = useState([])      // previously saved forecast apps
   const [latestApp, setLatestApp] = useState(null) // latest REAL application on the project
+  const [trackerVars, setTrackerVars] = useState([])   // variation tracker for this project
+  const [varRows, setVarRows] = useState([])           // [{ key, pctComplete, include }]
   const [rows, setRows] = useState([])            // this period's contract works (with pctComplete)
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
@@ -542,6 +544,18 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setRates(d.contractedRates || null)
         setHypApps(d.hypApps || [])
         setLatestApp(d.latestApplication || null)
+        const tv = Array.isArray(d.variations) ? d.variations : []
+        setTrackerVars(tv)
+        // Variation rows mirror the tracker, carrying a percentage and an include flag.
+        //
+        // Instructed variations are in by default. Uninstructed ones are LISTED but off
+        // until you tick them - they are not agreed money, and quietly forecasting them
+        // would overstate the job.
+        const seedVarRows = (pctByKey, includeExtra) => tv.map(v => ({
+          key: v.key,
+          pctComplete: pctByKey && pctByKey[v.key] != null ? num(pctByKey[v.key]) : 0,
+          include: v.instructed === 'yes' || !!(includeExtra && includeExtra[v.key]),
+        }))
         const base = (d.seedContractWorks || []).map(r => ({ ...r }))
         const editing = editId ? (d.hypApps || []).find(a => a.id === editId) : null
         if (editing) {
@@ -555,6 +569,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
+          // Saved variation rows win; a variation raised since is added at 0%.
+          const savedPct = {}, savedInc = {}
+          for (const v of (editing.varRows || [])) { savedPct[v.key] = v.pctComplete; if (v.include) savedInc[v.key] = true }
+          setVarRows(tv.map(v => ({
+            key: v.key,
+            pctComplete: savedPct[v.key] != null ? num(savedPct[v.key]) : 0,
+            include: (editing.varRows || []).some(x => x.key === v.key) ? !!savedInc[v.key] : v.instructed === 'yes',
+          })))
         } else {
           // NEW forecast. Start from the latest REAL application - that is the last
           // agreed picture of how complete the job is, and it is what a forecast
@@ -594,8 +616,15 @@ function HypAppModal({ modal, onClose, onSaved }) {
             setSeededFrom(useApp
               ? { kind: 'application', label: `Application ${src.appNumber || src.seq || ''}`.trim(), status: src.status || '' }
               : { kind: 'forecast', label: 'the previous forecast', status: '' })
+            // Variation percentages come from the same source as the works percentages.
+            // An application stores them as varPct; a forecast stores varRows.
+            const vPct = useApp ? (src.varPct || {}) : {}
+            const vInc = {}
+            if (!useApp) for (const v of (src.varRows || [])) { vPct[v.key] = v.pctComplete; if (v.include) vInc[v.key] = true }
+            setVarRows(seedVarRows(vPct, vInc))
           } else {
             setSeededFrom({ kind: 'rates', label: 'contracted rates', status: '' })
+            setVarRows(seedVarRows({}, {}))
           }
         }
         setRows(base)
@@ -621,9 +650,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
     const cands = []
     for (const a of hypApps) {
       if (a.id === editId) continue        // never treat the app being edited as its own prior
-      cands.push({ end: a.to || '', works: a.contractWorks || [], kind: 'forecast' })
+      const vp = {}
+      for (const v of (a.varRows || [])) vp[v.key] = num(v.pctComplete)
+      cands.push({ end: a.to || '', works: a.contractWorks || [], varPct: vp, kind: 'forecast' })
     }
-    if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], kind: 'application' })
+    if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], varPct: latestApp.varPct || {}, kind: 'application' })
     // WHEN EDITING, the prior is the certificate ending before this one's period, so a
     // forecast in the middle of a chain still deducts only what came before it.
     //
@@ -641,19 +672,41 @@ function HypAppModal({ modal, onClose, onSaved }) {
     ).pop()
   }, [hypApps, latestApp, editId, from])
 
-  // Prior rows valued on TODAY's rates, so a rate change does not land in this period
-  // as if it were new work.
+  // VARIATIONS INCLUDED THIS PERIOD, shaped for computeApplicationSummary.
+  //
+  // Only the ticked ones are passed in at all. That matters: variationValueToDate() in
+  // lib/applications.js tests `v.instructed === false`, and instructed is the STRING
+  // 'no' on this codebase - so an uninstructed variation handed to it would be counted
+  // in full. Filtering here means it never gets the chance.
+  const varsForCert = useMemo(() => {
+    const byKey = new Map(trackerVars.map(v => [v.key, v]))
+    return varRows.filter(r => r.include).map(r => {
+      const v = byKey.get(r.key) || {}
+      return { key: r.key, instructed: true, materials: v.materials || 0, labour: v.labour || 0, profit: v.profit || 0, pctComplete: num(r.pctComplete) }
+    })
+  }, [varRows, trackerVars])
+
+  // The same list at the PRIOR certificate's percentages, so variation revenue this
+  // period is the increment - exactly as the contract works are handled.
+  const priorVarsForCert = useMemo(() => {
+    const byKey = new Map(trackerVars.map(v => [v.key, v]))
+    const pct = (prior && prior.varPct) || {}
+    return varRows.filter(r => r.include).map(r => {
+      const v = byKey.get(r.key) || {}
+      return { key: r.key, instructed: true, materials: v.materials || 0, labour: v.labour || 0, profit: v.profit || 0, pctComplete: num(pct[r.key] || 0) }
+    })
+  }, [varRows, trackerVars, prior])
   const priorRows = useMemo(() => (prior ? applyPriorPct(seed, prior.works) : []), [prior, seed])
 
   // Previous cumulative gross, so "this cert" is only the newly-added work.
-  // Variations are deliberately excluded on both sides - the forecast carries none
-  // (workApp below passes variations: []), so including them here would understate
-  // the prior and inflate this period.
+  // Variations are counted on BOTH sides at their respective percentages - include them
+  // here only and the prior would be overstated, omit them here only and every
+  // variation already certified would be forecast as new money a second time.
   const prevGross = useMemo(() => {
-    if (!priorRows.length) return 0
-    const s = computeApplicationSummary({ contractWorks: priorRows, variations: [], materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
+    if (!priorRows.length && !priorVarsForCert.length) return 0
+    const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
     return s.grossCurrent
-  }, [priorRows, mcdPct, retPct])
+  }, [priorRows, priorVarsForCert, mcdPct, retPct])
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -682,8 +735,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
       if (delta <= 0) continue
       v += num(src.matRate) * num(src.qty) * (delta / 100)
     }
+    // Variations are treated exactly as the contracted scope is: their MATERIALS
+    // element, against the percentage added this period.
+    const priorVarPct = new Map(priorVarsForCert.map(x => [x.key, num(x.pctComplete)]))
+    for (const x of varsForCert) {
+      const delta = num(x.pctComplete) - (priorVarPct.get(x.key) || 0)
+      if (delta <= 0) continue
+      v += num(x.materials) * (delta / 100)
+    }
     return v
-  }, [rows, priorRows, rates])
+  }, [rows, priorRows, rates, varsForCert, priorVarsForCert])
   const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
   const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
@@ -706,11 +767,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
     return used
   }, [hypApps, editId])
 
-  // Materials are CASH-TIMING ONLY - they do NOT add to revenue. So the certificate
-  // maths uses contract works (+ variations) only; materials are scheduled as cash out
-  // separately via each line's pay date.
-  const workApp = { contractWorks: rows, variations: [], materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, mcdPct, retPct, prevGross])
+  // Materials on site are CASH-TIMING ONLY here - they do not add to revenue. The
+  // certificate maths uses contract works + the included variations; materials are
+  // scheduled as cash out separately via each line's pay date.
+  const workApp = { contractWorks: rows, variations: varsForCert, materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mcdPct, retPct, prevGross])
 
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
@@ -723,8 +784,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
       const src = byId.get(r.id); if (!src) continue
       lab += num(src.labRate) * num(src.qty) * (num(r.pctComplete) / 100)
     }
+    // Variations the same way as the contracted scope: their LABOUR element at their
+    // own percentage.
+    for (const x of varsForCert) lab += num(x.labour) * (num(x.pctComplete) / 100)
     return lab
-  }, [rows, rates])
+  }, [rows, rates, varsForCert])
 
   // Labour value to date on the PREVIOUS certificate, so labour this period is the
   // increment. Uses the same `prior` as prevGross above - it previously had its own
@@ -740,8 +804,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
       const src = byId.get(r.id); if (!src) continue
       lab += num(src.labRate) * num(src.qty) * (num(r.pctComplete) / 100)
     }
+    for (const x of priorVarsForCert) lab += num(x.labour) * (num(x.pctComplete) / 100)
     return lab
-  }, [priorRows, rates])
+  }, [priorRows, rates, priorVarsForCert])
 
   const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
 
@@ -813,6 +878,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const revertToApplication = () => {
     if (!latestApp) return
     setRows(applyPriorPct(seed, latestApp.contractWorks || []))
+    // Variations go back too, or reverting the works alone would still leave variation
+    // revenue sitting in this period.
+    const vp = latestApp.varPct || {}
+    setVarRows(trackerVars.map(v => ({
+      key: v.key,
+      pctComplete: vp[v.key] != null ? num(vp[v.key]) : 0,
+      include: v.instructed === 'yes',
+    })))
     if (latestApp.mcdPct != null) setMcdPct(latestApp.mcdPct || 0)
     if (latestApp.retentionPct != null) setRetPct(latestApp.retentionPct)
     setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
@@ -843,6 +916,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
       id: editId || `hyp_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       from, to,
       contractWorks: rows,
+      // Saved so the next forecast can treat this one as its prior, and so reopening
+      // it restores which uninstructed variations were ticked in.
+      varRows: varRows.map(r => ({ key: r.key, pctComplete: num(r.pctComplete), include: !!r.include })),
       materials: [],
       matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m), term: m.term || { basis: 'eom', days: 30 }, payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 }) })),
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
@@ -1028,6 +1104,60 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 </table>
               </div>
 
+              {/* Variations - instructed ones are in by default, uninstructed are listed
+                  but off until ticked. */}
+              {trackerVars.length > 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Variations <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(cumulative % complete, same as the works above)</span></div>
+                    <div style={{ fontSize: 11.5, color: '#999' }}>{varsForCert.length} of {trackerVars.length} in this forecast</div>
+                  </div>
+                  <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', maxHeight: 260, marginBottom: 18 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead><tr style={{ background: '#faf9f7', color: '#999' }}>
+                        <th style={{ textAlign: 'center', padding: '6px 10px', width: 44 }}>In</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', width: 70 }}>No.</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px' }}>Description</th>
+                        <th style={{ textAlign: 'right', padding: '6px 10px', width: 100 }}>Value</th>
+                        <th style={{ textAlign: 'right', padding: '6px 10px', width: 80 }}>% cmp</th>
+                        <th style={{ textAlign: 'right', padding: '6px 10px', width: 100 }}>To date</th>
+                      </tr></thead>
+                      <tbody>
+                        {trackerVars.map(v => {
+                          const row = varRows.find(r => r.key === v.key) || { pctComplete: 0, include: false }
+                          const unins = v.instructed !== 'yes'
+                          const upd = (patch) => setVarRows(l => {
+                            const found = l.some(r => r.key === v.key)
+                            return found ? l.map(r => r.key === v.key ? { ...r, ...patch } : r) : [...l, { key: v.key, pctComplete: 0, include: false, ...patch }]
+                          })
+                          return (
+                            <tr key={v.key} style={{ borderTop: '1px solid #f3f2ee', opacity: row.include ? 1 : 0.55 }}>
+                              <td style={{ padding: '5px 10px', textAlign: 'center' }}>
+                                <input type="checkbox" checked={!!row.include} onChange={e => upd({ include: e.target.checked })} />
+                              </td>
+                              <td style={{ padding: '5px 10px', fontWeight: 600 }}>{v.varNumber || '-'}</td>
+                              <td style={{ padding: '5px 10px' }}>
+                                {v.description}
+                                {unins && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e', borderRadius: 4, padding: '1px 5px' }}>Not instructed</span>}
+                              </td>
+                              <td style={{ padding: '5px 10px', textAlign: 'right' }}>{gbp(v.value)}</td>
+                              <td style={{ padding: '5px 10px', textAlign: 'right' }}>
+                                <input type="number" value={row.pctComplete} disabled={!row.include}
+                                  onChange={e => upd({ pctComplete: e.target.value === '' ? 0 : Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
+                                  style={{ ...inpS, width: 62, padding: '4px 6px', textAlign: 'right' }} />
+                              </td>
+                              <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 600, color: row.include ? '#0f766e' : '#bbb' }}>
+                                {gbp(row.include ? v.value * (num(row.pctComplete) / 100) : 0)}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+
               {/* Materials - multiple line items, each with a comment (e.g. supplier)
                   and its own delivery day */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
@@ -1044,6 +1174,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
                     style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
                 </div>
               </div>
+              {latestApp && latestApp.materialsClaimed > 0 && (
+                <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12.5, color: '#5b21b6' }}>
+                  <strong>{gbp(latestApp.materialsClaimed)} of materials on site already claimed</strong> on Application {latestApp.appNumber || latestApp.seq || ''}
+                  {latestApp.materialsClaimedLines ? ` (${latestApp.materialsClaimedLines} line${latestApp.materialsClaimedLines === 1 ? '' : 's'})` : ''}.
+                  {' '}That is money IN from the customer. The lines below are money OUT to suppliers, so this figure is shown for reference only and is not added to either.
+                </div>
+              )}
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', marginBottom: 18 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead><tr style={{ background: '#faf9f7', color: '#999' }}>

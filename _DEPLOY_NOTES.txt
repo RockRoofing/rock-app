@@ -1,9 +1,9 @@
-pkg543 - Cash Flow forecast: revert button, zero-until-claimed, materials
-          from line item rates
-=========================================================================
+pkg544 - Cash Flow forecast: variations and materials on site
+==============================================================
 
-Deploy AFTER the re-issued pkg542. pkg542 also changes
-pages/api/project-cashflow.js, which this package needs and does not include.
+*** THIS SUPERSEDES pkg542 AND pkg543 ENTIRELY. ***
+Same two files, complete, with everything from both plus this work.
+Deploy this one ONLY. Discard the pkg542 and pkg543 zips.
 
 
 NEW FILES
@@ -14,77 +14,90 @@ NEW FILES
 CHANGED FILES (replace)
 -----------------------
   pages/project-cashflow.js
+  pages/api/project-cashflow.js
+
+Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-1. REVERT TO LAST APPLICATION
------------------------------
-New button on the "Contract works" header: "Revert to Application N".
+1. VARIATIONS - THEY WERE NEVER THERE
+-------------------------------------
+Two reasons, and the second one was mine:
 
-Puts every line back to the percentages on the last real application, along with
-its MCD and retention. Revenue and labour this period then read zero, and you add
-only what you are claiming on top.
+  workApp = { contractWorks: rows, variations: [], ... }   <- hard-coded empty
+  latestApplication in pkg542 returned contractWorks only  <- dropped variationData
 
-It targets the APPLICATION specifically, not whatever the rows happened to be
-seeded from. A button with that label that quietly reverted to a forecast would
-be lying. Hidden when the project has no applications.
+So instructed variations added nothing to forecast revenue, and no variation
+percentage carried over from the last application.
 
+Now: a Variations table under the contract works, with a cumulative % complete
+per variation, seeded from the last application exactly as the works are.
 
-2. REVENUE ZERO UNTIL SOMETHING EXTRA IS CLAIMED
-------------------------------------------------
-This mostly followed from pkg542 - seed and prior are the same record, so the
-increment is zero - but there was a hole.
+TREATED THE SAME WAY AS THE CONTRACTED SCOPE, as you asked:
+  - revenue this period  = variation value x % ADDED this period
+  - labour this period   = the variation's LABOUR element x % added
+  - materials            = the variation's MATERIALS element x % added, and it
+                           feeds the "Fill from line items" button alongside the
+                           works materials
 
-`prior` filtered on "ends before this period starts". Pick a period beginning
-before the last application's valuation date and the application dropped out of
-the running, prevGross fell to zero, and the whole value to date was spread
-again. Exactly the fault pkg542 set out to fix, reachable through the date box.
+INSTRUCTED ONLY BY DEFAULT. Uninstructed variations are listed, greyed, badged
+"Not instructed", and excluded until you tick them in. Ticked ones behave
+identically from then on. Which ones you ticked is saved with the forecast.
 
-Money already claimed cannot be un-claimed by choosing an earlier start date. So:
+Worked through, no MCD or retention, V01 worth £1,000 split 400 materials /
+400 labour / 200 profit, moved 50% -> 75%:
+  revenue this period    £250.00
+  labour this period     £100.00
+  materials this period  £100.00
+Nothing moved at all -> £0.00 on all three.
 
-  NEW forecast   prior = the latest certificate, whatever period you pick.
-  EDITING        prior = the certificate ending before this one's period, so a
-                 forecast in the middle of a chain still deducts only what came
-                 before it.
-
-Checked: seed from an application, change nothing, revenue this period = 0.00 and
-materials this period = 0.00.
-
-
-3. MATERIALS FROM LINE ITEM RATES
----------------------------------
-New button on the "Materials on site" header: "Fill from line items (£X)".
-
-It values the material rate on each contract works line (matRate x qty) against
-the percentage ADDED this period, not the cumulative figure - the same increment
-logic as revenue and labour. Materials for work already certified were bought
-long ago.
-
-  Strip out  100 m2, material rate £4.00, moved 40% -> 60%
-  = 100 x 4 x 20% = £80.00
-
-It adds ONE line, not one per rate item - this is a cash-timing figure and thirty
-supplier-less lines all landing on the same day is noise. The line is tagged, so
-pressing the button again replaces it rather than doubling it up. It is an
-ordinary material line once added: retype the value, change the delivery day, set
-its own payment term, or delete it.
-
-Disabled with an explanation until you have actually moved a percentage.
-
-Lines that go BACKWARDS are ignored rather than netted off. A reduced percentage
-does not send materials back to the supplier.
-
-The manual "+ Add material" route is untouched, so materials this period can come
-from either source, or both.
+A NOTE ON A LIVE BUG ELSEWHERE. variationValueToDate() in lib/applications.js
+tests `v.instructed === false`. On this codebase instructed is the STRING
+'yes'/'no', so 'no' sails through and an uninstructed variation is counted IN
+FULL. Confirmed: feeding it one uninstructed £500 variation returns £500. This
+package cannot hit it - only ticked variations are ever passed in, and they go in
+with instructed: true. But it is still live in the applications maths and worth a
+package of its own. Say the word.
 
 
-WHERE I MAY HAVE READ YOU WRONG
--------------------------------
-"Materials budgets from Materials on site or from line item rates" - I have taken
-that as the two ways of ARRIVING at the figure: type it into Materials on site by
-hand, or generate it from the line item material rates. Both now exist side by
-side.
+2. MATERIALS ON SITE - SHOWN, NOT SPENT
+---------------------------------------
+The two screens mean opposite things by the same words:
 
-If you meant something different - that the BUDGET figure in the header (£X shown
-next to "Materials on site", currently the sum of matRate x qty above the line)
-should itself be switchable to another source - tell me what that other source is
-on the rates sheet and I will wire it up. I could not identify it from the data.
+  On an application  materials on site are stock you have bought and certified to
+                     the customer with a mark-up. Money IN.
+  On this forecast   materials lines are supplier payments with a payment term,
+                     written only to the matOut stream. Money OUT.
+
+Per your answer, what has already been claimed is now NOTED rather than moved
+into either side. A purple panel above the materials table reads:
+
+  "£12,480.00 of materials on site already claimed on Application 4 (3 lines).
+   That is money IN from the customer. The lines below are money OUT to
+   suppliers, so this figure is shown for reference only and is not added to
+   either."
+
+It only appears when the last application actually claimed some.
+
+
+3. CARRIED OVER FROM pkg542 AND pkg543
+--------------------------------------
+- Forecasts seed from the latest real application, else contracted rates at 0%.
+- prevGross deducts what has already been claimed, so the whole value to date is
+  no longer re-spread. Now includes variations on both sides.
+- A new forecast always deducts the latest certificate whatever period you pick;
+  editing keeps the chain rule.
+- "Revert to Application N" button - now resets variations too, or reverting the
+  works alone would leave variation revenue sitting in the period.
+- "Fill from line items" button for materials, on the increment only.
+- Backdrop click no longer closes the modal; Escape does.
+- Banner saying where the percentages came from.
+
+
+WHAT TO CHECK ON DEPLOY
+-----------------------
+Open a forecast on a job with instructed variations. They should be listed and
+ticked, at the percentages from the last application, with revenue, labour and
+materials this period all reading zero until you move something.
+
+Any forecasts saved before pkg542 were built on the old maths, carry no varRows,
+and are overstated. Delete and redo them.

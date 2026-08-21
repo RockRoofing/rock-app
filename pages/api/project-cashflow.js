@@ -1,6 +1,9 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getProject } from '../../lib/db'
-import { buildContractWorksFromRates, computeApplicationSummary } from '../../lib/applications'
+import { buildContractWorksFromRates, computeApplicationSummary, buildAppVariations, varKey } from '../../lib/applications'
+import { projectVariations, varNumberOf } from '../../lib/variationInstruct'
+
+const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n }
 
 // Hypothetical (forecast) applications for the Commercial Cash Flow page.
 // These are NEVER written to a project's real applications - they live in their own
@@ -52,6 +55,30 @@ function latestApplicationSeed(project) {
   if (!apps.length) return null
   const latest = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0)).pop()
   if (!latest) return null
+
+  // Variation percentages already certified on that application, keyed the same way the
+  // applications screen keys them (varNumber|description) so they match the tracker.
+  //
+  // buildAppVariations() gives the frozen list on a sent application and rebuilds a
+  // draft's from variationData, which is exactly the distinction we want.
+  const appVars = buildAppVariations(latest, projectVariations(project))
+  const varPct = {}
+  for (const v of appVars) {
+    if (!v || !v.key) continue
+    varPct[v.key] = v.pctComplete == null ? 0 : num(v.pctComplete)
+  }
+
+  // MATERIALS ON SITE ALREADY CLAIMED. This is money IN - stock bought and certified to
+  // the customer with a mark-up - and is NOT the same thing as the forecast's materials
+  // lines, which are supplier payments going out. Returned so the forecast can SHOW what
+  // has been claimed, not so it can spend it again.
+  const mats = (Array.isArray(latest.materials) ? latest.materials : []).filter(m => m && m.kind !== 'group')
+  const materialsClaimed = mats.reduce((s, m) => {
+    const base = m.total != null ? num(m.total) : (num(m.qty) * num(m.rate))
+    const line = base * (1 + num(m.markupPct) / 100)
+    return s + line * ((m.pctComplete == null ? 100 : num(m.pctComplete)) / 100)
+  }, 0)
+
   return {
     seq: latest.seq || 0,
     appNumber: latest.appNumber || null,
@@ -69,7 +96,29 @@ function latestApplicationSeed(project) {
     contractWorks: (Array.isArray(latest.contractWorks) ? latest.contractWorks : [])
       .filter(r => r && r.kind === 'item')
       .map(r => ({ id: r.id, code: r.code, pctComplete: r.pctComplete || 0 })),
+    varPct,
+    materialsClaimed,
+    materialsClaimedLines: mats.length,
   }
+}
+
+// The variation tracker for this project, valued and flagged, so the forecast can carry
+// instructed variations as revenue and offer the uninstructed ones.
+//
+// instructed is a STRING ('yes'/'no'), not a boolean - `!!v.instructed` and
+// `v.instructed === false` both get it wrong, which is why it is normalised here once
+// rather than tested at each use.
+function variationSeed(project) {
+  return projectVariations(project).map(v => ({
+    key: varKey(v),
+    varNumber: varNumberOf(v) || '',
+    description: v.descriptionFull || v.description || '',
+    materials: num(v.materials),
+    labour: num(v.labour),
+    profit: num(v.profit),
+    value: num(v.materials) + num(v.labour) + num(v.profit),
+    instructed: (v.instructed === 'yes' || v.instructed === true) ? 'yes' : 'no',
+  })).filter(v => v.value !== 0 || v.varNumber)
 }
 
 export default async function handler(req, res) {
@@ -112,6 +161,7 @@ export default async function handler(req, res) {
       seedContractWorks: rates && Array.isArray(rates.items) ? buildContractWorksFromRates(rates.items) : [],
       hypApps: Array.isArray(hyp) ? hyp : [],
       latestApplication: latestApplicationSeed(project),
+      variations: variationSeed(project),
     })
   }
 
