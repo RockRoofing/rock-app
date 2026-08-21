@@ -1,9 +1,9 @@
-pkg544 - Cash Flow forecast: variations and materials on site
-==============================================================
+pkg545 - Cash Flow forecast: manual labour override
+====================================================
 
-*** THIS SUPERSEDES pkg542 AND pkg543 ENTIRELY. ***
-Same two files, complete, with everything from both plus this work.
-Deploy this one ONLY. Discard the pkg542 and pkg543 zips.
+*** SUPERSEDES pkg542, pkg543 AND pkg544. ***
+Same two files, complete, with everything from all three plus this.
+Deploy this one ONLY. Discard the earlier cash flow zips.
 
 
 NEW FILES
@@ -19,85 +19,60 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-1. VARIATIONS - THEY WERE NEVER THERE
--------------------------------------
-Two reasons, and the second one was mine:
+THE LABOUR OVERRIDE
+-------------------
+labourThisPeriod was a bare derived value with nowhere to intervene:
 
-  workApp = { contractWorks: rows, variations: [], ... }   <- hard-coded empty
-  latestApplication in pkg542 returned contractWorks only  <- dropped variationData
+  const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
 
-So instructed variations added nothing to forecast revenue, and no variation
-percentage carried over from the last application.
+"Labour this period" is now an editable box. Click Override, type a figure, and it
+wins. Click Reset and it goes back to the calculation. The calculated figure is
+kept on screen underneath while overridden, so you can always see what you moved
+away from - and the box gets an amber border so an overridden forecast is
+obvious at a glance.
 
-Now: a Variations table under the contract works, with a cumulative % complete
-per variation, seeded from the last application exactly as the works are.
+Everything downstream follows the override: the month spread, the payment
+schedule off the labour term, the labour-out cash stream, and the figure saved
+on the forecast.
 
-TREATED THE SAME WAY AS THE CONTRACTED SCOPE, as you asked:
-  - revenue this period  = variation value x % ADDED this period
-  - labour this period   = the variation's LABOUR element x % added
-  - materials            = the variation's MATERIALS element x % added, and it
-                           feeds the "Fill from line items" button alongside the
-                           works materials
+WHAT IT DOES NOT DO. Overriding labour does NOT touch the percentages, so revenue
+is unaffected. That is deliberate - paying a gang early does not mean the customer
+owes more. If you want revenue to move, move the percentages.
 
-INSTRUCTED ONLY BY DEFAULT. Uninstructed variations are listed, greyed, badged
-"Not instructed", and excluded until you tick them in. Ticked ones behave
-identically from then on. Which ones you ticked is saved with the forecast.
+WHY IT WAS NEEDED. The calculation assumes labour is spent in exactly the same
+shape as the work is valued. On a real job it is not: a gang goes on early, a
+sub-contractor invoices in one lump, a week goes to weather. It is a decent
+starting suggestion and a poor rule.
 
-Worked through, no MCD or retention, V01 worth £1,000 split 400 materials /
-400 labour / 200 profit, moved 50% -> 75%:
-  revenue this period    £250.00
-  labour this period     £100.00
-  materials this period  £100.00
-Nothing moved at all -> £0.00 on all three.
-
-A NOTE ON A LIVE BUG ELSEWHERE. variationValueToDate() in lib/applications.js
-tests `v.instructed === false`. On this codebase instructed is the STRING
-'yes'/'no', so 'no' sails through and an uninstructed variation is counted IN
-FULL. Confirmed: feeding it one uninstructed £500 variation returns £500. This
-package cannot hit it - only ticked variations are ever passed in, and they go in
-with instructed: true. But it is still live in the applications maths and worth a
-package of its own. Say the word.
+The override is stored per forecast (`labourOverride`: null means the saved figure
+was calculated, a number means somebody typed it), so reopening a forecast shows
+it still overridden rather than silently recalculating. "Revert to Application N"
+clears it too, or the revert would be half a revert.
 
 
-2. MATERIALS ON SITE - SHOWN, NOT SPENT
----------------------------------------
-The two screens mean opposite things by the same words:
-
-  On an application  materials on site are stock you have bought and certified to
-                     the customer with a mark-up. Money IN.
-  On this forecast   materials lines are supplier payments with a payment term,
-                     written only to the matOut stream. Money OUT.
-
-Per your answer, what has already been claimed is now NOTED rather than moved
-into either side. A purple panel above the materials table reads:
-
-  "£12,480.00 of materials on site already claimed on Application 4 (3 lines).
-   That is money IN from the customer. The lines below are money OUT to
-   suppliers, so this figure is shown for reference only and is not added to
-   either."
-
-It only appears when the last application actually claimed some.
-
-
-3. CARRIED OVER FROM pkg542 AND pkg543
---------------------------------------
+ALSO IN THIS PACKAGE (from pkg542/543/544)
+------------------------------------------
 - Forecasts seed from the latest real application, else contracted rates at 0%.
-- prevGross deducts what has already been claimed, so the whole value to date is
-  no longer re-spread. Now includes variations on both sides.
+- Already-claimed value is deducted, so the whole job to date is no longer
+  re-spread. Includes variations on both sides.
 - A new forecast always deducts the latest certificate whatever period you pick;
   editing keeps the chain rule.
-- "Revert to Application N" button - now resets variations too, or reverting the
-  works alone would leave variation revenue sitting in the period.
-- "Fill from line items" button for materials, on the increment only.
+- Variations table: instructed in by default, uninstructed listed and badged,
+  includable by tick. Value drives revenue, labour element drives labour,
+  materials element drives materials - same treatment as the contracted scope.
+- Materials on site already claimed on the last application are NOTED (money in),
+  separate from the forecast's supplier lines (money out).
+- "Revert to Application N" button - resets works, variations, MCD, retention and
+  now the labour override.
+- "Fill from line items" for materials, on the increment only.
 - Backdrop click no longer closes the modal; Escape does.
 - Banner saying where the percentages came from.
 
 
-WHAT TO CHECK ON DEPLOY
------------------------
-Open a forecast on a job with instructed variations. They should be listed and
-ticked, at the percentages from the last application, with revenue, labour and
-materials this period all reading zero until you move something.
-
-Any forecasts saved before pkg542 were built on the old maths, carry no varRows,
-and are overstated. Delete and redo them.
+STILL OUTSTANDING, NOT IN HERE
+------------------------------
+variationValueToDate() in lib/applications.js tests `v.instructed === false`,
+but instructed is the STRING 'yes'/'no' on this codebase - so an uninstructed
+variation is counted IN FULL. Confirmed: one uninstructed £500 variation returns
+£500. The cash flow cannot hit it (only ticked variations are passed, as
+instructed: true) but it is live in the applications maths. Worth its own package.

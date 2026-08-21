@@ -516,6 +516,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
   const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30 })    // sales cash received
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
+  // null = follow the calculation. Anything else is a manual figure that wins.
+  // Kept as the raw string so the box can be cleared and retyped without fighting it.
+  const [labourOverride, setLabourOverride] = useState(null)
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
@@ -536,7 +539,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -566,6 +569,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
+          setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
@@ -808,7 +812,22 @@ function HypAppModal({ modal, onClose, onSaved }) {
     return lab
   }, [priorRows, rates, priorVarsForCert])
 
-  const labourThisPeriod = Math.max(0, labourToDate - prevLabourToDate)
+  // LABOUR THIS PERIOD.
+  //
+  // The calculation is the labour element of the work added this period - labRate x qty
+  // across the contract works, plus the labour split of any included variation, less
+  // whatever the prior certificate already carried.
+  //
+  // That is a SUGGESTION, not a fact. It assumes labour is spent in exactly the same
+  // shape as the work is valued, and on a real job it is not - a gang goes on early, a
+  // sub-contractor invoices in one lump, a week is lost to weather. So the figure can
+  // be overridden outright and everything downstream (the month spread, the payment
+  // schedule, the cash-out stream) follows the override.
+  //
+  // Overriding does NOT touch the percentages. Revenue stays driven by the works, which
+  // is right - being paid for labour early does not mean the customer owes more.
+  const labourCalculated = Math.max(0, labourToDate - prevLabourToDate)
+  const labourThisPeriod = labourOverride == null ? labourCalculated : Math.max(0, num(labourOverride))
 
   // Calendar months this period spans, and keep the sales/labour spreads in step.
   const periodMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
@@ -888,6 +907,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
     })))
     if (latestApp.mcdPct != null) setMcdPct(latestApp.mcdPct || 0)
     if (latestApp.retentionPct != null) setRetPct(latestApp.retentionPct)
+    setLabourOverride(null)   // back to the calculation, or the revert would be partial
     setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
   }
 
@@ -923,6 +943,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
       matItems: matItems.filter(m => matLineValue(m) > 0).map(m => ({ ...m, value: num(m.value), amount: matLineValue(m), term: m.term || { basis: 'eom', days: 30 }, payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 }) })),
       matDeliverDay: matItems.filter(m => matLineValue(m) > 0 && m.deliverDay).map(m => m.deliverDay).sort()[0] || '',
       salesTerm, labourTerm,
+      // null means the saved figure was calculated; a number means somebody typed it.
+      labourOverride: labourOverride == null ? null : num(labourOverride),
       salesSpread, labourSpread,
       salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month })),
       salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
@@ -1028,7 +1050,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {/* Summary boxes */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                 <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong sub2={`${gbp(Math.max(0, salesBudget - sum.grossCurrent))} remaining`} />
-                <MiniBox label="Labour this period" value={gbp(labourThisPeriod)} color="#b45309" sub2={`${gbp(Math.max(0, labourBudget - labourToDate))} remaining`} />
+                <LabourBox calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride} remaining={Math.max(0, labourBudget - labourToDate)} />
                 <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudget - materialsUsedPrior - materialsThisPeriod))} remaining`} />
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
@@ -1312,6 +1334,43 @@ function TermEditor({ label, term, setTerm, refDate, refLabel }) {
         <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
       </div>
       <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>cash on {fmtD(cash)}</div>
+    </div>
+  )
+}
+
+// The Labour this period box, with a manual override.
+//
+// Module scope, not nested - a component declared inside another remounts on every
+// render, and this one holds a focused text input. Nested, it would lose focus after
+// every keypress.
+function LabourBox({ calculated, override, setOverride, remaining }) {
+  const on = override != null
+  return (
+    <div style={{ background: '#fff', border: on ? '1.5px solid #b45309' : '1px solid #e6e3dc', borderRadius: 10, padding: '10px 16px', minWidth: 168 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 11, color: '#888' }}>Labour this period</span>
+        <button
+          onClick={() => setOverride(on ? null : String(Math.round(calculated * 100) / 100))}
+          title={on ? 'Go back to the calculated figure' : 'Type your own figure instead'}
+          style={{ border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: '#b45309', cursor: 'pointer', textDecoration: 'underline' }}>
+          {on ? 'Reset' : 'Override'}
+        </button>
+      </div>
+      {on ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 17, fontWeight: 800, color: '#b45309' }}>{'\u00a3'}</span>
+          <input
+            type="number" step="0.01" min="0" value={override}
+            onChange={e => setOverride(e.target.value)}
+            style={{ width: '100%', border: 'none', borderBottom: '1px solid #f0d9b5', outline: 'none', fontSize: 19, fontWeight: 800, color: '#b45309', padding: '1px 0', background: 'transparent' }} />
+        </div>
+      ) : (
+        <div style={{ fontSize: 19, fontWeight: 800, color: '#b45309' }}>{gbp(calculated)}</div>
+      )}
+      <div style={{ fontSize: 10.5, color: on ? '#b45309' : '#9a958c' }}>
+        {on ? `Manual - calculated was ${gbp(calculated)}` : `From rates and variations`}
+      </div>
+      <div style={{ fontSize: 10.5, color: '#c4c0b8' }}>{gbp(remaining)} remaining</div>
     </div>
   )
 }
