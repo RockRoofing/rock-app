@@ -1,10 +1,9 @@
-pkg542 (RE-ISSUED) - Cash Flow forecast: seed from the latest application,
-                     and spread only what has not already been claimed
-==========================================================================
+pkg543 - Cash Flow forecast: revert button, zero-until-claimed, materials
+          from line item rates
+=========================================================================
 
-*** THIS REPLACES THE pkg542 SENT EARLIER. DO NOT DEPLOY THAT ONE. ***
-Same two files. The earlier version seeded the percentages correctly but then
-spread the WHOLE value to date as this period's cash. Fixed here.
+Deploy AFTER the re-issued pkg542. pkg542 also changes
+pages/api/project-cashflow.js, which this package needs and does not include.
 
 
 NEW FILES
@@ -15,122 +14,77 @@ NEW FILES
 CHANGED FILES (replace)
 -----------------------
   pages/project-cashflow.js
-  pages/api/project-cashflow.js
-
-Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-PART 1 - SEEDING FROM THE LATEST APPLICATION
---------------------------------------------
-The pop-out only ever looked at previous FORECASTS:
+1. REVERT TO LAST APPLICATION
+-----------------------------
+New button on the "Contract works" header: "Revert to Application N".
 
-  const prev = (d.hypApps || []).sort(...).pop()
+Puts every line back to the percentages on the last real application, along with
+its MCD and retention. Revenue and labour this period then read zero, and you add
+only what you are claiming on top.
 
-It never read the project's real applications. So on a live job applied for three
-times, a new forecast started every rate line at 0% and you keyed the position in
-by hand.
-
-It now seeds percentages, MCD and retention from the latest real application, and
-falls back to contracted rates at 0% when there are none. The API returns a new
-`latestApplication` - highest seq, trimmed to the fields the seed needs.
+It targets the APPLICATION specifically, not whatever the rows happened to be
+seeded from. A button with that label that quietly reverted to a forecast would
+be lying. Hidden when the project has no applications.
 
 
-PART 2 - THE BIT YOU CAUGHT
----------------------------
-The percentages are CUMULATIVE value to date. Everything below the last
-certificate has already been applied for and must not be spread again.
+2. REVENUE ZERO UNTIL SOMETHING EXTRA IS CLAIMED
+------------------------------------------------
+This mostly followed from pkg542 - seed and prior are the same record, so the
+increment is zero - but there was a hole.
 
-prevGross - the figure that turns cumulative into "this cert" - looked at
-forecasts only:
+`prior` filtered on "ends before this period starts". Pick a period beginning
+before the last application's valuation date and the application dropped out of
+the running, prevGross fell to zero, and the whole value to date was spread
+again. Exactly the fault pkg542 set out to fix, reachable through the date box.
 
-  const others = hypApps.filter(a => a.id !== editId)
+Money already claimed cannot be un-claimed by choosing an earlier start date. So:
 
-So on a live job with real applications and no forecasts yet it returned ZERO,
-and the entire value to date went out as this period's revenue. Seeding the
-percentages in Part 1 is exactly what exposed it: before, the rows started at 0%
-so there was nothing to double count.
+  NEW forecast   prior = the latest certificate, whatever period you pick.
+  EDITING        prior = the certificate ending before this one's period, so a
+                 forecast in the middle of a chain still deducts only what came
+                 before it.
 
-prevLabourToDate had the same forecasts-only lookup, so labour was over-stated
-the same way.
-
-Both now use one shared `prior` - whichever certificate ENDS LAST before this
-period starts, real application or earlier forecast. It has to be the same rule
-as the seeding, or the figure carried IN and the figure deducted would disagree.
-
-Worked through, with 2.5% MCD and 5% retention:
-
-  Value to date now          1,000.00
-  Already claimed              600.00
-  Increment                    400.00
-  This period (revenue)        370.50     <- 400 less MCD, less retention
-
-  What it did before           926.25     <- the whole job, re-spread
+Checked: seed from an application, change nothing, revenue this period = 0.00 and
+materials this period = 0.00.
 
 
-DETAILS WORTH KNOWING
----------------------
-THE PRIOR IS VALUED ON TODAY'S RATES. applyPriorPct() copies only the
-percentages off the prior certificate and re-values them against the current
-seed rows. If it used the prior's own stored totals, any rate change since would
-land in this period as though it were newly built work.
+3. MATERIALS FROM LINE ITEM RATES
+---------------------------------
+New button on the "Materials on site" header: "Fill from line items (£X)".
 
-VARIATIONS ARE EXCLUDED ON BOTH SIDES. The forecast carries no variations
-(workApp passes variations: []), so counting them in the prior would understate
-what has been claimed and inflate this period.
+It values the material rate on each contract works line (matRate x qty) against
+the percentage ADDED this period, not the cumulative figure - the same increment
+logic as revenue and labour. Materials for work already certified were bought
+long ago.
 
-TIES GO TO THE APPLICATION. If a forecast and an application end on the same
-date, the application wins - it is the certified position.
+  Strip out  100 m2, material rate £4.00, moved 40% -> 60%
+  = 100 x 4 x 20% = £80.00
 
-DRAFTS COUNT as the latest application. A draft is still the most recent view of
-percentage complete, and this is a forecast. The banner names which application
-was used and its status.
+It adds ONE line, not one per rate item - this is a cash-timing figure and thirty
+supplier-less lines all landing on the same day is noise. The line is tagged, so
+pressing the button again replaces it rather than doubling it up. It is an
+ordinary material line once added: retype the value, change the delivery day, set
+its own payment term, or delete it.
 
-ROWS MATCH ON ID THEN CODE, in both the seeding and the prior. Ids normally line
-up because both come from buildContractWorksFromRates(), but re-uploading the
-rates regenerates them and the code is then the only stable handle. Without the
-fallback every line would read 0% and look like a job that had never started.
+Disabled with an explanation until you have actually moved a percentage.
 
-NEGOTIATED PROJECTS (N:<dealId>) have no real applications and still start from
-contracted rates. Unchanged, and correct.
+Lines that go BACKWARDS are ignored rather than netted off. A reduced percentage
+does not send materials back to the supplier.
 
-
-ONE DECISION YOU MAY WANT TO OVERRULE
--------------------------------------
-"Latest application, else contracted rates" taken literally breaks the second
-forecast on a project: application 3 certifies at 40%, you forecast April to
-60%, then open May - and May would drop back to 40%, silently undoing April.
-
-So the rule is WHICHEVER PERIOD ENDS LAST. With no forecasts yet, which is your
-case, it behaves exactly as you asked. Say the word if you want it strictly the
-application every time.
+The manual "+ Add material" route is untouched, so materials this period can come
+from either source, or both.
 
 
-ALSO FIXED WHILE IN THERE
--------------------------
-The modal closed on a backdrop click and had no Escape handler - against your
-standing rule. It holds a period, percentages across every rate line, materials
-lines and payment terms, and a stray click outside threw the lot away. Backdrop
-no longer closes; Escape does.
+WHERE I MAY HAVE READ YOU WRONG
+-------------------------------
+"Materials budgets from Materials on site or from line item rates" - I have taken
+that as the two ways of ARRIVING at the figure: type it into Materials on site by
+hand, or generate it from the line item material rates. Both now exist side by
+side.
 
-
-ON SCREEN
----------
-A line at the top of a new forecast says where the percentages came from:
-
-  blue   "Percentages carried over from Application 4 (sent) - the latest
-          application on this project."
-  blue   "Percentages carried over from the previous forecast, which runs later
-          than the last application."
-  amber  "No applications yet - starting from the contracted rates at 0%."
-
-Otherwise a seeded figure and one somebody typed look identical. It does not
-show when editing an existing forecast, which loads its own saved values.
-
-
-WHAT TO CHECK ON DEPLOY
------------------------
-Open a forecast on a live job that has had applications. The percentages should
-arrive already filled in, and "Revenue this period" should be roughly the next
-slice of work - NOT the whole contract to date. Any forecasts you saved before
-this package were built on the old maths and are overstated; delete and redo
-them.
+If you meant something different - that the BUDGET figure in the header (£X shown
+next to "Materials on site", currently the sum of matRate x qty above the line)
+should itself be switchable to another source - tell me what that other source is
+on the rates sheet and I will wire it up. I could not identify it from the data.

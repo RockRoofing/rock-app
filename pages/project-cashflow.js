@@ -624,10 +624,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
       cands.push({ end: a.to || '', works: a.contractWorks || [], kind: 'forecast' })
     }
     if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], kind: 'application' })
-    // Only certificates that finish BEFORE this period starts count as already
-    // claimed. With no period set, fall back to the latest of everything.
-    const priors = cands.filter(c => !from || (c.end || '') < from)
-    const pool = priors.length ? priors : (from ? [] : cands)
+    // WHEN EDITING, the prior is the certificate ending before this one's period, so a
+    // forecast in the middle of a chain still deducts only what came before it.
+    //
+    // FOR A NEW ONE, take the latest of everything regardless of period. Money already
+    // claimed is already claimed - it cannot be un-claimed by choosing an earlier start
+    // date. Filtering on `from` here meant that picking a period starting before the
+    // last application's valuation date dropped it out, prevGross fell to zero, and the
+    // whole value to date was spread again - the very thing this is meant to prevent.
+    const priors = editId ? cands.filter(c => !from || (c.end || '') < from) : cands
+    const pool = priors.length ? priors : (editId && from ? [] : cands)
     if (!pool.length) return null
     // Ties go to the application - it is the certified position, a forecast is not.
     return pool.slice().sort((a, b) =>
@@ -656,7 +662,28 @@ function HypAppModal({ modal, onClose, onSaved }) {
       .reduce((s, x) => s + num(x.matRate) * num(x.qty), 0)
   }, [rates])
 
-  // Value of a single material line (from % of budget or a £ figure).
+  // MATERIALS FOR THE INCREMENT CLAIMED THIS PERIOD, from each line's own material
+  // rate on the contracted rates (matRate x qty), applied to the percentage ADDED this
+  // period rather than the cumulative figure. Same increment logic as revenue and
+  // labour - the materials for work already certified were bought long ago.
+  //
+  // Lines that went backwards are ignored rather than netted off. A reduced percentage
+  // does not send materials back to the supplier.
+  const materialsFromLineItems = useMemo(() => {
+    const items = (rates && Array.isArray(rates.items)) ? rates.items : []
+    const byId = new Map(items.map(x => [x.id, x]))
+    const priorById = new Map(priorRows.filter(r => r.kind === 'item').map(r => [r.id, r]))
+    let v = 0
+    for (const r of rows) {
+      if (r.kind !== 'item') continue
+      const src = byId.get(r.id); if (!src) continue
+      const was = priorById.has(r.id) ? num(priorById.get(r.id).pctComplete) : 0
+      const delta = num(r.pctComplete) - was
+      if (delta <= 0) continue
+      v += num(src.matRate) * num(src.qty) * (delta / 100)
+    }
+    return v
+  }, [rows, priorRows, rates])
   const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
   const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
@@ -775,6 +802,39 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const itemRows = rows.filter(r => r.kind === 'item')
   const allHundred = itemRows.length > 0 && itemRows.every(r => num(r.pctComplete) >= 100)
   const setAllPct = (pct) => setRows(list => list.map(r => r.kind === 'item' ? { ...r, pctComplete: pct } : r))
+
+  // Put every percentage back to the last real application, i.e. exactly the position
+  // that has already been certified. Revenue and labour this period then read zero,
+  // which is the honest starting point - you add only what you are claiming on top.
+  //
+  // Deliberately targets the APPLICATION, not whatever the rows were seeded from. A
+  // button called "revert to last application" that quietly reverted to a forecast
+  // would be lying.
+  const revertToApplication = () => {
+    if (!latestApp) return
+    setRows(applyPriorPct(seed, latestApp.contractWorks || []))
+    if (latestApp.mcdPct != null) setMcdPct(latestApp.mcdPct || 0)
+    if (latestApp.retentionPct != null) setRetPct(latestApp.retentionPct)
+    setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
+  }
+
+  // Replace any previously generated line and add one valued at this period's
+  // increment. One line, not one per rate item - this is a cash-timing figure, and
+  // thirty supplier-less lines all landing on the same day is noise.
+  const addMaterialsFromLineItems = () => {
+    const v = materialsFromLineItems
+    if (!(v > 0)) return
+    setMatItems(l => [
+      ...l.filter(m => !m.fromLineItems),
+      {
+        id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
+        mode: 'figure', value: Math.round(v * 100) / 100,
+        comment: 'From line item material rates (% added this period)',
+        deliverDay: to, term: { basis: 'eom', days: 30 },
+        fromLineItems: true,
+      },
+    ])
+  }
 
   async function save() {
     if (!from || !to) { alert('Set the period (from and to dates) for this forecast.'); return }
@@ -924,12 +984,20 @@ function HypAppModal({ modal, onClose, onSaved }) {
               )}
 
               {/* Contract works with % complete */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Contract works (enter cumulative % complete)</div>
-                <label style={{ fontSize: 12, color: '#0f766e', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600 }}>
-                  <input type="checkbox" checked={allHundred} onChange={e => setAllPct(e.target.checked ? 100 : 0)} />
-                  All lines 100%
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  {latestApp && (
+                    <button onClick={revertToApplication} style={{ ...ghostBtn, padding: '5px 12px' }}
+                      title="Put every line back to the percentages on the last application. Revenue and labour this period return to zero.">
+                      Revert to Application {latestApp.appNumber || latestApp.seq || ''}
+                    </button>
+                  )}
+                  <label style={{ fontSize: 12, color: '#0f766e', display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600 }}>
+                    <input type="checkbox" checked={allHundred} onChange={e => setAllPct(e.target.checked ? 100 : 0)} />
+                    All lines 100%
+                  </label>
+                </div>
               </div>
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', maxHeight: 320, marginBottom: 16 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -962,10 +1030,19 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Materials - multiple line items, each with a comment (e.g. supplier)
                   and its own delivery day */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Materials on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(budget {gbp(materialsBudget)})</span></div>
-                <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to, term: { basis: 'eom', days: 30 } }])}
-                  style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button onClick={addMaterialsFromLineItems} disabled={!(materialsFromLineItems > 0)}
+                    title={materialsFromLineItems > 0
+                      ? 'Add one line valued at the material rates on the lines you have moved this period.'
+                      : 'Nothing added this period yet - move a contract works percentage above first.'}
+                    style={{ ...ghostBtn, padding: '5px 12px', opacity: materialsFromLineItems > 0 ? 1 : 0.45, cursor: materialsFromLineItems > 0 ? 'pointer' : 'default' }}>
+                    Fill from line items {materialsFromLineItems > 0 ? `(${gbp(materialsFromLineItems)})` : ''}
+                  </button>
+                  <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to, term: { basis: 'eom', days: 30 } }])}
+                    style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
+                </div>
               </div>
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', marginBottom: 18 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
