@@ -489,6 +489,14 @@ function labourSchedule(fromISO, toISO, total, term) {
 // id first, then code. Rows come from the same buildContractWorksFromRates() so ids
 // normally match, but a re-upload of the rates regenerates them and code is then the
 // only stable handle.
+// Materials on site as a single synthetic line for computeApplicationSummary, which
+// expects an array of material rows. pctComplete 100 because the figure IS the
+// to-date value, not a percentage of a budget.
+function mosLine(v) {
+  const n = Number(v) || 0
+  return n ? [{ id: 'mos', total: n, pctComplete: 100 }] : []
+}
+
 function applyPriorPct(baseRows, priorWorks) {
   const works = (Array.isArray(priorWorks) ? priorWorks : []).filter(r => r && r.kind !== 'heading')
   const byId = new Map(works.filter(r => r.id != null).map(r => [r.id, r]))
@@ -519,6 +527,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // null = follow the calculation. Anything else is a manual figure that wins.
   // Kept as the raw string so the box can be cleared and retyped without fighting it.
   const [labourOverride, setLabourOverride] = useState(null)
+  // Materials on site CLAIMED (money in), cumulative. null = follow the auto wind-down.
+  const [mosOverride, setMosOverride] = useState(null)
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
@@ -539,7 +549,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -570,6 +580,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
+          setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
@@ -656,9 +667,13 @@ function HypAppModal({ modal, onClose, onSaved }) {
       if (a.id === editId) continue        // never treat the app being edited as its own prior
       const vp = {}
       for (const v of (a.varRows || [])) vp[v.key] = num(v.pctComplete)
-      cands.push({ end: a.to || '', works: a.contractWorks || [], varPct: vp, kind: 'forecast' })
+      cands.push({ end: a.to || '', works: a.contractWorks || [], varPct: vp, mos: num(a.materialsOnSite), kind: 'forecast' })
     }
-    if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], varPct: latestApp.varPct || {}, kind: 'application' })
+    // MATERIALS ON SITE ALREADY CLAIMED comes across as part of the prior. Leave it out
+    // and the forecast believes only the measured work and variations have been claimed
+    // - so every pound of stock already invoiced gets forecast a second time as the work
+    // it was bought for is measured. On J240 that was 65,690.28 of a 92,766.50 claim.
+    if (latestApp) cands.push({ end: latestApp.endDate || '', works: latestApp.contractWorks || [], varPct: latestApp.varPct || {}, mos: num(latestApp.materialsClaimed), kind: 'application' })
     // WHEN EDITING, the prior is the certificate ending before this one's period, so a
     // forecast in the middle of a chain still deducts only what came before it.
     //
@@ -701,16 +716,19 @@ function HypAppModal({ modal, onClose, onSaved }) {
     })
   }, [varRows, trackerVars, prior])
   const priorRows = useMemo(() => (prior ? applyPriorPct(seed, prior.works) : []), [prior, seed])
+  // Materials on site already claimed on the prior certificate. Declared here because
+  // prevGross below reads it, and a memo that reads a const declared under it throws.
+  const mosPriorRaw = prior ? num(prior.mos) : 0
 
   // Previous cumulative gross, so "this cert" is only the newly-added work.
   // Variations are counted on BOTH sides at their respective percentages - include them
   // here only and the prior would be overstated, omit them here only and every
   // variation already certified would be forecast as new money a second time.
   const prevGross = useMemo(() => {
-    if (!priorRows.length && !priorVarsForCert.length) return 0
-    const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
+    if (!priorRows.length && !priorVarsForCert.length && !mosPriorRaw) return 0
+    const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: mosLine(mosPriorRaw), mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
     return s.grossCurrent
-  }, [priorRows, priorVarsForCert, mcdPct, retPct])
+  }, [priorRows, priorVarsForCert, mosPriorRaw, mcdPct, retPct])
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -719,14 +737,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
       .reduce((s, x) => s + num(x.matRate) * num(x.qty), 0)
   }, [rates])
 
-  // MATERIALS FOR THE INCREMENT CLAIMED THIS PERIOD, from each line's own material
+  // MATERIALS CONSUMED BY THE WORK MEASURED THIS PERIOD, from each line's own material
   // rate on the contracted rates (matRate x qty), applied to the percentage ADDED this
-  // period rather than the cumulative figure. Same increment logic as revenue and
-  // labour - the materials for work already certified were bought long ago.
+  // period rather than the cumulative figure - the same increment logic as revenue and
+  // labour.
   //
   // Lines that went backwards are ignored rather than netted off. A reduced percentage
   // does not send materials back to the supplier.
-  const materialsFromLineItems = useMemo(() => {
+  const materialsConsumed = useMemo(() => {
     const items = (rates && Array.isArray(rates.items)) ? rates.items : []
     const byId = new Map(items.map(x => [x.id, x]))
     const priorById = new Map(priorRows.filter(r => r.kind === 'item').map(r => [r.id, r]))
@@ -749,6 +767,28 @@ function HypAppModal({ modal, onClose, onSaved }) {
     }
     return v
   }, [rows, priorRows, rates, varsForCert, priorVarsForCert])
+
+  // MATERIALS ON SITE (claimed from the customer, money IN - not the supplier lines).
+  //
+  // Carried in from the last certificate, then wound down automatically as the work is
+  // measured: the stock bought for a roof stops being "on site" the moment that roof is
+  // valued as measured work. Winding it down by exactly what the measured work consumed
+  // is what stops the customer being asked to pay for the same materials twice.
+  //
+  // Manual override for the cases the rule cannot know about - a delivery landing that
+  // you want to claim before it is fixed, which pushes the figure UP.
+  //
+  // It has to reach zero by final account, because by then everything is measured.
+  const mosAuto = Math.max(0, mosPriorRaw - materialsConsumed)
+  const mosToDate = mosOverride == null ? mosAuto : Math.max(0, num(mosOverride))
+
+  // What actually has to be BOUGHT this period, as opposed to consumed. Materials drawn
+  // out of stock already on site were paid for in an earlier period, so charging them to
+  // suppliers again here would double the cash out.
+  //
+  //   drawdown negative = you have ADDED stock, so that gets bought on top.
+  const mosDrawdown = mosPriorRaw - mosToDate
+  const materialsToBuy = Math.max(0, materialsConsumed - mosDrawdown)
   const matLineValue = (m) => m.mode === 'pct' ? materialsBudget * (num(m.value) / 100) : num(m.value)
   const materialsThisPeriod = useMemo(() => matItems.reduce((s, m) => s + matLineValue(m), 0), [matItems, materialsBudget])
 
@@ -764,6 +804,25 @@ function HypAppModal({ modal, onClose, onSaved }) {
       .reduce((s, x) => s + (x.total != null ? num(x.total) : num(x.rate) * num(x.qty)), 0)
   }, [rates])
 
+  // INSTRUCTED variations only, for the "remaining" figures. Gross to date counts
+  // variations, so budgets measured against it have to as well or "remaining" reads low
+  // by the whole variation account. Uninstructed ones are excluded even when ticked into
+  // a forecast - they are not agreed money and must not inflate a budget.
+  //
+  // Deliberately SEPARATE from materialsBudget: that one drives the "% of budget"
+  // material lines, and moving it would silently revalue every saved forecast.
+  const instructedVarTotals = useMemo(() => {
+    const ins = trackerVars.filter(v => v.instructed === 'yes')
+    return {
+      value: ins.reduce((s, v) => s + num(v.value), 0),
+      labour: ins.reduce((s, v) => s + num(v.labour), 0),
+      materials: ins.reduce((s, v) => s + num(v.materials), 0),
+    }
+  }, [trackerVars])
+  const salesBudgetTotal = salesBudget + instructedVarTotals.value
+  const labourBudgetTotal = labourBudget + instructedVarTotals.labour
+  const materialsBudgetTotal = materialsBudget + instructedVarTotals.materials
+
   // Materials used across every OTHER saved forecast (to date), for the remaining figure.
   const materialsUsedPrior = useMemo(() => {
     let used = 0
@@ -771,11 +830,12 @@ function HypAppModal({ modal, onClose, onSaved }) {
     return used
   }, [hypApps, editId])
 
-  // Materials on site are CASH-TIMING ONLY here - they do not add to revenue. The
-  // certificate maths uses contract works + the included variations; materials are
-  // scheduled as cash out separately via each line's pay date.
-  const workApp = { contractWorks: rows, variations: varsForCert, materials: [], mcdPct: num(mcdPct), retentionPct: num(retPct) }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mcdPct, retPct, prevGross])
+  // Gross = measured work + included variations + MATERIALS ON SITE, exactly as the
+  // application computes it. The supplier lines ("Materials forecasted on site") are a
+  // separate thing entirely - cash going OUT, scheduled off each line's pay date - and
+  // are not part of this.
+  const workApp = { contractWorks: rows, variations: varsForCert, materials: mosLine(mosToDate), mcdPct: num(mcdPct), retentionPct: num(retPct) }
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mosToDate, mcdPct, retPct, prevGross])
 
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
@@ -908,6 +968,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
     if (latestApp.mcdPct != null) setMcdPct(latestApp.mcdPct || 0)
     if (latestApp.retentionPct != null) setRetPct(latestApp.retentionPct)
     setLabourOverride(null)   // back to the calculation, or the revert would be partial
+    setMosOverride(null)
     setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
   }
 
@@ -915,14 +976,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // increment. One line, not one per rate item - this is a cash-timing figure, and
   // thirty supplier-less lines all landing on the same day is noise.
   const addMaterialsFromLineItems = () => {
-    const v = materialsFromLineItems
+    const v = materialsToBuy
     if (!(v > 0)) return
     setMatItems(l => [
       ...l.filter(m => !m.fromLineItems),
       {
         id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
         mode: 'figure', value: Math.round(v * 100) / 100,
-        comment: 'From line item material rates (% added this period)',
+        comment: 'From line item material rates (% added this period, less stock on site)',
         deliverDay: to, term: { basis: 'eom', days: 30 },
         fromLineItems: true,
       },
@@ -945,6 +1006,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
       salesTerm, labourTerm,
       // null means the saved figure was calculated; a number means somebody typed it.
       labourOverride: labourOverride == null ? null : num(labourOverride),
+      // Materials on site CLAIMED, cumulative - the next forecast reads this as its
+      // carried-in figure, so it must be the resolved value, not just the override.
+      materialsOnSite: mosToDate,
+      materialsOnSiteOverride: mosOverride == null ? null : num(mosOverride),
       salesSpread, labourSpread,
       salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month })),
       salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
@@ -1049,9 +1114,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Summary boxes */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-                <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong sub2={`${gbp(Math.max(0, salesBudget - sum.grossCurrent))} remaining`} />
-                <LabourBox calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride} remaining={Math.max(0, labourBudget - labourToDate)} />
-                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudget - materialsUsedPrior - materialsThisPeriod))} remaining`} />
+                <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong sub2={`${gbp(Math.max(0, salesBudgetTotal - sum.grossCurrent))} remaining`} />
+                <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
+                  colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - labourToDate))} remaining`} />
+                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior - materialsThisPeriod))} remaining`} />
+                <OverrideBox label="Materials on site (claimed)" calculated={mosAuto} override={mosOverride} setOverride={setMosOverride}
+                  colour="#5b21b6"
+                  autoNote={mosPriorRaw > 0 ? `${gbp(mosPriorRaw)} carried in, less ${gbp(Math.min(mosPriorRaw, materialsConsumed))} measured` : 'Nothing claimed on site yet'}
+                  sub2={mosDrawdown > 0 ? `${gbp(mosDrawdown)} released into measured work` : (mosDrawdown < 0 ? `${gbp(-mosDrawdown)} of new stock claimed` : 'Unchanged this period')} />
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
 
@@ -1183,26 +1253,21 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {/* Materials - multiple line items, each with a comment (e.g. supplier)
                   and its own delivery day */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Materials on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(budget {gbp(materialsBudget)})</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Materials forecasted on site <span style={{ fontSize: 11, color: '#aaa', fontWeight: 400 }}>(supplier payments out - budget {gbp(materialsBudget)})</span></div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button onClick={addMaterialsFromLineItems} disabled={!(materialsFromLineItems > 0)}
-                    title={materialsFromLineItems > 0
-                      ? 'Add one line valued at the material rates on the lines you have moved this period.'
-                      : 'Nothing added this period yet - move a contract works percentage above first.'}
-                    style={{ ...ghostBtn, padding: '5px 12px', opacity: materialsFromLineItems > 0 ? 1 : 0.45, cursor: materialsFromLineItems > 0 ? 'pointer' : 'default' }}>
-                    Fill from line items {materialsFromLineItems > 0 ? `(${gbp(materialsFromLineItems)})` : ''}
+                  <button onClick={addMaterialsFromLineItems} disabled={!(materialsToBuy > 0)}
+                    title={materialsToBuy > 0
+                      ? 'Add one line for the materials that actually have to be bought this period - what the measured work consumed, less anything drawn out of stock already on site.'
+                      : (materialsConsumed > 0
+                        ? 'The materials for the work measured this period are already on site and were paid for earlier.'
+                        : 'Nothing added this period yet - move a contract works percentage above first.')}
+                    style={{ ...ghostBtn, padding: '5px 12px', opacity: materialsToBuy > 0 ? 1 : 0.45, cursor: materialsToBuy > 0 ? 'pointer' : 'default' }}>
+                    Fill from line items {materialsToBuy > 0 ? `(${gbp(materialsToBuy)})` : ''}
                   </button>
                   <button onClick={() => setMatItems(l => [...l, { id: `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, mode: 'figure', value: '', comment: '', deliverDay: to, term: { basis: 'eom', days: 30 } }])}
                     style={{ ...ghostBtn, padding: '5px 12px' }}>+ Add material</button>
                 </div>
               </div>
-              {latestApp && latestApp.materialsClaimed > 0 && (
-                <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '8px 12px', marginBottom: 8, fontSize: 12.5, color: '#5b21b6' }}>
-                  <strong>{gbp(latestApp.materialsClaimed)} of materials on site already claimed</strong> on Application {latestApp.appNumber || latestApp.seq || ''}
-                  {latestApp.materialsClaimedLines ? ` (${latestApp.materialsClaimedLines} line${latestApp.materialsClaimedLines === 1 ? '' : 's'})` : ''}.
-                  {' '}That is money IN from the customer. The lines below are money OUT to suppliers, so this figure is shown for reference only and is not added to either.
-                </div>
-              )}
               <div style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'auto', marginBottom: 18 }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead><tr style={{ background: '#faf9f7', color: '#999' }}>
@@ -1338,39 +1403,39 @@ function TermEditor({ label, term, setTerm, refDate, refLabel }) {
   )
 }
 
-// The Labour this period box, with a manual override.
+// An override box: a calculated figure that can be replaced by a typed one.
 //
 // Module scope, not nested - a component declared inside another remounts on every
-// render, and this one holds a focused text input. Nested, it would lose focus after
-// every keypress.
-function LabourBox({ calculated, override, setOverride, remaining }) {
+// render, and these hold focused text inputs. Nested, they lose focus after every
+// keypress.
+function OverrideBox({ label, calculated, override, setOverride, colour, autoNote, sub2 }) {
   const on = override != null
   return (
-    <div style={{ background: '#fff', border: on ? '1.5px solid #b45309' : '1px solid #e6e3dc', borderRadius: 10, padding: '10px 16px', minWidth: 168 }}>
+    <div style={{ background: '#fff', border: on ? `1.5px solid ${colour}` : '1px solid #e6e3dc', borderRadius: 10, padding: '10px 16px', minWidth: 172 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 11, color: '#888' }}>Labour this period</span>
+        <span style={{ fontSize: 11, color: '#888' }}>{label}</span>
         <button
           onClick={() => setOverride(on ? null : String(Math.round(calculated * 100) / 100))}
           title={on ? 'Go back to the calculated figure' : 'Type your own figure instead'}
-          style={{ border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: '#b45309', cursor: 'pointer', textDecoration: 'underline' }}>
+          style={{ border: 'none', background: 'none', padding: 0, fontSize: 10.5, fontWeight: 700, color: colour, cursor: 'pointer', textDecoration: 'underline' }}>
           {on ? 'Reset' : 'Override'}
         </button>
       </div>
       {on ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ fontSize: 17, fontWeight: 800, color: '#b45309' }}>{'\u00a3'}</span>
+          <span style={{ fontSize: 17, fontWeight: 800, color: colour }}>{'\u00a3'}</span>
           <input
             type="number" step="0.01" min="0" value={override}
             onChange={e => setOverride(e.target.value)}
-            style={{ width: '100%', border: 'none', borderBottom: '1px solid #f0d9b5', outline: 'none', fontSize: 19, fontWeight: 800, color: '#b45309', padding: '1px 0', background: 'transparent' }} />
+            style={{ width: '100%', border: 'none', borderBottom: `1px solid ${colour}44`, outline: 'none', fontSize: 19, fontWeight: 800, color: colour, padding: '1px 0', background: 'transparent' }} />
         </div>
       ) : (
-        <div style={{ fontSize: 19, fontWeight: 800, color: '#b45309' }}>{gbp(calculated)}</div>
+        <div style={{ fontSize: 19, fontWeight: 800, color: colour }}>{gbp(calculated)}</div>
       )}
-      <div style={{ fontSize: 10.5, color: on ? '#b45309' : '#9a958c' }}>
-        {on ? `Manual - calculated was ${gbp(calculated)}` : `From rates and variations`}
+      <div style={{ fontSize: 10.5, color: on ? colour : '#9a958c' }}>
+        {on ? `Manual - calculated was ${gbp(calculated)}` : autoNote}
       </div>
-      <div style={{ fontSize: 10.5, color: '#c4c0b8' }}>{gbp(remaining)} remaining</div>
+      {sub2 && <div style={{ fontSize: 10.5, color: '#c4c0b8' }}>{sub2}</div>}
     </div>
   )
 }
