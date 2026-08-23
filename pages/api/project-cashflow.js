@@ -162,6 +162,15 @@ export default async function handler(req, res) {
       hypApps: Array.isArray(hyp) ? hyp : [],
       latestApplication: latestApplicationSeed(project),
       variations: variationSeed(project),
+      // ACTUAL spend to date, the same cache Project Financials reads
+      // (costs:latest:<xeroId>, written by the wip-sync cron from Xero bills plus the
+      // labour journals). Negotiated projects are not in Xero, so there is nothing to
+      // read and this comes back null rather than a misleading zero.
+      actuals: xeroId ? await (async () => {
+        const c = (await redis.get(`costs:latest:${xeroId}`).catch(() => null)) || null
+        if (!c) return null
+        return { labourSpend: num(c.labourSpend), materialsSpend: num(c.materialsSpend), calculatedAt: c.calculatedAt || null }
+      })() : null,
     })
   }
 

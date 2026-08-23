@@ -1,8 +1,8 @@
-pkg546 - Cash Flow forecast: materials on site
-===============================================
+pkg547 - Cash Flow forecast: labour and materials position panels
+==================================================================
 
-*** SUPERSEDES pkg542, pkg543, pkg544 AND pkg545. ***
-Same two files, complete, with everything from all four plus this.
+*** SUPERSEDES pkg542 THROUGH pkg546. ***
+Same two files, complete, with everything from all of them plus this.
 Deploy this one ONLY.
 
 
@@ -19,114 +19,77 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-THE FAULT, ON YOUR OWN NUMBERS
-------------------------------
-The prior certificate's gross was computed from measured work and variations only.
-Materials on site was left out. J240, Application 4:
+WHAT IS NEW
+-----------
+Two panels under the "this period" boxes. Those boxes are all about the period in
+front of you; these are the cumulative position for the whole job.
 
-  Forecast "Gross to date"                27,076.22
-  less V07 at 12.60%                         674.41
-  = measured work to date                 26,401.81   matches the application
-  plus materials on site                  65,690.28   MISSING
-  = Application 4 gross                   92,766.50
+  LABOUR
+    Total budget      labRate x qty across the rates, plus instructed variations'
+                      labour element
+    Claimed to date    the labour element of everything measured to date, works
+                      and variations - cumulative, not this period
+    Spend to date      actual cost out of Project Financials
+                      + "x% of budget spent", red once over 100%
 
-Revenue read 0.00 and that part was right - nothing had moved. The error was
-hidden and would have surfaced as the job progressed: the forecast would predict
-274,138.21 - 27,076.22 = 247,061.99 still to come in, when the customer actually
-owes 274,138.21 - 92,766.50 = 181,371.71. Over-forecast by 65,690.28 - exactly
-the materials on site.
+  MATERIALS
+    Total budget       matRate x qty, plus instructed variations' materials
+    Claimed to date    line items + materials on site, broken out underneath so
+                       you can see which is which
+    Spend to date      actual cost out of Project Financials
 
-The reason is real. On an application, materials on site is an ADVANCE claim that
-unwinds as the work gets measured. The forecast had no such figure to unwind, so
-that money got forecast a second time as measured work grew.
-
-
-THE FIX
--------
-A new "Materials on site (claimed)" box alongside Revenue and Labour. Cumulative,
-carried in from the last certificate, and part of gross on BOTH sides - so it
-changes nothing today and stops the double count later.
-
-AUTO WIND-DOWN. It falls by exactly the materials the measured work consumed this
-period (matRate x qty on the works, plus the materials element of any included
-variation). Stock bought for a roof stops being "on site" the moment that roof is
-valued as measured work.
-
-MANUAL OVERRIDE, same pattern as the labour box: click Override, type, Reset to
-go back. The calculated figure stays visible underneath and the box takes a
-purple border. Use it when a delivery lands that you want to claim before it is
-fixed - that pushes the figure UP, which no rule can predict.
-
-Worked through on J240, measuring 30,000 more work of which 12,000 came out of
-stock:
-
-  Materials on site   65,690.28 -> 53,690.28
-  Gross               92,766.50 -> 110,766.50
-  Revenue this period    17,100.00   (18,000 increment less 5% retention)
-
-Note the increment is 18,000, not 30,000. The 12,000 of stock was already paid
-for by the customer. That is the whole point.
-
-It must reach zero by final account, because by then everything is measured.
+Three different questions, deliberately kept apart: what the rates ALLOW, what
+has been billed to the CUSTOMER, and what has actually LEFT the business.
 
 
-KNOCK-ON: "FILL FROM LINE ITEMS" NOW BUYS ONLY WHAT IS NOT ALREADY THERE
-------------------------------------------------------------------------
-Materials drawn out of stock already on site were paid for in an earlier period.
-Charging them to suppliers again would double the cash out. The button now offers
+WHERE THE SPEND COMES FROM
+--------------------------
+costs:latest:<xeroId> - the same cache Project Financials and the CM view read,
+written by the wip-sync cron from Xero bills plus the labour journals. The date
+it was last synced is shown under the figure, because a stale sync silently
+flatters the comparison.
 
-  materials consumed  -  drawn out of stock
-
-so in the example above it offers 0.00 and says why. Add stock manually and the
-figure goes the other way - the new stock gets bought on top.
-
-
-RENAME
-------
-The old "Materials on site" section - supplier payments going OUT, each with a
-delivery day and payment term - is now "Materials forecasted on site". "Materials
-on site" now means the claim, as it does on the application. Two different things
-were sharing one name on the same screen.
+Negotiated projects (N:<dealId>) are not in Xero, so there is nothing to read.
+Those show "n/a (not in Xero)" rather than a zero, which would read as "spent
+nothing".
 
 
-REMAINING FIGURES NOW INCLUDE INSTRUCTED VARIATIONS
----------------------------------------------------
-Revenue, Labour and Materials "remaining" measured against rates-only budgets
-while gross to date counted variations, so they read low by the whole variation
-account. They now add the INSTRUCTED variations' value, labour and materials
-elements.
-
-Uninstructed ones are excluded even when ticked into a forecast - not agreed
-money, must not inflate a budget. Consequence: tick one in and "remaining"
-shrinks by its value without the budget rising. Tell me if you would rather it
-followed the ticks.
-
-The materials % -of-budget lines still use the rates-only budget deliberately -
-moving that would silently revalue every saved forecast.
+NOTE ON YOUR MESSAGE
+--------------------
+You asked for "the total labour spend from costs on the proj financials" twice -
+once under labour and once under materials. I have taken the second as MATERIALS
+spend, since labour spend is already on the labour panel. Say if you meant
+something else.
 
 
-ALSO IN THIS PACKAGE (pkg542-545)
+ONE BUG CAUGHT IN BUILD
+-----------------------
+The panel first used fmtD() for the sync date. fmtD is declared INSIDE two other
+components, not at module scope, so it compiled perfectly and would have thrown
+ReferenceError on every render of the modal. Date is now formatted inline.
+
+
+ALSO IN THIS PACKAGE (pkg542-546)
 ---------------------------------
 - Seeds from the latest real application, else contracted rates at 0%.
-- Already-claimed value deducted, so the job to date is not re-spread.
-- New forecasts deduct the latest certificate whatever period you pick; editing
-  keeps the chain rule.
+- Already-claimed value deducted, including MATERIALS ON SITE - the fault you
+  spotted on J240, where 65,690.28 of the 92,766.50 claim was being ignored and
+  would have been forecast a second time.
+- "Materials on site (claimed)" box: carried in from the last certificate, winds
+  down automatically as work is measured, manual override for new stock.
+- "Fill from line items" buys only what is not already in stock on site.
+- Old supplier section renamed "Materials forecasted on site".
 - Variations table: instructed in by default, uninstructed listed and badged.
-  Value drives revenue, labour element drives labour, materials element drives
-  materials - same as the contracted scope.
-- "Revert to Application N" - resets works, variations, MCD, retention, and both
-  overrides.
 - Labour override.
+- "Revert to Application N" resets everything including both overrides.
+- Remaining figures include instructed variations.
 - Backdrop click no longer closes the modal; Escape does.
 
 
-TWO THINGS FOR YOU
-------------------
-1. Application 4 on J240 has "Previously certified (gross)" BLANK. Until you put
-   92,766.50 in, that draft claims the whole 92,766.50 again - and the forecast
-   reads that application.
-
-2. variationValueToDate() in lib/applications.js tests `v.instructed === false`,
-   but instructed is the STRING 'yes'/'no' - so an uninstructed variation is
-   counted IN FULL in the applications maths. Confirmed. The cash flow cannot hit
-   it. Still needs its own package.
+STILL FOR YOU
+-------------
+1. J240 Application 4 has "Previously certified (gross)" BLANK. Until you enter
+   92,766.50 that draft claims the whole lot again, and the forecast reads it.
+2. variationValueToDate() in lib/applications.js tests `v.instructed === false`
+   against a 'yes'/'no' STRING, so uninstructed variations count IN FULL in the
+   applications maths. Needs its own package.

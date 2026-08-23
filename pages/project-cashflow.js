@@ -529,6 +529,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [labourOverride, setLabourOverride] = useState(null)
   // Materials on site CLAIMED (money in), cumulative. null = follow the auto wind-down.
   const [mosOverride, setMosOverride] = useState(null)
+  const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
@@ -557,6 +558,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setRates(d.contractedRates || null)
         setHypApps(d.hypApps || [])
         setLatestApp(d.latestApplication || null)
+        setActuals(d.actuals || null)
         const tv = Array.isArray(d.variations) ? d.variations : []
         setTrackerVars(tv)
         // Variation rows mirror the tracker, carrying a percentage and an include flag.
@@ -767,6 +769,22 @@ function HypAppModal({ modal, onClose, onSaved }) {
     }
     return v
   }, [rows, priorRows, rates, varsForCert, priorVarsForCert])
+
+  // MATERIALS CLAIMED AGAINST THE LINE ITEMS, cumulative - the materials element of
+  // everything measured to date, not just this period. Sits alongside materials on site
+  // to give the total materials position claimed off the customer.
+  const materialsClaimedOnLines = useMemo(() => {
+    const items = (rates && Array.isArray(rates.items)) ? rates.items : []
+    const byId = new Map(items.map(x => [x.id, x]))
+    let v = 0
+    for (const r of rows) {
+      if (r.kind !== 'item') continue
+      const src = byId.get(r.id); if (!src) continue
+      v += num(src.matRate) * num(src.qty) * (num(r.pctComplete) / 100)
+    }
+    for (const x of varsForCert) v += num(x.materials) * (num(x.pctComplete) / 100)
+    return v
+  }, [rows, rates, varsForCert])
 
   // MATERIALS ON SITE (claimed from the customer, money IN - not the supplier lines).
   //
@@ -1125,6 +1143,33 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <MiniBox label="Gross to date" value={gbp(sum.grossCurrent)} />
               </div>
 
+              {/* Budget vs claimed vs actual spend. The boxes above are all "this
+                  period"; these are the cumulative position for the whole job. */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+                <PositionPanel
+                  title="Labour" colour="#b45309"
+                  budget={labourBudgetTotal}
+                  claimed={labourToDate} claimedNote="(labour element of measured work)"
+                  spend={actuals ? actuals.labourSpend : null} spendAt={actuals ? actuals.calculatedAt : null}
+                />
+                <PositionPanel
+                  title="Materials" colour="#7c3aed"
+                  budget={materialsBudgetTotal}
+                  claimed={materialsClaimedOnLines + mosToDate} claimedNote="(line items + on site)"
+                  spend={actuals ? actuals.materialsSpend : null} spendAt={actuals ? actuals.calculatedAt : null}
+                  rows={<>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '1px 0 1px 12px' }}>
+                      <span style={{ fontSize: 11, color: '#b8b3aa' }}>against line items</span>
+                      <span style={{ fontSize: 12, color: '#9a958c', whiteSpace: 'nowrap' }}>{gbp(materialsClaimedOnLines)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '1px 0 1px 12px' }}>
+                      <span style={{ fontSize: 11, color: '#b8b3aa' }}>materials on site</span>
+                      <span style={{ fontSize: 12, color: '#9a958c', whiteSpace: 'nowrap' }}>{gbp(mosToDate)}</span>
+                    </div>
+                  </>}
+                />
+              </div>
+
               {/* Payment terms (sales received, labour paid) */}
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                 <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" />
@@ -1399,6 +1444,43 @@ function TermEditor({ label, term, setTerm, refDate, refLabel }) {
         <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
       </div>
       <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>cash on {fmtD(cash)}</div>
+    </div>
+  )
+}
+
+// Budget / claimed / spend for one cost head, so the forecast can be sanity-checked
+// against what the job has actually cost.
+//
+// Three different questions, and they must not be confused:
+//   Budget   what the contracted rates and instructed variations allow.
+//   Claimed  what has been billed to the CUSTOMER for it, cumulative.
+//   Spend    what has actually left the business, from Project Financials.
+function PositionPanel({ title, colour, budget, claimed, claimedNote, spend, spendAt, rows }) {
+  const pct = budget > 0 ? (spend / budget) * 100 : null
+  const over = pct != null && pct > 100
+  const Row = ({ k, v, note, strong, tone }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, padding: '3px 0' }}>
+      <span style={{ fontSize: 11.5, color: '#7a756c' }}>{k}{note ? <span style={{ color: '#b8b3aa' }}> {note}</span> : null}</span>
+      <span style={{ fontSize: 13.5, fontWeight: strong ? 800 : 700, color: tone || INK, whiteSpace: 'nowrap' }}>{v}</span>
+    </div>
+  )
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 10, padding: '10px 14px', minWidth: 280, flex: '1 1 300px' }}>
+      <div style={{ fontSize: 11, fontWeight: 800, color: colour, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 4 }}>{title}</div>
+      <Row k="Total budget" v={gbp(budget)} note="(rates + instructed vars)" />
+      <Row k="Claimed to date" v={gbp(claimed)} note={claimedNote} tone={colour} />
+      {rows}
+      <div style={{ borderTop: '1px solid #f0eee9', marginTop: 4, paddingTop: 2 }}>
+        {spend == null
+          ? <Row k="Spend to date" v="n/a" note="(not in Xero)" />
+          : <Row k="Spend to date" v={gbp(spend)} note="(Project Financials)" strong tone={over ? '#b91c1c' : INK} />}
+        {spend != null && (
+          <div style={{ fontSize: 10, color: over ? '#b91c1c' : '#b8b3aa', textAlign: 'right' }}>
+            {pct != null ? `${pct.toFixed(1)}% of budget spent` : ''}
+            {spendAt ? ` - synced ${String(spendAt).slice(8, 10)}/${String(spendAt).slice(5, 7)}/${String(spendAt).slice(2, 4)}` : ''}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
