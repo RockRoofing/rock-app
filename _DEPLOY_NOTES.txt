@@ -1,7 +1,7 @@
-pkg554 - Project Cash Flow: monthly income band under Total OUT
-================================================================
+pkg555 - Cash Flow: sales can follow the project's own application dates
+=========================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg553. ***
+*** SUPERSEDES pkg542 THROUGH pkg554. ***
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -18,42 +18,57 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-THE NEW ROW
------------
-"Income / month", directly under Total OUT / week and sticky with the others, so
-it stays visible while you scroll the projects.
+"PROJECT APPLICATION DATES"
+---------------------------
+Fourth option in Sales received, alongside Per application / Weekly / Fortnightly.
 
-Income = sales in + retention in.
+It uses the application calendar already set on Edit Project Details - application
+day, valuation day, payment day, final payment days - and produces one application
+per calendar month in the period, dated on the VALUATION date, with cash on the
+FINAL DATE FOR PAYMENT.
 
-Each month is one continuous coloured band across the columns it covers, cycling
-through six colours so no two neighbours match. The month name and total sit in
-the band. Works in both day and week view.
+A second dropdown appears next to it so you can take cash on payment due instead
+of the final date, since both are on the application and different customers pay
+against different ones. Defaults to the final date, as you asked.
+
+Worked through, with apply 25th / value 28th / pay 14th of the following month /
+final +7 days, and 60,000 across three months:
+
+  Sep 26   val 28/09   due 14/10   final 21/10   cash 21/10   19,800.00
+  Oct 26   val 28/10   due 14/11   final 21/11   cash 21/11   19,800.00
+  Nov 26   val 28/11   due 14/12   final 21/12   cash 21/12   20,400.00
+
+It calls resolveAppDates() - the SAME function the applications screen uses - so
+the forecast lands on the exact dates the real applications will, rather than an
+approximation that drifts the moment one of the rules changes. Per-month date
+overrides are honoured too: an override of 31/10 valuation and 20/11 payment came
+straight through in testing.
+
+The monthly Sales % row stays visible for this cycle, because it is still one
+application per calendar month and the split is what decides how much each one is
+worth.
 
 
-TWO THINGS I DECIDED
---------------------
-A WEEK COLUMN CAN STRADDLE TWO MONTHS. It is assigned to the month holding the
-MAJORITY of its days - its middle day - so the band breaks where the month mostly
-changes rather than on a technicality. The week of 28/09 to 04/10 lands in
-October, which is where four of its seven days are.
+THE GUARD
+---------
+A valuation day with no payment day resolves to a BLANK cash date, which would
+have dropped that money out of the forecast entirely and silently. Confirmed in
+testing. So the option only produces a schedule when the calendar can actually
+yield a payment date, and otherwise says:
 
-THE FIGURE IS THE TRUE CALENDAR-MONTH TOTAL, summed from cashByDay, never the sum
-of the columns in the band. Summing the band would silently mis-state a month
-every time a week straddled a boundary - and it would look perfectly plausible.
-Checked: bands total 52,000 against 52,000 of daily cash, with a straddling week
-in play.
+  "No application calendar on this project - set the valuation and payment days
+   on Edit Project Details."
 
-On a narrow band (under ~54px, so a single week column) the month name is dropped
-and only the figure shows. A truncated month name is worse than none, and the
-colour plus the tooltip still identify it.
+When it is working, the line underneath previews it: "val 28/09 -> cash 21/10,
+then 2 more".
 
 
-ALSO IN THIS PACKAGE (pkg542-553)
+ALSO IN THIS PACKAGE (pkg542-554)
 ---------------------------------
-- Sales received: weekly / fortnightly application cycles with a start date, term
-  running from each application date.
-- Retention and MCD come from Edit Project Details (retention is stored as a
-  fraction, MCD as a percentage - both normalised in the API).
+- Income / month band row under Total OUT / week, each month its own colour.
+- Weekly / fortnightly sales cycles with a start date.
+- Retention and MCD from Edit Project Details (retention stored as a fraction,
+  MCD as a percentage - both normalised in the API).
 - An overridden forecast records what it CLAIMED, so the next one does not offer
   the same money again.
 - Actuals supersede forecasts: applications land in the chart on their own

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import Head from 'next/head'
 import CommercialNav from '../components/CommercialNav'
-import { computeApplicationSummary } from '../lib/applications'
+import { computeApplicationSummary, resolveAppDates } from '../lib/applications'
 
 // ── Layout constants (mirror the planning gantt) ──
 const NAME_W = 280, DATE_W = 92, CELL_W = 34, ROW_H = 42
@@ -642,6 +642,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [revOverride, setRevOverride] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [contractTerms, setContractTerms] = useState({})  // retention / MCD from Edit Project Details
+  const [appCalendar, setAppCalendar] = useState(null)    // application/valuation/payment days
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
@@ -673,6 +674,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setActuals(d.actuals || null)
         const terms = d.contractTerms || {}
         setContractTerms(terms)
+        setAppCalendar(d.appCalendar || null)
         const tv = Array.isArray(d.variations) ? d.variations : []
         setTrackerVars(tv)
         // Variation rows mirror the tracker, carrying a percentage and an include flag.
@@ -1014,6 +1016,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // move as you type this period's percentages, or it stops being headroom and becomes a
   // running total of the same thing the box above already shows.
   const salesCycle = (salesTerm && salesTerm.cycle) || 'applications'
+  // The project calendar is only usable if it can actually produce a cash date. A
+  // valuation day with no payment day gives an application date and no payment, which
+  // would drop the money out of the forecast silently.
+  const appCalendarUsable = !!(appCalendar && appCalendar.paymentDay && (appCalendar.valuationDay || appCalendar.applicationDay))
 
   const priorLabel = !prior ? 'the start'
     : prior.kind === 'application' ? `App ${(latestApp && (latestApp.appNumber || latestApp.seq)) || ''}`.trim()
@@ -1155,6 +1161,26 @@ function HypAppModal({ modal, onClose, onSaved }) {
       })).filter(s => s.amount > 0.5)
     }
 
+    // The project's OWN application calendar, from Edit Project Details. One application
+    // per calendar month, dated on the valuation day, cash on the final date for payment.
+    //
+    // resolveAppDates() is the same function the applications screen uses, so the forecast
+    // lands on the exact dates the real applications will - including any per-month
+    // override. Rebuilding the rule here would drift the moment one of them changed.
+    if (cycle === 'project') {
+      if (!periodMonths.length || !appCalendarUsable) return []
+      return periodMonths.map(mk => {
+        const dts = resolveAppDates(mk, appCalendar || {})
+        const cash = salesTerm.payOn === 'due' ? (dts.paymentDate || dts.finalDate) : (dts.finalDate || dts.paymentDate)
+        return {
+          month: mk,
+          appDate: dts.valDate || dts.appDate || '',
+          date: cash,
+          amount: rev * (num(salesSpread[mk]) / 100),
+        }
+      }).filter(s => s.date && s.amount > 0.5)
+    }
+
     // One application for the period: each spread month's portion, timed off month end.
     if (!periodMonths.length) return []
     const days = num(salesTerm.days)
@@ -1163,7 +1189,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
       return { month: mk, date, amount: rev * pct }
     }).filter(s => s.amount > 0.5)
-  }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm, from, to])
+  }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm, from, to, appCalendar, appCalendarUsable])
 
   // Labour cash schedule: each spread month's portion, timed by the labour term.
   const labSchedule = useMemo(() => {
@@ -1419,7 +1445,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Payment terms (sales received, labour paid) */}
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" cycles />
+                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" cycles
+                  calendar={appCalendar} calendarUsable={appCalendarUsable} previewDates={salesSchedule} />
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
               </div>
@@ -1428,7 +1455,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {periodMonths.length > 1 && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} calendar months</div>
-                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {salesCycle === 'applications' ? 'sales and labour' : 'labour'} falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle !== 'applications' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
+                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {(salesCycle === 'applications' || salesCycle === 'project') ? 'sales and labour' : 'labour'} falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle === 'weekly' || salesCycle === 'fortnightly' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
                   <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead><tr style={{ color: '#999' }}>
                       <th style={{ textAlign: 'left', padding: '3px 10px' }}></th>
@@ -1440,7 +1467,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                           weekly or fortnightly cycle the application dates drive the cash
                           and this row would be ignored - showing it would invite you to
                           set numbers that do nothing. */}
-                      {salesCycle === 'applications' && <SpreadRow label="Sales %" months={periodMonths} spread={salesSpread} setSpread={setSalesSpread} />}
+                      {(salesCycle === 'applications' || salesCycle === 'project') && <SpreadRow label="Sales %" months={periodMonths} spread={salesSpread} setSpread={setSalesSpread} />}
                       <SpreadRow label="Labour %" months={periodMonths} spread={labourSpread} setSpread={setLabourSpread} />
                     </tbody>
                   </table>
@@ -1691,14 +1718,16 @@ function LabourTermEditor({ term, setTerm, schedule }) {
   )
 }
 
-function TermEditor({ label, term, setTerm, refDate, refLabel, cycles }) {
+function TermEditor({ label, term, setTerm, refDate, refLabel, cycles, calendar, calendarUsable, previewDates }) {
   const cycle = (term && term.cycle) || 'applications'
   const cycling = cycles && (cycle === 'weekly' || cycle === 'fortnightly')
+  const usingProject = cycles && cycle === 'project'
   // When applications go in on a cycle, the term runs from each APPLICATION date, so the
   // preview has to be off the start date - not the period end, which is the reference
   // for a single application covering the whole period.
   const cash = paymentDate(cycling ? (term.startDate || refDate) : refDate, term)
   const fmtD = (s) => { if (!s) return '-'; const [y, m, d] = s.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+  const first = previewDates && previewDates[0]
   return (
     <div>
       <div style={lblS}>{label}</div>
@@ -1706,15 +1735,25 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles }) {
         {cycles && (
           <select value={cycle} onChange={e => setTerm({ ...term, cycle: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
             <option value="applications">Per application</option>
+            <option value="project">Project application dates</option>
             <option value="weekly">Weekly</option>
             <option value="fortnightly">Fortnightly</option>
           </select>
         )}
-        <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
-          <option value="days">days from {cycling ? 'application' : refLabel}</option>
-          <option value="eom">EOM + days</option>
-        </select>
-        <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
+        {usingProject ? (
+          <select value={term.payOn || 'final'} onChange={e => setTerm({ ...term, payOn: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+            <option value="final">cash on final date for payment</option>
+            <option value="due">cash on payment due</option>
+          </select>
+        ) : (
+          <>
+            <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+              <option value="days">days from {cycling ? 'application' : refLabel}</option>
+              <option value="eom">EOM + days</option>
+            </select>
+            <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
+          </>
+        )}
       </div>
       {cycling && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
@@ -1722,10 +1761,16 @@ function TermEditor({ label, term, setTerm, refDate, refLabel, cycles }) {
           <input type="date" value={term.startDate || ''} onChange={e => setTerm({ ...term, startDate: e.target.value })} style={{ ...inpS, padding: '4px 6px' }} />
         </div>
       )}
-      <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>
-        {cycling
-          ? `first cash ${fmtD(cash)}${term.startDate ? '' : ' (from period start - set a date)'}`
-          : `cash on ${fmtD(cash)}`}
+      <div style={{ fontSize: 10.5, color: usingProject && !calendarUsable ? '#b45309' : '#0f766e', marginTop: 3, maxWidth: 300 }}>
+        {usingProject
+          ? (!calendarUsable
+              ? 'No application calendar on this project - set the valuation and payment days on Edit Project Details.'
+              : (first
+                  ? `val ${fmtD(first.appDate)} -> cash ${fmtD(first.date)}${previewDates.length > 1 ? `, then ${previewDates.length - 1} more` : ''}`
+                  : 'From Edit Project Details.'))
+          : cycling
+            ? `first cash ${fmtD(cash)}${term.startDate ? '' : ' (from period start - set a date)'}`
+            : `cash on ${fmtD(cash)}`}
       </div>
     </div>
   )

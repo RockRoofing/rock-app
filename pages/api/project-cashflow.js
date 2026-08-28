@@ -221,6 +221,17 @@ export default async function handler(req, res) {
       // stored as a PERCENTAGE (2.5) already. Two neighbouring fields, two different
       // scales - so both are normalised to a percentage here, once, and the client never
       // has to know.
+      // THE PROJECT'S APPLICATION CALENDAR, from Edit Project Details. Exactly the
+      // fields resolveAppDates() consumes, passed through untouched (including any
+      // per-month dateOverrides) so the forecast produces the SAME dates the real
+      // applications will - not an approximation of them.
+      appCalendar: {
+        applicationDay: project.applicationDay || null,
+        valuationDay: project.valuationDay || null,
+        paymentDay: project.paymentDay || null,
+        finalPaymentDays: project.finalPaymentDays || null,
+        dateOverrides: project.dateOverrides || {},
+      },
       contractTerms: {
         retentionPct: (project.retentionPct != null && project.retentionPct !== '' && isFinite(parseFloat(project.retentionPct)))
           ? parseFloat(project.retentionPct) * 100 : null,
