@@ -156,12 +156,19 @@ export default function ProjectCashflow() {
     // term only decides when the money shows up, and that is what the cash rows above
     // are for. An August valuation paid in October is August sales.
     const detail = {}
-    const note = (txDate, cashDate, kind, label, amt) => {
+    const note = (txDate, cashDate, kind, label, amt, gross) => {
       const d = txDate || cashDate
       if (!d || !amt) return
       const mk = String(d).slice(0, 7)
       if (!detail[mk]) detail[mk] = []
-      detail[mk].push({ kind, label, txDate: d, date: cashDate || '', amount: amt })
+      detail[mk].push({ kind, label, txDate: d, date: cashDate || '', amount: amt, gross: gross == null ? amt : gross })
+    }
+    // A forecast stores its NET figure. The sales rows want the figure AFTER MCD but
+    // BEFORE retention, so only the retention is added back - the MCD stays deducted,
+    // which is what makes this match the sales line in the P&L.
+    const salesValue = (net, ret) => {
+      const d = 1 - num(ret) / 100
+      return d > 0 ? net / d : net
     }
     const monthEnd = (mk) => { const [y, m] = String(mk).split('-').map(Number); return y && m ? isoOf(new Date(y, m, 0)) : '' }
 
@@ -174,7 +181,7 @@ export default function ProjectCashflow() {
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
         add(a.dueDate, 'actualIn', a.thisCert)
-        note(a.endDate, a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
+        note(a.endDate, a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert, a.thisCertGross != null ? a.thisCertGross : a.thisCert)
       }
     }
 
@@ -188,8 +195,8 @@ export default function ProjectCashflow() {
         // Overtaken by a real application - its cash is already in from the actual above.
         if (supersededIds.has(fc.id)) continue
         if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
-          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.appDate || monthEnd(s.month) || fc.to, s.date, 'forecast', `${fcLabel} forecast`, s.amount || 0) }
-        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.to, fc.salesDate, 'forecast', `${fcLabel} forecast`, fc.revenueThisPeriod || 0) }
+          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.appDate || monthEnd(s.month) || fc.to, s.date, 'forecast', `${fcLabel} forecast`, s.amount || 0, salesValue(s.amount || 0, fc.retentionPct)) }
+        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.to, fc.salesDate, 'forecast', `${fcLabel} forecast`, fc.revenueThisPeriod || 0, salesValue(fc.revenueThisPeriod || 0, fc.retentionPct)) }
         for (const s of (fc.labourSchedule || [])) add(s.date, 'labourOut', s.amount || 0)
         if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'labourOut', fc.labourThisPeriod || 0)
         for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
@@ -378,8 +385,12 @@ export default function ProjectCashflow() {
                         for (const [mk, rows] of Object.entries(detail)) {
                           const m = { actual: 0, forecast: 0 }
                           for (const x of rows) {
-                            if (x.kind === 'actual') m.actual += x.amount
-                            else if (x.kind === 'forecast') m.forecast += x.amount
+                            // GROSS - the certificate's Gross line, before MCD and before
+                            // retention is held. The cash rows above use the net figure,
+                            // because that is what actually gets paid.
+                            // After MCD, before retention - the P&L sales basis.
+                            if (x.kind === 'actual') m.actual += x.gross
+                            else if (x.kind === 'forecast') m.forecast += x.gross
                           }
                           monthSales[mk] = m
                         }
@@ -396,16 +407,20 @@ export default function ProjectCashflow() {
                         // be traced without guessing at it.
                         const tip = (mk, kinds, total) => {
                           const rows = (detail[mk] || []).filter(x => kinds.includes(x.kind))
-                            .sort((a, b) => b.amount - a.amount)
+                            .sort((a, b) => b.gross - a.gross)
                           const head = `${monthShort(mk)}: ${gbp(total)} from ${rows.length} item${rows.length === 1 ? '' : 's'} (valued in ${monthShort(mk)})`
                           const lines = rows.slice(0, 14).map(x =>
-                            `  val ${x.txDate}${x.date && x.date !== x.txDate ? ` -> cash ${x.date}` : ''}  ${x.label}  ${gbp(x.amount)}`)
+                            `  val ${x.txDate}${x.date && x.date !== x.txDate ? ` -> cash ${x.date}` : ''}  ${x.label}  ${gbp(x.gross)}${Math.round(x.gross) !== Math.round(x.amount) ? ` (net ${gbp(x.amount)})` : ''}`)
                           if (rows.length > 14) lines.push(`  ...and ${rows.length - 14} more`)
                           return [head, ...lines].join('\n')
                         }
+                        const BAND_H = 36
                         const BandRow = ({ label, colour, kinds, pick, top }) => (
-                          <div style={{ display: 'flex', borderBottom: '2px solid #d9d5cc', position: 'sticky', top, zIndex: 4, height: ROW_H2 + 2 }}>
-                            <Frozen w={NAME_W} style={{ background: '#fff', fontSize: 11, fontWeight: 700, color: colour, zIndex: 6 }}>{label}</Frozen>
+                          <div style={{ display: 'flex', borderBottom: '2px solid #d9d5cc', position: 'sticky', top, zIndex: 4, height: BAND_H }}>
+                            <Frozen w={NAME_W} style={{ background: '#fff', color: colour, zIndex: 6, padding: '3px 10px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.15 }}>{label}</span>
+                              <span style={{ fontSize: 8, fontWeight: 500, color: '#9a958c', lineHeight: 1.15 }}>(Total Sales at transaction date, less MCD, inc. Retention - matches P&amp;L sales)</span>
+                            </Frozen>
                             <PlainCell w={DATE_W} style={{ background: '#fff' }} />
                             <PlainCell w={DATE_W} style={{ background: '#fff' }} />
                             {groups.map((g, i) => {
@@ -435,7 +450,7 @@ export default function ProjectCashflow() {
                             <BandRow label="Forecasted Sales / month" colour="#0f766e"
                               kinds={['forecast']} pick={m => m.forecast} top={HEADER_H + ROW_H2 * 6} />
                             <BandRow label="Actual Sales / month" colour="#15803d"
-                              kinds={['actual']} pick={m => m.actual} top={HEADER_H + ROW_H2 * 7 + 2} />
+                              kinds={['actual']} pick={m => m.actual} top={HEADER_H + ROW_H2 * 6 + BAND_H} />
                           </>
                         )
                       })()}

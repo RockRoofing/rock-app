@@ -1,7 +1,8 @@
-pkg558 - Cash Flow: Sales by valuation date, not by cash date
-==============================================================
+pkg560 - Cash Flow: sales rows on the P&L basis (less MCD, inc. retention)
+===========================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg557. ***
+*** SUPERSEDES pkg542 THROUGH pkg559. ***
+pkg559 was never deployed - discard it, this replaces it.
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -16,69 +17,61 @@ CHANGED FILES (replace)
   pages/api/project-cashflow.js
 
 
-THE CHANGE
+THE FIGURE
 ----------
-  Forecasted Income / month   ->  Forecasted Sales / month
-  Actual Income / month       ->  Actual Sales / month
+Both sales rows now show the value AFTER MCD and BEFORE retention, which is the
+sales line in the P&L: MCD is a discount never received, retention is money
+earned and merely held back.
 
-And, more importantly, they now bucket by the TRANSACTION date - the valuation
-date the work was applied for - not by the date the money lands.
+Label, on two lines:
 
-An August valuation paid in October is AUGUST sales. Before, that 88,128.18 sat
-in October because that is when the cash arrived.
+  Forecasted Sales / month
+  (Total Sales at transaction date, less MCD, inc. Retention - matches P&L sales)
 
-The cash rows above are untouched. "Sales in", "Retention in" and "Total IN /
-week" still work off payment dates, because they answer a different question -
-when the money is in the bank. The two must not be mixed and are now computed
-from separate maps: cashByDay by payment date, the Sales rows off the detail
-index by transaction date.
+  Actual Sales / month
+  (Total Sales at transaction date, less MCD, inc. Retention - matches P&L sales)
 
 
-WHICH DATE IS USED AS THE TRANSACTION DATE
-------------------------------------------
-  Actual application     its valuation date (valDate, falling back to appDate)
-  Forecast, project or
-  weekly/fortnightly     the application date the cycle produced
-  Forecast, per
-  application            the end of the calendar month being valued, or the
-                         period end for an older forecast with no monthly split
-
-
-RETENTION IS NO LONGER IN THESE ROWS
+ONE FIELD THAT WOULD HAVE BEEN WRONG
 ------------------------------------
-It used to be added to the Income row. A retention release is cash arriving
-against work sold months ago, not a new sale, so counting it as sales in the
-month it is released overstates that month and understates the one the work was
-actually valued in.
+The obvious choice was thisCert.subTotal - the Sub-Total row on the certificate.
+It is wrong, and plausibly so.
 
-It has not been lost - it is still on "Retention in" and in "Total IN / week",
-where it belongs. Tell me if you would rather it stayed on the sales row.
+subTotal is `base - mcd`, where base is only the MCD-ABLE part. On a job where
+MCD applies to the contract sum but not to variations or materials on site, those
+parts are held in a separate `after` figure and subTotal omits them entirely.
 
+  MCD 2.5% on everything          gross 120,000  subTotal 117,000  netBeforeRet 117,000
+  MCD 2.5% on contract sum only   gross 120,000  subTotal  97,500  netBeforeRet 117,500
 
-THE HOVER NOW SHOWS BOTH DATES
-------------------------------
-  Aug 26: 1,075,400.00 from 9 items (valued in Aug 26)
-    val 2026-08-31 -> cash 2026-10-21  J240 - Market Drayton App 4 (draft)  88,128.18
-    val 2026-08-28 -> cash 2026-10-14  J251 - Ellesmere Port forecast       19,800.00
+The second line is a 100,000 contract with a 20,000 variation. subTotal loses the
+whole variation - 20,000 short, on a row that would have looked entirely
+reasonable. netBeforeRet is the whole account after the discount, and that is
+what is used.
 
-The cash date is only shown where it differs from the valuation date.
-
-
-ONE THING THIS WILL CHANGE ON SCREEN
-------------------------------------
-Money will MOVE MONTHS the first time you look. Anything on a 30 or 60 day term
-shifts one or two months earlier, into the month it was valued. That is the
-point, but it will not look like your old figures - expect August to change even
-before any double-counting is dealt with.
-
-The two causes of the inflated figures are still worth reading off the hover:
-a DRAFT with "Previously certified (gross)" blank contributing its full
-cumulative value (marked "(draft)"), and a project appearing as both "App N" and
-"forecast" where the forecast runs past the application it overlaps.
+On J240, MCD is 0% and all three agree, so this would not have shown up there.
 
 
-ALSO IN THIS PACKAGE (pkg542-557)
+OLDER FORECASTS
+---------------
+A forecast stores its NET figure, so only the retention is added back - the MCD
+stays deducted. Exact, not an estimate: net 111,625.00 recovers 117,500.00, which
+matches netBeforeRet to the penny. No re-saving needed.
+
+
+HOVER
+-----
+  val 2026-08-31 -> cash 2026-10-21  J240 - Market Drayton App 4  92,766.50 (net 88,128.18)
+
+Net shown in brackets only where it differs.
+
+The cash rows above are untouched and still net - Sales in, Retention in and
+Total IN / week are about money reaching the bank.
+
+
+ALSO IN THIS PACKAGE (pkg542-559)
 ---------------------------------
+- Sales bucketed by valuation date; retention releases excluded from sales.
 - Project names on every breakdown line.
 - Duplicate project records de-duplicated by full application fingerprint.
 - Sales received can follow the project's own application dates, or weekly /
@@ -90,3 +83,13 @@ ALSO IN THIS PACKAGE (pkg542-557)
 - Revenue, labour and materials-on-site overrides.
 - Labour and Materials position panels (budget / claimed / actual spend).
 - Backdrop click no longer closes the modal; Escape does.
+
+
+STILL OUTSTANDING
+-----------------
+1. J240 Application 4 - "Previously certified (gross)" BLANK, so it contributes
+   its full cumulative value. Marked "(draft)" in the hover.
+2. Forecasts do not recompute when an application changes retrospectively - you
+   asked about this and I offered two options; no decision yet.
+3. variationValueToDate() instructed 'yes'/'no' string bug.
+4. "Raise & send to customer" - waiting on whether it still saves.

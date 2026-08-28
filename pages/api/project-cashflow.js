@@ -174,10 +174,20 @@ export default async function handler(req, res) {
             // computed gross. Getting this wrong makes every certificate cumulative.
             const prevGross = !prev ? 0
               : (a.prevCertGross != null ? num(a.prevCertGross) : computeApplicationSummary(prev, 0).grossCurrent)
-            let thisCert = 0
+            let thisCert = 0, thisCertGross = 0
             try {
               const app = { ...a, variations: buildAppVariations(a, trackerVars) }
-              thisCert = num(computeApplicationSummary(app, prevGross).thisCert.total)
+              const c = computeApplicationSummary(app, prevGross).thisCert
+              // total       after MCD and after retention - the cash that gets paid.
+              // netBeforeRet after MCD, before retention - the SALES figure, and what
+              //              the P&L shows, since MCD is a discount never received but
+              //              retention is money earned and merely held back.
+              //
+              // NOT subTotal: that is base - mcd, where base is only the MCD-able part,
+              // so on a job where MCD applies to the contract sum only it silently drops
+              // the variations and materials. netBeforeRet is the whole account.
+              thisCert = num(c.total)
+              thisCertGross = num(c.netBeforeRet)
             } catch {}
             out.push({
               seq: a.seq || 0,
@@ -189,6 +199,7 @@ export default async function handler(req, res) {
               // any forecast payment term - it is the contractual date.
               dueDate: a.finalDate || a.paymentDate || '',
               thisCert,
+              thisCertGross,
             })
             prev = a
           }
