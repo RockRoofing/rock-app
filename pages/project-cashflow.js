@@ -44,6 +44,7 @@ export default function ProjectCashflow() {
   const [modal, setModal] = useState(null)           // { projectKey, projectName, xeroId, from, to }
   const [hypCounts, setHypCounts] = useState({})     // projectKey -> number of saved hyp apps
   const [allForecasts, setAllForecasts] = useState({}) // projectKey -> forecast apps[] (gantt bands)
+  const [appActuals, setAppActuals] = useState({})           // xeroId -> real applications[]
   const [retention, setRetention] = useState([])       // retention tracker entries
   const dragging = useRef(false)
   const dragKey = useRef(null)
@@ -61,7 +62,8 @@ export default function ProjectCashflow() {
   }, [])
 
   function loadAllForecasts() {
-    fetch('/api/project-cashflow?all=1').then(r => r.json()).then(d => setAllForecasts(d.all || {})).catch(() => {})
+    fetch('/api/project-cashflow?all=1').then(r => r.json())
+      .then(d => { setAllForecasts(d.all || {}); setAppActuals(d.actuals || {}) }).catch(() => {})
   }
 
   useEffect(() => {
@@ -91,13 +93,52 @@ export default function ProjectCashflow() {
     return { from: arr[0], to: arr[arr.length - 1], count: arr.length }
   }, [sel])
 
+  // WHICH FORECASTS HAVE BEEN OVERTAKEN BY A REAL APPLICATION.
+  //
+  // A forecast is a guess at a period. Once that period has been applied for, the guess
+  // is history and the ACTUAL certificate is what will be paid. Leaving both in would
+  // count the same money twice.
+  //
+  // Superseded when the application's valuation date is at or past the forecast's end -
+  // a forecast still running when the application lands is left alone, because only part
+  // of its period has been certified and it is still forecasting the rest.
+  //
+  // Nothing is deleted. The forecast stays on the record and on the list, greyed, so a
+  // prediction can still be read against what actually happened.
+  const supersededIds = useMemo(() => {
+    const out = new Set()
+    for (const [pk, list] of Object.entries(allForecasts || {})) {
+      const no = String(pk).startsWith('L:') ? String(pk).slice(2) : ''
+      const xid = no ? xeroMap[no] : ''
+      const apps = (xid && appActuals[xid]) || []
+      if (!apps.length) continue
+      const lastEnd = apps.reduce((m, a) => (a.endDate > m ? a.endDate : m), '')
+      if (!lastEnd) continue
+      for (const fc of (list || [])) {
+        if (fc.to && fc.to <= lastEnd) out.add(fc.id)
+      }
+    }
+    return out
+  }, [allForecasts, appActuals, xeroMap])
+
   // Per-day cash movement across all saved forecasts (in = sales + retention released;
   // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
   const cashByDay = useMemo(() => {
     const map = {}
     const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { salesIn: 0, retIn: 0, labourOut: 0, matOut: 0 }; map[d][k] += amt }
-    for (const list of Object.values(allForecasts || {})) {
+
+    // ACTUALS FIRST. A raised application is money that will be paid on a contractual
+    // date, which is better than any forecast of it.
+    for (const [xid, apps] of Object.entries(appActuals || {})) {
+      for (const a of (apps || [])) {
+        if (a.dueDate && a.thisCert) add(a.dueDate, 'salesIn', a.thisCert)
+      }
+    }
+
+    for (const [pk, list] of Object.entries(allForecasts || {})) {
       for (const fc of (list || [])) {
+        // Overtaken by a real application - its cash is already in from the actual above.
+        if (supersededIds.has(fc.id)) continue
         if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
           for (const s of fc.salesSchedule) add(s.date, 'salesIn', s.amount || 0)
         } else if (fc.salesDate) add(fc.salesDate, 'salesIn', fc.revenueThisPeriod || 0)
@@ -115,7 +156,7 @@ export default function ProjectCashflow() {
       if (e.release2Date && !e.release2Received) add(e.release2Date, 'retIn', totalRet / 2)
     }
     return map
-  }, [allForecasts, retention])
+  }, [allForecasts, retention, appActuals, supersededIds])
 
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
@@ -266,11 +307,11 @@ export default function ProjectCashflow() {
 
                 {live.length > 0 && <SectionLabel>Live projects</SectionLabel>}
                 {live.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} onView={openForecast} />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} onView={openForecast} />)}
 
                 {negotiated.length > 0 && <SectionLabel>Negotiated projects</SectionLabel>}
                 {negotiated.map(p => <Row key={p.key} p={p} days={days} weekGroups={weekGroups} view={view} data={data} meta={metaAll[p.key] || {}}
-                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} onView={openForecast} neg />)}
+                  countOnDay={countOnDay} sel={sel} onCellDown={cellDown} onCellEnter={cellEnter} todayKey={todayKey} forecasts={allForecasts[p.key] || []} superseded={supersededIds} onView={openForecast} neg />)}
               </div>
             </div>
           </div>
@@ -286,7 +327,7 @@ export default function ProjectCashflow() {
   )
 }
 
-function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], onView, neg }) {
+function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDown, onCellEnter, todayKey, forecasts = [], superseded, onView, neg }) {
   const complD = parseISO(meta.completionDate || '')
   const projDays = (data.allocations || {})[p.key] || {}
   let plannedStart = ''
@@ -342,14 +383,19 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
               const e = Math.min(days.length - 1, dayIndex(fc.to > lastDayKey ? lastDayKey : fc.to))
               if (e < s) return null
               const col = appColour(idx)
+              // Overtaken by a real application. Kept on the chart so you can read the
+              // prediction against what happened, but faded and struck so it is obvious
+              // it is no longer contributing cash.
+              const gone = superseded && superseded.has(fc.id)
               const left = s * CELL_W, width = (e - s + 1) * CELL_W
               const matIn = fc.matDeliverDay && fc.matDeliverDay >= firstDayKey && fc.matDeliverDay <= lastDayKey
               const matLeft = matIn ? dayIndex(fc.matDeliverDay) * CELL_W : 0
               return (
                 <div key={fc.id} style={{ position: 'absolute', top: 3, bottom: 3, left, width, pointerEvents: 'none' }}>
-                  <div style={{ position: 'absolute', inset: 0, background: col, opacity: 0.82, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                    <span style={{ color: '#fff', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.3)', padding: '0 4px' }}>
-                      App {idx + 1} · Rev {gbpK(fc.revenueThisPeriod)} · Lab {gbpK(fc.labourThisPeriod)}{fc.materialsThisPeriod ? ` · Mat ${gbpK(fc.materialsThisPeriod)}` : ''}
+                  <div title={gone ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead' : undefined}
+                    style={{ position: 'absolute', inset: 0, background: gone ? '#c9c5bd' : col, opacity: gone ? 0.5 : 0.82, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', pointerEvents: gone ? 'auto' : 'none' }}>
+                    <span style={{ color: '#fff', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.3)', padding: '0 4px', textDecoration: gone ? 'line-through' : 'none' }}>
+                      {gone ? 'Superseded' : `App ${idx + 1}`} · Rev {gbpK(fc.revenueThisPeriod)} · Lab {gbpK(fc.labourThisPeriod)}{fc.materialsThisPeriod ? ` · Mat ${gbpK(fc.materialsThisPeriod)}` : ''}
                     </span>
                   </div>
                   {matIn && <div title={`Materials delivered ${fmtDMY(parseISO(fc.matDeliverDay))} · ${gbpK(fc.materialsThisPeriod)}`}

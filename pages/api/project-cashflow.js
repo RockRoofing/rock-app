@@ -144,7 +144,59 @@ export default async function handler(req, res) {
         const pk = k.replace('cashflow:hyp-apps:', '')
         try { out[pk] = (await redis.get(k)) || [] } catch { out[pk] = [] }
       }
-      return res.json({ all: out })
+
+      // REAL APPLICATIONS, keyed by xeroId, so the chart can show actuals where they
+      // exist instead of a forecast that has already been overtaken. Keyed by xeroId
+      // rather than projectKey because the forecast keys are job numbers ("L:J240") and
+      // the applications live on the Xero-keyed project record - the client already holds
+      // the jobNo -> xeroId map and joins them.
+      const actuals = {}
+      try {
+        let cursor = 0
+        const pkeys = []
+        do {
+          const [next, batch] = await redis.scan(cursor, { match: 'project:*', count: 200 })
+          cursor = Number(next)
+          for (const k of (batch || [])) pkeys.push(k)
+        } while (cursor)
+        for (const k of pkeys) {
+          const rec = await redis.get(k).catch(() => null)
+          const apps = Array.isArray(rec && rec.applications) ? rec.applications : []
+          if (!apps.length) continue
+          const sorted = apps.slice().sort((a, b) => (a.seq || 0) - (b.seq || 0))
+          const trackerVars = projectVariations(rec)
+          const out = []
+          let prev = null
+          for (const a of sorted) {
+            // Same prevGross rule as pages/api/applications.js - the typed
+            // prevCertGross if there is one, otherwise the previous application's
+            // computed gross. Getting this wrong makes every certificate cumulative.
+            const prevGross = !prev ? 0
+              : (a.prevCertGross != null ? num(a.prevCertGross) : computeApplicationSummary(prev, 0).grossCurrent)
+            let thisCert = 0
+            try {
+              const app = { ...a, variations: buildAppVariations(a, trackerVars) }
+              thisCert = num(computeApplicationSummary(app, prevGross).thisCert.total)
+            } catch {}
+            out.push({
+              seq: a.seq || 0,
+              appNumber: a.appNumber || null,
+              status: a.status || '',
+              // The period the application VALUES, for matching a forecast to it.
+              endDate: a.valDate || a.appDate || (a.monthKey ? `${a.monthKey}-28` : ''),
+              // When the money is actually due. Off the application itself, which beats
+              // any forecast payment term - it is the contractual date.
+              dueDate: a.finalDate || a.paymentDate || '',
+              thisCert,
+            })
+            prev = a
+          }
+          const keep = out.filter(a => a.endDate)
+          if (keep.length) actuals[k.replace('project:', '')] = keep
+        }
+      } catch {}
+
+      return res.json({ all: out, actuals })
     }
     if (!projectKey) return res.status(400).json({ error: 'projectKey required' })
     // One read of the project record, used for both the rates and the applications.

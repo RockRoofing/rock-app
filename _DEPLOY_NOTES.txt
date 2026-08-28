@@ -1,8 +1,8 @@
-pkg549 - Cash Flow forecast: revenue override, and "remaining" measured from
-         the previous certificate
-=============================================================================
+pkg550 - Cash Flow: actuals supersede forecasts, revenue override, and
+         "remaining" measured from the previous certificate
+======================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg548. ***
+*** SUPERSEDES pkg542 THROUGH pkg549. ***
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -19,66 +19,77 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-1. REVENUE OVERRIDE
+1. ACTUALS NOW SUPERSEDE FORECASTS
+----------------------------------
+The chart was built from saved forecasts and retention releases only. Real
+applications never entered it. So once a forecast period passed and the real
+application went in, the chart kept showing the guess, at the guessed date, for
+ever - and the actual never appeared at all.
+
+Two changes:
+
+REAL APPLICATIONS ARE NOW IN THE CHART. Each one lands as sales-in on its own
+payment date (finalDate, falling back to paymentDate) at its actual certificate
+value. That is the contractual date off the application itself, which beats any
+forecast payment term.
+
+FORECASTS THEY COVER DROP OUT. A forecast is superseded when the latest
+application's VALUATION date is at or past the forecast's end date. Its cash
+stops counting - otherwise the same money is in twice.
+
+A forecast still RUNNING when the application lands is left alone. Only part of
+its period has been certified and it is still forecasting the rest. Checked:
+
+  App 4 values to 31 Aug
+  forecast ending 31 Aug   -> superseded
+  forecast ending 30 Sep   -> kept (straddles)
+  forecast starting 28 Sep -> kept (future)
+  negotiated project       -> untouched, it has no applications
+
+NOTHING IS DELETED. The superseded forecast stays on the record and on the gantt,
+greyed and struck through, reading "Superseded" with a tooltip explaining why.
+You can still read what you predicted against what happened, which is the only
+way the forecasting gets better. Deleting it would have thrown that away and
+there would be no undo if a match were ever wrong.
+
+The certificate value is computed server-side exactly as pages/api/applications.js
+does it - prevCertGross where it has been entered, otherwise the previous
+application's computed gross. Anything else makes every certificate cumulative.
+
+NOTE: this is why J240 Application 4 matters. Its "Previously certified (gross)"
+is blank, so its certificate value computes as the FULL 92,766.50 rather than the
+increment - and that is now what goes into the chart. Enter 92,766.50 on it.
+
+
+2. REVENUE OVERRIDE
 -------------------
-"Revenue this period" is now editable, same as Labour and Materials on site.
-Override / type / Reset, calculated figure shown underneath, teal border when
-overridden. All three overrides now share one component.
-
-It drives the CASH only - month spread, sales payment schedule, sales-in stream,
-and the revenueThisPeriod saved on the forecast, which is what the chart reads.
-
-It does NOT rewrite the percentages. Gross to date and the labour and materials
-positions still show the true measured position, and the next forecast still
-carries on from the real numbers. If a typed revenue fed back into percentages,
-one adjustment would move what the FOLLOWING forecast thinks has been claimed and
-the error would compound. thisCertTotal is still saved as the calculated value.
+"Revenue this period" is now editable, like Labour and Materials on site.
+Override / type / Reset. Drives the cash only - spread, schedule, sales-in
+stream, and the saved revenueThisPeriod. It does NOT rewrite the percentages, so
+the measured position and the next forecast's starting point stay honest.
+thisCertTotal is still saved as the calculated value.
 
 
-2. "REMAINING" NOW MEASURES FROM THE PREVIOUS CERTIFICATE
----------------------------------------------------------
-The grey line under each box was budget less EVERYTHING INCLUDING what you were
-typing, so it shrank as you worked and duplicated what the figure above already
-told you.
-
-It now reads budget less the PREVIOUS certificate, and says which one:
+3. "REMAINING" MEASURES FROM THE PREVIOUS CERTIFICATE
+-----------------------------------------------------
+The grey line was budget less everything INCLUDING what you were typing, so it
+shrank as you worked and restated the box above it. It now reads budget less the
+PREVIOUS certificate and names it:
 
   "GBP 225,511.46 left after App 4"
 
-So it is headroom - how much is left to claim in this period - and it holds still
-while you type.
-
-  Revenue     salesBudgetTotal   - prevGross
-  Labour      labourBudgetTotal  - prevLabourToDate
-  Materials   materialsBudgetTotal - materialsUsedPrior
-
-All three budgets include instructed variations, as before.
+Headroom for this period, and it holds still while you type.
 
 
-3. YOUR QUESTION - WHAT HAPPENS WHEN AN APPLICATION IS RAISED AFTER A FORECAST
-------------------------------------------------------------------------------
-Right now: NOTHING, and it is worse than it sounds.
-
-The chart is built only from saved forecasts, plus retention releases. Real
-applications never enter it at all. So when a forecast period passes and you
-raise the real application:
-
-  - the forecast's GUESSED revenue stays in the chart, at its guessed date,
-    for ever
-  - the real application's actual value and its known payment due date never
-    appear
-  - the chart keeps showing a prediction that has already been overtaken
-
-The percentages do self-correct - the NEXT forecast picks the application as its
-prior, because prior is whichever certificate ends last. So the measured position
-recovers. The stale CASH does not.
-
-Not fixed in this package - see the message accompanying it. It needs a decision
-from you first, because "auto change the forecast" can mean two quite different
-things and one of them destroys what you predicted.
+PERFORMANCE NOTE
+----------------
+The all=1 call now scans project:* and reads each record to build the actuals.
+Same pattern as getAllProjectSettings, so it is nothing new, but it is a heavier
+call than before. If the cash flow page feels slow to load, that is where to
+look first and it can be cached.
 
 
-ALSO IN THIS PACKAGE (pkg542-548)
+ALSO IN THIS PACKAGE (pkg542-549)
 ---------------------------------
 - Seeds from the latest real application, else contracted rates at 0%.
 - Already-claimed value deducted, including MATERIALS ON SITE (the J240 fault).
@@ -86,14 +97,14 @@ ALSO IN THIS PACKAGE (pkg542-548)
 - "Fill from line items" buys only what is not already in stock.
 - Old supplier section renamed "Materials forecasted on site".
 - Variations table: instructed in by default, uninstructed listed and badged.
-- Labour override.
-- Labour and Materials position panels: budget / claimed / actual spend.
+- Labour override; Labour and Materials position panels (budget/claimed/spend).
 - "Revert to Application N" resets everything including all three overrides.
 - Backdrop click no longer closes the modal; Escape does.
 
 
 STILL OUTSTANDING
 -----------------
-1. J240 Application 4 - "Previously certified (gross)" is BLANK.
+1. J240 Application 4 - "Previously certified (gross)" BLANK. Now affects the
+   chart directly, so worth doing first.
 2. variationValueToDate() instructed 'yes'/'no' string bug.
 3. "Raise & send to customer" - waiting on whether it still saves.
