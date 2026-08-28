@@ -214,6 +214,19 @@ export default async function handler(req, res) {
       hypApps: Array.isArray(hyp) ? hyp : [],
       latestApplication: latestApplicationSeed(project),
       variations: variationSeed(project),
+      // THE CONTRACT RATES FROM EDIT PROJECT DETAILS.
+      //
+      // NOTE THE UNITS. settings.retentionPct is stored as a FRACTION (0.05), which is
+      // why the applications page does `settings.retentionPct * 100`. settings.mcdPct is
+      // stored as a PERCENTAGE (2.5) already. Two neighbouring fields, two different
+      // scales - so both are normalised to a percentage here, once, and the client never
+      // has to know.
+      contractTerms: {
+        retentionPct: (project.retentionPct != null && project.retentionPct !== '' && isFinite(parseFloat(project.retentionPct)))
+          ? parseFloat(project.retentionPct) * 100 : null,
+        mcdPct: (project.mcdPct != null && project.mcdPct !== '' && isFinite(parseFloat(project.mcdPct)))
+          ? parseFloat(project.mcdPct) : null,
+      },
       // ACTUAL spend to date, the same cache Project Financials reads
       // (costs:latest:<xeroId>, written by the wip-sync cron from Xero bills plus the
       // labour journals). Negotiated projects are not in Xero, so there is nothing to

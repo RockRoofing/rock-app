@@ -1,7 +1,7 @@
-pkg551 - Cash Flow: an overridden forecast now records what it claimed
-=======================================================================
+pkg554 - Project Cash Flow: monthly income band under Total OUT
+================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg550. ***
+*** SUPERSEDES pkg542 THROUGH pkg553. ***
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -18,74 +18,47 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-YES - THAT IS EXACTLY WHY
--------------------------
-You overrode the revenue instead of filling in the percentages. The override was
-built to drive the CASH only and never touch the percentages, which is right -
-otherwise a typed figure would silently rewrite the measured position.
+THE NEW ROW
+-----------
+"Income / month", directly under Total OUT / week and sticky with the others, so
+it stays visible while you scroll the projects.
 
-But "left after ..." is measured from prevGross, and prevGross was computed
-ENTIRELY from the prior certificate's percentages. So an overridden forecast put
-cash into the chart while recording no claimed position at all. The next forecast
-read the percentages, saw nothing claimed, and offered the whole budget again.
+Income = sales in + retention in.
 
-Worse than a wrong grey figure: the next forecast would have RE-CLAIMED the same
-money as revenue.
+Each month is one continuous coloured band across the columns it covers, cycling
+through six colours so no two neighbours match. The month name and total sit in
+the band. Works in both day and week view.
 
 
-THE FIX
--------
-A forecast now records what it actually claims, not just what its percentages
-measure:
+TWO THINGS I DECIDED
+--------------------
+A WEEK COLUMN CAN STRADDLE TWO MONTHS. It is assigned to the month holding the
+MAJORITY of its days - its middle day - so the band breaks where the month mostly
+changes rather than on a technicality. The week of 28/09 to 04/10 lands in
+October, which is where four of its seven days are.
 
-  grossClaimedToDate    cumulative gross claimed, including override uplift
-  labourClaimedToDate   the same for labour
+THE FIGURE IS THE TRUE CALENDAR-MONTH TOTAL, summed from cashByDay, never the sum
+of the columns in the band. Summing the band would silently mis-state a month
+every time a week straddled a boundary - and it would look perfectly plausible.
+Checked: bands total 52,000 against 52,000 of daily cash, with a straddling week
+in play.
 
-When a forecast is used as the prior, the RECORDED figure wins. Where there is no
-override the two are identical, so nothing changes. A real application always
-measures everything, so there it is the same number too.
-
-Uplift carried in from an earlier overridden forecast is carried on down the
-chain rather than being lost at the next link.
-
-GROSSING UP. Revenue is net of MCD and retention; the claimed position is gross,
-before both. Adding the net figure straight onto a gross total would understate
-the claim, so the uplift is grossed up on the same deductions the certificate
-used. Labour has neither, so its uplift goes on as-is.
-
-Worked through - App 4 at 92,766.50, revenue overridden to 40,000 with no
-percentage touched, 2.5% MCD and 5% retention:
-
-  uplift as gross      40,000 / (0.975 x 0.95)  =  43,184.89
-  grossClaimedToDate                              135,951.39
-
-  "left after" was    181,371.71   (ignored the 40,000)
-  "left after" now    138,186.82
-
-  and the NEXT forecast, measuring up to 140,000 gross:
-    revenue this period      3,750.03
-    without this fix        43,750.03   <- the 40,000 claimed a second time
+On a narrow band (under ~54px, so a single week column) the month name is dropped
+and only the figure shows. A truncated month name is worse than none, and the
+colour plus the tooltip still identify it.
 
 
-BACK-COMPATIBILITY
-------------------
-Forecasts saved before this package have no grossClaimedToDate, so they fall back
-to their percentages - the old behaviour, unchanged. Any forecast where you
-overrode revenue without setting percentages is understating its claim and will
-keep doing so until you reopen and re-save it. Worth doing on any you have
-already built that way.
-
-
-ALSO IN THIS PACKAGE (pkg542-550)
+ALSO IN THIS PACKAGE (pkg542-553)
 ---------------------------------
-- Actuals supersede forecasts: real applications land in the chart on their own
-  payment date; forecasts they cover are greyed, struck through and dropped from
-  the cash, never deleted.
-- Seeds from the latest real application, else contracted rates at 0%.
-- Already-claimed value deducted, including MATERIALS ON SITE (the J240 fault).
-- "Materials on site (claimed)": carried in, auto wind-down, manual override.
-- "Fill from line items" buys only what is not already in stock.
-- Old supplier section renamed "Materials forecasted on site".
+- Sales received: weekly / fortnightly application cycles with a start date, term
+  running from each application date.
+- Retention and MCD come from Edit Project Details (retention is stored as a
+  fraction, MCD as a percentage - both normalised in the API).
+- An overridden forecast records what it CLAIMED, so the next one does not offer
+  the same money again.
+- Actuals supersede forecasts: applications land in the chart on their own
+  payment date; forecasts they cover are greyed and dropped from the cash.
+- Materials on site carried in, auto wind-down, manual override (the J240 fault).
 - Variations: instructed in by default, uninstructed listed and badged.
 - Revenue, labour and materials-on-site overrides.
 - Labour and Materials position panels (budget / claimed / actual spend).
@@ -95,7 +68,8 @@ ALSO IN THIS PACKAGE (pkg542-550)
 
 STILL OUTSTANDING
 -----------------
-1. J240 Application 4 - "Previously certified (gross)" BLANK. This now feeds the
-   chart directly, so worth doing first.
-2. variationValueToDate() instructed 'yes'/'no' string bug.
-3. "Raise & send to customer" - waiting on whether it still saves.
+1. J240 Application 4 - "Previously certified (gross)" BLANK. Feeds the chart now.
+2. Any forecast where you overrode revenue before pkg551 understates its claim
+   until you reopen and re-save it.
+3. variationValueToDate() instructed 'yes'/'no' string bug.
+4. "Raise & send to customer" - waiting on whether it still saves.

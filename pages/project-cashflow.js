@@ -301,6 +301,58 @@ export default function ProjectCashflow() {
                       <TotalRow label="Labour out" streams={['labourOut']} colour="#b45309" bg="#fdf7f2" top={HEADER_H + ROW_H2 * 3} />
                       <TotalRow label="Materials out" streams={['matOut']} colour="#7c3aed" bg="#faf7fd" top={HEADER_H + ROW_H2 * 4} />
                       <TotalRow label="Total OUT / week" streams={['labourOut', 'matOut']} colour="#b91c1c" bg="#fdecec" top={HEADER_H + ROW_H2 * 5} big bold />
+                      {(() => {
+                        // INCOME BY CALENDAR MONTH, banded across the columns that month
+                        // covers, each month a different colour so the boundaries read at
+                        // a glance.
+                        //
+                        // A week column can straddle two months. It is assigned to the
+                        // month holding the MAJORITY of its days - its middle day - so the
+                        // band breaks where the month mostly changes. The FIGURE is always
+                        // the true calendar-month total, summed from cashByDay, never the
+                        // sum of the columns in the band. Summing the band would silently
+                        // mis-state a month whenever a week straddled the boundary.
+                        const monthIncome = {}
+                        for (const [dISO, v] of Object.entries(cashByDay || {})) {
+                          const mk = dISO.slice(0, 7)
+                          monthIncome[mk] = (monthIncome[mk] || 0) + (v.salesIn || 0) + (v.retIn || 0)
+                        }
+                        const groups = []
+                        for (const colDays of cols) {
+                          const d = colDays[Math.floor(colDays.length / 2)] || colDays[0]
+                          const mk = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
+                          const last = groups[groups.length - 1]
+                          if (last && last.mk === mk) last.count += 1
+                          else groups.push({ mk, count: 1 })
+                        }
+                        const cw = view === 'day' ? CELL_W : 46
+                        return (
+                          <div style={{ display: 'flex', borderBottom: '2px solid #d9d5cc', position: 'sticky', top: HEADER_H + ROW_H2 * 6, zIndex: 4, height: ROW_H2 + 2 }}>
+                            <Frozen w={NAME_W} style={{ background: '#fff', fontSize: 11, fontWeight: 700, color: '#0f766e', zIndex: 6 }}>Income / month</Frozen>
+                            <PlainCell w={DATE_W} style={{ background: '#fff' }} />
+                            <PlainCell w={DATE_W} style={{ background: '#fff' }} />
+                            {groups.map((g, i) => {
+                              const band = MONTH_BANDS[i % MONTH_BANDS.length]
+                              const v = monthIncome[g.mk] || 0
+                              const w = g.count * cw
+                              return (
+                                <div key={`${g.mk}-${i}`} title={`${monthShort(g.mk)} income: ${gbp(v)}`}
+                                  style={{
+                                    width: w, background: band.bg, color: band.fg,
+                                    borderLeft: '2px solid #fff', fontSize: 9.5, fontWeight: 800,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    overflow: 'hidden', whiteSpace: 'nowrap', lineHeight: 1,
+                                  }}>
+                                  {/* Below about 54px there is not room for both, and a
+                                      truncated month name is worse than none - the colour
+                                      and the tooltip still identify it. */}
+                                  {w >= 54 ? `${monthShort(g.mk)}${v ? ` ${gbpK(v)}` : ''}` : (v ? gbpK(v) : '')}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      })()}
                     </>
                   )
                 })()}
@@ -480,6 +532,17 @@ function monthsInPeriod(fromISO, toISO) {
   }
   return out
 }
+// Month bands on the totals row. Distinct enough to read at a glance where one month
+// ends and the next begins, muted enough not to fight the project rows above.
+const MONTH_BANDS = [
+  { bg: '#dcfce7', fg: '#14532d' },
+  { bg: '#dbeafe', fg: '#1e3a5f' },
+  { bg: '#fef3c7', fg: '#78350f' },
+  { bg: '#ede9fe', fg: '#4c1d95' },
+  { bg: '#ffe4e6', fg: '#881337' },
+  { bg: '#ccfbf1', fg: '#134e4a' },
+]
+
 const monthShort = (mk) => { const [y, m] = mk.split('-').map(Number); return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m - 1]} ${String(y).slice(2)}` }
 // Even default split (%) across n months, remainder on the last.
 function evenSplit(n) { if (n <= 0) return []; const base = Math.floor(100 / n); const arr = Array(n).fill(base); arr[n - 1] += 100 - base * n; return arr }
@@ -568,7 +631,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [mcdPct, setMcdPct] = useState(0)
   const [retPct, setRetPct] = useState(5)
   const [matItems, setMatItems] = useState([])    // [{ id, mode, value, comment, deliverDay }]
-  const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30 })    // sales cash received
+  const [salesTerm, setSalesTerm] = useState({ basis: 'eom', days: 30, cycle: 'applications', startDate: '' })  // sales cash received
   const [labourTerm, setLabourTerm] = useState({ basis: 'weekly', days: 7 })  // weekly | fortnightly | eom
   // null = follow the calculation. Anything else is a manual figure that wins.
   // Kept as the raw string so the box can be cleared and retyped without fighting it.
@@ -578,6 +641,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // null = follow the certificate maths. Anything else is a typed figure that wins.
   const [revOverride, setRevOverride] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
+  const [contractTerms, setContractTerms] = useState({})  // retention / MCD from Edit Project Details
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
   const [salesSpread, setSalesSpread] = useState({})   // { 'YYYY-MM': pct }
@@ -607,6 +671,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
         setHypApps(d.hypApps || [])
         setLatestApp(d.latestApplication || null)
         setActuals(d.actuals || null)
+        const terms = d.contractTerms || {}
+        setContractTerms(terms)
         const tv = Array.isArray(d.variations) ? d.variations : []
         setTrackerVars(tv)
         // Variation rows mirror the tracker, carrying a percentage and an include flag.
@@ -627,7 +693,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           for (const r of base) { if (r.kind === 'item') { const p = byId.get(r.id); if (p) r.pctComplete = p.pctComplete || 0 } }
           setMcdPct(editing.mcdPct || 0); setRetPct(editing.retentionPct != null ? editing.retentionPct : 5)
           setMatItems((editing.matItems || []).map(m => ({ ...m, term: m.term || { basis: 'eom', days: 30 } })))
-          setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30 })
+          setSalesTerm(editing.salesTerm || { basis: 'eom', days: 30, cycle: 'applications', startDate: '' })
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
@@ -677,8 +743,17 @@ function HypAppModal({ modal, onClose, onSaved }) {
               const p = byId.get(r.id) || byCode.get(String(r.code))
               if (p) r.pctComplete = p.pctComplete || 0
             }
-            if (src.mcdPct != null) setMcdPct(src.mcdPct || 0)
-            if (src.retentionPct != null) setRetPct(src.retentionPct)
+            // RETENTION AND MCD COME FROM EDIT PROJECT DETAILS.
+            //
+            // They are contract terms, not a property of the last certificate - if the
+            // rate on the project is corrected, every forecast from then on should use
+            // the corrected one. The prior certificate only fills the gap where the
+            // project has no figure set, and 5% / 0% only where neither does.
+            //
+            // Retention is not part of gross, so changing it cannot disturb the
+            // already-claimed chain - it only changes what is deducted this period.
+            setMcdPct(terms.mcdPct != null ? terms.mcdPct : (src.mcdPct != null ? src.mcdPct : 0))
+            setRetPct(terms.retentionPct != null ? terms.retentionPct : (src.retentionPct != null ? src.retentionPct : 5))
             setSeededFrom(useApp
               ? { kind: 'application', label: `Application ${src.appNumber || src.seq || ''}`.trim(), status: src.status || '' }
               : { kind: 'forecast', label: 'the previous forecast', status: '' })
@@ -691,6 +766,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
           } else {
             setSeededFrom({ kind: 'rates', label: 'contracted rates', status: '' })
             setVarRows(seedVarRows({}, {}))
+            if (terms.mcdPct != null) setMcdPct(terms.mcdPct)
+            if (terms.retentionPct != null) setRetPct(terms.retentionPct)
           }
         }
         setRows(base)
@@ -936,6 +1013,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // left to claim", so it is budget less what the PREVIOUS certificate had - it must not
   // move as you type this period's percentages, or it stops being headroom and becomes a
   // running total of the same thing the box above already shows.
+  const salesCycle = (salesTerm && salesTerm.cycle) || 'applications'
+
   const priorLabel = !prior ? 'the start'
     : prior.kind === 'application' ? `App ${(latestApp && (latestApp.appNumber || latestApp.seq)) || ''}`.trim()
     : 'the last forecast'
@@ -1034,17 +1113,57 @@ function HypAppModal({ modal, onClose, onSaved }) {
     setLabourSpread(s => fix(s))
   }, [periodMonths.join(',')])
 
-  // Sales cash schedule: each spread month's portion received on month-end + sales days.
+  // Sales cash schedule.
+  //
+  // Two ways of applying, and they produce quite different cash:
+  //
+  //   'applications'  one application for the whole period, its value spread across the
+  //                   calendar months it covers, each month's share paid off that month
+  //                   end. This is the original behaviour and stays the default.
+  //
+  //   weekly /        applications go in on a fixed cycle from a start date, and each is
+  //   fortnightly     paid its own term after ITS OWN date. On a job that applies every
+  //                   fortnight, month-end spreading puts the money in the wrong weeks.
+  //
+  // The cycle dates are the APPLICATION dates. The payment term then runs from each one,
+  // so "fortnightly, 30 days from application" gives an application every 14 days and
+  // cash 30 days after each.
   const salesSchedule = useMemo(() => {
     const rev = revenueThisPeriod
-    if (!(rev > 0) || !periodMonths.length) return []
+    if (!(rev > 0)) return []
+    const cycle = (salesTerm && salesTerm.cycle) || 'applications'
+
+    if (cycle === 'weekly' || cycle === 'fortnightly') {
+      const step = cycle === 'weekly' ? 7 : 14
+      // Falls back to the period start, so choosing a cycle without setting a date still
+      // produces something sensible rather than nothing.
+      const start = (salesTerm && salesTerm.startDate) || from
+      if (!start || !to || start > to) return []
+      const dates = []
+      const end = new Date(`${to}T00:00:00`)
+      const d = new Date(`${start}T00:00:00`)
+      if (isNaN(d) || isNaN(end)) return []
+      // Hard cap: a mistyped start date years back would otherwise spin.
+      while (d <= end && dates.length < 60) { dates.push(isoOf(d)); d.setDate(d.getDate() + step) }
+      if (!dates.length) return []
+      const each = rev / dates.length
+      return dates.map(appDate => ({
+        month: appDate.slice(0, 7),
+        appDate,
+        date: paymentDate(appDate, salesTerm),
+        amount: each,
+      })).filter(s => s.amount > 0.5)
+    }
+
+    // One application for the period: each spread month's portion, timed off month end.
+    if (!periodMonths.length) return []
     const days = num(salesTerm.days)
     return periodMonths.map(mk => {
       const pct = num(salesSpread[mk]) / 100
       const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
       return { month: mk, date, amount: rev * pct }
     }).filter(s => s.amount > 0.5)
-  }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm])
+  }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm, from, to])
 
   // Labour cash schedule: each spread month's portion, timed by the labour term.
   const labSchedule = useMemo(() => {
@@ -1139,7 +1258,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
       materialsOnSite: mosToDate,
       materialsOnSiteOverride: mosOverride == null ? null : num(mosOverride),
       salesSpread, labourSpread,
-      salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month })),
+      // appDate is kept so a cycled forecast can show which application each payment
+      // belongs to, not just when the money lands.
+      salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month, appDate: s.appDate || null })),
       salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
       labourSchedule: labSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount) })),
       mcdPct: num(mcdPct), retentionPct: num(retPct),
@@ -1298,7 +1419,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Payment terms (sales received, labour paid) */}
               <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end', background: '#f7f9fb', border: '1px solid #e4ebf1', borderRadius: 10, padding: 12, marginBottom: 16 }}>
-                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" />
+                <TermEditor label="Sales received" term={salesTerm} setTerm={setSalesTerm} refDate={to} refLabel="period end" cycles />
                 <LabourTermEditor term={labourTerm} setTerm={setLabourTerm} schedule={labSchedule} />
                 <div style={{ fontSize: 10.5, color: '#9a958c', maxWidth: 260 }}>Materials terms are set per line below (per supplier).</div>
               </div>
@@ -1307,7 +1428,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
               {periodMonths.length > 1 && (
                 <div style={{ background: '#faf9f7', border: '1px solid #eee', borderRadius: 10, padding: 12, marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 2 }}>Spread across the period&apos;s {periodMonths.length} calendar months</div>
-                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of sales and labour falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.</div>
+                  <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 8 }}>Set what % of {salesCycle === 'applications' ? 'sales and labour' : 'labour'} falls in each month. The payment term then sets the cash date from each month end. Each row should total 100%.{salesCycle !== 'applications' ? ` Sales are on a ${salesCycle} cycle, so they follow the application dates instead.` : ''}</div>
                   <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead><tr style={{ color: '#999' }}>
                       <th style={{ textAlign: 'left', padding: '3px 10px' }}></th>
@@ -1315,7 +1436,11 @@ function HypAppModal({ modal, onClose, onSaved }) {
                       <th style={{ padding: '3px 10px' }}>Total</th>
                     </tr></thead>
                     <tbody>
-                      <SpreadRow label="Sales %" months={periodMonths} spread={salesSpread} setSpread={setSalesSpread} />
+                      {/* Only meaningful when ONE application covers the period. On a
+                          weekly or fortnightly cycle the application dates drive the cash
+                          and this row would be ignored - showing it would invite you to
+                          set numbers that do nothing. */}
+                      {salesCycle === 'applications' && <SpreadRow label="Sales %" months={periodMonths} spread={salesSpread} setSpread={setSalesSpread} />}
                       <SpreadRow label="Labour %" months={periodMonths} spread={labourSpread} setSpread={setLabourSpread} />
                     </tbody>
                   </table>
@@ -1500,9 +1625,19 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Cert settings + save */}
               <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
                   <div><div style={lblS}>MCD %</div><input type="number" value={mcdPct} onChange={e => setMcdPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
                   <div><div style={lblS}>Retention %</div><input type="number" value={retPct} onChange={e => setRetPct(e.target.value)} style={{ ...inpS, width: 70 }} /></div>
+                  {/* Say where these came from. A retention rate that appeared by itself
+                      and one somebody typed look identical otherwise. */}
+                  <div style={{ fontSize: 10.5, color: '#9a958c', paddingBottom: 6, maxWidth: 260 }}>
+                    {contractTerms.retentionPct == null && contractTerms.mcdPct == null
+                      ? 'Not set on Edit Project Details - set them there and they will come through.'
+                      : (num(retPct) !== num(contractTerms.retentionPct != null ? contractTerms.retentionPct : retPct)
+                         || num(mcdPct) !== num(contractTerms.mcdPct != null ? contractTerms.mcdPct : mcdPct))
+                        ? `Changed here. Project details say ${contractTerms.retentionPct != null ? `${contractTerms.retentionPct}% retention` : 'no retention'}${contractTerms.mcdPct != null ? `, ${contractTerms.mcdPct}% MCD` : ''}.`
+                        : 'From Edit Project Details.'}
+                  </div>
                 </div>
                 <button onClick={save} disabled={saving} style={{ background: '#0f766e', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : (editId ? 'Update forecast' : 'Save forecasted application')}</button>
               </div>
@@ -1556,20 +1691,42 @@ function LabourTermEditor({ term, setTerm, schedule }) {
   )
 }
 
-function TermEditor({ label, term, setTerm, refDate, refLabel }) {
-  const cash = paymentDate(refDate, term)
+function TermEditor({ label, term, setTerm, refDate, refLabel, cycles }) {
+  const cycle = (term && term.cycle) || 'applications'
+  const cycling = cycles && (cycle === 'weekly' || cycle === 'fortnightly')
+  // When applications go in on a cycle, the term runs from each APPLICATION date, so the
+  // preview has to be off the start date - not the period end, which is the reference
+  // for a single application covering the whole period.
+  const cash = paymentDate(cycling ? (term.startDate || refDate) : refDate, term)
   const fmtD = (s) => { if (!s) return '-'; const [y, m, d] = s.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
   return (
     <div>
       <div style={lblS}>{label}</div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {cycles && (
+          <select value={cycle} onChange={e => setTerm({ ...term, cycle: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
+            <option value="applications">Per application</option>
+            <option value="weekly">Weekly</option>
+            <option value="fortnightly">Fortnightly</option>
+          </select>
+        )}
         <select value={term.basis} onChange={e => setTerm({ ...term, basis: e.target.value })} style={{ ...inpS, padding: '5px 6px' }}>
-          <option value="days">days from {refLabel}</option>
+          <option value="days">days from {cycling ? 'application' : refLabel}</option>
           <option value="eom">EOM + days</option>
         </select>
         <input type="number" value={term.days} onChange={e => setTerm({ ...term, days: e.target.value })} style={{ ...inpS, width: 64, padding: '5px 6px' }} />
       </div>
-      <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>cash on {fmtD(cash)}</div>
+      {cycling && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4 }}>
+          <span style={{ fontSize: 10.5, color: '#9a958c' }}>starting</span>
+          <input type="date" value={term.startDate || ''} onChange={e => setTerm({ ...term, startDate: e.target.value })} style={{ ...inpS, padding: '4px 6px' }} />
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: '#0f766e', marginTop: 3 }}>
+        {cycling
+          ? `first cash ${fmtD(cash)}${term.startDate ? '' : ' (from period start - set a date)'}`
+          : `cash on ${fmtD(cash)}`}
+      </div>
     </div>
   )
 }
