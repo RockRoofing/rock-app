@@ -718,7 +718,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
       if (a.id === editId) continue        // never treat the app being edited as its own prior
       const vp = {}
       for (const v of (a.varRows || [])) vp[v.key] = num(v.pctComplete)
-      cands.push({ end: a.to || '', works: a.contractWorks || [], varPct: vp, mos: num(a.materialsOnSite), kind: 'forecast' })
+      cands.push({
+        end: a.to || '', works: a.contractWorks || [], varPct: vp, mos: num(a.materialsOnSite),
+        // What that forecast RECORDED as claimed to date. On a forecast whose revenue or
+        // labour was overridden this is HIGHER than its percentages account for - the
+        // money was claimed without measuring it - so the percentages alone understate
+        // what has gone, and the next forecast would offer it again.
+        grossClaimed: a.grossClaimedToDate == null ? null : num(a.grossClaimedToDate),
+        labourClaimed: a.labourClaimedToDate == null ? null : num(a.labourClaimedToDate),
+        kind: 'forecast',
+      })
     }
     // MATERIALS ON SITE ALREADY CLAIMED comes across as part of the prior. Leave it out
     // and the forecast believes only the measured work and variations have been claimed
@@ -775,11 +784,18 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // Variations are counted on BOTH sides at their respective percentages - include them
   // here only and the prior would be overstated, omit them here only and every
   // variation already certified would be forecast as new money a second time.
-  const prevGross = useMemo(() => {
+  // What the prior's PERCENTAGES account for.
+  const priorMeasuredGross = useMemo(() => {
     if (!priorRows.length && !priorVarsForCert.length && !mosPriorRaw) return 0
     const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: mosLine(mosPriorRaw), mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
     return s.grossCurrent
   }, [priorRows, priorVarsForCert, mosPriorRaw, mcdPct, retPct])
+
+  // What was actually CLAIMED. The two differ only where a previous forecast's revenue
+  // was overridden instead of its percentages being filled in - which is a perfectly
+  // reasonable way to work, and the chain has to carry it or that money gets claimed
+  // twice. A real application always measures everything, so there it is the same number.
+  const prevGross = prior && prior.grossClaimed != null ? prior.grossClaimed : priorMeasuredGross
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -927,6 +943,22 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const revenueCalculated = sum.thisCert.total || 0
   const revenueThisPeriod = revOverride == null ? revenueCalculated : Math.max(0, num(revOverride))
 
+  // THE OVERRIDE UPLIFT, EXPRESSED AS GROSS.
+  //
+  // Revenue is net of MCD and retention; the claimed position is gross, before both. So
+  // an extra 1,000 of revenue represents MORE than 1,000 of gross claim, and adding the
+  // net figure straight onto a gross total would understate what has been claimed.
+  //
+  // Grossed up on the same deductions the certificate used. With 2.5% MCD and 5%
+  // retention, 1,000 of extra revenue is 1,000 / (0.975 x 0.95) = 1,079.80 of gross.
+  const revUpliftGross = useMemo(() => {
+    if (revOverride == null) return 0
+    const net = revenueThisPeriod - revenueCalculated
+    if (!net) return 0
+    const d = (1 - num(mcdPct) / 100) * (1 - num(retPct) / 100)
+    return d > 0 ? net / d : net
+  }, [revOverride, revenueThisPeriod, revenueCalculated, mcdPct, retPct])
+
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
   const labourToDate = useMemo(() => {
@@ -962,6 +994,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
     return lab
   }, [priorRows, rates, priorVarsForCert])
 
+  // Same again for labour: what the prior RECORDED beats what its percentages imply.
+  const prevLabour = prior && prior.labourClaimed != null ? prior.labourClaimed : prevLabourToDate
+
   // LABOUR THIS PERIOD.
   //
   // The calculation is the labour element of the work added this period - labRate x qty
@@ -976,8 +1011,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
   //
   // Overriding does NOT touch the percentages. Revenue stays driven by the works, which
   // is right - being paid for labour early does not mean the customer owes more.
-  const labourCalculated = Math.max(0, labourToDate - prevLabourToDate)
+  const labourCalculated = Math.max(0, labourToDate - prevLabour)
   const labourThisPeriod = labourOverride == null ? labourCalculated : Math.max(0, num(labourOverride))
+  // Labour is not subject to MCD or retention, so its uplift needs no grossing up.
+  const labourUplift = labourOverride == null ? 0 : (labourThisPeriod - labourCalculated)
 
   // Calendar months this period spans, and keep the sales/labour spreads in step.
   const periodMonths = useMemo(() => monthsInPeriod(from, to), [from, to])
@@ -1112,6 +1149,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
       thisCertTotal: sum.thisCert.total,
       revenueThisPeriod,
       revenueOverride: revOverride == null ? null : num(revOverride),
+      // WHAT THIS FORECAST CLAIMS TO DATE, cumulative, which is NOT the same as what its
+      // percentages measure whenever an override has been used. Overriding revenue rather
+      // than filling in percentages is a normal way to work - but without recording it,
+      // the next forecast reads only the percentages, believes that money was never
+      // claimed, and offers the whole lot again as headroom.
+      //
+      // Any uplift carried in from an earlier overridden forecast is carried on, so it
+      // accumulates down the chain rather than being lost at the next link.
+      grossClaimedToDate: sum.grossCurrent + (prevGross - priorMeasuredGross) + revUpliftGross,
+      labourClaimedToDate: labourToDate + (prevLabour - prevLabourToDate) + labourUplift,
       labourThisPeriod,
       materialsThisPeriod,
       createdAt: (editId && (hypApps.find(a => a.id === editId)?.createdAt)) || Date.now(),
@@ -1213,7 +1260,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   colour="#0f766e" autoNote="Increment less MCD and retention"
                   sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} left after ${priorLabel}`} />
                 <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
-                  colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - prevLabourToDate))} left after ${priorLabel}`} />
+                  colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - prevLabour))} left after ${priorLabel}`} />
                 <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior))} left after ${priorLabel}`} />
                 <OverrideBox label="Materials on site (claimed)" calculated={mosAuto} override={mosOverride} setOverride={setMosOverride}
                   colour="#5b21b6"
