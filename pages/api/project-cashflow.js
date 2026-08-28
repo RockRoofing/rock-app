@@ -159,6 +159,7 @@ export default async function handler(req, res) {
           cursor = Number(next)
           for (const k of (batch || [])) pkeys.push(k)
         } while (cursor)
+        const seenRecords = new Set()
         for (const k of pkeys) {
           const rec = await redis.get(k).catch(() => null)
           const apps = Array.isArray(rec && rec.applications) ? rec.applications : []
@@ -192,7 +193,24 @@ export default async function handler(req, res) {
             prev = a
           }
           const keep = out.filter(a => a.endDate)
-          if (keep.length) actuals[k.replace('project:', '')] = keep
+          if (!keep.length) continue
+
+          // DE-DUPLICATE WHOLE RECORDS.
+          //
+          // A project can exist twice in Redis - once keyed by tracking option id and once
+          // by job number - and both copies carry the same applications. Counting both
+          // doubles every certificate on that project.
+          //
+          // Matched on the FULL set of applications, not on one of them. Two genuinely
+          // different projects will not have an identical application list; one project
+          // stored twice always will. Matching on a single application could merge two
+          // real projects that happened to agree, which would be a worse error than the
+          // one being fixed.
+          const fingerprint = keep.map(a => `${a.seq}:${a.endDate}:${Math.round(a.thisCert * 100)}`).join('|')
+          if (seenRecords.has(fingerprint)) continue
+          seenRecords.add(fingerprint)
+
+          actuals[k.replace('project:', '')] = keep
         }
       } catch {}
 

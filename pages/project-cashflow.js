@@ -123,15 +123,44 @@ export default function ProjectCashflow() {
 
   // Per-day cash movement across all saved forecasts (in = sales + retention released;
   // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
+  // xeroId -> job number, the reverse of xeroMap, so a breakdown line can name the
+  // project rather than showing a raw Xero id.
+  const jobNoOfXeroId = useMemo(() => {
+    const out = {}
+    for (const [no, xid] of Object.entries(xeroMap || {})) if (xid) out[String(xid)] = no
+    return out
+  }, [xeroMap])
+
   const cashByDay = useMemo(() => {
     const map = {}
-    const add = (d, k, amt) => { if (!d || !amt) return; if (!map[d]) map[d] = { salesIn: 0, retIn: 0, labourOut: 0, matOut: 0 }; map[d][k] += amt }
+    // salesIn stays as the combined figure so nothing downstream changes; actualIn and
+    // forecastIn split the same money so the two rows can be shown separately.
+    const add = (d, k, amt) => {
+      if (!d || !amt) return
+      if (!map[d]) map[d] = { salesIn: 0, actualIn: 0, forecastIn: 0, retIn: 0, labourOut: 0, matOut: 0 }
+      map[d][k] += amt
+      if (k === 'actualIn' || k === 'forecastIn') map[d].salesIn += amt
+    }
+    // Every contributor, kept so the month bands can show WHAT made up a figure rather
+    // than just asserting it.
+    const detail = {}
+    const note = (d, kind, label, amt) => {
+      if (!d || !amt) return
+      const mk = String(d).slice(0, 7)
+      if (!detail[mk]) detail[mk] = []
+      detail[mk].push({ kind, label, date: d, amount: amt })
+    }
 
     // ACTUALS FIRST. A raised application is money that will be paid on a contractual
     // date, which is better than any forecast of it.
+    //
+    // Records duplicated across two Redis keys are de-duplicated server-side, so every
+    // application here is counted once.
     for (const [xid, apps] of Object.entries(appActuals || {})) {
       for (const a of (apps || [])) {
-        if (a.dueDate && a.thisCert) add(a.dueDate, 'salesIn', a.thisCert)
+        if (!a.dueDate || !a.thisCert) continue
+        add(a.dueDate, 'actualIn', a.thisCert)
+        note(a.dueDate, 'actual', `${jobNoOfXeroId[xid] || String(xid).slice(0, 8)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
       }
     }
 
@@ -140,8 +169,8 @@ export default function ProjectCashflow() {
         // Overtaken by a real application - its cash is already in from the actual above.
         if (supersededIds.has(fc.id)) continue
         if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
-          for (const s of fc.salesSchedule) add(s.date, 'salesIn', s.amount || 0)
-        } else if (fc.salesDate) add(fc.salesDate, 'salesIn', fc.revenueThisPeriod || 0)
+          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.date, 'forecast', `${pk.replace(/^[LN]:/, '')} forecast`, s.amount || 0) }
+        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.salesDate, 'forecast', `${pk.replace(/^[LN]:/, '')} forecast`, fc.revenueThisPeriod || 0) }
         for (const s of (fc.labourSchedule || [])) add(s.date, 'labourOut', s.amount || 0)
         if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'labourOut', fc.labourThisPeriod || 0)
         for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
@@ -152,11 +181,15 @@ export default function ProjectCashflow() {
       const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
       const totalRet = fa * pct
       if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) add(e.release1Date, 'retIn', totalRet / 2)
-      if (e.release2Date && !e.release2Received) add(e.release2Date, 'retIn', totalRet / 2)
+      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, 'retention', `${e.ourRef || ''} retention 1st half`, totalRet / 2) }
+      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, 'retention', `${e.ourRef || ''} retention 2nd half`, totalRet / 2) }
     }
+    // NON-ENUMERABLE on purpose. The month band builder walks Object.entries(cashByDay)
+    // and slices a month key off each date - a plain property would show up there as a
+    // month called "__detai" carrying every figure twice.
+    Object.defineProperty(map, '__detail', { value: detail, enumerable: false })
     return map
-  }, [allForecasts, retention, appActuals, supersededIds])
+  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId])
 
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
@@ -315,8 +348,13 @@ export default function ProjectCashflow() {
                         const monthIncome = {}
                         for (const [dISO, v] of Object.entries(cashByDay || {})) {
                           const mk = dISO.slice(0, 7)
-                          monthIncome[mk] = (monthIncome[mk] || 0) + (v.salesIn || 0) + (v.retIn || 0)
+                          if (!monthIncome[mk]) monthIncome[mk] = { actual: 0, forecast: 0 }
+                          monthIncome[mk].actual += (v.actualIn || 0)
+                          // Retention released sits with the forecast side: it is expected
+                          // money, not something already applied for.
+                          monthIncome[mk].forecast += (v.forecastIn || 0) + (v.retIn || 0)
                         }
+                        const detail = (cashByDay && cashByDay.__detail) || {}
                         const groups = []
                         for (const colDays of cols) {
                           const d = colDays[Math.floor(colDays.length / 2)] || colDays[0]
@@ -326,22 +364,33 @@ export default function ProjectCashflow() {
                           else groups.push({ mk, count: 1 })
                         }
                         const cw = view === 'day' ? CELL_W : 46
-                        return (
-                          <div style={{ display: 'flex', borderBottom: '2px solid #d9d5cc', position: 'sticky', top: HEADER_H + ROW_H2 * 6, zIndex: 4, height: ROW_H2 + 2 }}>
-                            <Frozen w={NAME_W} style={{ background: '#fff', fontSize: 11, fontWeight: 700, color: '#0f766e', zIndex: 6 }}>Income / month</Frozen>
+                        // Every contributor to the month, so a figure that looks wrong can
+                        // be traced without guessing at it.
+                        const tip = (mk, kinds, total) => {
+                          const rows = (detail[mk] || []).filter(x => kinds.includes(x.kind))
+                            .sort((a, b) => b.amount - a.amount)
+                          const head = `${monthShort(mk)}: ${gbp(total)} from ${rows.length} item${rows.length === 1 ? '' : 's'}`
+                          const lines = rows.slice(0, 14).map(x => `  ${x.date} ${x.label} ${gbp(x.amount)}`)
+                          if (rows.length > 14) lines.push(`  ...and ${rows.length - 14} more`)
+                          return [head, ...lines].join('\n')
+                        }
+                        const BandRow = ({ label, colour, kinds, pick, top }) => (
+                          <div style={{ display: 'flex', borderBottom: '2px solid #d9d5cc', position: 'sticky', top, zIndex: 4, height: ROW_H2 + 2 }}>
+                            <Frozen w={NAME_W} style={{ background: '#fff', fontSize: 11, fontWeight: 700, color: colour, zIndex: 6 }}>{label}</Frozen>
                             <PlainCell w={DATE_W} style={{ background: '#fff' }} />
                             <PlainCell w={DATE_W} style={{ background: '#fff' }} />
                             {groups.map((g, i) => {
                               const band = MONTH_BANDS[i % MONTH_BANDS.length]
-                              const v = monthIncome[g.mk] || 0
+                              const v = pick(monthIncome[g.mk] || { actual: 0, forecast: 0 })
                               const w = g.count * cw
                               return (
-                                <div key={`${g.mk}-${i}`} title={`${monthShort(g.mk)} income: ${gbp(v)}`}
+                                <div key={`${g.mk}-${i}`} title={tip(g.mk, kinds, v)}
                                   style={{
                                     width: w, background: band.bg, color: band.fg,
                                     borderLeft: '2px solid #fff', fontSize: 9.5, fontWeight: 800,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     overflow: 'hidden', whiteSpace: 'nowrap', lineHeight: 1,
+                                    opacity: v ? 1 : 0.45,
                                   }}>
                                   {/* Below about 54px there is not room for both, and a
                                       truncated month name is worse than none - the colour
@@ -351,6 +400,14 @@ export default function ProjectCashflow() {
                               )
                             })}
                           </div>
+                        )
+                        return (
+                          <>
+                            <BandRow label="Forecasted Income / month" colour="#0f766e"
+                              kinds={['forecast', 'retention']} pick={m => m.forecast} top={HEADER_H + ROW_H2 * 6} />
+                            <BandRow label="Actual Income / month" colour="#15803d"
+                              kinds={['actual']} pick={m => m.actual} top={HEADER_H + ROW_H2 * 7 + 2} />
+                          </>
                         )
                       })()}
                     </>

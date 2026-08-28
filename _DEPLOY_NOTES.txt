@@ -1,7 +1,8 @@
-pkg555 - Cash Flow: sales can follow the project's own application dates
+pkg556 - Project Cash Flow: Forecasted vs Actual income, and a breakdown
+         you can read
 =========================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg554. ***
+*** SUPERSEDES pkg542 THROUGH pkg555. ***
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -15,76 +16,75 @@ CHANGED FILES (replace)
   pages/project-cashflow.js
   pages/api/project-cashflow.js
 
-Independent of pkg539 / pkg540 / pkg541 - different files, any order.
+
+1. TWO ROWS
+-----------
+  Forecasted Income / month     unsuperseded forecasts + retention releases
+  Actual Income / month         real applications, on their own payment date
+
+Both month-banded and coloured as before. Retention sits on the FORECAST row - it
+is expected money, not something that has been applied for.
+
+salesIn is still written as the combined figure, so the Sales in / Total IN rows
+above are unchanged.
 
 
-"PROJECT APPLICATION DATES"
----------------------------
-Fourth option in Sales received, alongside Per application / Weekly / Fortnightly.
+2. ONE CAUSE OF DOUBLING FIXED
+------------------------------
+A project can exist TWICE in Redis - once keyed by tracking option id, once by job
+number. Your handover flags exactly this, and names project:39002840 as a likely
+duplicate of project:c59294a0. Both copies carry the same applications, so every
+certificate on that project was counted twice.
 
-It uses the application calendar already set on Edit Project Details - application
-day, valuation day, payment day, final payment days - and produces one application
-per calendar month in the period, dated on the VALUATION date, with cash on the
-FINAL DATE FOR PAYMENT.
+Whole records are now matched on their FULL application list and the duplicate is
+skipped. Deliberately not matched on a single application: two genuinely different
+projects could agree on one, and merging them would be a worse error than the one
+being fixed. One project stored twice always has an identical list.
 
-A second dropdown appears next to it so you can take cash on payment due instead
-of the final date, since both are on the application and different customers pay
-against different ones. Defaults to the final date, as you asked.
-
-Worked through, with apply 25th / value 28th / pay 14th of the following month /
-final +7 days, and 60,000 across three months:
-
-  Sep 26   val 28/09   due 14/10   final 21/10   cash 21/10   19,800.00
-  Oct 26   val 28/10   due 14/11   final 21/11   cash 21/11   19,800.00
-  Nov 26   val 28/11   due 14/12   final 21/12   cash 21/12   20,400.00
-
-It calls resolveAppDates() - the SAME function the applications screen uses - so
-the forecast lands on the exact dates the real applications will, rather than an
-approximation that drifts the moment one of the rules changes. Per-month date
-overrides are honoured too: an override of 31/10 valuation and 20/11 payment came
-straight through in testing.
-
-The monthly Sales % row stays visible for this cycle, because it is still one
-application per calendar month and the split is what decides how much each one is
-worth.
+I do NOT know that this accounts for your figures. See below.
 
 
-THE GUARD
----------
-A valuation day with no payment day resolves to a BLANK cash date, which would
-have dropped that money out of the forecast entirely and silently. Confirmed in
-testing. So the option only produces a schedule when the calendar can actually
-yield a payment date, and otherwise says:
+3. HOW TO FIND THE REST - HOVER THE BAND
+----------------------------------------
+Each month band now lists every contributor on hover:
 
-  "No application calendar on this project - set the valuation and payment days
-   on Edit Project Details."
+  Aug 26: 1,075,400.00 from 9 items
+    2026-08-14 J240 App 4 92,766.50
+    2026-08-21 J251 forecast 40,000.00
+    ...
 
-When it is working, the line underneath previews it: "val 28/09 -> cash 21/10,
-then 2 more".
+That will settle it in seconds, and it is cheaper than me guessing a third time.
+What I would look for:
+
+  THE SAME PROJECT TWICE, once as "App N" and once as "forecast". A forecast is
+  only superseded when an application's VALUATION date is at or past the
+  forecast's END date. A forecast that runs past the application it overlaps
+  stays in - by design, since part of its period is still uncertified - but if
+  your forecast periods do not line up with application months, that will double
+  a lot of money.
+
+  A DRAFT APPLICATION CLAIMING THE FULL CUMULATIVE VALUE. Marked "(draft)" in the
+  breakdown. J240 Application 4 has "Previously certified (gross)" BLANK, so its
+  certificate computes as the whole 92,766.50 instead of the increment - and that
+  is what goes into this row. Any draft in that state inflates its month. This is
+  the third time I have flagged it and it is now visible in the numbers.
+
+  HISTORIC APPLICATIONS. Before pkg550 the chart held forecasts only, with no
+  history at all. Every application ever raised now appears on its payment date,
+  so Jun/Jul/Aug legitimately carry real money they never used to. Some of the
+  increase is correct.
+
+Tell me what the August tooltip shows and I will fix the actual cause.
 
 
-ALSO IN THIS PACKAGE (pkg542-554)
+ALSO IN THIS PACKAGE (pkg542-555)
 ---------------------------------
-- Income / month band row under Total OUT / week, each month its own colour.
-- Weekly / fortnightly sales cycles with a start date.
-- Retention and MCD from Edit Project Details (retention stored as a fraction,
-  MCD as a percentage - both normalised in the API).
-- An overridden forecast records what it CLAIMED, so the next one does not offer
-  the same money again.
-- Actuals supersede forecasts: applications land in the chart on their own
-  payment date; forecasts they cover are greyed and dropped from the cash.
-- Materials on site carried in, auto wind-down, manual override (the J240 fault).
+- Sales received can follow the project's own application dates (valuation date
+  -> final date for payment), or weekly / fortnightly cycles with a start date.
+- Retention and MCD from Edit Project Details.
+- An overridden forecast records what it CLAIMED.
+- Materials on site carried in, auto wind-down, manual override.
 - Variations: instructed in by default, uninstructed listed and badged.
 - Revenue, labour and materials-on-site overrides.
 - Labour and Materials position panels (budget / claimed / actual spend).
-- "Remaining" measured from the previous certificate, and names it.
 - Backdrop click no longer closes the modal; Escape does.
-
-
-STILL OUTSTANDING
------------------
-1. J240 Application 4 - "Previously certified (gross)" BLANK. Feeds the chart now.
-2. Any forecast where you overrode revenue before pkg551 understates its claim
-   until you reopen and re-save it.
-3. variationValueToDate() instructed 'yes'/'no' string bug.
-4. "Raise & send to customer" - waiting on whether it still saves.
