@@ -1,13 +1,12 @@
-pkg561 - Cash Flow: MCD basis honoured, and forecasts recompute
-================================================================
+pkg562 - Cash Flow: retention releases, MCD basis, and forecast recompute
+==========================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg560. ***
-pkg559 and pkg560 were never deployed - discard them.
+*** SUPERSEDES pkg542 THROUGH pkg561. ***
+pkg559, 560 and 561 were never deployed - discard them.
 Same two files, complete. Deploy this one ONLY.
 
-NOTE: this package now depends on lib/projectRegistry.js from pkg539. If pkg539
-is not deployed yet, deploy it first (it is only that one new file plus four
-changed ones) or the forecast recompute below quietly does nothing.
+DEPENDS ON lib/projectRegistry.js from pkg539. Deploy pkg539 first if you have
+not, or the forecast recompute quietly does nothing.
 
 
 CHANGED FILES (replace)
@@ -16,68 +15,77 @@ CHANGED FILES (replace)
   pages/api/project-cashflow.js
 
 
-1. MCD BASIS - NO, IT WAS NOT ALLOWED FOR
------------------------------------------
-You were right to ask. The forecast never sent the flags at all, and the two
-sides of the codebase DEFAULT THE OPPOSITE WAY:
+1. RETENTION - YES, STRAIGHT FROM THE TRACKER, AND ONE THING WAS BROKEN
+-----------------------------------------------------------------------
+The DATES come only from the tracker's 1st and 2nd release fields. Whatever is
+typed there wins, whatever the PC or sub label says. A blank date contributes
+nothing, which is right - an unknown release date is not a forecast.
+
+That part was already true. The VALUES were not.
+
+/api/retention returns the RAW saved entry. The tracker page merges the Xero
+financials on when it renders:
+
+    finalAccount: e.finalAccount || x.finalAccount,
+    retentionPct: e.retentionPct || x.retentionPct,
+
+So on a Xero project where you only set the two release dates - which is the
+normal way to use it - finalAccount and retentionPct are BLANK on the stored
+entry. The tracker looked right. The cash flow computed a total of zero and
+dropped the row without a word.
+
+Now: the entry's own figures first, the dashboard's afa / retentionPct /
+totalRetention behind them, and explicit release1Value / release2Value ahead of
+both, because the two halves are not always equal.
+
+Checked across the real cases:
+
+  Xero override, dates only     1st 6,853.46  |  2nd 6,853.46     (was: nothing)
+  Manual entry, own figures     1st 2,500.00
+  Uneven halves set             1st 5,000.00  |  2nd 8,706.91
+  1st half already received     2nd 6,853.46  only
+  No dates at all               nothing
+
+So yes - manual entries and Xero-derived rows are both accounted for now.
+Anything with a date set appears; anything without still does not, and that is
+the correct behaviour rather than a gap.
+
+
+2. MCD BASIS - IT WAS NOT ALLOWED FOR
+-------------------------------------
+The forecast never sent the flags, and the two sides default OPPOSITE ways:
 
   lib/applications.js:144        app.mcdOnVariations !== false    -> absent = TRUE
   pages/api/applications.js:194  project.mcdOnVariations === true -> absent = FALSE
 
-So on a project with the boxes unticked - MCD on contract works only - the real
-application charged no MCD on variations or materials, and the forecast charged
-it on everything. Leaving the flags off did not mean "use the project setting",
-it meant "discount everything".
+On a project with the boxes unticked the real application charged no MCD on
+variations or materials and the forecast charged it on everything. Both flags now
+come from Edit Project Details and go on EVERY computeApplicationSummary call in
+the modal, via one `mcdBasis` object so no call site can miss one.
 
-Both flags now come from Edit Project Details and are sent on EVERY
-computeApplicationSummary call in the modal, gathered into one `mcdBasis` object
-so no call site can forget one. They are saved onto the forecast too.
-
-  MCD 2.5%, retention 5%, 100,000 works + 20,000 variation:
-    MCD on everything        sales 117,000.00
-    MCD on contract works    sales 117,500.00
-
-500.00 on one variation. It compounds across a job.
-
-The override gross-up now derives its ratio from the certificate itself rather
-than assuming MCD hits the whole account, so it is right on either basis.
+  100,000 works + 20,000 variation, MCD 2.5%:
+    MCD on everything      sales 117,000.00
+    MCD on contract works  sales 117,500.00
 
 
-2. FORECASTS NOW RECOMPUTE
+3. FORECASTS NOW RECOMPUTE
 --------------------------
-Answering your earlier question - they did not, and now they do.
+Each saved forecast is recalculated on load against the CURRENT applications.
+Percentages stay exactly as saved; only the deduction for what has already been
+claimed moves, which is the one part that depends on anything outside it.
 
-On every load, each saved forecast is recalculated against the CURRENT
-applications. Its stored percentages are untouched; only the deduction for what
-has already been claimed is recalculated, which is the one part that depends on
-anything outside the forecast.
+  Forecast saved when the prior certified 40,000, later corrected to 70,000:
+    stored      74,575.00   <- double counts 30,000 of gross
+    recomputed  46,787.50
 
-  Forecast saved when the prior application certified 40,000.
-  That application is corrected and now certifies 70,000.
-
-    stored figure       74,575.00   <- double counts 30,000 of gross
-    recomputed          46,787.50
-
-So entering the missing "Previously certified (gross)" on J240 Application 4 will
-now correct both the actual AND every forecast that chained off it, on the next
-page load, with nothing else to do.
-
-A forecast whose revenue was OVERRIDDEN is left alone. You typed that figure
-deliberately and recalculating it silently would be worse than letting it age.
-
-Cash instalments are scaled by the same ratio, so the payment dates and the
-monthly split you saved are preserved.
-
-This is a read-time recalculation - nothing is written back, so the saved
-forecast is never altered behind you. Reopening one still shows what you saved.
-
-It needs the project register from pkg539 to join forecast keys ("L:J240") to
-applications (keyed by Xero id) - that register is the only place holding both.
+Overridden forecasts are left alone - you typed those deliberately. Cash
+instalments scale by the same ratio so the dates and monthly split survive. Read
+time only; nothing is written back, so reopening a forecast shows what you saved.
 
 
 STILL OUTSTANDING
 -----------------
-1. J240 Application 4 - "Previously certified (gross)" BLANK. Now the single most
-   worthwhile thing to fix: it corrects the actual and the forecasts together.
+1. J240 Application 4 - "Previously certified (gross)" BLANK. Now corrects the
+   actual AND every forecast chained off it, so it is the highest-value fix.
 2. variationValueToDate() instructed 'yes'/'no' string bug.
 3. "Raise & send to customer" - waiting on whether it still saves.

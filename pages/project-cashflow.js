@@ -42,6 +42,7 @@ export default function ProjectCashflow() {
   const [sel, setSel] = useState(null)               // { key, dates:Set<iso> }
   const [xeroMap, setXeroMap] = useState({})         // projectNo -> xeroId (for live rates)
   const [projectNames, setProjectNames] = useState({})  // xeroId -> 'J240 - Market Drayton'
+  const [retFin, setRetFin] = useState({})              // xeroId -> retention financials
   const [modal, setModal] = useState(null)           // { projectKey, projectName, xeroId, from, to }
   const [hypCounts, setHypCounts] = useState({})     // projectKey -> number of saved hyp apps
   const [allForecasts, setAllForecasts] = useState({}) // projectKey -> forecast apps[] (gantt bands)
@@ -59,11 +60,22 @@ export default function ProjectCashflow() {
       // of showing a raw Xero id. Built here because the dashboard is already being
       // fetched for the job-number map and it carries the names.
       const nm = {}
+      const rf = {}
       for (const p of (d.projects || [])) {
         if (p.jobNo) m[String(p.jobNo)] = String(p.xeroId)
-        if (p.xeroId) nm[String(p.xeroId)] = [p.jobNo, p.name].filter(Boolean).join(' - ') || String(p.xeroId)
+        if (p.xeroId) {
+          nm[String(p.xeroId)] = [p.jobNo, p.name].filter(Boolean).join(' - ') || String(p.xeroId)
+          // The retention tracker MERGES these onto a Xero row at render time, but
+          // /api/retention returns the raw saved entry - so on a project where only the
+          // release dates were set, finalAccount and retentionPct are blank there.
+          rf[String(p.xeroId)] = {
+            finalAccount: p.afa || p.contractValue || 0,
+            retentionPct: (p.retentionPct || 0) * 100,   // stored as a fraction
+            totalRetention: p.totalRetention || 0,
+          }
+        }
       }
-      setXeroMap(m); setProjectNames(nm)
+      setXeroMap(m); setProjectNames(nm); setRetFin(rf)
     }).catch(() => {})
     loadAllForecasts()
     fetch('/api/retention').then(r => r.json()).then(d => setRetention(d.entries || [])).catch(() => {})
@@ -202,20 +214,34 @@ export default function ProjectCashflow() {
         for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
       }
     }
+    // RETENTION RELEASES.
+    //
+    // The DATES come only from the tracker's 1st and 2nd release fields - whatever is
+    // typed there wins, whatever the PC or sub label says. A blank date contributes
+    // nothing, which is right: an unknown release date is not a forecast.
+    //
+    // The VALUES need more care. A saved override on a Xero project often carries only
+    // the dates, because the tracker merges finalAccount and retentionPct in from Xero
+    // when it renders and never writes them onto the entry. Reading the entry alone gave
+    // zero and dropped the row silently.
     for (const e of (retention || [])) {
-      const fa = parseFloat(e.finalAccount || e.projectValue || 0) || 0
-      const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
-      const totalRet = fa * pct
-      if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, e.release1Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 1st half`, totalRet / 2) }
-      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, e.release2Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 2nd half`, totalRet / 2) }
+      const fin = (e.xeroId && retFin[String(e.xeroId)]) || {}
+      const fa = parseFloat(e.finalAccount || e.projectValue || fin.finalAccount || 0) || 0
+      const pct = (parseFloat(e.retentionPct || fin.retentionPct || 0) || 0) / 100
+      const totalRet = (fa * pct) || parseFloat(fin.totalRetention || 0) || 0
+      // Explicit half values win - the two halves are not always equal.
+      const h1 = parseFloat(e.release1Value || 0) || (totalRet / 2)
+      const h2 = parseFloat(e.release2Value || 0) || (totalRet / 2)
+      const label = [e.ourRef, e.projectName].filter(Boolean).join(' - ') || (e.xeroId ? labelOfXeroId(e.xeroId) : '')
+      if (e.release1Date && !e.release1Received && h1 > 0) { add(e.release1Date, 'retIn', h1); note(e.release1Date, e.release1Date, 'retention', `${label} retention 1st half`, h1) }
+      if (e.release2Date && !e.release2Received && h2 > 0) { add(e.release2Date, 'retIn', h2); note(e.release2Date, e.release2Date, 'retention', `${label} retention 2nd half`, h2) }
     }
     // NON-ENUMERABLE on purpose. The month band builder walks Object.entries(cashByDay)
     // and slices a month key off each date - a plain property would show up there as a
     // month called "__detai" carrying every figure twice.
     Object.defineProperty(map, '__detail', { value: detail, enumerable: false })
     return map
-  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId, projectNames, xeroMap])
+  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId, projectNames, xeroMap, retFin])
 
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
