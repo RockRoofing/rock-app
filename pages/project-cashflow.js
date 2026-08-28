@@ -41,6 +41,7 @@ export default function ProjectCashflow() {
   const [historic, setHistoric] = useState(false)
   const [sel, setSel] = useState(null)               // { key, dates:Set<iso> }
   const [xeroMap, setXeroMap] = useState({})         // projectNo -> xeroId (for live rates)
+  const [projectNames, setProjectNames] = useState({})  // xeroId -> 'J240 - Market Drayton'
   const [modal, setModal] = useState(null)           // { projectKey, projectName, xeroId, from, to }
   const [hypCounts, setHypCounts] = useState({})     // projectKey -> number of saved hyp apps
   const [allForecasts, setAllForecasts] = useState({}) // projectKey -> forecast apps[] (gantt bands)
@@ -54,8 +55,15 @@ export default function ProjectCashflow() {
     fetch('/api/planning').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
     fetch('/api/dashboard').then(r => r.json()).then(d => {
       const m = {}
-      for (const p of (d.projects || [])) if (p.jobNo) m[String(p.jobNo)] = String(p.xeroId)
-      setXeroMap(m)
+      // xeroId -> "J240 - Market Drayton", so a breakdown line names the project instead
+      // of showing a raw Xero id. Built here because the dashboard is already being
+      // fetched for the job-number map and it carries the names.
+      const nm = {}
+      for (const p of (d.projects || [])) {
+        if (p.jobNo) m[String(p.jobNo)] = String(p.xeroId)
+        if (p.xeroId) nm[String(p.xeroId)] = [p.jobNo, p.name].filter(Boolean).join(' - ') || String(p.xeroId)
+      }
+      setXeroMap(m); setProjectNames(nm)
     }).catch(() => {})
     loadAllForecasts()
     fetch('/api/retention').then(r => r.json()).then(d => setRetention(d.entries || [])).catch(() => {})
@@ -123,13 +131,13 @@ export default function ProjectCashflow() {
 
   // Per-day cash movement across all saved forecasts (in = sales + retention released;
   // out = labour instalments + materials). Kept ABOVE the loading return (rules of hooks).
-  // xeroId -> job number, the reverse of xeroMap, so a breakdown line can name the
-  // project rather than showing a raw Xero id.
+  // Reverse of xeroMap, as a fallback for a project the dashboard did not name.
   const jobNoOfXeroId = useMemo(() => {
     const out = {}
     for (const [no, xid] of Object.entries(xeroMap || {})) if (xid) out[String(xid)] = no
     return out
   }, [xeroMap])
+  const labelOfXeroId = (xid) => projectNames[String(xid)] || jobNoOfXeroId[String(xid)] || String(xid).slice(0, 8)
 
   const cashByDay = useMemo(() => {
     const map = {}
@@ -160,17 +168,22 @@ export default function ProjectCashflow() {
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
         add(a.dueDate, 'actualIn', a.thisCert)
-        note(a.dueDate, 'actual', `${jobNoOfXeroId[xid] || String(xid).slice(0, 8)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
+        note(a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
       }
     }
 
     for (const [pk, list] of Object.entries(allForecasts || {})) {
+      // Forecast keys are "L:<jobNo>" or "N:<dealId>", so the name comes via xeroMap for
+      // a live project. A negotiated one has no Xero record, so its key is all there is.
+      const fcLabel = pk.startsWith('L:')
+        ? labelOfXeroId(xeroMap[pk.slice(2)] || '') || pk.slice(2)
+        : `${pk.slice(2)} (negotiated)`
       for (const fc of (list || [])) {
         // Overtaken by a real application - its cash is already in from the actual above.
         if (supersededIds.has(fc.id)) continue
         if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
-          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.date, 'forecast', `${pk.replace(/^[LN]:/, '')} forecast`, s.amount || 0) }
-        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.salesDate, 'forecast', `${pk.replace(/^[LN]:/, '')} forecast`, fc.revenueThisPeriod || 0) }
+          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.date, 'forecast', `${fcLabel} forecast`, s.amount || 0) }
+        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.salesDate, 'forecast', `${fcLabel} forecast`, fc.revenueThisPeriod || 0) }
         for (const s of (fc.labourSchedule || [])) add(s.date, 'labourOut', s.amount || 0)
         if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'labourOut', fc.labourThisPeriod || 0)
         for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
@@ -181,15 +194,15 @@ export default function ProjectCashflow() {
       const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
       const totalRet = fa * pct
       if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, 'retention', `${e.ourRef || ''} retention 1st half`, totalRet / 2) }
-      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, 'retention', `${e.ourRef || ''} retention 2nd half`, totalRet / 2) }
+      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 1st half`, totalRet / 2) }
+      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 2nd half`, totalRet / 2) }
     }
     // NON-ENUMERABLE on purpose. The month band builder walks Object.entries(cashByDay)
     // and slices a month key off each date - a plain property would show up there as a
     // month called "__detai" carrying every figure twice.
     Object.defineProperty(map, '__detail', { value: detail, enumerable: false })
     return map
-  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId])
+  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId, projectNames, xeroMap])
 
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
