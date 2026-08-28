@@ -1,14 +1,13 @@
-pkg560 - Cash Flow: sales rows on the P&L basis (less MCD, inc. retention)
-===========================================================================
+pkg561 - Cash Flow: MCD basis honoured, and forecasts recompute
+================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg559. ***
-pkg559 was never deployed - discard it, this replaces it.
+*** SUPERSEDES pkg542 THROUGH pkg560. ***
+pkg559 and pkg560 were never deployed - discard them.
 Same two files, complete. Deploy this one ONLY.
 
-
-NEW FILES
----------
-  None.
+NOTE: this package now depends on lib/projectRegistry.js from pkg539. If pkg539
+is not deployed yet, deploy it first (it is only that one new file plus four
+changed ones) or the forecast recompute below quietly does nothing.
 
 
 CHANGED FILES (replace)
@@ -17,79 +16,68 @@ CHANGED FILES (replace)
   pages/api/project-cashflow.js
 
 
-THE FIGURE
-----------
-Both sales rows now show the value AFTER MCD and BEFORE retention, which is the
-sales line in the P&L: MCD is a discount never received, retention is money
-earned and merely held back.
+1. MCD BASIS - NO, IT WAS NOT ALLOWED FOR
+-----------------------------------------
+You were right to ask. The forecast never sent the flags at all, and the two
+sides of the codebase DEFAULT THE OPPOSITE WAY:
 
-Label, on two lines:
+  lib/applications.js:144        app.mcdOnVariations !== false    -> absent = TRUE
+  pages/api/applications.js:194  project.mcdOnVariations === true -> absent = FALSE
 
-  Forecasted Sales / month
-  (Total Sales at transaction date, less MCD, inc. Retention - matches P&L sales)
+So on a project with the boxes unticked - MCD on contract works only - the real
+application charged no MCD on variations or materials, and the forecast charged
+it on everything. Leaving the flags off did not mean "use the project setting",
+it meant "discount everything".
 
-  Actual Sales / month
-  (Total Sales at transaction date, less MCD, inc. Retention - matches P&L sales)
+Both flags now come from Edit Project Details and are sent on EVERY
+computeApplicationSummary call in the modal, gathered into one `mcdBasis` object
+so no call site can forget one. They are saved onto the forecast too.
 
+  MCD 2.5%, retention 5%, 100,000 works + 20,000 variation:
+    MCD on everything        sales 117,000.00
+    MCD on contract works    sales 117,500.00
 
-ONE FIELD THAT WOULD HAVE BEEN WRONG
-------------------------------------
-The obvious choice was thisCert.subTotal - the Sub-Total row on the certificate.
-It is wrong, and plausibly so.
+500.00 on one variation. It compounds across a job.
 
-subTotal is `base - mcd`, where base is only the MCD-ABLE part. On a job where
-MCD applies to the contract sum but not to variations or materials on site, those
-parts are held in a separate `after` figure and subTotal omits them entirely.
-
-  MCD 2.5% on everything          gross 120,000  subTotal 117,000  netBeforeRet 117,000
-  MCD 2.5% on contract sum only   gross 120,000  subTotal  97,500  netBeforeRet 117,500
-
-The second line is a 100,000 contract with a 20,000 variation. subTotal loses the
-whole variation - 20,000 short, on a row that would have looked entirely
-reasonable. netBeforeRet is the whole account after the discount, and that is
-what is used.
-
-On J240, MCD is 0% and all three agree, so this would not have shown up there.
+The override gross-up now derives its ratio from the certificate itself rather
+than assuming MCD hits the whole account, so it is right on either basis.
 
 
-OLDER FORECASTS
----------------
-A forecast stores its NET figure, so only the retention is added back - the MCD
-stays deducted. Exact, not an estimate: net 111,625.00 recovers 117,500.00, which
-matches netBeforeRet to the penny. No re-saving needed.
+2. FORECASTS NOW RECOMPUTE
+--------------------------
+Answering your earlier question - they did not, and now they do.
 
+On every load, each saved forecast is recalculated against the CURRENT
+applications. Its stored percentages are untouched; only the deduction for what
+has already been claimed is recalculated, which is the one part that depends on
+anything outside the forecast.
 
-HOVER
------
-  val 2026-08-31 -> cash 2026-10-21  J240 - Market Drayton App 4  92,766.50 (net 88,128.18)
+  Forecast saved when the prior application certified 40,000.
+  That application is corrected and now certifies 70,000.
 
-Net shown in brackets only where it differs.
+    stored figure       74,575.00   <- double counts 30,000 of gross
+    recomputed          46,787.50
 
-The cash rows above are untouched and still net - Sales in, Retention in and
-Total IN / week are about money reaching the bank.
+So entering the missing "Previously certified (gross)" on J240 Application 4 will
+now correct both the actual AND every forecast that chained off it, on the next
+page load, with nothing else to do.
 
+A forecast whose revenue was OVERRIDDEN is left alone. You typed that figure
+deliberately and recalculating it silently would be worse than letting it age.
 
-ALSO IN THIS PACKAGE (pkg542-559)
----------------------------------
-- Sales bucketed by valuation date; retention releases excluded from sales.
-- Project names on every breakdown line.
-- Duplicate project records de-duplicated by full application fingerprint.
-- Sales received can follow the project's own application dates, or weekly /
-  fortnightly cycles with a start date.
-- Retention and MCD from Edit Project Details.
-- An overridden forecast records what it CLAIMED.
-- Materials on site carried in, auto wind-down, manual override.
-- Variations: instructed in by default, uninstructed listed and badged.
-- Revenue, labour and materials-on-site overrides.
-- Labour and Materials position panels (budget / claimed / actual spend).
-- Backdrop click no longer closes the modal; Escape does.
+Cash instalments are scaled by the same ratio, so the payment dates and the
+monthly split you saved are preserved.
+
+This is a read-time recalculation - nothing is written back, so the saved
+forecast is never altered behind you. Reopening one still shows what you saved.
+
+It needs the project register from pkg539 to join forecast keys ("L:J240") to
+applications (keyed by Xero id) - that register is the only place holding both.
 
 
 STILL OUTSTANDING
 -----------------
-1. J240 Application 4 - "Previously certified (gross)" BLANK, so it contributes
-   its full cumulative value. Marked "(draft)" in the hover.
-2. Forecasts do not recompute when an application changes retrospectively - you
-   asked about this and I offered two options; no decision yet.
-3. variationValueToDate() instructed 'yes'/'no' string bug.
-4. "Raise & send to customer" - waiting on whether it still saves.
+1. J240 Application 4 - "Previously certified (gross)" BLANK. Now the single most
+   worthwhile thing to fix: it corrects the actual and the forecasts together.
+2. variationValueToDate() instructed 'yes'/'no' string bug.
+3. "Raise & send to customer" - waiting on whether it still saves.

@@ -151,6 +151,7 @@ export default async function handler(req, res) {
       // the applications live on the Xero-keyed project record - the client already holds
       // the jobNo -> xeroId map and joins them.
       const actuals = {}
+      const projectRecords = {}
       try {
         let cursor = 0
         const pkeys = []
@@ -160,6 +161,8 @@ export default async function handler(req, res) {
           for (const k of (batch || [])) pkeys.push(k)
         } while (cursor)
         const seenRecords = new Set()
+        // Kept so the forecast recompute below can read each project's variations and
+        // MCD basis without a second pass over Redis.
         for (const k of pkeys) {
           const rec = await redis.get(k).catch(() => null)
           const apps = Array.isArray(rec && rec.applications) ? rec.applications : []
@@ -174,7 +177,7 @@ export default async function handler(req, res) {
             // computed gross. Getting this wrong makes every certificate cumulative.
             const prevGross = !prev ? 0
               : (a.prevCertGross != null ? num(a.prevCertGross) : computeApplicationSummary(prev, 0).grossCurrent)
-            let thisCert = 0, thisCertGross = 0
+            let thisCert = 0, thisCertGross = 0, grossToDate = 0
             try {
               const app = { ...a, variations: buildAppVariations(a, trackerVars) }
               const c = computeApplicationSummary(app, prevGross).thisCert
@@ -188,6 +191,7 @@ export default async function handler(req, res) {
               // the variations and materials. netBeforeRet is the whole account.
               thisCert = num(c.total)
               thisCertGross = num(c.netBeforeRet)
+              grossToDate = num(computeApplicationSummary(app, prevGross).grossCurrent)
             } catch {}
             out.push({
               seq: a.seq || 0,
@@ -200,6 +204,10 @@ export default async function handler(req, res) {
               dueDate: a.finalDate || a.paymentDate || '',
               thisCert,
               thisCertGross,
+              // Cumulative gross after this application - what the NEXT certificate has
+              // to deduct. Without it a forecast recomputed against this application
+              // would deduct nothing and re-claim everything.
+              grossToDate,
             })
             prev = a
           }
@@ -221,9 +229,115 @@ export default async function handler(req, res) {
           if (seenRecords.has(fingerprint)) continue
           seenRecords.add(fingerprint)
 
-          actuals[k.replace('project:', '')] = keep
+          const pid = k.replace('project:', '')
+          actuals[pid] = keep
+          projectRecords[pid] = rec
         }
       } catch {}
+
+      // RECOMPUTE FORECASTS AGAINST THE CURRENT APPLICATIONS.
+      //
+      // A forecast stores its revenue at save time. Change the application it chained
+      // from - enter a missing "previously certified", correct a percentage, raise a new
+      // one - and the stored number is stale, and stale in the worst way: it looks
+      // authoritative and quietly double counts money the application now also claims.
+      //
+      // The PERCENTAGES stay exactly as saved. Only the deduction for what has already
+      // been claimed is recalculated, which is the part that depends on anything outside
+      // the forecast itself.
+      //
+      // A forecast whose revenue was OVERRIDDEN is left alone. Somebody typed that figure
+      // deliberately; silently recalculating it would be worse than letting it age.
+      // Forecast keys are job numbers ("L:J240"); applications are keyed by Xero id. The
+      // project register (projects:registry, added when a deleted tracking category
+      // stopped wiping a project) is the only place that holds both, so it is the join.
+      const pkToXeroId = {}
+      try {
+        const { readRegistry } = await import('../../lib/projectRegistry')
+        const reg = await readRegistry(redis)
+        for (const [id, r] of Object.entries(reg || {})) {
+          if (r && r.jobNo) pkToXeroId[`L:${r.jobNo}`] = String(id)
+        }
+      } catch {}
+
+      for (const [pk, list] of Object.entries(out)) {
+        if (!Array.isArray(list) || !list.length) continue
+        const xid = pkToXeroId[pk] || ''
+        const rec = xid ? projectRecords[xid] : null
+        const apps = (xid && actuals[xid]) || []
+        const trackerVars = rec ? projectVariations(rec) : []
+        const varByKey = new Map(trackerVars.map(v => [varKey(v), v]))
+        const basis = {
+          mcdOnVariations: rec ? rec.mcdOnVariations === true : false,
+          mcdOnMaterials: rec ? rec.mcdOnMaterials === true : false,
+        }
+
+        // Cumulative gross a forecast represents, from its own stored rows.
+        const grossOf = (fc) => {
+          const vars = (fc.varRows || []).filter(v => v.include).map(v => {
+            const t = varByKey.get(v.key) || {}
+            return { instructed: true, materials: num(t.materials), labour: num(t.labour), profit: num(t.profit), pctComplete: num(v.pctComplete) }
+          })
+          const mos = num(fc.materialsOnSite)
+          try {
+            return num(computeApplicationSummary({
+              contractWorks: fc.contractWorks || [],
+              variations: vars,
+              materials: mos ? [{ id: 'mos', total: mos, pctComplete: 100 }] : [],
+              mcdPct: num(fc.mcdPct), retentionPct: num(fc.retentionPct), ...basis,
+            }, 0).grossCurrent)
+          } catch { return 0 }
+        }
+
+        const byEnd = list.slice().sort((a, b) => String(a.to || '').localeCompare(String(b.to || '')))
+        for (const fc of byEnd) {
+          if (fc.revenueOverride != null) continue          // typed by hand - leave it
+          if (!Array.isArray(fc.contractWorks) || !fc.contractWorks.length) continue
+
+          // Latest certificate finishing before this forecast starts - application or
+          // earlier forecast, whichever ends last. Same rule the modal uses.
+          let priorGross = 0, priorEnd = ''
+          for (const a of apps) {
+            if (a.endDate && (!fc.from || a.endDate < fc.from) && a.endDate >= priorEnd) { priorEnd = a.endDate; priorGross = num(a.grossToDate) }
+          }
+          for (const o of byEnd) {
+            if (o.id === fc.id || !o.to) continue
+            if ((!fc.from || o.to < fc.from) && o.to >= priorEnd) {
+              priorEnd = o.to
+              priorGross = o.grossClaimedToDate != null ? num(o.grossClaimedToDate) : grossOf(o)
+            }
+          }
+
+          const vars = (fc.varRows || []).filter(v => v.include).map(v => {
+            const t = varByKey.get(v.key) || {}
+            return { instructed: true, materials: num(t.materials), labour: num(t.labour), profit: num(t.profit), pctComplete: num(v.pctComplete) }
+          })
+          const mos = num(fc.materialsOnSite)
+          let cert = null
+          try {
+            cert = computeApplicationSummary({
+              contractWorks: fc.contractWorks, variations: vars,
+              materials: mos ? [{ id: 'mos', total: mos, pctComplete: 100 }] : [],
+              mcdPct: num(fc.mcdPct), retentionPct: num(fc.retentionPct), ...basis,
+            }, priorGross).thisCert
+          } catch { continue }
+
+          const before = num(fc.revenueThisPeriod)
+          const after = Math.max(0, num(cert.total))
+          if (Math.abs(after - before) < 0.5) continue     // nothing moved
+
+          // Scale the cash instalments by the same ratio, so the payment dates and the
+          // monthly split the forecast was saved with are preserved.
+          const ratio = before > 0 ? after / before : 0
+          fc.revenueThisPeriod = after
+          fc.recomputed = { was: before, now: after }
+          if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
+            fc.salesSchedule = before > 0
+              ? fc.salesSchedule.map(x => ({ ...x, amount: num(x.amount) * ratio }))
+              : fc.salesSchedule.map((x, i) => ({ ...x, amount: i === 0 ? after : 0 }))
+          }
+        }
+      }
 
       return res.json({ all: out, actuals })
     }
@@ -262,6 +376,12 @@ export default async function handler(req, res) {
         dateOverrides: project.dateOverrides || {},
       },
       contractTerms: {
+        // MCD BASIS. Applications default these to FALSE (`project.x === true`), while
+        // computeApplicationSummary defaults them to TRUE (`app.x !== false`). Opposite
+        // defaults - so the forecast has to send them explicitly on every call or it
+        // silently discounts variations and materials that the real application does not.
+        mcdOnVariations: project.mcdOnVariations === true,
+        mcdOnMaterials: project.mcdOnMaterials === true,
         retentionPct: (project.retentionPct != null && project.retentionPct !== '' && isFinite(parseFloat(project.retentionPct)))
           ? parseFloat(project.retentionPct) * 100 : null,
         mcdPct: (project.mcdPct != null && project.mcdPct !== '' && isFinite(parseFloat(project.mcdPct)))

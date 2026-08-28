@@ -960,6 +960,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // prevGross below reads it, and a memo that reads a const declared under it throws.
   const mosPriorRaw = prior ? num(prior.mos) : 0
 
+  // MCD BASIS, sent on EVERY computeApplicationSummary call in this modal.
+  // computeApplicationSummary defaults both to true when absent, the applications screen
+  // defaults them to false - so leaving them off does not mean "use the project setting",
+  // it means "discount everything", which is the opposite of an unticked box.
+  const mcdBasis = {
+    mcdOnVariations: contractTerms.mcdOnVariations === true,
+    mcdOnMaterials: contractTerms.mcdOnMaterials === true,
+  }
+
+
   // Previous cumulative gross, so "this cert" is only the newly-added work.
   // Variations are counted on BOTH sides at their respective percentages - include them
   // here only and the prior would be overstated, omit them here only and every
@@ -967,9 +977,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // What the prior's PERCENTAGES account for.
   const priorMeasuredGross = useMemo(() => {
     if (!priorRows.length && !priorVarsForCert.length && !mosPriorRaw) return 0
-    const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: mosLine(mosPriorRaw), mcdPct: num(mcdPct), retentionPct: num(retPct) }, 0)
+    const s = computeApplicationSummary({ contractWorks: priorRows, variations: priorVarsForCert, materials: mosLine(mosPriorRaw), mcdPct: num(mcdPct), retentionPct: num(retPct), ...mcdBasis }, 0)
     return s.grossCurrent
-  }, [priorRows, priorVarsForCert, mosPriorRaw, mcdPct, retPct])
+  }, [priorRows, priorVarsForCert, mosPriorRaw, mcdPct, retPct, contractTerms])
 
   // What was actually CLAIMED. The two differ only where a previous forecast's revenue
   // was overridden instead of its percentages being filled in - which is a perfectly
@@ -1097,8 +1107,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // application computes it. The supplier lines ("Materials forecasted on site") are a
   // separate thing entirely - cash going OUT, scheduled off each line's pay date - and
   // are not part of this.
-  const workApp = { contractWorks: rows, variations: varsForCert, materials: mosLine(mosToDate), mcdPct: num(mcdPct), retentionPct: num(retPct) }
-  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mosToDate, mcdPct, retPct, prevGross])
+  const workApp = { contractWorks: rows, variations: varsForCert, materials: mosLine(mosToDate), mcdPct: num(mcdPct), retentionPct: num(retPct), ...mcdBasis }
+  const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mosToDate, mcdPct, retPct, prevGross, contractTerms])
 
   // REVENUE THIS PERIOD.
   //
@@ -1141,9 +1151,12 @@ function HypAppModal({ modal, onClose, onSaved }) {
     if (revOverride == null) return 0
     const net = revenueThisPeriod - revenueCalculated
     if (!net) return 0
-    const d = (1 - num(mcdPct) / 100) * (1 - num(retPct) / 100)
+    // Derived from the certificate itself rather than assuming MCD applies to the whole
+    // account - on a contract-works-only basis the flat formula would gross up too far.
+    const g = sum.thisCert.gross, t = sum.thisCert.total
+    const d = (g > 0 && t > 0) ? (t / g) : ((1 - num(mcdPct) / 100) * (1 - num(retPct) / 100))
     return d > 0 ? net / d : net
-  }, [revOverride, revenueThisPeriod, revenueCalculated, mcdPct, retPct])
+  }, [revOverride, revenueThisPeriod, revenueCalculated, mcdPct, retPct, sum])
 
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
@@ -1390,7 +1403,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       salesSchedule: salesSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount), month: s.month, appDate: s.appDate || null })),
       salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
       labourSchedule: labSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount) })),
-      mcdPct: num(mcdPct), retentionPct: num(retPct),
+      mcdPct: num(mcdPct), retentionPct: num(retPct), ...mcdBasis,
       // thisCertTotal stays the CALCULATED certificate value - it is the measured
       // position and must not move. revenueThisPeriod is what the cash flow chart reads,
       // so that one carries the override.
