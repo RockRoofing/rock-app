@@ -870,6 +870,14 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // date" and the labour and materials positions still show the true measured position
   // and the next forecast still carries on from the real numbers. Otherwise one typed
   // figure would quietly corrupt everything after it.
+  // What the "remaining" lines are measured AFTER. The grey figure answers "how much is
+  // left to claim", so it is budget less what the PREVIOUS certificate had - it must not
+  // move as you type this period's percentages, or it stops being headroom and becomes a
+  // running total of the same thing the box above already shows.
+  const priorLabel = !prior ? 'the start'
+    : prior.kind === 'application' ? `App ${(latestApp && (latestApp.appNumber || latestApp.seq)) || ''}`.trim()
+    : 'the last forecast'
+
   const revenueCalculated = sum.thisCert.total || 0
   const revenueThisPeriod = revOverride == null ? revenueCalculated : Math.max(0, num(revOverride))
 
@@ -1157,10 +1165,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
                 <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
                   colour="#0f766e" autoNote="Increment less MCD and retention"
-                  sub2={`${gbp(Math.max(0, salesBudgetTotal - sum.grossCurrent))} remaining`} />
+                  sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} left after ${priorLabel}`} />
                 <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
-                  colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - labourToDate))} remaining`} />
-                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior - materialsThisPeriod))} remaining`} />
+                  colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - prevLabourToDate))} left after ${priorLabel}`} />
+                <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior))} left after ${priorLabel}`} />
                 <OverrideBox label="Materials on site (claimed)" calculated={mosAuto} override={mosOverride} setOverride={setMosOverride}
                   colour="#5b21b6"
                   autoNote={mosPriorRaw > 0 ? `${gbp(mosPriorRaw)} carried in, less ${gbp(Math.min(mosPriorRaw, materialsConsumed))} measured` : 'Nothing claimed on site yet'}

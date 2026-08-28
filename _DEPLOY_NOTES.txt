@@ -1,9 +1,9 @@
-pkg548 - Cash Flow forecast: manual override of Revenue this period
-====================================================================
+pkg549 - Cash Flow forecast: revenue override, and "remaining" measured from
+         the previous certificate
+=============================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg547. ***
-Same two files, complete, with everything from all of them plus this.
-Deploy this one ONLY.
+*** SUPERSEDES pkg542 THROUGH pkg548. ***
+Same two files, complete. Deploy this one ONLY.
 
 
 NEW FILES
@@ -19,68 +19,81 @@ CHANGED FILES (replace)
 Independent of pkg539 / pkg540 / pkg541 - different files, any order.
 
 
-THE REVENUE OVERRIDE
---------------------
-"Revenue this period" is now an editable box, same as Labour and Materials on
-site. Click Override, type a figure, Reset to go back. The calculated figure
-stays visible underneath and the box takes a teal border so an overridden
-forecast is obvious.
+1. REVENUE OVERRIDE
+-------------------
+"Revenue this period" is now editable, same as Labour and Materials on site.
+Override / type / Reset, calculated figure shown underneath, teal border when
+overridden. All three overrides now share one component.
 
-All three overrides now share one component rather than three near-copies.
+It drives the CASH only - month spread, sales payment schedule, sales-in stream,
+and the revenueThisPeriod saved on the forecast, which is what the chart reads.
 
-
-WHAT IT DRIVES, AND WHAT IT DELIBERATELY DOES NOT
--------------------------------------------------
-DRIVES: the month spread, the sales payment schedule, the sales-in cash stream,
-and the revenueThisPeriod figure saved on the forecast - which is what the cash
-flow chart reads.
-
-DOES NOT: rewrite the percentages. Gross to date, the labour position and the
-materials position all still show the true measured position, and the NEXT
-forecast still carries on from the real numbers.
-
-That separation matters. If a typed revenue figure fed back into the
-percentages, one adjustment would silently move what the following forecast
-believes has already been claimed, and the error would compound down the chain.
-So the override says "this is the cash I expect to receive for this period",
-not "this is how much work got done".
-
-thisCertTotal is still saved as the CALCULATED certificate value, untouched, so
-the measured position remains on the record next to whatever you typed.
+It does NOT rewrite the percentages. Gross to date and the labour and materials
+positions still show the true measured position, and the next forecast still
+carries on from the real numbers. If a typed revenue fed back into percentages,
+one adjustment would move what the FOLLOWING forecast thinks has been claimed and
+the error would compound. thisCertTotal is still saved as the calculated value.
 
 
-WHY IT WAS NEEDED
------------------
-The calculation - increment over the last certificate, less MCD and retention -
-is the right default and still only a model. A QS disputes a percentage, a claim
-is part-certified, an application lands late and slips a month. Good starting
-suggestion, poor rule.
+2. "REMAINING" NOW MEASURES FROM THE PREVIOUS CERTIFICATE
+---------------------------------------------------------
+The grey line under each box was budget less EVERYTHING INCLUDING what you were
+typing, so it shrank as you worked and duplicated what the figure above already
+told you.
+
+It now reads budget less the PREVIOUS certificate, and says which one:
+
+  "GBP 225,511.46 left after App 4"
+
+So it is headroom - how much is left to claim in this period - and it holds still
+while you type.
+
+  Revenue     salesBudgetTotal   - prevGross
+  Labour      labourBudgetTotal  - prevLabourToDate
+  Materials   materialsBudgetTotal - materialsUsedPrior
+
+All three budgets include instructed variations, as before.
 
 
-ALSO IN THIS PACKAGE (pkg542-547)
+3. YOUR QUESTION - WHAT HAPPENS WHEN AN APPLICATION IS RAISED AFTER A FORECAST
+------------------------------------------------------------------------------
+Right now: NOTHING, and it is worse than it sounds.
+
+The chart is built only from saved forecasts, plus retention releases. Real
+applications never enter it at all. So when a forecast period passes and you
+raise the real application:
+
+  - the forecast's GUESSED revenue stays in the chart, at its guessed date,
+    for ever
+  - the real application's actual value and its known payment due date never
+    appear
+  - the chart keeps showing a prediction that has already been overtaken
+
+The percentages do self-correct - the NEXT forecast picks the application as its
+prior, because prior is whichever certificate ends last. So the measured position
+recovers. The stale CASH does not.
+
+Not fixed in this package - see the message accompanying it. It needs a decision
+from you first, because "auto change the forecast" can mean two quite different
+things and one of them destroys what you predicted.
+
+
+ALSO IN THIS PACKAGE (pkg542-548)
 ---------------------------------
 - Seeds from the latest real application, else contracted rates at 0%.
-- Already-claimed value deducted, including MATERIALS ON SITE - the J240 fault,
-  where 65,690.28 of a 92,766.50 claim was being ignored.
-- "Materials on site (claimed)" box: carried in from the last certificate, winds
-  down automatically as work is measured, manual override.
-- "Fill from line items" buys only what is not already in stock on site.
+- Already-claimed value deducted, including MATERIALS ON SITE (the J240 fault).
+- "Materials on site (claimed)": carried in, auto wind-down, manual override.
+- "Fill from line items" buys only what is not already in stock.
 - Old supplier section renamed "Materials forecasted on site".
 - Variations table: instructed in by default, uninstructed listed and badged.
 - Labour override.
-- Labour and Materials position panels: budget / claimed / actual spend from
-  Project Financials.
+- Labour and Materials position panels: budget / claimed / actual spend.
 - "Revert to Application N" resets everything including all three overrides.
-- Remaining figures include instructed variations.
 - Backdrop click no longer closes the modal; Escape does.
 
 
 STILL OUTSTANDING
 -----------------
-1. J240 Application 4 has "Previously certified (gross)" BLANK. Until you enter
-   92,766.50 that draft claims the whole lot again, and the forecast reads it.
-2. variationValueToDate() in lib/applications.js tests `v.instructed === false`
-   against a 'yes'/'no' STRING, so uninstructed variations count IN FULL in the
-   applications maths.
-3. "Raise & send to customer" - waiting on your answer about whether it still
-   saves, so I stop guessing at it.
+1. J240 Application 4 - "Previously certified (gross)" is BLANK.
+2. variationValueToDate() instructed 'yes'/'no' string bug.
+3. "Raise & send to customer" - waiting on whether it still saves.
