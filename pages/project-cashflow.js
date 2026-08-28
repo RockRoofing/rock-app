@@ -151,13 +151,19 @@ export default function ProjectCashflow() {
     }
     // Every contributor, kept so the month bands can show WHAT made up a figure rather
     // than just asserting it.
+    // Bucketed by TRANSACTION date - the valuation date the work is applied for - not by
+    // the date the cash lands. A sale belongs to the month it was valued in; the payment
+    // term only decides when the money shows up, and that is what the cash rows above
+    // are for. An August valuation paid in October is August sales.
     const detail = {}
-    const note = (d, kind, label, amt) => {
+    const note = (txDate, cashDate, kind, label, amt) => {
+      const d = txDate || cashDate
       if (!d || !amt) return
       const mk = String(d).slice(0, 7)
       if (!detail[mk]) detail[mk] = []
-      detail[mk].push({ kind, label, date: d, amount: amt })
+      detail[mk].push({ kind, label, txDate: d, date: cashDate || '', amount: amt })
     }
+    const monthEnd = (mk) => { const [y, m] = String(mk).split('-').map(Number); return y && m ? isoOf(new Date(y, m, 0)) : '' }
 
     // ACTUALS FIRST. A raised application is money that will be paid on a contractual
     // date, which is better than any forecast of it.
@@ -168,7 +174,7 @@ export default function ProjectCashflow() {
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
         add(a.dueDate, 'actualIn', a.thisCert)
-        note(a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
+        note(a.endDate, a.dueDate, 'actual', `${labelOfXeroId(xid)} App ${a.appNumber || a.seq}${a.status === 'draft' ? ' (draft)' : ''}`, a.thisCert)
       }
     }
 
@@ -182,8 +188,8 @@ export default function ProjectCashflow() {
         // Overtaken by a real application - its cash is already in from the actual above.
         if (supersededIds.has(fc.id)) continue
         if (Array.isArray(fc.salesSchedule) && fc.salesSchedule.length) {
-          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.date, 'forecast', `${fcLabel} forecast`, s.amount || 0) }
-        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.salesDate, 'forecast', `${fcLabel} forecast`, fc.revenueThisPeriod || 0) }
+          for (const s of fc.salesSchedule) { add(s.date, 'forecastIn', s.amount || 0); note(s.appDate || monthEnd(s.month) || fc.to, s.date, 'forecast', `${fcLabel} forecast`, s.amount || 0) }
+        } else if (fc.salesDate) { add(fc.salesDate, 'forecastIn', fc.revenueThisPeriod || 0); note(fc.to, fc.salesDate, 'forecast', `${fcLabel} forecast`, fc.revenueThisPeriod || 0) }
         for (const s of (fc.labourSchedule || [])) add(s.date, 'labourOut', s.amount || 0)
         if ((!fc.labourSchedule || !fc.labourSchedule.length) && fc.labourDate) add(fc.labourDate, 'labourOut', fc.labourThisPeriod || 0)
         for (const m of (fc.matItems || [])) add(m.payDate, 'matOut', m.amount || 0)
@@ -194,8 +200,8 @@ export default function ProjectCashflow() {
       const pct = (parseFloat(e.retentionPct || 0) || 0) / 100
       const totalRet = fa * pct
       if (totalRet <= 0) continue
-      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 1st half`, totalRet / 2) }
-      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 2nd half`, totalRet / 2) }
+      if (e.release1Date && !e.release1Received) { add(e.release1Date, 'retIn', totalRet / 2); note(e.release1Date, e.release1Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 1st half`, totalRet / 2) }
+      if (e.release2Date && !e.release2Received) { add(e.release2Date, 'retIn', totalRet / 2); note(e.release2Date, e.release2Date, 'retention', `${[e.ourRef, e.projectName].filter(Boolean).join(' - ')} retention 2nd half`, totalRet / 2) }
     }
     // NON-ENUMERABLE on purpose. The month band builder walks Object.entries(cashByDay)
     // and slices a month key off each date - a plain property would show up there as a
@@ -358,16 +364,25 @@ export default function ProjectCashflow() {
                         // the true calendar-month total, summed from cashByDay, never the
                         // sum of the columns in the band. Summing the band would silently
                         // mis-state a month whenever a week straddled the boundary.
-                        const monthIncome = {}
-                        for (const [dISO, v] of Object.entries(cashByDay || {})) {
-                          const mk = dISO.slice(0, 7)
-                          if (!monthIncome[mk]) monthIncome[mk] = { actual: 0, forecast: 0 }
-                          monthIncome[mk].actual += (v.actualIn || 0)
-                          // Retention released sits with the forecast side: it is expected
-                          // money, not something already applied for.
-                          monthIncome[mk].forecast += (v.forecastIn || 0) + (v.retIn || 0)
-                        }
                         const detail = (cashByDay && cashByDay.__detail) || {}
+                        // Summed off the detail, which is keyed by TRANSACTION date, so a
+                        // sale sits in the month it was valued rather than the month it
+                        // gets paid. cashByDay is keyed by payment date and drives the
+                        // cash rows above - the two answer different questions and must
+                        // not be mixed.
+                        //
+                        // Retention releases are excluded. A release is cash arriving
+                        // against work sold months ago, not a new sale, and it already has
+                        // its own "Retention in" row above.
+                        const monthSales = {}
+                        for (const [mk, rows] of Object.entries(detail)) {
+                          const m = { actual: 0, forecast: 0 }
+                          for (const x of rows) {
+                            if (x.kind === 'actual') m.actual += x.amount
+                            else if (x.kind === 'forecast') m.forecast += x.amount
+                          }
+                          monthSales[mk] = m
+                        }
                         const groups = []
                         for (const colDays of cols) {
                           const d = colDays[Math.floor(colDays.length / 2)] || colDays[0]
@@ -382,8 +397,9 @@ export default function ProjectCashflow() {
                         const tip = (mk, kinds, total) => {
                           const rows = (detail[mk] || []).filter(x => kinds.includes(x.kind))
                             .sort((a, b) => b.amount - a.amount)
-                          const head = `${monthShort(mk)}: ${gbp(total)} from ${rows.length} item${rows.length === 1 ? '' : 's'}`
-                          const lines = rows.slice(0, 14).map(x => `  ${x.date} ${x.label} ${gbp(x.amount)}`)
+                          const head = `${monthShort(mk)}: ${gbp(total)} from ${rows.length} item${rows.length === 1 ? '' : 's'} (valued in ${monthShort(mk)})`
+                          const lines = rows.slice(0, 14).map(x =>
+                            `  val ${x.txDate}${x.date && x.date !== x.txDate ? ` -> cash ${x.date}` : ''}  ${x.label}  ${gbp(x.amount)}`)
                           if (rows.length > 14) lines.push(`  ...and ${rows.length - 14} more`)
                           return [head, ...lines].join('\n')
                         }
@@ -394,7 +410,7 @@ export default function ProjectCashflow() {
                             <PlainCell w={DATE_W} style={{ background: '#fff' }} />
                             {groups.map((g, i) => {
                               const band = MONTH_BANDS[i % MONTH_BANDS.length]
-                              const v = pick(monthIncome[g.mk] || { actual: 0, forecast: 0 })
+                              const v = pick(monthSales[g.mk] || { actual: 0, forecast: 0 })
                               const w = g.count * cw
                               return (
                                 <div key={`${g.mk}-${i}`} title={tip(g.mk, kinds, v)}
@@ -416,9 +432,9 @@ export default function ProjectCashflow() {
                         )
                         return (
                           <>
-                            <BandRow label="Forecasted Income / month" colour="#0f766e"
-                              kinds={['forecast', 'retention']} pick={m => m.forecast} top={HEADER_H + ROW_H2 * 6} />
-                            <BandRow label="Actual Income / month" colour="#15803d"
+                            <BandRow label="Forecasted Sales / month" colour="#0f766e"
+                              kinds={['forecast']} pick={m => m.forecast} top={HEADER_H + ROW_H2 * 6} />
+                            <BandRow label="Actual Sales / month" colour="#15803d"
                               kinds={['actual']} pick={m => m.actual} top={HEADER_H + ROW_H2 * 7 + 2} />
                           </>
                         )

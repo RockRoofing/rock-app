@@ -1,7 +1,7 @@
-pkg557 - Cash Flow: project names in the breakdown
-===================================================
+pkg558 - Cash Flow: Sales by valuation date, not by cash date
+==============================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg556. ***
+*** SUPERSEDES pkg542 THROUGH pkg557. ***
 Same two files, complete. Deploy this one ONLY.
 
 
@@ -16,62 +16,70 @@ CHANGED FILES (replace)
   pages/api/project-cashflow.js
 
 
-PROJECT NAMES IN THE HOVER
---------------------------
-Every line in the month breakdown now names the project:
+THE CHANGE
+----------
+  Forecasted Income / month   ->  Forecasted Sales / month
+  Actual Income / month       ->  Actual Sales / month
 
-  Aug 26: 1,075,400.00 from 9 items
-    2026-08-14 J240 - Market Drayton App 4 (draft)  92,766.50
-    2026-08-21 J251 - Ellesmere Port forecast       40,000.00
-    2026-09-01 J233 - Crewe retention 1st half       6,853.46
+And, more importantly, they now bucket by the TRANSACTION date - the valuation
+date the work was applied for - not by the date the money lands.
 
-Applications, forecasts and retention releases all named. Live projects come off
-the dashboard, which was already being fetched for the job-number map and carries
-the names. Negotiated projects have no Xero record, so they show their deal key
-marked "(negotiated)".
+An August valuation paid in October is AUGUST sales. Before, that 88,128.18 sat
+in October because that is when the cash arrived.
 
-
-ON THE VALUE - IT IS ALREADY NET
---------------------------------
-Checked, because it is worth being certain rather than agreeing.
-
-The figure is thisCert.total from computeApplicationSummary() - the certified
-value for THAT application, after MCD and after retention. Not the gross, and not
-the cumulative.
-
-  gross this cert          40,000.00
-  less MCD @ 2.5%           1,000.00
-  less retention @ 5%       1,950.00
-  = total this cert        37,050.00   <- what the chart uses
-
-applicationTotal (100,000.00 in that test) is the gross cumulative figure and is
-not used anywhere in the cash flow.
-
-Nothing in this endpoint reads invoices - grep for "invoice" in
-pages/api/project-cashflow.js returns nothing. It is applications only, as you
-asked.
-
-SO THE INFLATED FIGURES ARE NOT GROSS-VS-NET. The two causes I would still expect
-in your August tooltip:
-
-  1. A DRAFT WITH "PREVIOUSLY CERTIFIED (GROSS)" BLANK. With no previous figure
-     the certificate computes as the whole cumulative value rather than the
-     increment - so a 92,766.50 draft that should contribute nothing contributes
-     92,766.50. These are marked "(draft)" in the breakdown. J240 Application 4
-     is in exactly this state.
-
-  2. THE SAME PROJECT APPEARING TWICE, once as "App N" and once as "forecast". A
-     forecast is only superseded when an application's VALUATION date reaches the
-     forecast's END date, so a forecast running past the application it overlaps
-     stays in.
-
-Both are now readable straight off the hover. Send me the August list and I will
-fix whichever it is.
+The cash rows above are untouched. "Sales in", "Retention in" and "Total IN /
+week" still work off payment dates, because they answer a different question -
+when the money is in the bank. The two must not be mixed and are now computed
+from separate maps: cashByDay by payment date, the Sales rows off the detail
+index by transaction date.
 
 
-ALSO IN THIS PACKAGE (pkg542-556)
+WHICH DATE IS USED AS THE TRANSACTION DATE
+------------------------------------------
+  Actual application     its valuation date (valDate, falling back to appDate)
+  Forecast, project or
+  weekly/fortnightly     the application date the cycle produced
+  Forecast, per
+  application            the end of the calendar month being valued, or the
+                         period end for an older forecast with no monthly split
+
+
+RETENTION IS NO LONGER IN THESE ROWS
+------------------------------------
+It used to be added to the Income row. A retention release is cash arriving
+against work sold months ago, not a new sale, so counting it as sales in the
+month it is released overstates that month and understates the one the work was
+actually valued in.
+
+It has not been lost - it is still on "Retention in" and in "Total IN / week",
+where it belongs. Tell me if you would rather it stayed on the sales row.
+
+
+THE HOVER NOW SHOWS BOTH DATES
+------------------------------
+  Aug 26: 1,075,400.00 from 9 items (valued in Aug 26)
+    val 2026-08-31 -> cash 2026-10-21  J240 - Market Drayton App 4 (draft)  88,128.18
+    val 2026-08-28 -> cash 2026-10-14  J251 - Ellesmere Port forecast       19,800.00
+
+The cash date is only shown where it differs from the valuation date.
+
+
+ONE THING THIS WILL CHANGE ON SCREEN
+------------------------------------
+Money will MOVE MONTHS the first time you look. Anything on a 30 or 60 day term
+shifts one or two months earlier, into the month it was valued. That is the
+point, but it will not look like your old figures - expect August to change even
+before any double-counting is dealt with.
+
+The two causes of the inflated figures are still worth reading off the hover:
+a DRAFT with "Previously certified (gross)" blank contributing its full
+cumulative value (marked "(draft)"), and a project appearing as both "App N" and
+"forecast" where the forecast runs past the application it overlaps.
+
+
+ALSO IN THIS PACKAGE (pkg542-557)
 ---------------------------------
-- Forecasted Income / month and Actual Income / month, month-banded by colour.
+- Project names on every breakdown line.
 - Duplicate project records de-duplicated by full application fingerprint.
 - Sales received can follow the project's own application dates, or weekly /
   fortnightly cycles with a start date.
