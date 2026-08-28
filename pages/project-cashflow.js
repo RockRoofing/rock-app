@@ -529,6 +529,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [labourOverride, setLabourOverride] = useState(null)
   // Materials on site CLAIMED (money in), cumulative. null = follow the auto wind-down.
   const [mosOverride, setMosOverride] = useState(null)
+  // null = follow the certificate maths. Anything else is a typed figure that wins.
+  const [revOverride, setRevOverride] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [from, setFrom] = useState(modal.from || '')   // editable period
   const [to, setTo] = useState(modal.to || '')
@@ -550,7 +552,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -583,6 +585,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setLabourTerm(editing.labourTerm || { basis: 'weekly', days: 7 })
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
+          setRevOverride(editing.revenueOverride == null ? null : String(editing.revenueOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
@@ -855,6 +858,21 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const workApp = { contractWorks: rows, variations: varsForCert, materials: mosLine(mosToDate), mcdPct: num(mcdPct), retentionPct: num(retPct) }
   const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mosToDate, mcdPct, retPct, prevGross])
 
+  // REVENUE THIS PERIOD.
+  //
+  // Calculated is the increment over the last certificate, net of MCD and retention.
+  // That is the right default and it is still only a model of what will actually be
+  // certified - a QS disputes a percentage, a claim is part-certified, an application
+  // lands late and slips a month. So it can be overridden outright.
+  //
+  // The override drives the CASH ONLY: the month spread, the payment schedule and the
+  // sales-in stream. It deliberately does NOT rewrite the percentages, so "Gross to
+  // date" and the labour and materials positions still show the true measured position
+  // and the next forecast still carries on from the real numbers. Otherwise one typed
+  // figure would quietly corrupt everything after it.
+  const revenueCalculated = sum.thisCert.total || 0
+  const revenueThisPeriod = revOverride == null ? revenueCalculated : Math.max(0, num(revOverride))
+
   // Revenue + labour split for the works this period (value-to-date on works lines).
   // Labour value to date on the current rows (labRate x qty x pct).
   const labourToDate = useMemo(() => {
@@ -927,7 +945,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
   // Sales cash schedule: each spread month's portion received on month-end + sales days.
   const salesSchedule = useMemo(() => {
-    const rev = sum.thisCert.total || 0
+    const rev = revenueThisPeriod
     if (!(rev > 0) || !periodMonths.length) return []
     const days = num(salesTerm.days)
     return periodMonths.map(mk => {
@@ -935,7 +953,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
       const date = paymentDate(`${mk}-01`, { basis: 'eom', days })
       return { month: mk, date, amount: rev * pct }
     }).filter(s => s.amount > 0.5)
-  }, [sum, periodMonths, salesSpread, salesTerm])
+  }, [revenueThisPeriod, periodMonths, salesSpread, salesTerm])
 
   // Labour cash schedule: each spread month's portion, timed by the labour term.
   const labSchedule = useMemo(() => {
@@ -987,6 +1005,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
     if (latestApp.retentionPct != null) setRetPct(latestApp.retentionPct)
     setLabourOverride(null)   // back to the calculation, or the revert would be partial
     setMosOverride(null)
+    setRevOverride(null)
     setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
   }
 
@@ -1033,8 +1052,12 @@ function HypAppModal({ modal, onClose, onSaved }) {
       salesDate: (salesSchedule[0] && salesSchedule[0].date) || paymentDate(to, salesTerm),
       labourSchedule: labSchedule.map(s => ({ date: s.date, amount: Math.round(s.amount) })),
       mcdPct: num(mcdPct), retentionPct: num(retPct),
+      // thisCertTotal stays the CALCULATED certificate value - it is the measured
+      // position and must not move. revenueThisPeriod is what the cash flow chart reads,
+      // so that one carries the override.
       thisCertTotal: sum.thisCert.total,
-      revenueThisPeriod: sum.thisCert.total,
+      revenueThisPeriod,
+      revenueOverride: revOverride == null ? null : num(revOverride),
       labourThisPeriod,
       materialsThisPeriod,
       createdAt: (editId && (hypApps.find(a => a.id === editId)?.createdAt)) || Date.now(),
@@ -1132,7 +1155,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Summary boxes */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-                <MiniBox label="Revenue this period" value={gbp(sum.thisCert.total)} color="#0f766e" strong sub2={`${gbp(Math.max(0, salesBudgetTotal - sum.grossCurrent))} remaining`} />
+                <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
+                  colour="#0f766e" autoNote="Increment less MCD and retention"
+                  sub2={`${gbp(Math.max(0, salesBudgetTotal - sum.grossCurrent))} remaining`} />
                 <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
                   colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - labourToDate))} remaining`} />
                 <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior - materialsThisPeriod))} remaining`} />
