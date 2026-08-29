@@ -1,78 +1,76 @@
-pkg579 - Bills: report the token's ACTUAL granted scope
-========================================================
+pkg580 - URGENT: restores the Xero connection, plus a safe scope tester
+=======================================================================
 
-*** SUPERSEDES pkg572 - pkg578. Deploy this one. ***
-Heading marker becomes "v578".
+*** SUPERSEDES pkg572 - pkg579. DEPLOY THIS FIRST, before anything else. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/connect.js                      <- adds accounting.transactions.read
-  pages/api/business-financials.js
+  pages/connect.js                      <- the urgent one
   pages/business-financials/bills.js
+  pages/api/business-financials.js
   lib/xero.js
 
 
-FIRST - HAVE YOU RECONNECTED?
------------------------------
-The message you got is the one I added, so pkg578 IS live and the scope has been
-added to the authorize URL. But the error means the TOKEN still does not carry it.
+WHAT I BROKE, AND WHY IT MATTERS NOW
+------------------------------------
+I added accounting.transactions.read to the authorize URL. Xero rejects the
+ENTIRE authorize request with invalid_scope if ANY single scope is unrecognised -
+it does not ignore the bad one and grant the rest.
 
-Deploying the scope changes nothing on its own. The existing token was issued
-under the old scope list and keeps exactly those permissions for ever. It has to
-be re-authorised:
+So /connect currently cannot connect AT ALL. That is worse than a missing
+overpayment figure: if the refresh token ever expires you would have no way back
+in. This package restores the known-good list first.
 
-    Go to /connect  ->  click Connect/Reconnect Xero  ->  approve
-
-If you have already done that and it still fails, the next section settles it.
-
-
-THE SYNC NOW PRINTS THE GRANTED SCOPE
--------------------------------------
-The stored token records what Xero actually granted (saved at
-pages/api/xero/callback.js:40). The bills sync now reads it back and prints it:
-
-  "117 bills, 1 credits. OVERPAYMENTS FAILED. Token DOES NOT HAVE
-   accounting.transactions. Granted: openid offline_access
-   accounting.invoices.read accounting.contacts.read ..."
-
-  DOES NOT HAVE  ->  the reconnect has not happened, or did not complete.
-                     Nothing else to investigate - reconnect.
-
-  HAS            ->  the reconnect worked and Xero is refusing anyway. That is a
-                     different problem entirely and I will stop guessing at it -
-                     send me the line and I will work from the granted list.
-
-Send me that line either way. It is the difference between two completely
-different actions, and I have already burned three attempts guessing.
+I asserted that scope was correct. It was not, for this app, and I should have
+given you a way to test it rather than editing the live list.
 
 
-ONE FRAGILITY WORTH KNOWING (not changed)
------------------------------------------
-pages/connect.js hard-codes the client id:
+THE SCOPE TESTER
+----------------
+The base list is now fixed and no longer edited to try things. /connect has a
+small box above the Connect button for ONE EXTRA SCOPE, appended for that attempt
+only, with quick buttons for the likely candidates:
 
-    const clientId = '934571EC178A488AAFFB4C7E8C4DDD43'
+  accounting.transactions
+  accounting.transactions.read
+  accounting.reports.read
+  none
 
-while the token exchange and every refresh use process.env.XERO_CLIENT_ID. They
-must be the same app or the exchange fails outright with invalid_grant - so they
-almost certainly are. But if that env var is ever pointed at a different Xero
-app, the authorize step and the token step would silently disagree. Worth making
-connect.js read from the env too, as its own small change.
+If Xero says invalid_scope, that name is wrong - clear the box, connect again,
+and you are straight back to a working connection. No deploy needed between
+attempts.
+
+TRY accounting.transactions FIRST (no .read). Overpayments are documented under
+that scope, and the .read variant is what was just refused.
 
 
-THE FIX ITSELF (from pkg578)
-----------------------------
-accounting.invoices.read covers Invoices AND CreditNotes, which is why bills and
-credit notes sync perfectly. Overpayments and Prepayments sit under
-accounting.transactions, which was never requested. Added to connect.js.
+WHEN ONE IS ACCEPTED
+--------------------
+Connect with it, then press Sync bills. The message now also prints what the
+token actually grants, so there is no ambiguity:
+
+  "117 bills, 1 credit notes, 4 overpayments."                        working
+  "... Token HAS accounting.transactions. Granted: <list>"            granted but refused
+  "... Token DOES NOT HAVE accounting.transactions. Granted: <list>"  not granted
+
+Send me whichever line you get and I will work from the granted list rather than
+guessing again.
+
+
+ONE THING TO NOTE
+-----------------
+Every other scope in that list - accounting.invoices.read,
+accounting.banktransactions.read, accounting.manualjournals.read,
+accounting.reports.profitandloss.read - is accepted by this app and works. So the
+app clearly takes fine-grained names. Which specific one covers Overpayments is
+what the tester is for.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-Cost account filter, remembered per browser. Credit notes and overpayments carry
-lineCodes so they cannot vanish under a filter and push the total up. No Status
-filter on overpayments - RemainingCredit > 0 is the real test. Type checked with
-startsWith('SPEND') to match SPEND-OVERPAYMENT.
+Cost account filter on Bills to Pay, remembered per browser. Credit notes and
+overpayments carry lineCodes. No Status filter on overpayments. Type matched with
+startsWith('SPEND'). Heading marker "v578".
 
-When it works: "117 bills, 1 credit notes, 4 overpayments." and the total drops
-307,471.06 -> 302,771.49.
+Target once the scope is sorted: total drops 307,471.06 -> 302,771.49.

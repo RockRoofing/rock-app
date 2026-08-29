@@ -1,9 +1,40 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 
+// Xero rejects the ENTIRE authorize request with invalid_scope if one scope is
+// unrecognised, so testing by editing the base list risks locking you out of
+// reconnecting. This adds a scope for one attempt only.
+//
+// Module scope, not nested - a component declared inside another remounts every render
+// and this holds a focused input.
+function ScopeTester({ value, onChange }) {
+  const OPTIONS = ['accounting.transactions', 'accounting.transactions.read', 'accounting.reports.read']
+  return (
+    <div style={{ textAlign: 'left', background: '#fafafa', border: '1px solid #eee', borderRadius: 8, padding: 10, marginBottom: 14 }}>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
+        Extra scope to request (optional). Overpayments need an accounting.transactions scope; the exact name this app accepts has to be found by trying.
+      </div>
+      <input value={value} onChange={e => onChange(e.target.value)} placeholder="e.g. accounting.transactions"
+        style={{ width: '100%', padding: '7px 9px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, marginBottom: 6 }} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {OPTIONS.map(o => (
+          <button key={o} onClick={() => onChange(o)} style={{ fontSize: 10.5, padding: '3px 7px', border: '1px solid #ddd', background: value === o ? '#e0f2fe' : '#fff', borderRadius: 5, cursor: 'pointer' }}>{o}</button>
+        ))}
+        <button onClick={() => onChange('')} style={{ fontSize: 10.5, padding: '3px 7px', border: '1px solid #ddd', background: '#fff', borderRadius: 5, cursor: 'pointer' }}>none</button>
+      </div>
+      <div style={{ fontSize: 10, color: '#aaa', marginTop: 6 }}>
+        If Xero says invalid_scope, that name is wrong - clear it and connect again to restore the working connection.
+      </div>
+    </div>
+  )
+}
+
 export default function ConnectPage() {
   const [connected, setConnected] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Extra scopes to try on the next authorize. Kept OUT of the base list so a rejected
+  // scope can never leave you unable to reconnect - clear the box and connect again.
+  const [extraScopes, setExtraScopes] = useState('')
 
   useEffect(() => {
     fetch('/api/xero/status')
@@ -14,16 +45,16 @@ export default function ConnectPage() {
   function connectXero() {
 const clientId = '934571EC178A488AAFFB4C7E8C4DDD43'
 const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback')
-    // accounting.transactions.read is NOT covered by accounting.invoices.read.
+    // KNOWN-GOOD LIST. Do not edit this line to test a scope - Xero rejects the whole
+    // authorize request with invalid_scope if ANY single scope is unrecognised, which
+    // leaves you unable to reconnect at all. accounting.transactions.read did exactly
+    // that, even though it is documented, so this app does not accept it.
     //
-    // Invoices and CreditNotes come under accounting.invoices.read, which is why bills
-    // and credit notes sync fine. OVERPAYMENTS and PREPAYMENTS sit under
-    // accounting.transactions, which was never requested - so that endpoint returns
-    // 401 AuthorizationUnsuccessful while every other call on the same token succeeds.
-    //
-    // Adding a scope does NOT apply to an existing connection. Xero has to be
-    // reconnected from this page before it takes effect.
-    const scope = encodeURIComponent('openid offline_access accounting.invoices.read accounting.transactions.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read')
+    // To try a scope, use the box below instead - it appends to this list for one
+    // attempt without touching the code or needing a deploy.
+    const BASE_SCOPES = 'openid offline_access accounting.invoices.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read'
+    const scopeStr = [BASE_SCOPES, (extraScopes || '').trim()].filter(Boolean).join(' ')
+    const scope = encodeURIComponent(scopeStr)
     window.location.href = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=xero_auth&prompt=consent`
   }
 
@@ -40,6 +71,7 @@ const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback'
               ✓ Connected to Xero
             </div>
             <a href="/" style={{ display: 'block', background: '#1a1a2e', color: '#fff', padding: '12px 24px', borderRadius: 8, fontSize: 15, textDecoration: 'none', marginBottom: 10 }}>Go to Dashboard</a>
+            <ScopeTester value={extraScopes} onChange={setExtraScopes} />
             <button onClick={connectXero} style={{ background: 'transparent', border: '1px solid #ddd', borderRadius: 8, padding: '10px 24px', fontSize: 13, color: '#666', cursor: 'pointer', width: '100%' }}>
               Reconnect Xero
             </button>
@@ -49,6 +81,7 @@ const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback'
             <p style={{ color: '#666', marginBottom: 24, fontSize: 14, lineHeight: 1.6 }}>
               Connect your Xero account to pull live project data, costs and invoices automatically.
             </p>
+            <ScopeTester value={extraScopes} onChange={setExtraScopes} />
             <button onClick={connectXero} style={{ background: '#13B5EA', color: '#fff', border: 'none', borderRadius: 8, padding: '12px 24px', fontSize: 15, cursor: 'pointer', width: '100%', fontWeight: 600 }}>
               Connect to Xero
             </button>
