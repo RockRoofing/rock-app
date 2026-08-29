@@ -1,80 +1,56 @@
-pkg584 - Retention: reconciliation on the halves rule, and Retentions Due
-          deducts confirmed releases
-=========================================================================
+pkg585 - FIX: tracker crashed on open (my bug in pkg584)
+=========================================================
 
-*** SUPERSEDES pkg570 and pkg583. All three files are COMPLETE and carry the
-    pkg539 / pkg541 changes too. ***
+*** SUPERSEDES pkg570, pkg583, pkg584. Deploy this one. ***
+All three files are COMPLETE and carry the pkg539 / pkg541 changes too.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/retention.js
+  pages/retention.js                            <- the crash
   pages/api/dashboard.js
   pages/business-financials/retentions-due.js
 
 
-1. THE TICK WAS MEASURING THE WRONG THING - YOU WERE RIGHT
-----------------------------------------------------------
-It tested Retention Owed - 612 Deducted + 612 Released = 0. But Retention Owed
-only deducts what an APPLICATION claimed. Since releases are now marked by hand
-on the tracker, a hand-marked release left Owed untouched and the row flagged
-even when Xero and the register agreed perfectly.
+THE CRASH
+---------
+The new reconciliation cell called gbp() NINE times. There is no gbp() in
+retention.js - that file uses fmt() and fmtC(). I carried the name over from
+pages/project-cashflow.js, where gbp() does exist.
 
-Your own screenshot proves it: 5,100.00 deducted, 2,550.00 released - EXACTLY
-half - and it flagged. Meanwhile rows releasing odd part-amounts ticked, which
-are precisely the ones worth looking at.
+It compiled perfectly and threw ReferenceError on the first render, taking the
+whole page down. Exactly the failure mode your notes warn about: an undefined
+identifier passes the build and only shows up at runtime. Same shape as the
+fmtD() one I caught during the build on the cash flow position panels - that one
+I spotted before shipping, this one I did not.
 
-NEW RULE, as you described it: retention is released in halves, so 612 Released
-should be NOTHING, HALF of 612 Deducted, or ALL of it. Anything else flags.
+All nine now use fmtC(), which is what the rest of the file uses.
 
-Measured against 612 Deducted - Xero's own gross - so the check is self-contained
-and does not care whether an application or a manual mark recorded the release.
-
-Your six visible rows, before and after:
-
-    Deducted    Released    now      new
-    9,163.10    9,163.10    flag  -> tick  (both halves)
-    2,046.67      170.29    tick  -> flag  (out by +170.29)
-    4,659.92    2,104.11    flag  -> flag  (out by -225.85)
-    4,761.45      977.81    tick  -> flag  (out by +977.81)
-    8,172.18    1,975.81    tick  -> flag  (out by +1,975.81)
-    5,100.00    2,550.00    flag  -> tick  (1st half)
-
-Five of six change. A live job that has released nothing ticks "none yet", so
-work in progress stays clean rather than flagging everything.
-
-The cell now shows WHICH of the three it matched underneath the tick, or how far
-out it is next to the flag - so a flag says why at a glance instead of needing a
-hover. The hover adds the nearest expected figure and the likely cause: a
-part-release, or a deduction still growing because the job is not fully invoiced.
+I also scanned every file touched across these packages for the same class of
+fault - a helper borrowed from another page and never declared or imported
+(gbp, gbpK, fmt, fmtC, monthShort, INK, isoOf, pad). retention.js was the only
+one. The unicode escapes are single-backslash and render as real glyphs, checked
+separately.
 
 
-2. RETENTIONS DUE DID NOT DEDUCT ANYTHING
------------------------------------------
-retentions-due.js:17 tested `e.release1Received` - a field NOTHING EVER SETS. It
-is left over from the tracker's old design, where the released state was inferred
-from the paid balance at render time and never stored.
+WHAT IS IN THIS PACKAGE (unchanged from pkg584)
+-----------------------------------------------
+RECONCILIATION ON THE HALVES RULE. 612 Released should be nothing, half of 612
+Deducted, or all of it. Anything else flags, with how far out it is shown beside
+the flag. Which of the three matched is shown under a tick.
 
-So confirming a half on the tracker changed nothing on that page, and every
-project showed its full retention as due for ever. Same fault in both the balance
-figure and the list of dated cash-in events.
+Your six visible rows:
+    9,163.10 / 9,163.10   flag -> tick  (both halves)
+    2,046.67 /   170.29   tick -> flag  (+170.29)
+    4,659.92 / 2,104.11   flag -> flag  (-225.85)
+    4,761.45 /   977.81   tick -> flag  (+977.81)
+    8,172.18 / 1,975.81   tick -> flag  (+1,975.81)
+    5,100.00 / 2,550.00   flag -> tick  (1st half)
 
-It now uses the same rule as the tracker: manual mark wins either way, and with no
-manual mark a half ticked on the latest application releases it. Checked on two
-5,000 halves:
+RETENTIONS DUE now deducts confirmed releases. It tested release1Received, a
+field nothing ever sets, so confirming a half on the tracker changed nothing
+there and every project showed its full retention as due for ever.
 
-  nothing released           rows 1st + 2nd    outstanding 10,000
-  1st confirmed by hand      rows 2nd only     outstanding  5,000
-  both confirmed             rows none         outstanding      0
-  1st via application        rows 2nd only     outstanding  5,000
-  app says yes, overridden   rows 1st + 2nd    outstanding 10,000
-
-The "Balanced with the Retention Tracker" banner still holds - both sides now use
-the same rule.
-
-
-3. ALSO
--------
-Release marks: click a 1st/2nd Value cell to confirm a half released, click again
-to undo, with the action written in the cell rather than just a state. Automatic
-from an application's retention section. Retention Outstanding card.
+RELEASE MARKS: click a 1st/2nd Value cell to confirm, click again to undo.
+Automatic from an application's retention section. Manual overrides automatic in
+both directions.

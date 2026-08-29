@@ -1020,10 +1020,10 @@ export default function RetentionPage() {
                               return (
                                 <td style={{ padding: '6px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}
                                   title={ok
-                                    ? `612 released ${gbp(rel)} = ${label}. Expected one of: 0, ${gbp(half)} or ${gbp(ded)}.`
-                                    : `612 released ${gbp(rel)} is not 0, half (${gbp(half)}) or all (${gbp(ded)}) of the retention withheld. Nearest is ${gbp(near)}, out by ${gbp(rel - near)}. Usually a part-release, or a deduction still growing because the job is not fully invoiced.`}>
+                                    ? `612 released ${fmtC(rel)} = ${label}. Expected one of: 0, ${fmtC(half)} or ${fmtC(ded)}.`
+                                    : `612 released ${fmtC(rel)} is not 0, half (${fmtC(half)}) or all (${fmtC(ded)}) of the retention withheld. Nearest is ${fmtC(near)}, out by ${fmtC(rel - near)}. Usually a part-release, or a deduction still growing because the job is not fully invoiced.`}>
                                   <div style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '\u2713' : '\u2691'}</div>
-                                  <div style={{ fontSize: 8.5, color: ok ? '#9ca3af' : '#dc2626', fontWeight: 600 }}>{ok ? label : gbp(rel - near)}</div>
+                                  <div style={{ fontSize: 8.5, color: ok ? '#9ca3af' : '#dc2626', fontWeight: 600 }}>{ok ? label : fmtC(rel - near)}</div>
                                 </td>
                               )
                             })()}
