@@ -63,8 +63,11 @@ const fmtShort = (n) => `\u00a3${Math.round(Number(n) || 0).toLocaleString('en-G
 // overall ceiling is applied LAST, to the figure already reduced by the materials and
 // variations caps. Applying all three to the raw total would double-count an excess that
 // is both a variation AND above 90%.
-function eligibleFor(project, unpaidApps, settings) {
-  const raw = unpaidApps.reduce((s, a) => s + (a.thisCertNet || 0), 0)
+function eligibleFor(project, evidenceApps, settings, debt) {
+  // `debt` is the invoice total - what Bibby actually assign. The applications are only
+  // read for COMPOSITION, to work out how much of that debt the caps disallow.
+  const raw = Number(debt) || 0
+  const unpaidApps = evidenceApps
   const cv = Number(project.contractValue) || 0
   const reasons = []
   if (!cv || !unpaidApps.length) return { eligible: Math.max(0, raw), reasons, excluded: 0 }
@@ -171,11 +174,34 @@ export default function InvoiceFinance() {
     for (const p of data.projects) {
       const cust = p.customer || '(no customer)'
       if (!byCust[cust]) byCust[cust] = { customer: cust, key: norm(cust), projects: [] }
-      // Unpaid this-cert for this project.
-      const unpaid = p.applications.filter(a => !isPaid(a))
-      const rawProject = unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0)
-      const elig = eligibleFor(p, unpaid, settings)
-      byCust[cust].projects.push({ ...p, unpaidCount: unpaid.length, rawProject, ...elig, fundableProject: elig.eligible })
+      // THE DEBT IS THE INVOICE. The application is the evidence of what it consists of.
+      const invs = Array.isArray(p.invoices) ? p.invoices : []
+      const retentionInvs = invs.filter(i => i.isRetention)
+      const fundingInvs = invs.filter(i => !i.isRetention)
+      const invoiceDebt = fundingInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
+      const retentionDebt = retentionInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
+      const unmatched = fundingInvs.filter(i => i.appNumber == null)
+      const unmatchedDebt = unmatched.reduce((s, i) => s + (i.amountDue || 0), 0)
+
+      // Composition for the caps comes from the applications the unpaid invoices point
+      // at - falling back to the unpaid applications where nothing matched, so a project
+      // whose invoices carry no "App N" is still capped rather than funded blind.
+      const invAppNos = new Set(fundingInvs.map(i => i.appNumber).filter(n => n != null))
+      const evidenceApps = invAppNos.size
+        ? p.applications.filter(a => invAppNos.has(a.appNumber))
+        : p.applications.filter(a => !isPaid(a))
+
+      // Applied for but not yet invoiced. Not debt, so not funded - but shown, because
+      // silently dropping it looks like the work vanished.
+      const notInvoiced = Math.max(0, p.applications.filter(a => !isPaid(a)).reduce((s, a) => s + (a.thisCertNet || 0), 0) - invoiceDebt)
+
+      const elig = eligibleFor(p, evidenceApps, settings, invoiceDebt)
+      byCust[cust].projects.push({
+        ...p, unpaidCount: fundingInvs.length, rawProject: invoiceDebt,
+        retentionDebt, retentionCount: retentionInvs.length,
+        unmatchedDebt, unmatchedCount: unmatched.length, notInvoiced,
+        ...elig, fundableProject: elig.eligible,
+      })
     }
     return Object.values(byCust).map(c => {
       const lim = limits[c.customer] || {}
@@ -254,7 +280,7 @@ export default function InvoiceFinance() {
         <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 280 }}>
             <h1 style={{ margin: 0, color: INK, fontSize: 26 }}>Invoice Finance (Bibby) availability</h1>
-            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>Bibby fund against your APPLICATIONS, not invoices. Funding basis per project = the &quot;This cert (net)&quot; of each UNPAID application (already net of retention, and inclusive of materials on site). Advance = {settings.advanceRate}% of that, capped at the customer&apos;s insured limit, with the total capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
+            <div style={{ color: '#8a857c', fontSize: 13, marginTop: 4 }}>The DEBT is the unpaid sales invoice; the matched application is the evidence of what it consists of, which is what the eligibility caps need. Retention invoices are excluded. Caps: materials on site {settings.mosCapPct}% of contract, variations {settings.varCapPct}%, certified ceiling {settings.certCeilingPct}%. Advance = {settings.advanceRate}% of what survives, capped at the customer&apos;s insured limit, total capped at the facility maximum ({gbp(Number(settings.facilityCap) || 0)}).</div>
           </div>
           <SyncButton endpoint="/api/sync-invoices" label="Sync invoices from Xero" onDone={load}
             buildMsg={(d) => 'Synced - paid status refreshed.'} />
@@ -362,6 +388,24 @@ function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, set
                   {/* Show the reduction where there is one. A figure that has been cut by
                       an eligibility cap must say so on the row - otherwise it reads as a
                       smaller application rather than money Bibby will not fund. */}
+                  {p.retentionDebt > 0 && (
+                    <span title={`${p.retentionCount} retention invoice(s) totalling ${gbp(p.retentionDebt)}. Retention is not fundable debt under the facility, so it is excluded. Detected by "retention" in the reference - one raised without that note will NOT be caught.`}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#5b21b6', border: '1px solid #ddd6fe', background: '#f5f3ff', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
+                      {gbp(p.retentionDebt)} retention
+                    </span>
+                  )}
+                  {p.unmatchedCount > 0 && (
+                    <span title={`${p.unmatchedCount} invoice(s) totalling ${gbp(p.unmatchedDebt)} carry no "App N" reference, so no application could be matched to evidence what they consist of. They ARE counted as debt - the caps were applied using this project's unpaid applications instead.`}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', border: '1px solid #bae6fd', background: '#f0f9ff', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
+                      {p.unmatchedCount} unmatched
+                    </span>
+                  )}
+                  {p.notInvoiced > 0.005 && (
+                    <span title={`${gbp(p.notInvoiced)} has been applied for but not yet invoiced. Bibby assign the INVOICE, so this is not debt yet and is not funded. Raise the invoice and it becomes fundable.`}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
+                      {gbp(p.notInvoiced)} not invoiced
+                    </span>
+                  )}
                   {p.excluded > 0 && (
                     <span title={(p.reasons || []).join('\n')}
                       style={{ fontSize: 11, fontWeight: 700, color: '#b45309', border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>

@@ -528,6 +528,32 @@ export default async function handler(req, res) {
         // Contract value is what every Bibby percentage is measured against.
         contractValue: p.contractValue || 0,
         applications: appRows,
+        // UNPAID SALES INVOICES - the DEBT Bibby assign. The application beside it is the
+        // evidence of what the invoice consists of, which is what the eligibility caps
+        // need and an invoice cannot give.
+        //
+        // Invoice-based rather than application-based because an application entered
+        // GROSS with "previously certified" left blank computes thisCert as the FULL
+        // cumulative value - so one badly set-up application inflates the funding
+        // position by its whole account. An invoice has no such failure mode.
+        invoices: invLines
+          .filter(l => (l.amountDue != null ? l.amountDue : ((l.total || 0) - (l.amountPaid || 0))) > 0.005)
+          .map(l => {
+            const ref = `${l.reference || ''} ${l.invoiceNumber || ''}`
+            return {
+              invoiceNumber: l.invoiceNumber || '',
+              reference: l.reference || '',
+              date: l.date || '', dueDate: l.dueDate || '',
+              amountDue: l.amountDue != null ? l.amountDue : ((l.total || 0) - (l.amountPaid || 0)),
+              total: l.total || 0,
+              appNumber: appNumFromRef(l.reference) ?? appNumFromRef(l.invoiceNumber) ?? null,
+              // Retention release invoices are not fundable debt under the facility.
+              // Detected by the note, which is how they are marked in practice - so a
+              // retention invoice raised WITHOUT the note will not be caught, and that
+              // is worth knowing rather than trusting silently.
+              isRetention: /retention|retn\b/i.test(ref),
+            }
+          }),
       })
     }
 

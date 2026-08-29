@@ -1,8 +1,9 @@
-pkg591 - Invoice Finance: Bibby's eligibility rules
-====================================================
+pkg592 - Invoice Finance: invoice = the debt, application = the evidence
+=========================================================================
 
-*** pages/api/business-financials.js is COMPLETE and also carries pkg582 (bills)
-    and pkg589 (budgets comments). A superset - safe over what you have. ***
+*** SUPERSEDES pkg591 (not deployed). ***
+pages/api/business-financials.js is COMPLETE and also carries pkg582 (bills) and
+pkg589 (budgets comments). A superset.
 
 
 CHANGED FILES (replace)
@@ -11,78 +12,80 @@ CHANGED FILES (replace)
   pages/api/business-financials.js
 
 
-WHAT WAS ALREADY RIGHT
-----------------------
-  - 60% of eligible debt                          advanceRate
-  - Only up to the insured limit                  per customer, from the Bibby CSV
-  - 500k facility cap on the account              caps the total
+THE BASIS HAS CHANGED - AND IT MATTERED
+---------------------------------------
+Was: fundable = sum of "this cert (net)" across every UNPAID APPLICATION.
 
-WHAT WAS MISSING - all three of Holly's caps
---------------------------------------------
-The page funded 60% of every unpaid application in full. Materials on site,
-variations and the last 10% were all being counted as approved debt when Bibby
-would not fund them.
+The failure mode you spotted is real and already live. thisCertNet comes from
+computeApplicationSummary(app, prevGrossFor(app)), and prevGrossFor uses
+app.prevCertGross when set, otherwise the previous application's computed gross.
+With PREVIOUSLY CERTIFIED BLANK - exactly the state J240 App 4 is in - thisCert
+computes as the FULL CUMULATIVE VALUE. On this page that is not a display error,
+it is 92,766.50 of phantom debt inflating the funding position by 55,660 at 60%.
 
-  1. MATERIALS ON SITE      fundable to 25% of contract value
-  2. VARIATIONS             fundable to 25% of contract value; beyond that needs
-                            written instruction
-  3. CERTIFIED CEILING      90% of contract approved initially; past that needs
-                            further certification as the final account approaches
+Now: the DEBT is the unpaid sales invoice. The matched application is read only
+for COMPOSITION - materials on site, variations to date, gross to date - which is
+what the caps need and an invoice cannot give. Exactly as you put it: they fund
+the invoice, and need the application to show what it consists of.
 
-All three are now applied PER PROJECT, before the advance rate - they reduce what
-counts as approved debt, not what is advanced against it.
-
-The API now returns measuredToDate, variationsToDate, materialsOnSite,
-grossToDate and contractValue per application, which is what the caps measure
-against.
+An invoice has no gross/net ambiguity. It is one number with a real amountDue.
 
 
-TWO THINGS I WAS CAREFUL ABOUT
-------------------------------
-CUMULATIVE, NOT PER CERTIFICATE. "Materials on site funded to 25% of contract" is
-a POSITION, not an increment, so the caps are measured on the cumulative figures
-at the latest unpaid application. The excess is then taken off the unpaid total,
-and never by more than is actually outstanding - an excess sitting in an
-application already paid is not in the unpaid figure to remove.
+THREE CASES, ALL VISIBLE RATHER THAN SILENT
+-------------------------------------------
+RETENTION INVOICES - excluded from funding, shown as a purple chip with their
+total. Detected by "retention" (or "retn") in the reference or invoice number.
+CAVEAT WORTH KNOWING: a retention invoice raised WITHOUT that note will not be
+caught and will be funded as ordinary debt. The chip says so on hover.
 
-THE 90% CEILING IS APPLIED LAST, to the figure already reduced by the other two.
-Applying all three to the raw total would double-count money that is both a
-variation AND above 90%. Checked: contract 500k, materials at 30% AND certified
-to 95% - the materials excess brings gross to exactly 450k, so the ceiling adds
-nothing further. 25k excluded, not 50k.
+UNMATCHED INVOICES - no "App N" to match. These ARE counted as debt (they are
+real money owed), flagged blue, and the caps are applied using the project's
+unpaid applications instead, so they are never funded blind.
 
-Worked, on a 500k contract with 100k unpaid:
+APPLIED BUT NOT INVOICED - shown grey, NOT funded. Bibby assign the invoice, so
+work applied for and not yet billed is not debt yet. Shown rather than dropped,
+because silently vanishing work looks like a bug.
 
-  clean, 50% certified        100,000 eligible   advance  60,000
-  materials at 30%             75,000 eligible   advance  45,000
-  variations at 30%            75,000 eligible   advance  45,000
-  certified to 95%             75,000 eligible   advance  45,000
-  excess exceeds the unpaid         0 eligible   advance       0
+Worked example, 500k contract:
 
-
-ON SCREEN
----------
-A project reduced by a cap shows an amber "-GBP X not eligible" chip beside its
-figure, hovering to give the reasons in full - eg "Materials on site GBP 150,000
-over the 25% cap (GBP 125,000) - GBP 25,000 not funded". Without it a cut figure
-reads as a smaller application rather than money Bibby will not fund.
-
-The three percentages are EDITABLE next to the advance rate, not hard-coded -
-they are facility terms and will change at review.
+  invoice debt (excl retention)   75,000
+  retention invoices              12,500  (1)  excluded
+  unmatched invoices               5,000  (1)  counted, capped via unpaid apps
+  applied not invoiced            17,766        shown, not funded
+  caps excluded                   25,000        materials over the 25% cap
+  ELIGIBLE                        50,000
+  advance @ 60%                   30,000
 
 
-ONE BUG CAUGHT IN BUILD
------------------------
-The save handler WHITELISTS setting fields, so the three new ones would have
-appeared to save and been gone on reload. Added. They use `?? 25` rather than
-`|| 25`, because a deliberate 0% cap is a real setting and `||` would quietly
-turn it back into 25.
+ALSO IN THIS PACKAGE - THE THREE BIBBY CAPS (was pkg591)
+--------------------------------------------------------
+  materials on site   25% of contract value
+  variations          25% of contract value
+  certified ceiling   90% of contract value
+
+Applied per project BEFORE the advance rate - they reduce approved debt, not the
+advance. Measured on the CUMULATIVE position at the evidence application, since
+"materials funded to 25% of contract" is a position not an increment. The 90%
+ceiling is applied LAST to the figure already reduced by the other two, so money
+that is both a variation and above 90% is not counted twice.
+
+All three are editable beside the advance rate - they are facility terms and
+will change at review. The save handler whitelists settings, so they had to be
+added there too or they would have appeared to save and been gone on reload.
 
 
-WORTH CHECKING
---------------
-Holly's answer on the facility limit - "your current account can reach a max
-500k before being capped" - describes a cap on the DRAWN balance. The page caps
-the calculated advance, which is the same thing while you are drawing to the
-maximum but not identical if you are not. If you want it to cap drawn + new
-advance instead, that is a small change - tell me how Bibby actually apply it.
+STILL OPEN - NEEDS HOLLY
+------------------------
+1. Is the 25% variations cap on ORIGINAL CONTRACT VALUE or on the anticipated
+   final account? Implemented as contract value, following her wording literally.
+   On a job with heavy variations those diverge a lot.
+
+2. Does the 90% ceiling lift automatically once the final account is agreed, or
+   case by case? "Further certification required" suggests case by case, which
+   would mean a per-project override here rather than a global setting.
+
+3. Does written instruction LIFT the variations cap? Her wording says further
+   variations "require written instruction to fund", which reads as instruction
+   raising the ceiling rather than the 25% being absolute. NOT built - and it
+   needs the instructed 'yes'/'no' string bug in lib/applications.js fixed first,
+   because that field is not currently trustworthy.
