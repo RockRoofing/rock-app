@@ -1,77 +1,82 @@
-pkg574 - Bills: overpayment fetch fixed (my bug in pkg573)
-===========================================================
+pkg575 - Bills to Pay: version marker to prove the deploy, plus the pkg574 fixes
+=================================================================================
 
-*** SUPERSEDES pkg573. Deploy this and press Sync bills. ***
-pages/api/business-financials.js is COMPLETE and includes the pkg563 changes.
+*** SUPERSEDES pkg572, pkg573 and pkg574. Deploy this one. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  lib/xero.js
   pages/business-financials/bills.js
   pages/api/business-financials.js
+  lib/xero.js
 
 
-THE BUG - MINE
---------------
+READ THIS FIRST
+---------------
+Yes - the changes are for /business-financials/bills, which is the "Bills to Pay"
+page in the nav (BizNav.js:16). That is the right file.
+
+If NOTHING has changed on that page, then the file running is not the file I have
+been editing. Even before any sync, you should already be seeing:
+
+  - a "Cost accounts" dropdown next to the Suppliers filter
+  - a message next to the Sync bills button after you press it
+
+Neither of those needs Xero, a sync, or fresh data. If they are absent the deploy
+has not landed.
+
+So this package adds a VERSION MARKER: the heading now reads
+
+    Bills to Pay  v574
+
+in small amber text. If you do not see "v574" beside the heading, the new file is
+not live and there is no point looking at any figures. Check, in order:
+
+  1. Open pages/business-financials/bills.js on GitHub and search for
+     "Cost accounts". If it is not there, the paste did not save - the file is
+     ~29KB and a truncated paste in the web editor is easy to miss.
+  2. Check Vercel has a deployment AFTER that commit, and that it succeeded.
+  3. Hard refresh: Ctrl+Shift+R. Next caches the page bundle aggressively.
+
+Tell me which of the three it was and I will not send figures until it is live.
+
+
+THE OVERPAYMENT BUG (from pkg574) - MINE
+----------------------------------------
 Xero's Overpayment Type is "SPEND-OVERPAYMENT", not plain "SPEND". pkg573 tested
+`!== 'SPEND'`, which rejected every one - so the fetch ran, succeeded, and
+returned nothing, leaving the total at 307,471.06 and looking like a working sync.
 
-    String(op.Type).toUpperCase() !== 'SPEND'
-
-which rejected every single one, so the fetch ran, succeeded, and returned nothing.
-The total stayed at 307,471.06 and looked exactly like a working sync.
-
-Worse: fetchBankTransactions in the same file already does
-`bt.Type.startsWith('SPEND')` at line 494, for precisely this reason. The correct
-pattern was ten lines up from where I was working.
-
-Now uses startsWith, which also picks up SPEND-PREPAYMENT:
-
-  SPEND-OVERPAYMENT      old: false   new: true
-  SPEND-PREPAYMENT       old: false   new: true
-  RECEIVE-OVERPAYMENT    old: false   new: false
+fetchBankTransactions in the same file already uses `startsWith('SPEND')` at line
+494 for exactly this reason. Now fixed, and it also picks up SPEND-PREPAYMENT.
 
 
-A SILENT ZERO IS WHY IT WENT UNNOTICED
---------------------------------------
-Two things made this invisible, and both are fixed:
+WHY IT WAS INVISIBLE - ALSO FIXED
+---------------------------------
+sync() threw the API response away entirely inside a bare try/catch, so a failed
+sync and a successful one looked identical. It now reports beside the button:
 
-1. sync() threw the API response away entirely - `await fetch(...); await load()`
-   inside a bare try/catch. A failed sync and a successful one looked identical.
-   It now reports next to the button:
+  "117 bills, 1 credit notes, 4 overpayments."   green
+  "Sync failed."                                  red
 
-     "117 bills, 1 credit notes, 4 overpayments."   green
-     "Sync failed."                                  red
-
-2. The overpayment fetch is wrapped in a try/catch that only console.errors, so a
-   permissions or endpoint failure returned an empty list silently. It now logs a
-   breakdown - how many Xero returned, how many were kept, how many were the wrong
-   type, how many were fully allocated.
+The overpayment fetch also logs a breakdown server-side - how many Xero returned,
+how many were kept, and how many were rejected and why.
 
 
-WHAT YOU SHOULD SEE
--------------------
-After Sync bills, the message should read 4 overpayments and the total should drop
-from 307,471.06 to 302,771.49.
+WHAT TO EXPECT ONCE IT IS LIVE
+------------------------------
+Press Sync bills. The message should say 4 overpayments, and the total should
+drop from 307,471.06 to 302,771.49.
 
-If it still says 0 overpayments, the fetch itself is failing rather than the
-filter - most likely the Xero app is missing a scope for the Overpayments
-endpoint. Tell me and I will surface the actual error rather than swallowing it.
-
-
-REMINDER - EXPECT A THIRD NUMBER
---------------------------------
-  app after this           302,771.49
-  Xero "Bills to pay" screen  307,471.06   (excludes overpayments)
-  Xero raw CSV export      312,170.63   (lists them positive)
-
-The app nets them off, which is what you will actually pay. It will no longer tie
-to either Xero view, by design.
+Reminder that this gives a THIRD number by design:
+  app                          302,771.49   (nets overpayments off)
+  Xero "Bills to pay" screen   307,471.06   (excludes them)
+  Xero raw CSV export          312,170.63   (lists them positive)
 
 
 ALSO IN THIS PACKAGE
 --------------------
-The cost account filter from pkg572 - searchable multi-select, remembered per
-browser in localStorage, and a bill shown if ANY of its lines is on a picked
-account. Credit notes and overpayments carry lineCodes so they cannot vanish
-under a filter and push the total up.
+Cost account filter - searchable multi-select beside the supplier filter,
+remembered per browser. A bill shows if ANY of its lines is on a picked account.
+Credit notes and overpayments carry lineCodes so they cannot vanish under a
+filter and push the total up.
