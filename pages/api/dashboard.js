@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -154,6 +154,8 @@ export default async function handler(req, res) {
       // ── Read invoice lines from Redis ─────────────────────────────────────
       let totalInvoiced = 0, invoiceLines = []
       let invoicedExVat = 0, invoicedSales200 = 0, vatTotal = 0, paidTotal = 0, vatRateLabel = '—', retention612 = 0
+      let retention612Deducted = 0, retention612Released = 0, retention612ReleasedPaid = 0
+      let ret612Lines = 0, ret612First = ''
       try {
         const invCache = await redis.get(`invoiced:latest:${id}`)
         if (invCache) {
@@ -178,6 +180,26 @@ export default async function handler(req, res) {
         if (!invoicedExVat) invoicedExVat = invoiceLines.reduce((s, l) => s + (l.subTotal || 0), 0)
         if (!invoicedSales200) invoicedSales200 = invoiceLines.reduce((s, l) => s + (l.sales200 || 0), 0)
         if (!retention612) retention612 = invoiceLines.reduce((s, l) => s + (l.retention612 || 0), 0)
+        // SPLIT THE 612 MOVEMENT, rather than reporting one netted number.
+        //
+        // A deduction posts a NEGATIVE 612 line, a release posts a POSITIVE one. Summing
+        // them and taking the absolute value - which is what happened until now - makes
+        // 10,000 deducted with 5,000 released indistinguishable from 5,000 never
+        // deducted. That single figure is the reason the register will not reconcile.
+        //
+        // Derived from the stored lines, so it works without waiting for a resync.
+        for (const l of invoiceLines) {
+          const v = l.retention612 || 0
+          if (v < 0) retention612Deducted += -v
+          else if (v > 0) retention612Released += v
+          if (v !== 0) {
+            ret612Lines += 1
+            if (!ret612First || (l.date && l.date < ret612First)) ret612First = l.date || ret612First
+            // A release only counts as RECEIVED once the invoice carrying it is paid.
+            // Until then it has left retention and become an ordinary debtor.
+            if (v > 0 && (l.amountDue || 0) <= 0.01) retention612ReleasedPaid += v
+          }
+        }
         if (!totalInvoiced) totalInvoiced = invoiceLines.reduce((s, l) => s + (l.total || 0), 0)
         if (vatRateLabel === '—') {
           const labels = [...new Set(invoiceLines.map(l => l.vatLabel).filter(x => x && x !== '—'))]
@@ -492,7 +514,18 @@ export default async function handler(req, res) {
         materialsBudget,
         retentionOutstanding,
         totalRetention,
-        retention612Allocated: Math.abs(retention612),
+        // Kept for anything still reading it: retention still HELD per Xero, i.e.
+        // deducted less released. Was Math.abs(retention612), which read a net credit as
+        // if it were retention held.
+        retention612Allocated: Math.max(0, retention612Deducted - retention612Released),
+        retention612Deducted,
+        retention612Released,
+        retention612ReleasedPaid,
+        // How much 612 activity was actually found, and how far back it goes. Historic
+        // releases were often posted as a plain sales invoice with no 612 line at all, so
+        // a zero here means "no evidence", NOT "nothing released".
+        ret612Lines,
+        ret612From: ret612First || '',
         grossInvoiced,
         currentMargin,
         wip,
