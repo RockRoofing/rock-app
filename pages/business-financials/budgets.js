@@ -632,6 +632,7 @@ function Budgets() {
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Budget to date</th>
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Actual to date</th>
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Full-yr budget</th>
+                      <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }} title="Actual for the months switched to Actual, plus the forecast (or budget) for every month still to come. The figure Tracking is measured against.">Forecasted actual</th>
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Tracking (yr)</th>
                     </tr>
                   </thead>
@@ -648,11 +649,12 @@ function Budgets() {
                         <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.budgetToDate)}</td>
                         <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.actualToDate)}</td>
                         <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums' }}>{gbp(totals.fullYr)}</td>
+                        <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{gbp(totals.projectedYear)}</td>
                         <td style={{ ...tdCell, ...stickyTotals, background: '#eef3fb', zIndex: 4, fontVariantNumeric: 'tabular-nums', color: totals.trackDiff > 0 ? '#b91c1c' : '#166534' }}>{`${totals.trackDiff > 0 ? '+' : ''}${gbp(totals.trackDiff)}`}</td>
                       </tr>
                     )}
                     {visibleAccounts.length === 0 && (
-                      <tr><td colSpan={months.length + 8} style={{ padding: 24, textAlign: 'center', color: '#aaa' }}>
+                      <tr><td colSpan={months.length + 9} style={{ padding: 24, textAlign: 'center', color: '#aaa' }}>
                         {accounts.length === 0 ? 'No overhead accounts found. Sync Xero figures and check Account Categorisation.' : 'All accounts hidden. Use the gear to show some.'}
                       </td></tr>
                     )}
@@ -727,6 +729,14 @@ function Budgets() {
                           <td style={{ ...tdCell, background: '#f6f9fe', fontVariantNumeric: 'tabular-nums' }}>{budgetToDate != null ? gbp(budgetToDate) : '-'}</td>
                           <td style={{ ...tdCell, background: '#f6f9fe', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{gbp(actualToDate)}</td>
                           <td style={{ ...tdCell, background: '#f6f9fe', fontVariantNumeric: 'tabular-nums' }}>{fullYrBudget != null ? gbp(fullYrBudget) : '-'}</td>
+                          {/* The projected full year in its own right. It was already
+                              being computed to produce Tracking, but only the VARIANCE
+                              was shown - so you could see you were 4,000 over without
+                              seeing the 46,000 that came from. */}
+                          <td style={{ ...tdCell, background: '#f6f9fe', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
+                            title="Actual for the months switched to Actual, plus forecast (or budget) for every month still to come.">
+                            {gbp(projectedYear)}
+                          </td>
                           <td style={{ ...tdCell, background: '#f6f9fe', fontVariantNumeric: 'tabular-nums', color: trackDiff == null ? '#333' : trackDiff > 0 ? '#b91c1c' : '#166534', fontWeight: 600 }}
                             title="Projected full-year (actual to date + forecast for remaining months) vs full-year budget">
                             {trackDiff == null ? '-' : `${trackDiff > 0 ? '+' : ''}${gbp(trackDiff)}`}
@@ -742,7 +752,7 @@ function Budgets() {
           <div style={{ fontSize: 11, color: '#aaa', marginTop: 12 }}>
             Actuals from the P&amp;L benchmark ({data?.benchmarkUpdatedAt ? new Date(data.benchmarkUpdatedAt).toLocaleDateString('en-GB') : 'not synced'}).
             Budget/mo defaults to the forecast (amber text) until you type a figure. Summary columns: Budget to date = budget x completed months;
-            Actual to date = sum of completed months; Full-yr budget = budget x 12; Tracking = projected full year (actual + forecast) minus full-yr budget.
+            Actual to date = sum of months switched to Actual; Full-yr budget = budget x 12; Forecasted actual = actual to date + forecast (or budget) for the remaining months; Tracking = Forecasted actual minus Full-yr budget.
           </div>
         </div>
       </div>
