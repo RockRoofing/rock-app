@@ -116,7 +116,7 @@ export default function InvoiceFinance() {
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90 })
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
@@ -147,6 +147,7 @@ export default function InvoiceFinance() {
         mosCapPct: d.settings?.mosCapPct ?? 25,
         varCapPct: d.settings?.varCapPct ?? 25,
         certCeilingPct: d.settings?.certCeilingPct ?? 90,
+        highInvolvement: d.settings?.highInvolvement ?? 0,
       })
       setLimits(d.debtorLimits || {})
       setLimitsMeta(d.limitsMeta || null)
@@ -228,16 +229,76 @@ export default function InvoiceFinance() {
 
   const totals = useMemo(() => {
     const fundable = customers.reduce((s, c) => s + c.fundable, 0)
-    const grossAdvance = customers.reduce((s, c) => s + c.advance, 0)
+    // HIGH INVOLVEMENT - a concentration deduction Bibby take off APPROVED DEBT before
+    // applying the advance rate. Reverse-engineered from their own summary:
+    //   (Approved Debt - High Involvement) x 60% = Approved Funding
+    //   (323,029.46 - 35,069.31) x 60% = 172,776.09   exactly.
+    // It is not derivable from anything we hold - it depends on their view of debtor
+    // concentration - so it is entered from their screen rather than calculated.
+    const highInv = Number(settings.highInvolvement) || 0
+    const grossAdvance = Math.max(0, customers.reduce((s, c) => s + c.advance, 0) - highInv * ((Number(settings.advanceRate) || 0) / 100))
     const cap = Number(settings.facilityCap) || 0
     const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
     const cappedByFacility = cap > 0 && grossAdvance > cap
     const drawn = Number(settings.drawn) || 0
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability,
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, availability, highInv,
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
-  }, [customers, settings.drawn, settings.facilityCap])
+  }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.advanceRate])
+
+  // RECONCILIATION EXPORT, laid out in BIBBY'S OWN ORDER so the two can be read side by
+  // side rather than eyeballed. Their Finance Agreement Summary goes:
+  //
+  //   Sales Ledger - Non-Funded Debt = Approved Debt
+  //   (Approved Debt - High Involvement) x rate = Approved Funding
+  //   Approved Funding - Funds in Use = Availability
+  //
+  // Reverse-engineered from their figures and confirmed exactly:
+  //   (323,029.46 - 35,069.31) x 60% = 172,776.09
+  function exportReconciliation() {
+    const rows = []
+    const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+    const money = (n) => (Number(n) || 0).toFixed(2)
+
+    const salesLedger = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.rawProject || 0) + (p.retentionDebt || 0), 0), 0)
+    const retention = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.retentionDebt || 0), 0), 0)
+    const capped = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.excluded || 0), 0), 0)
+    const overLimit = customers.reduce((t, c) => t + Math.max(0, (c.rawAdvance || 0) - (c.advance || 0)), 0)
+    const noLimit = customers.filter(c => !c.hasLimit).reduce((t, c) => t + (c.fundable || 0), 0)
+
+    rows.push(['SUMMARY - compare against Bibby Finance Agreement Summary'])
+    rows.push(['Sales Ledger (all unpaid sales invoices incl retention)', money(salesLedger)])
+    rows.push(['  less retention invoices', money(retention)])
+    rows.push(['  less eligibility caps (materials / variations / ceiling)', money(capped)])
+    rows.push(['  less over insured limit', money(overLimit)])
+    rows.push(['  less no insured limit set', money(noLimit)])
+    rows.push(['= Approved Debt', money(totals.fundable)])
+    rows.push(['High involvement (entered from Bibby)', money(totals.highInv)])
+    rows.push([`Advance rate`, `${settings.advanceRate}%`])
+    rows.push(['= Approved Funding', money(totals.grossAdvance)])
+    rows.push(['Funds in use / drawn', money(totals.drawn)])
+    rows.push(['= Availability', money(totals.availability)])
+    rows.push([])
+    rows.push(['INVOICE DETAIL'])
+    rows.push(['Customer', 'Project', 'Invoice', 'Reference', 'Date', 'Amount due', 'Retention?', 'App matched', 'Contract value', 'Project excluded by caps', 'Reasons'])
+    for (const c of customers) {
+      for (const p of c.projects) {
+        for (const inv of (p.invoices || [])) {
+          rows.push([
+            c.customer, p.name || '', inv.invoiceNumber || '', inv.reference || '', inv.date || '',
+            money(inv.amountDue), inv.isRetention ? 'YES' : '', inv.appNumber == null ? 'UNMATCHED' : `App ${inv.appNumber}`,
+            money(p.contractValue), money(p.excluded), (p.reasons || []).join(' | '),
+          ])
+        }
+      }
+    }
+    const csv = rows.map(r => r.map(q).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = `if-reconciliation-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
 
   async function saveAll() {
     setSaving(true)
@@ -341,6 +402,7 @@ export default function InvoiceFinance() {
               <div><div style={lbl}>Advance rate %</div><input type="number" value={settings.advanceRate} onChange={e => setSettings(s => ({ ...s, advanceRate: e.target.value }))} style={{ ...inp, width: 90 }} /></div>
               <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} /></div></div>
               <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
+              <div><div style={lbl} title="Bibby's concentration deduction, taken off approved debt BEFORE the advance rate. Read it off their Finance Agreement Summary - it cannot be derived from anything we hold.">High involvement</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.highInvolvement} onChange={e => setSettings(s => ({ ...s, highInvolvement: e.target.value }))} style={{ ...inp, width: 110 }} /></div></div>
               <div><div style={lbl} title="Approved materials on site are funded up to this share of contract value.">Materials cap %</div><input type="number" value={settings.mosCapPct} onChange={e => setSettings(s => ({ ...s, mosCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Variations are funded up to this share of contract value. Beyond it, Bibby need written instruction.">Variations cap %</div><input type="number" value={settings.varCapPct} onChange={e => setSettings(s => ({ ...s, varCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
@@ -354,6 +416,8 @@ export default function InvoiceFinance() {
                 )}
                 <label htmlFor="bibbyfile" style={{ background: GOLD, border: '1px solid ' + GOLD, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer', color: '#fff', fontWeight: 600 }}>Import Bibby limit list (CSV)</label>
               </div>
+              <button onClick={exportReconciliation} title="CSV laid out in Bibby's own order - Sales Ledger, deductions, Approved Debt, High Involvement, Approved Funding, Availability - with every invoice underneath."
+                style={{ background: '#fff', color: INK, border: '1px solid #e2e0da', borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Export reconciliation</button>
               <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
               {importMsg && <div style={{ fontSize: 11.5, color: '#555', flexBasis: '100%' }}>{importMsg}</div>}
             </div>

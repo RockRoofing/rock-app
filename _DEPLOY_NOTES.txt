@@ -1,9 +1,10 @@
-pkg593 - Invoice Finance: limits save on upload, import date recorded
-======================================================================
+pkg594 - Invoice Finance: reconciliation export, High Involvement,
+          limits save on upload
+==================================================================
 
-*** SUPERSEDES pkg591 and pkg592 (neither deployed). ***
+*** SUPERSEDES pkg591, pkg592, pkg593 (none deployed). ***
 pages/api/business-financials.js is COMPLETE and also carries pkg582 (bills) and
-pkg589 (budgets comments). A superset.
+pkg589 (budgets comments).
 
 
 CHANGED FILES (replace)
@@ -12,60 +13,91 @@ CHANGED FILES (replace)
   pages/api/business-financials.js
 
 
-1. THE IMPORT NOW SAVES ITSELF
-------------------------------
-It only ever STAGED the parsed limits into local React state and asked you to
-press Save. Close the tab, or click away, before pressing it and the entire
-imported list was gone - with nothing on screen to say so. The import is the slow
-part of the job; losing it silently is expensive.
+BIBBY'S FORMULA, REVERSE-ENGINEERED FROM YOUR SCREENSHOT
+--------------------------------------------------------
+  Sales Ledger - Non-Funded Debt = Approved Debt
+      468,326.86 - 145,297.40    = 323,029.46          exact
 
-Uploading now writes the limits immediately. Editing and Save still work
-afterwards, so the review step is not lost - it just no longer decides whether
-the data survives.
+  (Approved Debt - High Involvement) x 60% = Approved Funding
+      (323,029.46 - 35,069.31) x 0.6       = 172,776.09   exact
 
-If the save fails the message says so plainly and tells you to press Save to
-retry, rather than reporting a successful import that did not persist.
+  Approved Funding - Funds in Use = Availability
+      172,776.09 - 122,711.31     =  50,064.78          exact
 
-
-2. THE IMPORT DATE
-------------------
-Stored with the list and shown beside the Import button:
-
-    List imported 29/08/26 14:07
-
-Hovering gives the detail: "142 limits imported, 118 matched a customer, 24 did
-not - bibby-limits.csv".
-
-Kept in a SEPARATE Redis key (config:if-limits-meta) rather than folded into the
-limits map. That map is a flat { customerName: {...} } and every screen that walks
-it would have shown a debtor called "importedAt".
+So yes - the disapproved amounts ARE the difference. "Non-Funded Debt" is exactly
+where materials on site, variations, the last 10% and insured-limit shortfalls
+land in their model.
 
 
-ALSO IN THIS PACKAGE (pkg591/592)
----------------------------------
-THE DEBT IS THE INVOICE, the matched application is the evidence of what it
-consists of - as you put it. Was: the sum of "this cert (net)" across unpaid
-applications, which breaks badly when an application is entered GROSS with
-"previously certified" blank. In that state thisCert computes as the FULL
-cumulative value: on J240 App 4 that is 92,766.50 of phantom debt, inflating the
-funding position by 55,660 at 60%.
+THE GAP IS TWO SEPARATE PROBLEMS PULLING OPPOSITE WAYS
+------------------------------------------------------
+  app unpaid sales invoices    485,671.22
+  Bibby Sales Ledger           468,326.86
+  app HIGHER by                 17,344.36
 
-Retention invoices excluded (purple chip - detected by "retention" in the
-reference, so one raised without that note will NOT be caught). Unmatched
-invoices counted as debt but flagged, capped via the project's unpaid
-applications. Applied-but-not-invoiced shown grey and not funded.
+  app implied approved debt    260,201.67   (156,121 / 60%)
+  app implied deductions       225,469.55
+  Bibby non-funded + high inv  180,366.71
+  app OVER-DEDUCTS by           45,102.84
 
-BIBBY'S THREE CAPS - materials on site 25%, variations 25%, certified ceiling
-90% - applied per project BEFORE the advance rate, measured on the cumulative
-position, with the 90% ceiling applied LAST so money that is both a variation and
-above 90% is not counted twice. All three editable beside the advance rate.
+Net: app funding reads 16,655 low. Chasing the single number was never going to
+work because the two errors partly cancel.
 
 
-STILL NEEDS HOLLY
------------------
-1. Is the variations 25% on ORIGINAL contract value or the anticipated final
-   account? Built as contract value, per her wording.
-2. Does the 90% ceiling lift automatically at final account, or case by case?
-3. Does written instruction LIFT the variations cap? Not built - it needs the
-   instructed 'yes'/'no' string bug in lib/applications.js fixed first, because
-   that field is not currently trustworthy.
+1. HIGH INVOLVEMENT - NOW MODELLED
+----------------------------------
+Bibby deduct 35,069.31 of concentration BEFORE applying the advance rate. Holly
+never mentioned it and the app had no equivalent, so the app should have read
+HIGHER than Bibby, not lower.
+
+It cannot be derived from anything we hold - it depends on their view of debtor
+concentration - so it is ENTERED from their Finance Agreement Summary, next to
+the advance rate. Put 35,069.31 in.
+
+
+2. RECONCILIATION EXPORT
+------------------------
+New "Export reconciliation" button. CSV in BIBBY'S OWN ORDER so the two read side
+by side:
+
+  Sales Ledger (all unpaid sales invoices incl retention)
+    less retention invoices
+    less eligibility caps (materials / variations / ceiling)
+    less over insured limit
+    less no insured limit set
+  = Approved Debt
+  High involvement
+  Advance rate
+  = Approved Funding
+  Funds in use / drawn
+  = Availability
+
+Then every invoice underneath - customer, project, invoice number, reference,
+date, amount due, retention flag, which application it matched, contract value,
+what the caps excluded on that project and why.
+
+
+3. LIMITS SAVE ON UPLOAD, WITH A DATE (was pkg593)
+--------------------------------------------------
+The import only STAGED into local state - close the tab before pressing Save and
+the whole list was gone silently. It now saves on upload and records the date,
+shown beside the button as "List imported 29/08/26 14:07", hovering for the
+counts and file name.
+
+
+WHAT TO DO, IN THIS ORDER
+-------------------------
+1. Enter High involvement 35,069.31 and Funds in use / drawn 122,711.31.
+
+2. GET BIBBY'S "DISAPPROVED BREAKDOWN" TAB - it is right next to Availability
+   Breakdown on the screen you sent. It itemises the 145,297.40 and says WHICH
+   invoices they disapproved and why. Nothing I can build tells you that; only
+   they know it.
+
+3. Then run the export and compare top line first. If the 17,344 on Sales Ledger
+   is timing - invoices raised since their snapshot - it will show as invoices
+   dated after their statement date. If it is not timing, it is more likely
+   credit notes or overpayments on the sales side, which is a different fix.
+
+Only chase the 45,103 of over-deduction once the top line agrees. Otherwise you
+are reconciling two moving numbers at once.

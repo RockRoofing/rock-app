@@ -569,6 +569,7 @@ export default async function handler(req, res) {
         mosCapPct: ifConfig.mosCapPct != null ? ifConfig.mosCapPct : 25,
         varCapPct: ifConfig.varCapPct != null ? ifConfig.varCapPct : 25,
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
+        highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : 0,
       },
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
       limitsMeta: ifLimitsMeta,      // { importedAt, count, matched, unmatched, fileName }
@@ -602,6 +603,7 @@ export default async function handler(req, res) {
         mosCapPct: Number(s.mosCapPct ?? 25),
         varCapPct: Number(s.varCapPct ?? 25),
         certCeilingPct: Number(s.certCeilingPct ?? 90),
+        highInvolvement: Number(s.highInvolvement) || 0,
       }
       await redis.set('config:if-settings', cfg)
       return res.json({ ok: true, settings: cfg })
