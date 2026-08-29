@@ -51,6 +51,16 @@ function splitCsvLine(line) {
 // Declared ABOVE eligibleFor, which uses it. Safe either way here (the function only
 // runs during render, long after the module evaluates) but a const used above its own
 // declaration reads like a bug and invites one.
+// Module scope, and defined here rather than borrowed - this file has no date formatter
+// and reaching for one that lives on another page compiles cleanly then throws on render.
+const fmtDateTime = (iso) => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d)) return ''
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 const fmtShort = (n) => `\u00a3${Math.round(Number(n) || 0).toLocaleString('en-GB')}`
 
 // BIBBY ELIGIBILITY for one project. Returns the fundable figure and WHY it was reduced.
@@ -108,6 +118,7 @@ export default function InvoiceFinance() {
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
+  const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
   const [expanded, setExpanded] = useState({})        // { xeroId: true }
   const [saving, setSaving] = useState(false)
@@ -138,6 +149,7 @@ export default function InvoiceFinance() {
         certCeilingPct: d.settings?.certCeilingPct ?? 90,
       })
       setLimits(d.debtorLimits || {})
+      setLimitsMeta(d.limitsMeta || null)
       const po = {}
       for (const p of (d.projects || [])) for (const a of p.applications) if (a.paidOverride != null) po[a.id] = a.paidOverride
       setPaidOverrides(po)
@@ -245,11 +257,18 @@ export default function InvoiceFinance() {
     setLimits(prev => ({ ...prev, [name]: { ...(prev[name] || {}), insuredLimit: value } }))
   }
 
+  // SAVES ON UPLOAD. It used to only stage the parsed limits into local state - close
+  // the tab, or navigate away, before pressing Save and the entire imported list was
+  // gone with nothing to say so. The import is the slow bit; losing it is expensive.
+  //
+  // Editing and Save still work afterwards, so the review step is not lost - it just no
+  // longer gates whether the data survives.
   function onFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    const fileName = file.name || ''
     const reader = new FileReader()
-    reader.onload = () => {
+    reader.onload = async () => {
       const { limits: parsed, error } = parseBibbyCsv(String(reader.result))
       if (error) { setImportMsg('Import failed: ' + error); return }
       const custNames = (data?.projects || []).map(p => p.customer).filter(Boolean)
@@ -264,7 +283,21 @@ export default function InvoiceFinance() {
         else { next[bibbyName] = { ...(next[bibbyName] || {}), insuredLimit: amount }; unmatched++; unmatchedNames.push(bibbyName) }
       }
       setLimits(next)
-      setImportMsg(`Imported ${Object.keys(parsed).length} limits. ${matched} matched a customer, ${unmatched} did not${unmatchedNames.length ? ': ' + unmatchedNames.slice(0, 6).join(', ') + (unmatchedNames.length > 6 ? '...' : '') : ''}. Review, then Save.`)
+      try {
+        const res = await fetch('/api/business-financials', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            view: 'invoice-finance', action: 'save-limits', debtorLimits: next,
+            importMeta: { count: Object.keys(parsed).length, matched, unmatched, fileName },
+          }),
+        })
+        const d = await res.json().catch(() => ({}))
+        if (d && d.limitsMeta) setLimitsMeta(d.limitsMeta)
+        if (!res.ok || d.ok === false) { setImportMsg('Parsed, but SAVING FAILED - press Save to retry.'); return }
+      } catch {
+        setImportMsg('Parsed, but SAVING FAILED - press Save to retry.'); return
+      }
+      setImportMsg(`Imported and saved ${Object.keys(parsed).length} limits. ${matched} matched a customer, ${unmatched} did not${unmatchedNames.length ? ': ' + unmatchedNames.slice(0, 6).join(', ') + (unmatchedNames.length > 6 ? '...' : '') : ''}. Review, then Save.`)
     }
     reader.readAsText(file)
     if (fileRef.current) fileRef.current.value = ''
@@ -313,6 +346,12 @@ export default function InvoiceFinance() {
               <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
+                {limitsMeta && limitsMeta.importedAt && (
+                  <span title={`${limitsMeta.count || 0} limits imported${limitsMeta.matched != null ? `, ${limitsMeta.matched} matched a customer, ${limitsMeta.unmatched} did not` : ''}${limitsMeta.fileName ? ` - ${limitsMeta.fileName}` : ''}`}
+                    style={{ fontSize: 11, color: '#8a857c', cursor: 'help', whiteSpace: 'nowrap' }}>
+                    List imported {fmtDateTime(limitsMeta.importedAt)}
+                  </span>
+                )}
                 <label htmlFor="bibbyfile" style={{ background: GOLD, border: '1px solid ' + GOLD, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer', color: '#fff', fontWeight: 600 }}>Import Bibby limit list (CSV)</label>
               </div>
               <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>

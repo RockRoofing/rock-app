@@ -1,7 +1,7 @@
-pkg592 - Invoice Finance: invoice = the debt, application = the evidence
-=========================================================================
+pkg593 - Invoice Finance: limits save on upload, import date recorded
+======================================================================
 
-*** SUPERSEDES pkg591 (not deployed). ***
+*** SUPERSEDES pkg591 and pkg592 (neither deployed). ***
 pages/api/business-financials.js is COMPLETE and also carries pkg582 (bills) and
 pkg589 (budgets comments). A superset.
 
@@ -12,80 +12,60 @@ CHANGED FILES (replace)
   pages/api/business-financials.js
 
 
-THE BASIS HAS CHANGED - AND IT MATTERED
----------------------------------------
-Was: fundable = sum of "this cert (net)" across every UNPAID APPLICATION.
+1. THE IMPORT NOW SAVES ITSELF
+------------------------------
+It only ever STAGED the parsed limits into local React state and asked you to
+press Save. Close the tab, or click away, before pressing it and the entire
+imported list was gone - with nothing on screen to say so. The import is the slow
+part of the job; losing it silently is expensive.
 
-The failure mode you spotted is real and already live. thisCertNet comes from
-computeApplicationSummary(app, prevGrossFor(app)), and prevGrossFor uses
-app.prevCertGross when set, otherwise the previous application's computed gross.
-With PREVIOUSLY CERTIFIED BLANK - exactly the state J240 App 4 is in - thisCert
-computes as the FULL CUMULATIVE VALUE. On this page that is not a display error,
-it is 92,766.50 of phantom debt inflating the funding position by 55,660 at 60%.
+Uploading now writes the limits immediately. Editing and Save still work
+afterwards, so the review step is not lost - it just no longer decides whether
+the data survives.
 
-Now: the DEBT is the unpaid sales invoice. The matched application is read only
-for COMPOSITION - materials on site, variations to date, gross to date - which is
-what the caps need and an invoice cannot give. Exactly as you put it: they fund
-the invoice, and need the application to show what it consists of.
-
-An invoice has no gross/net ambiguity. It is one number with a real amountDue.
+If the save fails the message says so plainly and tells you to press Save to
+retry, rather than reporting a successful import that did not persist.
 
 
-THREE CASES, ALL VISIBLE RATHER THAN SILENT
--------------------------------------------
-RETENTION INVOICES - excluded from funding, shown as a purple chip with their
-total. Detected by "retention" (or "retn") in the reference or invoice number.
-CAVEAT WORTH KNOWING: a retention invoice raised WITHOUT that note will not be
-caught and will be funded as ordinary debt. The chip says so on hover.
+2. THE IMPORT DATE
+------------------
+Stored with the list and shown beside the Import button:
 
-UNMATCHED INVOICES - no "App N" to match. These ARE counted as debt (they are
-real money owed), flagged blue, and the caps are applied using the project's
-unpaid applications instead, so they are never funded blind.
+    List imported 29/08/26 14:07
 
-APPLIED BUT NOT INVOICED - shown grey, NOT funded. Bibby assign the invoice, so
-work applied for and not yet billed is not debt yet. Shown rather than dropped,
-because silently vanishing work looks like a bug.
+Hovering gives the detail: "142 limits imported, 118 matched a customer, 24 did
+not - bibby-limits.csv".
 
-Worked example, 500k contract:
-
-  invoice debt (excl retention)   75,000
-  retention invoices              12,500  (1)  excluded
-  unmatched invoices               5,000  (1)  counted, capped via unpaid apps
-  applied not invoiced            17,766        shown, not funded
-  caps excluded                   25,000        materials over the 25% cap
-  ELIGIBLE                        50,000
-  advance @ 60%                   30,000
+Kept in a SEPARATE Redis key (config:if-limits-meta) rather than folded into the
+limits map. That map is a flat { customerName: {...} } and every screen that walks
+it would have shown a debtor called "importedAt".
 
 
-ALSO IN THIS PACKAGE - THE THREE BIBBY CAPS (was pkg591)
---------------------------------------------------------
-  materials on site   25% of contract value
-  variations          25% of contract value
-  certified ceiling   90% of contract value
+ALSO IN THIS PACKAGE (pkg591/592)
+---------------------------------
+THE DEBT IS THE INVOICE, the matched application is the evidence of what it
+consists of - as you put it. Was: the sum of "this cert (net)" across unpaid
+applications, which breaks badly when an application is entered GROSS with
+"previously certified" blank. In that state thisCert computes as the FULL
+cumulative value: on J240 App 4 that is 92,766.50 of phantom debt, inflating the
+funding position by 55,660 at 60%.
 
-Applied per project BEFORE the advance rate - they reduce approved debt, not the
-advance. Measured on the CUMULATIVE position at the evidence application, since
-"materials funded to 25% of contract" is a position not an increment. The 90%
-ceiling is applied LAST to the figure already reduced by the other two, so money
-that is both a variation and above 90% is not counted twice.
+Retention invoices excluded (purple chip - detected by "retention" in the
+reference, so one raised without that note will NOT be caught). Unmatched
+invoices counted as debt but flagged, capped via the project's unpaid
+applications. Applied-but-not-invoiced shown grey and not funded.
 
-All three are editable beside the advance rate - they are facility terms and
-will change at review. The save handler whitelists settings, so they had to be
-added there too or they would have appeared to save and been gone on reload.
+BIBBY'S THREE CAPS - materials on site 25%, variations 25%, certified ceiling
+90% - applied per project BEFORE the advance rate, measured on the cumulative
+position, with the 90% ceiling applied LAST so money that is both a variation and
+above 90% is not counted twice. All three editable beside the advance rate.
 
 
-STILL OPEN - NEEDS HOLLY
-------------------------
-1. Is the 25% variations cap on ORIGINAL CONTRACT VALUE or on the anticipated
-   final account? Implemented as contract value, following her wording literally.
-   On a job with heavy variations those diverge a lot.
-
-2. Does the 90% ceiling lift automatically once the final account is agreed, or
-   case by case? "Further certification required" suggests case by case, which
-   would mean a per-project override here rather than a global setting.
-
-3. Does written instruction LIFT the variations cap? Her wording says further
-   variations "require written instruction to fund", which reads as instruction
-   raising the ceiling rather than the 25% being absolute. NOT built - and it
-   needs the instructed 'yes'/'no' string bug in lib/applications.js fixed first,
-   because that field is not currently trustworthy.
+STILL NEEDS HOLLY
+-----------------
+1. Is the variations 25% on ORIGINAL contract value or the anticipated final
+   account? Built as contract value, per her wording.
+2. Does the 90% ceiling lift automatically at final account, or case by case?
+3. Does written instruction LIFT the variations cap? Not built - it needs the
+   instructed 'yes'/'no' string bug in lib/applications.js fixed first, because
+   that field is not currently trustworthy.

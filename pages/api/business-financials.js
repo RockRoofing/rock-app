@@ -454,9 +454,10 @@ export default async function handler(req, res) {
   }
 
   if (view === 'invoice-finance') {
-    const [ifConfig, ifLimits, dashCache, appPaidOverrides] = await Promise.all([
+    const [ifConfig, ifLimits, ifLimitsMeta, dashCache, appPaidOverrides] = await Promise.all([
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
+      redis.get('config:if-limits-meta').then(v => v || null).catch(() => null),
       redis.get('dashboard:cache').then(v => v || null).catch(() => null),
       redis.get('config:if-app-paid').then(v => v || {}).catch(() => ({})),  // { appId: true/false }
     ])
@@ -570,6 +571,7 @@ export default async function handler(req, res) {
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
       },
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
+      limitsMeta: ifLimitsMeta,      // { importedAt, count, matched, unmatched, fileName }
     })
   }
 
@@ -610,7 +612,21 @@ export default async function handler(req, res) {
     try {
       const limits = (req.body || {}).debtorLimits || {}
       await redis.set('config:if-debtor-limits', limits)
-      return res.json({ ok: true, debtorLimits: limits })
+      // Import provenance kept in a SEPARATE key, not folded into the limits map - that
+      // map is a flat { name: {...} } and adding a meta entry to it would turn up as a
+      // debtor called "importedAt" on every screen that walks it.
+      const meta = (req.body || {}).importMeta
+      if (meta) {
+        await redis.set('config:if-limits-meta', {
+          importedAt: new Date().toISOString(),
+          count: Number(meta.count) || 0,
+          matched: Number(meta.matched) || 0,
+          unmatched: Number(meta.unmatched) || 0,
+          fileName: String(meta.fileName || '').slice(0, 120),
+        })
+      }
+      const savedMeta = await redis.get('config:if-limits-meta').catch(() => null)
+      return res.json({ ok: true, debtorLimits: limits, limitsMeta: savedMeta || null })
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 
