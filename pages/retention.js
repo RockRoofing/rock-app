@@ -799,9 +799,9 @@ export default function RetentionPage() {
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from Edit Project Details. Blank means none has been set on that project.', 'qs'],
-                        ['1st Value', 'right', 'First retention release (half of total retention). Orange = due/not paid, green = settled.', null],
+                        ['1st Value \u2013 click to release', 'right', 'First retention release. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
                         ['1st Date', 'left', 'Due date of the first retention release (manual).', 'r1date'],
-                        ['2nd Value', 'right', 'Second retention release (half of total retention). Orange = due/not paid, green = settled.', null],
+                        ['2nd Value \u2013 click to release', 'right', 'Second retention release. CLICK THE CELL to confirm this half has been released; click again to undo. A half ticked in the retention section of an application marks itself. Amber = still to confirm, blue = Xero looks paid so it probably has been, green = released.', null],
                         ['2nd Date', 'left', 'Due date of the second retention release (manual).', 'r2date'],
                         ['VAT', 'right', 'VAT on the Final Account = Final Account × VAT-type rate. Reverse charge / 0% = £0.', null],
                         ['VAT Type', 'left', 'VAT treatment from Xero: reverse charge, 5%, 20%, zero-rated, etc.', null],
@@ -888,17 +888,28 @@ export default function RetentionPage() {
                         // do not decide - that guess is exactly what could never work on
                         // an old project whose release went out uncoded.
                         const hint = !on && src !== 'overridden' && paidSuggests[half]
+                        // An unmarked cell says what to DO, not just what it is. "due" on
+                        // its own gave no clue that the cell was the control - the whole
+                        // point of the change is that somebody has to confirm the release.
                         const tag = on
-                          ? (src === 'application' ? 'released (app)' : 'released')
-                          : (src === 'overridden' ? 'not released *' : (hint ? 'due - looks paid' : 'due'))
+                          ? (src === 'application' ? '\u2713 released (app)' : '\u2713 released')
+                          : (src === 'overridden' ? 'not released \u2013 click to accept' : (hint ? 'looks paid \u2013 click to confirm' : 'click to confirm released'))
                         return (
                           <td onClick={() => toggleRelease(entry, half)}
                             title={on
                               ? (src === 'application' ? 'Marked released by the retention section on an application. Click to override.' : 'Marked released by hand. Click to undo.')
                               : (src === 'overridden' ? 'An application says this was released, but it has been overridden here. Click to accept the application.' : 'Click to mark this half released.')}
-                            style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer', background: on ? '#e8f5e9' : (src === 'overridden' ? '#fef9c3' : (hint ? '#eff6ff' : '#fff3e0')) }}>
+                            style={{
+                              padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer',
+                              background: on ? '#e8f5e9' : (src === 'overridden' ? '#fef9c3' : (hint ? '#eff6ff' : '#fff3e0')),
+                              // A dashed outline on anything still to confirm, so the
+                              // clickable cells read as buttons at a glance down the column
+                              // rather than as another money column.
+                              outline: on ? 'none' : '1px dashed ' + (src === 'overridden' ? '#d1a441' : (hint ? '#93c5fd' : '#e6b980')),
+                              outlineOffset: -3,
+                            }}>
                             <div style={{ fontWeight: 600, color: on ? '#166534' : (src === 'overridden' ? '#a16207' : '#b26a00') }}>{fmt(parseFloat(val))}</div>
-                            <div style={{ fontSize: 9.5, color: on ? '#16a34a' : (src === 'overridden' ? '#a16207' : (hint ? '#2563eb' : '#c77700')), fontWeight: 600 }}>{tag}</div>
+                            <div style={{ fontSize: 9, color: on ? '#16a34a' : (src === 'overridden' ? '#a16207' : (hint ? '#2563eb' : '#c77700')), fontWeight: 700, textDecoration: on ? 'none' : 'underline', textUnderlineOffset: 2 }}>{tag}</div>
                           </td>
                         )
                       }
@@ -1249,7 +1260,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release1Date || ''} onChange={f('release1Date')} style={inputStyle} />
             </div>
           </div>
-          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Mark released by clicking the release cell on the row. An application's retention section marks it automatically.</div>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>To mark this half released, close this form and CLICK the value in the 1st / 2nd Value column on the row. Ticking the half on an application's retention section does it automatically.</div>
         </div>
         <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>2nd Retention Release</div>
@@ -1263,7 +1274,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release2Date || ''} onChange={f('release2Date')} style={inputStyle} />
             </div>
           </div>
-          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Mark released by clicking the release cell on the row. An application's retention section marks it automatically.</div>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>To mark this half released, close this form and CLICK the value in the 1st / 2nd Value column on the row. Ticking the half on an application's retention section does it automatically.</div>
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>
