@@ -1,91 +1,73 @@
-pkg562 - Cash Flow: retention releases, MCD basis, and forecast recompute
-==========================================================================
+pkg563 - Business Financials / Budgets: Switch to Actual button
+================================================================
 
-*** SUPERSEDES pkg542 THROUGH pkg561. ***
-pkg559, 560 and 561 were never deployed - discard them.
-Same two files, complete. Deploy this one ONLY.
+Independent of the cash flow packages. Deploy alongside or after pkg562.
 
-DEPENDS ON lib/projectRegistry.js from pkg539. Deploy pkg539 first if you have
-not, or the forecast recompute quietly does nothing.
+
+NEW FILES
+---------
+  None.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js
-  pages/api/project-cashflow.js
+  pages/business-financials/budgets.js
+  pages/api/business-financials.js
 
 
-1. RETENTION - YES, STRAIGHT FROM THE TRACKER, AND ONE THING WAS BROKEN
------------------------------------------------------------------------
-The DATES come only from the tracker's 1st and 2nd release fields. Whatever is
-typed there wins, whatever the PC or sub label says. A blank date contributes
-nothing, which is right - an unknown release date is not a forecast.
+WHAT WAS WRONG
+--------------
+  const isComplete = (mo) => mo < thisMonth && availableSet.has(mo)
 
-That part was already true. The VALUES were not.
-
-/api/retention returns the RAW saved entry. The tracker page merges the Xero
-financials on when it renders:
-
-    finalAccount: e.finalAccount || x.finalAccount,
-    retentionPct: e.retentionPct || x.retentionPct,
-
-So on a Xero project where you only set the two release dates - which is the
-normal way to use it - finalAccount and retentionPct are BLANK on the stored
-entry. The tracker looked right. The cash flow computed a total of zero and
-dropped the row without a word.
-
-Now: the entry's own figures first, the dashboard's afa / retentionPct /
-totalRetention behind them, and explicit release1Value / release2Value ahead of
-both, because the two halves are not always equal.
-
-Checked across the real cases:
-
-  Xero override, dates only     1st 6,853.46  |  2nd 6,853.46     (was: nothing)
-  Manual entry, own figures     1st 2,500.00
-  Uneven halves set             1st 5,000.00  |  2nd 8,706.91
-  1st half already received     2nd 6,853.46  only
-  No dates at all               nothing
-
-So yes - manual entries and Xero-derived rows are both accounted for now.
-Anything with a date set appears; anything without still does not, and that is
-the correct behaviour rather than a gap.
+The moment a month rolled over, the considered forecast was replaced by whatever
+had been posted to Xero so far. On the 1st that is usually almost nothing, so the
+figure collapsed and then crept back up over the following weeks as bills came in.
+No warning, and nothing on screen to say the month was only half posted.
 
 
-2. MCD BASIS - IT WAS NOT ALLOWED FOR
--------------------------------------
-The forecast never sent the flags, and the two sides default OPPOSITE ways:
+WHAT IT DOES NOW
+----------------
+A month uses actuals only when you say so.
 
-  lib/applications.js:144        app.mcdOnVariations !== false    -> absent = TRUE
-  pages/api/applications.js:194  project.mcdOnVariations === true -> absent = FALSE
+Once a month has ENDED, a "Switch to Actual" button appears under its column
+heading and STAYS there until pressed - so an un-switched month is visible rather
+than quietly still on forecast.
 
-On a project with the boxes unticked the real application charged no MCD on
-variations or materials and the forecast charged it on everything. Both flags now
-come from Edit Project Details and go on EVERY computeApplicationSummary call in
-the modal, via one `mcdBasis` object so no call site can miss one.
+Press it and the header turns green and reads "OK Actual" with a tick. Press it
+again to go back to the forecast. Nothing here is one-way.
 
-  100,000 works + 20,000 variation, MCD 2.5%:
-    MCD on everything      sales 117,000.00
-    MCD on contract works  sales 117,500.00
+The button is disabled with an explanation if there are no Xero figures for that
+month yet, rather than letting you switch to nothing.
 
-
-3. FORECASTS NOW RECOMPUTE
---------------------------
-Each saved forecast is recalculated on load against the CURRENT applications.
-Percentages stay exactly as saved; only the deduction for what has already been
-claimed moves, which is the one part that depends on anything outside it.
-
-  Forecast saved when the prior certified 40,000, later corrected to 70,000:
-    stored      74,575.00   <- double counts 30,000 of gross
-    recomputed  46,787.50
-
-Overridden forecasts are left alone - you typed those deliberately. Cash
-instalments scale by the same ratio so the dates and monthly split survive. Read
-time only; nothing is written back, so reopening a forecast shows what you saved.
+Saved to config:overhead-actual-months, so it holds across sessions and users.
 
 
-STILL OUTSTANDING
------------------
-1. J240 Application 4 - "Previously certified (gross)" BLANK. Now corrects the
-   actual AND every forecast chained off it, so it is the highest-value fix.
-2. variationValueToDate() instructed 'yes'/'no' string bug.
-3. "Raise & send to customer" - waiting on whether it still saves.
+THIS ALSO FIXES THE FORECASTS
+-----------------------------
+The forecast methods - Avg this FY, Last 3 mo, Last full month, Avg last
+financial year - all derive from "completed" months. They were therefore
+averaging in a month that was one day old and 5% posted. They now only use months
+you have switched, so a forecast is never built on a half-posted ledger.
+
+
+ON FIRST LOAD NOTHING MOVES
+---------------------------
+The config key has never been written, so on the first load every past month with
+data is treated as already switched - exactly the old behaviour. You then
+un-switch anything you want back on forecast.
+
+Without that, every method that averages history would have found no completed
+months and the whole grid would have read zero on deploy.
+
+`null` (never set) is deliberately distinguished from `[]` (everything switched
+off on purpose). An `|| []` would have collapsed the two and re-seeded the
+defaults every time you switched the last month off.
+
+
+NOT CHANGED - WORTH KNOWING
+---------------------------
+The two summary cards at the top - "last 3 completed months" spend and average -
+still read straight off Xero for any past month, switched or not. They report
+actual spend rather than replacing a forecast, so I have left them. But the same
+half-posted-month problem applies to that average. Say the word and they will
+follow the switch too.

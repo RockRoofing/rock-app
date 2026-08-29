@@ -28,6 +28,8 @@ const CATEGORY_OF = (code, config) => {
 // figure. codes = array of code strings; actualsByCode = { code: { 'YYYY-MM': amt } };
 // availableMonths = months with benchmark data; budgets/forecastMethods/forecastOverrides
 // are the saved configs.
+const nowMonthKeyServer = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
 function computePredictedByCodeMonth(codes, actualsByCode, availableMonths, budgets, forecastMethods, forecastOverrides) {
   const availableSet = new Set(availableMonths)
   const d = new Date()
@@ -130,6 +132,11 @@ export default async function handler(req, res) {
       if (req.body && req.body.cashflowSchedule !== undefined) await redis.set('config:overhead-cashflow-schedule', req.body.cashflowSchedule || {})
       if (req.body && req.body.cashCommitments !== undefined) await redis.set('config:cash-commitments', req.body.cashCommitments || [])
       if (req.body && req.body.card3moCodes !== undefined) await redis.set('config:overhead-3mo-card-codes', req.body.card3moCodes || [])
+      // Months explicitly switched from forecast to Xero actuals. A month passing is not
+      // enough - somebody has to say the ledger is ready, because a month rolls over long
+      // before its bills are all in and swapping automatically replaces a considered
+      // forecast with a half-posted month.
+      if (req.body && req.body.actualMonths !== undefined) await redis.set('config:overhead-actual-months', Array.isArray(req.body.actualMonths) ? req.body.actualMonths : [])
       // Lock in a full-year forecast snapshot (kept as a dated history).
       if (lockForecast) {
         const locks = (await redis.get('config:overhead-forecast-locks').catch(() => null)) || []
@@ -154,6 +161,7 @@ export default async function handler(req, res) {
       redis.get('config:overhead-3mo-card-codes').then(v => v || null).catch(() => null),   // [ code ] or null = all
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
+    const actualMonthsStored = await redis.get('config:overhead-actual-months').then(v => Array.isArray(v) ? v : null).catch(() => null)
     const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
     const cashCommitments = await redis.get('config:cash-commitments').then(v => v || []).catch(() => ([]))
     const chartNames = {}
@@ -209,6 +217,16 @@ export default async function handler(req, res) {
       forecastMethods,
       forecastOverrides,
       hiddenRows,
+      // FIRST RUN: the key has never been written, so every past month with data is
+      // treated as already switched. That is exactly the old behaviour, so nothing moves
+      // on deploy - without it every forecast method that averages history would find no
+      // completed months and the whole grid would read zero.
+      //
+      // null (never set) is deliberately distinguished from [] (everything switched off
+      // on purpose), which an `|| []` would have flattened into the same thing.
+      actualMonths: actualMonthsStored != null
+        ? actualMonthsStored
+        : availableMonths.filter(mo => mo < nowMonthKeyServer()),
       forecastLocks,
       card3moCodes,
       cashflowSchedule,

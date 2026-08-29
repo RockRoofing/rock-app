@@ -76,6 +76,8 @@ function Budgets() {
   const [forecastOverrides, setForecastOverrides] = useState({}) // { code: { 'YYYY-MM': amount } }
   const [hiddenRows, setHiddenRows] = useState([])           // [ code, ... ]
   const [forecastLocks, setForecastLocks] = useState([])     // [ {lockedAt, fyEnd, total, note} ]
+  // Months explicitly switched from forecast to Xero actuals.
+  const [actualMonths, setActualMonths] = useState([])       // [ 'YYYY-MM', ... ]
   const [showLockHistory, setShowLockHistory] = useState(false)
   const [reconcile, setReconcile] = useState(false)          // reconciliation checkbox
   const [card3moCodes, setCard3moCodes] = useState(null)     // [code] included in the custom 3-mo card; null = all
@@ -102,6 +104,7 @@ function Budgets() {
       setHiddenRows(d.hiddenRows || [])
       setForecastLocks(d.forecastLocks || [])
       setCard3moCodes(d.card3moCodes ?? null)
+      setActualMonths(Array.isArray(d.actualMonths) ? d.actualMonths : [])
     } catch {}
     setLoading(false)
   }
@@ -144,7 +147,22 @@ function Budgets() {
 
   const availableSet = useMemo(() => new Set(data?.availableMonths || []), [data])
   const hiddenSet = useMemo(() => new Set((hiddenRows || []).map(String)), [hiddenRows])
-  const isComplete = (mo) => mo < thisMonth && availableSet.has(mo)
+  // A MONTH USES ACTUALS ONLY WHEN SOMEBODY SAYS SO.
+  //
+  // This used to be `mo < thisMonth && availableSet.has(mo)` - the moment a month rolled
+  // over, a considered forecast was replaced by whatever had been posted to Xero so far.
+  // On the 1st that is usually almost nothing, so the figure collapsed and then crept
+  // back up over the following weeks as bills came in. Now the swap is deliberate.
+  const actualSet = useMemo(() => new Set(actualMonths || []), [actualMonths])
+  const isComplete = (mo) => actualSet.has(mo) && availableSet.has(mo)
+  // The month has ended, so the button is worth offering. Not the same as being switched.
+  const isPast = (mo) => mo < thisMonth
+
+  function toggleActual(mo) {
+    const next = actualSet.has(mo) ? (actualMonths || []).filter(m => m !== mo) : [...(actualMonths || []), mo]
+    setActualMonths(next)
+    save({ actualMonths: next })
+  }
 
   const actualOf = (code, mo) => {
     const m = actualsByCode[code] || {}
@@ -571,9 +589,42 @@ function Budgets() {
                       <th style={{ ...th, ...stickyTop, textAlign: 'left', left: 52, zIndex: 5, minWidth: 180, background: '#faf9f7' }}>Account</th>
                       <th style={{ ...th, ...stickyTop, background: '#f4f1e8', zIndex: 4 }}>Budget / mo</th>
                       <th style={{ ...th, ...stickyTop, textAlign: 'left', background: '#faf9f7', zIndex: 4 }}>Forecast</th>
-                      {months.map(mo => (
-                        <th key={mo} style={{ ...th, ...stickyTop, background: mo === thisMonth ? '#fff8e6' : '#faf9f7', zIndex: 4 }}>{monthShort(mo)}</th>
-                      ))}
+                      {months.map(mo => {
+                        const on = actualSet.has(mo)
+                        const past = isPast(mo)
+                        const haveData = availableSet.has(mo)
+                        return (
+                          <th key={mo} style={{ ...th, ...stickyTop, background: on ? '#effaf1' : (mo === thisMonth ? '#fff8e6' : '#faf9f7'), zIndex: 4, padding: '4px 6px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                              <span>{monthShort(mo)}</span>
+                              {/* The button appears once the month has ENDED and stays until
+                                  it is pressed, so an un-switched month is visible rather
+                                  than silently still on forecast. Pressing again switches
+                                  back - nothing here is one-way. */}
+                              {past && (
+                                <button
+                                  onClick={() => toggleActual(mo)}
+                                  disabled={!haveData && !on}
+                                  title={on
+                                    ? 'Using Xero actuals. Click to go back to the forecast.'
+                                    : (haveData
+                                      ? 'Replace the forecast for this month with the Xero figures.'
+                                      : 'No Xero figures for this month yet - sync first.')}
+                                  style={{
+                                    fontSize: 9, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap',
+                                    border: `1px solid ${on ? '#15803d' : '#d8d4cb'}`,
+                                    background: on ? '#15803d' : '#fff',
+                                    color: on ? '#fff' : (haveData ? '#555' : '#bbb'),
+                                    borderRadius: 6, padding: '3px 6px',
+                                    cursor: (haveData || on) ? 'pointer' : 'default',
+                                  }}>
+                                  {on ? '\u2713 Actual' : 'Switch to Actual'}
+                                </button>
+                              )}
+                            </div>
+                          </th>
+                        )
+                      })}
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Budget to date</th>
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Actual to date</th>
                       <th style={{ ...th, ...stickyTop, background: '#eef3fb', zIndex: 4 }}>Full-yr budget</th>
