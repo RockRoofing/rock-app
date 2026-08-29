@@ -1,77 +1,88 @@
-pkg590 - Cash Schedule: split by PERCENTAGE so it tracks the month
-===================================================================
+pkg591 - Invoice Finance: Bibby's eligibility rules
+====================================================
 
-Independent of pkg589. Two files.
+*** pages/api/business-financials.js is COMPLETE and also carries pkg582 (bills)
+    and pkg589 (budgets comments). A superset - safe over what you have. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cash-schedule.js
-  pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
+  pages/api/business-financials.js
 
 
-ANSWERING THE QUESTION FIRST
-----------------------------
-The AMOUNT already comes through per month, correctly. cashflow.js:29 reads
-predictedByCodeMonth, which mirrors the Budgets page month by month - the actual
-for a month switched to Actual, a typed override where there is one, otherwise
-the forecast method, budget last. Sep, Oct and Nov each get their own figure. The
-flat budget is only the fallback. And it already flows to Cash Flow, not
-eventually.
+WHAT WAS ALREADY RIGHT
+----------------------
+  - 60% of eligible debt                          advanceRate
+  - Only up to the insured limit                  per customer, from the Bibby CSV
+  - 500k facility cap on the account              caps the total
 
-The TIMING is per code, not per month - "pay on the 28th" applies to every month.
-Carry-forward entries are the escape for a one-off shift.
+WHAT WAS MISSING - all three of Holly's caps
+--------------------------------------------
+The page funded 60% of every unpaid application in full. Materials on site,
+variations and the last 10% were all being counted as approved debt when Bibby
+would not fund them.
 
-BUT you were right that it does not balance, and the cause is worse than a
-rounding gap.
+  1. MATERIALS ON SITE      fundable to 25% of contract value
+  2. VARIATIONS             fundable to 25% of contract value; beyond that needs
+                            written instruction
+  3. CERTIFIED CEILING      90% of contract approved initially; past that needs
+                            further certification as the final account approaches
 
+All three are now applied PER PROJECT, before the advance rate - they reduce what
+counts as approved debt, not what is advanced against it.
 
-THE DEFECT
-----------
-In 'multiday' mode, cashflow.js scheduled the TYPED AMOUNTS and never touched
-monthlyBudget at all:
-
-    const amount = (Number(d.amount) || 0) * vatMult + adj * share
-
-So the month's budget, forecast and actual were ignored entirely. Type 4,000
-across three days and Cash Flow pays 4,000 every month whatever the month says -
-and switching a month to Actual changed nothing.
-
-'oneday' and 'even' were fine; both use monthlyBudget.
-
-The editor made it worse: "Balances to budget" compared against the FLAT monthly
-budget, so it reported balanced while the months diverged.
-
-Budget 4,000/mo, forecast Sep 4,300 / Oct 4,000 / Nov 3,800:
-
-  AMOUNT basis    Sep 4,000 (out -300)   Oct 4,000 (ok)   Nov 4,000 (out +200)
-                  quarter 12,000 vs 12,100
-  PERCENT basis   Sep 4,300              Oct 4,000        Nov 3,800
-                  quarter 12,100 vs 12,100 - balances every month
+The API now returns measuredToDate, variationsToDate, materialsOnSite,
+grossToDate and contractValue per application, which is what the caps measure
+against.
 
 
-THE FIX
--------
-"Specific days" now has a basis:
+TWO THINGS I WAS CAREFUL ABOUT
+------------------------------
+CUMULATIVE, NOT PER CERTIFICATE. "Materials on site funded to 25% of contract" is
+a POSITION, not an increment, so the caps are measured on the cumulative figures
+at the latest unpaid application. The excess is then taken off the unpaid total,
+and never by more than is actually outstanding - an excess sitting in an
+application already paid is not in the unpaid figure to remove.
 
-  % OF THE MONTH'S BUDGET  each split is a share, so they always add to that
-                           month's figure whatever it is
-  FIXED AMOUNTS            paid as typed, whatever the month says
+THE 90% CEILING IS APPLIED LAST, to the figure already reduced by the other two.
+Applying all three to the raw total would double-count money that is both a
+variation AND above 90%. Checked: contract 500k, materials at 30% AND certified
+to 95% - the materials excess brings gross to exactly 450k, so the ceiling adds
+nothing further. 25k excluded, not 50k.
 
-Existing schedules default to FIXED, so nothing already saved changes meaning on
-deploy. A "Convert to %" button turns the typed amounts into shares of the budget,
-keeping the same split - so switching over is one click and keeps your pattern.
+Worked, on a 500k contract with 100k unpaid:
 
-In percent mode each row shows the resulting money next to the percentage at the
-current budget, and the footer checks against 100% rather than a cash figure.
-Fixed mode carries a warning saying it will not follow the forecast.
-
-VAT: in percent mode the gross-up already sits in monthlyBudget via amountFor(),
-so it is NOT applied a second time to each split. In fixed mode it still is, as
-before.
+  clean, 50% certified        100,000 eligible   advance  60,000
+  materials at 30%             75,000 eligible   advance  45,000
+  variations at 30%            75,000 eligible   advance  45,000
+  certified to 95%             75,000 eligible   advance  45,000
+  excess exceeds the unpaid         0 eligible   advance       0
 
 
-WORTH DOING AFTER DEPLOY
-------------------------
-Any account on "Specific days" is still on fixed amounts and still will not
-balance. Open each, press Convert to %, and check the footer says 100%.
+ON SCREEN
+---------
+A project reduced by a cap shows an amber "-GBP X not eligible" chip beside its
+figure, hovering to give the reasons in full - eg "Materials on site GBP 150,000
+over the 25% cap (GBP 125,000) - GBP 25,000 not funded". Without it a cut figure
+reads as a smaller application rather than money Bibby will not fund.
+
+The three percentages are EDITABLE next to the advance rate, not hard-coded -
+they are facility terms and will change at review.
+
+
+ONE BUG CAUGHT IN BUILD
+-----------------------
+The save handler WHITELISTS setting fields, so the three new ones would have
+appeared to save and been gone on reload. Added. They use `?? 25` rather than
+`|| 25`, because a deliberate 0% cap is a real setting and `||` would quietly
+turn it back into 25.
+
+
+WORTH CHECKING
+--------------
+Holly's answer on the facility limit - "your current account can reach a max
+500k before being capped" - describes a cap on the DRAWN balance. The page caps
+the calculated advance, which is the same thing while you are drawing to the
+maximum but not identical if you are not. If you want it to cap drawn + new
+advance instead, that is a small change - tell me how Bibby actually apply it.

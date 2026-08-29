@@ -505,6 +505,14 @@ export default async function handler(req, res) {
             monthKey: app.monthKey || '',
             status: app.status || '',
             thisCertNet,
+            // CUMULATIVE components at this application, for the Bibby eligibility caps.
+            // Cumulative, not this-cert: the caps are "materials on site funded up to 25%
+            // of contract value", which is a position, not an increment.
+            measuredToDate: summary?.measuredToDate || 0,
+            variationsToDate: summary?.variationsToDate || 0,
+            materialsOnSite: summary?.materialsOnSite || 0,
+            grossToDate: summary?.grossCurrent || 0,
+            retentionPctUsed: app.retentionPct != null ? Number(app.retentionPct) : null,
             matched: !!matchInv,
             matchedInvoice: matchInv ? (matchInv.invoiceNumber || matchInv.reference || '') : '',
             autoPaid,
@@ -517,6 +525,8 @@ export default async function handler(req, res) {
         xeroId: p.xeroId,
         name: p.name || '',
         customer: p.customer || '',
+        // Contract value is what every Bibby percentage is measured against.
+        contractValue: p.contractValue || 0,
         applications: appRows,
       })
     }
@@ -527,6 +537,11 @@ export default async function handler(req, res) {
         advanceRate: ifConfig.advanceRate != null ? ifConfig.advanceRate : 60,
         drawn: ifConfig.drawn != null ? ifConfig.drawn : 0,
         facilityCap: ifConfig.facilityCap != null ? ifConfig.facilityCap : 500000,
+        // Bibby eligibility caps, confirmed with them. Stored so they can be changed at
+        // facility review without a deploy.
+        mosCapPct: ifConfig.mosCapPct != null ? ifConfig.mosCapPct : 25,
+        varCapPct: ifConfig.varCapPct != null ? ifConfig.varCapPct : 25,
+        certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
       },
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
     })
@@ -551,6 +566,14 @@ export default async function handler(req, res) {
         drawn: Number(s.drawn) || 0,
         retentionPct: Number(s.retentionPct) || 0,
         facilityCap: Number(s.facilityCap) || 0,
+        // The save handler WHITELISTS fields, so anything not listed here is silently
+        // dropped - the setting would appear to save and be gone on reload.
+        //
+        // `?? 25` rather than `|| 25`: a deliberate 0% cap is a real setting ("fund no
+        // materials at all") and `||` would quietly turn it back into 25.
+        mosCapPct: Number(s.mosCapPct ?? 25),
+        varCapPct: Number(s.varCapPct ?? 25),
+        certCeilingPct: Number(s.certCeilingPct ?? 90),
       }
       await redis.set('config:if-settings', cfg)
       return res.json({ ok: true, settings: cfg })

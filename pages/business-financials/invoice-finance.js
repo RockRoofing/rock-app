@@ -48,12 +48,62 @@ function splitCsvLine(line) {
   return out
 }
 
+// Declared ABOVE eligibleFor, which uses it. Safe either way here (the function only
+// runs during render, long after the module evaluates) but a const used above its own
+// declaration reads like a bug and invites one.
+const fmtShort = (n) => `\u00a3${Math.round(Number(n) || 0).toLocaleString('en-GB')}`
+
+// BIBBY ELIGIBILITY for one project. Returns the fundable figure and WHY it was reduced.
+//
+// Each cap is measured on the CUMULATIVE position at the latest unpaid application -
+// "materials on site funded to 25% of contract value" is a position, not an increment.
+// The excess over each cap is then taken off the unpaid total.
+//
+// Deliberately NOT stacked as three independent deductions of the same money: the 90%
+// overall ceiling is applied LAST, to the figure already reduced by the materials and
+// variations caps. Applying all three to the raw total would double-count an excess that
+// is both a variation AND above 90%.
+function eligibleFor(project, unpaidApps, settings) {
+  const raw = unpaidApps.reduce((s, a) => s + (a.thisCertNet || 0), 0)
+  const cv = Number(project.contractValue) || 0
+  const reasons = []
+  if (!cv || !unpaidApps.length) return { eligible: Math.max(0, raw), reasons, excluded: 0 }
+
+  // Cumulative position at the LAST unpaid application - the furthest the account has got.
+  const last = unpaidApps[unpaidApps.length - 1] || {}
+  const mos = Number(last.materialsOnSite) || 0
+  const vars = Number(last.variationsToDate) || 0
+  const gross = Number(last.grossToDate) || 0
+
+  const mosCapPct = Number(settings.mosCapPct ?? 25)
+  const varCapPct = Number(settings.varCapPct ?? 25)
+  const ceilPct = Number(settings.certCeilingPct ?? 90)
+
+  let excess = 0
+  const mosCap = cv * (mosCapPct / 100)
+  if (mos > mosCap) { const over = mos - mosCap; excess += over; reasons.push(`Materials on site ${fmtShort(mos)} over the ${mosCapPct}% cap (${fmtShort(mosCap)}) - ${fmtShort(over)} not funded`) }
+
+  const varCap = cv * (varCapPct / 100)
+  if (vars > varCap) { const over = vars - varCap; excess += over; reasons.push(`Variations ${fmtShort(vars)} over the ${varCapPct}% cap (${fmtShort(varCap)}) - ${fmtShort(over)} needs written instruction to fund`) }
+
+  // The 90% ceiling, applied to what is left after the two caps above.
+  const ceiling = cv * (ceilPct / 100)
+  const grossAfter = Math.max(0, gross - excess)
+  if (grossAfter > ceiling) { const over = grossAfter - ceiling; excess += over; reasons.push(`Certified ${fmtShort(grossAfter)} over ${ceilPct}% of contract (${fmtShort(ceiling)}) - ${fmtShort(over)} needs further certification`) }
+
+  // Never remove more than is actually outstanding: the excess may sit in an application
+  // that has already been paid, in which case it is not in `raw` to be removed.
+  const excluded = Math.min(excess, raw)
+  return { eligible: Math.max(0, raw - excluded), reasons, excluded }
+}
+
+
 export default function InvoiceFinance() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000 })
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
   const [expanded, setExpanded] = useState({})        // { xeroId: true }
@@ -74,7 +124,16 @@ export default function InvoiceFinance() {
     try {
       const d = await fetch('/api/business-financials?view=invoice-finance').then(r => r.json())
       setData(d)
-      setSettings({ advanceRate: d.settings?.advanceRate ?? 60, drawn: d.settings?.drawn ?? 0, facilityCap: d.settings?.facilityCap ?? 500000 })
+      setSettings({
+        advanceRate: d.settings?.advanceRate ?? 60,
+        drawn: d.settings?.drawn ?? 0,
+        facilityCap: d.settings?.facilityCap ?? 500000,
+        // Bibby's eligibility caps. Editable rather than hard-coded - they are facility
+        // terms and will change at review.
+        mosCapPct: d.settings?.mosCapPct ?? 25,
+        varCapPct: d.settings?.varCapPct ?? 25,
+        certCeilingPct: d.settings?.certCeilingPct ?? 90,
+      })
       setLimits(d.debtorLimits || {})
       const po = {}
       for (const p of (d.projects || [])) for (const a of p.applications) if (a.paidOverride != null) po[a.id] = a.paidOverride
@@ -87,6 +146,23 @@ export default function InvoiceFinance() {
   // Effective paid state = manual override if set, else the auto value from the API.
   const isPaid = (a) => (paidOverrides[a.id] != null ? paidOverrides[a.id] : a.paid)
 
+  // BIBBY ELIGIBILITY, applied per project BEFORE the advance rate.
+  //
+  // Confirmed with Bibby (Holly), and every one of these is a cap on what counts as
+  // approved debt - not on the advance:
+  //
+  //   1. Materials on site fundable to 25% of contract value.
+  //   2. 90% of contract value approved initially - the last 10% needs further
+  //      certification as the final account approaches.
+  //   3. Variations fundable to 25% of contract value; more needs written instruction.
+  //   4. Only up to the customer's insured limit (already handled, per customer).
+  //   5. 60% of whatever survives the above.
+  //   6. Facility limit - the account can reach GBP 500k before being capped.
+  //
+  // The caps are measured on the CUMULATIVE position at the latest unpaid application,
+  // because "materials to 25% of contract" is a position rather than an increment. The
+  // excess is then removed from the unpaid total, so a project already paid up to the
+  // caps is not penalised twice.
   // Group projects by customer, compute fundable (unpaid this-cert) and advance.
   const customers = useMemo(() => {
     if (!data?.projects) return []
@@ -97,8 +173,9 @@ export default function InvoiceFinance() {
       if (!byCust[cust]) byCust[cust] = { customer: cust, key: norm(cust), projects: [] }
       // Unpaid this-cert for this project.
       const unpaid = p.applications.filter(a => !isPaid(a))
-      const fundableProject = unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0)
-      byCust[cust].projects.push({ ...p, unpaidCount: unpaid.length, fundableProject })
+      const rawProject = unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0)
+      const elig = eligibleFor(p, unpaid, settings)
+      byCust[cust].projects.push({ ...p, unpaidCount: unpaid.length, rawProject, ...elig, fundableProject: elig.eligible })
     }
     return Object.values(byCust).map(c => {
       const lim = limits[c.customer] || {}
@@ -205,6 +282,9 @@ export default function InvoiceFinance() {
               <div><div style={lbl}>Advance rate %</div><input type="number" value={settings.advanceRate} onChange={e => setSettings(s => ({ ...s, advanceRate: e.target.value }))} style={{ ...inp, width: 90 }} /></div>
               <div><div style={lbl}>Facility cap (max funded)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.facilityCap} onChange={e => setSettings(s => ({ ...s, facilityCap: e.target.value }))} style={{ ...inp, width: 130 }} /></div></div>
               <div><div style={lbl}>Currently drawn (from Bibby)</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.drawn} onChange={e => setSettings(s => ({ ...s, drawn: e.target.value }))} style={{ ...inp, width: 140 }} /></div></div>
+              <div><div style={lbl} title="Approved materials on site are funded up to this share of contract value.">Materials cap %</div><input type="number" value={settings.mosCapPct} onChange={e => setSettings(s => ({ ...s, mosCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
+              <div><div style={lbl} title="Variations are funded up to this share of contract value. Beyond it, Bibby need written instruction.">Variations cap %</div><input type="number" value={settings.varCapPct} onChange={e => setSettings(s => ({ ...s, varCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
+              <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
                 <label htmlFor="bibbyfile" style={{ background: GOLD, border: '1px solid ' + GOLD, borderRadius: 8, padding: '8px 14px', fontSize: 12.5, cursor: 'pointer', color: '#fff', fontWeight: 600 }}>Import Bibby limit list (CSV)</label>
@@ -278,7 +358,18 @@ function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, set
                 onClick={() => setExpanded(prev => ({ ...prev, [p.xeroId]: !prev[p.xeroId] }))}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 12px 7px 28px', cursor: 'pointer', background: '#fff' }}>
                 <span style={{ color: '#333' }}>{isOpen ? '\u25BC' : '\u25B6'} {p.name || '(unnamed project)'} <span style={{ color: '#aaa', fontSize: 11 }}>({p.unpaidCount} unpaid)</span></span>
-                <span style={{ fontWeight: 600, color: p.fundableProject > 0 ? INK : '#bbb' }}>{gbp(p.fundableProject)}</span>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  {/* Show the reduction where there is one. A figure that has been cut by
+                      an eligibility cap must say so on the row - otherwise it reads as a
+                      smaller application rather than money Bibby will not fund. */}
+                  {p.excluded > 0 && (
+                    <span title={(p.reasons || []).join('\n')}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#b45309', border: '1px solid #fde68a', background: '#fffbeb', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
+                      -{gbp(p.excluded)} not eligible
+                    </span>
+                  )}
+                  <span style={{ fontWeight: 600, color: p.fundableProject > 0 ? INK : '#bbb' }}>{gbp(p.fundableProject)}</span>
+                </span>
               </div>
               {isOpen && (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, background: '#fbfaf7' }}>
