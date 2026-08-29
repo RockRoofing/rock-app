@@ -1,82 +1,67 @@
-pkg575 - Bills to Pay: version marker to prove the deploy, plus the pkg574 fixes
-=================================================================================
+pkg577 - Bills: the Status filter was excluding every overpayment
+==================================================================
 
-*** SUPERSEDES pkg572, pkg573 and pkg574. Deploy this one. ***
+*** SUPERSEDES pkg572 - pkg576. Deploy this one. ***
+Heading marker becomes "v576".
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/bills.js
-  pages/api/business-financials.js
   lib/xero.js
+  pages/api/business-financials.js
+  pages/business-financials/bills.js
 
 
-READ THIS FIRST
----------------
-Yes - the changes are for /business-financials/bills, which is the "Bills to Pay"
-page in the nav (BizNav.js:16). That is the right file.
+WHAT "0 OVERPAYMENTS" TOLD US
+-----------------------------
+It ruled out everything else. The deploy is live (v574 showed), the SPEND-
+OVERPAYMENT type fix is in, and no error surfaced. So Xero IS returning
+overpayments and my query was throwing them away.
 
-If NOTHING has changed on that page, then the file running is not the file I have
-been editing. Even before any sync, you should already be seeing:
+    const where = encodeURIComponent('Status=="AUTHORISED"')
 
-  - a "Cost accounts" dropdown next to the Suppliers filter
-  - a message next to the Sync bills button after you press it
+An overpayment is money that has ALREADY LEFT THE BANK, so Xero marks it PAID,
+not AUTHORISED. I copied that clause from the credit-note fetch above it, where
+AUTHORISED is correct precisely because a credit note is not a payment. Applied
+to overpayments it excluded all of them.
 
-Neither of those needs Xero, a sync, or fresh data. If they are absent the deploy
-has not landed.
-
-So this package adds a VERSION MARKER: the heading now reads
-
-    Bills to Pay  v574
-
-in small amber text. If you do not see "v574" beside the heading, the new file is
-not live and there is no point looking at any figures. Check, in order:
-
-  1. Open pages/business-financials/bills.js on GitHub and search for
-     "Cost accounts". If it is not there, the paste did not save - the file is
-     ~29KB and a truncated paste in the web editor is easy to miss.
-  2. Check Vercel has a deployment AFTER that commit, and that it succeeded.
-  3. Hard refresh: Ctrl+Shift+R. Next caches the page bundle aggressively.
-
-Tell me which of the three it was and I will not send figures until it is live.
+Second mistake of the same shape as the first: reusing a neighbouring pattern
+without checking it meant the same thing for a different object.
 
 
-THE OVERPAYMENT BUG (from pkg574) - MINE
+THE FIX
+-------
+No Status filter at all. RemainingCredit > 0 is the real test of "still
+outstanding" - it is what is left unallocated, whatever the status says. Only
+VOIDED and DELETED are dropped.
+
+
+AND IF IT IS STILL ZERO, IT NOW SAYS WHY
 ----------------------------------------
-Xero's Overpayment Type is "SPEND-OVERPAYMENT", not plain "SPEND". pkg573 tested
-`!== 'SPEND'`, which rejected every one - so the fetch ran, succeeded, and
-returned nothing, leaving the total at 307,471.06 and looking like a working sync.
+The sync message appends the full breakdown whenever none come through:
 
-fetchBankTransactions in the same file already uses `startsWith('SPEND')` at line
-494 for exactly this reason. Now fixed, and it also picks up SPEND-PREPAYMENT.
+  "117 bills, 1 credit notes, 0 overpayments. [12 returned, 0 kept, 12 not SPEND,
+   0 fully allocated, 0 voided, statuses {"PAID":12}]"
 
-
-WHY IT WAS INVISIBLE - ALSO FIXED
----------------------------------
-sync() threw the API response away entirely inside a bare try/catch, so a failed
-sync and a successful one looked identical. It now reports beside the button:
-
-  "117 bills, 1 credit notes, 4 overpayments."   green
-  "Sync failed."                                  red
-
-The overpayment fetch also logs a breakdown server-side - how many Xero returned,
-how many were kept, and how many were rejected and why.
+That tells us in one line whether Xero returned any at all, and exactly which
+test rejected them - rather than another round of me guessing. Same detail is
+logged server-side.
 
 
-WHAT TO EXPECT ONCE IT IS LIVE
-------------------------------
-Press Sync bills. The message should say 4 overpayments, and the total should
-drop from 307,471.06 to 302,771.49.
+WHAT SUCCESS LOOKS LIKE
+-----------------------
+"117 bills, 1 credit notes, 4 overpayments." and the total drops from
+307,471.06 to 302,771.49.
 
-Reminder that this gives a THIRD number by design:
-  app                          302,771.49   (nets overpayments off)
-  Xero "Bills to pay" screen   307,471.06   (excludes them)
-  Xero raw CSV export          312,170.63   (lists them positive)
+Reminder - a THIRD number, by design:
+  app                          302,771.49   nets overpayments off
+  Xero "Bills to pay" screen   307,471.06   excludes them
+  Xero raw CSV export          312,170.63   lists them positive
 
 
 ALSO IN THIS PACKAGE
 --------------------
-Cost account filter - searchable multi-select beside the supplier filter,
-remembered per browser. A bill shows if ANY of its lines is on a picked account.
-Credit notes and overpayments carry lineCodes so they cannot vanish under a
-filter and push the total up.
+Cost account filter beside the supplier filter - searchable, remembered per
+browser, a bill shown if ANY of its lines is on a picked account. Credit notes
+and overpayments carry lineCodes so they cannot vanish under a filter and push
+the total up.

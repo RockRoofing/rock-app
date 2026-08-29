@@ -389,8 +389,9 @@ export default async function handler(req, res) {
         let tokens = await getTokens()
         if (!tokens) return res.status(401).json({ error: 'Not connected to Xero' })
         try { const nt = await refreshXeroToken(tokens.refresh_token); if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+        const diag = {}
         const items = view === 'bills'
-          ? await fetchOutstandingBills(tokens.access_token, tokens.tenant_id)
+          ? await fetchOutstandingBills(tokens.access_token, tokens.tenant_id, diag)
           : await fetchOutstandingReceivables(tokens.access_token, tokens.tenant_id)
         const payload = { items, updatedAt: new Date().toISOString() }
         await redis.set(key, payload)
@@ -401,6 +402,11 @@ export default async function handler(req, res) {
         return res.json({
           ok: true, count: items.length, updatedAt: payload.updatedAt,
           bills: items.length - credits - overpayments, credits, overpayments,
+          // The actual reason, if a sub-fetch failed. Without this a permissions problem
+          // on the Overpayments endpoint is indistinguishable from having none.
+          overpaymentError: diag.overpaymentError || null,
+          overpaymentDetail: diag.overpaymentDetail || null,
+          creditNoteError: diag.creditNoteError || null,
         })
       } catch (e) { return res.status(500).json({ error: e.message }) }
     }
