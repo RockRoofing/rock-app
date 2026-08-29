@@ -792,7 +792,7 @@ export default function RetentionPage() {
                         ['Retention Owed', 'right', 'Retention still held: invoiced (Sales, code 200) \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
                         ['612 Deducted', 'right', 'Retention withheld on invoices under account code 612 - the GROSS figure, before any release. Sum of the negative 612 lines. NOTE: the old "612 Allocated" column was the NET (deducted less released), which is a different number.', 'r612ded'],
                         ['612 Released', 'right', 'Retention invoiced back out - the POSITIVE account 612 lines. WARNING: a release posted as a plain sales invoice with no 612 line does not appear here, which is common on older projects. A dash means no 612 movement was found at all, which is NOT the same as nothing released.', 'r612rel'],
-                        ['\u2713', 'center', 'Reconciliation: Retention Owed minus 612 Deducted plus 612 Released should be zero. Green when it is. A red flag means either the deduction never reached 612, or a half has been claimed on an application without being invoiced back out of 612.', null],
+                        ['\u2713', 'center', 'Reconciliation: retention is released in halves, so 612 Released should be NOTHING, HALF of 612 Deducted, or ALL of it. Green on any of those three, with which one shown underneath. Red flag on anything else, with how far out it is - usually a part-release, or a deduction still growing because the job is not fully invoiced. A dash means no 612 lines at all.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from Edit Project Details. Blank means none has been set on that project.', 'qs'],
@@ -984,27 +984,46 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: (parseFloat(entry.retention612Released) || 0) > 0 ? '#16a34a' : '#bbb' }}
                               title={entry.ret612Lines ? `${entry.ret612Lines} account 612 line${entry.ret612Lines === 1 ? '' : 's'}${entry.ret612From ? ` from ${entry.ret612From}` : ''}${(parseFloat(entry.retention612ReleasedPaid) || 0) > 0 ? ` - ${fmtC(parseFloat(entry.retention612ReleasedPaid))} of it on invoices now paid` : ''}` : 'No account 612 lines found on this project - either none synced yet, or releases were posted straight to sales.'}>
                               {entry.ret612Lines ? fmt(parseFloat(entry.retention612Released || 0)) : '\u2014'}</td>
-                            {/* RECONCILIATION: Owed - Allocated + Released should be zero.
-                                Two different failures in one check, deliberately: the
-                                deduction never reached 612, or a half was claimed on an
-                                application but never invoiced back out of 612. Both are
-                                worth looking at and both show as a flag. */}
+                            {/* RECONCILIATION.
+                                Releases happen in halves, so what Xero has released
+                                against a project should be one of exactly three figures:
+                                nothing, half the retention withheld, or all of it.
+
+                                Measured against 612 DEDUCTED - Xero's own gross - so the
+                                check is self-contained and does not depend on whether an
+                                application or a manual mark recorded the release.
+
+                                The previous version compared Retention Owed against 612,
+                                but Owed only deducts what an APPLICATION claimed. Since
+                                releases are now marked by hand on this page, a hand-marked
+                                release left Owed untouched and the row flagged even when
+                                Xero and the register agreed perfectly. It also ticked rows
+                                releasing odd part-amounts, which are the ones actually
+                                worth looking at. */}
                             {(() => {
-                              const owed = parseFloat(entry.retentionOwed) || 0
-                              const alloc = parseFloat(entry.retention612Deducted) || 0
+                              const ded = parseFloat(entry.retention612Deducted) || 0
                               const rel = parseFloat(entry.retention612Released) || 0
-                              // No 612 activity means there is nothing to reconcile
-                              // AGAINST - flagging that would put a red mark on every
-                              // pre-612 project and train you to ignore the column.
                               if (!entry.ret612Lines) return <td style={{ padding: '8px 6px', textAlign: 'center', color: '#cbd5e1' }} title="No account 612 lines on this project, so there is nothing to reconcile against.">&mdash;</td>
-                              const diff = owed - alloc + rel
-                              const ok = Math.abs(diff) < 1
+                              const half = ded / 2
+                              // A pound of tolerance - retention halves round.
+                              const isNone = Math.abs(rel) < 1
+                              const isHalf = Math.abs(rel - half) < 1
+                              const isFull = Math.abs(rel - ded) < 1
+                              const ok = isNone || isHalf || isFull
+                              // isNone FIRST. With nothing deducted all three tests pass
+                              // and 'both halves' would be printed on a project that has
+                              // released nothing at all.
+                              const label = isNone ? 'none yet' : isFull ? 'both halves' : isHalf ? '1st half' : ''
+                              // Distance to whichever expected figure is nearest, so a flag
+                              // says HOW FAR out rather than only that it is out.
+                              const near = [0, half, ded].reduce((a, b) => Math.abs(b - rel) < Math.abs(a - rel) ? b : a, 0)
                               return (
-                                <td style={{ padding: '8px 6px', textAlign: 'center' }}
+                                <td style={{ padding: '6px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}
                                   title={ok
-                                    ? 'Retention Owed - 612 Deducted + 612 Released = 0. Reconciled.'
-                                    : `Out by ${fmtC(diff)}. Either the deduction never reached 612, or a half has been claimed on an application without being invoiced back out of 612.`}>
-                                  <span style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '\u2713' : '\u2691'}</span>
+                                    ? `612 released ${gbp(rel)} = ${label}. Expected one of: 0, ${gbp(half)} or ${gbp(ded)}.`
+                                    : `612 released ${gbp(rel)} is not 0, half (${gbp(half)}) or all (${gbp(ded)}) of the retention withheld. Nearest is ${gbp(near)}, out by ${gbp(rel - near)}. Usually a part-release, or a deduction still growing because the job is not fully invoiced.`}>
+                                  <div style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '\u2713' : '\u2691'}</div>
+                                  <div style={{ fontSize: 8.5, color: ok ? '#9ca3af' : '#dc2626', fontWeight: 600 }}>{ok ? label : gbp(rel - near)}</div>
                                 </td>
                               )
                             })()}
