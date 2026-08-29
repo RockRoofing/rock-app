@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import Head from 'next/head'
 import Link from 'next/link'
@@ -14,6 +14,11 @@ const TABLE_MIN_WIDTH = 2400
 const naCell = { padding: '8px 10px', whiteSpace: 'nowrap', color: '#bbb', textAlign: 'center' }
 
 const fmt = (n) => n == null || n === '' ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
+// Module scope, beside the other formatters. This file has no date formatter of its own
+// and gbp/fmtD live on OTHER pages - referencing one here compiles and then throws on
+// render, which is exactly how the tracker went down a moment ago.
+const fmtD = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
+
 const fmtC = (n) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)
 
 const EMPTY_ENTRY = {
@@ -120,6 +125,38 @@ function calcFinalBalance(entry) {
   const vat = parseFloat(entry.vat || 0) || 0
   const paidExVat = paidIncVat - vat
   return fa - paidExVat
+}
+
+// Warning banner listing the projects behind a headline figure.
+//
+// Collapsed by default: on a register this size an always-open list of twenty projects
+// pushes the table off screen, and a warning you scroll past is a warning you ignore.
+// The count and the money are in the heading, so it is actionable closed.
+//
+// Module scope - a component declared inside another remounts on every render, losing
+// the open/closed state on every keystroke in the filters.
+function AttentionBanner({ tone, title, note, items }) {
+  const [open, setOpen] = useState(false)
+  const c = tone === 'red'
+    ? { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c' }
+    : { bg: '#fffbeb', border: '#fde68a', text: '#92400e' }
+  return (
+    <div style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: 8, padding: '10px 14px', marginBottom: 12, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: c.text }}>{title}</span>
+        <button onClick={() => setOpen(o => !o)}
+          style={{ background: 'none', border: 'none', padding: 0, fontSize: 11.5, fontWeight: 700, color: c.text, textDecoration: 'underline', cursor: 'pointer' }}>
+          {open ? 'hide' : `show ${items.length}`}
+        </button>
+      </div>
+      <div style={{ fontSize: 11.5, color: c.text, opacity: 0.85, marginTop: 2 }}>{note}</div>
+      {open && (
+        <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: c.text, maxHeight: 190, overflowY: 'auto' }}>
+          {items.map((t, i) => <li key={i} style={{ marginBottom: 2 }}>{t}</li>)}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 function statusBadge(entry) {
@@ -570,6 +607,43 @@ export default function RetentionPage() {
     else { setSortKey(key); setSortDir('asc') }
   }
 
+  // PROJECTS THAT NEED ATTENTION.
+  //
+  // Both are computed over allEntries - the FILTERED view - so a banner never claims a
+  // problem you have filtered away, and clearing the filters shows the true picture.
+  //
+  // Complete projects are excluded: retention on a closed job is not being chased.
+  const attention = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    const noDate = [], overdue = []
+    for (const e of allEntries) {
+      if (retStatusOf(e) === 'complete') continue
+      const r1 = parseFloat(e.release1Value || 0) || 0
+      const r2 = parseFloat(e.release2Value || 0) || 0
+      const label = [e.ourRef, e.projectName || e.customerName].filter(Boolean).join(' - ') || 'Unnamed'
+
+      // A half with money against it but NO date is invisible everywhere else: it never
+      // goes overdue, and it never reaches the cash flow, which only schedules dated
+      // releases. It just sits there.
+      const miss = []
+      if (r1 > 0 && !released1(e) && !e.release1Date) miss.push('1st')
+      if (r2 > 0 && !released2(e) && !e.release2Date) miss.push('2nd')
+      if (miss.length) noDate.push({ label, which: miss.join(' and '), amount: (miss.includes('1st') ? r1 : 0) + (miss.includes('2nd') ? r2 : 0) })
+
+      // Past its release date and still not confirmed - the money that should be in.
+      const late = []
+      let lateAmt = 0
+      if (r1 > 0 && !released1(e) && e.release1Date && e.release1Date < today) { late.push('1st'); lateAmt += r1 }
+      if (r2 > 0 && !released2(e) && e.release2Date && e.release2Date < today) { late.push('2nd'); lateAmt += r2 }
+      if (late.length) overdue.push({ label, which: late.join(' and '), amount: lateAmt, date: e.release1Date && e.release1Date < today ? e.release1Date : e.release2Date })
+    }
+    overdue.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    noDate.sort((a, b) => b.amount - a.amount)
+    return { noDate, overdue,
+      noDateTotal: noDate.reduce((t, x) => t + x.amount, 0),
+      overdueTotal: overdue.reduce((t, x) => t + x.amount, 0) }
+  }, [allEntries])
+
   const totals = {
     // STILL TO COME IN: the release halves, less any confirmed released. calcBalance()
     // had been sitting in this file unused since it was written - it is exactly this, and
@@ -637,6 +711,27 @@ export default function RetentionPage() {
           {/* Summary cards and the page's own actions. Hidden in the EMBED: Bookkeeping
               wants the register itself, and four tiles above it eat the height the table
               needs inside a frame. */}
+          {/* NEEDS ATTENTION. Two different problems, deliberately two banners: one is
+              money that should already be in, the other is money with no date that will
+              never become overdue and never reach the cash flow. Hidden in the embed -
+              Bookkeeping reads this register, it does not chase it. */}
+          {!embed && attention.overdue.length > 0 && (
+            <AttentionBanner
+              tone="red"
+              title={`${attention.overdue.length} retention release${attention.overdue.length === 1 ? '' : 's'} past its due date and not marked released - ${fmtC(attention.overdueTotal)}`}
+              note="Chase these, or confirm the release by clicking the 1st / 2nd Value cell on the row."
+              items={attention.overdue.map(x => `${x.label} - ${x.which} half, due ${fmtD(x.date)}, ${fmtC(x.amount)}`)}
+            />
+          )}
+          {!embed && attention.noDate.length > 0 && (
+            <AttentionBanner
+              tone="amber"
+              title={`${attention.noDate.length} retention${attention.noDate.length === 1 ? '' : 's'} with no release date - ${fmtC(attention.noDateTotal)}`}
+              note="With no date these never show as overdue and never reach the Cash Flow, which only schedules dated releases. Set the date on the row."
+              items={attention.noDate.map(x => `${x.label} - ${x.which} half, ${fmtC(x.amount)}`)}
+            />
+          )}
+
           {!embed && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch', flexShrink: 0 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>

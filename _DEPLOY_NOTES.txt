@@ -1,56 +1,69 @@
-pkg585 - FIX: tracker crashed on open (my bug in pkg584)
-=========================================================
+pkg586 - Retention Tracker: warning banners for retentions needing release
+===========================================================================
 
-*** SUPERSEDES pkg570, pkg583, pkg584. Deploy this one. ***
+*** SUPERSEDES pkg570, pkg583, pkg584, pkg585. Deploy this one. ***
 All three files are COMPLETE and carry the pkg539 / pkg541 changes too.
+Includes the pkg585 crash fix.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/retention.js                            <- the crash
+  pages/retention.js
   pages/api/dashboard.js
   pages/business-financials/retentions-due.js
 
 
-THE CRASH
+TWO BANNERS
+-----------
+RED - past due and not released:
+
+  "2 retention releases past its due date and not marked released - GBP 8,000.00"
+  "Chase these, or confirm the release by clicking the 1st / 2nd Value cell."
+
+AMBER - no release date at all:
+
+  "1 retention with no release date - GBP 8,000.00"
+  "With no date these never show as overdue and never reach the Cash Flow, which
+   only schedules dated releases. Set the date on the row."
+
+Two banners rather than one because they are different problems needing different
+actions: one is money that should already be in, the other is money that will
+NEVER be chased by anything because nothing can go overdue without a date. That
+second one is the quieter and more expensive of the two.
+
+Each is COLLAPSED by default with the count and the money in the heading, and a
+"show N" link listing the projects. On a register this size an always-open list
+pushes the table off screen, and a warning you scroll past is a warning you
+ignore.
+
+
+THE RULES
 ---------
-The new reconciliation cell called gbp() NINE times. There is no gbp() in
-retention.js - that file uses fmt() and fmtC(). I carried the name over from
-pages/project-cashflow.js, where gbp() does exist.
+  - Only halves with a VALUE and NOT confirmed released.
+  - Released counts a manual mark OR a half ticked on an application - same rule
+    as everything else on the page.
+  - COMPLETE projects excluded. Retention on a closed job is not being chased.
+  - Computed over the FILTERED view, so a banner never warns about something you
+    have filtered away.
+  - Overdue list sorted oldest first; no-date list sorted largest first.
 
-It compiled perfectly and threw ReferenceError on the first render, taking the
-whole page down. Exactly the failure mode your notes warn about: an undefined
-identifier passes the build and only shows up at runtime. Same shape as the
-fmtD() one I caught during the build on the cash flow position panels - that one
-I spotted before shipping, this one I did not.
-
-All nine now use fmtC(), which is what the rest of the file uses.
-
-I also scanned every file touched across these packages for the same class of
-fault - a helper borrowed from another page and never declared or imported
-(gbp, gbpK, fmt, fmtC, monthShort, INK, isoOf, pad). retention.js was the only
-one. The unicode escapes are single-backslash and render as real glyphs, checked
-separately.
+Checked:
+  J210  1st due 01/03, unreleased        -> RED, 1st half
+  J221  1st marked released, 2nd overdue -> RED, 2nd half only
+  J218  both halves, no dates            -> AMBER
+  J230  dates in 2027                    -> neither
+  J199  complete                         -> excluded
 
 
-WHAT IS IN THIS PACKAGE (unchanged from pkg584)
------------------------------------------------
-RECONCILIATION ON THE HALVES RULE. 612 Released should be nothing, half of 612
-Deducted, or all of it. Anything else flags, with how far out it is shown beside
-the flag. Which of the three matched is shown under a tick.
+TWO CRASHES CAUGHT DURING THE BUILD
+-----------------------------------
+Worth recording, because pkg584 shipped one of exactly this kind:
 
-Your six visible rows:
-    9,163.10 / 9,163.10   flag -> tick  (both halves)
-    2,046.67 /   170.29   tick -> flag  (+170.29)
-    4,659.92 / 2,104.11   flag -> flag  (-225.85)
-    4,761.45 /   977.81   tick -> flag  (+977.81)
-    8,172.18 / 1,975.81   tick -> flag  (+1,975.81)
-    5,100.00 / 2,550.00   flag -> tick  (1st half)
+  fmtD()   used in the banner text. Does not exist in retention.js - it lives on
+           other pages. Added at module scope beside fmtC.
+  useMemo  used for the attention lists. NOT imported in this file - it was the
+           only useMemo in it. Added to the react import.
 
-RETENTIONS DUE now deducts confirmed releases. It tested release1Received, a
-field nothing ever sets, so confirming a half on the tracker changed nothing
-there and every project showed its full retention as due for ever.
-
-RELEASE MARKS: click a 1st/2nd Value cell to confirm, click again to undo.
-Automatic from an application's retention section. Manual overrides automatic in
-both directions.
+Both compile perfectly and throw ReferenceError on render. I now scan every
+identifier the new code uses against the file's own declarations and imports
+before packaging, which is what caught these two.
