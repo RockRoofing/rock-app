@@ -79,7 +79,11 @@ function Budgets() {
   // Months explicitly switched from forecast to Xero actuals.
   const [actualMonths, setActualMonths] = useState([])       // [ 'YYYY-MM', ... ]
   const [showLockHistory, setShowLockHistory] = useState(false)
-  const [reconcile, setReconcile] = useState(false)          // reconciliation checkbox
+  // ON BY DEFAULT. It is the only thing policing the hide-accounts feature: hide a row
+  // that still carries money and the year-end total silently understates, with nothing on
+  // screen to say so. Cheap to leave on - it computes from data already loaded and saves
+  // nothing - and useless if it is off at the moment the problem appears.
+  const [reconcile, setReconcile] = useState(true)            // reconciliation checkbox
   const [card3moCodes, setCard3moCodes] = useState(null)     // [code] included in the custom 3-mo card; null = all
   const [card3moGear, setCard3moGear] = useState(false)
 

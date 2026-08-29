@@ -1,69 +1,73 @@
-pkg586 - Retention Tracker: warning banners for retentions needing release
-===========================================================================
+pkg587 - Budgets: reconcile check on by default, plus Switch to Actual
+=======================================================================
 
-*** SUPERSEDES pkg570, pkg583, pkg584, pkg585. Deploy this one. ***
-All three files are COMPLETE and carry the pkg539 / pkg541 changes too.
-Includes the pkg585 crash fix.
+*** SUPERSEDES pkg563. ***
+pages/api/business-financials.js is a COMPLETE file and ALSO contains the pkg582
+bills changes (cost account list for the filter, sync breakdown). If pkg582 is
+deployed, this file is still the right one - it is a superset.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/retention.js
-  pages/api/dashboard.js
-  pages/business-financials/retentions-due.js
+  pages/business-financials/budgets.js
+  pages/api/business-financials.js
 
 
-TWO BANNERS
+1. "RECONCILE: ALL ACCOUNTS VS SHOWN" NOW STARTS TICKED
+-------------------------------------------------------
+It is the only thing policing the hide-accounts feature. Hide a row that still
+carries money and the year-end total silently understates, with nothing on screen
+to say so - which is exactly the sort of fault you only find months later.
+
+Cheap to leave on: it computes from data already loaded, saves nothing, and adds
+one line to the toolbar. And it is useless if it happens to be off at the moment
+the problem appears.
+
+  green + matching figures  ->  every hidden account projects to nil
+  red + different figures   ->  a hidden account still has money in it, and the
+                                totals on screen understate the year by the gap
+
+Two limits worth knowing: it compares TOTALS, so it would not catch hidden
+accounts whose positive and negative values cancel out (unlikely on overheads),
+and it works off the displayed year, so an account hidden but only active in
+another year will not register.
+
+
+2. ALSO IN THIS PACKAGE - SWITCH TO ACTUAL (was pkg563)
+--------------------------------------------------------
+Budgets used to swap a month from forecast to Xero actuals the moment it rolled
+over:
+
+    const isComplete = (mo) => mo < thisMonth && availableSet.has(mo)
+
+On the 1st, almost nothing is posted, so the figure collapsed and then crept back
+up over the following weeks as bills came in.
+
+Now a month uses actuals only when you say so. Once it has ENDED a "Switch to
+Actual" button appears under its column heading and STAYS there until pressed, so
+an un-switched month is visible rather than quietly still on forecast. Pressing
+it turns the header green with a tick; pressing again goes back. Disabled with an
+explanation if there are no Xero figures for that month yet.
+
+This also fixes the forecast methods. Avg this FY, Last 3 mo, Last full month and
+Avg last financial year all derive from "completed" months, so they were
+averaging in a month that was one day old and 5% posted. They now only use months
+you have switched.
+
+ON FIRST LOAD NOTHING MOVES. The config key has never been written, so every past
+month with data is treated as already switched - exactly the old behaviour. You
+then un-switch anything you want back on forecast. Without that, every method
+that averages history would have found no completed months and the grid would
+have read zero on deploy.
+
+null (never set) is deliberately kept distinct from [] (everything switched off on
+purpose); an `|| []` would have collapsed the two and re-seeded the defaults every
+time you switched the last month off.
+
+
+NOT CHANGED
 -----------
-RED - past due and not released:
-
-  "2 retention releases past its due date and not marked released - GBP 8,000.00"
-  "Chase these, or confirm the release by clicking the 1st / 2nd Value cell."
-
-AMBER - no release date at all:
-
-  "1 retention with no release date - GBP 8,000.00"
-  "With no date these never show as overdue and never reach the Cash Flow, which
-   only schedules dated releases. Set the date on the row."
-
-Two banners rather than one because they are different problems needing different
-actions: one is money that should already be in, the other is money that will
-NEVER be chased by anything because nothing can go overdue without a date. That
-second one is the quieter and more expensive of the two.
-
-Each is COLLAPSED by default with the count and the money in the heading, and a
-"show N" link listing the projects. On a register this size an always-open list
-pushes the table off screen, and a warning you scroll past is a warning you
-ignore.
-
-
-THE RULES
----------
-  - Only halves with a VALUE and NOT confirmed released.
-  - Released counts a manual mark OR a half ticked on an application - same rule
-    as everything else on the page.
-  - COMPLETE projects excluded. Retention on a closed job is not being chased.
-  - Computed over the FILTERED view, so a banner never warns about something you
-    have filtered away.
-  - Overdue list sorted oldest first; no-date list sorted largest first.
-
-Checked:
-  J210  1st due 01/03, unreleased        -> RED, 1st half
-  J221  1st marked released, 2nd overdue -> RED, 2nd half only
-  J218  both halves, no dates            -> AMBER
-  J230  dates in 2027                    -> neither
-  J199  complete                         -> excluded
-
-
-TWO CRASHES CAUGHT DURING THE BUILD
------------------------------------
-Worth recording, because pkg584 shipped one of exactly this kind:
-
-  fmtD()   used in the banner text. Does not exist in retention.js - it lives on
-           other pages. Added at module scope beside fmtC.
-  useMemo  used for the attention lists. NOT imported in this file - it was the
-           only useMemo in it. Added to the react import.
-
-Both compile perfectly and throw ReferenceError on render. I now scan every
-identifier the new code uses against the file's own declarations and imports
-before packaging, which is what caught these two.
+The two summary cards at the top - last 3 completed months' spend and average -
+still read straight off Xero for any past month, switched or not. They report
+actual spend rather than replacing a forecast. The same half-posted-month problem
+applies to that average, so say the word if they should follow the switch too.
