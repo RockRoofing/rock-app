@@ -4,6 +4,8 @@ import Head from 'next/head'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell } from 'recharts'
 import { BizNav, INK, GOLD, gbp, gbpK, monthLbl, fmtDate, Card } from '../../components/BizNav'
 
+const ACCOUNT_PREFS_KEY = 'bills:accountFilter'
+
 const monthKey = (s) => (s || '').slice(0, 7)
 const isoDay = (d) => d.toISOString().slice(0, 10)
 
@@ -34,10 +36,36 @@ export default function BillsToPay() {
   const [supplierSearch, setSupplierSearch] = useState('')
   const supplierRef = useRef(null)
 
+  // Account (chart of accounts) multi-select filter
+  const [accounts, setAccounts] = useState([])           // [{ code, name }] present on these bills
+  const [accountPick, setAccountPick] = useState([])     // [] = all accounts
+  const [accountOpen, setAccountOpen] = useState(false)
+  const [accountSearch, setAccountSearch] = useState('')
+  const accountRef = useRef(null)
+  // Saved per browser, like the CRM's view prefs. Deliberately NOT a Redis config key:
+  // that would be shared, so one person narrowing the filter would silently narrow it
+  // for everybody else looking at the same page.
+  const prefsLoaded = useRef(false)
+
   // Sorting
   const [sortKey, setSortKey] = useState('dueDate')
   const [sortDir, setSortDir] = useState('asc')
   const [selMonth, setSelMonth] = useState('')   // 'YYYY-MM' due-in-month filter / bar click
+
+  // Restore the saved account filter. Runs once, before the first save effect below can
+  // fire, so an empty initial state never overwrites a stored selection.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ACCOUNT_PREFS_KEY)
+      if (raw) { const v = JSON.parse(raw); if (Array.isArray(v)) setAccountPick(v) }
+    } catch { /* private mode, or the value is not JSON */ }
+    prefsLoaded.current = true
+  }, [])
+
+  useEffect(() => {
+    if (!prefsLoaded.current) return
+    try { window.localStorage.setItem(ACCOUNT_PREFS_KEY, JSON.stringify(accountPick)) } catch {}
+  }, [accountPick])
 
   useEffect(() => {
     fetch('/api/portal-auth?action=me').then(r => r.json()).then(d => {
@@ -49,14 +77,17 @@ export default function BillsToPay() {
 
   async function load() {
     setLoading(true)
-    try { const d = await fetch('/api/business-financials?view=bills').then(r => r.json()); setItems(d.items || []); setUpdatedAt(d.updatedAt) } catch {}
+    try { const d = await fetch('/api/business-financials?view=bills').then(r => r.json()); setItems(d.items || []); setUpdatedAt(d.updatedAt); setAccounts(d.accounts || []) } catch {}
     setLoading(false)
   }
   useEffect(() => { if (ok) load() }, [ok])
 
   // Close supplier dropdown on outside click.
   useEffect(() => {
-    function onDoc(e) { if (supplierRef.current && !supplierRef.current.contains(e.target)) setSupplierOpen(false) }
+    function onDoc(e) {
+      if (supplierRef.current && !supplierRef.current.contains(e.target)) setSupplierOpen(false)
+      if (accountRef.current && !accountRef.current.contains(e.target)) setAccountOpen(false)
+    }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
@@ -91,6 +122,12 @@ export default function BillsToPay() {
 
   const pickSet = useMemo(() => new Set(supplierPick), [supplierPick])
 
+  const accountMatches = useMemo(() => {
+    const q = accountSearch.trim().toLowerCase()
+    return q ? accounts.filter(a => `${a.code} ${a.name}`.toLowerCase().includes(q)) : accounts
+  }, [accounts, accountSearch])
+  const accSet = useMemo(() => new Set(accountPick), [accountPick])
+
   // Rows after date + supplier + due-in-month filters.
   const filtered = useMemo(() => {
     return billsOnly.filter(i => {
@@ -99,10 +136,17 @@ export default function BillsToPay() {
       if (toDate && d && d > toDate) return false
       if (fromDate && !d) return false   // undated excluded once a range is set
       if (pickSet.size && !pickSet.has(i.contact)) return false
+      // ANY line on a picked account keeps the bill. A bill is not split across accounts
+      // here - it is either shown in full or not at all - so a mixed bill appears under
+      // every account it touches. Summing part of a bill would make the total wrong.
+      if (accSet.size) {
+        const codes = i.lineCodes || []
+        if (!codes.some(c => accSet.has(String(c)))) return false
+      }
       if (selMonth && monthKey(d) !== selMonth) return false
       return true
     })
-  }, [billsOnly, fromDate, toDate, pickSet, selMonth])
+  }, [billsOnly, fromDate, toDate, pickSet, accSet, selMonth])
 
   // Months available to pick (respecting date range + supplier, ignoring the month pick).
   const monthOptions = useMemo(() => {
@@ -256,6 +300,40 @@ export default function BillsToPay() {
                           </label>
                         ))}
                       </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chart of accounts filter. A bill is kept if ANY of its lines sits on a
+                    picked account - see the note in `filtered`. */}
+                <div ref={accountRef} style={{ position: 'relative', minWidth: 260 }}>
+                  <div style={flabel}>Cost accounts {accountPick.length ? `(${accountPick.length})` : '(all)'}</div>
+                  <div onClick={() => setAccountOpen(o => !o)} style={{ ...finput, minWidth: 260, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: accountPick.length ? INK : '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 220 }}>
+                      {accountPick.length ? accountPick.join(', ') : 'All accounts'}
+                    </span>
+                    <span style={{ color: '#999' }}>{accountOpen ? '\u25B2' : '\u25BC'}</span>
+                  </div>
+                  {accountOpen && (
+                    <div style={{ position: 'absolute', top: 60, left: 0, zIndex: 30, background: '#fff', border: '1px solid #e2e0da', borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)', width: 340, padding: 8 }}>
+                      <input autoFocus value={accountSearch} onChange={e => setAccountSearch(e.target.value)} placeholder="Type to search code or name..."
+                        style={{ width: '100%', padding: '7px 9px', border: '1px solid #e2e0da', borderRadius: 7, fontSize: 12, marginBottom: 8 }} />
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                        <button onClick={() => setAccountPick([])} style={miniBtn}>Clear</button>
+                        <button onClick={() => setAccountPick(accountMatches.map(a => a.code))} style={miniBtn}>Select shown</button>
+                      </div>
+                      <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                        {accounts.length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: 8 }}>No account codes on these bills. Sync bills to populate.</div>}
+                        {accounts.length > 0 && accountMatches.length === 0 && <div style={{ fontSize: 12, color: '#aaa', padding: 8 }}>No accounts match.</div>}
+                        {accountMatches.map(a => (
+                          <label key={a.code} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', fontSize: 12, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={accSet.has(a.code)} onChange={() => setAccountPick(prev => prev.includes(a.code) ? prev.filter(x => x !== a.code) : [...prev, a.code])} />
+                            <span style={{ color: '#999', fontVariantNumeric: 'tabular-nums', minWidth: 34 }}>{a.code}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name || '(unnamed)'}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: 10, color: '#aaa', marginTop: 6, lineHeight: 1.3 }}>A bill is shown if any of its lines is on a picked account. Your selection is remembered.</div>
                     </div>
                   )}
                 </div>

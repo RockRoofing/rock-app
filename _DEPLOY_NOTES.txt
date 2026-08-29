@@ -1,7 +1,8 @@
-pkg571 - Margin page: trend value removed from the hover
-=========================================================
+pkg572 - Bills page: filter by Xero cost account
+=================================================
 
-Independent of everything else outstanding. One file.
+*** pages/api/business-financials.js is a COMPLETE file and also contains the
+    pkg563 changes (Switch to Actual). Deploy this copy. ***
 
 
 NEW FILES
@@ -11,33 +12,55 @@ NEW FILES
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/margin.js
+  pages/business-financials/bills.js
+  pages/api/business-financials.js
+  lib/xero.js
 
 
-THE CHANGE
+THE FILTER
 ----------
-Hovering a chart showed two rows - "Margin" and "Trend". It now shows the month
-and its margin only. The trend line still draws; it just no longer quotes a
-figure.
+"Cost accounts" multi-select next to the supplier filter. Same behaviour -
+searchable, Clear, Select shown, and a count in the label. Searches on code or
+name, so "310" and "materials" both find it.
 
-Applies to all four charts (FY gross, FY net, and both 12-month rolling), since
-they all render through the same MarginChart component.
+Only accounts that actually appear on the current bills are listed. The full
+chart is hundreds of accounts and most never touch a supplier bill.
 
-  hover a month with data   ->  18.4%
-  hover where margin null   ->  nothing shown
-  hover with no data point  ->  nothing shown
+A bill is shown if ANY of its lines is on a picked account. Bills are NOT split
+across accounts - a mixed bill appears in full under every account it touches,
+because showing part of a bill would make the Filtered total wrong.
+
+  pick 310        ->  materials bill, mixed bill, credit note
+  pick 321        ->  mixed bill only
+  pick 310 + 400  ->  materials, plant hire, mixed, credit note
 
 
-WHY A CONTENT RENDERER, NOT A FORMATTER
----------------------------------------
-The obvious fix is to change the existing formatter, but recharts calls the
-formatter once PER SERIES and still renders a row for each - so the trend row
-would have stayed and merely been relabelled or blanked. The tooltip now uses a
-custom content component that picks the margin series out of the payload and
-ignores everything else.
+THE SELECTION IS REMEMBERED
+---------------------------
+Saved to localStorage, the same approach the CRM already uses for its view prefs.
+Deliberately NOT a Redis config key - that is shared, so one person narrowing the
+filter would silently narrow it for everybody else on the same page.
 
-MarginTooltip sits at module scope, not inside MarginChart - a component declared
-inside another remounts on every render.
+The restore runs before the save effect can fire, so an empty initial state never
+overwrites a stored selection on load.
 
-It also returns null when the margin for that month is null, so a gap in the data
-no longer produces an empty tooltip box.
+
+TWO THINGS THAT NEEDED FIXING TO MAKE IT WORK
+---------------------------------------------
+CREDIT NOTES HAD NO ACCOUNT CODES. lib/xero.js stored lineCodes on bills but not
+on credit notes, so every credit note would have vanished under any filter - and
+because credits are NEGATIVE, the filtered total would have gone UP. A credit
+silently disappearing is worse than one showing under a code you did not pick.
+They now carry lineCodes the same way.
+
+THE API RETURNED NO ACCOUNT NAMES. It now returns the codes present on the
+current bills paired with their names from config:chart-of-accounts, so the list
+reads "310 Materials" rather than a bare number.
+
+
+WORTH KNOWING
+-------------
+A bill with NO account codes at all drops out under any filter - there is nothing
+for it to match. That is correct, but if you see the filtered count fall further
+than expected, that is why. Codes come from the bill sync, so anything synced
+before lineCodes existed will have none until you press Sync bills.

@@ -398,7 +398,17 @@ export default async function handler(req, res) {
       } catch (e) { return res.status(500).json({ error: e.message }) }
     }
     const stored = await redis.get(key).then(v => v || { items: [] }).catch(() => ({ items: [] }))
-    return res.json({ items: stored.items || [], updatedAt: stored.updatedAt || null })
+    // Chart of accounts, so the account filter can show names rather than bare codes.
+    // Only the codes actually present on these bills are returned - the full chart is
+    // hundreds of accounts and most never appear on a supplier bill.
+    const chartArr = await redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([]))
+    const nameByCode = {}
+    for (const a of (Array.isArray(chartArr) ? chartArr : [])) nameByCode[String(a.code)] = a.name || ''
+    const present = new Set()
+    for (const it of (stored.items || [])) for (const c of (it.lineCodes || [])) present.add(String(c))
+    const accounts = [...present].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+      .map(code => ({ code, name: nameByCode[code] || '' }))
+    return res.json({ items: stored.items || [], updatedAt: stored.updatedAt || null, accounts })
   }
 
   // ── Cash flow forecast ────────────────────────────────────────────────────
