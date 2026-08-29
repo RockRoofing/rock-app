@@ -205,6 +205,20 @@ export default function Margin() {
   )
 }
 
+// Tooltip showing the month and its margin only - the trend series is dropped.
+// Module scope, not nested: a component declared inside another remounts every render.
+function MarginTooltip({ active, payload, label, dataKey, colour }) {
+  if (!active || !payload || !payload.length) return null
+  const point = payload.find(p => p.dataKey === dataKey)
+  if (!point || point.value == null) return null
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e0da', borderRadius: 8, padding: '6px 10px', boxShadow: '0 2px 8px rgba(0,0,0,0.10)', fontSize: 12 }}>
+      <div style={{ color: '#888', marginBottom: 2 }}>{label}</div>
+      <div style={{ color: colour, fontWeight: 700 }}>{`${Number(point.value).toFixed(1)}%`}</div>
+    </div>
+  )
+}
+
 function MarginChart({ title, sub, data, dataKey, colour }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 14, padding: 16 }}>
@@ -216,7 +230,13 @@ function MarginChart({ title, sub, data, dataKey, colour }) {
             <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} interval="preserveStartEnd" angle={-30} textAnchor="end" height={52} />
             <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} width={44} />
-            <Tooltip formatter={(v, n) => [v == null ? '-' : `${Number(v).toFixed(1)}%`, n === 'trend' ? 'Trend' : 'Margin']} />
+            {/* Only the MARGIN point gets a tooltip. The trend is a fitted line - a
+                figure for it invites "what was the trend in March", which is not a real
+                number, it is an artefact of the fit.
+                A custom content renderer rather than a formatter: recharts calls the
+                formatter per series but still renders a row for each, so the trend row
+                would stay and simply be relabelled. */}
+            <Tooltip content={<MarginTooltip dataKey={dataKey} colour={colour} />} />
             <ReferenceLine y={0} stroke="#999" />
             <Line type="monotone" dataKey={dataKey} name="Margin" stroke={colour} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
             <Line type="monotone" dataKey="trend" name="Trend" stroke="#b45309" strokeWidth={1.5} strokeDasharray="5 4" dot={false} connectNulls />
