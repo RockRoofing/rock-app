@@ -253,6 +253,10 @@ export default function RetentionPage() {
           // Retention owed on a tracker-only row: the two release values are the whole of
           // it, and there is no Xero project to compute it from.
           retentionOwed: (num(pick(r, '1st Value')) || 0) + (num(pick(r, '2nd Value')) || 0),
+          // Imported rows have no Xero 612 lines, so the reconciliation has nothing to
+          // work with and shows a dash. An imported "612 Allocated" figure is kept on the
+          // record but NOT mapped to retention612Deducted - the spreadsheet column was
+          // the net, and feeding a net into a gross field would flag every imported row.
           retention612Allocated: num(pick(r, '612 Allocated')),
           paid: num(pick(r, 'Total Paid', 'paid')),
           comments: String(pick(r, 'Comments') || '').trim(),
@@ -789,10 +793,9 @@ export default function RetentionPage() {
                         ['✓', 'center', 'Match check: green tick when Applied for equals Invoiced, red flag when they differ.', null],
                         ['Account Remaining', 'right', 'Final Account − Invoiced. What is still to be invoiced against the final account.', null],
                         ['Retention Owed', 'right', 'Retention still held: invoiced (Sales, code 200) \u00d7 retention %, LESS any half already claimed back through an application\u2019s Retention section.', 'retentionOwed'],
-                        ['612 Deducted', 'right', 'Retention withheld on invoices - the NEGATIVE account 612 lines, added up. This is what Xero says has been held back in total.', 'r612ded'],
+                        ['612 Deducted', 'right', 'Retention withheld on invoices under account code 612 - the GROSS figure, before any release. Sum of the negative 612 lines. NOTE: the old "612 Allocated" column was the NET (deducted less released), which is a different number.', 'r612ded'],
                         ['612 Released', 'right', 'Retention invoiced back out - the POSITIVE account 612 lines. WARNING: a release posted as a plain sales invoice with no 612 line does not appear here, which is common on older projects. A dash means no 612 movement was found at all, which is NOT the same as nothing released.', 'r612rel'],
-                        ['612 Held', 'right', 'Deducted less released - what Xero says is still held. This is the figure to compare against Retention Owed.', 'r612'],
-                        ['✓', 'center', 'Match check: green tick when Retention Owed equals 612 Allocated, red flag when they differ.', null],
+                        ['\u2713', 'center', 'Reconciliation: Retention Owed minus 612 Deducted plus 612 Released should be zero. Green when it is. A red flag means either the deduction never reached 612, or a half has been claimed on an application without being invoiced back out of 612.', null],
                         ['Ret %', 'center', 'Retention percentage from project details.', 'retPct'],
                         ['PC Type', 'left', 'Main PC or Sub PC, from Edit Project Details.', 'pcType'],
                         ['QS', 'left', 'Quantity Surveyor from Edit Project Details. Blank means none has been set on that project.', 'qs'],
@@ -965,17 +968,38 @@ export default function RetentionPage() {
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: accRemaining == null ? '#bbb' : Math.abs(accRemaining) < 1 ? '#16a34a' : '#2563eb' }}>{accRemaining == null ? '—' : fmtC(accRemaining)}</td>
                             {/* Retention Owed (invoiced × ret %) */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>{entry.retentionOwed ? fmt(parseFloat(entry.retentionOwed)) : fmt(0)}</td>
-                            {/* 612 Deducted / Released / Held. A dash rather than a zero
-                                where no 612 movement exists at all - "no evidence" and
-                                "nothing released" are different answers and older
-                                projects give the first. */}
+                            {/* 612 Allocated (gross deducted) and 612 Released. A dash
+                                rather than a zero where no 612 movement exists at all -
+                                "no evidence" and "nothing released" are different
+                                answers, and older projects give the first. */}
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: '#555' }}>{entry.ret612Lines ? fmt(parseFloat(entry.retention612Deducted || 0)) : '\u2014'}</td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', color: (parseFloat(entry.retention612Released) || 0) > 0 ? '#16a34a' : '#bbb' }}
                               title={entry.ret612Lines ? `${entry.ret612Lines} account 612 line${entry.ret612Lines === 1 ? '' : 's'}${entry.ret612From ? ` from ${entry.ret612From}` : ''}${(parseFloat(entry.retention612ReleasedPaid) || 0) > 0 ? ` - ${fmtC(parseFloat(entry.retention612ReleasedPaid))} of it on invoices now paid` : ''}` : 'No account 612 lines found on this project - either none synced yet, or releases were posted straight to sales.'}>
                               {entry.ret612Lines ? fmt(parseFloat(entry.retention612Released || 0)) : '\u2014'}</td>
-                            <td style={{ padding: '8px 10px', textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600, color: '#555' }}>{entry.ret612Lines ? fmt(parseFloat(entry.retention612Allocated || 0)) : '\u2014'}</td>
-                            {/* Retention Owed vs 612 Allocated match (right of 612) */}
-                            {matchCell(entry.retentionOwed, entry.retention612Allocated, (parseFloat(entry.retentionOwed) || 0) > 0 || (parseFloat(entry.retention612Allocated) || 0) > 0, 'Mismatch, retention owed and Xero allocated retention differs')}
+                            {/* RECONCILIATION: Owed - Allocated + Released should be zero.
+                                Two different failures in one check, deliberately: the
+                                deduction never reached 612, or a half was claimed on an
+                                application but never invoiced back out of 612. Both are
+                                worth looking at and both show as a flag. */}
+                            {(() => {
+                              const owed = parseFloat(entry.retentionOwed) || 0
+                              const alloc = parseFloat(entry.retention612Deducted) || 0
+                              const rel = parseFloat(entry.retention612Released) || 0
+                              // No 612 activity means there is nothing to reconcile
+                              // AGAINST - flagging that would put a red mark on every
+                              // pre-612 project and train you to ignore the column.
+                              if (!entry.ret612Lines) return <td style={{ padding: '8px 6px', textAlign: 'center', color: '#cbd5e1' }} title="No account 612 lines on this project, so there is nothing to reconcile against.">&mdash;</td>
+                              const diff = owed - alloc + rel
+                              const ok = Math.abs(diff) < 1
+                              return (
+                                <td style={{ padding: '8px 6px', textAlign: 'center' }}
+                                  title={ok
+                                    ? 'Retention Owed - 612 Deducted + 612 Released = 0. Reconciled.'
+                                    : `Out by ${fmtC(diff)}. Either the deduction never reached 612, or a half has been claimed on an application without being invoiced back out of 612.`}>
+                                  <span style={{ color: ok ? '#16a34a' : '#dc2626', fontWeight: 700 }}>{ok ? '\u2713' : '\u2691'}</span>
+                                </td>
+                              )
+                            })()}
                             {/* Ret % */}
                             <td style={{ padding: '8px 10px', textAlign: 'center' }}>{entry.retentionPct ? `${parseFloat(entry.retentionPct).toFixed(0)}%` : '—'}</td>
                             {/* PC Type */}
@@ -1056,7 +1080,7 @@ export default function RetentionPage() {
                           </tr>
                           {isEditing && (
                             <tr key={`edit-${entry.id}`}>
-                              <td colSpan={27} style={{ padding: '0 10px 10px' }}>
+                              <td colSpan={26} style={{ padding: '0 10px 10px' }}>
                                 <EntryForm form={editForm} setForm={setEditForm}
                                   onSave={saveEntry} saving={saving} qsOptions={qsOptions} allProjects={allProjects} inputStyle={inputStyle}
                                   onCancel={() => setEditingId(null)} />

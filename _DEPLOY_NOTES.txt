@@ -1,11 +1,10 @@
-pkg566 - Retention: manual release marks, auto release from applications,
-         612 split, Retention Outstanding card
-==========================================================================
+pkg568 - Retention: 612 reconciliation, manual + automatic release marks
+=========================================================================
 
-*** SUPERSEDES pkg564 AND pkg565 (neither deployed). ***
+*** SUPERSEDES pkg566 and pkg567 (neither deployed). You HAVE deployed pkg564
+    and pkg565 - both files here are complete replacements, nothing to undo. ***
 
-Both files are COMPLETE and also carry the pkg539 / pkg541 changes to
-retention.js and dashboard.js.
+Both files also carry the pkg539 / pkg541 changes.
 
 
 CHANGED FILES (replace)
@@ -14,77 +13,83 @@ CHANGED FILES (replace)
   pages/api/dashboard.js
 
 
-1. THERE WAS NO MANUAL CONTROL AT ALL
--------------------------------------
-Worth correcting something I said earlier. release1Received / release2Received
-exist as stored fields but NOTHING EVER SET THEM and the table never read them.
-The green "released" state was derived:
+1. YOU WERE RIGHT - "ALLOCATED" WAS THE SAME AS "HELD"
+------------------------------------------------------
+The original code was
 
-  settledSecond = paidKnown ? (totalRemaining < 1) : false
-  settledFirst  = paidKnown ? (settledSecond || totalRemaining <= r2v + 1) : false
-  firstReceived = settledFirst && faMatchesInvoiced
+    retention612Allocated: Math.abs(retention612)
 
-It inferred release from the paid balance hitting zero, gated on Final Account
-matching invoiced to within a pound. On an old project whose release went out
-uncoded that can never settle, and there was no way to say so by hand. The edit
-form only said "Auto: turns green once...".
+and retention612 is the SIGNED sum (sync-invoices.js:277) - deductions negative,
+releases positive. So the old "612 Allocated" was the NET, which is exactly what
+I had renamed to "612 Held". The tooltip claimed it was "retention actually
+deducted", but the code never computed that. I quoted that tooltip at you as
+justification without checking the code agreed with it. It did not.
 
+Keeping the label "612 Allocated" for the gross figure would therefore have meant
+the same column name showing a different number after deploy, with nothing on
+screen to say so.
 
-2. CLICK THE RELEASE CELL
--------------------------
-Click the 1st or 2nd release cell on any row to mark that half released. Click
-again to undo. No opening the edit form. The date it was marked is stored.
+So the gross column is called "612 Deducted". Its tooltip says explicitly that
+the old "612 Allocated" was the net and is a different number.
 
 
-3. AUTOMATIC FROM THE APPLICATION
----------------------------------
-If the retention section on the project's latest application has a half ticked,
-the register marks itself off - the cell reads "released (app)".
+2. THE COLUMNS
+--------------
+  ... Retention Owed | 612 Deducted | 612 Released | tick | Ret % ...
 
-app.retentionRelease1 / retentionRelease2 are cumulative across applications, so
-the latest one carries the whole picture. Exposed as appRelease1 / appRelease2.
+  612 Deducted   gross withheld - the negative 612 lines
+  612 Released   invoiced back out - the positive 612 lines
 
-So: new projects run through the app mark themselves; old spreadsheet projects
-get marked by hand. Both work, as you asked.
-
-
-4. MANUAL BEATS AUTOMATIC, IN BOTH DIRECTIONS
----------------------------------------------
-The manual flag is an explicit true/false, not a "set or unset". So clicking a
-green "released (app)" cell records FALSE and it stays false - if an application
-says released and it never actually was, somebody can say so.
-
-  old project, nothing set        released: false   source: none
-  old project, marked by hand     released: true    source: manual
-  new project, app ticked half    released: true    source: application
-  app ticked, overridden off      released: false   source: overridden
-  marked, then undone             released: false   source: none
-
-An overridden cell goes amber and reads "not released *", so a deliberate
-override never looks like an oversight.
+The net column is gone entirely. Any two of the three determine the third, and
+the net was the one duplicating Retention Owed.
 
 
-5. THE OLD PAID-BALANCE GUESS IS NOW A HINT
--------------------------------------------
-It no longer decides anything. Where Xero looks paid off but nobody has marked
-the half, the cell turns pale blue and reads "due - looks paid". A prompt, not a
-decision - which is what it should always have been.
+3. THE CHECK
+------------
+  Retention Owed - 612 Deducted + 612 Released, green at zero.
+
+  nothing released           10,000 - 10,000 +      0  ->  tick
+  half claimed + released     5,000 - 10,000 +  5,000  ->  tick
+  both released                   0 - 10,000 + 10,000  ->  tick
+  claimed on app, not in 612  5,000 - 10,000 +      0  ->  FLAG, out by -5,000
+  deduction never coded      10,000 -  4,000 +      0  ->  FLAG, out by  6,000
+  no 612 lines at all                                  ->  dash
+
+The hover says which way it is out and by how much. No 612 lines gives a dash,
+not a flag - there is nothing to reconcile against, and a red mark on every
+pre-612 project would just train you to ignore the column.
+
+Imported rows keep any "612 Allocated" figure from the spreadsheet on the record
+but it is NOT fed into 612 Deducted - that column was the net, and putting a net
+into a gross field would flag every imported row.
 
 
-6. ALSO IN THIS PACKAGE
------------------------
-RETENTION OUTSTANDING CARD - the halves not released, across the projects shown.
-Now driven by the real release state, so it means something.
+4. RELEASE MARKS - MANUAL AND AUTOMATIC
+---------------------------------------
+Click the 1st or 2nd release cell to mark that half released; click again to
+undo. The date marked is stored.
 
-612 SPLIT INTO THREE COLUMNS - Deducted / Released / Held. dashboard.js was doing
-Math.abs() on a signed net, so 10,000 deducted with 5,000 released was
-indistinguishable from 5,000 never deducted. A project with NO 612 lines shows
-dashes, not zeros - "no evidence" and "nothing released" are different answers,
-and old projects give the first.
+A half ticked in the retention section of the project's latest application marks
+the register automatically - the cell reads "released (app)".
+
+Manual beats automatic BOTH WAYS: the flag is an explicit true/false, so clicking
+a green "released (app)" cell records false and it stays false. That cell goes
+amber reading "not released *".
+
+There was no manual control at all before. release1Received existed but nothing
+set it and the table never read it - the green state was inferred from the paid
+balance hitting zero, gated on Final Account matching invoiced to within a pound,
+which could never settle an old project whose release went out uncoded. That
+guess is now only a hint: "due - looks paid", in pale blue.
 
 
-WHAT TO DO ON DEPLOY
+5. ALSO
+-------
+Retention Outstanding card - the halves not released, across the projects shown.
+
+
+BEFORE YOU RECONCILE
 --------------------
-Every row starts unmarked, so Retention Outstanding will read the full gross
-until you work down the register. The pale blue "due - looks paid" cells are the
-ones Xero thinks are already settled - those are the quickest wins.
+Run a LONG invoice sync. The Sync from Xero button sends months: 6, the endpoint
+accepts 60, and per sync-invoices.js:186 lines outside the window are never
+re-fetched - so 612 data on older projects is partial until you do.
