@@ -8,11 +8,17 @@ import { useRouter } from 'next/router'
 // Module scope, not nested - a component declared inside another remounts every render
 // and this holds a focused input.
 function ScopeTester({ value, onChange }) {
-  const OPTIONS = ['accounting.transactions', 'accounting.transactions.read', 'accounting.reports.read']
+  // Only scopes this app is actually PERMITTED, taken from its developer-portal list.
+  // accounting.transactions is NOT on that list, which is why every attempt at it came
+  // back invalid_scope - the name was never the problem, the app cannot have it.
+  //
+  // accounting.invoices.read and accounting.banktransactions.read are already granted
+  // and already fail on Overpayments, so payments is the one candidate left.
+  const OPTIONS = ['accounting.payments.read', 'accounting.payments']
   return (
     <div style={{ textAlign: 'left', background: '#fafafa', border: '1px solid #eee', borderRadius: 8, padding: 10, marginBottom: 14 }}>
       <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>
-        Extra scope to request (optional). Overpayments need an accounting.transactions scope; the exact name this app accepts has to be found by trying.
+        Extra scope to request (optional). Only names on this app's permitted list can work - accounting.transactions is not one of them.
       </div>
       <input value={value} onChange={e => onChange(e.target.value)} placeholder="e.g. accounting.transactions"
         style={{ width: '100%', padding: '7px 9px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12, marginBottom: 6 }} />

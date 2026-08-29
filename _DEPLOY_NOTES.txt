@@ -1,76 +1,69 @@
-pkg580 - URGENT: restores the Xero connection, plus a safe scope tester
-=======================================================================
+pkg581 - Xero scope: accounting.transactions is not available to this app
+==========================================================================
 
-*** SUPERSEDES pkg572 - pkg579. DEPLOY THIS FIRST, before anything else. ***
+*** SUPERSEDES pkg572 - pkg580. Deploy this one. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/connect.js                      <- the urgent one
+  pages/connect.js
   pages/business-financials/bills.js
   pages/api/business-financials.js
   lib/xero.js
 
 
-WHAT I BROKE, AND WHY IT MATTERS NOW
-------------------------------------
-I added accounting.transactions.read to the authorize URL. Xero rejects the
-ENTIRE authorize request with invalid_scope if ANY single scope is unrecognised -
-it does not ignore the bad one and grant the rest.
-
-So /connect currently cannot connect AT ALL. That is worse than a missing
-overpayment figure: if the refresh token ever expires you would have no way back
-in. This package restores the known-good list first.
-
-I asserted that scope was correct. It was not, for this app, and I should have
-given you a way to test it rather than editing the live list.
-
-
-THE SCOPE TESTER
-----------------
-The base list is now fixed and no longer edited to try things. /connect has a
-small box above the Connect button for ONE EXTRA SCOPE, appended for that attempt
-only, with quick buttons for the likely candidates:
-
-  accounting.transactions
-  accounting.transactions.read
-  accounting.reports.read
-  none
-
-If Xero says invalid_scope, that name is wrong - clear the box, connect again,
-and you are straight back to a working connection. No deploy needed between
-attempts.
-
-TRY accounting.transactions FIRST (no .read). Overpayments are documented under
-that scope, and the .read variant is what was just refused.
-
-
-WHEN ONE IS ACCEPTED
---------------------
-Connect with it, then press Sync bills. The message now also prints what the
-token actually grants, so there is no ambiguity:
-
-  "117 bills, 1 credit notes, 4 overpayments."                        working
-  "... Token HAS accounting.transactions. Granted: <list>"            granted but refused
-  "... Token DOES NOT HAVE accounting.transactions. Granted: <list>"  not granted
-
-Send me whichever line you get and I will work from the granted list rather than
-guessing again.
-
-
-ONE THING TO NOTE
+THE ACTUAL ANSWER
 -----------------
-Every other scope in that list - accounting.invoices.read,
-accounting.banktransactions.read, accounting.manualjournals.read,
-accounting.reports.profitandloss.read - is accepted by this app and works. So the
-app clearly takes fine-grained names. Which specific one covers Overpayments is
-what the tester is for.
+Your app's permitted scope list does NOT contain accounting.transactions or
+accounting.transactions.read. So invalid_scope was correct and unavoidable - the
+name was never the problem, the app simply cannot request it. Four attempts spent
+on the wrong question, which is on me. The portal list was the thing to check
+first and I did not ask for it.
+
+Of the scopes it IS permitted, two are already granted and already fail on
+Overpayments:
+
+  accounting.invoices.read           granted, Overpayments -> 401
+  accounting.banktransactions.read   granted, Overpayments -> 401
+
+That leaves ONE candidate worth trying: accounting.payments.read. An overpayment
+originates from a payment, so of everything on the list it is the best fit. The
+quick buttons on /connect are now just that one and its full variant.
+
+
+HOW TO TRY IT
+-------------
+1. /connect -> click "accounting.payments.read" -> Reconnect Xero -> approve
+2. Bills to Pay -> Sync bills
+
+  "117 bills, 1 credit notes, 4 overpayments."   it worked
+  "... Token HAS ... Granted: <list>"            granted but still refused
+  "... DOES NOT HAVE ..."                        not granted
+  invalid_scope from Xero                        not permitted either
+
+Whatever happens you cannot get stuck: click "none", reconnect, and you are back
+to the working connection.
+
+
+IF accounting.payments.read DOES NOT WORK
+-----------------------------------------
+Then Overpayments genuinely needs accounting.transactions and this app cannot
+have it. Two options at that point:
+
+  a) See whether accounting.transactions can be ADDED to the app in the developer
+     portal. If the list you sent is what is SELECTED rather than everything on
+     offer, ticking it and reconnecting would fix this properly.
+
+  b) Drop it. Say the word and I will strip the overpayment fetch out entirely.
+
+Option (b) costs almost nothing, and it is worth being clear about that: without
+any of this the app matched Xero's "Bills to Pay" screen TO THE PENNY at
+307,471.06. The whole exercise nets off 4,699.57 across four records. The app is
+arguably more useful matching the Xero screen exactly.
 
 
 ALSO IN THIS PACKAGE
 --------------------
 Cost account filter on Bills to Pay, remembered per browser. Credit notes and
-overpayments carry lineCodes. No Status filter on overpayments. Type matched with
-startsWith('SPEND'). Heading marker "v578".
-
-Target once the scope is sorted: total drops 307,471.06 -> 302,771.49.
+overpayments carry lineCodes so they cannot vanish under a filter and push the
+total up. Sync reports what it found and what the token grants. Heading "v578".
