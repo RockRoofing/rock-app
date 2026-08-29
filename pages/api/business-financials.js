@@ -394,7 +394,14 @@ export default async function handler(req, res) {
           : await fetchOutstandingReceivables(tokens.access_token, tokens.tenant_id)
         const payload = { items, updatedAt: new Date().toISOString() }
         await redis.set(key, payload)
-        return res.json({ ok: true, count: items.length, updatedAt: payload.updatedAt })
+        // Broken down, so "0 overpayments" is visible on the sync message instead of
+        // looking identical to a successful sync that simply found none.
+        const overpayments = items.filter(i => i.isOverpayment).length
+        const credits = items.filter(i => i.isCreditNote && !i.isOverpayment).length
+        return res.json({
+          ok: true, count: items.length, updatedAt: payload.updatedAt,
+          bills: items.length - credits - overpayments, credits, overpayments,
+        })
       } catch (e) { return res.status(500).json({ error: e.message }) }
     }
     const stored = await redis.get(key).then(v => v || { items: [] }).catch(() => ({ items: [] }))

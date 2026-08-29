@@ -24,6 +24,7 @@ export default function BillsToPay() {
   const [updatedAt, setUpdatedAt] = useState(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
   const [sel, setSel] = useState({})
 
   const dr = defaultRange()
@@ -94,7 +95,16 @@ export default function BillsToPay() {
 
   async function sync() {
     setSyncing(true)
-    try { await fetch('/api/business-financials?view=bills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'bills', sync: true }) }); await load() } catch {}
+    setSyncMsg('')
+    try {
+      const res = await fetch('/api/business-financials?view=bills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'bills', sync: true }) })
+      const d = await res.json().catch(() => ({}))
+      // The result used to be thrown away entirely, so a failed sync and a successful one
+      // looked identical - which is how a broken overpayment fetch went unnoticed.
+      if (!res.ok || d.error) setSyncMsg(d.error || 'Sync failed.')
+      else setSyncMsg(`${d.bills ?? '?'} bills, ${d.credits ?? 0} credit notes, ${d.overpayments ?? 0} overpayments.`)
+      await load()
+    } catch (e) { setSyncMsg('Sync failed.') }
     setSyncing(false)
   }
 
@@ -244,6 +254,7 @@ export default function BillsToPay() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={exportCsv} style={{ background: '#fff', color: INK, border: '1px solid #e2e0da', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Export CSV</button>
               <button onClick={sync} disabled={syncing} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.6 : 1 }}>{syncing ? 'Syncing...' : 'Sync bills'}</button>
+              {syncMsg && <span style={{ marginLeft: 10, fontSize: 12, color: syncMsg.toLowerCase().includes('fail') ? '#dc2626' : '#16a34a', fontWeight: 600 }}>{syncMsg}</span>}
             </div>
           </div>
 
