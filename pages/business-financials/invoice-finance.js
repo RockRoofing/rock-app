@@ -258,27 +258,52 @@ export default function InvoiceFinance() {
   //   (323,029.46 - 35,069.31) x 60% = 172,776.09
   function exportReconciliation() {
     const rows = []
+    // `rate` is scoped inside the customers memo, not here - reading it would be a
+    // ReferenceError at click time, which no build catches.
+    const rate = (Number(settings.advanceRate) || 0) / 100
     const q = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
     const money = (n) => (Number(n) || 0).toFixed(2)
 
     const salesLedger = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.rawProject || 0) + (p.retentionDebt || 0), 0), 0)
     const retention = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.retentionDebt || 0), 0), 0)
     const capped = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.excluded || 0), 0), 0)
-    const overLimit = customers.reduce((t, c) => t + Math.max(0, (c.rawAdvance || 0) - (c.advance || 0)), 0)
-    const noLimit = customers.filter(c => !c.hasLimit).reduce((t, c) => t + (c.fundable || 0), 0)
+
+    // ONE SET OF UNITS. The first version listed "over insured limit" in ADVANCE terms
+    // and "no insured limit set" in DEBT terms - the same exclusion twice, since a
+    // customer with no limit gets advance 0 and therefore appears in full in the
+    // over-limit figure. 160,831.50 of debt and 96,498.90 of advance were the same
+    // money, and the summary could not be made to add up.
+    //
+    // Everything is now in DEBT terms down to Approved Debt, then the rate is applied
+    // once, matching how Bibby lay it out.
+    const rawAdv = customers.reduce((t, c) => t + (c.rawAdvance || 0), 0)
+    const actualAdv = customers.reduce((t, c) => t + (c.advance || 0), 0)
+    const limitCutDebt = rate > 0 ? (rawAdv - actualAdv) / rate : 0
+    const noLimitDebt = customers.filter(c => !c.hasLimit).reduce((t, c) => t + (c.fundable || 0), 0)
+    const overLimitDebt = Math.max(0, limitCutDebt - noLimitDebt)
 
     rows.push(['SUMMARY - compare against Bibby Finance Agreement Summary'])
     rows.push(['Sales Ledger (all unpaid sales invoices incl retention)', money(salesLedger)])
     rows.push(['  less retention invoices', money(retention)])
     rows.push(['  less eligibility caps (materials / variations / ceiling)', money(capped)])
-    rows.push(['  less over insured limit', money(overLimit)])
-    rows.push(['  less no insured limit set', money(noLimit)])
-    rows.push(['= Approved Debt', money(totals.fundable)])
+    rows.push(['= Approved Debt (before insured limits)', money(totals.fundable)])
+    rows.push(['  less debt with NO insured limit set - funded at zero', money(noLimitDebt)])
+    rows.push(['  less debt over the insured limit', money(overLimitDebt)])
+    rows.push(['= Insurable Approved Debt', money(Math.max(0, totals.fundable - noLimitDebt - overLimitDebt))])
     rows.push(['High involvement (entered from Bibby)', money(totals.highInv)])
     rows.push([`Advance rate`, `${settings.advanceRate}%`])
     rows.push(['= Approved Funding', money(totals.grossAdvance)])
     rows.push(['Funds in use / drawn', money(totals.drawn)])
     rows.push(['= Availability', money(totals.availability)])
+    rows.push([])
+    // Per customer, so a missing insured limit is traceable to a name rather than being
+    // a single large number with nowhere to go.
+    rows.push(['BY CUSTOMER'])
+    rows.push(['Customer', 'Fundable debt', 'Insured limit', 'Limit set?', 'Advance', 'Debt not funded'])
+    for (const c of [...customers].sort((a, b) => (b.hasLimit ? 0 : b.fundable) - (a.hasLimit ? 0 : a.fundable) || b.fundable - a.fundable)) {
+      const notFunded = rate > 0 ? ((c.rawAdvance || 0) - (c.advance || 0)) / rate : 0
+      rows.push([c.customer, money(c.fundable), money(c.insured), c.hasLimit ? 'yes' : 'NO LIMIT SET', money(c.advance), money(notFunded)])
+    }
     rows.push([])
     rows.push(['INVOICE DETAIL'])
     rows.push(['Customer', 'Project', 'Invoice', 'Reference', 'Date', 'Amount due', 'Retention?', 'App matched', 'Contract value', 'Project excluded by caps', 'Reasons'])
