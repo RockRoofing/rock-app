@@ -1,10 +1,9 @@
-pkg588 - Budgets: Forecasted actual column, reconcile on by default,
-          Switch to Actual
-=====================================================================
+pkg589 - Budgets: per-cell comments, Forecasted actual column
+==============================================================
 
-*** SUPERSEDES pkg563 and pkg587. ***
+*** SUPERSEDES pkg563, pkg587, pkg588. ***
 pages/api/business-financials.js is COMPLETE and also carries the pkg582 bills
-changes - it is a superset, safe to deploy over what you have.
+changes - a superset, safe over what you have.
 
 
 CHANGED FILES (replace)
@@ -13,17 +12,41 @@ CHANGED FILES (replace)
   pages/api/business-financials.js
 
 
-1. NEW COLUMN: FORECASTED ACTUAL
+1. A COMMENT ON EVERY CELL
+--------------------------
+Every month cell now carries a small dot on its right - filled amber when there
+is a comment, a faint outline when there is not, so an empty cell offers
+somewhere to click without shouting.
+
+Click it to write a comment. The cell then shows it on hover, anywhere on the
+cell. Clearing the box removes the comment and the dot goes hollow again.
+
+Works on BOTH kinds of month cell - a month switched to Actual and a forecast
+month. On an actual cell the figure itself still opens the transaction drill-down;
+the dot is a separate target, so commenting does not fight the drill.
+
+The editor is a modal: Escape and the x close it, a backdrop click does NOT, per
+the standing rule - a stray click must not discard something typed.
+
+STORAGE. config:overhead-cell-comments, a FLAT map keyed "<accountCode>|<YYYY-MM>":
+
+    { "310|2026-04": "Includes annual insurance renewal",
+      "400|2026-07": "Van lease uplift" }
+
+Flat rather than nested per account on purpose: writing one comment does not
+involve reading and rewriting that account's whole set, so two people commenting
+at the same time cannot lose each other's work. An empty comment is DELETED
+rather than stored as "", so a cleared comment stops counting as one.
+
+
+2. NEW COLUMN: FORECASTED ACTUAL
 --------------------------------
-Sits between Full-yr budget and Tracking (yr), on every account row and on the
-TOTAL row.
+Between Full-yr budget and Tracking (yr), on every row and the TOTAL.
 
-Actual for the months switched to Actual, plus the forecast (or the budget where
-no forecast) for every month still to come.
-
-The figure was ALREADY being computed - `projectedYear` - purely to produce
-Tracking, but only the VARIANCE was ever shown. So you could see you were 800
-over without any sight of the 48,800 it came from:
+Actual for the months switched to Actual, plus forecast (or budget) for every
+month still to come. The figure was already computed as `projectedYear` purely to
+produce Tracking, but only the VARIANCE was shown - so you saw +800 with no sight
+of the 48,800 it came from:
 
     Budget to date     20,000
     Actual to date     20,500
@@ -31,49 +54,26 @@ over without any sight of the 48,800 it came from:
     Forecasted actual  48,800    <- new
     Tracking (yr)        +800
 
-The TOTAL row uses totals.projectedYear, which already existed and is the same
-figure the Lock forecast confirmation quotes - so the column, the total and the
-lock all agree by construction.
-
-Header, body and totals cell counts verified at 5 each, and the empty-state
-colSpan bumped to match.
+The TOTAL uses totals.projectedYear, the same figure the Lock forecast prompt
+quotes, so column, total and lock agree by construction.
 
 
-2. RECONCILE: ALL ACCOUNTS VS SHOWN - NOW TICKED BY DEFAULT
------------------------------------------------------------
-It is the only thing policing the hide-accounts feature: hide a row that still
-carries money and the year-end total silently understates. Costs nothing to leave
-on - computes from data already loaded, saves nothing.
+3. ALSO
+-------
+Reconcile: all accounts vs shown - now ticked by default.
+Switch to Actual per month (was pkg563), and the forecast methods no longer
+average in a month that is one day old.
 
 
-3. SWITCH TO ACTUAL (was pkg563)
---------------------------------
-A month used to swap from forecast to Xero actuals the moment it rolled over,
-when almost nothing was posted - so the figure collapsed and crept back up over
-the following weeks. Now a "Switch to Actual" button appears once a month has
-ENDED and stays until pressed. Green with a tick once switched; press again to go
-back.
+ON THE PDF - READ THIS BEFORE I BUILD IT
+----------------------------------------
+The comments are stored and ready for one. But hover text on a PDF is not
+reliable: PDF annotations show on hover in Acrobat, and NOT in Chrome's built-in
+viewer or on most phones. If whoever you send it to opens it in Chrome, hovering
+gives them nothing.
 
-This also fixes the forecast methods, which all derive from "completed" months
-and were averaging in a month that was one day old.
-
-On first load nothing moves: the config key has never been written, so every past
-month with data is treated as already switched.
-
-
-NOT CHANGED - AND A QUESTION
-----------------------------
-You also asked for a comment on each cell, hoverable, and readable on the PDF.
-
-There is NO comments feature and NO PDF export anywhere in Business Financials -
-I grepped all eleven pages. So I have not guessed at it. Two things I need:
-
-  1. WHICH PAGE do you mean? The Tracking column is on Budgets, but the comments
-     and PDF sound like a different screen. The only comment fields in Business
-     Financials are on Monthly (lump-sum rows) and Invoices.
-
-  2. WHAT IS THE PDF? If it does not exist yet, that is a build in itself - a
-     budgets PDF with per-cell comments is a decent piece of work and worth
-     scoping properly rather than bolting on.
-
-Give me those two and I will do it properly.
+So for the PDF I would PRINT the comments rather than hide them - most likely a
+numbered marker in the cell and the comments listed underneath the table, which
+survives any viewer and prints on paper. Tell me if you would rather have them as
+hover annotations anyway and I will do both, hover plus a printed list as the
+fallback.

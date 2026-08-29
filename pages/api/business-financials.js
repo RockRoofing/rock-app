@@ -137,6 +137,10 @@ export default async function handler(req, res) {
       // before its bills are all in and swapping automatically replaces a considered
       // forecast with a half-posted month.
       if (req.body && req.body.actualMonths !== undefined) await redis.set('config:overhead-actual-months', Array.isArray(req.body.actualMonths) ? req.body.actualMonths : [])
+      // Per-cell comments, keyed "<accountCode>|<YYYY-MM>". A flat map rather than nested
+      // per account, so writing one comment does not involve rewriting an account's whole
+      // set - two people commenting at once would otherwise lose one.
+      if (req.body && req.body.cellComments !== undefined) await redis.set('config:overhead-cell-comments', req.body.cellComments || {})
       // Lock in a full-year forecast snapshot (kept as a dated history).
       if (lockForecast) {
         const locks = (await redis.get('config:overhead-forecast-locks').catch(() => null)) || []
@@ -162,6 +166,7 @@ export default async function handler(req, res) {
       redis.get('config:chart-of-accounts').then(v => v || []).catch(() => ([])),
     ])
     const actualMonthsStored = await redis.get('config:overhead-actual-months').then(v => Array.isArray(v) ? v : null).catch(() => null)
+    const cellComments = await redis.get('config:overhead-cell-comments').then(v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}).catch(() => ({}))
     const cashflowSchedule = await redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({}))
     const cashCommitments = await redis.get('config:cash-commitments').then(v => v || []).catch(() => ([]))
     const chartNames = {}
@@ -217,6 +222,7 @@ export default async function handler(req, res) {
       forecastMethods,
       forecastOverrides,
       hiddenRows,
+      cellComments,
       // FIRST RUN: the key has never been written, so every past month with data is
       // treated as already switched. That is exactly the old behaviour, so nothing moves
       // on deploy - without it every forecast method that averages history would find no

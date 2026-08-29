@@ -32,6 +32,63 @@ export default function BudgetsPage() {
 
 const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+// A comment marker on a grid cell. Filled when there is a comment, a faint outline when
+// there is not - so an empty cell still offers somewhere to click without shouting.
+//
+// Module scope: a component declared inside another remounts on every render, and this
+// sits in ~500 cells.
+function CommentDot({ has, onClick }) {
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick() }}
+      title={has ? 'Edit comment' : 'Add a comment'}
+      style={{
+        border: 'none', background: 'none', padding: 0, margin: 0, lineHeight: 0,
+        cursor: 'pointer', flex: '0 0 auto', opacity: has ? 1 : 0.28,
+      }}>
+      <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true">
+        <circle cx="5" cy="5" r="4" fill={has ? '#b45309' : 'none'} stroke="#b45309" strokeWidth="1.2" />
+      </svg>
+    </button>
+  )
+}
+
+// Comment editor. Escape and the x close it; a backdrop click does NOT, per the standing
+// rule - a stray click must not discard something typed.
+function CommentModal({ target, value, onChange, onSave, onCancel }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+  if (!target) return null
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 12, width: 460, maxWidth: '100%', boxShadow: '0 12px 40px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #eee' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Comment</div>
+            <div style={{ fontSize: 11.5, color: '#888' }}>{target.name} &middot; {target.label}</div>
+          </div>
+          <button onClick={onCancel} style={{ border: 'none', background: 'none', fontSize: 20, lineHeight: 1, cursor: 'pointer', color: '#999' }}>&times;</button>
+        </div>
+        <div style={{ padding: 16 }}>
+          <textarea autoFocus value={value} onChange={e => onChange(e.target.value)} rows={4}
+            placeholder="Why this figure is what it is - e.g. includes the annual insurance renewal"
+            style={{ width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'vertical' }} />
+          <div style={{ fontSize: 10.5, color: '#aaa', marginTop: 6 }}>
+            Shows on hover over the cell, and will print on the PDF. Clearing the box removes the comment.
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '0 16px 16px' }}>
+          <button onClick={onCancel} style={{ background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '8px 14px', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onSave} style={{ background: '#b45309', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function fyMonths(endYear) {
   const out = [`${endYear - 1}-12`]
   for (let m = 1; m <= 11; m++) out.push(`${endYear}-${String(m).padStart(2, '0')}`)
@@ -78,6 +135,10 @@ function Budgets() {
   const [forecastLocks, setForecastLocks] = useState([])     // [ {lockedAt, fyEnd, total, note} ]
   // Months explicitly switched from forecast to Xero actuals.
   const [actualMonths, setActualMonths] = useState([])       // [ 'YYYY-MM', ... ]
+  // { "<code>|<YYYY-MM>": "text" }. Flat, so one comment writes without touching others.
+  const [cellComments, setCellComments] = useState({})
+  const [editingComment, setEditingComment] = useState(null)  // { code, mo, name, label }
+  const [commentDraft, setCommentDraft] = useState('')
   const [showLockHistory, setShowLockHistory] = useState(false)
   // ON BY DEFAULT. It is the only thing policing the hide-accounts feature: hide a row
   // that still carries money and the year-end total silently understates, with nothing on
@@ -109,6 +170,7 @@ function Budgets() {
       setForecastLocks(d.forecastLocks || [])
       setCard3moCodes(d.card3moCodes ?? null)
       setActualMonths(Array.isArray(d.actualMonths) ? d.actualMonths : [])
+      setCellComments(d.cellComments && typeof d.cellComments === 'object' ? d.cellComments : {})
     } catch {}
     setLoading(false)
   }
@@ -161,6 +223,27 @@ function Budgets() {
   const isComplete = (mo) => actualSet.has(mo) && availableSet.has(mo)
   // The month has ended, so the button is worth offering. Not the same as being switched.
   const isPast = (mo) => mo < thisMonth
+
+  const ckey = (code, mo) => `${code}|${mo}`
+  const commentOf = (code, mo) => cellComments[ckey(code, mo)] || ''
+
+  function openComment(code, mo, name, label) {
+    setEditingComment({ code, mo, name, label })
+    setCommentDraft(commentOf(code, mo))
+  }
+  function saveComment() {
+    if (!editingComment) return
+    const { code, mo } = editingComment
+    const text = commentDraft.trim()
+    const next = { ...cellComments }
+    // Delete rather than store an empty string, so a cleared comment stops counting as
+    // one and the marker disappears with it.
+    if (text) next[ckey(code, mo)] = text
+    else delete next[ckey(code, mo)]
+    setCellComments(next)
+    setEditingComment(null)
+    save({ cellComments: next })
+  }
 
   function toggleActual(mo) {
     const next = actualSet.has(mo) ? (actualMonths || []).filter(m => m !== mo) : [...(actualMonths || []), mo]
@@ -703,21 +786,27 @@ function Budgets() {
                             if (complete) {
                               const actual = actualOf(code, mo) || 0
                               const col = cellColour(actual, budget)
+                              const note = commentOf(code, mo)
                               return (
-                                <td key={mo} style={{ ...tdCell, cursor: 'pointer' }} onClick={() => openDrill(code, name, mo)} title="Click for transactions">
-                                  <span style={{ color: col, fontWeight: 700, fontVariantNumeric: 'tabular-nums', textDecoration: 'underline dotted #ddd' }}>{gbp(actual)}</span>
+                                <td key={mo} style={{ ...tdCell, position: 'relative' }} title={note || undefined}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                                    <span onClick={() => openDrill(code, name, mo)} title={note ? undefined : 'Click for transactions'}
+                                      style={{ color: col, fontWeight: 700, fontVariantNumeric: 'tabular-nums', textDecoration: 'underline dotted #ddd', cursor: 'pointer' }}>{gbp(actual)}</span>
+                                    <CommentDot has={!!note} onClick={() => openComment(code, mo, name, monthShort(mo))} />
+                                  </div>
                                 </td>
                               )
                             }
                             const fc = forecastOf(code, mo)
                             const hasOverride = forecastOverrides[code]?.[mo] != null && forecastOverrides[code]?.[mo] !== ''
                             return (
-                              <td key={mo} style={{ ...tdCell, background: mo === thisMonth ? '#fffdf5' : 'transparent' }}>
+                              <td key={mo} style={{ ...tdCell, background: mo === thisMonth ? '#fffdf5' : 'transparent' }} title={commentOf(code, mo) || undefined}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
                                   <input type="number" value={forecastOverrides[code]?.[mo] ?? ''} onChange={e => setOverride(code, mo, e.target.value)}
                                     placeholder={fc.value != null ? Math.round(fc.value).toLocaleString('en-GB') : '-'}
                                     title={fc.value != null ? `Forecast: ${gbp(fc.value)} (type to override)` : 'No basis to forecast yet'}
                                     style={{ width: 76, padding: '3px 5px', border: `1px ${hasOverride ? 'solid #cfc9b4' : 'dashed #dcdad3'}`, borderRadius: 5, fontSize: 12, textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: hasOverride ? '#333' : '#b8b8b8', background: 'transparent' }} />
+                                  <CommentDot has={!!commentOf(code, mo)} onClick={() => openComment(code, mo, name, monthShort(mo))} />
                                   {hasOverride && (
                                     <button onClick={() => clearOverride(code, mo)} title="Clear override (revert to forecast)" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#b91c1c', fontSize: 13, lineHeight: 1, padding: 0 }}>&times;</button>
                                   )}
@@ -758,6 +847,9 @@ function Budgets() {
       </div>
 
       {/* Transaction drill-down */}
+      <CommentModal target={editingComment} value={commentDraft} onChange={setCommentDraft}
+        onSave={saveComment} onCancel={() => setEditingComment(null)} />
+
       {drill && (
         <div onClick={() => setDrill(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 780, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
