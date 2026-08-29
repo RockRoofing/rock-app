@@ -1,86 +1,40 @@
-pkg565 - Retention: 612 split into Deducted / Released / Held, plus the
-         Retention Outstanding card
-=======================================================================
+pkg564 - Retention Tracker: Retention Outstanding card
+=======================================================
 
-*** SUPERSEDES pkg564 (not deployed). ***
+*** CONTAINS THE pkg539 AND pkg541 CHANGES TO retention.js AS WELL. ***
+It is a complete file. If you have not deployed pkg539 / pkg541 yet, deploy their
+OTHER files and use THIS retention.js.
 
-Both files are COMPLETE and also carry the pkg539 / pkg541 changes to
-retention.js and dashboard.js. If those are not deployed yet, use THESE two files
-and deploy the other pkg539 / pkg541 files alongside.
+
+NEW FILES
+---------
+  None.
 
 
 CHANGED FILES (replace)
 -----------------------
   pages/retention.js
-  pages/api/dashboard.js
 
 
-1. RETENTION OUTSTANDING CARD
------------------------------
-Fifth card: the halves NOT yet ticked as Received, across the projects shown.
-Red while there is something to chase, green at zero.
+THE CARD
+--------
+A fifth card, "Retention Outstanding": the halves NOT yet ticked as Received,
+across the projects shown.
 
   Total Retention        gross - 1st Value + 2nd Value, ignores payment
   Retention Outstanding  the same, less the halves ticked Received
 
-calcBalance() does exactly this and had been sitting unused in retention.js since
-it was written. Both cards now carry a tooltip saying which is which.
+Red while there is anything to chase, green at zero. Both cards now carry a
+tooltip saying which is which, because two money figures side by side with no
+explanation is how the confusion started.
 
-Note both sum the FILTERED view, while the two counts beside them use the whole
-register. That was already true; it just matters more now there are two money
-cards.
-
-
-2. THE 612 COLUMN WAS HIDING THE ANSWER
----------------------------------------
-  dashboard.js:495   retention612Allocated: Math.abs(retention612)
-
-retention612 is signed and summed - deductions negative, releases positive.
-Taking the absolute value of the net made two completely different situations
-identical:
-
-                          OLD      DEDUCTED  RELEASED  HELD   RELEASED+PAID
-  deducted only          10,000      10,000        0  10,000            0
-  half released, paid     5,000      10,000    5,000   5,000        5,000
-  half released, unpaid   5,000      10,000    5,000   5,000            0
-  no 612 lines at all         0           -        -       -            -
-
-The middle two both read 5,000 and could not be told apart. One is banked, the
-other has left retention and become an ordinary debtor. That is the reason the
-register would not reconcile to Xero.
-
-"612 Allocated" is now three columns - 612 Deducted, 612 Released, 612 Held - all
-sortable. Held is deducted less released and is the figure to compare against
-Retention Owed. Hovering Released shows how many 612 lines were found, the date
-of the earliest, and how much of the release sits on invoices now paid.
-
-Computed from the stored invoice lines, so it works WITHOUT a resync.
+calcBalance() - which does exactly this - has been sitting in retention.js since
+it was written and was never called anywhere. It is now.
 
 
-3. THE HISTORIC DATA PROBLEM - HANDLED, NOT HIDDEN
---------------------------------------------------
-You said older releases were often posted as a plain sales invoice with no 612
-coding. That means 612 Released will UNDER-report on old projects, and a naive
-zero would read as "nothing released" when the truth is "no evidence".
-
-So a project with NO 612 movement at all shows a DASH in all three columns, not a
-zero, with a tooltip saying no 612 lines were found and why that might be. A zero
-only appears where there genuinely is 612 activity and none of it is a release.
-
-The manual Received ticks remain the source of truth for what has been paid.
-Nothing here overwrites them - the 612 columns are evidence to reconcile against,
-which is the whole point.
-
-
-4. WHAT TO DO NEXT
-------------------
-Run a LONG invoice sync before trusting these columns. The Sync from Xero button
-sends months: 6 and the endpoint accepts up to 60 - and per the comment at
-sync-invoices.js:186, lines outside the window are never re-fetched, so 612 data
-on older projects is partial. Gas Lane is the worked example in that comment:
-17,317 of retention reading as a few hundred.
-
-Once a long sync has run, compare 612 Held against Retention Owed project by
-project. Where they agree, the ticks can be trusted. Where 612 Released is a dash
-on a project you know has been part-released, that is a project whose releases
-were never coded to 612 - and no automatic method will ever find them.
+BOTH CARDS SUM THE FILTERED VIEW
+--------------------------------
+Worth knowing: these two use allEntries, so filtering the table changes them. The
+"In Defects Liability" and "Live Projects" counts beside them deliberately use
+the whole register and do NOT change with the filters. That is intentional, but
+it does mean the five cards are not all describing the same set of projects.
