@@ -11,10 +11,31 @@ const todayStr = () => new Date().toISOString().slice(0, 10)
 
 // Mirror of the Retention Tracker helpers so figures always balance with it.
 const retStatusOf = (e) => e.retStatus || (e.markedComplete ? 'complete' : 'live')
+
+// IS A HALF RELEASED? Must match the tracker exactly or the two pages disagree.
+//
+// This page read `release1Received` - a field NOTHING ever sets. It was left over from
+// the tracker's old design, where the green state was inferred from the paid balance
+// rather than stored. So no release was ever deducted here: confirming a half on the
+// tracker changed nothing on this page.
+//
+// The manual mark is an explicit true/false so it can also override an application that
+// says released when it was not. undefined means nobody has said, and only then does the
+// application decide.
+function released1(e) {
+  if (e.release1Manual === true) return true
+  if (e.release1Manual === false) return false
+  return !!e.appRelease1
+}
+function released2(e) {
+  if (e.release2Manual === true) return true
+  if (e.release2Manual === false) return false
+  return !!e.appRelease2
+}
 function calcBalance(e) {
   const r1 = parseFloat(e.release1Value || 0) || 0
   const r2 = parseFloat(e.release2Value || 0) || 0
-  const received = (e.release1Received ? r1 : 0) + (e.release2Received ? r2 : 0)
+  const received = (released1(e) ? r1 : 0) + (released2(e) ? r2 : 0)
   return (r1 + r2) - received
 }
 
@@ -58,8 +79,11 @@ export default function RetentionsDue() {
         finalAccount: p.afa || 0, projectValue: p.contractValue || 0,
         retentionPct: (p.retentionPct || 0) * 100,
         completionDate: p.completionDate || p.pcDate || '',
-        release1Value: (p.totalRetention || 0) / 2 || 0, release1Date: '', release1Received: false,
-        release2Value: (p.totalRetention || 0) / 2 || 0, release2Date: '', release2Received: false,
+        release1Value: (p.totalRetention || 0) / 2 || 0, release1Date: '',
+        release2Value: (p.totalRetention || 0) / 2 || 0, release2Date: '',
+        // A half ticked on the project's latest application releases it automatically,
+        // exactly as on the tracker.
+        appRelease1: !!p.appRelease1, appRelease2: !!p.appRelease2,
         status: p.status,
       }))
 
@@ -70,6 +94,7 @@ export default function RetentionsDue() {
           return {
             ...e,
             retentionOwed: x.retentionOwed, retention612Allocated: x.retention612Allocated,
+            appRelease1: x.appRelease1, appRelease2: x.appRelease2,
             finalAccount: e.finalAccount || x.finalAccount,
             projectValue: e.projectValue || x.projectValue,
             retentionPct: e.retentionPct || x.retentionPct,
@@ -95,14 +120,17 @@ export default function RetentionsDue() {
   const releases = useMemo(() => {
     const out = []
     for (const e of entries) {
-      if (retStatusOf(e) === 'complete') {
-        // Complete = fully released; only include anything still flagged not received.
-      }
+      // NOTE: an empty if-block sat here saying "Complete = fully released; only include
+      // anything still flagged not received", but it did nothing at all - no continue, no
+      // filter. Left as-is deliberately rather than made to skip complete projects: a
+      // project marked complete whose halves are NOT released is exactly the money you
+      // would want chasing, and silently dropping it would lose it from this page AND
+      // break the balance check against the tracker, which counts it.
       const name = `${e.ourRef ? e.ourRef + ' - ' : ''}${e.customerName || e.projectName || 'Project'}`
       const r1 = parseFloat(e.release1Value || 0) || 0
       const r2 = parseFloat(e.release2Value || 0) || 0
-      if (r1 && !e.release1Received) out.push({ ref: e.ourRef || '', name, project: e.projectName || '', which: '1st release', date: e.release1Date || '', amount: r1, id: (e.id || e.xeroId) + '-r1' })
-      if (r2 && !e.release2Received) out.push({ ref: e.ourRef || '', name, project: e.projectName || '', which: '2nd release', date: e.release2Date || '', amount: r2, id: (e.id || e.xeroId) + '-r2' })
+      if (r1 && !released1(e)) out.push({ ref: e.ourRef || '', name, project: e.projectName || '', which: '1st release', date: e.release1Date || '', amount: r1, id: (e.id || e.xeroId) + '-r1' })
+      if (r2 && !released2(e)) out.push({ ref: e.ourRef || '', name, project: e.projectName || '', which: '2nd release', date: e.release2Date || '', amount: r2, id: (e.id || e.xeroId) + '-r2' })
     }
     return out
   }, [entries])
