@@ -14,7 +14,16 @@ export default function ConnectPage() {
   function connectXero() {
 const clientId = '934571EC178A488AAFFB4C7E8C4DDD43'
 const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback')
-    const scope = encodeURIComponent('openid offline_access accounting.invoices.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read')
+    // accounting.transactions.read is NOT covered by accounting.invoices.read.
+    //
+    // Invoices and CreditNotes come under accounting.invoices.read, which is why bills
+    // and credit notes sync fine. OVERPAYMENTS and PREPAYMENTS sit under
+    // accounting.transactions, which was never requested - so that endpoint returns
+    // 401 AuthorizationUnsuccessful while every other call on the same token succeeds.
+    //
+    // Adding a scope does NOT apply to an existing connection. Xero has to be
+    // reconnected from this page before it takes effect.
+    const scope = encodeURIComponent('openid offline_access accounting.invoices.read accounting.transactions.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read')
     window.location.href = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=xero_auth&prompt=consent`
   }
 

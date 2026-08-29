@@ -1,67 +1,85 @@
-pkg577 - Bills: the Status filter was excluding every overpayment
-==================================================================
+pkg578 - Bills: missing Xero scope for Overpayments
+====================================================
 
-*** SUPERSEDES pkg572 - pkg576. Deploy this one. ***
-Heading marker becomes "v576".
+*** SUPERSEDES pkg572 - pkg577. Deploy this one. ***
+Heading marker becomes "v577".
+
+*** THIS ONE NEEDS AN ACTION FROM YOU AFTER DEPLOY - SEE STEP 2. ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/connect.js                      <- the actual fix
   lib/xero.js
   pages/api/business-financials.js
   pages/business-financials/bills.js
 
 
-WHAT "0 OVERPAYMENTS" TOLD US
+THE CAUSE - FOUND
+-----------------
+pages/connect.js:17 requested these scopes:
+
+  openid offline_access accounting.invoices.read accounting.contacts.read
+  accounting.reports.profitandloss.read accounting.settings.read
+  accounting.manualjournals.read accounting.banktransactions.read projects.read
+
+accounting.invoices.read covers Invoices AND CreditNotes - which is exactly why
+bills and credit notes sync perfectly. OVERPAYMENTS and PREPAYMENTS sit under
+accounting.transactions, which was never requested. Hence a 401
+AuthorizationUnsuccessful on that endpoint alone, on a token where everything
+else works.
+
+Nothing in the fetching code could ever have fixed this.
+
+
+WHAT TO DO
+----------
+1. Deploy this package. Check the heading reads "Bills to Pay v577".
+
+2. GO TO /connect AND RECONNECT XERO.
+   This is the bit that actually matters. Adding a scope does NOT apply to an
+   existing connection - the token was issued under the old scope list and keeps
+   those permissions until you re-authorise. The consent screen will now ask for
+   the extra permission.
+
+3. Press Sync bills.
+   Expect: "117 bills, 1 credit notes, 4 overpayments."
+   Total drops 307,471.06 -> 302,771.49.
+
+
+IF THE SCOPE IS STILL MISSING
 -----------------------------
-It ruled out everything else. The deploy is live (v574 showed), the SPEND-
-OVERPAYMENT type fix is in, and no error surfaced. So Xero IS returning
-overpayments and my query was throwing them away.
+The 401 no longer reports Xero's "AuthorizationUnsuccessful", which tells you
+nothing. It now says:
 
-    const where = encodeURIComponent('Status=="AUTHORISED"')
-
-An overpayment is money that has ALREADY LEFT THE BANK, so Xero marks it PAID,
-not AUTHORISED. I copied that clause from the credit-note fetch above it, where
-AUTHORISED is correct precisely because a credit note is not a payment. Applied
-to overpayments it excluded all of them.
-
-Second mistake of the same shape as the first: reusing a neighbouring pattern
-without checking it meant the same thing for a different object.
+  "Xero has not granted accounting.transactions.read, which Overpayments needs.
+   Reconnect Xero from /connect to grant it - adding the scope does not apply to
+   an existing connection."
 
 
-THE FIX
--------
-No Status filter at all. RemainingCredit > 0 is the real test of "still
-outstanding" - it is what is left unallocated, whatever the status says. Only
-VOIDED and DELETED are dropped.
+THE TWO EARLIER MISTAKES, BOTH MINE, BOTH THE SAME SHAPE
+--------------------------------------------------------
+Reusing a neighbouring pattern without checking it meant the same thing:
 
+  pkg573  tested Type !== 'SPEND'. Xero uses "SPEND-OVERPAYMENT".
+          fetchBankTransactions ten lines up already used startsWith('SPEND').
+  pkg576  filtered Status=="AUTHORISED", copied from the credit-note fetch. An
+          overpayment is already paid, so Xero marks it PAID.
 
-AND IF IT IS STILL ZERO, IT NOW SAYS WHY
-----------------------------------------
-The sync message appends the full breakdown whenever none come through:
-
-  "117 bills, 1 credit notes, 0 overpayments. [12 returned, 0 kept, 12 not SPEND,
-   0 fully allocated, 0 voided, statuses {"PAID":12}]"
-
-That tells us in one line whether Xero returned any at all, and exactly which
-test rejected them - rather than another round of me guessing. Same detail is
-logged server-side.
-
-
-WHAT SUCCESS LOOKS LIKE
------------------------
-"117 bills, 1 credit notes, 4 overpayments." and the total drops from
-307,471.06 to 302,771.49.
-
-Reminder - a THIRD number, by design:
-  app                          302,771.49   nets overpayments off
-  Xero "Bills to pay" screen   307,471.06   excludes them
-  Xero raw CSV export          312,170.63   lists them positive
+Both are fixed. There is no status filter now - RemainingCredit > 0 is the real
+test of "still outstanding", and only VOIDED/DELETED are dropped.
 
 
 ALSO IN THIS PACKAGE
 --------------------
 Cost account filter beside the supplier filter - searchable, remembered per
-browser, a bill shown if ANY of its lines is on a picked account. Credit notes
+browser. A bill shows if ANY of its lines is on a picked account. Credit notes
 and overpayments carry lineCodes so they cannot vanish under a filter and push
 the total up.
+
+Sync now reports what it found, with a full breakdown when nothing comes through.
+
+REMINDER - a THIRD number, by design:
+  app                          302,771.49   nets overpayments off
+  Xero "Bills to pay" screen   307,471.06   excludes them
+  Xero raw CSV export          312,170.63   lists them positive
