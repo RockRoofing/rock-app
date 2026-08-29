@@ -571,11 +571,10 @@ export default function RetentionPage() {
   }
 
   const totals = {
-    total: allEntries.reduce((s, e) => s + (parseFloat(e.release1Value || 0) + parseFloat(e.release2Value || 0)), 0),
-    // STILL TO COME IN: the halves less the halves ticked as received. calcBalance() has
-    // been sitting in this file unused since it was written - it is exactly this, and it
-    // is what "how much retention are we chasing" actually means. Total Retention above
-    // is the GROSS figure and takes no account of anything having been paid.
+    // STILL TO COME IN: the release halves, less any confirmed released. calcBalance()
+    // had been sitting in this file unused since it was written - it is exactly this, and
+    // it is what "how much retention are we chasing" actually means. The gross figure it
+    // replaced took no account of anything having been released.
     outstanding: allEntries.reduce((s, e) => s + calcBalance(e), 0),
     // REMAINING TO BE CLAIMED, ex VAT: Final Account minus Invoiced.
     //
@@ -640,12 +639,10 @@ export default function RetentionPage() {
               needs inside a frame. */}
           {!embed && (
           <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'stretch', flexShrink: 0 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, flex: 1 }}>
               {[
-                { label: 'Total Retention', value: fmtC(totals.total), color: '#1a1a2e',
-                  tip: 'GROSS retention across the projects shown - 1st Value plus 2nd Value. Takes no account of what has been received.' },
                 { label: 'Retention Outstanding', value: fmtC(totals.outstanding), color: totals.outstanding > 1 ? '#dc2626' : '#16a34a',
-                  tip: 'The halves NOT yet ticked as Received, across the projects shown. This is what is still being chased. Driven by the Received ticks - it does not read payments from Xero.' },
+                  tip: 'The halves not yet confirmed released, across the projects shown - what is still being chased. Driven by the release marks on each row and by any half ticked on an application. It does not read payments from Xero.' },
                 { label: 'Remaining to Claim', value: fmtC(totals.remaining), color: totals.remaining > 1 ? '#dc2626' : '#16a34a',
                   tip: 'Final Account minus Invoiced, excluding VAT, across the projects shown. What is still to be claimed - the sum of the Account Remaining column.' },
                 { label: 'In Defects Liability', value: totals.defects, raw: true, color: '#ca8a04',
