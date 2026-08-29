@@ -1,79 +1,77 @@
-pkg589 - Budgets: per-cell comments, Forecasted actual column
-==============================================================
+pkg590 - Cash Schedule: split by PERCENTAGE so it tracks the month
+===================================================================
 
-*** SUPERSEDES pkg563, pkg587, pkg588. ***
-pages/api/business-financials.js is COMPLETE and also carries the pkg582 bills
-changes - a superset, safe over what you have.
+Independent of pkg589. Two files.
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/budgets.js
-  pages/api/business-financials.js
+  pages/business-financials/cash-schedule.js
+  pages/business-financials/cashflow.js
 
 
-1. A COMMENT ON EVERY CELL
---------------------------
-Every month cell now carries a small dot on its right - filled amber when there
-is a comment, a faint outline when there is not, so an empty cell offers
-somewhere to click without shouting.
+ANSWERING THE QUESTION FIRST
+----------------------------
+The AMOUNT already comes through per month, correctly. cashflow.js:29 reads
+predictedByCodeMonth, which mirrors the Budgets page month by month - the actual
+for a month switched to Actual, a typed override where there is one, otherwise
+the forecast method, budget last. Sep, Oct and Nov each get their own figure. The
+flat budget is only the fallback. And it already flows to Cash Flow, not
+eventually.
 
-Click it to write a comment. The cell then shows it on hover, anywhere on the
-cell. Clearing the box removes the comment and the dot goes hollow again.
+The TIMING is per code, not per month - "pay on the 28th" applies to every month.
+Carry-forward entries are the escape for a one-off shift.
 
-Works on BOTH kinds of month cell - a month switched to Actual and a forecast
-month. On an actual cell the figure itself still opens the transaction drill-down;
-the dot is a separate target, so commenting does not fight the drill.
-
-The editor is a modal: Escape and the x close it, a backdrop click does NOT, per
-the standing rule - a stray click must not discard something typed.
-
-STORAGE. config:overhead-cell-comments, a FLAT map keyed "<accountCode>|<YYYY-MM>":
-
-    { "310|2026-04": "Includes annual insurance renewal",
-      "400|2026-07": "Van lease uplift" }
-
-Flat rather than nested per account on purpose: writing one comment does not
-involve reading and rewriting that account's whole set, so two people commenting
-at the same time cannot lose each other's work. An empty comment is DELETED
-rather than stored as "", so a cleared comment stops counting as one.
+BUT you were right that it does not balance, and the cause is worse than a
+rounding gap.
 
 
-2. NEW COLUMN: FORECASTED ACTUAL
---------------------------------
-Between Full-yr budget and Tracking (yr), on every row and the TOTAL.
+THE DEFECT
+----------
+In 'multiday' mode, cashflow.js scheduled the TYPED AMOUNTS and never touched
+monthlyBudget at all:
 
-Actual for the months switched to Actual, plus forecast (or budget) for every
-month still to come. The figure was already computed as `projectedYear` purely to
-produce Tracking, but only the VARIANCE was shown - so you saw +800 with no sight
-of the 48,800 it came from:
+    const amount = (Number(d.amount) || 0) * vatMult + adj * share
 
-    Budget to date     20,000
-    Actual to date     20,500
-    Full-yr budget     48,000
-    Forecasted actual  48,800    <- new
-    Tracking (yr)        +800
+So the month's budget, forecast and actual were ignored entirely. Type 4,000
+across three days and Cash Flow pays 4,000 every month whatever the month says -
+and switching a month to Actual changed nothing.
 
-The TOTAL uses totals.projectedYear, the same figure the Lock forecast prompt
-quotes, so column, total and lock agree by construction.
+'oneday' and 'even' were fine; both use monthlyBudget.
+
+The editor made it worse: "Balances to budget" compared against the FLAT monthly
+budget, so it reported balanced while the months diverged.
+
+Budget 4,000/mo, forecast Sep 4,300 / Oct 4,000 / Nov 3,800:
+
+  AMOUNT basis    Sep 4,000 (out -300)   Oct 4,000 (ok)   Nov 4,000 (out +200)
+                  quarter 12,000 vs 12,100
+  PERCENT basis   Sep 4,300              Oct 4,000        Nov 3,800
+                  quarter 12,100 vs 12,100 - balances every month
 
 
-3. ALSO
+THE FIX
 -------
-Reconcile: all accounts vs shown - now ticked by default.
-Switch to Actual per month (was pkg563), and the forecast methods no longer
-average in a month that is one day old.
+"Specific days" now has a basis:
+
+  % OF THE MONTH'S BUDGET  each split is a share, so they always add to that
+                           month's figure whatever it is
+  FIXED AMOUNTS            paid as typed, whatever the month says
+
+Existing schedules default to FIXED, so nothing already saved changes meaning on
+deploy. A "Convert to %" button turns the typed amounts into shares of the budget,
+keeping the same split - so switching over is one click and keeps your pattern.
+
+In percent mode each row shows the resulting money next to the percentage at the
+current budget, and the footer checks against 100% rather than a cash figure.
+Fixed mode carries a warning saying it will not follow the forecast.
+
+VAT: in percent mode the gross-up already sits in monthlyBudget via amountFor(),
+so it is NOT applied a second time to each split. In fixed mode it still is, as
+before.
 
 
-ON THE PDF - READ THIS BEFORE I BUILD IT
-----------------------------------------
-The comments are stored and ready for one. But hover text on a PDF is not
-reliable: PDF annotations show on hover in Acrobat, and NOT in Chrome's built-in
-viewer or on most phones. If whoever you send it to opens it in Chrome, hovering
-gives them nothing.
-
-So for the PDF I would PRINT the comments rather than hide them - most likely a
-numbered marker in the cell and the comments listed underneath the table, which
-survives any viewer and prints on paper. Tell me if you would rather have them as
-hover annotations anyway and I will do both, hover plus a printed list as the
-fallback.
+WORTH DOING AFTER DEPLOY
+------------------------
+Any account on "Specific days" is still on fixed amounts and still will not
+balance. Open each, press Convert to %, and check the footer says 100%.

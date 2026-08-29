@@ -154,7 +154,9 @@ export default function CashSchedule() {
                             </div>
                           )}
                           {sc.mode === 'multiday' && (
-                            <DayAllocator sc={sc} budget={budget} onChange={(days) => setCode(a.code, { days })} />
+                            <DayAllocator sc={sc} budget={budget}
+                              onChange={(days) => setCode(a.code, { days })}
+                              onBasis={(basis) => setCode(a.code, { basis })} />
                           )}
                           {sc.mode === 'even' && <span style={{ color: '#888', fontSize: 12 }}>{budget ? `${gbp(budget)} spread across the month` : 'Set a monthly budget first'}</span>}
                           {!sc.mode && <span style={{ color: '#ccc', fontSize: 12 }}>Not included</span>}
@@ -236,29 +238,78 @@ export default function CashSchedule() {
   )
 }
 
-function DayAllocator({ sc, budget, onChange }) {
+function DayAllocator({ sc, budget, onChange, onBasis }) {
   const days = sc.days || []
-  const total = days.reduce((s, d) => s + (Number(d.amount) || 0), 0)
-  const remaining = Math.round((budget - total) * 100) / 100
+  // Default to AMOUNT when basis is absent, so nothing already saved changes meaning.
+  const byPct = sc.basis === 'percent'
+  const total = days.reduce((s, d) => s + (Number(byPct ? d.pct : d.amount) || 0), 0)
+  const remaining = byPct
+    ? Math.round((100 - total) * 100) / 100
+    : Math.round((budget - total) * 100) / 100
   const update = (i, patch) => { const next = days.map((d, j) => j === i ? { ...d, ...patch } : d); onChange(next) }
-  const add = () => onChange([...days, { day: 28, amount: remaining > 0 ? remaining : 0 }])
+  const add = () => onChange([...days, byPct
+    ? { day: 28, pct: remaining > 0 ? remaining : 0 }
+    : { day: 28, amount: remaining > 0 ? remaining : 0 }])
   const remove = (i) => onChange(days.filter((_, j) => j !== i))
+
+  // Turn the typed amounts into shares of the flat budget, so switching over keeps the
+  // same split rather than starting from nothing.
+  const convert = () => {
+    const sum = days.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+    const bandBase = sum || Number(budget) || 0
+    onChange(days.map(d => ({ ...d, pct: bandBase ? Math.round(((Number(d.amount) || 0) / bandBase) * 10000) / 100 : 0 })))
+    onBasis('percent')
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: '#888' }}>Split by</span>
+        <select value={byPct ? 'percent' : 'amount'} onChange={e => onBasis(e.target.value)} style={{ ...inp, width: 210 }}>
+          <option value="percent">% of the month&apos;s budget</option>
+          <option value="amount">Fixed amounts</option>
+        </select>
+        {!byPct && (
+          <button onClick={convert} style={addBtn} title="Convert the amounts below into percentages of the budget, keeping the same split.">
+            Convert to %
+          </button>
+        )}
+      </div>
+      {!byPct && (
+        <div style={{ fontSize: 10.5, color: '#b45309', lineHeight: 1.35 }}>
+          Fixed amounts are paid as typed every month. Budgets change month to month, so
+          these will not follow the forecast or an actual once a month is switched - use
+          them only for something genuinely fixed, like a set direct debit.
+        </div>
+      )}
       {days.map((d, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ color: '#888', fontSize: 12 }}>Day</span>
-          <input type="number" min={1} max={31} value={d.day} onChange={e => update(i, { day: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} style={{ ...inp, width: 56 }} />
-          <span style={{ color: '#999' }}>&pound;</span>
-          <input type="number" value={d.amount} onChange={e => update(i, { amount: e.target.value })} style={{ ...inp, width: 90 }} />
-          <input type="text" value={d.note || ''} placeholder="Comment (optional)" onChange={e => update(i, { note: e.target.value })} style={{ ...inp, width: 180 }} />
+          <input type="number" min={1} max={31} value={d.day} onChange={e => update(i, { day: Math.min(31, Math.max(1, Number(e.target.value) || 1)) })} style={{ ...inp, width: 64 }} />
+          {byPct ? (
+            <>
+              <input type="number" value={d.pct ?? ''} onChange={e => update(i, { pct: e.target.value })} style={{ ...inp, width: 78 }} />
+              <span style={{ color: '#999' }}>%</span>
+              <span style={{ fontSize: 11, color: '#aaa', width: 92, textAlign: 'right' }}>
+                {budget ? gbp((Number(d.pct) || 0) / 100 * budget) : ''}
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: '#999' }}>&pound;</span>
+              <input type="number" value={d.amount} onChange={e => update(i, { amount: e.target.value })} style={{ ...inp, width: 90 }} />
+            </>
+          )}
+          <input type="text" value={d.note || ''} placeholder="Comment (optional)" onChange={e => update(i, { note: e.target.value })} style={{ ...inp, flex: 1, minWidth: 120 }} />
           <button onClick={() => remove(i)} style={rmBtn}>&times;</button>
         </div>
       ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={add} style={addBtn}>+ Add day</button>
         <span style={{ fontSize: 11, color: Math.abs(remaining) < 0.01 ? '#16a34a' : '#b45309' }}>
-          {Math.abs(remaining) < 0.01 ? 'Balances to budget' : `${gbp(remaining)} unallocated`}
+          {byPct
+            ? (Math.abs(remaining) < 0.01 ? 'Adds up to 100%' : `${total.toFixed(2)}% allocated - ${remaining > 0 ? `${remaining.toFixed(2)}% left` : `${Math.abs(remaining).toFixed(2)}% over`}`)
+            : (Math.abs(remaining) < 0.01 ? 'Balances to this month\u2019s budget' : `${gbp(remaining)} unallocated`)}
         </span>
       </div>
     </div>

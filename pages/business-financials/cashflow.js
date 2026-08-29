@@ -58,14 +58,32 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
         const day = clampDay(y, m, Number(sc.day || 28))
         events.push({ date: `${mk}-${pad(day)}`, amount, code })
       } else if (sc.mode === 'multiday') {
-        // Specific-day splits; carry adjustment is applied pro-rata across the splits.
-        // Gross up each split by 20% when the code is VAT-flagged (matches the +VAT tick).
+        // TWO BASES.
+        //
+        // 'percent' - each split is a share of THIS MONTH'S figure, so the splits always
+        // add up to the month's budget/forecast/actual. Budgets change month to month;
+        // fixed amounts cannot track that and the schedule silently stops balancing.
+        //
+        // 'amount' (the default when basis is absent) - the typed figures are paid as
+        // typed, whatever the month says. Right for a genuinely fixed direct debit,
+        // wrong for anything that follows the budget. This was the ONLY behaviour, and
+        // it ignored monthlyBudget entirely - so a month forecasting 4,300 still paid
+        // out the 4,000 that had been typed, and switching a month to Actual changed
+        // nothing at all.
         const vatMult = sc.vat ? 1.20 : 1
-        const splits = (sc.days || []).filter(d => Number(d.amount) || d.amount === 0)
-        const base = splits.reduce((s, d) => s + (Number(d.amount) || 0), 0)
+        const byPct = sc.basis === 'percent'
+        const splits = (sc.days || []).filter(d => byPct
+          ? (Number(d.pct) || d.pct === 0)
+          : (Number(d.amount) || d.amount === 0))
+        const base = splits.reduce((s, d) => s + (Number(byPct ? d.pct : d.amount) || 0), 0)
         for (const d of splits) {
-          const share = base ? (Number(d.amount) || 0) / base : 1 / (splits.length || 1)
-          const amount = (Number(d.amount) || 0) * vatMult + adj * share
+          const raw = Number(byPct ? d.pct : d.amount) || 0
+          const share = base ? raw / base : 1 / (splits.length || 1)
+          // In percent mode monthlyBudget already carries the VAT gross-up from
+          // amountFor(), so vatMult must NOT be applied again.
+          const amount = byPct
+            ? (monthlyBudget * (raw / 100)) + adj * share
+            : (raw * vatMult) + adj * share
           if (Math.abs(amount) < 0.005) continue
           const day = clampDay(y, m, Number(d.day || 28))
           events.push({ date: `${mk}-${pad(day)}`, amount, code })
