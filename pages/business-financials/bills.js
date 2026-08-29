@@ -199,7 +199,7 @@ export default function BillsToPay() {
         (i.contact || '').replace(/"/g, '""'),
         (i.number || '').replace(/"/g, '""'),
         i.date || '', i.dueDate || '',
-        i.isCreditNote ? 'CREDIT' : 'BILL',
+        i.isOverpayment ? 'OVERPAYMENT' : (i.isCreditNote ? 'CREDIT' : 'BILL'),
         (i.amountDue || 0).toFixed(2),
       ])
     }
@@ -407,7 +407,7 @@ export default function BillsToPay() {
                       return (
                         <tr key={i.id} style={{ borderBottom: '1px solid #f2f0ec', background: sel[i.id] ? '#fffbeb' : (cn ? '#f0f9f4' : 'transparent') }}>
                           <td style={{ ...td, textAlign: 'center' }}><input type="checkbox" checked={!!sel[i.id]} onChange={e => setSel(s => ({ ...s, [i.id]: e.target.checked }))} /></td>
-                          <td style={{ ...td, textAlign: 'left' }}>{i.contact || '-'}{cn && <span style={{ marginLeft: 6, fontSize: 10, color: '#16a34a', fontWeight: 700, border: '1px solid #86efac', borderRadius: 4, padding: '1px 4px' }}>CREDIT</span>}</td>
+                          <td style={{ ...td, textAlign: 'left' }}>{i.contact || '-'}{cn && <span style={{ marginLeft: 6, fontSize: 10, color: '#16a34a', fontWeight: 700, border: '1px solid #86efac', borderRadius: 4, padding: '1px 4px' }} title={i.isOverpayment ? 'Supplier overpayment - money already paid that sits with the supplier and offsets future bills. Shown negative so the total nets off, the same as a credit note.' : 'Supplier credit note.'}>{i.isOverpayment ? 'OVERPAYMENT' : 'CREDIT'}</span>}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#888' }}>{i.number || '-'}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#555' }}>{fmtDate(i.date)}</td>
                           <td style={{ ...td, textAlign: 'left', color: overdue ? '#dc2626' : '#555', fontWeight: overdue ? 600 : 400 }}>{fmtDate(i.dueDate)}{overdue ? ' - overdue' : ''}</td>

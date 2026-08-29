@@ -1,13 +1,9 @@
-pkg572 - Bills page: filter by Xero cost account
-=================================================
+pkg573 - Bills: supplier overpayments, and the cost account filter
+===================================================================
 
-*** pages/api/business-financials.js is a COMPLETE file and also contains the
-    pkg563 changes (Switch to Actual). Deploy this copy. ***
-
-
-NEW FILES
----------
-  None.
+*** SUPERSEDES pkg572 (not deployed). ***
+pages/api/business-financials.js is a COMPLETE file and also contains the pkg563
+changes (Switch to Actual).
 
 
 CHANGED FILES (replace)
@@ -17,50 +13,77 @@ CHANGED FILES (replace)
   lib/xero.js
 
 
-THE FILTER
-----------
-"Cost accounts" multi-select next to the supplier filter. Same behaviour -
-searchable, Clear, Select shown, and a count in the label. Searches on code or
-name, so "310" and "materials" both find it.
+1. WHY YOUR TWO EXPORTS DIFFERED
+--------------------------------
+The app matched Xero TO THE PENNY on bills and credit notes. The whole gap was
+four supplier overpayments the app never fetched.
 
-Only accounts that actually appear on the current bills are listed. The full
-chart is hundreds of accounts and most never touch a supplier bill.
+  App total                      307,471.06   118 rows
+  Xero - Bill                    307,607.14   117
+  Xero - Bill credit note           -136.08     1
+  Xero - Bill overpayment          4,699.57     4   <- missing entirely
+  Xero total                     312,170.63   122
 
-A bill is shown if ANY of its lines is on a picked account. Bills are NOT split
-across accounts - a mixed bill appears in full under every account it touches,
-because showing part of a bill would make the Filtered total wrong.
+  307,607.14 - 136.08 = 307,471.06, exactly the app's figure.
 
-  pick 310        ->  materials bill, mixed bill, credit note
-  pick 321        ->  mixed bill only
-  pick 310 + 400  ->  materials, plant hire, mixed, credit note
+The four: Construction Liberation 3,400.00, Caz Roofing 1,000.00, Fixfast 274.92,
+UK Postbox 24.65.
 
+CAUSE: fetchOutstandingBills called Invoices?Type=ACCPAY and
+CreditNotes?Type=ACCPAYCREDIT. Overpayments are a SEPARATE Xero endpoint
+(/Overpayments), not a type of invoice, so they could never appear.
 
-THE SELECTION IS REMEMBERED
----------------------------
-Saved to localStorage, the same approach the CRM already uses for its view prefs.
-Deliberately NOT a Redis config key - that is shared, so one person narrowing the
-filter would silently narrow it for everybody else on the same page.
-
-The restore runs before the save effect can fire, so an empty initial state never
-overwrites a stored selection on load.
+(Your diff also counted the "total" footer row of the app CSV as a bill, which is
+why the gap first looked like 302k rather than 4.7k.)
 
 
-TWO THINGS THAT NEEDED FIXING TO MAKE IT WORK
+2. OVERPAYMENTS NOW COME IN, NEGATIVE
+-------------------------------------
+Same treatment as credit notes: money already paid that sits with the supplier
+and offsets future bills, so it reduces the total. Badged OVERPAYMENT on the row,
+green like a credit, and exported as OVERPAYMENT rather than CREDIT.
+
+Only Type SPEND is taken - RECEIVE is a customer overpayment and does not belong
+on a bills page. Only unallocated remaining credit counts.
+
+An overpayment has no due date - it is already paid - so its own date is used.
+Leaving it undated would drop it the moment you set a date range.
+
+
+3. EXPECT A THIRD NUMBER - THIS IS THE IMPORTANT BIT
+----------------------------------------------------
+  app after this change     302,771.49
+  Xero "Bills you need to pay" screen  307,471.06
+  Xero raw CSV export       312,170.63
+
+All three are defensible and none of them are wrong:
+
+  The Xero SCREEN excludes overpayments entirely.
+  The Xero EXPORT lists them positive, which overstates what you owe.
+  The APP now nets them off, which is the true amount you will actually pay.
+
+So the app will no longer tie to either Xero figure, by design. If you would
+rather it matched the Xero screen exactly, the alternative is to fetch them and
+show them at zero, or not at all - say the word and it is a one-line change.
+
+
+4. ALSO IN THIS PACKAGE - COST ACCOUNT FILTER
 ---------------------------------------------
-CREDIT NOTES HAD NO ACCOUNT CODES. lib/xero.js stored lineCodes on bills but not
-on credit notes, so every credit note would have vanished under any filter - and
-because credits are NEGATIVE, the filtered total would have gone UP. A credit
-silently disappearing is worse than one showing under a code you did not pick.
-They now carry lineCodes the same way.
+"Cost accounts" multi-select next to the supplier filter, searchable on code or
+name, with Clear and Select shown. Only accounts present on the current bills are
+listed. A bill shows if ANY of its lines is on a picked account - bills are never
+split, because showing part of one would make the Filtered total wrong.
 
-THE API RETURNED NO ACCOUNT NAMES. It now returns the codes present on the
-current bills paired with their names from config:chart-of-accounts, so the list
-reads "310 Materials" rather than a bare number.
+The selection is saved to localStorage, the same approach the CRM uses. NOT a
+Redis config key: that is shared, so one person narrowing the filter would
+silently narrow it for everybody else.
+
+Credit notes and overpayments now carry lineCodes too. Without that they would
+have vanished under any account filter - and since both are NEGATIVE, the
+filtered total would have gone UP.
 
 
-WORTH KNOWING
--------------
-A bill with NO account codes at all drops out under any filter - there is nothing
-for it to match. That is correct, but if you see the filtered count fall further
-than expected, that is why. Codes come from the bill sync, so anything synced
-before lineCodes existed will have none until you press Sync bills.
+AFTER DEPLOYING
+---------------
+Press Sync bills. Overpayments only arrive on a sync, and bills stored before
+lineCodes existed have no account codes until then.
