@@ -1,69 +1,58 @@
-pkg581 - Xero scope: accounting.transactions is not available to this app
-==========================================================================
+pkg582 - Bills: Export CSV ignored every filter
+================================================
 
-*** SUPERSEDES pkg572 - pkg580. Deploy this one. ***
+*** SUPERSEDES pkg572 - pkg581. Deploy this one. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/connect.js
-  pages/business-financials/bills.js
+  pages/business-financials/bills.js     <- the fix
   pages/api/business-financials.js
   lib/xero.js
+  pages/connect.js
 
 
-THE ACTUAL ANSWER
------------------
-Your app's permitted scope list does NOT contain accounting.transactions or
-accounting.transactions.read. So invalid_scope was correct and unavoidable - the
-name was never the problem, the app simply cannot request it. Four attempts spent
-on the wrong question, which is on me. The portal list was the thing to check
-first and I did not ask for it.
+NO, THEY DO NOT MATCH - AND NOT FOR A REASON WORTH CHASING
+-----------------------------------------------------------
+The app export was not filtered. exportCsv iterated `billsOnly`, the UNFILTERED
+set, so every filter on the page was ignored - cost accounts, suppliers, dates,
+the month click. Your export has all 117 bills, 4 overpayments and 1 credit,
+totalling 302,771.49, which is the whole ledger.
 
-Of the scopes it IS permitted, two are already granted and already fail on
-Overpayments:
-
-  accounting.invoices.read           granted, Overpayments -> 401
-  accounting.banktransactions.read   granted, Overpayments -> 401
-
-That leaves ONE candidate worth trying: accounting.payments.read. An overpayment
-originates from a payment, so of everything on the list it is the best fit. The
-quick buttons on /connect are now just that one and its full variant.
+Straight against your standing rule that an export reflects what is filtered on
+screen. It has presumably always done this; the account filter is just the first
+one where it was obvious.
 
 
-HOW TO TRY IT
--------------
-1. /connect -> click "accounting.payments.read" -> Reconnect Xero -> approve
-2. Bills to Pay -> Sync bills
-
-  "117 bills, 1 credit notes, 4 overpayments."   it worked
-  "... Token HAS ... Granted: <list>"            granted but still refused
-  "... DOES NOT HAVE ..."                        not granted
-  invalid_scope from Xero                        not permitted either
-
-Whatever happens you cannot get stuck: click "none", reconnect, and you are back
-to the working connection.
+FIXED
+-----
+  - exports `filtered`, not `billsOnly`
+  - the TOTAL footer sums the SAME set. It summed billsOnly while listing
+    filtered, so a filtered export would have carried a footer contradicting its
+    own rows
+  - new "Account codes" column, so a filtered export can be checked against Xero
+    without taking the filter on trust
 
 
-IF accounting.payments.read DOES NOT WORK
------------------------------------------
-Then Overpayments genuinely needs accounting.transactions and this app cannot
-have it. Two options at that point:
+WHAT TO EXPECT ON THE NEXT EXPORT
+---------------------------------
+From your Xero file, invoices touching 311 / 321 / 322 / 330 / 333:
 
-  a) See whether accounting.transactions can be ADDED to the app in the developer
-     portal. If the list you sent is what is SELECTED rather than everything on
-     offer, ticking it and reconnecting would fix this properly.
+    53 bills, total 90,528.38
 
-  b) Drop it. Say the word and I will strip the overpayment fetch out entirely.
-
-Option (b) costs almost nothing, and it is worth being clear about that: without
-any of this the app matched Xero's "Bills to Pay" screen TO THE PENNY at
-307,471.06. The whole exercise nets off 4,699.57 across four records. The app is
-arguably more useful matching the Xero screen exactly.
+That is what the app should show with those five accounts picked. If it does not,
+send both exports again and the new Account codes column will show exactly which
+bill disagrees.
 
 
-ALSO IN THIS PACKAGE
---------------------
-Cost account filter on Bills to Pay, remembered per browser. Credit notes and
-overpayments carry lineCodes so they cannot vanish under a filter and push the
-total up. Sync reports what it found and what the token grants. Heading "v578".
+ONE THING THAT IS NOT A FAULT
+-----------------------------
+Your Xero export also contains codes 401, 412, 425, 433, 449, 463, 464, 800, 821.
+That is not Xero ignoring your filter - it is the same whole-bill behaviour the
+app uses. A bill with ANY line on a picked account comes through IN FULL,
+including its lines on other accounts. Splitting bills would make the totals
+wrong.
+
+So a filtered list is "bills that touch these accounts", not "only spend on these
+accounts". If you need the latter - spend BY account rather than bills - that is
+a different view and worth building separately rather than bending this one.

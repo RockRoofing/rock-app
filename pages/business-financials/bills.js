@@ -214,18 +214,27 @@ export default function BillsToPay() {
   const grandTotal = useMemo(() => billsOnly.reduce((s, i) => s + (i.amountDue || 0), 0), [billsOnly])
 
   function exportCsv() {
-    const rows = [['Supplier', 'Ref', 'Bill date', 'Due date', 'Type', 'Amount due (exact)']]
-    for (const i of [...billsOnly].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))) {
+    const rows = [['Supplier', 'Ref', 'Bill date', 'Due date', 'Type', 'Account codes', 'Amount due (exact)']]
+    // EXPORT WHAT IS ON SCREEN. This iterated billsOnly - the unfiltered set - so every
+    // filter on the page was ignored: cost accounts, suppliers, dates, the month click.
+    // You could filter to five accounts, export, and get all 122 records with no
+    // indication anything had been dropped.
+    for (const i of [...filtered].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''))) {
       rows.push([
         (i.contact || '').replace(/"/g, '""'),
         (i.number || '').replace(/"/g, '""'),
         i.date || '', i.dueDate || '',
         i.isOverpayment ? 'OVERPAYMENT' : (i.isCreditNote ? 'CREDIT' : 'BILL'),
+        // The account codes on the bill, so a filtered export can be checked against
+        // Xero without having to take the filter on trust.
+        (i.lineCodes || []).join(' '),
         (i.amountDue || 0).toFixed(2),
       ])
     }
     rows.push([])
-    rows.push(['TOTAL', '', '', '', '', billsOnly.reduce((s, i) => s + (i.amountDue || 0), 0).toFixed(2)])
+    // Must sum the SAME set as the rows above it. Summing billsOnly while listing
+    // `filtered` gave a footer that contradicted its own rows.
+    rows.push(['TOTAL', '', '', '', '', '', total.toFixed(2)])
     const csv = rows.map(r => r.map(c => /[",\n]/.test(String(c)) ? `"${c}"` : c).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
