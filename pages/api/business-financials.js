@@ -406,6 +406,10 @@ export default async function handler(req, res) {
           // on the Overpayments endpoint is indistinguishable from having none.
           overpaymentError: diag.overpaymentError || null,
           overpaymentDetail: diag.overpaymentDetail || null,
+          // What the CURRENT token actually grants, straight off the stored token. The
+          // only way to tell "the reconnect has not happened" from "the reconnect
+          // happened and Xero still refused" - which need completely different actions.
+          tokenScope: tokens.scope || null,
           creditNoteError: diag.creditNoteError || null,
         })
       } catch (e) { return res.status(500).json({ error: e.message }) }

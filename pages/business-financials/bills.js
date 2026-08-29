@@ -102,7 +102,14 @@ export default function BillsToPay() {
       // The result used to be thrown away entirely, so a failed sync and a successful one
       // looked identical - which is how a broken overpayment fetch went unnoticed.
       if (!res.ok || d.error) setSyncMsg(d.error || 'Sync failed.')
-      else if (d.overpaymentError) setSyncMsg(`${d.bills ?? '?'} bills, ${d.credits ?? 0} credits. OVERPAYMENTS FAILED: ${d.overpaymentError}`)
+      else if (d.overpaymentError) {
+        // Show the token's ACTUAL scope alongside the error. If accounting.transactions
+        // is absent the reconnect has not happened; if it is present and Xero still
+        // refuses, the problem is something else entirely and guessing is pointless.
+        const sc = d.tokenScope || ''
+        const has = sc.includes('accounting.transactions')
+        setSyncMsg(`${d.bills ?? '?'} bills, ${d.credits ?? 0} credits. OVERPAYMENTS FAILED. Token ${has ? 'HAS' : 'DOES NOT HAVE'} accounting.transactions. Granted: ${sc || '(none recorded)'}`)
+      }
       else setSyncMsg(`${d.bills ?? '?'} bills, ${d.credits ?? 0} credit notes, ${d.overpayments ?? 0} overpayments.`
         // When none came through, show WHY rather than a bare zero - how many Xero
         // returned, and what statuses they had.
@@ -254,9 +261,9 @@ export default function BillsToPay() {
         <BizNav />
         <div style={{ padding: '24px 16px', maxWidth: '100%', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-            {/* VERSION MARKER - if you cannot see "v577" next to the heading, this file is not
+            {/* VERSION MARKER - if you cannot see "v578" next to the heading, this file is not
                 the one running and the deploy has not landed. Remove once confirmed. */}
-            <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Bills to Pay <span style={{ fontSize: 11, color: '#c77700', fontWeight: 700 }}>v577</span> <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(supplier bills only)</span></h1>
+            <h1 style={{ fontSize: 22, color: INK, margin: 0 }}>Bills to Pay <span style={{ fontSize: 11, color: '#c77700', fontWeight: 700 }}>v578</span> <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400 }}>(supplier bills only)</span></h1>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={exportCsv} style={{ background: '#fff', color: INK, border: '1px solid #e2e0da', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Export CSV</button>
               <button onClick={sync} disabled={syncing} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: syncing ? 0.6 : 1 }}>{syncing ? 'Syncing...' : 'Sync bills'}</button>
