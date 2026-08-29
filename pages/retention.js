@@ -75,11 +75,39 @@ function calcTotalRemaining(entry) {
 const retStatusOf = (entry) => entry.retStatus || (entry.markedComplete ? 'complete' : 'live')
 const isClosed = (entry) => retStatusOf(entry) === 'complete'
 
+// IS A HALF RELEASED?
+//
+// Two ways, and both are needed. A project run through the app ticks its retention
+// halves on an APPLICATION, and that should mark the register off by itself. A project
+// added from the old spreadsheet has no applications and never will, so it needs a
+// manual mark.
+//
+// The manual mark is an explicit true/false, so it can also UNDO an automatic one - if
+// the application says released and it never actually was, somebody has to be able to
+// say so. undefined means "nobody has said", and only then does the application decide.
+function released1(entry) {
+  if (entry.release1Manual === true) return true
+  if (entry.release1Manual === false) return false
+  return !!entry.appRelease1
+}
+function released2(entry) {
+  if (entry.release2Manual === true) return true
+  if (entry.release2Manual === false) return false
+  return !!entry.appRelease2
+}
+function releaseSource(entry, half) {
+  const man = half === 1 ? entry.release1Manual : entry.release2Manual
+  const app = half === 1 ? entry.appRelease1 : entry.appRelease2
+  if (man === true) return 'manual'
+  if (man === false) return app ? 'overridden' : 'none'
+  return app ? 'application' : 'none'
+}
+
 function calcBalance(entry) {
   const r1 = parseFloat(entry.release1Value || 0)
   const r2 = parseFloat(entry.release2Value || 0)
   const total = r1 + r2
-  const received = (entry.release1Received ? r1 : 0) + (entry.release2Received ? r2 : 0)
+  const received = (released1(entry) ? r1 : 0) + (released2(entry) ? r2 : 0)
   return total - received
 }
 
@@ -96,11 +124,11 @@ function calcFinalBalance(entry) {
 
 function statusBadge(entry) {
   const now = new Date().toISOString().split('T')[0]
-  const r1Due = entry.release1Date && !entry.release1Received && entry.release1Date < now
-  const r2Due = entry.release2Date && !entry.release2Received && entry.release2Date < now
+  const r1Due = entry.release1Date && !released1(entry) && entry.release1Date < now
+  const r2Due = entry.release2Date && !released2(entry) && entry.release2Date < now
   if (r1Due || r2Due) return { label: 'Overdue', bg: '#fef2f2', color: '#e63946' }
-  if (entry.release1Received && entry.release2Received) return { label: 'Released', bg: '#f0fdf4', color: '#16a34a' }
-  if (entry.release1Received) return { label: 'Part released', bg: '#fffbeb', color: '#ca8a04' }
+  if (released1(entry) && released2(entry)) return { label: 'Released', bg: '#f0fdf4', color: '#16a34a' }
+  if (released1(entry)) return { label: 'Part released', bg: '#fffbeb', color: '#ca8a04' }
   return { label: 'Pending', bg: '#f0f2f5', color: '#888' }
 }
 
@@ -335,6 +363,10 @@ export default function RetentionPage() {
           // register keeps chasing money that has been applied for.
           retentionOwed: Math.max(0, (p.totalRetention || 0) - (p.retentionClaimed || 0)),
           retentionClaimed: p.retentionClaimed || 0,
+          // From the retention section on the project's latest application - this is
+          // what marks a new project off without anybody touching the register.
+          appRelease1: !!p.appRelease1,
+          appRelease2: !!p.appRelease2,
           retention612Allocated: p.retention612Allocated || 0, // deducted less released
           retention612Deducted: p.retention612Deducted || 0,
           retention612Released: p.retention612Released || 0,
@@ -419,6 +451,16 @@ export default function RetentionPage() {
     await saveEntry({ ...entry, retStatus: next, markedComplete: next === 'complete', completedAt: next === 'complete' ? Date.now() : null })
   }
 
+  // Mark a half released, or undo it. Writes an EXPLICIT true/false rather than
+  // deleting the flag, so it can also override an application that says released when it
+  // was not - clicking a green "released (app)" cell sets false and it stays false.
+  async function toggleRelease(entry, half) {
+    const key = half === 1 ? 'release1Manual' : 'release2Manual'
+    const dateKey = half === 1 ? 'release1MarkedAt' : 'release2MarkedAt'
+    const now = half === 1 ? released1(entry) : released2(entry)
+    await saveEntry({ ...entry, [key]: !now, [dateKey]: !now ? new Date().toISOString() : null })
+  }
+
   async function deleteEntry(id) {
     if (!confirm('Delete this entry?')) return
     try {
@@ -447,6 +489,7 @@ export default function RetentionPage() {
         retentionOwed: x.retentionOwed, retentionClaimed: x.retentionClaimed, retention612Allocated: x.retention612Allocated,
         // Live Xero figures - must be layered on like the rest, or an edited row shows
         // blanks where an untouched one shows the numbers.
+        appRelease1: x.appRelease1, appRelease2: x.appRelease2,
         retention612Deducted: x.retention612Deducted, retention612Released: x.retention612Released,
         retention612ReleasedPaid: x.retention612ReleasedPaid, ret612Lines: x.ret612Lines, ret612From: x.ret612From,
         afaGross: x.afaGross, afaSource: x.afaSource, mcdPct: x.mcdPct, mcdRecorded: x.mcdRecorded, mcdValue: x.mcdValue,
@@ -817,31 +860,42 @@ export default function RetentionPage() {
                       const faKnown = fa > 0 && invNet != null
                       const faMatchesInvoiced = faKnown && Math.abs(fa - (invNet || 0)) < 1
                       const faBelowInvoiced = faKnown && (invNet || 0) - fa > 1
+                      // The paid balance used to DECIDE whether a half was released. It no
+                      // longer does - releases are marked by hand or by an application -
+                      // but it is still a useful hint, so it is offered as a suggestion on
+                      // an unmarked cell rather than turning it green on its own.
                       const settledSecond = paidKnown ? (totalRemaining < 1) : false
                       const settledFirst = paidKnown ? (settledSecond || totalRemaining <= r2v + 1) : false
-                      // Only allow the green "settled" state when FA reconciles to invoiced.
-                      const secondReceived = settledSecond && faMatchesInvoiced
-                      const firstReceived = settledFirst && faMatchesInvoiced
-                      // A release that WOULD be settled but is blocked by an FA/invoiced
-                      // mismatch shows an amber warning instead of green.
-                      const releaseWarn = (settledFirst || settledSecond) && !faMatchesInvoiced
+                      const paidSuggests = { 1: settledFirst && faMatchesInvoiced, 2: settledSecond && faMatchesInvoiced }
                       // Release cell: green when settled AND FA reconciles; amber warning
                       // when settled but FA≠Invoiced; orange "due" otherwise.
-                      const releaseCell = (val, received, warn) => {
+                      // Release cell. CLICK TO TOGGLE - the whole point, since a project
+                      // added from the old spreadsheet has no application to mark it off.
+                      //
+                      // Was derived from the paid balance reaching zero, gated on Final
+                      // Account matching invoiced to within a pound. That could never
+                      // settle an old project whose release went out uncoded, and there
+                      // was no way to say so by hand.
+                      const releaseCell = (val, half) => {
                         const has = val != null && val !== '' && !isNaN(parseFloat(val))
                         if (!has) return <td style={{ padding: '8px 10px', textAlign: 'right', color: '#bbb' }}>—</td>
-                        if (warn && !received) {
-                          return (
-                            <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: '#fef9c3' }} title="Paid, but Final Account doesn't match the invoiced value — reconcile before treating as released.">
-                              <div style={{ fontWeight: 600, color: '#a16207' }}>{fmt(parseFloat(val))}</div>
-                              <div style={{ fontSize: 9.5, color: '#a16207', fontWeight: 600 }}>⚠ check FA</div>
-                            </td>
-                          )
-                        }
+                        const on = half === 1 ? released1(entry) : released2(entry)
+                        const src = releaseSource(entry, half)
+                        // Xero says this looks paid off but nobody has marked it. Prompt,
+                        // do not decide - that guess is exactly what could never work on
+                        // an old project whose release went out uncoded.
+                        const hint = !on && src !== 'overridden' && paidSuggests[half]
+                        const tag = on
+                          ? (src === 'application' ? 'released (app)' : 'released')
+                          : (src === 'overridden' ? 'not released *' : (hint ? 'due - looks paid' : 'due'))
                         return (
-                          <td style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', background: received ? '#e8f5e9' : '#fff3e0' }}>
-                            <div style={{ fontWeight: 600, color: received ? '#166534' : '#b26a00' }}>{fmt(parseFloat(val))}</div>
-                            <div style={{ fontSize: 9.5, color: received ? '#16a34a' : '#c77700', fontWeight: 600 }}>{received ? 'released' : 'due'}</div>
+                          <td onClick={() => toggleRelease(entry, half)}
+                            title={on
+                              ? (src === 'application' ? 'Marked released by the retention section on an application. Click to override.' : 'Marked released by hand. Click to undo.')
+                              : (src === 'overridden' ? 'An application says this was released, but it has been overridden here. Click to accept the application.' : 'Click to mark this half released.')}
+                            style={{ padding: '6px 10px', textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer', background: on ? '#e8f5e9' : (src === 'overridden' ? '#fef9c3' : (hint ? '#eff6ff' : '#fff3e0')) }}>
+                            <div style={{ fontWeight: 600, color: on ? '#166534' : (src === 'overridden' ? '#a16207' : '#b26a00') }}>{fmt(parseFloat(val))}</div>
+                            <div style={{ fontSize: 9.5, color: on ? '#16a34a' : (src === 'overridden' ? '#a16207' : (hint ? '#2563eb' : '#c77700')), fontWeight: 600 }}>{tag}</div>
                           </td>
                         )
                       }
@@ -936,7 +990,7 @@ export default function RetentionPage() {
                             {/* 1st Value (coloured) */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
-                              : releaseCell(entry.release1Value, firstReceived, releaseWarn)}
+                              : releaseCell(entry.release1Value, 1)}
                             {/* 1st Date */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
@@ -944,7 +998,7 @@ export default function RetentionPage() {
                             {/* 2nd Value (coloured) */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
-                              : releaseCell(entry.release2Value, secondReceived, releaseWarn)}
+                              : releaseCell(entry.release2Value, 2)}
                             {/* 2nd Date */}
                             {noRetention
                               ? <td style={naCell} title="Retention is 0% on this project - nothing to release.">N/A</td>
@@ -1171,7 +1225,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release1Date || ''} onChange={f('release1Date')} style={inputStyle} />
             </div>
           </div>
-          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Auto: turns green once only the 2nd half remains to be paid.</div>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Mark released by clicking the release cell on the row. An application's retention section marks it automatically.</div>
         </div>
         <div style={{ background: '#f0fdf4', borderRadius: 8, padding: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 8 }}>2nd Retention Release</div>
@@ -1185,7 +1239,7 @@ function EntryForm({ form, setForm, onSave, onCancel, saving, qsOptions = [], al
               <input type="date" value={form.release2Date || ''} onChange={f('release2Date')} style={inputStyle} />
             </div>
           </div>
-          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Auto: turns green once the account is paid in full.</div>
+          <div style={{ fontSize: 10.5, color: '#16a34a', fontStyle: 'italic' }}>Mark released by clicking the release cell on the row. An application's retention section marks it automatically.</div>
         </div>
       </div>
       <div style={{ marginBottom: 12 }}>

@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -228,6 +228,7 @@ export default async function handler(req, res) {
       // before MCD/retention deductions.
       let appliedForLatest = 0
       let retentionClaimed = 0
+      let appRelease1 = false, appRelease2 = false
       // FINAL ACCOUNT FROM THE APPLICATION.
       //
       // The application is the better source: it holds the measured contract sum and the
@@ -254,6 +255,12 @@ export default async function handler(req, res) {
           // passed). Due and claimed are not the same thing, and conflating them would
           // have quietly written one over the other.
           retentionClaimed = sum.releasedTotal || 0
+          // WHICH HALF was released on an application, so the Retention Tracker can mark
+          // itself off automatically for projects run through the app. Cumulative - the
+          // flag is carried forward from earlier applications, so the latest one holds
+          // the whole picture.
+          appRelease1 = !!(sum.release1Value > 0)
+          appRelease2 = !!(sum.release2Value > 0)
           // measured contract sum + variations at final value, GROSS of MCD.
           const afaApp = sum.anticipatedFinalAccount
           if (afaApp != null && isFinite(afaApp) && afaApp > 0) {
@@ -416,6 +423,8 @@ export default async function handler(req, res) {
         qsResolved: true,
         appliedForLatest,
         retentionClaimed,
+        appRelease1,
+        appRelease2,
         // Same fix as contractsManager above, which was done and this was not.
         // It read settings.estimator only - a legacy flat field almost nothing writes
         // any more. Edit Project Details writes to peopleOverride.estimator and falls
