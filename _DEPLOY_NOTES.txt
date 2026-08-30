@@ -1,7 +1,7 @@
-pkg628 - Date pickers hold still while you use them
-====================================================
+pkg629 - Reference column on Invoices owed
+===========================================
 
-*** SUPERSEDES pkg591 - pkg627. ***
+*** SUPERSEDES pkg591 - pkg628. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -23,44 +23,32 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-THE DATE PICKER PROBLEM
------------------------
-The bills list is SORTED BY planned payment date (line 1224), and the input
-committed on every change. So scrolling the picker from August to September wrote
-a September date immediately - the list re-sorted, the row jumped somewhere else,
-and the calendar closed on a date you had not chosen.
+REFERENCE COLUMN
+----------------
+Added between Invoice and Due date. It was already on the payload
+(business-financials.js:836) and simply never shown - which is a shame, because the
+reference is usually the application or project and is what actually makes a row
+recognisable. Truncated with the full text on hover.
 
-The date is now held as a local draft and committed only on BLUR:
-
-  scroll Aug -> Sep    0 commits, row stays put
-  pick the 15th        0 commits
-  click away           1 commit, 2026-09-15
-
-Two commits became one, and nothing moves while the picker is open.
-
-Enter commits, Escape abandons the edit and puts the old date back.
-
-THE SAME TREATMENT ON EXPECTED PAYMENT DATES in the Invoices owed table - same
-fault, same fix, and it still writes straight to invoice:meta so the Invoices Owed
-page follows.
-
-One detail: the draft only follows the saved value when the field is NOT being
-edited. Otherwise a save happening elsewhere would overwrite what you were part
-way through typing.
+Header, body and footer cells all checked at 7.
 
 
-ALSO IN THIS PACKAGE (pkg627)
------------------------------
-BALANCE SHEET TAB - reads every account from Xero's Balance Sheet report, grouped
-by Xero's own sections, with NO account codes assumed anywhere. Track the ones you
-want, set outstanding / per month / day / from / to, and they feed the forecast.
+ALSO IN THIS PACKAGE
+--------------------
+pkg628 - date pickers commit on BLUR, not on every change. The bills list sorts by
+planned payment date, so scrolling the picker from August to September re-sorted
+the table, moved the row and shut the calendar before a day had been picked. Enter
+commits, Escape abandons. Same on expected payment dates.
 
-"Clears in" turns RED when the schedule will not clear the balance.
+pkg627 - BALANCE SHEET TAB. Reads every account from Xero's Balance Sheet report,
+grouped by Xero's own sections, with no account codes assumed anywhere so it works
+on any chart of accounts. Track what you want, set outstanding / per month / day /
+from / to. "Clears in" turns red when the schedule will not clear the balance.
 
 FINANCING & TAX column replaces "Vehicles / commitments" and carries both.
-Payments STOP when the liability clears: 12,000 at 5,000/month gives 5,000, 5,000,
-2,000 - not a fourth full payment.
+Payments stop when the liability clears - 12,000 at 5,000/month gives 5,000,
+5,000, 2,000.
 
-RECONNECT XERO before using the balance sheet read - it needs
+RECONNECT XERO before the balance sheet read - it needs
 accounting.reports.balancesheet.read, which does not apply to an existing
 connection.

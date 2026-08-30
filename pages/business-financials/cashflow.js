@@ -1204,6 +1204,7 @@ export default function CashFlow() {
                     <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee', position: 'sticky', top: 0, zIndex: 1 }}>
                       <th style={{ ...th, textAlign: 'left' }}>Customer</th>
                       <th style={{ ...th, textAlign: 'left' }}>Invoice</th>
+                      <th style={{ ...th, textAlign: 'left' }} title="The reference on the Xero invoice - usually the application or project it relates to.">Reference</th>
                       <th style={th}>Due date</th>
                       <th style={th}>Amount due</th>
                       <th style={{ ...th, textAlign: 'left' }}>Expected payment date</th>
@@ -1222,6 +1223,10 @@ export default function CashFlow() {
                         <tr key={k || i} style={{ borderBottom: '1px solid #f2f0ec', background: off ? '#fafafa' : (isOverdue ? '#fffbeb' : 'transparent'), opacity: off ? 0.55 : 1 }}>
                           <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.contact || ''}>{r.contact || '-'}</td>
                           <td style={{ ...td, textAlign: 'left', color: '#777' }}>{r.invoiceNumber || r.number || '-'}</td>
+                          {/* Reference was already on the payload, just never shown - it is
+                              usually the application or project, which is what makes a row
+                              recognisable. */}
+                          <td style={{ ...td, textAlign: 'left', color: '#777', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis' }} title={r.reference || ''}>{r.reference || '-'}</td>
                           <td style={{ ...td, color: '#666' }}>{r.dueDate ? fmtDMY(r.dueDate) : '-'}</td>
                           <td style={{ ...td, fontWeight: 600 }}>{gbp(r.amountDue)}</td>
                           <td style={{ ...td, textAlign: 'left' }}>
@@ -1248,12 +1253,14 @@ export default function CashFlow() {
                         </tr>
                       )
                     })}
-                    {(data.receivables || []).length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding invoices.</td></tr>}
+                    {(data.receivables || []).length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding invoices.</td></tr>}
                   </tbody>
                   <tfoot>
                     <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
                       <td style={{ ...td, textAlign: 'left' }}>Total ({(data.receivables || []).filter(r => !excluded[invKey(r)]).length} in forecast)</td>
                       <td style={td}></td>
+                      <td style={td}></td>
+                      {/* Matches the new Reference column. */}
                       <td style={td}></td>
                       <td style={{ ...td, fontWeight: 800 }}>{gbp((data.receivables || []).filter(r => !excluded[invKey(r)]).reduce((a, r) => a + (r.amountDue || 0), 0))}</td>
                       <td style={td}></td>
