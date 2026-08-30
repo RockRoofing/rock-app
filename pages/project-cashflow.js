@@ -951,8 +951,23 @@ function HypAppModal({ modal, onClose, onSaved }) {
     // date. Filtering on `from` here meant that picking a period starting before the
     // last application's valuation date dropped it out, prevGross fell to zero, and the
     // whole value to date was spread again - the very thing this is meant to prevent.
-    const priors = editId ? cands.filter(c => !from || (c.end || '') < from) : cands
-    const pool = priors.length ? priors : (editId && from ? [] : cands)
+    // A REAL APPLICATION IS NEVER FILTERED OUT BY THE PERIOD DATES.
+    //
+    // The rule above was applied to everything when editing: only certificates ending
+    // BEFORE this period's start counted. So editing a forecast whose period begins
+    // before the last application's end date dropped that application entirely -
+    // previously claimed fell to ZERO and the whole contract was offered again as this
+    // period's work. On J190 that showed 401,663.50 gross to date with 0.00 previously
+    // claimed, and the entire labour budget as "labour this period".
+    //
+    // Certified money cannot be un-certified by choosing an earlier start date - which
+    // the comment above already says about NEW forecasts. It is just as true when
+    // editing, and it was only ever the FORECAST chain that needed sequencing: a
+    // forecast in the middle of a chain should still deduct only what came before it.
+    const apps = cands.filter(c => c.kind === 'application')
+    const fcs = cands.filter(c => c.kind !== 'application')
+    const priorFcs = editId ? fcs.filter(c => !from || (c.end || '') < from) : fcs
+    const pool = [...apps, ...priorFcs]
     if (!pool.length) return null
     // Ties go to the application - it is the certified position, a forecast is not.
     return pool.slice().sort((a, b) =>

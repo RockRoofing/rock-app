@@ -1,7 +1,7 @@
-pkg631 - Nav order, and the Summary tab's missing tabs
-=======================================================
+pkg632 - The prior was dropping real applications. THE -160k BUG.
+==================================================================
 
-*** SUPERSEDES pkg591 - pkg630. ***
+*** SUPERSEDES pkg591 - pkg631. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,13 +9,13 @@ pkg631 - Nav order, and the Summary tab's missing tabs
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials.js            <- NEW in this set (the Summary page)
+  pages/project-cashflow.js               <- the fix
+  pages/business-financials.js
   components/BizNav.js
   lib/xero.js
   pages/api/business-financials.js
   pages/api/dashboard.js
   pages/connect.js
-  pages/project-cashflow.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
 
@@ -24,48 +24,57 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-1. BALANCE SHEET MOVED BEFORE CASH FLOW
+YOU WERE RIGHT - IT IS THE WHOLE AMOUNT
 ---------------------------------------
-    ... Invoice Finance | Balance Sheet | Cash Flow | 12-Month
+Look at what J190 was showing:
 
-Which reads better anyway - you set the financing up, then look at the forecast it
-feeds.
+    Previously claimed (gross)   0.00      "From the start"
+    Gross to date            401,663.50    the WHOLE contract
+    Labour this period        79,496.48    the WHOLE labour budget
+
+On a live job with real applications, previously claimed should never be zero.
 
 
-2. WHY SUMMARY HAD DIFFERENT TABS
----------------------------------
-pages/business-financials.js had its OWN hard-coded tab list:
+THE CAUSE - line 954
+--------------------
+    const priors = editId ? cands.filter(c => !from || (c.end||'') < from) : cands
 
-    const TABS = [
-      ['Summary', ...], ['Budgets', ...], ['Bills to Pay', ...],
-      ['Invoices Owed', ...], ['Cash Flow', ...],
-    ]
+When EDITING, only certificates ending BEFORE this period's start counted. Your
+forecast starts 31/08 and the last application ends after that, so the application
+was filtered out entirely. No prior, previously claimed 0, and the whole contract
+offered again as this period's work - which is why labour showed the entire budget.
 
-Five entries, a stale copy that predates the shared nav - along with its own INK,
-GOLD and gbp. So Summary showed five tabs while every other page showed thirteen,
-and anything added elsewhere never appeared there.
+This is the same fault behind the -160k you saw when reverting to Application 1.
 
-It now renders <BizNav /> like the other twelve pages, so it cannot drift again. I
-checked the rest of the section: no other page keeps a private copy.
+The comment directly above that line already said, about NEW forecasts: "money
+already claimed is already claimed - it cannot be un-claimed by choosing an earlier
+start date." That is just as true when editing. It was only ever the FORECAST chain
+that needed sequencing.
 
-The unused ReportImprovementLink import went with it - BizNav already renders it,
-so nothing is lost.
+
+THE FIX
+-------
+A real APPLICATION is never filtered out by the period dates. Only forecasts are
+sequenced, so a forecast in the middle of a chain still deducts only what came
+before it.
+
+  editing a forecast starting 31/08, App 3 ends 30/09
+     before   prior: none          previously claimed 0
+     after    prior: App 3         previously claimed = App 3's gross
+
+  editing a mid-chain forecast starting 01/07
+     prior: App 3, and a December forecast is still correctly excluded
+
+You will see it worked because the box will read "From App 3" instead of "From the
+start", and Labour this period will drop to the increment.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg630 - the due date shows in the field in LIGHT GREY when nothing is set, so you
-can see what the forecast is using. Clicking in and out does not turn a greyed
-default into a saved override.
+pkg631 - Balance Sheet moved before Cash Flow; the Summary page had its own stale
+five-entry tab list and now uses the shared nav.
 
-pkg629 - Reference column on Invoices owed.
+pkg630 - due date shown in light grey when nothing is set.
 
-pkg628 - date pickers commit on blur, so the row does not jump and the calendar
-does not shut mid-edit.
-
-pkg627 - BALANCE SHEET TAB, no account codes assumed anywhere. FINANCING & TAX
-column carrying commitments and balance sheet items, with payments stopping when
-the liability clears.
-
-RECONNECT XERO before the balance sheet read - it needs
-accounting.reports.balancesheet.read.
+pkg629 / 628 / 627 - Reference column; date pickers commit on blur; Balance Sheet
+tab and the Financing & tax column.
