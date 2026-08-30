@@ -83,8 +83,11 @@ const fmtShort = (n) => `\u00a3${Math.round(Number(n) || 0).toLocaleString('en-G
 //
 //   DISAPPROVAL IS PARTIAL. They flag a SLICE of an application - 7.5% of one, 3.8% of
 //   another, 35.8% of a third - never all-or-nothing.
-function eligibleFor(project, unpaidApps, settings) {
-  const raw = unpaidApps.reduce((s, a) => s + (a.thisCertNet || 0), 0)
+function eligibleFor(project, evidenceApps, settings, debt, invoices) {
+  // `debt` is the unpaid INVOICE total - what is actually outstanding. evidenceApps are
+  // read only for COMPOSITION, to work out how much of that debt the caps disallow.
+  const raw = Number(debt) || 0
+  const unpaidApps = evidenceApps || []
   const cv = Number(project.contractValue) || 0
   const reasons = []
   let excess = 0
@@ -93,11 +96,14 @@ function eligibleFor(project, unpaidApps, settings) {
   // application regardless of what it consists of.
   const ageDays = Number(settings.ageDays ?? 90)
   const today = new Date().toISOString().slice(0, 10)
+  // Aged on the INVOICE, not the application - the invoice carries the real due date and
+  // the real outstanding amount, and it is the invoice that is or is not paid.
   let aged = 0
-  for (const a of unpaidApps) {
-    if (!a.dueDate) continue
-    const days = Math.floor((new Date(today) - new Date(a.dueDate)) / 86400000)
-    if (days > ageDays) { aged += (a.thisCertNet || 0); }
+  for (const inv of (invoices || [])) {
+    const due = inv.dueDate || inv.date
+    if (!due) continue
+    const days = Math.floor((new Date(today) - new Date(due)) / 86400000)
+    if (days > ageDays) aged += (inv.amountDue || 0)
   }
   if (aged > 0) { excess += aged; reasons.push(`${fmtShort(aged)} more than ${ageDays} days past due - age disapproval`) }
 
@@ -217,19 +223,43 @@ export default function InvoiceFinance() {
     for (const p of data.projects) {
       const cust = p.customer || '(no customer)'
       if (!byCust[cust]) byCust[cust] = { customer: cust, key: norm(cust), projects: [] }
-      // THE DEBT IS THE APPLICATION - Bibby's own export says Document Type:
-      // Application on every line. Invoices are still read, but only to decide what has
-      // been PAID and to show retention separately.
+      // THE DEBT IS THE UNPAID INVOICE. The application is the evidence of what it
+      // consists of - which is exactly how you put it, and how Bibby work: they fund
+      // applications, and need the application to show what the invoice is made of.
+      //
+      // I had this on APPLICATIONS in pkg599, reasoning that their export says
+      // "Document Type: Application". That produced 1,375,463 of fundable debt against
+      // a real figure of about 421,033, because of this in the API:
+      //
+      //     autoPaid = matchInv ? (amountDue <= 0.005) : null   // null = unmatched
+      //     paid     = override != null ? !!override : (autoPaid === true)
+      //
+      // `null === true` is false, so EVERY application that cannot be matched to an
+      // invoice by "App N" counts as unpaid. On any project whose invoice references do
+      // not carry that, the entire application history is summed as outstanding.
+      //
+      // An invoice cannot do that: it has a real amountDue. The invoice basis reconciled
+      // to within 2,249 of Bibby's own Sales Ledger; the application basis is out by a
+      // factor of three.
       const invs = Array.isArray(p.invoices) ? p.invoices : []
       const retentionInvs = invs.filter(i => i.isRetention)
+      const fundingInvs = invs.filter(i => !i.isRetention)
       const retentionDebt = retentionInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
-      const unpaid = p.applications.filter(a => !isPaid(a))
-      const invoiceDebt = invs.filter(i => !i.isRetention).reduce((s, i) => s + (i.amountDue || 0), 0)
-      const notInvoiced = Math.max(0, unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0) - invoiceDebt)
+      const invoiceDebt = fundingInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
 
-      const elig = eligibleFor(p, unpaid, settings)
+      // Composition for the caps comes from the applications those invoices point at,
+      // falling back to unpaid applications where nothing matched.
+      const invAppNos = new Set(fundingInvs.map(i => i.appNumber).filter(n => n != null))
+      const unpaid = invAppNos.size
+        ? p.applications.filter(a => invAppNos.has(a.appNumber))
+        : p.applications.filter(a => !isPaid(a))
+
+      // Applied for but not yet invoiced - not debt, but shown so it does not vanish.
+      const notInvoiced = Math.max(0, p.applications.filter(a => !isPaid(a)).reduce((s, a) => s + (a.thisCertNet || 0), 0) - invoiceDebt)
+
+      const elig = eligibleFor(p, unpaid, settings, invoiceDebt, fundingInvs)
       byCust[cust].projects.push({
-        ...p, unpaidCount: unpaid.length, rawProject: unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0),
+        ...p, unpaidCount: fundingInvs.length, rawProject: invoiceDebt,
         retentionDebt, retentionCount: retentionInvs.length, notInvoiced,
         ...elig, fundableProject: elig.eligible,
       })
