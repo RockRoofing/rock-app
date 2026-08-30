@@ -1,71 +1,54 @@
-pkg623 - Revenue box now shows its own arithmetic
-==================================================
+pkg624 - VAT figures say when they are estimates
+=================================================
 
-*** SUPERSEDES pkg591 - pkg622. Six files. ***
+*** SUPERSEDES pkg591 - pkg623. Six files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
+  pages/project-cashflow.js
   pages/api/business-financials.js
   pages/api/dashboard.js
   pages/connect.js
 
 
-A CORRECTION FIRST
-------------------
-I flagged your J248 figure as retention possibly missing. It is not. My test
-listed "MCD 3%, no retention" as the match, but 3% RETENTION with 0% MCD gives the
-identical number - multiplication does not care about the order, and I read the
-label rather than the arithmetic.
+VAT IN AND VAT OUT NOW LABEL THEIR ESTIMATES
+--------------------------------------------
+Three different things were landing in that column and looking identical:
 
-    39,304.99 x 0.97 = 38,125.84
+  a FILED return          real, Box 5 as submitted
+  the VAT ESTIMATE        the current period's working figure
+  a RECLAIM ESTIMATE      my forward calculation from forecast materials and
+                          bills at spend x 20/120
 
-Exactly right, with your 3% retention and 0% MCD. Nothing to fix there.
+Only the first is fact. A figure marked "est" in amber is not a filed return.
 
+Hovering gives the detail, month by month:
 
-WHAT WAS ACTUALLY WRONG - THE LABELS
-------------------------------------
-    Revenue this period    38,125.84
-      "Increment less MCD and retention"
-      "39,304.99 left after the last forecast"
+    2026-09: VAT estimate; 2026-10: estimated reclaim on forecast materials and bills
 
-Two figures that look like they should agree and cannot: the first is AFTER
-deductions, the second is GROSS, and neither said which. That ambiguity is what
-sent us both chasing a phantom.
+A week that mixes a filed return with an estimate IS marked - part of it is a
+forecast, so the total is.
 
-Now the box states the arithmetic with the real rates:
-
-    "£39,304.99 gross, less retention 3%"
-    "£39,304.99 of contract left after Application 1 (gross, before deductions)"
-
-So a missing retention would read "no retention set" instead of having to be
-reverse-engineered from a percentage.
-
-It also handles the fraction/percentage trap in your notes: retentionPct is stored
-as a FRACTION (0.05) while mcdPct is a PERCENTAGE (2.5). A value under 1 is scaled
-for display, so 0.05 shows as 5% rather than 0.05%.
+VAT OUT gets the same treatment. It comes from the same months, so a PAYMENT can
+be just as much an estimate as a refund, and it was equally unlabelled.
 
 
-A BUG CAUGHT IN BUILD
----------------------
-grossIncrement reads sum.grossCurrent and I first declared it ABOVE `sum`. A const
-is not hoisted like a function, so that is a temporal dead zone - it would have
-thrown on the first render. Moved below.
+A NOTE ON MY OWN CHECKING
+-------------------------
+My build check was reporting "syntax OK" on a file that did not compile - the
+shell `&&` was swallowing esbuild's error. There were two broken braces in this
+change that it hid. I have verified every file in this package against esbuild's
+real output rather than an exit code, and will keep doing that.
 
 
-ALSO IN THIS PACKAGE (pkg622)
------------------------------
-"PREVIOUSLY CLAIMED (GROSS)" override - which you have already used on J248, with
-97,761.07 typed in. Blank follows the chain; a typed figure wins. Needed because a
-revenue override cannot be reconstructed from percentages, so the same materials
-money was entering twice.
+ALSO IN THIS PACKAGE
+--------------------
+pkg623 - the Revenue this period box states its own arithmetic with the real
+rates: "39,304.99 gross, less retention 3%". Two figures that looked like they
+should agree were gross and net, and neither said so.
 
-OVER-CLAIM WARNING when the prior exceeds contract plus instructed variations.
-
-
-STILL NOT TOUCHED - the -160k on reverting. Line 950 picks the prior differently
-for editing and for creating. I still think that is wrong, but it affects every
-forecast on every project and I want these confirmed first.
+pkg622 - "Previously claimed (gross)" override, and the over-claim warning when
+the prior exceeds contract plus instructed variations.

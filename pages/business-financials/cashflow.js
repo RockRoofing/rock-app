@@ -294,15 +294,20 @@ export default function CashFlow() {
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
     // Convention: positive = refund IN, negative = payment OUT.
     const vatByMonth = {}
+    // WHERE EACH MONTH'S FIGURE CAME FROM: 'filed' is a real return, everything else is
+    // an estimate. Tracked alongside the value so the table can say which is which -
+    // a forecast figure and a filed one look identical in a column of numbers.
+    const vatSrcByMonth = {}
     const allVatMonths = new Set([...Object.keys(data.vatFiled || {}), ...Object.keys(data.vatEstimateMonths || {})])
     for (const mk of allVatMonths) {
       const f = (data.vatFiled || {})[mk]
       if (f && f.box5 != null) {
         vatByMonth[mk] = f.direction === 'payable' ? -Math.abs(f.box5) : Math.abs(f.box5)
+        vatSrcByMonth[mk] = 'filed'
       } else {
         const e = (data.vatEstimateMonths || {})[mk]
         // estimate netVat: negative = refund. Flip so positive = refund in.
-        if (e) vatByMonth[mk] = -(e.netVat || 0)
+        if (e) { vatByMonth[mk] = -(e.netVat || 0); vatSrcByMonth[mk] = 'estimate' }
       }
     }
 
@@ -339,6 +344,7 @@ export default function CashFlow() {
         if (vatByMonth[mk] != null) continue          // a filed or estimated figure wins
         // spend is VAT-inclusive, so the VAT within it is spend x r/(1+r).
         vatByMonth[mk] = (spend * vatRate) / (1 + vatRate)
+        vatSrcByMonth[mk] = 'reclaim'
       }
     }
 
@@ -400,11 +406,14 @@ export default function CashFlow() {
       }, 0)
       // VAT: any month whose month-end falls in this week.
       let vatIn = 0
+      const vatSrcs = []
       for (const mk of Object.keys(vatByMonth)) {
         const [yy, mm] = mk.split('-').map(Number)
         const monthEnd = isoDay(new Date(yy, mm, 0))
-        if (inWk(monthEnd)) vatIn += vatByMonth[mk]
+        if (inWk(monthEnd)) { vatIn += vatByMonth[mk]; vatSrcs.push({ mk, src: vatSrcByMonth[mk] || 'estimate', amount: vatByMonth[mk] }) }
       }
+      // Any contributor that is not a filed return makes the week's figure an estimate.
+      const vatEstimated = vatSrcs.some(x => x.src !== 'filed')
       const vatInPos = vatIn > 0 ? vatIn : 0
       const vatOut = vatIn < 0 ? -vatIn : 0
 
@@ -496,6 +505,7 @@ export default function CashFlow() {
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
         weekStart: s,
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
+        vatEstimated, vatSrcs,
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
@@ -865,11 +875,11 @@ export default function CashFlow() {
                     <th style={{ ...th, textAlign: 'left' }}>Week</th>
                     <th style={th}>Invoices in</th>
                     <th style={th}>Retention in</th>
-                    <th style={th}>VAT in</th>
+                    <th style={th} title="VAT refunds landing at month end. A figure marked \u201cest\u201d is not a filed return - either the current VAT estimate, or a reclaim estimated from forecast materials and bills. Hover the figure to see which months and which source.">VAT in</th>
                     <th style={th}>Bills out</th>
                     <th style={th}>Overheads out</th>
                     <th style={th}>Vehicles / commitments</th>
-                    <th style={th}>VAT out</th>
+                    <th style={th} title="VAT payments at month end. A figure marked \u201cest\u201d is not a filed return. Hover the figure to see which months and which source.">VAT out</th>
                     <th style={th}>CIS to HMRC</th>
                     <th style={th} title="Sales from the Commercial project cash flow forecasts, excluding any period already applied for and any project with a real invoice that week.">Project sales</th>
                     <th style={th} title="Materials payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no materials scheduled - the cash flow is then showing income with no cost against it.">Materials out</th>
@@ -884,7 +894,13 @@ export default function CashFlow() {
                       <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.wk}</td>
                       <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
-                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}>{r.vatIn ? gbp(r.vatIn) : '-'}</td>
+                      {/* An estimate and a filed return look identical in a column of
+                          numbers. Anything not from a filed return is labelled. */}
+                      <td style={{ ...td, color: r.vatIn ? '#16a34a' : '#ccc' }}
+                        title={r.vatSrcs && r.vatSrcs.length ? r.vatSrcs.map(x => `${x.mk}: ${x.src === 'filed' ? 'filed return' : x.src === 'reclaim' ? 'estimated reclaim on forecast materials and bills' : 'VAT estimate'}`).join('; ') : ''}>
+                        {r.vatIn ? gbp(r.vatIn) : '-'}
+                        {r.vatIn && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.bills ? '#dc2626' : '#ccc' }}>{r.bills ? gbp(-r.bills) : '-'}</td>
                       <td style={{ ...td, color: r.overheads ? '#dc2626' : '#ccc', cursor: r.overheads ? 'pointer' : 'default', textDecoration: r.overheads ? 'underline dotted' : 'none' }}
                         onClick={() => r.overheads && setOpenOhWk(openOhWk === i ? null : i)}
@@ -892,7 +908,13 @@ export default function CashFlow() {
                         {r.overheads ? gbp(-r.overheads) : '-'}{r.overheads ? <span style={{ fontSize: 9, color: '#999' }}>{openOhWk === i ? ' \u25B2' : ' \u25BC'}</span> : null}
                       </td>
                       <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
-                      <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
+                      {/* Same treatment - VAT out comes from the same months, so a
+                          payment can be an estimate too. */}
+                      <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}
+                        title={r.vatSrcs && r.vatSrcs.length ? r.vatSrcs.map(x => `${x.mk}: ${x.src === 'filed' ? 'filed return' : x.src === 'reclaim' ? 'estimated from forecast materials and bills' : 'VAT estimate'}`).join('; ') : ''}>
+                        {r.vatOut ? gbp(-r.vatOut) : '-'}
+                        {r.vatOut && r.vatEstimated ? <span style={{ fontSize: 9, color: '#b45309', fontWeight: 700 }}> est</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
                       {/* Three columns, not one net figure. If Materials out and Labour
                           out sit at nil while Project sales runs high, the cost side of
