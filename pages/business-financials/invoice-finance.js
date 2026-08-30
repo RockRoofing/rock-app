@@ -153,6 +153,8 @@ export default function InvoiceFinance() {
   const [drawnDate, setDrawnDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [drawnAmt, setDrawnAmt] = useState('')
   const limitsRef = useRef(limits)
+  const limitTimer = useRef(null)
+  const [limitSaved, setLimitSaved] = useState({})   // { [customer]: 'saving'|'saved'|'failed' }
   useEffect(() => { limitsRef.current = limits }, [limits])
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
   const [expanded, setExpanded] = useState({})        // { xeroId: true }
@@ -495,8 +497,26 @@ export default function InvoiceFinance() {
     fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'invoice-finance', action: 'save-app-paid', appId, paid }) }).catch(() => {})
   }
 
+  // AUTO-SAVES AS YOU TYPE, debounced.
+  //
+  // It used to save on BLUR only, so a figure typed and then navigated away from - or
+  // committed with Enter - was lost, with nothing on screen either way. The blur handler
+  // stays as an immediate flush for when you tab straight out.
+  //
+  // The map is written whole each time. It is small, and a partial write of one key
+  // would race with another person editing a different customer.
   function setLimit(name, value) {
-    setLimits(prev => ({ ...prev, [name]: { ...(prev[name] || {}), insuredLimit: value } }))
+    const next = { ...limits, [name]: { ...(limits[name] || {}), insuredLimit: value } }
+    setLimits(next)
+    setLimitSaved(s => ({ ...s, [name]: 'saving' }))
+    if (limitTimer.current) clearTimeout(limitTimer.current)
+    // Passed explicitly rather than read from state or the ref - both would still hold
+    // the PREVIOUS value when this fires.
+    limitTimer.current = setTimeout(async () => {
+      const ok = await saveLimitsNow(next)
+      setLimitSaved(s => ({ ...s, [name]: ok ? 'saved' : 'failed' }))
+      if (ok) setTimeout(() => setLimitSaved(s => { const c = { ...s }; delete c[name]; return c }), 1800)
+    }, 700)
   }
 
   // SAVES ON UPLOAD. It used to only stage the parsed limits into local state - close
@@ -691,7 +711,7 @@ export default function InvoiceFinance() {
                     </td></tr>
                   )}
                   {customers.map((c) => (
-                    <CustomerBlock key={c.customer} c={c} expanded={expanded} setExpanded={setExpanded}
+                    <CustomerBlock key={c.customer} c={c} expanded={expanded} setExpanded={setExpanded} savedState={limitSaved[c.customer]}
                       limits={limits} setLimit={setLimit} isPaid={isPaid} setPaid={setPaid} />
                   ))}
                 </tbody>
@@ -708,7 +728,7 @@ export default function InvoiceFinance() {
   )
 }
 
-function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, setPaid }) {
+function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, setPaid, savedState }) {
   return (
     <>
       <tr style={{ borderBottom: '1px solid #eee', background: !c.hasLimit && c.fundable > 0 ? '#fffdf5' : '#fcfbf9' }}>
@@ -716,11 +736,20 @@ function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, set
         <td style={{ ...td, padding: '4px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end' }}>
             <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
+            {/* Says whether the typed figure actually reached the server. Without it
+                there is no way to tell an auto-save from a lost keystroke. */}
+            {savedState && (
+              <span style={{ fontSize: 10, fontWeight: 700, whiteSpace: 'nowrap',
+                color: savedState === 'saved' ? '#16a34a' : savedState === 'failed' ? '#dc2626' : '#b45309' }}>
+                {savedState === 'saved' ? 'saved' : savedState === 'failed' ? 'NOT SAVED' : 'saving'}
+              </span>
+            )}
             <input type="number" value={(limits[c.customer]?.insuredLimit) ?? ''} placeholder="0"
               onChange={e => setLimit(c.customer, e.target.value)}
               // Saves on blur, so a typed limit persists without pressing anything. The
               // import saves itself too - nothing about the limits depends on a button.
-              onBlur={() => saveLimitsNow()}
+              // Immediate flush - do not wait out the debounce when the field is left.
+              onBlur={() => { if (limitTimer.current) { clearTimeout(limitTimer.current); limitTimer.current = null } saveLimitsNow(limitsRef.current).then(ok => setLimitSaved(s => ({ ...s, [c.customer]: ok ? 'saved' : 'failed' }))) }}
               style={{ width: 100, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
           </div>
         </td>

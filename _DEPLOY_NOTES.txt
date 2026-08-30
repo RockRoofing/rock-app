@@ -1,83 +1,63 @@
-pkg607 - Cash Flow: invoice finance comes FROM the IF page, plus overdraft,
-          per-card limits and as-at dates
-============================================================================
+pkg608 - Insured limits auto-save as you type, and say so
+==========================================================
 
-*** SUPERSEDES pkg591 - pkg606. Three files. ***
+*** SUPERSEDES pkg591 - pkg607. Three files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
+  pages/business-financials/cashflow.js
   pages/api/business-financials.js
 
 
-1. THERE WERE TWO DIFFERENT MODELS OF THE FACILITY
---------------------------------------------------
-The Cash Flow was NOT reading the Invoice Finance page. It had its own, older
-calculation at business-financials.js:748 - a flat 10% retention deduction, the
-insured limit capping the ADVANCE instead of the debt, no High Involvement, no
-eligibility caps, no age rule, and the old single `drawn` setting rather than the
-dated history.
-
-It could never have agreed with the IF page. Two availability figures on two
-pages is worse than one that is slightly wrong.
-
-Now: the IF page PUBLISHES its computed position (config:if-position) whenever
-the numbers settle, and the Cash Flow reads it. One calculation, one answer.
-
-The "Invoice finance limit" and "Invoice finance drawn" boxes are GONE from the
-Cash Flow, replaced by a panel that says where the figures came from:
-
-    Invoice finance - from the Invoice Finance page
-    Funded GBP 172,776 - drawn GBP 122,711 as at 29/08/26
-    Available GBP 50,065 - updated 30/08/26
-
-Publishing happens on load, not on a button - the Cash Flow must not depend on
-somebody remembering to press something on another page. If you have not opened
-the IF page since deploying, the panel says so.
-
-
-2. AS-AT DATES ON EVERY BALANCE
--------------------------------
-Each bank account, each card, and the combined opening cash now carry the date
-they were read from Xero. No date shows "no balance date - press Refresh
-balances", so a stale figure is obvious rather than being taken as today's cash.
-The drawn balance carries its own date from the IF page.
-
-
-3. OPENING BALANCE - WHAT IT IS MADE OF
----------------------------------------
-Under the opening cash box, the components are itemised:
-
-    Bank cash            GBP x
-    Card debt            GBP y   already owed, not cash
-    Available on top, not counted as opening cash:
-    Invoice finance      GBP a   (drawn as at dd/mm/yy)
-    Card headroom        GBP b
-    Overdraft            GBP c
-    Max cash available   GBP z
-
-FACILITIES ARE LISTED BUT NOT ADDED IN. Opening balance is CASH. Fold headroom
-into it and the 13-week line can never go negative, which is the one thing the
-forecast exists to show.
-
-
-4. OVERDRAFT AND PER-CARD LIMITS (from pkg606)
-----------------------------------------------
-Overdraft limit field, with no double counting - drawn overdraft already shows as
-a negative bank balance, so headroom is the limit LESS what is used:
-
-  bank -20,000  limit 20,000  ->  headroom 0, max cash -20,000
-  (adding the limit on top would have shown 45,000 of headroom on a fully drawn
-   overdraft)
-
-One limit per card account, because a pooled figure hides which card is full.
-
-
-TWO WHITELIST BUGS FOUND
+THE LIMITS NOW AUTO-SAVE
 ------------------------
-The finance config is whitelisted on BOTH the load and the save. Anything not
-named in each is silently dropped - the overdraft and card limits had to be added
-to both or they would have been accepted on screen and never stored. Same shape
-of fault as the invoice finance settings whitelist earlier.
+They saved on BLUR only. So a figure typed and then navigated away from - or
+committed with Enter, or left while you went to look at something else - never
+reached the server. And nothing on screen said either way, which is why it did
+not feel like it was saving.
+
+Now: saved automatically 0.7 seconds after you stop typing, with the blur handler
+kept as an immediate flush for when you tab straight out.
+
+ONE SAVE PER CUSTOMER, not one per keystroke. Typing "300000" fires a single
+write once you stop, carrying 300000 - checked.
+
+THE WHOLE MAP IS WRITTEN each time, not just the one key. It is small, and a
+partial write would race with anyone editing a different customer.
+
+The value is passed explicitly into the debounced call rather than read back from
+state or the ref - both would still hold the PREVIOUS value when the timer fires,
+so it would save the figure you had typed over.
+
+
+IT NOW TELLS YOU
+----------------
+Next to each limit box:
+
+    saving      amber, while the write is in flight
+    saved       green, for about two seconds
+    NOT SAVED   red, and it stays
+
+Without that there is no way to tell an auto-save from a lost keystroke - which
+is exactly the position you were in.
+
+
+ALSO IN THIS PACKAGE (pkg607)
+-----------------------------
+INVOICE FINANCE FIGURES COME FROM THE IF PAGE. The Cash Flow had its own older
+model of the facility - flat 10% retention, the limit capping the advance instead
+of the debt, no High Involvement, no caps, no age rule, and the old single drawn
+setting. It could never have agreed. The IF page now publishes its position and
+the Cash Flow reads it, with a panel saying where the numbers came from and when.
+
+AS-AT DATES on every bank account, every card, the combined opening cash and the
+drawn balance.
+
+OPENING BALANCE ITEMISED - bank cash and card debt, then the facilities listed
+separately under "available on top, not counted as opening cash". Facilities are
+deliberately NOT added in: fold them into the opening figure and the 13-week line
+can never go negative, which is the one thing it exists to show.
+
+OVERDRAFT with no double counting, and one limit per card account.
