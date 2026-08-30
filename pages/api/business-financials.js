@@ -1,7 +1,7 @@
 import { requireRole } from '../../lib/portalAuth'
 import { getTokens, saveTokens, getProject } from '../../lib/db'
 import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
-import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances } from '../../lib/xero'
+import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances, fetchBalanceSheetAccounts } from '../../lib/xero'
 
 // End-of-month + N days, matching paymentDate() on the project cash flow page. Used to
 // place materials on older forecasts that only stored a delivery date.
@@ -753,7 +753,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, bsItems, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -761,6 +761,7 @@ export default async function handler(req, res) {
       redis.get('retention:entries').then(v => v || { entries: [] }).catch(() => ({ entries: [] })),
       redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
       redis.get('config:cashflow-excluded').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({})),
+      redis.get('config:bs-items').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('bank:account-balances').then(v => v || null).catch(() => null),
       redis.get('config:manual-balances').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
@@ -1002,6 +1003,7 @@ export default async function handler(req, res) {
       financeCfg,
       manualBalances,
       cfExcluded,
+      bsItems,
       ifAvailability,
       bills,
       billPayDates,
@@ -1058,6 +1060,50 @@ export default async function handler(req, res) {
   // EXCLUDE a bill or invoice from the forecast. Keyed by id (bills) or invoice number
   // (receivables), value true. Absent = included, so nothing changes for anything not
   // deliberately excluded.
+  // ---- BALANCE SHEET / FINANCING ------------------------------------------------
+  //
+  // Deliberately generic. Accounts are whatever Xero's Balance Sheet returns for this
+  // tenant - no codes assumed anywhere - and a selection is stored against the account
+  // id, so a different company with a different chart of accounts works unchanged.
+  if ((req.body || {}).view === 'balance-sheet' || view === 'balance-sheet') {
+    if (req.method === 'POST' && (req.body || {}).action === 'refresh') {
+      try {
+        const tokens = await getValidTokens()
+        if (!tokens) return res.status(400).json({ ok: false, error: 'Xero not connected' })
+        const r = await fetchBalanceSheetAccounts(tokens.access_token, tokens.tenant_id)
+        if (!r.ok) return res.status(200).json({ ok: false, error: r.error })
+        await redis.set('bs:accounts', { ...r, fetchedAt: new Date().toISOString() })
+        return res.json({ ok: true, ...r })
+      } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+    }
+    if (req.method === 'POST' && (req.body || {}).action === 'save-items') {
+      try {
+        const items = Array.isArray((req.body || {}).items) ? req.body.items : []
+        const clean = items.filter(x => x && x.id).map(x => ({
+          id: String(x.id).slice(0, 120),
+          name: String(x.name || '').slice(0, 120),
+          section: String(x.section || '').slice(0, 80),
+          // What is owed. Seeded from Xero, editable - the ledger balance and the amount
+          // you have agreed to pay off are not always the same figure.
+          liability: Number(x.liability) || 0,
+          monthly: Number(x.monthly) || 0,
+          day: Math.min(28, Math.max(1, Number(x.day) || 28)),
+          start: String(x.start || '').slice(0, 7),
+          end: String(x.end || '').slice(0, 7),
+          note: String(x.note || '').slice(0, 200),
+          inForecast: x.inForecast !== false,
+        }))
+        await redis.set('config:bs-items', clean)
+        return res.json({ ok: true, items: clean })
+      } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+    }
+    const [bsAccounts, bsItems] = await Promise.all([
+      redis.get('bs:accounts').then(v => v || null).catch(() => null),
+      redis.get('config:bs-items').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
+    ])
+    return res.json({ accounts: bsAccounts?.accounts || [], asAt: bsAccounts?.asAt || null, fetchedAt: bsAccounts?.fetchedAt || null, items: bsItems })
+  }
+
   if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-exclusions') {
     try {
       const { key, excluded } = req.body || {}

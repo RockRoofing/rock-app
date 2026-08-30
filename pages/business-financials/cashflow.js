@@ -18,6 +18,46 @@ const inpS = { padding: '5px 7px', border: '1px solid #ddd', borderRadius: 6, fo
 // dates, so an exclusion and a date always refer to the same invoice.
 const todayISO = new Date().toISOString().slice(0, 10)
 
+// DATE CELL WITH A DRAFT.
+//
+// The bills list is sorted by planned payment date, and the input committed on every
+// change. So scrolling the picker from August to September wrote a September date
+// immediately, the list re-sorted, the row jumped somewhere else and the calendar shut -
+// before you had chosen a day.
+//
+// The draft is held locally and only committed on BLUR, so nothing moves while the picker
+// is open. Escape abandons the edit, Enter commits it.
+//
+// Module scope: a component declared inside another remounts on every render, which would
+// close the picker just as effectively.
+function DateCell({ value, onCommit, onClear, highlight, title }) {
+  const [draft, setDraft] = useState(value || '')
+  const [editing, setEditing] = useState(false)
+  // Follow the saved value when NOT editing - otherwise a save elsewhere would be
+  // overwritten by a stale draft.
+  useEffect(() => { if (!editing) setDraft(value || '') }, [value, editing])
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type="date"
+        value={draft}
+        title={title}
+        onFocus={() => setEditing(true)}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { setEditing(false); if ((draft || '') !== (value || '')) onCommit(draft) }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.currentTarget.blur() }
+          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); e.currentTarget.blur() }
+        }}
+        style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (highlight ? '#fed7aa' : '#e5e5e5'), borderRadius: 5 }}
+      />
+      {onClear && value && (
+        <button onClick={onClear} title="Clear" style={{ background: 'none', border: 'none', color: '#c66', cursor: 'pointer' }}>&times;</button>
+      )}
+    </div>
+  )
+}
+
 const invKey = (i) => String(i.invoiceNumber || i.number || i.id || '')
 
 const fmtDMY = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
@@ -119,6 +159,41 @@ function overheadEvents(schedule, budgets, start, end, predictedByCodeMonth) {
 
 // Recurring cash commitments (e.g. vehicle finance / HP) that aren't in the P&L.
 // Each: { id, name, amount, day (1-31), start?: 'YYYY-MM', end?: 'YYYY-MM' }.
+// BALANCE SHEET ITEMS scheduled into cash events, same shape as commitments so the two
+// can share a column. These are payments that reduce a liability and never touch the
+// P&L - loan and HP capital, HMRC arrears, corporation tax, dividends.
+//
+// Stops when the liability is cleared, not just at the end month: paying 5,000 a month
+// against 12,000 owed should produce three payments, the last of 2,000, not carry on to
+// the horizon.
+function balanceSheetEvents(items, start, end) {
+  const events = []
+  const months = []
+  const cur = new Date(start.getFullYear(), start.getMonth(), 1)
+  const last = new Date(end.getFullYear(), end.getMonth(), 1)
+  while (cur <= last) { months.push(new Date(cur)); cur.setMonth(cur.getMonth() + 1) }
+  for (const it of (items || [])) {
+    if (it.inForecast === false) continue
+    const monthly = Number(it.monthly) || 0
+    if (!monthly) continue
+    let left = Number(it.liability) || 0
+    const hasLiability = left > 0
+    for (const mDate of months) {
+      const y = mDate.getFullYear(), m = mDate.getMonth()
+      const mk = `${y}-${pad(m + 1)}`
+      if (it.start && mk < it.start) continue
+      if (it.end && mk > it.end) continue
+      if (hasLiability && left <= 0) break
+      const amount = hasLiability ? Math.min(monthly, left) : monthly
+      if (amount <= 0) break
+      if (hasLiability) left -= amount
+      const day = clampDay(y, m, Number(it.day || 28))
+      events.push({ date: `${y}-${pad(m + 1)}-${pad(day)}`, amount, label: it.name || 'Financing', kind: 'bs' })
+    }
+  }
+  return events
+}
+
 function commitmentEvents(commitments, start, end) {
   const events = []
   const months = []
@@ -325,7 +400,12 @@ export default function CashFlow() {
     const end = new Date(start.getTime() + (WEEKS * 7 - 1) * 86400000)
 
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
-    const commEvents = commitmentEvents(data.cashCommitments, start, end)
+    // ONE COLUMN. Vehicles and commitments are financing too, so they sit with the
+    // balance sheet items rather than in a column of their own.
+    const commEvents = [
+      ...commitmentEvents(data.cashCommitments, start, end).map(e => ({ ...e, kind: e.kind || 'commitment' })),
+      ...balanceSheetEvents(data.bsItems, start, end),
+    ]
 
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
     // Convention: positive = refund IN, negative = payment OUT.
@@ -962,7 +1042,7 @@ export default function CashFlow() {
                     <th style={th} title="VAT refunds landing at month end. A figure marked \u201cest\u201d is not a filed return - either the current VAT estimate, or a reclaim estimated from forecast materials and bills. Hover the figure to see which months and which source.">VAT in</th>
                     <th style={th}>Bills out</th>
                     <th style={th}>Overheads out</th>
-                    <th style={th}>Vehicles / commitments</th>
+                    <th style={th} title="Cash that never touches the P&L: loan and HP CAPITAL repayments, HMRC arrears, corporation tax, dividends, plus vehicle and other recurring commitments. Set up on the Balance Sheet tab. The cost was recognised when it arose, so these reduce a liability rather than being an overhead.">Financing &amp; tax</th>
                     <th style={th} title="VAT payments at month end. A figure marked \u201cest\u201d is not a filed return. Hover the figure to see which months and which source.">VAT out</th>
                     <th style={th}>CIS to HMRC</th>
                     <th style={th} title="Sales from the Commercial project cash flow forecasts, excluding any period already applied for and any project with a real invoice that week.">Project sales</th>
@@ -1146,8 +1226,15 @@ export default function CashFlow() {
                           <td style={{ ...td, fontWeight: 600 }}>{gbp(r.amountDue)}</td>
                           <td style={{ ...td, textAlign: 'left' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <input type="date" value={r.expectedDate || ''} onChange={e => setExpectedDate(k, e.target.value)}
-                                style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (r.expectedDate ? '#bbf7d0' : '#e5e5e5'), borderRadius: 5 }} />
+                              {/* Same treatment - commits on blur so the picker survives
+                                  the edit, and a date typed here still writes straight to
+                                  invoice:meta, so the Invoices Owed page follows. */}
+                              <DateCell
+                                value={r.expectedDate || ''}
+                                highlight={!!r.expectedDate}
+                                title="Expected payment date. Shared with the Invoices Owed page."
+                                onCommit={v => setExpectedDate(k, v)}
+                              />
                               {isOverdue && (
                                 <span title="Past its due date with no expected date, so the forecast collects it in week 1. Set a date you actually expect."
                                   style={{ fontSize: 9.5, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', cursor: 'help' }}>OVERDUE - confirm date</span>
@@ -1220,13 +1307,21 @@ export default function CashFlow() {
                               </td>
                               <td style={{ ...td, textAlign: 'left' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                  <input type="date" value={billOverrides[b.id] || b.payDate || ''} onChange={e => setBillPayDate(b.id, e.target.value)}
-                                    style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (overridden ? '#fed7aa' : '#e5e5e5'), borderRadius: 5, color: overridden ? '#ea580c' : '#555', background: overridden ? '#fff7ed' : '#fff', fontWeight: overridden ? 600 : 400 }} />
+                                  {/* Commits on blur, not on every change - the list is
+                                      sorted by this date, so committing mid-edit re-sorted
+                                      the table, moved the row and shut the picker before a
+                                      day had been picked. */}
+                                  <DateCell
+                                    value={billOverrides[b.id] || b.payDate || ''}
+                                    highlight={overridden}
+                                    title="Planned payment date. Pick a day, then click away to save - the list re-sorts by this date."
+                                    onCommit={v => setBillPayDate(b.id, v)}
+                                    onClear={overridden ? () => setBillPayDate(b.id, '') : null}
+                                  />
                                   {isOverdue && (
                                     <span title="Past its due date, so it lands in week 1 of the forecast. Set a planned payment date you actually intend to pay on."
                                       style={{ fontSize: 9.5, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', cursor: 'help' }}>OVERDUE - confirm date</span>
                                   )}
-                                  {overridden && <button onClick={() => setBillPayDate(b.id, '')} title="Clear - use due date" style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>&times;</button>}
                                 </div>
                               </td>
                               <td style={{ ...td, textAlign: 'center' }}>

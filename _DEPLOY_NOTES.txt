@@ -1,56 +1,66 @@
-pkg626 - "Overdue - brought forward" row
-=========================================
+pkg628 - Date pickers hold still while you use them
+====================================================
 
-*** SUPERSEDES pkg591 - pkg625. Six files. ***
+*** SUPERSEDES pkg591 - pkg627. ***
+*** ONE NEW FILE - create it in GitHub:
+      pages/business-financials/balance-sheet.js
+***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/cashflow.js
+  components/BizNav.js
+  lib/xero.js
   pages/api/business-financials.js
-  pages/business-financials/invoice-finance.js
-  pages/project-cashflow.js
   pages/api/dashboard.js
   pages/connect.js
+  pages/project-cashflow.js
+  pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
+
+NEW FILE (create)
+-----------------
+  pages/business-financials/balance-sheet.js
 
 
-YES - AND IT MATTERS MORE THAN IT LOOKS
----------------------------------------
-Week 1 was carrying months of arrears and reading as an ordinary week. A separate
-row makes both halves visible:
+THE DATE PICKER PROBLEM
+-----------------------
+The bills list is SORTED BY planned payment date (line 1224), and the input
+committed on every change. So scrolling the picker from August to September wrote
+a September date immediately - the list re-sorted, the row jumped somewhere else,
+and the calendar closed on a date you had not chosen.
 
-  Overdue - brought forward   in 45,477   out  8,000   net  37,477   closing 39,977
-  w/c 24 Aug                  in 10,356   out 73,922   net -63,566   closing -23,589
+The date is now held as a local draft and committed only on BLUR:
 
-Before, that was ONE row showing in 55,833 and out 81,922, with no way to see that
-45,477 of the income was months late and might not arrive at all.
+  scroll Aug -> Sep    0 commits, row stays put
+  pick the 15th        0 commits
+  click away           1 commit, 2026-09-15
 
-The row is amber, labelled "late - confirm dates below", and hovering explains it
-is money past its date swept into today rather than money due this week.
+Two commits became one, and nothing moves while the picker is open.
 
-Week 1 now shows only what is genuinely due in week 1.
+Enter commits, Escape abandons the edit and puts the old date back.
 
+THE SAME TREATMENT ON EXPECTED PAYMENT DATES in the Invoices owed table - same
+fault, same fix, and it still writes straight to invoice:meta so the Invoices Owed
+page follows.
 
-THE CHART KEEPS 13 POINTS
--------------------------
-The arrears row is not a week, so plotting it would give a fourteenth point that
-reads as one and stretches the axis. It is folded into week 1 for the chart only -
-same closing balance, combined in and out. The table keeps them apart, which is
-where the distinction is useful.
-
-
-CONSISTENT WITH THE TABLES BELOW
---------------------------------
-Everything in that row is flagged "OVERDUE - confirm date" in the Bills to pay and
-Invoices owed tables underneath, so the row tells you the size of the problem and
-the tables tell you which items. Setting a date moves the item out of the arrears
-row and into the week you actually expect it.
-
-The 13-week totals still include the arrears - they are real money, just late.
+One detail: the draft only follows the saved value when the field is NOT being
+edited. Otherwise a save happening elsewhere would overwrite what you were part
+way through typing.
 
 
-REMOVED
--------
-inWkOrOverdue, the predicate that quietly folded overdue items into week 1. Now
-that arrears are split out explicitly, a single test that hid them would defeat
-the point of the row.
+ALSO IN THIS PACKAGE (pkg627)
+-----------------------------
+BALANCE SHEET TAB - reads every account from Xero's Balance Sheet report, grouped
+by Xero's own sections, with NO account codes assumed anywhere. Track the ones you
+want, set outstanding / per month / day / from / to, and they feed the forecast.
+
+"Clears in" turns RED when the schedule will not clear the balance.
+
+FINANCING & TAX column replaces "Vehicles / commitments" and carries both.
+Payments STOP when the liability clears: 12,000 at 5,000/month gives 5,000, 5,000,
+2,000 - not a fourth full payment.
+
+RECONNECT XERO before using the balance sheet read - it needs
+accounting.reports.balancesheet.read, which does not apply to an existing
+connection.
