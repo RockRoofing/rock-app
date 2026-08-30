@@ -1,12 +1,12 @@
-pkg622 - Forecast: "Previously claimed" override and an over-claim warning
-===========================================================================
+pkg623 - Revenue box now shows its own arithmetic
+==================================================
 
-*** SUPERSEDES pkg591 - pkg621. SIX files - project-cashflow.js is new here. ***
+*** SUPERSEDES pkg591 - pkg622. Six files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js               <- NEW in this set
+  pages/project-cashflow.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/api/business-financials.js
@@ -14,64 +14,58 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-THE DIAGNOSIS, CONFIRMED
-------------------------
-Re-saving app 1 did not fix it, which rules out a stale grossClaimedToDate and
-leaves double counting. On save (line 1466):
+A CORRECTION FIRST
+------------------
+I flagged your J248 figure as retention possibly missing. It is not. My test
+listed "MCD 3%, no retention" as the match, but 3% RETENTION with 0% MCD gives the
+identical number - multiplication does not care about the order, and I read the
+label rather than the arithmetic.
 
-    grossClaimedToDate: sum.grossCurrent + (prevGross - priorMeasuredGross) + revUpliftGross
+    39,304.99 x 0.97 = 38,125.84
 
-sum.grossCurrent ALREADY contains that period's materials on site. Your app 1
-override WAS the materials on site - so the same 62,000 enters twice, and app 3
-deducts 158,000 where 96,000 has actually been claimed.
-
-  contract        135,000
-  claimed         96,000   (60,000 + 36,000, which is the cash)
-  chain deducts   158,000
-  app 3 offers    -23,000  instead of 39,000
+Exactly right, with your 3% retention and 0% MCD. Nothing to fix there.
 
 
-1. "PREVIOUSLY CLAIMED (GROSS)" - A TYPED FIGURE WINS
------------------------------------------------------
-New override box beside Revenue this period. Blank follows the chain exactly as
-now; type a figure and it is used directly.
+WHAT WAS ACTUALLY WRONG - THE LABELS
+------------------------------------
+    Revenue this period    38,125.84
+      "Increment less MCD and retention"
+      "39,304.99 left after the last forecast"
 
-Put 96,000 in and app 3 gives 39,000.
+Two figures that look like they should agree and cannot: the first is AFTER
+deductions, the second is GROSS, and neither said which. That ambiguity is what
+sent us both chasing a phantom.
 
-This is the honest fix. A revenue override cannot be reconstructed from
-percentages - that is what "override" means - so where the chain cannot know, you
-tell it. The applications screen already works this way.
+Now the box states the arithmetic with the real rates:
 
-Saved with the forecast, reloaded when you edit it, and RESET when you open a
-different one - left out of the reset it would carry silently onto the next
-forecast, which is the worst kind of stale figure because it looks deliberate.
+    "£39,304.99 gross, less retention 3%"
+    "£39,304.99 of contract left after Application 1 (gross, before deductions)"
+
+So a missing retention would read "no retention set" instead of having to be
+reverse-engineered from a percentage.
+
+It also handles the fraction/percentage trap in your notes: retentionPct is stored
+as a FRACTION (0.05) while mcdPct is a PERCENTAGE (2.5). A value under 1 is scaled
+for display, so 0.05 shows as 5% rather than 0.05%.
 
 
-2. OVER-CLAIM WARNING
+A BUG CAUGHT IN BUILD
 ---------------------
-Red banner above the summary boxes when the prior exceeds contract plus
-instructed variations:
-
-    Already claimed GBP 158,000 against a contract of GBP 135,000 - over by
-    GBP 23,000. That is why this period offers a negative figure: the excess
-    unwinds here.
-
-It should never have been possible to claim more than the job is worth without
-being told. Surfacing later as a NEGATIVE revenue on the next application reads
-like a broken calculation rather than an over-claim.
+grossIncrement reads sum.grossCurrent and I first declared it ABOVE `sum`. A const
+is not hoisted like a function, so that is a temporal dead zone - it would have
+thrown on the first render. Moved below.
 
 
-STILL OUTSTANDING - THE -160k
+ALSO IN THIS PACKAGE (pkg622)
 -----------------------------
-Line 950 chooses the prior differently for editing and for creating:
+"PREVIOUSLY CLAIMED (GROSS)" override - which you have already used on J248, with
+97,761.07 typed in. Blank follows the chain; a typed figure wins. Needed because a
+revenue override cannot be reconstructed from percentages, so the same materials
+money was entering twice.
 
-    const priors = editId ? cands.filter(c => !from || (c.end||'') < from) : cands
+OVER-CLAIM WARNING when the prior exceeds contract plus instructed variations.
 
-Editing takes only certificates ending BEFORE this period; creating takes
-everything and the latest wins. I still think that is wrong - the prior should be
-the certificate immediately preceding IN SEQUENCE - but I have not touched it,
-because changing prior selection affects every forecast on every project and I
-want this fix confirmed first.
 
-Deploy, put 96,000 into Previously claimed on app 3, and tell me it reads 39,000.
-Then I will look at that one.
+STILL NOT TOUCHED - the -160k on reverting. Line 950 picks the prior differently
+for editing and for creating. I still think that is wrong, but it affects every
+forecast on every project and I want these confirmed first.

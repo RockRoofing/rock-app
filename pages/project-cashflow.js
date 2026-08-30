@@ -1029,6 +1029,18 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // applications screen already allows.
   const prevGross = prevGrossOverride === null || prevGrossOverride === '' ? prevGrossAuto : num(prevGrossOverride)
 
+  // SHOW THE ARITHMETIC on the revenue box, with the actual rates.
+  //
+  // "Increment less MCD and retention" sitting next to "X left after the last forecast"
+  // reads as two versions of the same number that ought to agree. One is GROSS, the other
+  // is after deductions, and neither said so - it cost a round trip working out whether a
+  // 3% gap was retention working correctly or retention missing entirely.
+  //
+  // retentionPct is stored as a FRACTION (0.05) while mcdPct is a PERCENTAGE (2.5), so a
+  // value under 1 is read as a fraction and scaled for display. Getting that wrong is how
+  // 3% becomes 300%.
+  const retPctShown = num(retPct) > 0 && num(retPct) < 1 ? num(retPct) * 100 : num(retPct)
+
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
     const items = (rates && Array.isArray(rates.items)) ? rates.items : []
@@ -1151,6 +1163,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // are not part of this.
   const workApp = { contractWorks: rows, variations: varsForCert, materials: mosLine(mosToDate), mcdPct: num(mcdPct), retentionPct: num(retPct), ...mcdBasis }
   const sum = useMemo(() => computeApplicationSummary(workApp, prevGross), [rows, varsForCert, mosToDate, mcdPct, retPct, prevGross, contractTerms])
+
+  // AFTER `sum` - it reads sum.grossCurrent. Declared above it this is a temporal dead
+  // zone: a const is not hoisted like a function, so it throws on the first render.
+  const grossIncrement = Math.max(0, (sum?.grossCurrent || 0) - prevGross)
 
   // REVENUE THIS PERIOD.
   //
@@ -1588,8 +1604,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
                   colour="#334155" autoNote={`From ${priorLabel}`}
                   sub2="Type what has actually been claimed if an earlier period's revenue was overridden" />
                 <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
-                  colour="#0f766e" autoNote="Increment less MCD and retention"
-                  sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} left after ${priorLabel}`} />
+                  colour="#0f766e"
+                  autoNote={`${gbp(grossIncrement)} gross${num(mcdPct) > 0 ? `, less MCD ${num(mcdPct)}%` : ''}${retPctShown > 0 ? `, less retention ${retPctShown}%` : ', no retention set'}`}
+                  sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} of contract left after ${priorLabel} (gross, before deductions)`} />
                 <OverrideBox label="Labour this period" calculated={labourCalculated} override={labourOverride} setOverride={setLabourOverride}
                   colour="#b45309" autoNote="From rates and variations" sub2={`${gbp(Math.max(0, labourBudgetTotal - prevLabour))} left after ${priorLabel}`} />
                 <MiniBox label="Materials this period" value={gbp(materialsThisPeriod)} color="#7c3aed" sub={matItems.length ? `${matItems.length} line${matItems.length === 1 ? '' : 's'}` : ''} sub2={`${gbp(Math.max(0, materialsBudgetTotal - materialsUsedPrior))} left after ${priorLabel}`} />
