@@ -3,6 +3,20 @@ import { getTokens, saveTokens, getProject } from '../../lib/db'
 import { computeApplicationSummary, backfillAppNumbers } from '../../lib/applications'
 import { refreshXeroToken, fetchBankSummary, fetchOutstandingBills, fetchOutstandingReceivables, fetchVatPosition, fetchBankAndCardBalances } from '../../lib/xero'
 
+// End-of-month + N days, matching paymentDate() on the project cash flow page. Used to
+// place materials on older forecasts that only stored a delivery date.
+//
+// MODULE SCOPE - it was declared inside the invoice-finance branch and used in the
+// cashflow branch, which would have thrown the moment an old forecast was hit.
+function payFromDeliver(refISO, days) {
+  if (!refISO) return ''
+  const [y, m] = String(refISO).split('-').map(Number)
+  const base = new Date(y, m, 0)
+  base.setDate(base.getDate() + (days || 0))
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+}
+
+
 async function getRedis() {
   try {
     const { Redis } = await import('@upstash/redis')
@@ -905,7 +919,16 @@ export default async function handler(req, res) {
             projectNo,
             projectName,
             salesSchedule: fc.salesSchedule || (fc.salesDate ? [{ date: fc.salesDate, amount: fc.revenueThisPeriod || 0 }] : []),
-            labourSchedule: fc.labourSchedule || [],
+            // SAME FALLBACK THE PROJECT CASH FLOW USES (project-cashflow.js:213).
+            //
+            // Forecasts saved before labourSchedule existed carry labourDate +
+            // labourThisPeriod instead. Sales already had its fallback here, labour and
+            // materials had none - so on an older forecast the sales came through and
+            // the costs did not, which is exactly the shape of the problem: income with
+            // no spend against it.
+            labourSchedule: (Array.isArray(fc.labourSchedule) && fc.labourSchedule.length)
+              ? fc.labourSchedule
+              : (fc.labourDate ? [{ date: fc.labourDate, amount: fc.labourThisPeriod || 0 }] : []),
             // MATERIALS. `amount` is resolved at SAVE time - a line can be a percentage
             // of the materials budget (mode: 'pct') and only then becomes a figure. Any
             // line saved before `amount` existed, or any pct line saved without a budget,
@@ -914,7 +937,15 @@ export default async function handler(req, res) {
             // Falls back to `value` for a plain line. A pct line without an amount cannot
             // be resolved here - the budget is not in this payload - so it is reported
             // rather than silently counted as nil.
-            matItems: (fc.matItems || []).map(m => ({
+            // Older forecasts have no matItems at all, only matDeliverDay +
+            // materialsThisPeriod. Rebuilt into a single line so the money is placed
+            // instead of being dropped. Payment terms default to eom+30, matching the
+            // save.
+            matItems: (!Array.isArray(fc.matItems) || !fc.matItems.length)
+              ? (fc.matDeliverDay && (fc.materialsThisPeriod || 0) > 0
+                  ? [{ date: payFromDeliver(fc.matDeliverDay, 30), amount: Number(fc.materialsThisPeriod) || 0, undated: false, unresolved: false, raw: Number(fc.materialsThisPeriod) || 0 }]
+                  : [])
+              : (fc.matItems || []).map(m => ({
               date: m.payDate,
               amount: (m.amount != null && m.amount !== '') ? Number(m.amount) || 0
                     : (m.mode === 'pct' ? 0 : Number(m.value) || 0),

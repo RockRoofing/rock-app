@@ -1,65 +1,65 @@
-pkg618 - ONE bill was deleting the entire forecast cost for that project
-=========================================================================
+pkg619 - Older forecasts store costs in DIFFERENT FIELDS - that is why they
+          never appeared
+============================================================================
 
-*** SUPERSEDES pkg591 - pkg617. Five files. ***
+*** SUPERSEDES pkg591 - pkg618. Five files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/api/business-financials.js        <- the fix
   pages/business-financials/cashflow.js
-  pages/business-financials/invoice-finance.js
-  pages/api/business-financials.js
   pages/api/dashboard.js
+  pages/business-financials/invoice-finance.js
   pages/connect.js
 
 
-ANSWERING THE QUESTION FIRST
-----------------------------
-NO - it works on forecasts already saved. Nothing needs re-entering.
+FOUND IT - AND YOUR INSTINCT ABOUT OLD FORECASTS WAS RIGHT
+-----------------------------------------------------------
+The PROJECT cash flow page has fallbacks for older forecast records. The API did
+not - except for sales.
 
-The current save has always written `amount` onto every material line, so existing
-forecasts carry their figures. The pkg617 fallback was for edge cases only.
+  project-cashflow.js:211  sales     falls back to fc.salesDate + revenueThisPeriod
+  project-cashflow.js:213  labour    falls back to fc.labourDate + labourThisPeriod
+  project-cashflow.js:214  materials reads fc.matItems
 
-The reason materials were not coming through is different, and worse.
+  business-financials.js   sales     HAD the fallback
+                           labour    had NONE
+                           materials had NONE
 
+So on any forecast saved before the schedule fields existed, THE SALES CAME
+THROUGH AND THE COSTS DID NOT. Income with no spend against it - exactly the
+668k shape, and exactly what you were seeing.
 
-ONE BILL KILLED EVERYTHING
---------------------------
-    const hasBill = projNamesWithBillThisWk.has(normName(fc.projectName))
-    const mOut = hasBill ? 0 : (fc.matItems || [])...
+NOW:
+  labour    falls back to labourDate + labourThisPeriod, same as the project page
+  materials rebuilt from matDeliverDay + materialsThisPeriod where matItems is
+            absent, paid at end of month + 30 to match the save
 
-All or nothing. ONE real bill on a project - any bill, any amount - discarded
-EVERY forecast cost for that project that week. Labour and materials both.
-
-    a 600 bill on the project  ->  materials counted 0, labour counted 0
-                                   a 65,630 materials payment, gone
-
-That is why the cost columns were thin while sales ran high, and why the closing
-balance climbed to 668k. The suppression was meant to stop double counting, but it
-was throwing away the whole forecast to avoid counting a fraction of it twice.
-
-NOW THE BILL IS NETTED OFF instead:
-
-    labour 8,727   materials 65,630   (bill applied to labour first)
-
-The 600 bill is already counted in Bills out, so nothing is double counted - only
-the part of the forecast the bill actually covers is removed. Applied to labour
-first because a project bill is far more often subcontract labour than materials.
-
-
-ALSO REMOVED A DUPLICATE CALCULATION
-------------------------------------
-The same figures were being worked out twice in that loop - once for the
-breakdown and once for the totals - so the drill-down and the column could
-disagree. Now computed once and used for both.
+  old forecast, matDeliverDay 25/09, materialsThisPeriod 70,000
+    before  nothing at all
+    after   70,000 on 30/10
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg617 - materials fall back to `value` where no amount was resolved, and the
-amber banner names lines that cannot be scheduled (no delivery date, or a
-percentage-of-budget line never resolved).
+pkg618 - ONE bill on a project was discarding EVERY forecast cost for that project
+that week, labour and materials both. A 600 bill wiped a 65,630 materials payment.
+The bill is now NETTED OFF instead, applied to labour first.
 
-Worth repeating: the project forecast shows the DELIVERY date, the cash flow shows
-the PAYMENT date - delivery plus terms, eom+30 by default. Deliver 15/10 pays
-30/11. They will never show the same date, and both are right.
+pkg617 - materials fall back to `value` where no amount was resolved; the amber
+banner names lines that cannot be scheduled.
+
+
+A BUG CAUGHT IN BUILD
+---------------------
+payFromDeliver was declared inside the invoice-finance branch and used in the
+cashflow branch - it would have thrown the moment an old forecast was hit. Moved
+to module scope.
+
+
+WHAT TO EXPECT
+--------------
+Materials and labour should both rise sharply. In the Project sales drill-down the
+Cost % should move toward 75-85%. If a project still shows "none", that forecast
+genuinely has no cost recorded in either the new or the old fields.
