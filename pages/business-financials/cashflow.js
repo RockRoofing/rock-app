@@ -274,6 +274,11 @@ export default function CashFlow() {
   }
 
   const WEEKS = 13
+  // COMPONENT SCOPE, not inside the memo. The banner below reads retEvents to report
+  // releases with no date, and a const declared inside a useMemo is invisible to the JSX -
+  // it compiles cleanly and throws ReferenceError on render.
+  const retEvents = useMemo(() => retentionEvents(data?.retentionEntries), [data])
+
   const forecast = useMemo(() => {
     if (!data) return []
     const openBank = startCash !== '' ? Number(startCash) : (data.cashAtBank || 0)
@@ -282,7 +287,6 @@ export default function CashFlow() {
 
     const ohEvents = overheadEvents(data.cashflowSchedule, data.ohBudgets, start, end, data.predictedByCodeMonth)
     const commEvents = commitmentEvents(data.cashCommitments, start, end)
-    const retEvents = retentionEvents(data.retentionEntries)
 
     // VAT landing at month-end: filed Box 5 if entered, else the estimate.
     // Convention: positive = refund IN, negative = payment OUT.
@@ -461,7 +465,9 @@ export default function CashFlow() {
       })
     }
     return rows
-  }, [data, startCash, billOverrides, cisFlags])
+  // finance is in the deps because the VAT reclaim estimate reads finance.vatRate -
+  // without it the forecast would keep a stale rate until something else changed.
+  }, [data, startCash, billOverrides, cisFlags, finance, manualBal])
 
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
