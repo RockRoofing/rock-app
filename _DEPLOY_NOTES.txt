@@ -1,8 +1,8 @@
-pkg598 - Invoice Finance: drawn balance recorded BY DATE
-=========================================================
+pkg599 - Invoice Finance: rebuilt on Bibby's actual Disapproved Breakdown
+==========================================================================
 
-*** SUPERSEDES pkg597 (not deployed). Deploy BOTH files. ***
-pkg596 is already in and working - the limits save. This builds on it.
+*** SUPERSEDES pkg591 - pkg598. Deploy BOTH files. ***
+pkg596 is already live (the saves work). This replaces the model on top of it.
 
 
 CHANGED FILES (replace)
@@ -11,60 +11,77 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-WHY YOU COULD NOT TYPE IN IT
-----------------------------
-    <input type="number" value={settings.drawn} ... />
-
-settings.drawn is the NUMBER 0, so the box renders a literal "0" that cannot be
-cleared - you end up appending digits after it. The new box starts EMPTY with a
-"0.00" placeholder.
-
-
-DRAWN IS NOW A DATED SERIES
----------------------------
-A drawn balance is a point-in-time reading off a Bibby statement, not something
-the app can know. Overwriting one number meant it went stale silently, and a
-figure typed in March looked identical to one typed this morning.
-
-Now: pick the date it applies to, enter the amount, press Add. Every reading is
-kept and THE MOST RECENT BY DATE is the one used.
-
-Underneath: "Using GBP 122,711.31 as at 29/08/26 - 3 readings", with the last few
-listed and an x to remove any of them.
-
-Checked:
-  add 30/06 98,000            -> uses 30/06
-  add 29/08 122,711.31        -> uses 29/08
-  add 31/07 110,500 (back-dated, out of order) -> still uses 29/08, correct
-  re-enter 29/08 125,000      -> REPLACES it, does not stack two readings for
-                                 one day, which would make "most recent" ambiguous
-  remove 29/08                -> falls back to 31/07
-
-Stored in its own key, config:if-drawn-history. The old single `drawn` setting is
-still read as a fallback so nothing entered before this is lost.
+THEIR THREE CATEGORIES, ALL NOW MODELLED
+----------------------------------------
+  Contract Funding Disapproval   39,264.32
+  Credit Limit exceeded          88,583.46
+  Age disapproval                17,449.62
+                                ----------
+                                145,297.40   = their Non-Funded Debt, exactly
 
 
-THIS SHOULD CLOSE THE AVAILABILITY GAP
---------------------------------------
-Your last export had BOTH of these at zero:
+1. AGE DISAPPROVAL - 90 DAYS, CONFIRMED BY THEIR OWN FIGURES
+------------------------------------------------------------
+Not modelled at all before. Applying a 90-day-past-due rule to their three items
+reproduces 17,449.62 TO THE PENNY:
 
-    High involvement    0.00   should be  35,069.31
-    Funds in use/drawn  0.00   should be 122,711.31
+  Hollis Croft-06   118d past due   13,172.71
+  J229-05           153d past due    1,881.46
+  BCS/1130/LN/-07    99d past due    2,395.45
+                                    17,449.62
 
-The app computes availability = approved funding - drawn. With drawn at zero the
-app's "Availability" was really just approved funding, so it could never match
-Bibby's, which is after the 122,711.31 you have already drawn.
+120 days would give 1,881.46, so it is 90 rather than a longer term. Still worth
+confirming against the agreement - it is an editable setting.
 
-    172,776.09 - 122,711.31 = 50,064.78    exactly Bibby's Availability
 
-Enter the drawn balance dated 29/08/2026, and High involvement 35,069.31 under
-Save settings. Then compare line by line rather than on one number:
+2. CREDIT LIMIT APPLIES TO THE DEBT, NOT THE ADVANCE
+----------------------------------------------------
+Was:  advance = hasLimit ? min(debt x 60%, limit) : 0
+Now:  overLimitDebt = max(0, debt - limit); advance = (debt - over) x 60%
 
-    Approved Debt      vs  323,029.46
-    Approved Funding   vs  172,776.09
-    Availability now   vs   50,064.78
+Bibby fund UP TO the limit and disapprove only the excess. The old rule capped
+the ADVANCE at the limit and ZEROED a customer entirely when no limit was
+recorded - which is why the app disapproved 160,832 where Bibby disapproved
+88,583.
 
-Tell me WHICH line is out and by how much. If Approved Funding matches and only
-Availability is out, it is just the drawn figure. If Approved Funding is out, it
-is still the eligibility side and the BY CUSTOMER block in the export will show
-whether anyone remains on "NO LIMIT SET".
+  Torsion Projects   debt 71,838  limit fully used  -> 0, matches their 71,871
+  Selsdon            debt 32,626  limit 25,000      -> was 0, now funds 15,000
+  Wates              debt 148,130 limit 300,000     -> unchanged at 88,878
+
+Selsdon is the case that proves it: Bibby disapprove 30,569 of theirs and fund
+the rest. The app funded none of it.
+
+
+3. THE DEBT IS THE APPLICATION AGAIN
+------------------------------------
+Every row of their export reads Document Type: Application, with application
+references - "Russell Hill-12", "J229-10", "P27 - 300045-04". Bibby assign
+applications. pkg592 switched this to invoices on my reading of "they fund either
+apps or invoices"; their own data says otherwise, so it is switched back.
+
+Invoices are still read - to decide what has been PAID, and to show retention
+separately.
+
+
+4. A DATA FAULT THAT WAS INFLATING THE DEBT
+-------------------------------------------
+An application entered GROSS with "Previously certified" BLANK computes its
+this-cert as the FULL cumulative value. On this page that presents a whole account
+as one period's debt.
+
+Any such application is now flagged red on the row - "N app(s) missing prev cert"
+- so it reads as the data fault it is rather than a large application. J240
+Application 4 is in exactly this state.
+
+
+WHAT TO DO
+----------
+1. Deploy. Set Age disapproval to 90 (it defaults there).
+2. Enter High involvement 35,069.31 and the drawn balance 122,711.31 dated
+   29/08/2026 - drawn is now entered WITH ITS DATE and the most recent is used.
+3. Get the insured limits for Selsdon and BOTH Torsion entities. Their export
+   shows two separate debtors - TOR001 "Torsion Projects Limited" and TORSION
+   "Torsion Construction Limited" - and your app has one "Torsion Projects Ltd".
+   If your Xero names do not distinguish them the limits can never match.
+4. Then export and compare Approved Debt / Approved Funding / Availability line
+   by line against their summary.

@@ -524,6 +524,14 @@ export default async function handler(req, res) {
             materialsOnSite: summary?.materialsOnSite || 0,
             grossToDate: summary?.grossCurrent || 0,
             retentionPctUsed: app.retentionPct != null ? Number(app.retentionPct) : null,
+            // Due date, for Bibby's AGE DISAPPROVAL. finalDate is the contractual final
+            // date for payment; paymentDate is the due date. Either serves - the point is
+            // how far past due the item is.
+            dueDate: app.finalDate || app.paymentDate || '',
+            // A GROSS-ENTERED application with previously-certified BLANK computes its
+            // thisCert as the FULL cumulative value. That is a data fault, not a large
+            // application, and on this page it inflates fundable debt by a whole account.
+            prevCertBlank: (app.seq || 0) > 1 && app.prevCertGross == null,
             matched: !!matchInv,
             matchedInvoice: matchInv ? (matchInv.invoiceNumber || matchInv.reference || '') : '',
             autoPaid,
@@ -580,12 +588,13 @@ export default async function handler(req, res) {
         varCapPct: ifConfig.varCapPct != null ? ifConfig.varCapPct : 25,
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
         highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : 0,
+        ageDays: ifConfig.ageDays != null ? ifConfig.ageDays : 90,
       },
       // Which build of THIS FILE is answering. Two files changed in pkg596 and the API
       // one is the one that carries the fix - if only the page was deployed the symptom
       // is identical to nothing being deployed at all, and there is no way to tell them
       // apart from the screen.
-      apiVersion: 'pkg598',
+      apiVersion: 'pkg599',
       // Sorted oldest first; the LAST entry is the current drawn balance.
       drawnHistory: ifDrawnHistory,
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
@@ -621,6 +630,7 @@ export default async function handler(req, res) {
         varCapPct: Number(s.varCapPct ?? 25),
         certCeilingPct: Number(s.certCeilingPct ?? 90),
         highInvolvement: Number(s.highInvolvement) || 0,
+        ageDays: Number(s.ageDays ?? 90),
       }
       await redis.set('config:if-settings', cfg)
       return res.json({ ok: true, settings: cfg })

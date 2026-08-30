@@ -67,60 +67,75 @@ const fmtDateTime = (iso) => {
 
 const fmtShort = (n) => `\u00a3${Math.round(Number(n) || 0).toLocaleString('en-GB')}`
 
-// BIBBY ELIGIBILITY for one project. Returns the fundable figure and WHY it was reduced.
+// BIBBY ELIGIBILITY for one project, rebuilt on their actual Disapproved Breakdown
+// rather than on Holly's summary of the terms. Their three categories, totalling exactly
+// the Non-Funded Debt of 145,297.40:
 //
-// Each cap is measured on the CUMULATIVE position at the latest unpaid application -
-// "materials on site funded to 25% of contract value" is a position, not an increment.
-// The excess over each cap is then taken off the unpaid total.
+//   Contract Funding Disapproval   39,264.32   the caps below
+//   Credit Limit exceeded          88,583.46   handled PER CUSTOMER, not here
+//   Age disapproval                17,449.62   past-due items
 //
-// Deliberately NOT stacked as three independent deductions of the same money: the 90%
-// overall ceiling is applied LAST, to the figure already reduced by the materials and
-// variations caps. Applying all three to the raw total would double-count an excess that
-// is both a variation AND above 90%.
-function eligibleFor(project, evidenceApps, settings, debt) {
-  // `debt` is the invoice total - what Bibby actually assign. The applications are only
-  // read for COMPOSITION, to work out how much of that debt the caps disallow.
-  const raw = Number(debt) || 0
-  const unpaidApps = evidenceApps
+// Two corrections their export forced:
+//
+//   THE DEBT IS THE APPLICATION. Every row reads Document Type: Application, with
+//   application references ("Russell Hill-12", "J229-10"). Bibby assign applications.
+//   pkg592 switched this to invoices on a wrong steer; it is switched back.
+//
+//   DISAPPROVAL IS PARTIAL. They flag a SLICE of an application - 7.5% of one, 3.8% of
+//   another, 35.8% of a third - never all-or-nothing.
+function eligibleFor(project, unpaidApps, settings) {
+  const raw = unpaidApps.reduce((s, a) => s + (a.thisCertNet || 0), 0)
   const cv = Number(project.contractValue) || 0
   const reasons = []
-  if (!cv || !unpaidApps.length) return { eligible: Math.max(0, raw), reasons, excluded: 0 }
-
-  // Cumulative position at the LAST unpaid application - the furthest the account has got.
-  const last = unpaidApps[unpaidApps.length - 1] || {}
-  const mos = Number(last.materialsOnSite) || 0
-  const vars = Number(last.variationsToDate) || 0
-  const gross = Number(last.grossToDate) || 0
-
-  const mosCapPct = Number(settings.mosCapPct ?? 25)
-  const varCapPct = Number(settings.varCapPct ?? 25)
-  const ceilPct = Number(settings.certCeilingPct ?? 90)
-
   let excess = 0
-  const mosCap = cv * (mosCapPct / 100)
-  if (mos > mosCap) { const over = mos - mosCap; excess += over; reasons.push(`Materials on site ${fmtShort(mos)} over the ${mosCapPct}% cap (${fmtShort(mosCap)}) - ${fmtShort(over)} not funded`) }
 
-  const varCap = cv * (varCapPct / 100)
-  if (vars > varCap) { const over = vars - varCap; excess += over; reasons.push(`Variations ${fmtShort(vars)} over the ${varCapPct}% cap (${fmtShort(varCap)}) - ${fmtShort(over)} needs written instruction to fund`) }
+  // AGE DISAPPROVAL. Applied first and on the item itself, because it disallows the whole
+  // application regardless of what it consists of.
+  const ageDays = Number(settings.ageDays ?? 90)
+  const today = new Date().toISOString().slice(0, 10)
+  let aged = 0
+  for (const a of unpaidApps) {
+    if (!a.dueDate) continue
+    const days = Math.floor((new Date(today) - new Date(a.dueDate)) / 86400000)
+    if (days > ageDays) { aged += (a.thisCertNet || 0); }
+  }
+  if (aged > 0) { excess += aged; reasons.push(`${fmtShort(aged)} more than ${ageDays} days past due - age disapproval`) }
 
-  // The 90% ceiling, applied to what is left after the two caps above.
-  const ceiling = cv * (ceilPct / 100)
-  const grossAfter = Math.max(0, gross - excess)
-  if (grossAfter > ceiling) { const over = grossAfter - ceiling; excess += over; reasons.push(`Certified ${fmtShort(grossAfter)} over ${ceilPct}% of contract (${fmtShort(ceiling)}) - ${fmtShort(over)} needs further certification`) }
+  if (cv && unpaidApps.length) {
+    const last = unpaidApps[unpaidApps.length - 1] || {}
+    const mos = Number(last.materialsOnSite) || 0
+    const vars = Number(last.variationsToDate) || 0
+    const gross = Number(last.grossToDate) || 0
+    const mosCapPct = Number(settings.mosCapPct ?? 25)
+    const varCapPct = Number(settings.varCapPct ?? 25)
+    const ceilPct = Number(settings.certCeilingPct ?? 90)
 
-  // Never remove more than is actually outstanding: the excess may sit in an application
-  // that has already been paid, in which case it is not in `raw` to be removed.
+    const mosCap = cv * (mosCapPct / 100)
+    if (mos > mosCap) { const o = mos - mosCap; excess += o; reasons.push(`Materials on site ${fmtShort(mos)} over the ${mosCapPct}% cap - ${fmtShort(o)} not funded`) }
+
+    const varCap = cv * (varCapPct / 100)
+    if (vars > varCap) { const o = vars - varCap; excess += o; reasons.push(`Variations ${fmtShort(vars)} over the ${varCapPct}% cap - ${fmtShort(o)} needs written instruction`) }
+
+    // Applied LAST, to the figure already reduced, so money that is both a variation and
+    // above the ceiling is not counted twice.
+    const ceiling = cv * (ceilPct / 100)
+    const grossAfter = Math.max(0, gross - excess)
+    if (grossAfter > ceiling) { const o = grossAfter - ceiling; excess += o; reasons.push(`Certified ${fmtShort(grossAfter)} over ${ceilPct}% of contract - ${fmtShort(o)} needs further certification`) }
+  }
+
+  // A gross-entered application missing its previously-certified figure is a data fault
+  // that would otherwise present its whole account as this period's debt.
+  const suspect = unpaidApps.filter(a => a.prevCertBlank)
   const excluded = Math.min(excess, raw)
-  return { eligible: Math.max(0, raw - excluded), reasons, excluded }
+  return { eligible: Math.max(0, raw - excluded), reasons, excluded, agedExcluded: Math.min(aged, raw), suspectCount: suspect.length }
 }
-
 
 export default function InvoiceFinance() {
   const router = useRouter()
   const [ok, setOk] = useState(false)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0 })
+  const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0, ageDays: 90 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [apiVersion, setApiVersion] = useState(null)
@@ -158,6 +173,7 @@ export default function InvoiceFinance() {
         varCapPct: d.settings?.varCapPct ?? 25,
         certCeilingPct: d.settings?.certCeilingPct ?? 90,
         highInvolvement: d.settings?.highInvolvement ?? 0,
+        ageDays: d.settings?.ageDays ?? 90,
       })
       setLimits(d.debtorLimits || {})
       setLimitsMeta(d.limitsMeta || null)
@@ -199,32 +215,20 @@ export default function InvoiceFinance() {
     for (const p of data.projects) {
       const cust = p.customer || '(no customer)'
       if (!byCust[cust]) byCust[cust] = { customer: cust, key: norm(cust), projects: [] }
-      // THE DEBT IS THE INVOICE. The application is the evidence of what it consists of.
+      // THE DEBT IS THE APPLICATION - Bibby's own export says Document Type:
+      // Application on every line. Invoices are still read, but only to decide what has
+      // been PAID and to show retention separately.
       const invs = Array.isArray(p.invoices) ? p.invoices : []
       const retentionInvs = invs.filter(i => i.isRetention)
-      const fundingInvs = invs.filter(i => !i.isRetention)
-      const invoiceDebt = fundingInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
       const retentionDebt = retentionInvs.reduce((s, i) => s + (i.amountDue || 0), 0)
-      const unmatched = fundingInvs.filter(i => i.appNumber == null)
-      const unmatchedDebt = unmatched.reduce((s, i) => s + (i.amountDue || 0), 0)
+      const unpaid = p.applications.filter(a => !isPaid(a))
+      const invoiceDebt = invs.filter(i => !i.isRetention).reduce((s, i) => s + (i.amountDue || 0), 0)
+      const notInvoiced = Math.max(0, unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0) - invoiceDebt)
 
-      // Composition for the caps comes from the applications the unpaid invoices point
-      // at - falling back to the unpaid applications where nothing matched, so a project
-      // whose invoices carry no "App N" is still capped rather than funded blind.
-      const invAppNos = new Set(fundingInvs.map(i => i.appNumber).filter(n => n != null))
-      const evidenceApps = invAppNos.size
-        ? p.applications.filter(a => invAppNos.has(a.appNumber))
-        : p.applications.filter(a => !isPaid(a))
-
-      // Applied for but not yet invoiced. Not debt, so not funded - but shown, because
-      // silently dropping it looks like the work vanished.
-      const notInvoiced = Math.max(0, p.applications.filter(a => !isPaid(a)).reduce((s, a) => s + (a.thisCertNet || 0), 0) - invoiceDebt)
-
-      const elig = eligibleFor(p, evidenceApps, settings, invoiceDebt)
+      const elig = eligibleFor(p, unpaid, settings)
       byCust[cust].projects.push({
-        ...p, unpaidCount: fundingInvs.length, rawProject: invoiceDebt,
-        retentionDebt, retentionCount: retentionInvs.length,
-        unmatchedDebt, unmatchedCount: unmatched.length, notInvoiced,
+        ...p, unpaidCount: unpaid.length, rawProject: unpaid.reduce((s, a) => s + (a.thisCertNet || 0), 0),
+        retentionDebt, retentionCount: retentionInvs.length, notInvoiced,
         ...elig, fundableProject: elig.eligible,
       })
     }
@@ -232,10 +236,17 @@ export default function InvoiceFinance() {
       const lim = limits[c.customer] || {}
       const insured = Number(lim.insuredLimit) || 0
       const fundable = c.projects.reduce((s, p) => s + p.fundableProject, 0)
-      const rawAdvance = fundable * rate
+      // CREDIT LIMIT EXCEEDED. Bibby apply the limit to the DEBT and disapprove only the
+      // excess - "Credit Limit exceeded 88,583.46" against Torsion, who they still fund
+      // up to the limit. This capped the ADVANCE instead, and zeroed a customer entirely
+      // when no limit was recorded, which is why the app disapproved 160,832 where Bibby
+      // disapproved 88,583.
       const hasLimit = insured > 0
-      const advance = hasLimit ? Math.min(rawAdvance, insured) : 0
-      return { ...c, insured, hasLimit, fundable, rawAdvance, advance, cappedByLimit: hasLimit && rawAdvance > insured }
+      const overLimitDebt = hasLimit ? Math.max(0, fundable - insured) : fundable
+      const insurable = Math.max(0, fundable - overLimitDebt)
+      const rawAdvance = fundable * rate
+      const advance = insurable * rate
+      return { ...c, insured, hasLimit, fundable, insurable, overLimitDebt, rawAdvance, advance, cappedByLimit: hasLimit && overLimitDebt > 0 }
     }).sort((a, b) => b.advance - a.advance || b.fundable - a.fundable)
   }, [data, limits, settings.advanceRate, paidOverrides])
 
@@ -292,20 +303,19 @@ export default function InvoiceFinance() {
     //
     // Everything is now in DEBT terms down to Approved Debt, then the rate is applied
     // once, matching how Bibby lay it out.
-    const rawAdv = customers.reduce((t, c) => t + (c.rawAdvance || 0), 0)
-    const actualAdv = customers.reduce((t, c) => t + (c.advance || 0), 0)
-    const limitCutDebt = rate > 0 ? (rawAdv - actualAdv) / rate : 0
     const noLimitDebt = customers.filter(c => !c.hasLimit).reduce((t, c) => t + (c.fundable || 0), 0)
-    const overLimitDebt = Math.max(0, limitCutDebt - noLimitDebt)
+    const aged = customers.reduce((t, c) => t + c.projects.reduce((s, p) => s + (p.agedExcluded || 0), 0), 0)
+    const overLimitDebt = customers.reduce((t, c) => t + (c.overLimitDebt || 0), 0)
 
     rows.push(['SUMMARY - compare against Bibby Finance Agreement Summary'])
     rows.push(['Sales Ledger (all unpaid sales invoices incl retention)', money(salesLedger)])
     rows.push(['  less retention invoices', money(retention)])
-    rows.push(['  less eligibility caps (materials / variations / ceiling)', money(capped)])
+    rows.push(['  less age disapproval (past due)', money(aged)])
+    rows.push(['  less eligibility caps (materials / variations / ceiling)', money(Math.max(0, capped - aged))])
     rows.push(['= Approved Debt (before insured limits)', money(totals.fundable)])
-    rows.push(['  less debt with NO insured limit set - funded at zero', money(noLimitDebt)])
-    rows.push(['  less debt over the insured limit', money(overLimitDebt)])
-    rows.push(['= Insurable Approved Debt', money(Math.max(0, totals.fundable - noLimitDebt - overLimitDebt))])
+    rows.push(['  less credit limit exceeded (incl customers with no limit set)', money(overLimitDebt)])
+    rows.push(['    of which customers with NO limit recorded', money(noLimitDebt)])
+    rows.push(['= Insurable Approved Debt', money(Math.max(0, totals.fundable - overLimitDebt))])
     rows.push(['High involvement (entered from Bibby)', money(totals.highInv)])
     rows.push([`Advance rate`, `${settings.advanceRate}%`])
     rows.push(['= Approved Funding', money(totals.grossAdvance)])
@@ -317,8 +327,7 @@ export default function InvoiceFinance() {
     rows.push(['BY CUSTOMER'])
     rows.push(['Customer', 'Fundable debt', 'Insured limit', 'Limit set?', 'Advance', 'Debt not funded'])
     for (const c of [...customers].sort((a, b) => (b.hasLimit ? 0 : b.fundable) - (a.hasLimit ? 0 : a.fundable) || b.fundable - a.fundable)) {
-      const notFunded = rate > 0 ? ((c.rawAdvance || 0) - (c.advance || 0)) / rate : 0
-      rows.push([c.customer, money(c.fundable), money(c.insured), c.hasLimit ? 'yes' : 'NO LIMIT SET', money(c.advance), money(notFunded)])
+      rows.push([c.customer, money(c.fundable), money(c.insured), c.hasLimit ? 'yes' : 'NO LIMIT SET', money(c.advance), money(c.overLimitDebt)])
     }
     rows.push([])
     rows.push(['INVOICE DETAIL'])
@@ -503,6 +512,7 @@ export default function InvoiceFinance() {
                 )}
               </div>
               <div><div style={lbl} title="Bibby's concentration deduction, taken off approved debt BEFORE the advance rate. Read it off their Finance Agreement Summary - it cannot be derived from anything we hold.">High involvement</div><div style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ color: '#999' }}>&pound;</span><input type="number" value={settings.highInvolvement} onChange={e => setSettings(s => ({ ...s, highInvolvement: e.target.value }))} style={{ ...inp, width: 110 }} /></div></div>
+              <div><div style={lbl} title="Bibby disapprove an application once it is this many days past its due date. Three of theirs were 99, 118 and 153 days past due - confirm the exact threshold in the agreement.">Age disapproval (days)</div><input type="number" value={settings.ageDays} onChange={e => setSettings(s => ({ ...s, ageDays: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Approved materials on site are funded up to this share of contract value.">Materials cap %</div><input type="number" value={settings.mosCapPct} onChange={e => setSettings(s => ({ ...s, mosCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Variations are funded up to this share of contract value. Beyond it, Bibby need written instruction.">Variations cap %</div><input type="number" value={settings.varCapPct} onChange={e => setSettings(s => ({ ...s, varCapPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
@@ -606,16 +616,16 @@ function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, set
                       {gbp(p.retentionDebt)} retention
                     </span>
                   )}
-                  {p.unmatchedCount > 0 && (
-                    <span title={`${p.unmatchedCount} invoice(s) totalling ${gbp(p.unmatchedDebt)} carry no "App N" reference, so no application could be matched to evidence what they consist of. They ARE counted as debt - the caps were applied using this project's unpaid applications instead.`}
-                      style={{ fontSize: 11, fontWeight: 700, color: '#0369a1', border: '1px solid #bae6fd', background: '#f0f9ff', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
-                      {p.unmatchedCount} unmatched
-                    </span>
-                  )}
                   {p.notInvoiced > 0.005 && (
                     <span title={`${gbp(p.notInvoiced)} has been applied for but not yet invoiced. Bibby assign the INVOICE, so this is not debt yet and is not funded. Raise the invoice and it becomes fundable.`}
                       style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
                       {gbp(p.notInvoiced)} not invoiced
+                    </span>
+                  )}
+                  {p.suspectCount > 0 && (
+                    <span title={`${p.suspectCount} application(s) have "Previously certified (gross)" BLANK. That makes this-cert compute as the FULL cumulative value, so the debt shown here is overstated. Fix it on the Applications page.`}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', border: '1px solid #fecaca', background: '#fef2f2', borderRadius: 5, padding: '1px 6px', cursor: 'help' }}>
+                      {p.suspectCount} app(s) missing prev cert
                     </span>
                   )}
                   {p.excluded > 0 && (
