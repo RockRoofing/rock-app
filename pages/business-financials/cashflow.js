@@ -153,7 +153,6 @@ export default function CashFlow() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [startCash, setStartCash] = useState('')   // optional manual override
-  const [refreshingBal, setRefreshingBal] = useState(false)
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
@@ -215,14 +214,11 @@ export default function CashFlow() {
   }
   useEffect(() => { if (ok) load() }, [ok])
 
-  async function refreshBalances() {
-    setRefreshingBal(true)
-    try {
-      await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'refresh-balances' }) })
-      await load()
-    } catch {}
-    setRefreshingBal(false)
-  }
+  // refreshBalances() removed with its button. Xero's Balance Sheet gives the BOOK
+  // balance - only what has been reconciled - so it runs behind the real bank position
+  // silently. Balances are typed in the panel below with the date they were read, which
+  // is both more accurate and auditable. The API handler is left in place in case the
+  // cross-check is wanted back later.
 
   async function saveFinance() {
     setSavingFin(true)
@@ -494,10 +490,8 @@ export default function CashFlow() {
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
                     {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
                     {odLimit > 0 && <BalBox label="Overdraft available" value={gbp(odHeadroom)} sub={odDrawn > 0 ? `${gbp(odDrawn)} of ${gbp(odLimit)} used` : `${gbp(odLimit)} limit`} color={odHeadroom > 0 ? INK : '#dc2626'} />}
-                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft" color="#0f766e" strong />
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <button onClick={refreshBalances} disabled={refreshingBal} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: refreshingBal ? 0.6 : 1 }}>{refreshingBal ? 'Refreshing...' : 'Refresh balances from Xero'}</button>
-                    </div>
+                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft - all borrowable, not owned" color="#0f766e" strong />
+                    <NetPositionBox bankCash={bankTotal} cardDebt={cardDebt} odDrawn={odDrawn} ifDrawn={ifCalc ? (ifCalc.drawn || 0) : 0} />
                   </div>
                   {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
                   {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
@@ -824,6 +818,51 @@ function Stat({ label, value, sub, color }) {
       <div style={{ fontSize: 12, color: '#888' }}>{label}</div>
       <div style={{ fontSize: 22, fontWeight: 800, color: color || INK, marginTop: 2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: '#9a958c', marginTop: 2 }}>{sub}</div>}
+    </div>
+  )
+}
+
+// NET CASH POSITION.
+//
+// One box, not two. Two headline numbers measuring the same thing at different scopes
+// invites "which is the real one" and neither gets trusted - so both figures live here
+// with the arithmetic between them visible.
+//
+// The invoice finance line is kept SEPARATE because it is different in kind: card debt
+// and overdraft are money owed with nothing behind them, whereas IF is advanced against
+// invoices customers will pay and self-liquidates as the ledger collects. Netting it in
+// silently would overstate the problem; leaving it out entirely would flatter it.
+//
+// Module scope - a component declared inside another remounts on every render.
+function NetPositionBox({ bankCash, cardDebt, odDrawn, ifDrawn }) {
+  const netCash = bankCash - cardDebt - odDrawn
+  const netAll = netCash - ifDrawn
+  const Row = ({ k, v, strong, top }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline',
+      borderTop: top ? '1px solid #e6e3dc' : 'none', marginTop: top ? 3 : 0, paddingTop: top ? 3 : 0 }}>
+      <span style={{ fontSize: 10.5, color: strong ? INK : '#8a857c', fontWeight: strong ? 700 : 400 }}>{k}</span>
+      <span style={{ fontSize: strong ? 12.5 : 11, fontWeight: strong ? 800 : 600, whiteSpace: 'nowrap',
+        color: strong ? (v < 0 ? '#dc2626' : '#16a34a') : (v < 0 ? '#b45309' : INK) }}>{gbp(v)}</span>
+    </div>
+  )
+  return (
+    <div style={{ background: '#fff', border: '1.5px solid #b45309', borderRadius: 10, padding: '8px 12px', minWidth: 250 }}>
+      <div style={{ fontSize: 11.5, color: '#888' }}>Net cash position</div>
+      <div style={{ fontSize: 22, fontWeight: 800, color: netCash < 0 ? '#dc2626' : '#16a34a', marginTop: 1 }}>{gbp(netCash)}</div>
+      <div style={{ marginTop: 4 }}>
+        <Row k="Bank cash" v={bankCash} />
+        <Row k="less card debt" v={-cardDebt} />
+        {odDrawn > 0 && <Row k="less overdraft drawn" v={-odDrawn} />}
+        <Row k="= Net cash" v={netCash} strong top />
+        <Row k="less invoice finance drawn" v={-ifDrawn} />
+        <Row k="= Net of all facilities" v={netAll} strong top />
+      </div>
+      {/* The single most useful line on the box. "Max cash available" sits alongside and
+          reads like strength - but drawing headroom raises cash and debt by the same
+          amount, so this figure does not move at all. */}
+      <div style={{ fontSize: 9.5, color: '#b45309', marginTop: 5, lineHeight: 1.35 }}>
+        Drawing headroom does not change this - cash and debt rise together.
+      </div>
     </div>
   )
 }

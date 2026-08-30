@@ -1,7 +1,7 @@
-pkg611 - Cards are negative, matching Xero. Plus the pkg610 fixes
-=================================================================
+pkg612 - Net cash position box, and Refresh balances removed
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg610. Four files. ***
+*** SUPERSEDES pkg591 - pkg611. Four files. ***
 
 
 CHANGED FILES (replace)
@@ -12,46 +12,59 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-YES - AND IT FIXES A BUG I INTRODUCED
--------------------------------------
-pkg610 had cards typed as a positive "amount owed" and flipped the sign
-internally. That broke the Xero cross-check, which compares your figure against
-Xero's - and Xero holds a card as NEGATIVE, because it is a liability:
+1. NET CASH POSITION
+--------------------
+One box, beside Max cash available:
 
-    typed  77,156.42   Xero  -77,156.42   gap shown  154,312.84
-    on an account that actually AGREED to the penny.
+    Net cash position
+    -74,656
 
-Balances are now taken LITERALLY for both kinds. Negative means owed, for cards
-and for an overdrawn bank account alike. Same convention as Xero, so the
-cross-check works:
+      Bank cash                    2,500.52
+      less card debt             -77,156.42
+      = Net cash                 -74,655.90
+      less invoice finance drawn -122,711.31
+      = Net of all facilities   -197,367.21
 
-    typed -77,156.42   Xero  -77,156.42   gap  0.00
+      Drawing headroom does not change this - cash and debt rise together.
 
-A card typed as a POSITIVE is now FLAGGED - "in credit?" - rather than silently
-reinterpreted. It is far more likely to be the amount owed entered without the
-minus, but guessing which is exactly how the cross-check ended up comparing a
-positive against a negative. The field is labelled "- = owed" and turns red when
-negative.
+ONE BOX, NOT TWO. Two headline numbers measuring the same thing at different
+scopes invites "which is the real one" and neither gets trusted. Both figures are
+here with the arithmetic between them visible.
 
-    Metrobank   bank    2,500.52
-    AMEX        card        0.00
-    Cap on Tap  card  -77,156.42
-    -> card debt 77,156.42, headroom 82,843.58, max cash 191,532.10
+INVOICE FINANCE IS ON ITS OWN LINE because it is different in kind. Card debt and
+overdraft are money owed with nothing behind them; IF is advanced against invoices
+customers will pay and self-liquidates as the ledger collects. Netting it in
+silently would overstate the problem, leaving it out would flatter it.
+
+TRADE PAYABLES ARE DELIBERATELY EXCLUDED. Your 302,771 of bills is operational
+debt, and the 13-week already schedules every one of them week by week. Putting it
+in a headline box as well tells the same story twice, and the forecast is the
+better place because timing is what matters.
+
+WHY IT WAS NEEDED. The page said "Max cash available 191,532" and never said you
+owed 197,367 against it. Read alone, that is strength. And drawing 46,188 of the
+headroom raises cash to -28,468 while net of all facilities stays at -197,367
+exactly - Max cash available measures how much borrowing is left, dressed as cash.
+The sub-line on Max cash now says so too.
 
 
-ALSO IN THIS PACKAGE (pkg610)
------------------------------
-OPENING CASH SHOWED 0 with a balance visibly on screen above it. The editor wrote
-to local state but the calculations read the server copy, which is not refetched
-after a save.
+2. REFRESH BALANCES FROM XERO - REMOVED
+---------------------------------------
+Button, handler and its state are gone. Xero's Balance Sheet returns the BOOK
+balance - only what has been reconciled - so it runs behind the real bank position
+silently, which is worse than not having it.
 
-THE DOUBLE COUNT. moneyIn = invoices + retention + VAT refunds + project
-forecasts. The guard only suppressed a forecast when a real invoice landed in the
-SAME WEEK, so an application invoiced in week 2 with forecast cash in week 6 was
-counted twice. Now any forecast whose period has already been APPLIED FOR is
-dropped entirely - the same supersede rule the project cash flow uses, with
-drafts not counting. Expect Total money in to fall substantially.
+Balances are typed in the panel below with the date they were read. The API
+handler is left in place, and the Xero figures already fetched still drive the
+per-account cross-check and the "Start from Xero's accounts" button - so nothing
+is lost, only the misleading one-click refresh.
 
-REFRESH BALANCES needed accounting.reports.balancesheet.read, missing from the
-connect scopes. Added - reconnect Xero. It still returns Xero's BOOK balance, so
-manual stays the primary source and Xero is the cross-check.
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg611 - cards held NEGATIVE like Xero, so the cross-check compares like with
+like. A card typed positive is flagged "in credit?" rather than silently flipped.
+
+pkg610 - opening cash reads from local state (it showed 0 with a balance on screen
+above it); and the double count fixed - any forecast whose period has already been
+APPLIED FOR is dropped, not just when an invoice lands in the same week.
