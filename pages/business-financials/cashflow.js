@@ -420,7 +420,9 @@ export default function CashFlow() {
       // A date before the horizon is not "never" - it is late, and late money out is the
       // most certain spend there is. Dropping it flattered the forecast twice: the debt
       // vanished from Invoices in AND the bill vanished from Bills out.
-      const inWkOrOverdue = (dstr) => !!dstr && ((w === 0 && dstr < s) || inWk(dstr))
+      // (inWkOrOverdue removed - arrears are now split out explicitly above, so a single
+      // predicate that quietly folded them into week 1 would hide the very thing the
+      // arrears row exists to show.)
 
       // OVERDUE DEBT LANDS IN WEEK 1, it does not vanish.
       //
@@ -431,19 +433,27 @@ export default function CashFlow() {
       //
       // Overdue does not mean never paid; it means late. It belongs in the first week,
       // which is also the honest place for it - if it does not arrive you see the hole.
-      const invoicesIn = (data.receivables || []).reduce((a, i) => {
-        if (excluded[invKey(i)]) return a
-        return inWkOrOverdue(i.expectedDate || i.dueDate || '') ? a + (i.amountDue || 0) : a
-      }, 0)
+      // Split into what is genuinely due THIS WEEK and what is arrears swept into week 1,
+      // so the two can be shown as separate rows. A week 1 carrying months of late money
+      // looks like an ordinary week otherwise.
+      const isArrears = (d) => w === 0 && d && d < s
+      let invoicesIn = 0, arrInvoices = 0
+      for (const i of (data.receivables || [])) {
+        if (excluded[invKey(i)]) continue
+        const d = i.expectedDate || i.dueDate || ''
+        if (isArrears(d)) arrInvoices += (i.amountDue || 0)
+        else if (inWk(d)) invoicesIn += (i.amountDue || 0)
+      }
       const overdueIn = w === 0
         ? (data.receivables || []).filter(i => { const d = i.expectedDate || i.dueDate || ''; return d && d < s }).reduce((a, i) => a + (i.amountDue || 0), 0)
         : 0
       // Overdue releases land in week 1, same rule as invoices.
-      const retIn = retEvents.reduce((a, r) => {
-        if (!r.date) return a
-        const hit = (w === 0 && r.date < s) ? true : inWk(r.date)
-        return hit ? a + r.amount : a
-      }, 0)
+      let retIn = 0, arrRet = 0
+      for (const r of retEvents) {
+        if (!r.date) continue
+        if (isArrears(r.date)) arrRet += r.amount
+        else if (inWk(r.date)) retIn += r.amount
+      }
       // VAT: any month whose month-end falls in this week.
       let vatIn = 0
       const vatSrcs = []
@@ -459,7 +469,9 @@ export default function CashFlow() {
 
       // Bills out: pay the full Amount Due (Xero already nets CIS off labour bills).
       // The 20% CIS to HMRC is scheduled separately below.
-      const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWkOrOverdue((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+      const arrBills = (data.bills || []).filter(i => !excluded[i.id] && isArrears((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+        .reduce((a, i) => a + (i.amountDue || 0), 0)
+      const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       // Per-week overhead breakdown by code (for the click-to-expand detail).
@@ -540,6 +552,23 @@ export default function CashFlow() {
       const moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
       const moneyOut = billsOut + ohOut + commOut + vatOut + cisOut + fcCostOut
       const net = moneyIn - moneyOut
+      // ARREARS ROW, before week 1 only. Everything already past its date, swept forward
+      // - the money that is late rather than due. Shown separately so week 1 reads as the
+      // week it actually is, and so the size of the arrears is impossible to miss.
+      if (w === 0 && (arrInvoices || arrBills || arrRet)) {
+        const arrNet = arrInvoices + arrRet - arrBills
+        running += arrNet
+        rows.push({
+          wk: 'Overdue - brought forward', arrears: true, weekStart: s,
+          invoicesIn: Math.round(arrInvoices), retIn: Math.round(arrRet), vatIn: 0,
+          vatEstimated: false, vatSrcs: [],
+          bills: Math.round(arrBills), overheads: 0, ohDetail: [], commitments: 0, vatOut: 0, cisOut: 0,
+          projSalesIn: 0, projCostOut: 0, projNet: 0, projLabourOut: 0, projMatOut: 0, fcBreak: [],
+          moneyIn: Math.round(arrInvoices + arrRet), moneyOut: Math.round(arrBills),
+          net: Math.round(arrNet), closing: Math.round(running),
+        })
+      }
+
       running += net
       rows.push({
         wk: `w/c ${wkStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
@@ -562,7 +591,22 @@ export default function CashFlow() {
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
   const lowestWk = forecast.find(r => r.closing === lowest)
-  const chartData = forecast.map(r => ({ wk: r.wk, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut }))
+  // The arrears row is not a week, so it is folded into week 1 for the CHART - plotted as
+  // its own point it would read as a fourteenth week and stretch the axis. The table keeps
+  // them separate, which is where the distinction matters.
+  const chartData = (() => {
+    const out = []
+    for (const r of forecast) {
+      if (r.arrears) { out.push({ wk: r.wk, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut, _arr: true }); continue }
+      const prev = out[out.length - 1]
+      if (prev && prev._arr) {
+        out[out.length - 1] = { wk: r.wk, closing: r.closing, moneyIn: prev.moneyIn + r.moneyIn, moneyOut: prev.moneyOut - r.moneyOut }
+        continue
+      }
+      out.push({ wk: r.wk, closing: r.closing, moneyIn: r.moneyIn, moneyOut: -r.moneyOut })
+    }
+    return out
+  })()
 
   return (
     <>
@@ -930,8 +974,10 @@ export default function CashFlow() {
                 </thead>
                 <tbody>
                   {forecast.map((r, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #f2f0ec' }}>
-                      <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{r.wk}</td>
+                    <tr key={i} style={{ borderBottom: r.arrears ? '2px solid #fde68a' : '1px solid #f2f0ec', background: r.arrears ? '#fffbeb' : 'transparent' }}>
+                      <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: r.arrears ? '#92400e' : undefined }}
+                        title={r.arrears ? 'Everything already past its due date, swept into today. It is late money, not money due this week - shown separately so week 1 reads as the week it actually is.' : ''}>
+                        {r.wk}{r.arrears ? <div style={{ fontSize: 9.5, fontWeight: 600, color: '#b45309' }}>late - confirm dates below</div> : null}</td>
                       <td style={{ ...td, color: r.invoicesIn ? '#16a34a' : '#ccc' }}>{r.invoicesIn ? gbp(r.invoicesIn) : '-'}</td>
                       <td style={{ ...td, color: r.retIn ? '#16a34a' : '#ccc' }}>{r.retIn ? gbp(r.retIn) : '-'}</td>
                       {/* An estimate and a filed return look identical in a column of

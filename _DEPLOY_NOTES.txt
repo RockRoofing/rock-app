@@ -1,7 +1,7 @@
-pkg625 - Overdue bills, an Invoices Owed table, and exclusions
-==============================================================
+pkg626 - "Overdue - brought forward" row
+=========================================
 
-*** SUPERSEDES pkg591 - pkg624. Six files. ***
+*** SUPERSEDES pkg591 - pkg625. Six files. ***
 
 
 CHANGED FILES (replace)
@@ -14,54 +14,43 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-1. OVERDUE BILLS WERE VANISHING TOO
------------------------------------
-    const billsOut = data.bills.filter(i => inWk(...))
-
-Same fault as the invoices had. A bill past its due date sits BEFORE week 1 and
-was dropped entirely - so the forecast was flattered TWICE over: the debt
-disappeared from Invoices in AND the bill disappeared from Bills out.
-
-Both now land in week 1, and only week 1 - not repeated down the table.
-
-    invoice due 12/06   week 1 INCLUDED    week 5 no
-    bill    due 01/07   week 1 INCLUDED    week 5 no
-
-
-2. OVERDUE IS FLAGGED, NOT SILENT
----------------------------------
-Any bill or invoice past its date with no confirmed planned/expected date shows
-an amber row and "OVERDUE - confirm date". It is being paid or collected in week 1
-whether or not that is realistic, so it needs a date you actually intend.
-
-Setting a date clears the flag.
-
-
-3. NEW "INVOICES OWED" TABLE, AND THE DATES ARE SHARED
-------------------------------------------------------
-Mirrors the Invoices Owed page - customer, invoice, due date, amount, expected
-payment date.
-
-The expected date posts to the SAME endpoint that page uses, which writes
-invoice:meta. So a date set here appears there and vice versa, with no syncing
-logic to drift out of step. Keyed by invoice number, as that page keys it.
-
-
-4. EXCLUDE FROM THE FORECAST
-----------------------------
-An "In forecast" tick on every bill and every invoice. Untick and it is left out
-of the forecast entirely - a disputed bill, or an invoice you do not expect within
-the window. The row greys out so it is obvious it is not counted.
-
-Stored in config:cashflow-excluded, keyed by bill id or invoice number. Absent
-means included, so nothing changes for anything you have not deliberately
-excluded. The totals row counts only what is in the forecast.
-
-
-A BUG CAUGHT IN BUILD - WORTH RECORDING
+YES - AND IT MATTERS MORE THAN IT LOOKS
 ---------------------------------------
-Adding a key to the Promise.all in business-financials.js without adding a name to
-the destructuring shifted EVERY variable after it by one - balancesStore was bound
-to config:cashflow-excluded, financeCfg to config:manual-balances, and so on down.
-It compiles perfectly and silently corrupts a dozen features. I now check that
-block pairs name-to-key every time I touch it.
+Week 1 was carrying months of arrears and reading as an ordinary week. A separate
+row makes both halves visible:
+
+  Overdue - brought forward   in 45,477   out  8,000   net  37,477   closing 39,977
+  w/c 24 Aug                  in 10,356   out 73,922   net -63,566   closing -23,589
+
+Before, that was ONE row showing in 55,833 and out 81,922, with no way to see that
+45,477 of the income was months late and might not arrive at all.
+
+The row is amber, labelled "late - confirm dates below", and hovering explains it
+is money past its date swept into today rather than money due this week.
+
+Week 1 now shows only what is genuinely due in week 1.
+
+
+THE CHART KEEPS 13 POINTS
+-------------------------
+The arrears row is not a week, so plotting it would give a fourteenth point that
+reads as one and stretches the axis. It is folded into week 1 for the chart only -
+same closing balance, combined in and out. The table keeps them apart, which is
+where the distinction is useful.
+
+
+CONSISTENT WITH THE TABLES BELOW
+--------------------------------
+Everything in that row is flagged "OVERDUE - confirm date" in the Bills to pay and
+Invoices owed tables underneath, so the row tells you the size of the problem and
+the tables tell you which items. Setting a date moves the item out of the arrears
+row and into the week you actually expect it.
+
+The 13-week totals still include the arrears - they are real money, just late.
+
+
+REMOVED
+-------
+inWkOrOverdue, the predicate that quietly folded overdue items into week 1. Now
+that arrears are split out explicitly, a single test that hid them would defeat
+the point of the row.
