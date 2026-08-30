@@ -1,7 +1,7 @@
-pkg609 - Cash Flow: manual bank and card balances, each with its own date
-==========================================================================
+pkg610 - Cash Flow: three faults, including the double count you asked about
+=============================================================================
 
-*** SUPERSEDES pkg591 - pkg608. Four files. ***
+*** SUPERSEDES pkg591 - pkg609. Four files. ***
 
 
 CHANGED FILES (replace)
@@ -12,59 +12,62 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-WHY REFRESH BALANCES WAS FAILING
---------------------------------
-It calls Xero's Balance Sheet report, which needs accounting.reports.balancesheet.read.
-That scope was NOT in the connect list - same class of fault as the overpayments
-one. It IS on your app's permitted list, so it has been added: reconnect Xero from
-/connect and the button will work.
+1. OPENING CASH SHOWED 0 WITH A BALANCE ON SCREEN ABOVE IT
+----------------------------------------------------------
+The editor writes to local state and saves, but the CALCULATIONS read
+data.manualBalances - the server copy - and `data` is not refetched after a save.
+So the totals ignored everything you had just typed until a full page reload.
+Now read from local state.
 
-The error was being swallowed into a generic message, so it never said so.
+  opening cash   was 0.00   now 2,500.52
 
 
-BUT YOU WERE RIGHT NOT TO RELY ON IT
+2. CARD BALANCES WERE READ AS MONEY IN THE CARD
+-----------------------------------------------
+You typed Capital on Tap 77,156.42 as a positive - which is how a statement reads
+- but the page treats a negative card balance as debt. So card debt came out at
+ZERO and the whole 160,000 limit showed as headroom.
+
+Cards are now entered as the AMOUNT OWED, positive, and held negative internally.
+The field is labelled "owed" so there is no ambiguity.
+
+  card debt        was 0.00        now 77,156.42
+  card headroom    was 160,000.00  now 82,843.58
+  max cash         was 266,188     now 191,532
+
+
+3. THE DOUBLE COUNT - YOU WERE RIGHT
 ------------------------------------
-Xero's Balance Sheet gives the BOOK balance - only what has been entered and
-reconciled. The bank's real position is the STATEMENT balance, and the Xero API
-does not expose it at all; it exists only in the bank feed.
+HOW MONEY IN IS BUILT:
 
-So if reconciliation is a week behind, the opening figure is a week behind, and
-every one of the 13 weeks inherits the error - SILENTLY, as a perfectly plausible
-number.
+    moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
 
-MANUAL IS NOW THE PRIMARY SOURCE. A new Balances panel: add each bank account and
-each credit card, type what is actually in it, and set the date you read it.
-Kind (Bank / Card) drives the totals, so cards feed card debt and banks feed
-opening cash.
+    invoicesIn   unpaid sales invoices, by expected or due date
+    retIn        retention releases from the tracker
+    vatInPos     VAT refunds
+    fcSalesIn    project cash flow forecasts from Commercial
 
-Saves the moment you change anything, with saving / saved / NOT SAVED shown.
+There WAS a guard, but a weak one: a project's forecast sales were suppressed only
+if a real invoice landed in the SAME WEEK. An application invoiced in week 2 whose
+forecast scheduled cash in week 6 was counted TWICE - once as the invoice, once as
+the forecast. That is most of why 1,407,928 looks high against a 468k ledger.
 
-"Start from Xero's accounts" seeds the list from whatever Xero last returned, so
-you are not typing account names from scratch.
+Now a forecast whose PERIOD HAS ALREADY BEEN APPLIED FOR is dropped entirely -
+the same supersede rule the project cash flow uses. Drafts do not count as applied
+for.
 
+  J240 forecast to 31/07, applied for to 31/08   ->  dropped, it is an invoice now
+  J240 forecast to 30/09                          ->  kept, still future
+  J251 no applications                            ->  kept
 
-XERO BECOMES A CROSS-CHECK, WHICH IS THE USEFUL PART
-----------------------------------------------------
-Where a manual account matches a Xero one by name, the row shows Xero's figure
-and the difference:
+On a three-forecast example that is 192,766 down to 100,000.
 
-    Xero GBP 38,200 (+GBP 4,300)
-
-That gap is not an error - it is unreconciled items. It tells you how far behind
-reconciliation is, which is worth knowing in its own right.
+Expect Total money in to FALL substantially, and to be closer to reality.
 
 
-INVOICE FINANCE IS UNTOUCHED - it already comes from the IF page (pkg607), with
-the drawn balance and its date carried across.
-
-
-ALSO IN THIS PACKAGE
---------------------
-pkg608 - insured limits auto-save 0.7s after you stop typing, one write per
-customer, with saving / saved / NOT SAVED beside each box.
-
-pkg607 - the Cash Flow reads the IF page's published position rather than its own
-older model of the facility; as-at dates throughout; opening balance itemised
-with facilities listed but NOT added in.
-
-pkg606 - overdraft with no double counting, and one limit per card.
+4. REFRESH BALANCES (from pkg609)
+---------------------------------
+It needed accounting.reports.balancesheet.read, which was missing from the connect
+scopes. Added - reconnect Xero and it will work. But it returns Xero's BOOK
+balance, so manual entry remains the right primary source, with Xero shown as a
+cross-check and the gap flagged as unreconciled items.

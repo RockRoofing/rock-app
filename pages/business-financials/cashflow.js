@@ -349,6 +349,15 @@ export default function CashFlow() {
         .filter(b => inWk((billOverrides[b.id] || b.payDate || b.dueDate) || '') && b.project).map(b => normName(b.project)))
       let fcSalesIn = 0, fcCostOut = 0
       for (const fc of (data.projForecasts || [])) {
+        // SUPERSEDED - the period has already been applied for, so the money is now a
+        // real invoice sitting in `receivables`. Counting the forecast as well is the
+        // double-count you were worried about.
+        //
+        // The old guard only suppressed a forecast when an invoice landed in the SAME
+        // WEEK. An application invoiced in week 2 whose forecast scheduled cash in week 6
+        // was counted twice - which is most of why money in reads high.
+        if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) continue
+
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
         const hasBill = fc.projectName && projNamesWithBillThisWk.has(normName(fc.projectName))
         if (!hasInvoice) fcSalesIn += (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
@@ -408,12 +417,30 @@ export default function CashFlow() {
               // Xero is kept as a cross-check: where both exist, the gap is shown, and
               // that gap is itself useful - it is how far behind reconciliation is.
               const xbal = data.balances
-              const manual = Array.isArray(data.manualBalances) ? data.manualBalances : []
+              // FROM LOCAL STATE, not data.manualBalances. The editor writes to manualBal
+              // and saves, but `data` is not refetched - so reading the server copy here
+              // meant the totals ignored everything just typed until a full page reload.
+              // Opening cash sat at 0 with a balance visibly on screen above it.
+              const manual = manualBal
               const useManual = manual.length > 0
+              // CARDS ARE TYPED AS THE AMOUNT OWED, positive, which is how a card
+              // statement reads. Held negative internally because the rest of the page
+              // treats a negative card balance as debt. Entering 77,156.42 positive was
+              // read as money IN the card, so card debt came out at zero and the whole
+              // limit showed as headroom.
+              const cardOwed = manual.filter(m => m.kind === 'card').reduce((t, m) => t + Math.abs(Number(m.balance) || 0), 0)
               const bal = useManual
-                ? { ok: true, accounts: manual.map(m => ({ name: m.name, balance: m.balance, isCard: m.kind === 'card', asAt: m.asAt })),
+                ? { ok: true,
+                    accounts: manual.map(m => ({
+                      name: m.name,
+                      balance: m.kind === 'card' ? -Math.abs(Number(m.balance) || 0) : (Number(m.balance) || 0),
+                      isCard: m.kind === 'card', asAt: m.asAt,
+                    })),
                     bankTotal: manual.filter(m => m.kind !== 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
-                    cardTotal: manual.filter(m => m.kind === 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
+                    cardTotal: -cardOwed,
+                    // Latest date across the accounts, so the "as at" line has something to
+                    // show instead of "no balance date".
+                    updatedAt: manual.map(m => m.asAt).filter(Boolean).sort().pop() || null,
                     manual: true }
                 : xbal
               const bankAccts = (bal?.accounts || []).filter(a => !a.isCard)
@@ -493,7 +520,10 @@ export default function CashFlow() {
                           </select>
                           <input value={m.name} placeholder="Account name" onChange={e => upd({ name: e.target.value })} style={{ ...inpS, width: 210 }} />
                           <span style={{ color: '#bbb' }}>&pound;</span>
-                          <input type="number" value={m.balance} placeholder="0.00" onChange={e => upd({ balance: e.target.value })} style={{ ...inpS, width: 120, textAlign: 'right' }} />
+                          <input type="number" value={m.balance} placeholder="0.00" onChange={e => upd({ balance: e.target.value })}
+                            title={m.kind === 'card' ? 'Amount OWED on the card, as a positive number' : 'Cash in the account'}
+                            style={{ ...inpS, width: 120, textAlign: 'right' }} />
+                          <span style={{ fontSize: 10.5, color: '#999', width: 44 }}>{m.kind === 'card' ? 'owed' : 'in acc'}</span>
                           <span style={{ fontSize: 11, color: '#999' }}>as at</span>
                           <input type="date" value={m.asAt || ''} onChange={e => upd({ asAt: e.target.value })} style={{ ...inpS, width: 140 }} />
                           {gap != null && Math.abs(gap) > 0.5 && (

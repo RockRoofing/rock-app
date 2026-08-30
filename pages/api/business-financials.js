@@ -882,7 +882,20 @@ export default async function handler(req, res) {
       } while (cursor)
       // Map planning project key -> a display/project name for matching to invoices/bills.
       const dashByNo = {}
-      for (const p of (Array.isArray(dashCache) ? dashCache : [])) { if (p.jobNo) dashByNo[String(p.jobNo)] = p.name || '' }
+      // Latest application valuation date per job number, for the supersede rule below.
+      const recByNo = {}
+      for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
+        if (!p.jobNo) continue
+        dashByNo[String(p.jobNo)] = p.name || ''
+        const apps = Array.isArray(p.applications) ? p.applications : []
+        let latest = ''
+        for (const a of apps) {
+          if (a.status === 'draft') continue                 // a draft has not been applied for
+          const end = a.valDate || a.appDate || (a.monthKey ? `${a.monthKey}-28` : '')
+          if (end && end > latest) latest = end
+        }
+        recByNo[String(p.jobNo)] = latest
+      }
       for (const k of keys) {
         const pk = k.replace('cashflow:hyp-apps:', '')
         // pk is "L:<projectNo>" (live/draft) or "N:<dealId>" (negotiated).
@@ -898,6 +911,13 @@ export default async function handler(req, res) {
             labourSchedule: fc.labourSchedule || [],
             matItems: (fc.matItems || []).map(m => ({ date: m.payDate, amount: m.amount || 0 })),
             from: fc.from, to: fc.to,
+            // Latest APPLICATION valuation date on this project. A forecast whose period
+            // has already been applied for is history - the money is now a real invoice,
+            // and counting both is the double-count.
+            latestAppEnd: (() => {
+              const rec = projectNo ? (dashByNo[projectNo] != null ? recByNo[String(projectNo)] : null) : null
+              return rec || ''
+            })(),
           })
         }
       }
