@@ -887,14 +887,11 @@ export default async function handler(req, res) {
       for (const p of (Array.isArray(dashCache) ? dashCache : [])) {
         if (!p.jobNo) continue
         dashByNo[String(p.jobNo)] = p.name || ''
-        const apps = Array.isArray(p.applications) ? p.applications : []
-        let latest = ''
-        for (const a of apps) {
-          if (a.status === 'draft') continue                 // a draft has not been applied for
-          const end = a.valDate || a.appDate || (a.monthKey ? `${a.monthKey}-28` : '')
-          if (end && end > latest) latest = end
-        }
-        recByNo[String(p.jobNo)] = latest
+        // From the dashboard cache's own field. It was reading p.applications, which does
+        // NOT exist on the cache - applications live under settings.applications there.
+        // So latestAppEnd was always empty and the supersede rule never fired once, which
+        // is why the double count survived.
+        recByNo[String(p.jobNo)] = p.latestAppEnd || ''
       }
       for (const k of keys) {
         const pk = k.replace('cashflow:hyp-apps:', '')

@@ -429,7 +429,10 @@ export default function CashFlow() {
         .filter(i => inWk(i.expectedDate || i.dueDate || '') && i.projectNo).map(i => String(i.projectNo)))
       const projNamesWithBillThisWk = new Set((data.bills || [])
         .filter(b => inWk((billOverrides[b.id] || b.payDate || b.dueDate) || '') && b.project).map(b => normName(b.project)))
-      let fcSalesIn = 0, fcCostOut = 0
+      // Labour and materials kept SEPARATE, not rolled into one cost figure. Netted into
+      // a single "Project forecast" column they are invisible - and if the cost schedules
+      // are empty the column shows pure income with nothing to say the costs are missing.
+      let fcSalesIn = 0, fcLabourOut = 0, fcMatOut = 0
       for (const fc of (data.projForecasts || [])) {
         // SUPERSEDED - the period has already been applied for, so the money is now a
         // real invoice sitting in `receivables`. Counting the forecast as well is the
@@ -444,10 +447,11 @@ export default function CashFlow() {
         const hasBill = fc.projectName && projNamesWithBillThisWk.has(normName(fc.projectName))
         if (!hasInvoice) fcSalesIn += (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         if (!hasBill) {
-          fcCostOut += (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-          fcCostOut += (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+          fcLabourOut += (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+          fcMatOut += (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         }
       }
+      const fcCostOut = fcLabourOut + fcMatOut
       const projNet = fcSalesIn - fcCostOut
 
       const moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
@@ -460,6 +464,7 @@ export default function CashFlow() {
         invoicesIn: Math.round(invoicesIn), retIn: Math.round(retIn), vatIn: Math.round(vatInPos),
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
+        projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -769,7 +774,9 @@ export default function CashFlow() {
                     <th style={th}>Vehicles / commitments</th>
                     <th style={th}>VAT out</th>
                     <th style={th}>CIS to HMRC</th>
-                    <th style={th} title="Net of the Commercial project cash flow forecasts (sales in minus labour + materials out), only where no real invoice/bill exists yet for that project that week.">Project forecast</th>
+                    <th style={th} title="Sales from the Commercial project cash flow forecasts, excluding any period already applied for and any project with a real invoice that week.">Project sales</th>
+                    <th style={th} title="Materials payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no materials scheduled - the cash flow is then showing income with no cost against it.">Materials out</th>
+                    <th style={th} title="Labour payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no labour scheduled.">Labour out</th>
                     <th style={th}>Net</th>
                     <th style={th}>Closing cash</th>
                   </tr>
@@ -790,7 +797,12 @@ export default function CashFlow() {
                       <td style={{ ...td, color: r.commitments ? '#dc2626' : '#ccc' }}>{r.commitments ? gbp(-r.commitments) : '-'}</td>
                       <td style={{ ...td, color: r.vatOut ? '#dc2626' : '#ccc' }}>{r.vatOut ? gbp(-r.vatOut) : '-'}</td>
                       <td style={{ ...td, color: r.cisOut ? '#dc2626' : '#ccc' }}>{r.cisOut ? gbp(-r.cisOut) : '-'}</td>
-                      <td style={{ ...td, color: r.projNet ? (r.projNet < 0 ? '#dc2626' : '#0f766e') : '#ccc' }} title={r.projSalesIn || r.projCostOut ? `Forecast in ${gbp(r.projSalesIn)} / out ${gbp(r.projCostOut)}` : ''}>{r.projNet ? gbp(r.projNet) : '-'}</td>
+                      {/* Three columns, not one net figure. If Materials out and Labour
+                          out sit at nil while Project sales runs high, the cost side of
+                          the forecast is missing - which a netted column hides completely. */}
+                      <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc' }}>{r.projSalesIn ? gbp(r.projSalesIn) : '-'}</td>
+                      <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#ccc' }}>{r.projMatOut ? gbp(-r.projMatOut) : '-'}</td>
+                      <td style={{ ...td, color: r.projLabourOut ? '#dc2626' : '#ccc' }}>{r.projLabourOut ? gbp(-r.projLabourOut) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
@@ -821,7 +833,9 @@ export default function CashFlow() {
                     const tIn = sum('invoicesIn'), tRet = sum('retIn'), tVatIn = sum('vatIn')
                     const tBills = sum('bills'), tOh = sum('overheads'), tComm = sum('commitments')
                     const tVatOut = sum('vatOut'), tCis = sum('cisOut'), tNet = sum('net')
-                    const tProj = sum('projNet')
+                    const tProjSales = sum('projSalesIn')
+                    const tProjMat = sum('projMatOut')
+                    const tProjLab = sum('projLabourOut')
                     return (
                       <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
                         <td style={{ ...td, textAlign: 'left' }}>13-week total</td>
@@ -833,7 +847,9 @@ export default function CashFlow() {
                         <td style={{ ...td, color: '#dc2626' }}>{tComm ? gbp(-tComm) : '-'}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{tVatOut ? gbp(-tVatOut) : '-'}</td>
                         <td style={{ ...td, color: '#dc2626' }}>{tCis ? gbp(-tCis) : '-'}</td>
-                        <td style={{ ...td, color: tProj < 0 ? '#dc2626' : '#0f766e' }}>{tProj ? gbp(tProj) : '-'}</td>
+                        <td style={{ ...td, color: '#0f766e' }}>{tProjSales ? gbp(tProjSales) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tProjMat ? gbp(-tProjMat) : '-'}</td>
+                        <td style={{ ...td, color: '#dc2626' }}>{tProjLab ? gbp(-tProjLab) : '-'}</td>
                         <td style={{ ...td, color: tNet < 0 ? '#dc2626' : '#16a34a' }}>{gbp(tNet)}</td>
                         <td style={{ ...td }}></td>
                       </tr>

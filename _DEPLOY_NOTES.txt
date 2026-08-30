@@ -1,7 +1,8 @@
-pkg614 - FIX: cash flow crashed on open (my bug in pkg613)
-===========================================================
+pkg615 - Project forecast split into Sales / Materials / Labour, and the
+          supersede rule actually fires now
+=========================================================================
 
-*** SUPERSEDES pkg591 - pkg613. Four files. ***
+*** SUPERSEDES pkg591 - pkg614. FIVE files - dashboard.js is new to this set. ***
 
 
 CHANGED FILES (replace)
@@ -9,47 +10,60 @@ CHANGED FILES (replace)
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/api/business-financials.js
+  pages/api/dashboard.js          <- NEW in this package
   pages/connect.js
 
 
-THE CRASH
----------
-The new "not in the forecast" banner reads retEvents to report retention releases
-with no date. But retEvents was declared INSIDE the forecast useMemo - line 285 -
-and the banner renders at line 592, outside it.
+1. YOU WERE RIGHT - IT NEEDED SPLITTING
+---------------------------------------
+"Project forecast" was a NET column: sales in, less labour out, less materials
+out, rolled into one figure. So a week showing +174,821 could be 174,821 of sales
+with NO costs at all, and nothing on screen would say so.
 
-A const declared inside a hook is invisible to the JSX. It compiles perfectly and
-throws ReferenceError on the first render, taking the page down. Same class of
-fault as the gbp() one that took the Retention Tracker down: an undefined
-identifier passes the build and only shows at runtime.
+Now three columns: Project sales, Materials out, Labour out.
 
-retEvents is now declared at component scope, above the forecast memo, so both
-the calculation and the banner can see it.
+If Materials and Labour sit at "-" while Project sales runs high, the forecasts
+have no cost schedules against them - and the cash flow is showing income with no
+cost, which is exactly the shape of a closing balance that climbs to 668k.
 
-I swept the whole file for the same pattern - anything declared inside a useMemo
-and referenced in the JSX. Two more flagged, both false positives ('flex-end' in a
-CSS value and finance.vatRate as a property). retEvents was the only real one.
-
-ALSO FIXED WHILE THERE: the forecast memo reads finance.vatRate for the VAT
-reclaim estimate but did not list `finance` in its dependencies, so it would have
-kept a stale rate until something else happened to change. `manualBal` added for
-the same reason.
+That is the diagnostic. Deploy and look at those two columns first.
 
 
-WHAT IS IN THIS PACKAGE (from pkg613)
--------------------------------------
-OVERDUE DEBT LANDS IN WEEK 1. The filter required the date to fall INSIDE the 13
-weeks, so anything already past due was dropped entirely - 555k of debt showing as
-100,885 of cash in.
+2. THE SUPERSEDE RULE HAS NEVER ONCE FIRED - MY BUG
+---------------------------------------------------
+pkg613 added a rule to drop any forecast whose period had already been applied
+for. It read
 
-RETENTION IN was blank because it read release1Received, a field nothing ever
-sets, and required a release date, silently dropping every half without one. Now
-uses the same rule as the Retention Tracker.
+    const apps = Array.isArray(p.applications) ? p.applications : []
 
-AMBER BANNER listing what could not be scheduled - retention with no release date,
-invoices with no due date - so nothing is missing silently.
+but the dashboard cache does NOT have p.applications - applications live under
+settings.applications there. So the array was always empty, latestAppEnd was
+always '', and the rule never dropped a single forecast. The double count I told
+you was fixed was still running.
 
-FORWARD VAT RECLAIM estimated from forecast bills and materials at spend x 20/120
-for any month with no filed return. Rate editable, 0 turns it off.
+dashboard.js now computes latestAppEnd - the period end of the latest application
+- and the cash flow reads it directly. A new cache marker forces one rebuild, so
+open the Commercial dashboard once after deploying.
 
-NET CASH POSITION box, and Refresh balances from Xero removed.
+
+WHAT TO LOOK AT, IN ORDER
+-------------------------
+1. Open the Commercial dashboard once (rebuilds the cache with latestAppEnd).
+2. Back to Cash Flow. Project sales should drop where periods have been applied
+   for - that money is now in Invoices in instead.
+3. Check Materials out and Labour out. If they are empty against real sales, the
+   project forecasts themselves have no costs scheduled, and that is a Commercial
+   data question rather than a cash flow one - tell me what you see and we will
+   work from there.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg614 - retEvents hoisted to component scope (it was declared inside the forecast
+useMemo and read by the banner, which crashed the page).
+
+pkg613 - overdue debt lands in week 1 rather than vanishing; retention releases
+use the same rule as the tracker; amber banner for anything with no date; forward
+VAT reclaim estimated at spend x 20/120.
+
+pkg612 - Net cash position box; Refresh balances from Xero removed.

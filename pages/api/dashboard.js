@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   if (req.query.sync !== 'true') {
     try {
       const cached = await redis.get('dashboard:cache')
-      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0]) {
+      if (cached && Array.isArray(cached) && cached.length > 0 && cached[0] && 'detailsMissing' in cached[0] && cached[0].completeV6 === true && 'hasContractedRates' in cached[0] && 'wipAdjustments' in cached[0] && cached[0].stageSource === 'retention' && 'appliedForLatest' in cached[0] && cached[0].cmResolved === true && cached[0].estimatorResolved === true && cached[0].qsResolved === true && 'pcType' in cached[0] && 'inXero' in cached[0] && 'retention612Released' in cached[0] && 'appRelease1' in cached[0] && 'latestAppEnd' in cached[0]) {
         // Overlay the WIP-relevant fields from LIVE settings/adjustments so a margin
         // override, manual adjustment, or valuation-date change made on the WIP page
         // is reflected immediately even while the rest of the cache is still warm.
@@ -227,6 +227,7 @@ export default async function handler(req, res) {
       // application on this project (by sequence). Gross = the application total
       // before MCD/retention deductions.
       let appliedForLatest = 0
+      let latestAppEnd = ''
       let retentionClaimed = 0
       let appRelease1 = false, appRelease2 = false
       // FINAL ACCOUNT FROM THE APPLICATION.
@@ -249,6 +250,11 @@ export default async function handler(req, res) {
           for (const a of apps) { if ((a.seq || 0) < (latest.seq || 0)) prevGross = computeApplicationSummary(a, 0).grossCurrent }
           const sum = computeApplicationSummary(latest, prevGross)
           appliedForLatest = sum.grossCurrent || sum.applicationTotal || 0
+          // The PERIOD END of the latest application. The 13-week cash flow uses this to
+          // drop project forecasts for periods already applied for - that money is now a
+          // real invoice, and counting the forecast as well double-counts it.
+          latestAppEnd = latest.periodTo || latest.valDate || latest.appDate
+            || (latest.monthKey ? `${latest.monthKey}-28` : '')
           // Retention CLAIMED BACK on applications - the halves ticked in the Retention
           // section. Deliberately NOT called retentionReleased: that name is already used
           // further down for something different, retention DUE by date (PC + defects
@@ -422,6 +428,7 @@ export default async function handler(req, res) {
         estimatorResolved: true,
         qsResolved: true,
         appliedForLatest,
+        latestAppEnd,
         retentionClaimed,
         appRelease1,
         appRelease2,
