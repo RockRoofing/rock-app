@@ -753,13 +753,14 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, cfExcluded, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
       redis.get('vat:estimate').then(v => v || { months: {} }).catch(() => ({ months: {} })),
       redis.get('retention:entries').then(v => v || { entries: [] }).catch(() => ({ entries: [] })),
       redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
+      redis.get('config:cashflow-excluded').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({})),
       redis.get('bank:account-balances').then(v => v || null).catch(() => null),
       redis.get('config:manual-balances').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
@@ -1000,6 +1001,7 @@ export default async function handler(req, res) {
       balances: balancesStore || null,
       financeCfg,
       manualBalances,
+      cfExcluded,
       ifAvailability,
       bills,
       billPayDates,
@@ -1053,6 +1055,20 @@ export default async function handler(req, res) {
   // reconciled. The bank's real position is the STATEMENT balance, which the API does not
   // expose at all. So a figure read off online banking this morning is worth more than an
   // automated one that is quietly a week behind reconciliation.
+  // EXCLUDE a bill or invoice from the forecast. Keyed by id (bills) or invoice number
+  // (receivables), value true. Absent = included, so nothing changes for anything not
+  // deliberately excluded.
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-exclusions') {
+    try {
+      const { key, excluded } = req.body || {}
+      if (!key) return res.status(400).json({ ok: false, error: 'missing key' })
+      const map = await redis.get('config:cashflow-excluded').then(v => (v && typeof v === 'object') ? v : {}).catch(() => ({}))
+      if (excluded) map[key] = true; else delete map[key]
+      await redis.set('config:cashflow-excluded', map)
+      return res.json({ ok: true, excluded: map })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
   if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-manual-balances') {
     try {
       const list = Array.isArray((req.body || {}).balances) ? req.body.balances : []

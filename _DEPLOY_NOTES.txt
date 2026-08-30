@@ -1,54 +1,67 @@
-pkg624 - VAT figures say when they are estimates
-=================================================
+pkg625 - Overdue bills, an Invoices Owed table, and exclusions
+==============================================================
 
-*** SUPERSEDES pkg591 - pkg623. Six files. ***
+*** SUPERSEDES pkg591 - pkg624. Six files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
   pages/business-financials/cashflow.js
+  pages/api/business-financials.js
   pages/business-financials/invoice-finance.js
   pages/project-cashflow.js
-  pages/api/business-financials.js
   pages/api/dashboard.js
   pages/connect.js
 
 
-VAT IN AND VAT OUT NOW LABEL THEIR ESTIMATES
---------------------------------------------
-Three different things were landing in that column and looking identical:
+1. OVERDUE BILLS WERE VANISHING TOO
+-----------------------------------
+    const billsOut = data.bills.filter(i => inWk(...))
 
-  a FILED return          real, Box 5 as submitted
-  the VAT ESTIMATE        the current period's working figure
-  a RECLAIM ESTIMATE      my forward calculation from forecast materials and
-                          bills at spend x 20/120
+Same fault as the invoices had. A bill past its due date sits BEFORE week 1 and
+was dropped entirely - so the forecast was flattered TWICE over: the debt
+disappeared from Invoices in AND the bill disappeared from Bills out.
 
-Only the first is fact. A figure marked "est" in amber is not a filed return.
+Both now land in week 1, and only week 1 - not repeated down the table.
 
-Hovering gives the detail, month by month:
-
-    2026-09: VAT estimate; 2026-10: estimated reclaim on forecast materials and bills
-
-A week that mixes a filed return with an estimate IS marked - part of it is a
-forecast, so the total is.
-
-VAT OUT gets the same treatment. It comes from the same months, so a PAYMENT can
-be just as much an estimate as a refund, and it was equally unlabelled.
+    invoice due 12/06   week 1 INCLUDED    week 5 no
+    bill    due 01/07   week 1 INCLUDED    week 5 no
 
 
-A NOTE ON MY OWN CHECKING
--------------------------
-My build check was reporting "syntax OK" on a file that did not compile - the
-shell `&&` was swallowing esbuild's error. There were two broken braces in this
-change that it hid. I have verified every file in this package against esbuild's
-real output rather than an exit code, and will keep doing that.
+2. OVERDUE IS FLAGGED, NOT SILENT
+---------------------------------
+Any bill or invoice past its date with no confirmed planned/expected date shows
+an amber row and "OVERDUE - confirm date". It is being paid or collected in week 1
+whether or not that is realistic, so it needs a date you actually intend.
+
+Setting a date clears the flag.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg623 - the Revenue this period box states its own arithmetic with the real
-rates: "39,304.99 gross, less retention 3%". Two figures that looked like they
-should agree were gross and net, and neither said so.
+3. NEW "INVOICES OWED" TABLE, AND THE DATES ARE SHARED
+------------------------------------------------------
+Mirrors the Invoices Owed page - customer, invoice, due date, amount, expected
+payment date.
 
-pkg622 - "Previously claimed (gross)" override, and the over-claim warning when
-the prior exceeds contract plus instructed variations.
+The expected date posts to the SAME endpoint that page uses, which writes
+invoice:meta. So a date set here appears there and vice versa, with no syncing
+logic to drift out of step. Keyed by invoice number, as that page keys it.
+
+
+4. EXCLUDE FROM THE FORECAST
+----------------------------
+An "In forecast" tick on every bill and every invoice. Untick and it is left out
+of the forecast entirely - a disputed bill, or an invoice you do not expect within
+the window. The row greys out so it is obvious it is not counted.
+
+Stored in config:cashflow-excluded, keyed by bill id or invoice number. Absent
+means included, so nothing changes for anything you have not deliberately
+excluded. The totals row counts only what is in the forecast.
+
+
+A BUG CAUGHT IN BUILD - WORTH RECORDING
+---------------------------------------
+Adding a key to the Promise.all in business-financials.js without adding a name to
+the destructuring shifted EVERY variable after it by one - balancesStore was bound
+to config:cashflow-excluded, financeCfg to config:manual-balances, and so on down.
+It compiles perfectly and silently corrupts a dozen features. I now check that
+block pairs name-to-key every time I touch it.

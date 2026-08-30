@@ -14,6 +14,12 @@ const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDa
 // had no `inpS`, and a style name that does not exist compiles fine and then throws.
 const inpS = { padding: '5px 7px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit' }
 
+// Receivables are keyed by invoice number - the same key invoice:meta uses for expected
+// dates, so an exclusion and a date always refer to the same invoice.
+const todayISO = new Date().toISOString().slice(0, 10)
+
+const invKey = (i) => String(i.invoiceNumber || i.number || i.id || '')
+
 const fmtDMY = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate()
@@ -181,6 +187,35 @@ export default function CashFlow() {
   const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30 })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
+  // { [key]: true }. Bills key on id, receivables on invoice number - the same key the
+  // Invoices Owed page uses for its expected dates.
+  const [excluded, setExcluded] = useState({})
+
+  // EXPECTED PAYMENT DATE. Posts to the SAME endpoint the Invoices Owed page uses, which
+  // writes invoice:meta - so a date set here shows there and vice versa, with no syncing
+  // to go wrong. Keyed by invoice number, as that page does.
+  async function setExpectedDate(invoiceNumber, expectedDate) {
+    setData(d => ({
+      ...d,
+      receivables: (d.receivables || []).map(r => invKey(r) === invoiceNumber ? { ...r, expectedDate } : r),
+    }))
+    try {
+      await fetch('/api/outstanding-invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-expected', invoiceNumber, expectedDate }),
+      })
+    } catch {}
+  }
+
+  async function toggleExcluded(key, next) {
+    setExcluded(prev => { const c = { ...prev }; if (next) c[key] = true; else delete c[key]; return c })
+    try {
+      await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'cashflow', action: 'save-exclusions', key, excluded: !!next }),
+      })
+    } catch {}
+  }
   const [balMsg, setBalMsg] = useState('')
 
   async function saveManualBalances(next) {
@@ -216,6 +251,7 @@ export default function CashFlow() {
       const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
       setData(d)
       setManualBal(Array.isArray(d.manualBalances) ? d.manualBalances : [])
+      setExcluded(d.cfExcluded && typeof d.cfExcluded === 'object' ? d.cfExcluded : {})
       const fc = d.financeCfg || {}
       // Whitelisted on the way in, so anything not named here is dropped on every
       // refresh even though the save writes the whole object. The overdraft limit and the
@@ -379,6 +415,12 @@ export default function CashFlow() {
       const wkEnd = new Date(wkStart.getTime() + 6 * 86400000)
       const s = isoDay(wkStart), e = isoDay(wkEnd)
       const inWk = (dstr) => dstr >= s && dstr <= e
+      // OVERDUE LANDS IN WEEK 1, for money out as well as money in.
+      //
+      // A date before the horizon is not "never" - it is late, and late money out is the
+      // most certain spend there is. Dropping it flattered the forecast twice: the debt
+      // vanished from Invoices in AND the bill vanished from Bills out.
+      const inWkOrOverdue = (dstr) => !!dstr && ((w === 0 && dstr < s) || inWk(dstr))
 
       // OVERDUE DEBT LANDS IN WEEK 1, it does not vanish.
       //
@@ -390,10 +432,8 @@ export default function CashFlow() {
       // Overdue does not mean never paid; it means late. It belongs in the first week,
       // which is also the honest place for it - if it does not arrive you see the hole.
       const invoicesIn = (data.receivables || []).reduce((a, i) => {
-        const d = i.expectedDate || i.dueDate || ''
-        if (!d) return a                                  // undated, cannot be scheduled
-        const due = (w === 0 && d < s) ? true : inWk(d)    // before the horizon -> week 1
-        return due ? a + (i.amountDue || 0) : a
+        if (excluded[invKey(i)]) return a
+        return inWkOrOverdue(i.expectedDate || i.dueDate || '') ? a + (i.amountDue || 0) : a
       }, 0)
       const overdueIn = w === 0
         ? (data.receivables || []).filter(i => { const d = i.expectedDate || i.dueDate || ''; return d && d < s }).reduce((a, i) => a + (i.amountDue || 0), 0)
@@ -419,7 +459,7 @@ export default function CashFlow() {
 
       // Bills out: pay the full Amount Due (Xero already nets CIS off labour bills).
       // The 20% CIS to HMRC is scheduled separately below.
-      const billsOut = (data.bills || []).filter(i => inWk((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
+      const billsOut = (data.bills || []).filter(i => !excluded[i.id] && inWkOrOverdue((billOverrides[i.id] || i.payDate || i.dueDate) || ''))
         .reduce((a, i) => a + (i.amountDue || 0), 0)
       const ohOut = ohEvents.filter(x => inWk(x.date)).reduce((a, x) => a + x.amount, 0)
       // Per-week overhead breakdown by code (for the click-to-expand detail).
@@ -517,7 +557,7 @@ export default function CashFlow() {
     return rows
   // finance is in the deps because the VAT reclaim estimate reads finance.vatRate -
   // without it the forecast would keep a stale rate until something else changed.
-  }, [data, startCash, billOverrides, cisFlags, finance, manualBal])
+  }, [data, startCash, billOverrides, cisFlags, finance, manualBal, excluded])
 
   if (!ok) return null
   const lowest = forecast.reduce((min, r) => r.closing < min ? r.closing : min, forecast.length ? forecast[0].closing : 0)
@@ -1024,6 +1064,73 @@ export default function CashFlow() {
               </table>
             </div>
 
+            {/* INVOICES OWED - mirrors the Invoices Owed page. The expected date posts to
+                the SAME endpoint that page uses (invoice:meta), so setting it here shows
+                there and vice versa. No syncing to drift. */}
+            <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '14px 16px', marginBottom: 18 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: INK, marginBottom: 2 }}>Invoices owed</div>
+              <div style={{ fontSize: 11.5, color: '#8a857c', marginBottom: 10 }}>
+                Expected payment dates are shared with the Invoices Owed page - change one and the other follows. Anything past its due date is paid into week 1 of the forecast until you set a date you actually expect.
+              </div>
+              <div style={{ maxHeight: 380, overflow: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#faf9f7', borderBottom: '2px solid #eee', position: 'sticky', top: 0, zIndex: 1 }}>
+                      <th style={{ ...th, textAlign: 'left' }}>Customer</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Invoice</th>
+                      <th style={th}>Due date</th>
+                      <th style={th}>Amount due</th>
+                      <th style={{ ...th, textAlign: 'left' }}>Expected payment date</th>
+                      <th style={{ ...th, textAlign: 'center' }} title="Untick to leave this invoice out of the forecast - a disputed invoice, or one you do not expect in this window.">In forecast</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.receivables || []).slice().sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')).map((r, i) => {
+                      const k = invKey(r)
+                      const off = !!excluded[k]
+                      const eff = r.expectedDate || r.dueDate || ''
+                      // Overdue with NO expected date - it lands in week 1 whether or not
+                      // that is realistic, so it needs one.
+                      const isOverdue = eff && eff < todayISO && !r.expectedDate
+                      return (
+                        <tr key={k || i} style={{ borderBottom: '1px solid #f2f0ec', background: off ? '#fafafa' : (isOverdue ? '#fffbeb' : 'transparent'), opacity: off ? 0.55 : 1 }}>
+                          <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.contact || ''}>{r.contact || '-'}</td>
+                          <td style={{ ...td, textAlign: 'left', color: '#777' }}>{r.invoiceNumber || r.number || '-'}</td>
+                          <td style={{ ...td, color: '#666' }}>{r.dueDate ? fmtDMY(r.dueDate) : '-'}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>{gbp(r.amountDue)}</td>
+                          <td style={{ ...td, textAlign: 'left' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <input type="date" value={r.expectedDate || ''} onChange={e => setExpectedDate(k, e.target.value)}
+                                style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (r.expectedDate ? '#bbf7d0' : '#e5e5e5'), borderRadius: 5 }} />
+                              {isOverdue && (
+                                <span title="Past its due date with no expected date, so the forecast collects it in week 1. Set a date you actually expect."
+                                  style={{ fontSize: 9.5, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', cursor: 'help' }}>OVERDUE - confirm date</span>
+                              )}
+                              {r.expectedDate && <button onClick={() => setExpectedDate(k, '')} title="Clear - use the due date" style={{ background: 'none', border: 'none', color: '#c66', cursor: 'pointer' }}>&times;</button>}
+                            </div>
+                          </td>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            <input type="checkbox" checked={!off} onChange={e => toggleExcluded(k, !e.target.checked)} />
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {(data.receivables || []).length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding invoices.</td></tr>}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: '2px solid #ddd', background: '#faf9f7', fontWeight: 700 }}>
+                      <td style={{ ...td, textAlign: 'left' }}>Total ({(data.receivables || []).filter(r => !excluded[invKey(r)]).length} in forecast)</td>
+                      <td style={td}></td>
+                      <td style={td}></td>
+                      <td style={{ ...td, fontWeight: 800 }}>{gbp((data.receivables || []).filter(r => !excluded[invKey(r)]).reduce((a, r) => a + (r.amountDue || 0), 0))}</td>
+                      <td style={td}></td>
+                      <td style={td}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
             {/* Bills to pay - adjust planned payment dates; feeds the forecast above */}
             {(() => {
               const bills = (data.bills || []).filter(b => (b.amountDue || 0) > 0)
@@ -1044,13 +1151,20 @@ export default function CashFlow() {
                           <th style={th}>Amount</th>
                           <th style={{ ...th, textAlign: 'center' }} title="Tick if this is a CIS labour bill. Bill pays its full net amount; an extra 20% CIS goes to HMRC on the 22nd of next month.">CIS</th>
                           <th style={{ ...th, textAlign: 'left' }}>Planned payment date</th>
+                          <th style={{ ...th, textAlign: 'center' }} title="Untick to leave this bill out of the forecast entirely - a disputed bill, or one you will not be paying in this window.">In forecast</th>
                         </tr>
                       </thead>
                       <tbody>
                         {bills.map((b, i) => {
                           const overridden = !!(billOverrides[b.id] || b.payDate)
+                          // OVERDUE - the planned date is in the past, so this bill is
+                          // being paid in week 1 whether or not that is realistic. It
+                          // needs a date confirming rather than sitting there.
+                          const effDate = billOverrides[b.id] || b.payDate || b.dueDate || ''
+                          const isOverdue = effDate && effDate < todayISO && !overridden
+                          const off = !!excluded[b.id]
                           return (
-                            <tr key={b.id || i} style={{ borderBottom: '1px solid #f2f0ec' }}>
+                            <tr key={b.id || i} style={{ borderBottom: '1px solid #f2f0ec', background: off ? '#fafafa' : (isOverdue ? '#fffbeb' : 'transparent'), opacity: off ? 0.55 : 1 }}>
                               <td style={{ ...td, textAlign: 'left', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.contact}>{b.contact || '-'}</td>
                               <td style={{ ...td, textAlign: 'left', color: '#777', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.reference || b.number}>{b.reference || b.number || '-'}</td>
                               <td style={{ ...td, color: '#666' }}>{b.dueDate ? new Date(b.dueDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '-'}</td>
@@ -1062,13 +1176,20 @@ export default function CashFlow() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                   <input type="date" value={billOverrides[b.id] || b.payDate || ''} onChange={e => setBillPayDate(b.id, e.target.value)}
                                     style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (overridden ? '#fed7aa' : '#e5e5e5'), borderRadius: 5, color: overridden ? '#ea580c' : '#555', background: overridden ? '#fff7ed' : '#fff', fontWeight: overridden ? 600 : 400 }} />
+                                  {isOverdue && (
+                                    <span title="Past its due date, so it lands in week 1 of the forecast. Set a planned payment date you actually intend to pay on."
+                                      style={{ fontSize: 9.5, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', cursor: 'help' }}>OVERDUE - confirm date</span>
+                                  )}
                                   {overridden && <button onClick={() => setBillPayDate(b.id, '')} title="Clear - use due date" style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>&times;</button>}
                                 </div>
+                              </td>
+                              <td style={{ ...td, textAlign: 'center' }}>
+                                <input type="checkbox" checked={!off} onChange={e => toggleExcluded(b.id, !e.target.checked)} title={off ? 'Excluded from the forecast' : 'Included in the forecast'} />
                               </td>
                             </tr>
                           )
                         })}
-                        {bills.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
+                        {bills.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No outstanding bills. Sync Bills to Pay first.</td></tr>}
                       </tbody>
                       <tfoot>
                         {(() => {
@@ -1080,6 +1201,8 @@ export default function CashFlow() {
                               <td style={td}></td>
                               <td style={{ ...td, fontWeight: 800 }}>{gbp(totalBills)}{cisTotal ? <div style={{ fontSize: 10, color: '#ea580c', fontWeight: 400 }}>+{gbp(cisTotal)} CIS to HMRC</div> : null}</td>
                               <td style={td}></td>
+                              <td style={td}></td>
+                              {/* Matches the new "In forecast" column. */}
                               <td style={td}></td>
                             </tr>
                           )
