@@ -1,7 +1,7 @@
-pkg635 - Click a forecast bar to see that project's cash on its own
-====================================================================
+pkg636 - FIX: "getValidTokens is not defined" on the Balance Sheet read
+========================================================================
 
-*** SUPERSEDES pkg591 - pkg634. ***
+*** SUPERSEDES pkg591 - pkg635. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,64 +9,57 @@ pkg635 - Click a forecast bar to see that project's cash on its own
 
 CHANGED FILES (replace)
 -----------------------
+  pages/api/business-financials.js        <- the fix
+  pages/business-financials/balance-sheet.js
   pages/project-cashflow.js
   pages/business-financials.js
   components/BizNav.js
   lib/xero.js
-  pages/api/business-financials.js
   pages/api/dashboard.js
   pages/connect.js
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
 
-NEW FILE (create)
------------------
-  pages/business-financials/balance-sheet.js
+
+MY BUG
+------
+I called getValidTokens(). There is no such function in that file - every other
+handler uses getTokens(), imported from lib/db at line 2. So the call threw and
+the error came straight back to the page as the message you saw.
+
+Worse, my version had NO TOKEN REFRESH. Every working handler does:
+
+    let tokens = await getTokens()
+    try { const nt = await refreshXeroToken(tokens.refresh_token)
+          if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+
+Without it, an access token more than about half an hour old fails on every call -
+so even with the right function name it would have worked once and then stopped.
+Now mirrors the balances handler exactly.
+
+A missing connection now returns 200 with ok:false, so the page shows the message
+rather than the client having to interpret a 400.
+
+I also swept the file for any other awaited call that does not resolve to an
+import or a declaration. Only a dynamic import() came back, which is a false
+positive.
 
 
-WHERE THE BUSINESS FINANCIALS CASH FLOW PULLS FROM
---------------------------------------------------
-  Invoices in        unpaid Xero sales invoices, by expected date or due date
-  Retention in       the Retention Tracker's 1st/2nd release dates and values
-  VAT in / out       filed returns, else the estimate, else a forward reclaim
-  Bills out          unpaid Xero bills, by planned payment date or due date
-  Overheads out      Budgets page x the Cash Schedule
-  Financing & tax    commitments + the new Balance Sheet tab
-  Project sales /
-  Materials / Labour  the saved project forecasts - salesSchedule, matItems,
-                      labourSchedule - excluding any period already applied for
-
-The per-week drill-down added in pkg616 already shows which projects make up the
-Project sales figure, with cost % against each.
-
-
-CLICK A BAR ON THE PROJECT CASH FLOW
-------------------------------------
-That was the missing half. The forecast bars were pointerEvents:'none', so the
-only way in was the View button - and the View modal is already busy, as you say.
-
-Clicking a bar now limits the HORIZONTAL CASH ROWS above to that project alone:
-sales in, retention in, labour out, materials out. Click again to clear, or press
-"Show all" on the banner.
-
-  no focus       sales in 121,560
-  focus J190     sales in 83,435   labour 25,585   materials 42,441
-
-The focused bar carries a dark outline so you can see which one you are on.
-
-ACTUALS AND RETENTION FOLLOW THE FILTER TOO. Applications are keyed by Xero id and
-retention by tracker entry, while forecasts are keyed "L:<jobNo>" - all three are
-mapped across, otherwise focusing a project would have shown its forecast cash but
-everyone else's certified cash.
-
-A BANNER SAYS IT IS FILTERED. Quietly showing one project's totals in the same
-place as the combined figure would be worse than not filtering at all.
+THEN
+----
+1. Press "Read balance sheet from Xero" again.
+2. If it now says the SCOPE is missing, reconnect Xero from /connect -
+   accounting.reports.balancesheet.read does not apply to an existing connection.
+3. Track your PAYE/CIS arrears, set 5,000 a month, and it will appear in the
+   Financing & tax column - stopping automatically once the liability clears.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg634 - the timeline bar falls back to thisCertTotal, marked with *, where a
-stored revenueThisPeriod is zero; hovering shows the stored record.
-pkg633 - warns when saved and live figures differ.
-pkg632 - a real APPLICATION is never filtered out of the prior by the period dates.
-pkg627-631 - Balance Sheet tab, Financing & tax column, and the rest.
+pkg635 - click a forecast bar on the project cash flow and the horizontal cash
+rows show that project alone. Actuals and retention are mapped across the
+different key shapes so they follow the filter too.
+
+pkg634 / 633 / 632 - timeline bar falls back to thisCertTotal where a stored zero
+would otherwise read as a nil period; a warning when saved and live differ; and a
+real APPLICATION is never filtered out of the prior by the period dates.

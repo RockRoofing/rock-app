@@ -1068,8 +1068,16 @@ export default async function handler(req, res) {
   if ((req.body || {}).view === 'balance-sheet' || view === 'balance-sheet') {
     if (req.method === 'POST' && (req.body || {}).action === 'refresh') {
       try {
-        const tokens = await getValidTokens()
-        if (!tokens) return res.status(400).json({ ok: false, error: 'Xero not connected' })
+        // getTokens(), not getValidTokens - the latter does not exist in this file and
+        // threw straight back to the page as "getValidTokens is not defined". Mirrors the
+        // balances handler below, INCLUDING the refresh: without it a token more than
+        // half an hour old fails on every call.
+        let tokens = await getTokens()
+        if (!tokens) return res.status(200).json({ ok: false, error: 'Not connected to Xero. Connect from /connect.' })
+        try {
+          const nt = await refreshXeroToken(tokens.refresh_token)
+          if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) }
+        } catch {}
         const r = await fetchBalanceSheetAccounts(tokens.access_token, tokens.tenant_id)
         if (!r.ok) return res.status(200).json({ ok: false, error: r.error })
         await redis.set('bs:accounts', { ...r, fetchedAt: new Date().toISOString() })
