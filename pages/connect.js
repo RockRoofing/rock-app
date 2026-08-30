@@ -58,7 +58,7 @@ const redirectUri = encodeURIComponent(window.location.origin + '/xero-callback'
     //
     // To try a scope, use the box below instead - it appends to this list for one
     // attempt without touching the code or needing a deploy.
-    const BASE_SCOPES = 'openid offline_access accounting.invoices.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read'
+    const BASE_SCOPES = 'openid offline_access accounting.invoices.read accounting.reports.balancesheet.read accounting.contacts.read accounting.reports.profitandloss.read accounting.settings.read accounting.manualjournals.read accounting.banktransactions.read projects.read'
     const scopeStr = [BASE_SCOPES, (extraScopes || '').trim()].filter(Boolean).join(' ')
     const scope = encodeURIComponent(scopeStr)
     window.location.href = `https://login.xero.com/identity/connect/authorize?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=xero_auth&prompt=consent`

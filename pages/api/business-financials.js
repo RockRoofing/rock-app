@@ -739,7 +739,7 @@ export default async function handler(req, res) {
     // History of closing balances for the "where cash has been" line.
     const history = Object.keys(bankMonths).sort().map(mo => ({ month: mo, closing: bankMonths[mo].closing || 0 }))
 
-    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
+    const [ohBudgets, cashflowSchedule, vatFiled, vatEstimate, retentionStore, invoiceMeta, balancesStore, manualBalances, financeCfg, ifSettings, ifLimits, billPayDates, billCisFlags, ohForecastMethods, ohForecastOverrides, cashCommitments] = await Promise.all([
       redis.get('config:overhead-budgets').then(v => v || {}).catch(() => ({})),
       redis.get('config:overhead-cashflow-schedule').then(v => v || {}).catch(() => ({})),
       redis.get('vat:filed').then(v => v || {}).catch(() => ({})),
@@ -747,6 +747,7 @@ export default async function handler(req, res) {
       redis.get('retention:entries').then(v => v || { entries: [] }).catch(() => ({ entries: [] })),
       redis.get('invoice:meta').then(v => v || {}).catch(() => ({})),
       redis.get('bank:account-balances').then(v => v || null).catch(() => null),
+      redis.get('config:manual-balances').then(v => Array.isArray(v) ? v : []).catch(() => ([])),
       redis.get('config:cashflow-finance').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
@@ -907,6 +908,7 @@ export default async function handler(req, res) {
       cashAtBankLegacy: cashAtBank,
       balances: balancesStore || null,
       financeCfg,
+      manualBalances,
       ifAvailability,
       bills,
       billPayDates,
@@ -954,6 +956,28 @@ export default async function handler(req, res) {
   }
 
   // Save invoice-finance / facility settings.
+  // MANUAL BALANCES, each with the date it was read.
+  //
+  // Xero's Balance Sheet gives the BOOK balance - only what has been entered and
+  // reconciled. The bank's real position is the STATEMENT balance, which the API does not
+  // expose at all. So a figure read off online banking this morning is worth more than an
+  // automated one that is quietly a week behind reconciliation.
+  if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-manual-balances') {
+    try {
+      const list = Array.isArray((req.body || {}).balances) ? req.body.balances : []
+      const clean = list
+        .filter(b => b && String(b.name || '').trim())
+        .map(b => ({
+          name: String(b.name).trim().slice(0, 80),
+          kind: b.kind === 'card' ? 'card' : 'bank',
+          balance: Number(b.balance) || 0,
+          asAt: String(b.asAt || '').slice(0, 10),
+        }))
+      await redis.set('config:manual-balances', clean)
+      return res.json({ ok: true, manualBalances: clean })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
   if (req.method === 'POST' && (req.body || {}).view === 'cashflow' && (req.body || {}).action === 'save-finance') {
     try {
       const cfg = (req.body || {}).financeCfg || {}

@@ -10,6 +10,10 @@ const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const w
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 // Module scope, beside the other helpers. This file has no date formatter and the ones
 // on other pages are not in scope here - reaching for one compiles and then throws.
+// Shared input style. Defined here rather than borrowed from another page - this file
+// had no `inpS`, and a style name that does not exist compiles fine and then throws.
+const inpS = { padding: '5px 7px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit' }
+
 const fmtDMY = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate()
@@ -154,6 +158,23 @@ export default function CashFlow() {
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
   const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {} })
+  // [{ name, kind: 'bank'|'card', balance, asAt }]
+  const [manualBal, setManualBal] = useState([])
+  const [balMsg, setBalMsg] = useState('')
+
+  async function saveManualBalances(next) {
+    setManualBal(next)
+    setBalMsg('saving')
+    try {
+      const res = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'cashflow', action: 'save-manual-balances', balances: next }),
+      })
+      const d = await res.json().catch(() => ({}))
+      setBalMsg(res.ok && d.ok !== false ? 'saved' : 'NOT SAVED')
+      if (res.ok && d.ok !== false) setTimeout(() => setBalMsg(''), 1800)
+    } catch { setBalMsg('NOT SAVED') }
+  }
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
@@ -172,6 +193,7 @@ export default function CashFlow() {
     try {
       const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
       setData(d)
+      setManualBal(Array.isArray(d.manualBalances) ? d.manualBalances : [])
       const fc = d.financeCfg || {}
       // Whitelisted on the way in, so anything not named here is dropped on every
       // refresh even though the save writes the whole object. The overdraft limit and the
@@ -375,7 +397,25 @@ export default function CashFlow() {
         {loading ? <div style={{ color: '#999', padding: 40 }}>Loading...</div> : !data ? <div style={{ color: '#b91c1c', padding: 40 }}>Could not load.</div> : (
           <>
             {(() => {
-              const bal = data.balances
+              // MANUAL BALANCES ARE THE SOURCE OF TRUTH.
+              //
+              // Xero's Balance Sheet gives the BOOK balance - only what has been entered
+              // and reconciled. The bank's real position is the STATEMENT balance, which
+              // the API does not expose. A figure read off online banking, dated, beats an
+              // automated one that is quietly a week behind reconciliation - and the
+              // automated one is wrong SILENTLY, which is worse.
+              //
+              // Xero is kept as a cross-check: where both exist, the gap is shown, and
+              // that gap is itself useful - it is how far behind reconciliation is.
+              const xbal = data.balances
+              const manual = Array.isArray(data.manualBalances) ? data.manualBalances : []
+              const useManual = manual.length > 0
+              const bal = useManual
+                ? { ok: true, accounts: manual.map(m => ({ name: m.name, balance: m.balance, isCard: m.kind === 'card', asAt: m.asAt })),
+                    bankTotal: manual.filter(m => m.kind !== 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
+                    cardTotal: manual.filter(m => m.kind === 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
+                    manual: true }
+                : xbal
               const bankAccts = (bal?.accounts || []).filter(a => !a.isCard)
               const cardAccts = (bal?.accounts || []).filter(a => a.isCard)
               const bankTotal = bal?.ok ? (bal.bankTotal || 0) : (data.cashAtBank || 0)
@@ -429,6 +469,52 @@ export default function CashFlow() {
                   </div>
                   {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
                   {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
+
+                  {/* MANUAL BALANCES - the primary source. Each carries its own as-at
+                      date, because a balance without one cannot be judged. */}
+                  <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Balances</div>
+                      <span style={{ fontSize: 11, color: '#8a857c' }}>
+                        Type what is actually in the account. Xero gives its BOOK balance - only what has been reconciled - so it runs behind, silently.
+                      </span>
+                      {balMsg && <span style={{ fontSize: 11, fontWeight: 700, color: balMsg === 'saved' ? '#16a34a' : balMsg === 'saving' ? '#b45309' : '#dc2626' }}>{balMsg}</span>}
+                    </div>
+                    {manualBal.map((m, i) => {
+                      const upd = (patch) => saveManualBalances(manualBal.map((x, j) => j === i ? { ...x, ...patch } : x))
+                      // Cross-check against Xero where the same name exists.
+                      const x = (xbal?.accounts || []).find(a => a.name === m.name)
+                      const gap = x ? (Number(m.balance) || 0) - (x.balance || 0) : null
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5, flexWrap: 'wrap' }}>
+                          <select value={m.kind} onChange={e => upd({ kind: e.target.value })} style={{ ...inpS, width: 74 }}>
+                            <option value="bank">Bank</option>
+                            <option value="card">Card</option>
+                          </select>
+                          <input value={m.name} placeholder="Account name" onChange={e => upd({ name: e.target.value })} style={{ ...inpS, width: 210 }} />
+                          <span style={{ color: '#bbb' }}>&pound;</span>
+                          <input type="number" value={m.balance} placeholder="0.00" onChange={e => upd({ balance: e.target.value })} style={{ ...inpS, width: 120, textAlign: 'right' }} />
+                          <span style={{ fontSize: 11, color: '#999' }}>as at</span>
+                          <input type="date" value={m.asAt || ''} onChange={e => upd({ asAt: e.target.value })} style={{ ...inpS, width: 140 }} />
+                          {gap != null && Math.abs(gap) > 0.5 && (
+                            <span title={`Xero's book balance for this account is ${gbp(x.balance)}. The difference is unreconciled items - not necessarily an error.`}
+                              style={{ fontSize: 10.5, color: '#b45309', cursor: 'help' }}>Xero {gbp(x.balance)} ({gap > 0 ? '+' : ''}{gbp(gap)})</span>
+                          )}
+                          <button onClick={() => saveManualBalances(manualBal.filter((_, j) => j !== i))}
+                            style={{ border: 'none', background: 'none', color: '#c66', cursor: 'pointer', fontSize: 16 }}>&times;</button>
+                        </div>
+                      )
+                    })}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                      <button onClick={() => saveManualBalances([...manualBal, { name: '', kind: 'bank', balance: '', asAt: new Date().toISOString().slice(0, 10) }])}
+                        style={{ background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>+ Add account</button>
+                      {(xbal?.accounts || []).length > 0 && manualBal.length === 0 && (
+                        <button onClick={() => saveManualBalances((xbal.accounts || []).map(a => ({ name: a.name, kind: a.isCard ? 'card' : 'bank', balance: a.balance, asAt: new Date().toISOString().slice(0, 10) })))}
+                          style={{ background: '#f2f2f0', border: '1px solid #e2e2de', borderRadius: 8, padding: '6px 12px', fontSize: 12.5, cursor: 'pointer' }}>Start from Xero&apos;s accounts</button>
+                      )}
+                    </div>
+                    {manualBal.length === 0 && <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 6 }}>No manual balances set - the figures above are Xero&apos;s book balances and may be behind reconciliation.</div>}
+                  </div>
 
                   {/* Facility settings */}
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>

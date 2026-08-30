@@ -1,63 +1,70 @@
-pkg608 - Insured limits auto-save as you type, and say so
-==========================================================
+pkg609 - Cash Flow: manual bank and card balances, each with its own date
+==========================================================================
 
-*** SUPERSEDES pkg591 - pkg607. Three files. ***
+*** SUPERSEDES pkg591 - pkg608. Four files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/business-financials/invoice-finance.js
   pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
   pages/api/business-financials.js
+  pages/connect.js
 
 
-THE LIMITS NOW AUTO-SAVE
-------------------------
-They saved on BLUR only. So a figure typed and then navigated away from - or
-committed with Enter, or left while you went to look at something else - never
-reached the server. And nothing on screen said either way, which is why it did
-not feel like it was saving.
+WHY REFRESH BALANCES WAS FAILING
+--------------------------------
+It calls Xero's Balance Sheet report, which needs accounting.reports.balancesheet.read.
+That scope was NOT in the connect list - same class of fault as the overpayments
+one. It IS on your app's permitted list, so it has been added: reconnect Xero from
+/connect and the button will work.
 
-Now: saved automatically 0.7 seconds after you stop typing, with the blur handler
-kept as an immediate flush for when you tab straight out.
-
-ONE SAVE PER CUSTOMER, not one per keystroke. Typing "300000" fires a single
-write once you stop, carrying 300000 - checked.
-
-THE WHOLE MAP IS WRITTEN each time, not just the one key. It is small, and a
-partial write would race with anyone editing a different customer.
-
-The value is passed explicitly into the debounced call rather than read back from
-state or the ref - both would still hold the PREVIOUS value when the timer fires,
-so it would save the figure you had typed over.
+The error was being swallowed into a generic message, so it never said so.
 
 
-IT NOW TELLS YOU
-----------------
-Next to each limit box:
+BUT YOU WERE RIGHT NOT TO RELY ON IT
+------------------------------------
+Xero's Balance Sheet gives the BOOK balance - only what has been entered and
+reconciled. The bank's real position is the STATEMENT balance, and the Xero API
+does not expose it at all; it exists only in the bank feed.
 
-    saving      amber, while the write is in flight
-    saved       green, for about two seconds
-    NOT SAVED   red, and it stays
+So if reconciliation is a week behind, the opening figure is a week behind, and
+every one of the 13 weeks inherits the error - SILENTLY, as a perfectly plausible
+number.
 
-Without that there is no way to tell an auto-save from a lost keystroke - which
-is exactly the position you were in.
+MANUAL IS NOW THE PRIMARY SOURCE. A new Balances panel: add each bank account and
+each credit card, type what is actually in it, and set the date you read it.
+Kind (Bank / Card) drives the totals, so cards feed card debt and banks feed
+opening cash.
+
+Saves the moment you change anything, with saving / saved / NOT SAVED shown.
+
+"Start from Xero's accounts" seeds the list from whatever Xero last returned, so
+you are not typing account names from scratch.
 
 
-ALSO IN THIS PACKAGE (pkg607)
------------------------------
-INVOICE FINANCE FIGURES COME FROM THE IF PAGE. The Cash Flow had its own older
-model of the facility - flat 10% retention, the limit capping the advance instead
-of the debt, no High Involvement, no caps, no age rule, and the old single drawn
-setting. It could never have agreed. The IF page now publishes its position and
-the Cash Flow reads it, with a panel saying where the numbers came from and when.
+XERO BECOMES A CROSS-CHECK, WHICH IS THE USEFUL PART
+----------------------------------------------------
+Where a manual account matches a Xero one by name, the row shows Xero's figure
+and the difference:
 
-AS-AT DATES on every bank account, every card, the combined opening cash and the
-drawn balance.
+    Xero GBP 38,200 (+GBP 4,300)
 
-OPENING BALANCE ITEMISED - bank cash and card debt, then the facilities listed
-separately under "available on top, not counted as opening cash". Facilities are
-deliberately NOT added in: fold them into the opening figure and the 13-week line
-can never go negative, which is the one thing it exists to show.
+That gap is not an error - it is unreconciled items. It tells you how far behind
+reconciliation is, which is worth knowing in its own right.
 
-OVERDRAFT with no double counting, and one limit per card account.
+
+INVOICE FINANCE IS UNTOUCHED - it already comes from the IF page (pkg607), with
+the drawn balance and its date carried across.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg608 - insured limits auto-save 0.7s after you stop typing, one write per
+customer, with saving / saved / NOT SAVED beside each box.
+
+pkg607 - the Cash Flow reads the IF page's published position rather than its own
+older model of the facility; as-at dates throughout; opening balance itemised
+with facilities listed but NOT added in.
+
+pkg606 - overdraft with no double counting, and one limit per card.
