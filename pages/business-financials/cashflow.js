@@ -147,7 +147,10 @@ export default function CashFlow() {
   const [loading, setLoading] = useState(true)
   const [startCash, setStartCash] = useState('')   // optional manual override
   const [refreshingBal, setRefreshingBal] = useState(false)
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '' })
+  // cardLimits is keyed by account name, so each card carries its own limit rather than
+  // one pooled figure - a card at its limit and a card with headroom net out otherwise,
+  // and you cannot see which one is full.
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {} })
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
@@ -167,7 +170,14 @@ export default function CashFlow() {
       const d = await fetch('/api/business-financials?view=cashflow').then(r => r.json())
       setData(d)
       const fc = d.financeCfg || {}
-      setFinance({ ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '' })
+      // Whitelisted on the way in, so anything not named here is dropped on every
+      // refresh even though the save writes the whole object. The overdraft limit and the
+      // per-card limits have to be listed or they appear to save and vanish on reload.
+      setFinance({
+        ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '',
+        overdraftLimit: fc.overdraftLimit ?? '',
+        cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
+      })
       // Seed local bill payment-date overrides from what's saved.
       const seed = {}
       for (const b of (d.bills || [])) if (b.payDate) seed[b.id] = b.payDate
@@ -358,13 +368,33 @@ export default function CashFlow() {
               const bankTotal = bal?.ok ? (bal.bankTotal || 0) : (data.cashAtBank || 0)
               const cardTotal = bal?.ok ? (bal.cardTotal || 0) : 0   // negative = owed
               const cardDebt = Math.abs(Math.min(0, cardTotal))
-              const ccLimit = Number(finance.ccLimit) || 0
-              const ccHeadroom = Math.max(0, ccLimit - cardDebt)
+              // CARD HEADROOM, per card where a limit is set for it.
+              //
+              // Falls back to the single pooled ccLimit so nothing already entered is
+              // lost. Per card is the better measure: one card at its limit and another
+              // with room net out under a pooled figure, and the full one is invisible.
+              const cardLimits = finance.cardLimits || {}
+              const anyPerCard = cardAccts.some(a => (Number(cardLimits[a.name]) || 0) > 0)
+              const ccHeadroom = anyPerCard
+                ? cardAccts.reduce((t, a) => {
+                    const lim = Number(cardLimits[a.name]) || 0
+                    const owed = Math.abs(Math.min(0, a.balance || 0))
+                    return t + Math.max(0, lim - owed)
+                  }, 0)
+                : Math.max(0, (Number(finance.ccLimit) || 0) - cardDebt)
+
+              // OVERDRAFT. Anything already drawn shows as a NEGATIVE bank balance and is
+              // therefore already inside bankTotal - so the headroom is the limit less
+              // what has been used, not the whole limit on top. Adding the full limit
+              // would count the drawn part twice.
+              const odLimit = Number(finance.overdraftLimit) || 0
+              const odDrawn = Math.max(0, -bankTotal)
+              const odHeadroom = Math.max(0, odLimit - odDrawn)
               // Invoice-finance headroom: prefer the calculated availability from the
               // Invoice Finance page; fall back to the manual limit-minus-drawn entry.
               const ifCalc = data.ifAvailability
               const ifHeadroom = ifCalc ? Math.max(0, ifCalc.availability) : Math.max(0, (Number(finance.ifLimit) || 0) - (Number(finance.ifDrawn) || 0))
-              const maxCash = bankTotal + ifHeadroom + ccHeadroom
+              const maxCash = bankTotal + ifHeadroom + ccHeadroom + odHeadroom
               return (
                 <>
                   {/* Balance boxes: each account, then combined + max available */}
@@ -374,7 +404,8 @@ export default function CashFlow() {
                     <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong />
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
                     {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
-                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + card headroom" color="#0f766e" strong />
+                    {odLimit > 0 && <BalBox label="Overdraft available" value={gbp(odHeadroom)} sub={odDrawn > 0 ? `${gbp(odDrawn)} of ${gbp(odLimit)} used` : `${gbp(odLimit)} limit`} color={odHeadroom > 0 ? INK : '#dc2626'} />}
+                    <BalBox label="Max cash available" value={gbp(maxCash)} sub="bank + invoice finance + cards + overdraft" color="#0f766e" strong />
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <button onClick={refreshBalances} disabled={refreshingBal} style={{ background: GOLD, color: '#fff', border: 'none', borderRadius: 8, padding: '9px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: refreshingBal ? 0.6 : 1 }}>{refreshingBal ? 'Refreshing...' : 'Refresh balances from Xero'}</button>
                     </div>
@@ -387,7 +418,15 @@ export default function CashFlow() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: INK, alignSelf: 'center' }}>Facilities (for &quot;max cash available&quot;)</div>
                     <FinInput label="Invoice finance limit" value={finance.ifLimit} onChange={v => setFinance(f => ({ ...f, ifLimit: v }))} />
                     <FinInput label="Invoice finance drawn" value={finance.ifDrawn} onChange={v => setFinance(f => ({ ...f, ifDrawn: v }))} />
-                    <FinInput label="Credit card limit (total)" value={finance.ccLimit} onChange={v => setFinance(f => ({ ...f, ccLimit: v }))} />
+                    <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
+                    {/* One limit per card, from the accounts Xero returns. The pooled box
+                        below stays for anything without its own limit. */}
+                    {cardAccts.map(a => (
+                      <FinInput key={a.name} label={`${a.name} limit`}
+                        value={(finance.cardLimits || {})[a.name] ?? ''}
+                        onChange={v => setFinance(f => ({ ...f, cardLimits: { ...(f.cardLimits || {}), [a.name]: v } }))} />
+                    ))}
+                    <FinInput label={anyPerCard ? 'Card limit (pooled - unused)' : 'Credit card limit (total)'} value={finance.ccLimit} onChange={v => setFinance(f => ({ ...f, ccLimit: v }))} />
                     <button onClick={saveFinance} disabled={savingFin} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', opacity: savingFin ? 0.6 : 1 }}>{savingFin ? 'Saving...' : 'Save facilities'}</button>
                     <div style={{ fontSize: 11, color: '#9a958c', flexBasis: '100%' }}>Credit card limit sets your card headroom. Invoice finance availability is now calculated on the Invoice Finance page (per-debtor insured limits x advance rate, minus drawn) and feeds &quot;max cash available&quot; automatically - the invoice finance boxes below are only used as a fallback if that page hasn&apos;t been set up.</div>
                   </div>

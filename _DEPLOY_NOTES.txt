@@ -1,57 +1,87 @@
-pkg605 - The page is empty because the DASHBOARD CACHE is empty
-================================================================
+pkg606 - Cash Flow: overdraft and per-card limits. Plus everything from
+          pkg591-605 (invoice finance)
+=======================================================================
 
-*** SUPERSEDES pkg591 - pkg604. Both files. ***
-
-
-TRY THIS FIRST - IT MAY NEED NO DEPLOY AT ALL
----------------------------------------------
-    Open the Commercial dashboard, let it load, then come back to Invoice Finance.
-
-That is very likely all it needs. Nothing has been lost.
+*** SUPERSEDES pkg591 - pkg605. Three files. ***
 
 
-WHY
----
-Every project on this page comes from dashboard:cache:
-
-    const dash = Array.isArray(dashCache) ? dashCache : []
-    for (const p of dash) { ... }
-
-If that key is empty the loop runs ZERO times, projects comes back empty, and the
-page says "No applications found". It looks exactly like a code fault and is not
-one.
-
-The cache has a 4-hour life AND is dropped whenever a new cache marker ships -
-and several of the packages I have given you added markers to dashboard.js
-precisely to force a rebuild. Only the dashboard itself rebuilds it. So it went
-cold, and this page had no way of saying so.
-
-That is also why the earlier figures kept moving: 421,033 then 1,375,463 then 0
-are three different states of that cache, not three different bugs.
+CHANGED FILES (replace)
+-----------------------
+  pages/business-financials/cashflow.js          <- new
+  pages/business-financials/invoice-finance.js   <- pkg605
+  pages/api/business-financials.js               <- pkg605
 
 
-WHAT THIS PACKAGE ADDS
-----------------------
-The API now returns dashboardCacheEmpty, and the empty table says which of FOUR
-things is wrong instead of always blaming applications:
+ANSWERING THE QUESTIONS FIRST
+-----------------------------
+Most of what you asked for was already there:
 
-  - API file not deployed        -> deploy pages/api/business-financials.js
-  - dashboard cache empty        -> open the Commercial dashboard to rebuild it
-  - projects but no unpaid invs  -> press Sync invoices from Xero
-  - no projects at all           -> check projects are synced
+  OPENING BALANCE   yes - each bank account separately, a combined total, and an
+                    editable "Opening cash used in forecast" defaulting to it
+  CREDIT CARDS      card accounts listed with their debt
+  INVOICE FINANCE   already pulls through from the IF page as ifAvailability
+  AVAILABLE CASH    "Max cash available" box
 
-The version marker is also fixed properly. It hard-coded 'pkg597' on the page
-while the API had moved to 'pkg599', so it read "OLD" even when correctly
-deployed - which is what sent us chasing a deployment that had already happened.
-Both sides now use ONE constant, pkg605.
+MISSING, now added: OVERDRAFT, and per-card LIMITS.
 
 
-AFTER IT COMES BACK
--------------------
-CLEAR THE HIGH INVOLVEMENT VALUE BOX. You typed 35069.31 into it while the
-calculation was broken, so it reads "Overridden". Leave the % at 35 and the value
-EMPTY - it then follows the ledger as Wates is paid down.
+OVERDRAFT
+---------
+New "Overdraft limit" field. A box appears showing what is available and how much
+of the limit is used.
 
-Expected: Fundable near 421,033, high involvement calculating rather than 0, and
-Availability = funding less the 122,711.31 drawn.
+NO DOUBLE COUNTING. Anything already drawn on an overdraft shows as a NEGATIVE
+bank balance, so it is already inside the bank total. Headroom is the limit LESS
+what is used, not the whole limit on top:
+
+  bank  25,000  limit 20,000  ->  drawn      0  headroom 20,000  max cash  45,000
+  bank  -5,000  limit 20,000  ->  drawn  5,000  headroom 15,000  max cash  10,000
+  bank -20,000  limit 20,000  ->  drawn 20,000  headroom      0  max cash -20,000
+
+Adding the full limit on top would have shown 45,000 of headroom on a fully drawn
+overdraft.
+
+
+CARD LIMITS - ONE PER CARD
+--------------------------
+A limit field appears for every card account Xero returns, so headroom is worked
+out card by card. The pooled total stays as a fallback and is used only while no
+per-card limit is set - nothing already entered is lost.
+
+Per card matters because a pooled figure hides which card is full:
+
+  Amex -9,000 (limit 9,000), Barclaycard -1,000 (limit 15,000)
+    per card   14,000   Amex maxed, Barclaycard has the room
+    pooled 24k 14,000   same total, no idea Amex is at its limit
+
+
+ONE BUG FOUND WHILE DOING THIS
+------------------------------
+The load whitelists the finance config:
+
+    setFinance({ ifLimit: ..., ifDrawn: ..., ccLimit: ... })
+
+Anything not named there is dropped on every refresh, even though the SAVE writes
+the whole object. The overdraft and per-card limits had to be added or they would
+have appeared to save and been gone on reload - the same shape of fault as the
+invoice finance settings whitelist.
+
+
+NOT DONE - AND WORTH A DECISION
+-------------------------------
+1. OPENING BALANCE SHOULD STAY BANK-ONLY. It does today, and it should: if the
+   facilities are folded into it the 13-week line can never go negative, and
+   seeing when you run out is the whole point. The facilities belong as a FLOOR
+   LINE on the chart - cross zero and you need to draw, cross the negative
+   facility total and the money genuinely is not there. Say the word.
+
+2. THE CASH FLOW RECALCULATES INVOICE FINANCE ITSELF, at
+   business-financials.js:751:
+
+       const drawn = Number(ifSettings.drawn) || 0
+
+   That reads the OLD single drawn setting, not the dated history, and knows
+   nothing about High Involvement or the eligibility caps. So this page will show
+   a different availability from the Invoice Finance page. It should consume the
+   IF page's figure rather than keep a simpler copy - worth fixing before you
+   rely on the 13-week.
