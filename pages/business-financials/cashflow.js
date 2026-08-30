@@ -423,21 +423,26 @@ export default function CashFlow() {
               // Opening cash sat at 0 with a balance visibly on screen above it.
               const manual = manualBal
               const useManual = manual.length > 0
-              // CARDS ARE TYPED AS THE AMOUNT OWED, positive, which is how a card
-              // statement reads. Held negative internally because the rest of the page
-              // treats a negative card balance as debt. Entering 77,156.42 positive was
-              // read as money IN the card, so card debt came out at zero and the whole
-              // limit showed as headroom.
-              const cardOwed = manual.filter(m => m.kind === 'card').reduce((t, m) => t + Math.abs(Number(m.balance) || 0), 0)
+              // BALANCES ARE TAKEN LITERALLY, cards included: NEGATIVE means owed.
+              //
+              // That is Xero's convention - a card is a liability and its Balance Sheet
+              // figure is negative - and the cross-check below compares the two directly.
+              // An earlier version took cards as a positive "amount owed" and flipped the
+              // sign internally, which made the cross-check nonsense: 77,156.42 typed
+              // against Xero's -77,156.42 showed a gap of 154,312 on an account that
+              // actually agreed.
+              //
+              // Flipping silently was also the wrong instinct. A card entered positive is
+              // now taken at face value and FLAGGED, rather than quietly reinterpreted.
               const bal = useManual
                 ? { ok: true,
                     accounts: manual.map(m => ({
                       name: m.name,
-                      balance: m.kind === 'card' ? -Math.abs(Number(m.balance) || 0) : (Number(m.balance) || 0),
+                      balance: Number(m.balance) || 0,
                       isCard: m.kind === 'card', asAt: m.asAt,
                     })),
                     bankTotal: manual.filter(m => m.kind !== 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
-                    cardTotal: -cardOwed,
+                    cardTotal: manual.filter(m => m.kind === 'card').reduce((t, m) => t + (Number(m.balance) || 0), 0),
                     // Latest date across the accounts, so the "as at" line has something to
                     // show instead of "no balance date".
                     updatedAt: manual.map(m => m.asAt).filter(Boolean).sort().pop() || null,
@@ -503,7 +508,7 @@ export default function CashFlow() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>Balances</div>
                       <span style={{ fontSize: 11, color: '#8a857c' }}>
-                        Type what is actually in the account. Xero gives its BOOK balance - only what has been reconciled - so it runs behind, silently.
+                        Type what is actually in the account. Cards are NEGATIVE when money is owed, same as Xero. Xero gives its BOOK balance - only what has been reconciled - so it runs behind, silently.
                       </span>
                       {balMsg && <span style={{ fontSize: 11, fontWeight: 700, color: balMsg === 'saved' ? '#16a34a' : balMsg === 'saving' ? '#b45309' : '#dc2626' }}>{balMsg}</span>}
                     </div>
@@ -521,9 +526,18 @@ export default function CashFlow() {
                           <input value={m.name} placeholder="Account name" onChange={e => upd({ name: e.target.value })} style={{ ...inpS, width: 210 }} />
                           <span style={{ color: '#bbb' }}>&pound;</span>
                           <input type="number" value={m.balance} placeholder="0.00" onChange={e => upd({ balance: e.target.value })}
-                            title={m.kind === 'card' ? 'Amount OWED on the card, as a positive number' : 'Cash in the account'}
-                            style={{ ...inpS, width: 120, textAlign: 'right' }} />
-                          <span style={{ fontSize: 10.5, color: '#999', width: 44 }}>{m.kind === 'card' ? 'owed' : 'in acc'}</span>
+                            title={m.kind === 'card' ? 'NEGATIVE = owed on the card, matching Xero. A positive figure means the card is in credit.' : 'Cash in the account. Negative if overdrawn.'}
+                            style={{ ...inpS, width: 120, textAlign: 'right', color: (Number(m.balance) || 0) < 0 ? '#dc2626' : undefined }} />
+                          {/* Flagged, not silently flipped. A card typed positive is far
+                              more likely to be the amount owed entered without the minus
+                              than a genuine credit balance - but guessing which is how the
+                              cross-check ended up comparing a positive against Xero's
+                              negative. */}
+                          {m.kind === 'card' && (Number(m.balance) || 0) > 0 && (
+                            <span title="Cards are held negative, like Xero. Did you mean to type this as a minus?"
+                              style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', cursor: 'help' }}>in credit?</span>
+                          )}
+                          <span style={{ fontSize: 10.5, color: '#999', width: 52 }}>{m.kind === 'card' ? '- = owed' : 'in acc'}</span>
                           <span style={{ fontSize: 11, color: '#999' }}>as at</span>
                           <input type="date" value={m.asAt || ''} onChange={e => upd({ asAt: e.target.value })} style={{ ...inpS, width: 140 }} />
                           {gap != null && Math.abs(gap) > 0.5 && (

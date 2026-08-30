@@ -1,7 +1,7 @@
-pkg610 - Cash Flow: three faults, including the double count you asked about
-=============================================================================
+pkg611 - Cards are negative, matching Xero. Plus the pkg610 fixes
+=================================================================
 
-*** SUPERSEDES pkg591 - pkg609. Four files. ***
+*** SUPERSEDES pkg591 - pkg610. Four files. ***
 
 
 CHANGED FILES (replace)
@@ -12,62 +12,46 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-1. OPENING CASH SHOWED 0 WITH A BALANCE ON SCREEN ABOVE IT
-----------------------------------------------------------
-The editor writes to local state and saves, but the CALCULATIONS read
-data.manualBalances - the server copy - and `data` is not refetched after a save.
-So the totals ignored everything you had just typed until a full page reload.
-Now read from local state.
+YES - AND IT FIXES A BUG I INTRODUCED
+-------------------------------------
+pkg610 had cards typed as a positive "amount owed" and flipped the sign
+internally. That broke the Xero cross-check, which compares your figure against
+Xero's - and Xero holds a card as NEGATIVE, because it is a liability:
 
-  opening cash   was 0.00   now 2,500.52
+    typed  77,156.42   Xero  -77,156.42   gap shown  154,312.84
+    on an account that actually AGREED to the penny.
 
+Balances are now taken LITERALLY for both kinds. Negative means owed, for cards
+and for an overdrawn bank account alike. Same convention as Xero, so the
+cross-check works:
 
-2. CARD BALANCES WERE READ AS MONEY IN THE CARD
------------------------------------------------
-You typed Capital on Tap 77,156.42 as a positive - which is how a statement reads
-- but the page treats a negative card balance as debt. So card debt came out at
-ZERO and the whole 160,000 limit showed as headroom.
+    typed -77,156.42   Xero  -77,156.42   gap  0.00
 
-Cards are now entered as the AMOUNT OWED, positive, and held negative internally.
-The field is labelled "owed" so there is no ambiguity.
+A card typed as a POSITIVE is now FLAGGED - "in credit?" - rather than silently
+reinterpreted. It is far more likely to be the amount owed entered without the
+minus, but guessing which is exactly how the cross-check ended up comparing a
+positive against a negative. The field is labelled "- = owed" and turns red when
+negative.
 
-  card debt        was 0.00        now 77,156.42
-  card headroom    was 160,000.00  now 82,843.58
-  max cash         was 266,188     now 191,532
-
-
-3. THE DOUBLE COUNT - YOU WERE RIGHT
-------------------------------------
-HOW MONEY IN IS BUILT:
-
-    moneyIn = invoicesIn + retIn + vatInPos + fcSalesIn
-
-    invoicesIn   unpaid sales invoices, by expected or due date
-    retIn        retention releases from the tracker
-    vatInPos     VAT refunds
-    fcSalesIn    project cash flow forecasts from Commercial
-
-There WAS a guard, but a weak one: a project's forecast sales were suppressed only
-if a real invoice landed in the SAME WEEK. An application invoiced in week 2 whose
-forecast scheduled cash in week 6 was counted TWICE - once as the invoice, once as
-the forecast. That is most of why 1,407,928 looks high against a 468k ledger.
-
-Now a forecast whose PERIOD HAS ALREADY BEEN APPLIED FOR is dropped entirely -
-the same supersede rule the project cash flow uses. Drafts do not count as applied
-for.
-
-  J240 forecast to 31/07, applied for to 31/08   ->  dropped, it is an invoice now
-  J240 forecast to 30/09                          ->  kept, still future
-  J251 no applications                            ->  kept
-
-On a three-forecast example that is 192,766 down to 100,000.
-
-Expect Total money in to FALL substantially, and to be closer to reality.
+    Metrobank   bank    2,500.52
+    AMEX        card        0.00
+    Cap on Tap  card  -77,156.42
+    -> card debt 77,156.42, headroom 82,843.58, max cash 191,532.10
 
 
-4. REFRESH BALANCES (from pkg609)
----------------------------------
-It needed accounting.reports.balancesheet.read, which was missing from the connect
-scopes. Added - reconnect Xero and it will work. But it returns Xero's BOOK
-balance, so manual entry remains the right primary source, with Xero shown as a
-cross-check and the gap flagged as unreconciled items.
+ALSO IN THIS PACKAGE (pkg610)
+-----------------------------
+OPENING CASH SHOWED 0 with a balance visibly on screen above it. The editor wrote
+to local state but the calculations read the server copy, which is not refetched
+after a save.
+
+THE DOUBLE COUNT. moneyIn = invoices + retention + VAT refunds + project
+forecasts. The guard only suppressed a forecast when a real invoice landed in the
+SAME WEEK, so an application invoiced in week 2 with forecast cash in week 6 was
+counted twice. Now any forecast whose period has already been APPLIED FOR is
+dropped entirely - the same supersede rule the project cash flow uses, with
+drafts not counting. Expect Total money in to fall substantially.
+
+REFRESH BALANCES needed accounting.reports.balancesheet.read, missing from the
+connect scopes. Added - reconnect Xero. It still returns Xero's BOOK balance, so
+manual stays the primary source and Xero is the cross-check.
