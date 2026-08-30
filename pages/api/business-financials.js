@@ -597,7 +597,7 @@ export default async function handler(req, res) {
       // one is the one that carries the fix - if only the page was deployed the symptom
       // is identical to nothing being deployed at all, and there is no way to tell them
       // apart from the screen.
-      apiVersion: 'pkg599',
+      apiVersion: 'pkg604',   // must match EXPECTED_API in invoice-finance.js
       // Sorted oldest first; the LAST entry is the current drawn balance.
       drawnHistory: ifDrawnHistory,
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }

@@ -55,6 +55,9 @@ function splitCsvLine(line) {
 // and reaching for one that lives on another page compiles cleanly then throws on render.
 // Date only. This file has fmtDateTime but no fmtD, and fmtD lives on OTHER pages -
 // reaching for it here compiles cleanly then throws ReferenceError on render.
+// Must match the apiVersion returned by pages/api/business-financials.js.
+const EXPECTED_API = 'pkg604'
+
 const fmtD = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 
 const fmtDateTime = (iso) => {
@@ -611,11 +614,15 @@ export default function InvoiceFinance() {
               <div><div style={lbl} title="Bibby approve this share of contract value initially. Going past it needs further certification as the final account approaches.">Certified ceiling %</div><input type="number" value={settings.certCeilingPct} onChange={e => setSettings(s => ({ ...s, certCeilingPct: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="file" accept=".csv" ref={fileRef} onChange={onFile} style={{ display: 'none' }} id="bibbyfile" />
-                <span title={apiVersion === 'pkg597'
-                  ? 'The API file carrying the save fix IS deployed.'
-                  : 'The API file is NOT the pkg597 one. pages/api/business-financials.js has not been deployed - saves will silently do nothing.'}
-                  style={{ fontSize: 11, fontWeight: 700, cursor: 'help', whiteSpace: 'nowrap', color: apiVersion === 'pkg597' ? '#16a34a' : '#dc2626' }}>
-                  {apiVersion === 'pkg597' ? 'API pkg597' : 'API OLD - not deployed'}
+                {/* Compared against ONE constant that the API also returns. The first
+                    version hard-coded 'pkg597' on this side and then the API moved on to
+                    pkg599 - so it read "OLD" even when correctly deployed, which is worse
+                    than having no marker at all. */}
+                <span title={apiVersion === EXPECTED_API
+                  ? `API ${EXPECTED_API} is live.`
+                  : `The API is reporting "${apiVersion || 'nothing'}" but this page expects ${EXPECTED_API}. pages/api/business-financials.js has not been deployed - projects will have no invoice data, so fundable debt reads zero and the table is empty.`}
+                  style={{ fontSize: 11, fontWeight: 700, cursor: 'help', whiteSpace: 'nowrap', color: apiVersion === EXPECTED_API ? '#16a34a' : '#dc2626' }}>
+                  {apiVersion === EXPECTED_API ? `API ${EXPECTED_API}` : `API ${apiVersion || 'old'} - deploy the API file`}
                 </span>
                 {limitsMeta && limitsMeta.importedAt && (
                   <span title={`${limitsMeta.count || 0} limits imported${limitsMeta.matched != null ? `, ${limitsMeta.matched} matched a customer, ${limitsMeta.unmatched} did not` : ''}${limitsMeta.fileName ? ` - ${limitsMeta.fileName}` : ''}`}
@@ -645,7 +652,18 @@ export default function InvoiceFinance() {
                   </tr>
                 </thead>
                 <tbody>
-                  {customers.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#aaa' }}>No applications found. Make sure projects have submitted applications and are synced.</td></tr>}
+                  {/* Say WHICH failure it is. "No applications found" sent me looking at
+                      projects and syncing when the real cause was the API file not being
+                      deployed, so every project came back with no invoice data. */}
+                  {customers.length === 0 && (
+                    <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: apiVersion === EXPECTED_API ? '#aaa' : '#dc2626' }}>
+                      {apiVersion !== EXPECTED_API
+                        ? `Nothing to show because the API file has not been deployed - it is reporting "${apiVersion || 'nothing'}", this page expects ${EXPECTED_API}. Deploy pages/api/business-financials.js.`
+                        : (data?.projects?.length
+                            ? 'Projects found, but none has an unpaid sales invoice. Press "Sync invoices from Xero".'
+                            : 'No projects with applications found. Check the projects are synced.')}
+                    </td></tr>
+                  )}
                   {customers.map((c) => (
                     <CustomerBlock key={c.customer} c={c} expanded={expanded} setExpanded={setExpanded}
                       limits={limits} setLimit={setLimit} isPaid={isPaid} setPaid={setPaid} />

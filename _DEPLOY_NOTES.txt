@@ -1,65 +1,67 @@
-pkg603 - High Involvement was taking its % of the wrong base
-=============================================================
+pkg604 - Nothing is broken: the API file was not deployed
+==========================================================
 
-*** SUPERSEDES pkg591 - pkg602. Deploy BOTH files. ***
+*** SUPERSEDES pkg591 - pkg603. ***
+*** BOTH FILES. The API one is the whole problem. ***
 
-
-CHANGED FILES (replace)
------------------------
-  pages/api/business-financials.js
+  pages/api/business-financials.js          <- THIS IS THE MISSING ONE
   pages/business-financials/invoice-finance.js
 
 
-THE HIGH INVOLVEMENT BUG
-------------------------
-I took the percentage of `fundable` - the debt after the eligibility caps but
-BEFORE credit limits. Bibby's "approved sales ledger" is their Approved Debt,
-which is Sales Ledger less Non-Funded Debt - and Non-Funded INCLUDES Credit Limit
-exceeded. So their base is the figure AFTER limits.
+WHAT HAPPENED
+-------------
+Your screen is already telling you, in red next to the settings:
 
-  base 1,375,463 (the inflated debt)  cap 481,412.05  Wates over by       0.00
-  base   421,033 (before limits)      cap 147,361.55  Wates over by     768.07
-  base   323,029 (after limits)       cap 113,060.31  Wates over by  35,069.31
+    API OLD - not deployed
 
-Only the last reproduces their figure. That is why it showed 0 and why nothing
-was ever over the cap - the cap was far too high.
+The page went in; pages/api/business-financials.js did not. Without it, projects
+come back with no `invoices` array at all - so the debt for every project is
+zero, every customer drops out, and the table says "No applications found".
 
-Now based on the approved ledger after limits, and the label says so:
-"Cap GBP 113,060.31 = 35% of the GBP 323,029.46 approved ledger."
+Nothing is lost. Your data is untouched. Deploy the API file and it returns.
 
 
-THE WHOLE CHAIN NOW RECONCILES
-------------------------------
-  approved ledger (after caps + limits)   323,029.46
-  per-debtor cap 35%                      113,060.31
-  Wates                                   148,129.62
-  high involvement                         35,069.31   vs Bibby  35,069.31
-  approved funding (ledger - HI) x 60%    172,776.09   vs Bibby 172,776.09
-  less drawn                              122,711.31
-  availability                             50,064.78   vs Bibby  50,064.78
+TWO THINGS THAT MADE THIS HARDER THAN IT NEEDED TO BE - BOTH MINE
+-----------------------------------------------------------------
+1. THE VERSION MARKER WAS LYING ANYWAY. The page hard-coded a check for 'pkg597'
+   while the API had moved on to 'pkg599', so it would have read "OLD" even when
+   correctly deployed. Worse than no marker.
 
-Every line, to the penny.
+   Both sides now use ONE constant:
+     invoice-finance.js   const EXPECTED_API = 'pkg604'
+     business-financials.js   apiVersion: 'pkg604'
 
+   Green "API pkg604" = deployed. Red tells you exactly what it is reporting and
+   what to do.
 
-BUT IT ONLY LANDS THERE IF THE LIMITS ARE RIGHT
------------------------------------------------
-The base is the debt AFTER credit limits, so it depends on the insured limits
-being correct. While Selsdon and both Torsion entities have no limit recorded,
-the approved ledger is understated and every figure below it will be too.
-
-So, in order:
-  1. Deploy. Fundable should be back near 421,033, not 1,375,463.
-  2. Set the missing insured limits - Selsdon, Torsion Projects Limited and
-     Torsion Construction Limited are SEPARATE debtors at Bibby (TOR001 and
-     TORSION, different accounts).
-  3. Enter the drawn balance 122,711.31 dated 29/08/2026.
-  4. Leave the High involvement value box EMPTY - it calculates.
-
-Then Approved Debt, Approved Funding and Availability should all line up.
+2. "No applications found" WAS THE WRONG MESSAGE. It sent you to check projects
+   and syncing when the cause was a missing file. The empty state now says which
+   of the three it is:
+     - API not deployed  -> deploy the API file (in red)
+     - projects but no unpaid invoices -> press Sync invoices from Xero
+     - no projects at all -> check projects are synced
 
 
-ALSO IN THIS PACKAGE (pkg602)
------------------------------
-The debt basis is the unpaid INVOICE again. pkg599 moved it to applications and
-produced 1,375,463, because an application that cannot be matched to an invoice
-by "App N" counts as unpaid - so whole application histories were being summed.
+ONE THING TO CLEAR AFTER DEPLOYING
+----------------------------------
+You typed 35069.31 into the High involvement VALUE box, so it now reads
+"Overridden - calculated is GBP 0". That was the right move when the calculation
+was broken; it is not now.
+
+CLEAR THAT BOX. Leave the % at 35 and the value empty - it calculates from the
+approved ledger. Leaving the override in means it will not follow the ledger when
+Wates is paid down.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg603 - High involvement takes its % of the approved ledger AFTER credit limits,
+not before. Only that base reproduces their 35,069.31.
+
+pkg602 - the debt basis is the unpaid INVOICE, not the application. The
+application basis gave 1,375,463 because an application that cannot be matched to
+an invoice by "App N" counts as unpaid.
+
+With the limits right, the whole chain reconciles to the penny:
+  approved ledger 323,029.46 -> HI 35,069.31 -> funding 172,776.09
+  -> less drawn 122,711.31 -> availability 50,064.78
