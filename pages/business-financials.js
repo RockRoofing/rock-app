@@ -5,18 +5,10 @@ import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, ComposedChart, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import ReportImprovementLink from '../components/ReportImprovementLink'
+import { BizNav } from '../components/BizNav'
 
 const GOLD = '#ca8a04'
 const INK = '#1a1a19'
-const TABS = [
-  ['Summary', '/business-financials'],
-  ['Budgets', '/business-financials/budgets'],
-  ['Bills to Pay', '/business-financials/bills'],
-  ['Invoices Owed', '/business-financials/invoices'],
-  ['Cash Flow', '/business-financials/cashflow'],
-]
-
 const gbp = (n) => `£${Math.round(n || 0).toLocaleString('en-GB')}`
 const gbpK = (n) => { const v = n || 0; return Math.abs(v) >= 1000 ? `£${Math.round(v / 1000)}k` : `£${Math.round(v)}` }
 const monthLbl = (mo) => { const [y, m] = mo.split('-'); return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }) }
@@ -111,19 +103,12 @@ export default function BusinessFinancials() {
     <>
       <Head><title>Business Financials · Rock Roofing</title></Head>
       <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-        {/* Nav */}
-        <div style={{ background: INK, padding: '0 24px', position: 'sticky', top: 0, zIndex: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 56, flexWrap: 'wrap' }}>
-            <a href="/" style={{ color: '#9a9a97', fontSize: 13, textDecoration: 'none', marginRight: 8 }}>← Portal</a>
-            {TABS.map(([label, href]) => {
-              const active = router.pathname === href
-              return <a key={href} href={href} style={{ color: active ? '#fff' : '#9a9a97', background: active ? 'rgba(255,255,255,0.1)' : 'transparent', fontSize: 13, fontWeight: active ? 600 : 500, textDecoration: 'none', padding: '7px 12px', borderRadius: 7 }}>{label}</a>
-            })}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ReportImprovementLink />
-            </div>
-          </div>
-        </div>
+        {/* THE SHARED NAV.
+            This page had its own hard-coded TABS array - five entries, a stale copy that
+            had not been updated since. So Summary showed a different set of tabs from
+            every other page in the section, and any tab added elsewhere never appeared
+            here. Using the shared component means it cannot drift again. */}
+        <BizNav />
 
         <div style={{ padding: '24px 32px', maxWidth: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>

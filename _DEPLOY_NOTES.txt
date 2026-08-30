@@ -1,7 +1,7 @@
-pkg630 - Due date shown as a grey default
-==========================================
+pkg631 - Nav order, and the Summary tab's missing tabs
+=======================================================
 
-*** SUPERSEDES pkg591 - pkg629. ***
+*** SUPERSEDES pkg591 - pkg630. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,6 +9,7 @@ pkg630 - Due date shown as a grey default
 
 CHANGED FILES (replace)
 -----------------------
+  pages/business-financials.js            <- NEW in this set (the Summary page)
   components/BizNav.js
   lib/xero.js
   pages/api/business-financials.js
@@ -23,47 +24,48 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-YOUR QUESTION - YES, IT ALREADY WORKS THAT WAY
-----------------------------------------------
-    invoices   i.expectedDate || i.dueDate
-    bills      billOverrides[i.id] || i.payDate || i.dueDate
+1. BALANCE SHEET MOVED BEFORE CASH FLOW
+---------------------------------------
+    ... Invoice Finance | Balance Sheet | Cash Flow | 12-Month
 
-Expected/planned wins; the due date is the fallback. That was already correct -
-the screen just never showed which of the two was in play.
+Which reads better anyway - you set the financing up, then look at the forecast it
+feeds.
 
 
-THE FIELD NOW SHOWS IT
-----------------------
-  nothing set, due 26/08    shows 26/08/26 in LIGHT GREY, plain border
-                            - the forecast is using the due date
-  expected set 15/09        shows 15/09/26 in normal text, amber border,
-                            with an x to clear back to the due date
-  no date at all            empty
+2. WHY SUMMARY HAD DIFFERENT TABS
+---------------------------------
+pages/business-financials.js had its OWN hard-coded tab list:
 
-So you can see what the forecast will do without a greyed default looking like
-somebody chose it.
+    const TABS = [
+      ['Summary', ...], ['Budgets', ...], ['Bills to Pay', ...],
+      ['Invoices Owed', ...], ['Cash Flow', ...],
+    ]
 
-CLICKING IN AND OUT CHANGES NOTHING. The commit only fires when the date differs
-from what the forecast is ALREADY using - otherwise merely opening the picker on a
-greyed default would have turned it into a saved override.
+Five entries, a stale copy that predates the shared nav - along with its own INK,
+GOLD and gbp. So Summary showed five tabs while every other page showed thirteen,
+and anything added elsewhere never appeared there.
 
-Clearing goes back to the due date rather than to empty, which is what "clear"
-should mean here.
+It now renders <BizNav /> like the other twelve pages, so it cannot drift again. I
+checked the rest of the section: no other page keeps a private copy.
+
+The unused ReportImprovementLink import went with it - BizNav already renders it,
+so nothing is lost.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg629 - Reference column on Invoices owed. It was already on the payload and
-never displayed.
+pkg630 - the due date shows in the field in LIGHT GREY when nothing is set, so you
+can see what the forecast is using. Clicking in and out does not turn a greyed
+default into a saved override.
 
-pkg628 - date pickers commit on BLUR. The bills list sorts by payment date, so
-committing mid-edit re-sorted the table, moved the row and shut the calendar.
-Enter commits, Escape abandons.
+pkg629 - Reference column on Invoices owed.
 
-pkg627 - BALANCE SHEET TAB, built for any chart of accounts - no codes assumed
-anywhere. FINANCING & TAX column carrying both commitments and balance sheet
-items, with payments stopping when the liability clears.
+pkg628 - date pickers commit on blur, so the row does not jump and the calendar
+does not shut mid-edit.
+
+pkg627 - BALANCE SHEET TAB, no account codes assumed anywhere. FINANCING & TAX
+column carrying commitments and balance sheet items, with payments stopping when
+the liability clears.
 
 RECONNECT XERO before the balance sheet read - it needs
-accounting.reports.balancesheet.read, which does not apply to an existing
-connection.
+accounting.reports.balancesheet.read.
