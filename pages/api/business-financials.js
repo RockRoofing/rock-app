@@ -453,7 +453,16 @@ export default async function handler(req, res) {
     return res.json({ months, benchmarkUpdatedAt: benchmark.updatedAt || null })
   }
 
-  if (view === 'invoice-finance') {
+  // GET ONLY.
+  //
+  // This block had NO method check, and `view` is read from the POST body as well as the
+  // query - so every invoice-finance POST fell in here, was answered with the GET
+  // payload, and returned before reaching the save handlers below. The client saw a 200
+  // with sensible-looking JSON and reported success. Nothing was ever written: not the
+  // insured limits, not the settings, not the imported list.
+  //
+  // The save handlers are further down the file, so ordering alone decided this.
+  if (view === 'invoice-finance' && req.method !== 'POST') {
     const [ifConfig, ifLimits, ifLimitsMeta, dashCache, appPaidOverrides] = await Promise.all([
       redis.get('config:if-settings').then(v => v || {}).catch(() => ({})),
       redis.get('config:if-debtor-limits').then(v => v || {}).catch(() => ({})),
@@ -632,7 +641,11 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 
-  if (view === 'cashflow') {
+  // GET ONLY - same trap as invoice-finance above. `view` is read from the POST body too,
+  // so without this check every cashflow POST landed here, got the GET payload back, and
+  // returned before reaching save-lumps, refresh-balances, save-finance,
+  // save-bill-paydate or save-bill-cis - all five of which sit further down the file.
+  if (view === 'cashflow' && req.method !== 'POST') {
     const [billsStore, recStore, dashCache] = await Promise.all([
       redis.get('bank:outstanding-bills').then(v => v || { items: [] }).catch(() => ({ items: [] })),
       redis.get('bank:outstanding-receivables').then(v => v || { items: [] }).catch(() => ({ items: [] })),

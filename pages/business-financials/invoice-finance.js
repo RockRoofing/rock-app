@@ -119,6 +119,8 @@ export default function InvoiceFinance() {
   const [settings, setSettings] = useState({ advanceRate: 60, drawn: 0, facilityCap: 500000, mosCapPct: 25, varCapPct: 25, certCeilingPct: 90, highInvolvement: 0 })
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
+  const limitsRef = useRef(limits)
+  useEffect(() => { limitsRef.current = limits }, [limits])
   const [paidOverrides, setPaidOverrides] = useState({}) // { appId: true/false }
   const [expanded, setExpanded] = useState({})        // { xeroId: true }
   const [saving, setSaving] = useState(false)
@@ -325,6 +327,22 @@ export default function InvoiceFinance() {
     a.click(); URL.revokeObjectURL(url)
   }
 
+  // Limits save on their own - on import, and on leaving a cell. Reads limitsRef rather
+  // than the state variable: onBlur can fire in the same tick as the change, and the
+  // state closure would still hold the PREVIOUS value.
+  async function saveLimitsNow(next) {
+    const payload = next || limitsRef.current
+    try {
+      const res = await fetch('/api/business-financials', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view: 'invoice-finance', action: 'save-limits', debtorLimits: payload }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok || d.ok === false) { setImportMsg('Limit did NOT save - check your connection and retype it.'); return false }
+      return true
+    } catch { setImportMsg('Limit did NOT save - check your connection and retype it.'); return false }
+  }
+
   async function saveAll() {
     setSaving(true)
     try {
@@ -443,7 +461,7 @@ export default function InvoiceFinance() {
               </div>
               <button onClick={exportReconciliation} title="CSV laid out in Bibby's own order - Sales Ledger, deductions, Approved Debt, High Involvement, Approved Funding, Availability - with every invoice underneath."
                 style={{ background: '#fff', color: INK, border: '1px solid #e2e0da', borderRadius: 8, padding: '8px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Export reconciliation</button>
-              <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
+              <button onClick={saveAll} disabled={saving} style={{ background: INK, color: '#fff', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving...' : 'Save settings'}</button>
               {importMsg && <div style={{ fontSize: 11.5, color: '#555', flexBasis: '100%' }}>{importMsg}</div>}
             </div>
 
@@ -490,6 +508,9 @@ function CustomerBlock({ c, expanded, setExpanded, limits, setLimit, isPaid, set
             <span style={{ color: '#bbb', fontSize: 12 }}>&pound;</span>
             <input type="number" value={(limits[c.customer]?.insuredLimit) ?? ''} placeholder="0"
               onChange={e => setLimit(c.customer, e.target.value)}
+              // Saves on blur, so a typed limit persists without pressing anything. The
+              // import saves itself too - nothing about the limits depends on a button.
+              onBlur={() => saveLimitsNow()}
               style={{ width: 100, padding: '5px 6px', border: '1px solid #ddd', borderRadius: 6, fontSize: 12.5, textAlign: 'right' }} />
           </div>
         </td>

@@ -1,78 +1,68 @@
-pkg595 - Invoice Finance: the export found it - missing insured limits
-=======================================================================
+pkg596 - FIX: invoice-finance saves were never reaching the server
+===================================================================
 
-*** SUPERSEDES pkg591 - pkg594. ***
+*** SUPERSEDES pkg591 - pkg595. ***
 pages/api/business-financials.js is COMPLETE and carries pkg582 + pkg589 too.
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/api/business-financials.js       <- the real bug
   pages/business-financials/invoice-finance.js
-  pages/api/business-financials.js
 
 
-THE ANSWER
-----------
-160,831.50 of debt belongs to customers with NO INSURED LIMIT recorded in the
-app. The rule is
+WHY NOTHING SAVED
+-----------------
+Line 456:
 
-    advance = hasLimit ? Math.min(rawAdvance, insured) : 0
+    if (view === 'invoice-finance') {          // no method check
+      ...
+      return res.json({ ... })                 // always returns
+    }
 
-so those customers are funded at ZERO. Bibby plainly do hold limits for them -
-that is the bulk of the gap, and it is a data problem, not a maths one.
+`view` is read from the POST BODY as well as the query string. So every
+invoice-finance POST fell into that GET block, was answered with the GET payload,
+and RETURNED - before ever reaching the save handlers, which sit ~130 lines
+further down the file.
 
-Reconciled from your export:
+The client got a 200 with sensible-looking JSON and reported success. Nothing was
+ever written: not the insured limits, not the advance rate, not the caps, not the
+import date. Pure handler ordering.
 
-    Sales Ledger                      470,575.68
-      less retention invoices           6,109.24
-      less eligibility caps            43,433.81
-    = Approved Debt                   421,032.63
-      less NO insured limit set       160,831.50   <- the problem
-    = Insurable Approved Debt         260,201.13
-    x 60%                             156,120.68   the app's figure, exactly
-
-Against Bibby: your Sales Ledger is within 2,248.82 of theirs (470,575.68 vs
-468,326.86), which is close enough to be timing. The app over-deducts by
-30,007.84 once High Involvement is entered - and 160,831.50 of missing limits
-more than explains it.
-
-
-TWO BUGS IN MY EXPORT, BOTH FIXED
----------------------------------
-1. MIXED UNITS. "over insured limit" was in ADVANCE terms, "no insured limit set"
-   in DEBT terms - and they were THE SAME EXCLUSION. 160,831.50 x 60% = 96,498.90
-   exactly. A customer with no limit gets advance 0, so their whole raw advance
-   already sat inside the over-limit figure. The summary could not be made to add
-   up, which is why it looked wrong.
-
-   Everything is now in DEBT terms down to Approved Debt, then the rate is applied
-   ONCE, matching how Bibby lay it out. The summary now reconciles line by line to
-   156,120.68.
-
-2. NO WAY TO SEE WHICH CUSTOMERS. A single 160,831.50 with nowhere to go. There is
-   now a BY CUSTOMER block - fundable debt, insured limit, "NO LIMIT SET", advance
-   and debt not funded - sorted so the missing limits come first.
+THE SAME FAULT WAS ON CASHFLOW. `if (view === 'cashflow')` at line 644, also with
+no method check, shadowing FIVE POST handlers - save-lumps, refresh-balances,
+save-finance, save-bill-paydate, save-bill-cis. None of them have ever persisted
+either. Fixed, and I scanned every view block in the file: those two were the
+only ones and all POST handlers are now reachable.
 
 
-WHAT TO DO
-----------
-1. Deploy, export again, look at the BY CUSTOMER block. Every row marked
-   "NO LIMIT SET" is money being funded at zero.
+NO MORE SAVE BUTTON FOR LIMITS
+------------------------------
+  - The Bibby CSV import writes immediately on upload.
+  - Typing a limit in the table saves when you leave the cell.
+  - If a save fails it says so - "Limit did NOT save" - rather than reporting
+    success.
 
-2. Those names almost certainly failed to match on the Bibby CSV import - the
-   import reports "N matched a customer, M did not". Unmatched Bibby names are
-   stored under the BIBBY spelling, so the app's customer never picks them up.
-   Fix the names or set the limits by hand on the page.
+The blur handler reads a ref rather than the state variable: onBlur can fire in
+the same tick as the change, and the state closure would still hold the PREVIOUS
+value, so it would post the figure you just typed over.
 
-3. Enter High involvement 35,069.31 and Funds in use 122,711.31 from their
-   summary, or the app's Availability will stay wrong even once limits are right.
-
-4. Then chase the 2,248.82 on the top line - almost certainly invoices raised
-   after their statement date.
+The button is now "Save settings" and covers only the advance rate, drawn, caps
+and high involvement.
 
 
-ALSO IN THIS PACKAGE
---------------------
-High Involvement modelled (Bibby deduct it BEFORE the advance rate - reverse
-engineered exactly from their summary). Limits save on upload with an import
-date. Invoice-as-debt with application-as-evidence. Bibby's three caps.
+THE IMPORT DATE
+---------------
+Shown beside the Import button - "List imported 29/08/26 14:07" - hovering for
+the counts and file name. Stored in its own Redis key, not folded into the limits
+map, which is a flat { customerName: {...} } that every screen walks.
+
+
+WHAT THIS MEANS FOR YESTERDAY'S RECONCILIATION
+----------------------------------------------
+The 160,831.50 of debt with NO INSURED LIMIT is very likely because the limits
+you imported never saved. Re-import after deploying and it should drop
+substantially.
+
+Then enter High involvement 35,069.31 and Funds in use 122,711.31 - those are
+settings, so they were not saving either.
