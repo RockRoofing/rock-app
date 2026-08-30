@@ -1,67 +1,57 @@
-pkg604 - Nothing is broken: the API file was not deployed
-==========================================================
+pkg605 - The page is empty because the DASHBOARD CACHE is empty
+================================================================
 
-*** SUPERSEDES pkg591 - pkg603. ***
-*** BOTH FILES. The API one is the whole problem. ***
-
-  pages/api/business-financials.js          <- THIS IS THE MISSING ONE
-  pages/business-financials/invoice-finance.js
+*** SUPERSEDES pkg591 - pkg604. Both files. ***
 
 
-WHAT HAPPENED
--------------
-Your screen is already telling you, in red next to the settings:
+TRY THIS FIRST - IT MAY NEED NO DEPLOY AT ALL
+---------------------------------------------
+    Open the Commercial dashboard, let it load, then come back to Invoice Finance.
 
-    API OLD - not deployed
-
-The page went in; pages/api/business-financials.js did not. Without it, projects
-come back with no `invoices` array at all - so the debt for every project is
-zero, every customer drops out, and the table says "No applications found".
-
-Nothing is lost. Your data is untouched. Deploy the API file and it returns.
+That is very likely all it needs. Nothing has been lost.
 
 
-TWO THINGS THAT MADE THIS HARDER THAN IT NEEDED TO BE - BOTH MINE
------------------------------------------------------------------
-1. THE VERSION MARKER WAS LYING ANYWAY. The page hard-coded a check for 'pkg597'
-   while the API had moved on to 'pkg599', so it would have read "OLD" even when
-   correctly deployed. Worse than no marker.
+WHY
+---
+Every project on this page comes from dashboard:cache:
 
-   Both sides now use ONE constant:
-     invoice-finance.js   const EXPECTED_API = 'pkg604'
-     business-financials.js   apiVersion: 'pkg604'
+    const dash = Array.isArray(dashCache) ? dashCache : []
+    for (const p of dash) { ... }
 
-   Green "API pkg604" = deployed. Red tells you exactly what it is reporting and
-   what to do.
+If that key is empty the loop runs ZERO times, projects comes back empty, and the
+page says "No applications found". It looks exactly like a code fault and is not
+one.
 
-2. "No applications found" WAS THE WRONG MESSAGE. It sent you to check projects
-   and syncing when the cause was a missing file. The empty state now says which
-   of the three it is:
-     - API not deployed  -> deploy the API file (in red)
-     - projects but no unpaid invoices -> press Sync invoices from Xero
-     - no projects at all -> check projects are synced
+The cache has a 4-hour life AND is dropped whenever a new cache marker ships -
+and several of the packages I have given you added markers to dashboard.js
+precisely to force a rebuild. Only the dashboard itself rebuilds it. So it went
+cold, and this page had no way of saying so.
 
-
-ONE THING TO CLEAR AFTER DEPLOYING
-----------------------------------
-You typed 35069.31 into the High involvement VALUE box, so it now reads
-"Overridden - calculated is GBP 0". That was the right move when the calculation
-was broken; it is not now.
-
-CLEAR THAT BOX. Leave the % at 35 and the value empty - it calculates from the
-approved ledger. Leaving the override in means it will not follow the ledger when
-Wates is paid down.
+That is also why the earlier figures kept moving: 421,033 then 1,375,463 then 0
+are three different states of that cache, not three different bugs.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg603 - High involvement takes its % of the approved ledger AFTER credit limits,
-not before. Only that base reproduces their 35,069.31.
+WHAT THIS PACKAGE ADDS
+----------------------
+The API now returns dashboardCacheEmpty, and the empty table says which of FOUR
+things is wrong instead of always blaming applications:
 
-pkg602 - the debt basis is the unpaid INVOICE, not the application. The
-application basis gave 1,375,463 because an application that cannot be matched to
-an invoice by "App N" counts as unpaid.
+  - API file not deployed        -> deploy pages/api/business-financials.js
+  - dashboard cache empty        -> open the Commercial dashboard to rebuild it
+  - projects but no unpaid invs  -> press Sync invoices from Xero
+  - no projects at all           -> check projects are synced
 
-With the limits right, the whole chain reconciles to the penny:
-  approved ledger 323,029.46 -> HI 35,069.31 -> funding 172,776.09
-  -> less drawn 122,711.31 -> availability 50,064.78
+The version marker is also fixed properly. It hard-coded 'pkg597' on the page
+while the API had moved to 'pkg599', so it read "OLD" even when correctly
+deployed - which is what sent us chasing a deployment that had already happened.
+Both sides now use ONE constant, pkg605.
+
+
+AFTER IT COMES BACK
+-------------------
+CLEAR THE HIGH INVOLVEMENT VALUE BOX. You typed 35069.31 into it while the
+calculation was broken, so it reads "Overridden". Leave the % at 35 and the value
+EMPTY - it then follows the ledger as Wates is paid down.
+
+Expected: Fundable near 421,033, high involvement calculating rather than 0, and
+Availability = funding less the 122,711.31 drawn.

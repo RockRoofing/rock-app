@@ -56,7 +56,7 @@ function splitCsvLine(line) {
 // Date only. This file has fmtDateTime but no fmtD, and fmtD lives on OTHER pages -
 // reaching for it here compiles cleanly then throws ReferenceError on render.
 // Must match the apiVersion returned by pages/api/business-financials.js.
-const EXPECTED_API = 'pkg604'
+const EXPECTED_API = 'pkg605'
 
 const fmtD = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 
@@ -148,6 +148,7 @@ export default function InvoiceFinance() {
   const [limits, setLimits] = useState({})            // { customerName: { insuredLimit } }
   const [limitsMeta, setLimitsMeta] = useState(null)  // { importedAt, count, matched, unmatched, fileName }
   const [apiVersion, setApiVersion] = useState(null)
+  const [dashEmpty, setDashEmpty] = useState(false)
   const [drawnHistory, setDrawnHistory] = useState([])
   const [drawnDate, setDrawnDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [drawnAmt, setDrawnAmt] = useState('')
@@ -189,6 +190,7 @@ export default function InvoiceFinance() {
       setLimits(d.debtorLimits || {})
       setLimitsMeta(d.limitsMeta || null)
       setApiVersion(d.apiVersion || null)
+      setDashEmpty(!!d.dashboardCacheEmpty)
       setDrawnHistory(Array.isArray(d.drawnHistory) ? d.drawnHistory : [])
       const po = {}
       for (const p of (d.projects || [])) for (const a of p.applications) if (a.paidOverride != null) po[a.id] = a.paidOverride
@@ -659,6 +661,8 @@ export default function InvoiceFinance() {
                     <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: apiVersion === EXPECTED_API ? '#aaa' : '#dc2626' }}>
                       {apiVersion !== EXPECTED_API
                         ? `Nothing to show because the API file has not been deployed - it is reporting "${apiVersion || 'nothing'}", this page expects ${EXPECTED_API}. Deploy pages/api/business-financials.js.`
+                        : dashEmpty
+                        ? 'The dashboard cache is EMPTY, and every project on this page comes from it. Open the Commercial dashboard once to rebuild it, then come back. Nothing is lost - the cache has a 4-hour life and is cleared whenever the dashboard changes.'
                         : (data?.projects?.length
                             ? 'Projects found, but none has an unpaid sales invoice. Press "Sync invoices from Xero".'
                             : 'No projects with applications found. Check the projects are synced.')}

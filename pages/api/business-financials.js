@@ -478,8 +478,17 @@ export default async function handler(req, res) {
       return m ? parseInt(m[1], 10) : null
     }
 
+    // EVERYTHING ON THIS PAGE COMES OFF dashboard:cache.
+    //
+    // If that key is empty the loop below runs zero times, projects comes back empty, and
+    // the page shows "No applications found" - which looks exactly like a code fault and
+    // is not one. The cache has a 4-hour TTL and is dropped whenever a new cache marker
+    // ships, so it goes cold routinely and only the Dashboard rebuilds it.
+    //
+    // Reported explicitly rather than returning a silent empty list.
     const projects = []
     const dash = Array.isArray(dashCache) ? dashCache : []
+    const dashboardCacheEmpty = !dash.length
     for (const p of dash) {
       if (!p || !p.xeroId) continue
       let full = {}
@@ -597,7 +606,8 @@ export default async function handler(req, res) {
       // one is the one that carries the fix - if only the page was deployed the symptom
       // is identical to nothing being deployed at all, and there is no way to tell them
       // apart from the screen.
-      apiVersion: 'pkg604',   // must match EXPECTED_API in invoice-finance.js
+      apiVersion: 'pkg605',   // must match EXPECTED_API in invoice-finance.js
+      dashboardCacheEmpty,
       // Sorted oldest first; the LAST entry is the current drawn balance.
       drawnHistory: ifDrawnHistory,
       debtorLimits: ifLimits,        // { [customerName]: { insuredLimit } }
