@@ -1,7 +1,7 @@
-pkg602 - FIX: fundable debt was 1,375,463 instead of ~421,033
-==============================================================
+pkg603 - High Involvement was taking its % of the wrong base
+=============================================================
 
-*** SUPERSEDES pkg591 - pkg601. Deploy BOTH files. ***
+*** SUPERSEDES pkg591 - pkg602. Deploy BOTH files. ***
 
 
 CHANGED FILES (replace)
@@ -10,65 +10,56 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-WHAT WENT WRONG - pkg599, MY CHANGE
------------------------------------
-I moved the debt basis from unpaid INVOICES back to unpaid APPLICATIONS, because
-Bibby's disapproval export says "Document Type: Application" on every row.
+THE HIGH INVOLVEMENT BUG
+------------------------
+I took the percentage of `fundable` - the debt after the eligibility caps but
+BEFORE credit limits. Bibby's "approved sales ledger" is their Approved Debt,
+which is Sales Ledger less Non-Funded Debt - and Non-Funded INCLUDES Credit Limit
+exceeded. So their base is the figure AFTER limits.
 
-That was the wrong conclusion from a correct observation, and this in the API is
-why:
+  base 1,375,463 (the inflated debt)  cap 481,412.05  Wates over by       0.00
+  base   421,033 (before limits)      cap 147,361.55  Wates over by     768.07
+  base   323,029 (after limits)       cap 113,060.31  Wates over by  35,069.31
 
-    autoPaid = matchInv ? (amountDue <= 0.005) : null   // null = unmatched
-    paid     = override != null ? !!override : (autoPaid === true)
+Only the last reproduces their figure. That is why it showed 0 and why nothing
+was ever over the cap - the cap was far too high.
 
-`null === true` is FALSE. So every application that cannot be matched to an
-invoice by "App N" in the reference counts as UNPAID. On any project whose
-invoice references do not carry that, the WHOLE APPLICATION HISTORY is summed as
-outstanding debt.
-
-A project with twelve applications and one final invoice:
-
-    application basis    360,000    the entire history
-    invoice basis         34,000    what is actually owed
-
-Across your ledger that is 1,375,463 against a real figure near 421,033.
-
-An invoice cannot fail this way - it carries a real amountDue.
+Now based on the approved ledger after limits, and the label says so:
+"Cap GBP 113,060.31 = 35% of the GBP 323,029.46 approved ledger."
 
 
-THE BASIS IS THE INVOICE AGAIN
+THE WHOLE CHAIN NOW RECONCILES
 ------------------------------
-Which is what you said in the first place: they fund applications, and need the
-application to demonstrate what the invoice consists of. So:
+  approved ledger (after caps + limits)   323,029.46
+  per-debtor cap 35%                      113,060.31
+  Wates                                   148,129.62
+  high involvement                         35,069.31   vs Bibby  35,069.31
+  approved funding (ledger - HI) x 60%    172,776.09   vs Bibby 172,776.09
+  less drawn                              122,711.31
+  availability                             50,064.78   vs Bibby  50,064.78
 
-    DEBT        the unpaid sales invoice
-    EVIDENCE    the application it points at - materials on site, variations,
-                gross to date, for the eligibility caps
-
-The invoice basis reconciled to within 2,249 of Bibby's own Sales Ledger. The
-application basis was out by a factor of three. I should have weighed that
-against one line of their export and did not.
-
-AGE DISAPPROVAL NOW MEASURES THE INVOICE too, not the application - the invoice
-carries the real due date and the real outstanding amount, and it is the invoice
-that is or is not paid.
+Every line, to the penny.
 
 
-ALSO STILL IN (pkg601)
-----------------------
-High involvement calculated across ALL customers from the % - a stored 0 from an
-earlier version was suppressing it, and zero now counts as blank on the way in
-and out.
+BUT IT ONLY LANDS THERE IF THE LIMITS ARE RIGHT
+-----------------------------------------------
+The base is the debt AFTER credit limits, so it depends on the insured limits
+being correct. While Selsdon and both Torsion entities have no limit recorded,
+the approved ledger is understated and every figure below it will be too.
 
-Credit limit applied to the DEBT with only the excess disapproved. 90-day age
-rule. Materials 25%, variations 25% (Holly's figures, as you asked), certified
-ceiling 90%. Drawn balance dated.
+So, in order:
+  1. Deploy. Fundable should be back near 421,033, not 1,375,463.
+  2. Set the missing insured limits - Selsdon, Torsion Projects Limited and
+     Torsion Construction Limited are SEPARATE debtors at Bibby (TOR001 and
+     TORSION, different accounts).
+  3. Enter the drawn balance 122,711.31 dated 29/08/2026.
+  4. Leave the High involvement value box EMPTY - it calculates.
+
+Then Approved Debt, Approved Funding and Availability should all line up.
 
 
-WHAT TO EXPECT
---------------
-Fundable back to roughly 421,033, and the "no insured limit" banner back to about
-160,832 across 4 customers rather than 845,592 across 7.
-
-Then: High involvement should show a figure rather than 0, and Availability
-should be approved funding less the 122,711.31 drawn.
+ALSO IN THIS PACKAGE (pkg602)
+-----------------------------
+The debt basis is the unpaid INVOICE again. pkg599 moved it to applications and
+produced 1,375,463, because an application that cannot be matched to an invoice
+by "App N" counts as unpaid - so whole application histories were being summed.

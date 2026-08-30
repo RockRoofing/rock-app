@@ -299,7 +299,17 @@ export default function InvoiceFinance() {
     // Everything needed is already here, so it recalculates itself instead of going
     // stale between statements. The override below is for when their view differs.
     const hiPct = Number(settings.highInvolvementPct ?? 35)
-    const hiCap = fundable * (hiPct / 100)
+    // THE BASE IS THE APPROVED LEDGER - the debt AFTER the caps AND after credit limits.
+    //
+    // Bibby's Approved Debt is Sales Ledger less Non-Funded Debt, and Non-Funded INCLUDES
+    // Credit Limit exceeded. So their "approved sales ledger" is the post-limit figure.
+    // Taking the percentage of `fundable` - which is before limits - gives the wrong cap
+    // and, on your numbers, almost nothing over it:
+    //
+    //   base 421,033 (before limits)  cap 147,361.55  Wates over by     768.07
+    //   base 323,029 (after limits)   cap 113,060.31  Wates over by  35,069.31   correct
+    const approvedLedger = customers.reduce((t, c) => t + (c.insurable != null ? c.insurable : c.fundable), 0)
+    const hiCap = approvedLedger * (hiPct / 100)
     const hiCalc = hiPct > 0
       ? customers.reduce((t, c) => t + Math.max(0, (c.insurable != null ? c.insurable : c.fundable) - hiCap), 0)
       : 0
@@ -332,7 +342,7 @@ export default function InvoiceFinance() {
     const drawnAsAt = latest ? latest.date : null
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden,
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden, approvedLedger,
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
   }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.highInvolvementPct, settings.advanceRate, drawnHistory])
 
@@ -377,7 +387,7 @@ export default function InvoiceFinance() {
     rows.push(['= Approved Debt (before insured limits)', money(totals.fundable)])
     rows.push(['  less credit limit exceeded (incl customers with no limit set)', money(overLimitDebt)])
     rows.push(['    of which customers with NO limit recorded', money(noLimitDebt)])
-    rows.push(['= Insurable Approved Debt', money(Math.max(0, totals.fundable - overLimitDebt))])
+    rows.push(['= Approved Debt (Bibby basis - after limits)', money(totals.approvedLedger)])
     rows.push([`High involvement @ ${totals.hiPct}% of approved ledger (cap ${money(totals.hiCap)} per debtor)${totals.hiOverridden ? ' - OVERRIDDEN' : ''}`, money(totals.highInv)])
     for (const w of (totals.hiWho || [])) rows.push([`    ${w.name} - debt ${money(w.debt)}, over by`, money(w.over)])
     rows.push([`Advance rate`, `${settings.advanceRate}%`])
@@ -591,8 +601,8 @@ export default function InvoiceFinance() {
                   {totals.hiOverridden
                     ? `Overridden - calculated is ${gbp(totals.hiCalc)}. Clear the box to go back.`
                     : (totals.hiWho.length
-                        ? `${gbp(totals.hiCalc)} - ${totals.hiWho.map(w => `${w.name.split(' ')[0]} over by ${gbp(w.over)}`).join(', ')}. Cap ${gbp(totals.hiCap)} per debtor.`
-                        : `Nothing over the ${gbp(totals.hiCap)} per-debtor cap.`)}
+                        ? `${gbp(totals.hiCalc)} - ${totals.hiWho.map(w => `${w.name.split(' ')[0]} over by ${gbp(w.over)}`).join(', ')}. Cap ${gbp(totals.hiCap)} = ${totals.hiPct}% of the ${gbp(totals.approvedLedger)} approved ledger.`
+                        : `Nothing over the ${gbp(totals.hiCap)} per-debtor cap (${totals.hiPct}% of the ${gbp(totals.approvedLedger)} approved ledger).`)}
                 </div>
               </div>
               <div><div style={lbl} title="Bibby disapprove an application once it is this many days past its due date. Three of theirs were 99, 118 and 153 days past due - confirm the exact threshold in the agreement.">Age disapproval (days)</div><input type="number" value={settings.ageDays} onChange={e => setSettings(s => ({ ...s, ageDays: e.target.value }))} style={{ ...inp, width: 70 }} /></div>
