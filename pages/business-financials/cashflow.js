@@ -199,6 +199,7 @@ export default function CashFlow() {
   const [savingFin, setSavingFin] = useState(false)
   const [billOverrides, setBillOverrides] = useState({})  // { billId: 'YYYY-MM-DD' } local layer
   const [cisFlags, setCisFlags] = useState({})            // { billId: true } local layer
+  const [openFcWk, setOpenFcWk] = useState(null)         // which week's project breakdown is open
   const [openOhWk, setOpenOhWk] = useState(null)          // which week's overhead breakdown is expanded
 
   useEffect(() => {
@@ -433,6 +434,8 @@ export default function CashFlow() {
       // a single "Project forecast" column they are invisible - and if the cost schedules
       // are empty the column shows pure income with nothing to say the costs are missing.
       let fcSalesIn = 0, fcLabourOut = 0, fcMatOut = 0
+      // WHICH PROJECTS make up the week, so the figure can be checked rather than trusted.
+      const fcBreak = []
       for (const fc of (data.projForecasts || [])) {
         // SUPERSEDED - the period has already been applied for, so the money is now a
         // real invoice sitting in `receivables`. Counting the forecast as well is the
@@ -445,6 +448,10 @@ export default function CashFlow() {
 
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
         const hasBill = fc.projectName && projNamesWithBillThisWk.has(normName(fc.projectName))
+        const sIn = hasInvoice ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const lOut = hasBill ? 0 : (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const mOut = hasBill ? 0 : (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to })
         if (!hasInvoice) fcSalesIn += (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
         if (!hasBill) {
           fcLabourOut += (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
@@ -465,6 +472,7 @@ export default function CashFlow() {
         bills: Math.round(billsOut), overheads: Math.round(ohOut), ohDetail, commitments: Math.round(commOut), vatOut: Math.round(vatOut), cisOut: Math.round(cisOut),
         projSalesIn: Math.round(fcSalesIn), projCostOut: Math.round(fcCostOut), projNet: Math.round(projNet),
         projLabourOut: Math.round(fcLabourOut), projMatOut: Math.round(fcMatOut),
+        fcBreak: fcBreak.sort((a, b) => b.sales - a.sales),
         moneyIn: Math.round(moneyIn), moneyOut: Math.round(moneyOut),
         net: Math.round(net), closing: Math.round(running),
       })
@@ -800,13 +808,57 @@ export default function CashFlow() {
                       {/* Three columns, not one net figure. If Materials out and Labour
                           out sit at nil while Project sales runs high, the cost side of
                           the forecast is missing - which a netted column hides completely. */}
-                      <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc' }}>{r.projSalesIn ? gbp(r.projSalesIn) : '-'}</td>
+                      <td style={{ ...td, color: r.projSalesIn ? '#0f766e' : '#ccc', cursor: r.projSalesIn ? 'pointer' : 'default', textDecoration: r.projSalesIn ? 'underline dotted #bbb' : 'none' }}
+                        onClick={() => r.projSalesIn && setOpenFcWk(openFcWk === i ? null : i)}
+                        title={r.projSalesIn ? 'Click to see which projects this is' : ''}>
+                        {r.projSalesIn ? gbp(r.projSalesIn) : '-'}{r.projSalesIn ? <span style={{ fontSize: 9, color: '#999' }}> {openFcWk === i ? '\u25B2' : '\u25BC'}</span> : null}
+                      </td>
                       <td style={{ ...td, color: r.projMatOut ? '#dc2626' : '#ccc' }}>{r.projMatOut ? gbp(-r.projMatOut) : '-'}</td>
                       <td style={{ ...td, color: r.projLabourOut ? '#dc2626' : '#ccc' }}>{r.projLabourOut ? gbp(-r.projLabourOut) : '-'}</td>
                       <td style={{ ...td, fontWeight: 600, color: r.net < 0 ? '#dc2626' : '#16a34a' }}>{gbp(r.net)}</td>
                       <td style={{ ...td, fontWeight: 800, color: r.closing < 0 ? '#dc2626' : INK, background: r.closing < 0 ? '#fef2f2' : 'transparent' }}>{gbp(r.closing)}</td>
                     </tr>
                   ))}
+                  {/* WHICH PROJECTS make up the week's forecast sales, with the cost
+                      beside each. A project showing sales and no labour or materials has
+                      no cost schedule against it - that is the thing to look for. */}
+                  {openFcWk != null && forecast[openFcWk] && (
+                    <tr>
+                      <td colSpan={14} style={{ background: '#f7faf9', padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Project forecasts in {forecast[openFcWk].wk}</div>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                          <thead><tr style={{ color: '#888' }}>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Project</th>
+                            <th style={{ textAlign: 'left', padding: '3px 6px' }}>Period</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Sales</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Materials</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Labour</th>
+                            <th style={{ textAlign: 'right', padding: '3px 6px' }}>Cost %</th>
+                          </tr></thead>
+                          <tbody>
+                            {(forecast[openFcWk].fcBreak || []).map((b, k) => {
+                              const cost = (b.mat || 0) + (b.labour || 0)
+                              const pc = b.sales > 0 ? (cost / b.sales) * 100 : null
+                              return (
+                                <tr key={k} style={{ borderTop: '1px solid #eee' }}>
+                                  <td style={{ padding: '3px 6px' }}>{b.name || b.no || '(unnamed)'}</td>
+                                  <td style={{ padding: '3px 6px', color: '#999' }}>{b.from ? `${fmtDMY(b.from)} - ${fmtDMY(b.to)}` : '-'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{b.sales ? gbp(b.sales) : '-'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: b.mat ? '#dc2626' : '#c00' }}>{b.mat ? gbp(-b.mat) : 'none'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: b.labour ? '#dc2626' : '#c00' }}>{b.labour ? gbp(-b.labour) : 'none'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 700, color: pc == null ? '#999' : pc < 50 ? '#dc2626' : '#16a34a' }}>{pc == null ? '-' : `${pc.toFixed(0)}%`}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                        <div style={{ fontSize: 10.5, color: '#8a857c', marginTop: 6 }}>
+                          Cost % is materials plus labour over sales. A roofing period should run 75-85%. Anything far below that, or showing &quot;none&quot;, has no cost scheduled against it in the Commercial forecast - so the cash flow counts the income and not the spend.
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
                   {openOhWk != null && forecast[openOhWk] && (
                     <tr style={{ background: '#fbfaf7' }}>
                       <td colSpan={12} style={{ padding: '10px 16px' }}>

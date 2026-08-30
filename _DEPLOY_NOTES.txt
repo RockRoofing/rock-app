@@ -1,8 +1,7 @@
-pkg615 - Project forecast split into Sales / Materials / Labour, and the
-          supersede rule actually fires now
-=========================================================================
+pkg616 - Project sales drill-down: find which forecasts have no costs
+======================================================================
 
-*** SUPERSEDES pkg591 - pkg614. FIVE files - dashboard.js is new to this set. ***
+*** SUPERSEDES pkg591 - pkg615. Five files. ***
 
 
 CHANGED FILES (replace)
@@ -10,60 +9,66 @@ CHANGED FILES (replace)
   pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
   pages/api/business-financials.js
-  pages/api/dashboard.js          <- NEW in this package
+  pages/api/dashboard.js
   pages/connect.js
 
 
-1. YOU WERE RIGHT - IT NEEDED SPLITTING
----------------------------------------
-"Project forecast" was a NET column: sales in, less labour out, less materials
-out, rolled into one figure. So a week showing +174,821 could be 174,821 of sales
-with NO costs at all, and nothing on screen would say so.
+WHAT THE SPLIT ALREADY TELLS US
+-------------------------------
+  project sales     857,011
+  materials out     130,679    15.2% of sales
+  labour out        224,686    26.2%
+  total cost        355,365    41.5%
+  implied margin                58.5%
 
-Now three columns: Project sales, Materials out, Labour out.
+A roofing subcontract runs 75-85% cost. At 80% the cost on 857,011 would be
+685,609 - so ROUGHLY 330,000 OF COST IS MISSING from the project forecasts. The
+cash flow is counting that income and not the spend against it, which is most of
+your 668k.
 
-If Materials and Labour sit at "-" while Project sales runs high, the forecasts
-have no cost schedules against them - and the cash flow is showing income with no
-cost, which is exactly the shape of a closing balance that climbs to 668k.
+The other half of it: invoices in 550,352 plus project sales 857,011 is 1,407,363
+in 13 weeks, an annualised 5.6m. And the project sales all fall in the last eight
+weeks - 107,126 a week of NEW work on top of the existing debtors.
 
-That is the diagnostic. Deploy and look at those two columns first.
-
-
-2. THE SUPERSEDE RULE HAS NEVER ONCE FIRED - MY BUG
----------------------------------------------------
-pkg613 added a rule to drop any forecast whose period had already been applied
-for. It read
-
-    const apps = Array.isArray(p.applications) ? p.applications : []
-
-but the dashboard cache does NOT have p.applications - applications live under
-settings.applications there. So the array was always empty, latestAppEnd was
-always '', and the rule never dropped a single forecast. The double count I told
-you was fixed was still running.
-
-dashboard.js now computes latestAppEnd - the period end of the latest application
-- and the cash flow reads it directly. A new cache marker forces one rebuild, so
-open the Commercial dashboard once after deploying.
+Both point at the forecasts themselves, not at the cash flow arithmetic.
 
 
-WHAT TO LOOK AT, IN ORDER
+CLICK THE PROJECT SALES FIGURE
+------------------------------
+It now opens a breakdown of that week:
+
+  Project              Period              Sales   Materials  Labour  Cost %
+  J246 Albert Bartlett 01/09 - 30/09    184,148        none   9,327      5%
+  J251 Winnersh        01/09 - 30/09    205,726        -425   6,171      3%
+  J240 Market Drayton  01/09 - 30/09    160,281     -65,630  11,069     48%
+
+Cost % is materials plus labour over sales, RED below 50%, and a missing cost
+schedule shows the word "none" rather than a dash - so a forecast with income and
+no spend is obvious at a glance.
+
+That tells you exactly which projects to fix in Commercial, rather than either of
+us guessing again.
+
+
+WHAT I EXPECT YOU TO FIND
 -------------------------
-1. Open the Commercial dashboard once (rebuilds the cache with latestAppEnd).
-2. Back to Cash Flow. Project sales should drop where periods have been applied
-   for - that money is now in Invoices in instead.
-3. Check Materials out and Labour out. If they are empty against real sales, the
-   project forecasts themselves have no costs scheduled, and that is a Commercial
-   data question rather than a cash flow one - tell me what you see and we will
-   work from there.
+Several projects with large sales and either no materials or no labour scheduled.
+Those forecasts were built to model REVENUE and the cost side was never filled in
+- which does not matter on the project cash flow page, where you are looking at
+one job's income, but matters enormously here.
+
+If that is what you see, the fix is in the project forecasts, not this page. Send
+me a screenshot of the drill-down and we can decide whether to fill them in, or to
+apply a default cost percentage where none is scheduled.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg614 - retEvents hoisted to component scope (it was declared inside the forecast
-useMemo and read by the banner, which crashed the page).
+pkg615 - the supersede rule now actually fires. It read p.applications from the
+dashboard cache, which does not exist there (they live under
+settings.applications), so latestAppEnd was always empty and not one superseded
+forecast was ever dropped. dashboard.js now computes it. OPEN THE COMMERCIAL
+DASHBOARD ONCE after deploying to rebuild the cache.
 
-pkg613 - overdue debt lands in week 1 rather than vanishing; retention releases
-use the same rule as the tracker; amber banner for anything with no date; forward
-VAT reclaim estimated at spend x 20/120.
-
-pkg612 - Net cash position box; Refresh balances from Xero removed.
+pkg614/613 - overdue debt lands in week 1; retention uses the tracker's rule;
+amber banner for undated items; forward VAT reclaim; net cash position box.
