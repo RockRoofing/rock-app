@@ -178,7 +178,7 @@ export default function CashFlow() {
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20 })
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30 })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
   const [balMsg, setBalMsg] = useState('')
@@ -224,6 +224,7 @@ export default function CashFlow() {
         ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '',
         overdraftLimit: fc.overdraftLimit ?? '',
         vatRate: fc.vatRate ?? 20,
+        legacyMatDays: fc.legacyMatDays ?? 30,
         cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
       })
       // Seed local bill payment-date overrides from what's saved.
@@ -257,6 +258,7 @@ export default function CashFlow() {
         ccLimit: Number(finance.ccLimit) || 0,
         overdraftLimit: Number(finance.overdraftLimit) || 0,
         vatRate: Number(finance.vatRate ?? 20),
+        legacyMatDays: Number(finance.legacyMatDays ?? 30),
         cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
       }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
@@ -475,7 +477,8 @@ export default function CashFlow() {
         const offM = Math.min(rawM, Math.max(0, billThisWk - offL))
         const lOut = Math.max(0, rawL - offL)
         const mOut = Math.max(0, rawM - offM)
-        if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to })
+        if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to,
+          matEstimated: (fc.matItems || []).some(m => m.estimatedTerm) })
         // Use the figures already worked out above, net of any real bill. Recomputing them
         // here is how the two got out of step - and `hasBill` no longer exists.
         fcSalesIn += sIn
@@ -736,6 +739,8 @@ export default function CashFlow() {
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Used to estimate the VAT reclaim on future materials and overhead spend, for months with no filed return. Set to 0 to turn the estimate off.">VAT rate % (reclaim estimate)</div>
                       <input type="number" value={finance.vatRate} onChange={e => setFinance(f => ({ ...f, vatRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Older project forecasts stored only a materials DELIVERY date - the line items carrying the payment terms were never saved. This is the number of days after end of month those legacy materials are assumed to pay. Newer forecasts use each line's own term and ignore this.">Legacy materials, eom + days</div>
+                      <input type="number" value={finance.legacyMatDays} onChange={e => setFinance(f => ({ ...f, legacyMatDays: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
                     {/* One limit per card, from the accounts Xero returns. The pooled box
                         below stays for anything without its own limit. */}
                     {cardAccts.map(a => (
@@ -886,7 +891,9 @@ export default function CashFlow() {
                                   <td style={{ padding: '3px 6px' }}>{b.name || b.no || '(unnamed)'}</td>
                                   <td style={{ padding: '3px 6px', color: '#999' }}>{b.from ? `${fmtDMY(b.from)} - ${fmtDMY(b.to)}` : '-'}</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: '#0f766e' }}>{b.sales ? gbp(b.sales) : '-'}</td>
-                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: b.mat ? '#dc2626' : '#c00' }}>{b.mat ? gbp(-b.mat) : 'none'}</td>
+                                  <td style={{ padding: '3px 6px', textAlign: 'right', color: b.mat ? '#dc2626' : '#c00' }}
+                                    title={b.matEstimated ? 'Legacy forecast - only a delivery date was saved, so the payment date is estimated from the "legacy materials" setting rather than the line\u2019s own term.' : ''}>
+                                    {b.mat ? gbp(-b.mat) : 'none'}{b.matEstimated ? <span style={{ color: '#b45309', fontSize: 9 }}> est</span> : null}</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', color: b.labour ? '#dc2626' : '#c00' }}>{b.labour ? gbp(-b.labour) : 'none'}</td>
                                   <td style={{ padding: '3px 6px', textAlign: 'right', fontWeight: 700, color: pc == null ? '#999' : pc < 50 ? '#dc2626' : '#16a34a' }}>{pc == null ? '-' : `${pc.toFixed(0)}%`}</td>
                                 </tr>

@@ -885,6 +885,9 @@ export default async function handler(req, res) {
     // Project cash flow forecasts (from the Commercial Cash Flow page). Scanned from
     // cashflow:hyp-apps:*, flattened to dated cash movements, each tagged with its
     // project so the weekly forecast can suppress it where a REAL invoice/bill exists.
+    // Days added to a legacy delivery date. Editable, because the real term is not in the
+    // record and 30 is only the save default - a supplier on eom+60 pays a month later.
+    const legacyMatDays = Number((financeCfg || {}).legacyMatDays ?? 30)
     const projForecasts = []
     try {
       let cursor = 0
@@ -941,9 +944,19 @@ export default async function handler(req, res) {
             // materialsThisPeriod. Rebuilt into a single line so the money is placed
             // instead of being dropped. Payment terms default to eom+30, matching the
             // save.
+            // LEGACY MATERIALS - the term is not recoverable.
+            //
+            // Where matItems EXISTS the term is already honoured: payDate was computed at
+            // save from that line's own term, so a 60-day line pays at 60 days and this
+            // path never runs.
+            //
+            // Where it does not, only matDeliverDay and materialsThisPeriod survive - the
+            // line items that carried the terms were never saved. So the days are a guess,
+            // made VISIBLE rather than buried, and flagged so the row can say the date is
+            // estimated.
             matItems: (!Array.isArray(fc.matItems) || !fc.matItems.length)
               ? (fc.matDeliverDay && (fc.materialsThisPeriod || 0) > 0
-                  ? [{ date: payFromDeliver(fc.matDeliverDay, 30), amount: Number(fc.materialsThisPeriod) || 0, undated: false, unresolved: false, raw: Number(fc.materialsThisPeriod) || 0 }]
+                  ? [{ date: payFromDeliver(fc.matDeliverDay, legacyMatDays), amount: Number(fc.materialsThisPeriod) || 0, undated: false, unresolved: false, estimatedTerm: true, deliverDay: fc.matDeliverDay, raw: Number(fc.materialsThisPeriod) || 0 }]
                   : [])
               : (fc.matItems || []).map(m => ({
               date: m.payDate,

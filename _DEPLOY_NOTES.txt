@@ -1,65 +1,55 @@
-pkg619 - Older forecasts store costs in DIFFERENT FIELDS - that is why they
-          never appeared
-============================================================================
+pkg620 - Materials payment terms: the line's own, not a hard-coded 30
+======================================================================
 
-*** SUPERSEDES pkg591 - pkg618. Five files. ***
+*** SUPERSEDES pkg591 - pkg619. Five files. ***
 
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js        <- the fix
+  pages/api/business-financials.js
   pages/business-financials/cashflow.js
   pages/api/dashboard.js
   pages/business-financials/invoice-finance.js
   pages/connect.js
 
 
-FOUND IT - AND YOUR INSTINCT ABOUT OLD FORECASTS WAS RIGHT
------------------------------------------------------------
-The PROJECT cash flow page has fallbacks for older forecast records. The API did
-not - except for sales.
+GOOD CATCH - AND THERE ARE TWO CASES
+------------------------------------
+WHERE THE FORECAST HAS matItems, the line's own term is ALREADY honoured and
+always has been. payDate was computed at save from that line's term, so a 60-day
+line pays at 60 days. The +30 path never runs for these.
 
-  project-cashflow.js:211  sales     falls back to fc.salesDate + revenueThisPeriod
-  project-cashflow.js:213  labour    falls back to fc.labourDate + labourThisPeriod
-  project-cashflow.js:214  materials reads fc.matItems
+WHERE IT DOES NOT - the legacy records - the term is NOT RECOVERABLE. Only
+matDeliverDay and materialsThisPeriod were saved; the line items that carried the
+terms were not. There is no materials term at forecast level either - only
+salesTerm and labourTerm are stored.
 
-  business-financials.js   sales     HAD the fallback
-                           labour    had NONE
-                           materials had NONE
+So for legacy forecasts any figure is a guess. Rather than bury 30 in the code it
+is now a SETTING - "Legacy materials, eom + days" beside the VAT rate:
 
-So on any forecast saved before the schedule fields existed, THE SALES CAME
-THROUGH AND THE COSTS DID NOT. Income with no spend against it - exactly the
-668k shape, and exactly what you were seeing.
+    legacy delivery 25/09, materials 70,000
+      eom + 0   pays 30/09
+      eom +30   pays 30/10
+      eom +60   pays 29/11
 
-NOW:
-  labour    falls back to labourDate + labourThisPeriod, same as the project page
-  materials rebuilt from matDeliverDay + materialsThisPeriod where matItems is
-            absent, paid at end of month + 30 to match the save
+Set it to whatever your usual supplier terms were when those forecasts were built.
 
-  old forecast, matDeliverDay 25/09, materialsThisPeriod 70,000
-    before  nothing at all
-    after   70,000 on 30/10
+AND THE ESTIMATE IS FLAGGED. In the Project sales drill-down a materials figure
+derived this way carries a small amber "est", hovering to say the payment date was
+estimated rather than taken from the line's own term. So you can tell a real date
+from a guessed one at a glance.
 
 
 ALSO IN THIS PACKAGE
 --------------------
+pkg619 - the API had NO fallback for labour or materials on older forecasts, only
+for sales. So sales came through and costs did not, which is the whole "income
+with no spend" problem. Labour now falls back to labourDate + labourThisPeriod
+exactly as the project page does, and materials are rebuilt from matDeliverDay +
+materialsThisPeriod.
+
 pkg618 - ONE bill on a project was discarding EVERY forecast cost for that project
-that week, labour and materials both. A 600 bill wiped a 65,630 materials payment.
-The bill is now NETTED OFF instead, applied to labour first.
+that week. Now netted off instead, labour first.
 
-pkg617 - materials fall back to `value` where no amount was resolved; the amber
-banner names lines that cannot be scheduled.
-
-
-A BUG CAUGHT IN BUILD
----------------------
 payFromDeliver was declared inside the invoice-finance branch and used in the
-cashflow branch - it would have thrown the moment an old forecast was hit. Moved
-to module scope.
-
-
-WHAT TO EXPECT
---------------
-Materials and labour should both rise sharply. In the Project sales drill-down the
-Cost % should move toward 75-85%. If a project still shows "none", that forecast
-genuinely has no cost recorded in either the new or the old fields.
+cashflow branch - moved to module scope before it could throw.
