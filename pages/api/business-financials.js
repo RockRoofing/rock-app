@@ -906,7 +906,23 @@ export default async function handler(req, res) {
             projectName,
             salesSchedule: fc.salesSchedule || (fc.salesDate ? [{ date: fc.salesDate, amount: fc.revenueThisPeriod || 0 }] : []),
             labourSchedule: fc.labourSchedule || [],
-            matItems: (fc.matItems || []).map(m => ({ date: m.payDate, amount: m.amount || 0 })),
+            // MATERIALS. `amount` is resolved at SAVE time - a line can be a percentage
+            // of the materials budget (mode: 'pct') and only then becomes a figure. Any
+            // line saved before `amount` existed, or any pct line saved without a budget,
+            // has no amount at all and was contributing ZERO with nothing to say so.
+            //
+            // Falls back to `value` for a plain line. A pct line without an amount cannot
+            // be resolved here - the budget is not in this payload - so it is reported
+            // rather than silently counted as nil.
+            matItems: (fc.matItems || []).map(m => ({
+              date: m.payDate,
+              amount: (m.amount != null && m.amount !== '') ? Number(m.amount) || 0
+                    : (m.mode === 'pct' ? 0 : Number(m.value) || 0),
+              // Diagnostics for the banner: money that cannot be scheduled and why.
+              unresolved: (m.amount == null || m.amount === '') && m.mode === 'pct',
+              undated: !m.payDate,
+              raw: Number(m.amount != null && m.amount !== '' ? m.amount : m.value) || 0,
+            })),
             from: fc.from, to: fc.to,
             // Latest APPLICATION valuation date on this project. A forecast whose period
             // has already been applied for is history - the money is now a real invoice,

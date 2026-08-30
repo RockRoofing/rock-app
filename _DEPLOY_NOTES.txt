@@ -1,7 +1,7 @@
-pkg616 - Project sales drill-down: find which forecasts have no costs
-======================================================================
+pkg617 - Materials: lines that were contributing ZERO, and why the dates differ
+================================================================================
 
-*** SUPERSEDES pkg591 - pkg615. Five files. ***
+*** SUPERSEDES pkg591 - pkg616. Five files. ***
 
 
 CHANGED FILES (replace)
@@ -13,62 +13,58 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-WHAT THE SPLIT ALREADY TELLS US
--------------------------------
-  project sales     857,011
-  materials out     130,679    15.2% of sales
-  labour out        224,686    26.2%
-  total cost        355,365    41.5%
-  implied margin                58.5%
+1. WHY THE DATES DO NOT MATCH - NOT A BUG
+-----------------------------------------
+The project forecast shows the DELIVERY date. The cash flow shows the PAYMENT
+date, computed at save time as delivery plus terms:
 
-A roofing subcontract runs 75-85% cost. At 80% the cost on 857,011 would be
-685,609 - so ROUGHLY 330,000 OF COST IS MISSING from the project forecasts. The
-cash flow is counting that income and not the spend against it, which is most of
-your 668k.
+    payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 })
 
-The other half of it: invoices in 550,352 plus project sales 857,011 is 1,407,363
-in 13 weeks, an annualised 5.6m. And the project sales all fall in the last eight
-weeks - 107,126 a week of NEW work on top of the existing debtors.
+Default is end of month + 30 days:
 
-Both point at the forecasts themselves, not at the cash flow arithmetic.
+    deliver 25/09, eom+30  ->  pays 30/10
+    deliver 15/10, eom+30  ->  pays 30/11
+
+So your 70k "due mid-October" is a delivery, and it pays at the end of November -
+outside the 13 weeks entirely. That is correct for a cash flow, but nothing on
+either screen said which date it was showing.
 
 
-CLICK THE PROJECT SALES FIGURE
-------------------------------
-It now opens a breakdown of that week:
+2. MATERIAL LINES CONTRIBUTING NOTHING - THE REAL FAULT
+-------------------------------------------------------
+    matItems: (fc.matItems || []).map(m => ({ date: m.payDate, amount: m.amount || 0 }))
 
-  Project              Period              Sales   Materials  Labour  Cost %
-  J246 Albert Bartlett 01/09 - 30/09    184,148        none   9,327      5%
-  J251 Winnersh        01/09 - 30/09    205,726        -425   6,171      3%
-  J240 Market Drayton  01/09 - 30/09    160,281     -65,630  11,069     48%
+`amount` is resolved at SAVE time. A material line can be a PERCENTAGE of the
+materials budget (mode: 'pct') and only becomes a figure when saved. So:
 
-Cost % is materials plus labour over sales, RED below 50%, and a missing cost
-schedule shows the word "none" rather than a dash - so a forecast with income and
-no spend is obvious at a glance.
+  - any line saved before `amount` existed has none, and counted as ZERO
+  - any pct line saved without a budget has none, and counted as ZERO
+  - any line with no DELIVERY date gets no payDate and never lands in a week
 
-That tells you exactly which projects to fix in Commercial, rather than either of
-us guessing again.
+All three were silent. On a four-line example the old code counted 65,630 where
+the true figure was 77,630, with 5,040 unplaceable.
 
-
-WHAT I EXPECT YOU TO FIND
--------------------------
-Several projects with large sales and either no materials or no labour scheduled.
-Those forecasts were built to model REVENUE and the cost side was never filled in
-- which does not matter on the project cash flow page, where you are looking at
-one job's income, but matters enormously here.
-
-If that is what you see, the fix is in the project forecasts, not this page. Send
-me a screenshot of the drill-down and we can decide whether to fill them in, or to
-apply a default cost percentage where none is scheduled.
+Now: falls back to `value` for a plain line, and reports what it cannot resolve
+instead of counting it as nil.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg615 - the supersede rule now actually fires. It read p.applications from the
-dashboard cache, which does not exist there (they live under
-settings.applications), so latestAppEnd was always empty and not one superseded
-forecast was ever dropped. dashboard.js now computes it. OPEN THE COMMERCIAL
-DASHBOARD ONCE after deploying to rebuild the cache.
+3. THE BANNER NOW NAMES THEM
+----------------------------
+    GBP 5,040 of materials across 2 lines cannot be scheduled:
+    J246 Albert Bartlett - no delivery date; J251 Winnersh - % of budget, never
+    resolved. Materials pay on delivery date plus terms, so a line with no
+    delivery date never lands in a week.
 
-pkg614/613 - overdue debt lands in week 1; retention uses the tracker's rule;
-amber banner for undated items; forward VAT reclaim; net cash position box.
+That gives you the list to fix in Commercial rather than either of us guessing.
+
+
+ONE THING I CANNOT FIX FROM HERE
+--------------------------------
+A percentage-of-budget line with no saved amount cannot be resolved in this
+endpoint - the materials budget is not in the payload. Re-saving that period on
+the project cash flow page resolves it. If there are many, tell me and I will pull
+the budget through so they resolve automatically.
+
+Also worth knowing: payDate is calculated at SAVE time, not read live. If you have
+changed a supplier's payment terms since, every previously saved forecast still
+carries the OLD payment date until re-saved.

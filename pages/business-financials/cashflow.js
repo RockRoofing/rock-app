@@ -605,12 +605,30 @@ export default function CashFlow() {
                     const undatedInv = (data.receivables || []).filter(i => !(i.expectedDate || i.dueDate))
                     const rSum = undatedRet.reduce((a, r) => a + r.amount, 0)
                     const iSum = undatedInv.reduce((a, i) => a + (i.amountDue || 0), 0)
-                    if (rSum < 1 && iSum < 1) return null
+                    // MATERIALS THAT CANNOT REACH A WEEK.
+                    //
+                    // No payment date (which comes from delivery date + terms, so a line
+                    // with no delivery date gets none), or a percentage-of-budget line
+                    // whose amount was never resolved at save time. Either way the money
+                    // is absent from the forecast, not late.
+                    const matBad = []
+                    for (const fc of (data.projForecasts || [])) {
+                      for (const m of (fc.matItems || [])) {
+                        if (m.undated || m.unresolved) matBad.push({ name: fc.projectName || fc.projectKey, amount: m.raw || 0, why: m.unresolved ? '% of budget, never resolved' : 'no delivery date' })
+                      }
+                    }
+                    const mSum = matBad.reduce((a, x) => a + x.amount, 0)
+                    if (rSum < 1 && iSum < 1 && mSum < 1 && !matBad.length) return null
                     return (
                       <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 14px', marginBottom: 14, fontSize: 12, color: '#92400e' }}>
                         <strong>Not in the forecast - no date to schedule it against.</strong>{' '}
                         {rSum >= 1 && <>{gbp(rSum)} of retention across {undatedRet.length} release{undatedRet.length === 1 ? '' : 's'} - set the release dates on the Retention Tracker. </>}
-                        {iSum >= 1 && <>{gbp(iSum)} of invoices across {undatedInv.length} - no due date in Xero.</>}
+                        {iSum >= 1 && <>{gbp(iSum)} of invoices across {undatedInv.length} - no due date in Xero. </>}
+                        {matBad.length > 0 && (
+                          <><br /><strong>{gbp(mSum)} of materials</strong> across {matBad.length} line{matBad.length === 1 ? '' : 's'} cannot be scheduled:{' '}
+                            {[...new Set(matBad.map(x => `${x.name || '(unnamed)'} - ${x.why}`))].slice(0, 6).join('; ')}
+                            {matBad.length > 6 ? ' and more' : ''}. Materials pay on delivery date plus terms, so a line with no delivery date never lands in a week.</>
+                        )}
                       </div>
                     )
                   })()}
