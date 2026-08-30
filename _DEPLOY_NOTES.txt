@@ -1,7 +1,7 @@
-pkg612 - Net cash position box, and Refresh balances removed
-=============================================================
+pkg613 - 13-week: overdue debt was vanishing, retention was blank, no forward VAT
+==================================================================================
 
-*** SUPERSEDES pkg591 - pkg611. Four files. ***
+*** SUPERSEDES pkg591 - pkg612. Four files. ***
 
 
 CHANGED FILES (replace)
@@ -12,59 +12,69 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-1. NET CASH POSITION
---------------------
-One box, beside Max cash available:
+1. INVOICES IN 100,885 AGAINST 555k OUTSTANDING
+-----------------------------------------------
+    const invoicesIn = receivables.filter(i => inWk(i.expectedDate || i.dueDate))
 
-    Net cash position
-    -74,656
+inWk() requires the date to fall INSIDE the 13 weeks. Anything ALREADY PAST DUE
+sits before week 1 and was dropped ENTIRELY - so the money you are most likely to
+collect was the money the forecast ignored.
 
-      Bank cash                    2,500.52
-      less card debt             -77,156.42
-      = Net cash                 -74,655.90
-      less invoice finance drawn -122,711.31
-      = Net of all facilities   -197,367.21
+Overdue does not mean never paid, it means late. It now lands in WEEK 1, which is
+also the honest place for it: if it does not arrive, you see the hole immediately.
 
-      Drawing headroom does not change this - cash and debt rise together.
-
-ONE BOX, NOT TWO. Two headline numbers measuring the same thing at different
-scopes invites "which is the real one" and neither gets trusted. Both figures are
-here with the arithmetic between them visible.
-
-INVOICE FINANCE IS ON ITS OWN LINE because it is different in kind. Card debt and
-overdraft are money owed with nothing behind them; IF is advanced against invoices
-customers will pay and self-liquidates as the ledger collects. Netting it in
-silently would overstate the problem, leaving it out would flatter it.
-
-TRADE PAYABLES ARE DELIBERATELY EXCLUDED. Your 302,771 of bills is operational
-debt, and the 13-week already schedules every one of them week by week. Putting it
-in a headline box as well tells the same story twice, and the forecast is the
-better place because timing is what matters.
-
-WHY IT WAS NEEDED. The page said "Max cash available 191,532" and never said you
-owed 197,367 against it. Read alone, that is strength. And drawing 46,188 of the
-headroom raises cash to -28,468 while net of all facilities stays at -197,367
-exactly - Max cash available measures how much borrowing is left, dressed as cash.
-The sub-line on Max cash now says so too.
+Same rule applied to retention releases.
 
 
-2. REFRESH BALANCES FROM XERO - REMOVED
+2. RETENTION IN WAS BLANK - THE SAME DEAD FIELD, THIRD TIME
+-----------------------------------------------------------
+    if (r1 && !e.release1Received && e.release1Date) out.push(...)
+
+release1Received is NEVER SET by anything. Left over from the tracker's old design
+where the released state was inferred at render time and never stored. And it
+required a release DATE, silently dropping every half without one - which is most
+of the register.
+
+Now uses the same rule as the Retention Tracker and Retentions Due: manual mark
+wins either way, otherwise a half ticked on an application. Complete projects are
+excluded.
+
+
+3. NOTHING IS SILENTLY MISSING ANY MORE
 ---------------------------------------
-Button, handler and its state are gone. Xero's Balance Sheet returns the BOOK
-balance - only what has been reconciled - so it runs behind the real bank position
-silently, which is worse than not having it.
+An amber banner above the table lists what could NOT be scheduled:
 
-Balances are typed in the panel below with the date they were read. The API
-handler is left in place, and the Xero figures already fetched still drive the
-per-account cross-check and the "Start from Xero's accounts" button - so nothing
-is lost, only the misleading one-click refresh.
+    Not in the forecast - no date to schedule it against.
+    GBP x of retention across N releases - set the release dates on the Retention
+    Tracker. GBP y of invoices across M - no due date in Xero.
+
+Money with no date cannot go in a week. Being absent SILENTLY is how 555k showed
+as 100,885.
+
+
+4. FORWARD VAT RECLAIM
+----------------------
+vatByMonth only held FILED returns and the current estimate - nothing for months
+still to come, so one reclaim showed and then nothing.
+
+As a subcontractor most sales fall under the domestic reverse charge and carry no
+output VAT, while materials and overheads carry input VAT - which is why the
+position is a persistent RECLAIM. Now estimated for any month with no filed
+return, from forecast bills and materials:
+
+    reclaim = spend x 20/120        (spend is VAT-inclusive)
+    50,000 -> 8,333.33      120,000 -> 20,000.00
+
+A filed return or an existing estimate ALWAYS wins - this only fills the gaps. The
+rate is editable beside the other facility settings; set it to 0 to switch the
+estimate off.
+
+WORTH CONFIRMING: this assumes reverse charge on sales, so no output VAT is netted
+off. If some of your sales do carry VAT, the reclaim will be overstated.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg611 - cards held NEGATIVE like Xero, so the cross-check compares like with
-like. A card typed positive is flagged "in credit?" rather than silently flipped.
-
-pkg610 - opening cash reads from local state (it showed 0 with a balance on screen
-above it); and the double count fixed - any forecast whose period has already been
-APPLIED FOR is dropped, not just when an invoice lands in the same week.
+pkg612 - Net cash position box beside Max cash available, with the full arithmetic
+and the line that matters: drawing headroom does not change it. Refresh balances
+from Xero removed - it returned the BOOK balance and ran behind silently.

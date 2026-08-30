@@ -135,14 +135,36 @@ function commitmentEvents(commitments, start, end) {
 }
 
 // Retention releases (unreceived) as dated cash-in events.
+// RETENTION RELEASES DUE IN. Must match the Retention Tracker exactly or the two
+// disagree about the same money.
+//
+// This read `release1Received` - a field NOTHING EVER SETS. It is left over from the
+// tracker's old design, where the released state was inferred at render time and never
+// stored. So every half counted as still to come, and a half you had confirmed released
+// on the tracker still showed here as future cash.
+//
+// It also required a release DATE, silently dropping any half without one - which is
+// most of the register. That is why the column was blank.
+function released1(e) {
+  if (e.release1Manual === true) return true
+  if (e.release1Manual === false) return false
+  return !!e.appRelease1
+}
+function released2(e) {
+  if (e.release2Manual === true) return true
+  if (e.release2Manual === false) return false
+  return !!e.appRelease2
+}
 function retentionEvents(entries) {
   const out = []
   for (const e of (entries || [])) {
-    if ((e.retStatus || '') === 'complete') { /* still include unreceived flags below */ }
+    if ((e.retStatus || '') === 'complete') continue     // closed job, not being chased
     const r1 = parseFloat(e.release1Value || 0) || 0
     const r2 = parseFloat(e.release2Value || 0) || 0
-    if (r1 && !e.release1Received && e.release1Date) out.push({ date: e.release1Date, amount: r1 })
-    if (r2 && !e.release2Received && e.release2Date) out.push({ date: e.release2Date, amount: r2 })
+    // undated halves are returned WITHOUT a date so the page can report them rather than
+    // pretend they do not exist.
+    if (r1 && !released1(e)) out.push({ date: e.release1Date || '', amount: r1, name: e.projectName || e.ourRef || '' })
+    if (r2 && !released2(e)) out.push({ date: e.release2Date || '', amount: r2, name: e.projectName || e.ourRef || '' })
   }
   return out
 }
@@ -156,7 +178,7 @@ export default function CashFlow() {
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {} })
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20 })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
   const [balMsg, setBalMsg] = useState('')
@@ -200,6 +222,7 @@ export default function CashFlow() {
       setFinance({
         ifLimit: fc.ifLimit ?? '', ifDrawn: fc.ifDrawn ?? '', ccLimit: fc.ccLimit ?? '',
         overdraftLimit: fc.overdraftLimit ?? '',
+        vatRate: fc.vatRate ?? 20,
         cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
       })
       // Seed local bill payment-date overrides from what's saved.
@@ -232,6 +255,7 @@ export default function CashFlow() {
         ifDrawn: Number(finance.ifDrawn) || 0,
         ccLimit: Number(finance.ccLimit) || 0,
         overdraftLimit: Number(finance.overdraftLimit) || 0,
+        vatRate: Number(finance.vatRate ?? 20),
         cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
       }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
@@ -275,6 +299,42 @@ export default function CashFlow() {
       }
     }
 
+    // FORWARD VAT RECLAIM.
+    //
+    // vatByMonth only ever held FILED returns and the current estimate - nothing for
+    // months still to come. So the forecast showed one reclaim and then nothing, when in
+    // practice a reclaim arrives every period.
+    //
+    // As a subcontractor most sales fall under the domestic reverse charge and carry no
+    // output VAT, while materials and overheads carry input VAT - which is why the
+    // position is a persistent RECLAIM rather than a payment. Estimated here as the VAT
+    // on forecast materials and overhead spend in each month with nothing filed.
+    //
+    // Clearly an estimate: it is only used where no filed return and no existing estimate
+    // exists, so a real figure always wins.
+    const vatRate = Number(finance.vatRate ?? 20) / 100
+    if (vatRate > 0) {
+      const spendByMonth = {}
+      for (const b of (data.bills || [])) {
+        const d = billOverrides[b.id] || b.payDate || b.dueDate || ''
+        if (!d) continue
+        const mk = d.slice(0, 7)
+        spendByMonth[mk] = (spendByMonth[mk] || 0) + Math.abs(b.amountDue || 0)
+      }
+      for (const fc of (data.projForecasts || [])) {
+        for (const m of (fc.matItems || [])) {
+          if (!m.date) continue
+          const mk = String(m.date).slice(0, 7)
+          spendByMonth[mk] = (spendByMonth[mk] || 0) + Math.abs(m.amount || 0)
+        }
+      }
+      for (const [mk, spend] of Object.entries(spendByMonth)) {
+        if (vatByMonth[mk] != null) continue          // a filed or estimated figure wins
+        // spend is VAT-inclusive, so the VAT within it is spend x r/(1+r).
+        vatByMonth[mk] = (spend * vatRate) / (1 + vatRate)
+      }
+    }
+
     const cisBill = (i) => !!cisFlags[i.id]
     // In Xero the CIS deduction is ALREADY applied - a labour bill's Amount Due is the
     // NET figure paid to the subcontractor (e.g. GBP1,000 on a GBP1,250 gross bill). So the
@@ -307,8 +367,30 @@ export default function CashFlow() {
       const s = isoDay(wkStart), e = isoDay(wkEnd)
       const inWk = (dstr) => dstr >= s && dstr <= e
 
-      const invoicesIn = (data.receivables || []).filter(i => inWk(i.expectedDate || i.dueDate || '')).reduce((a, i) => a + (i.amountDue || 0), 0)
-      const retIn = retEvents.filter(r => inWk(r.date)).reduce((a, r) => a + r.amount, 0)
+      // OVERDUE DEBT LANDS IN WEEK 1, it does not vanish.
+      //
+      // This used inWk() alone, which requires the date to fall INSIDE the 13 weeks. Any
+      // invoice already past its due date sits BEFORE week 1 and was dropped entirely -
+      // so 555k of debt showed as 100,885 of cash coming in, and the money you are most
+      // likely to collect was the money the forecast ignored.
+      //
+      // Overdue does not mean never paid; it means late. It belongs in the first week,
+      // which is also the honest place for it - if it does not arrive you see the hole.
+      const invoicesIn = (data.receivables || []).reduce((a, i) => {
+        const d = i.expectedDate || i.dueDate || ''
+        if (!d) return a                                  // undated, cannot be scheduled
+        const due = (w === 0 && d < s) ? true : inWk(d)    // before the horizon -> week 1
+        return due ? a + (i.amountDue || 0) : a
+      }, 0)
+      const overdueIn = w === 0
+        ? (data.receivables || []).filter(i => { const d = i.expectedDate || i.dueDate || ''; return d && d < s }).reduce((a, i) => a + (i.amountDue || 0), 0)
+        : 0
+      // Overdue releases land in week 1, same rule as invoices.
+      const retIn = retEvents.reduce((a, r) => {
+        if (!r.date) return a
+        const hit = (w === 0 && r.date < s) ? true : inWk(r.date)
+        return hit ? a + r.amount : a
+      }, 0)
       // VAT: any month whose month-end falls in this week.
       let vatIn = 0
       for (const mk of Object.keys(vatByMonth)) {
@@ -496,6 +578,24 @@ export default function CashFlow() {
                   {bal && !bal.ok && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 12px' }}>Could not read balances from Xero (Balance Sheet): {bal.error || 'unknown'}. Opening cash is falling back to the bank-summary figure. If this is a permissions error, the Xero connection may need reconnecting with report access.</div>}
                   {bal?.updatedAt && <div style={{ fontSize: 11, color: '#9a958c', marginBottom: 12 }}>Balances from Xero as at {new Date(bal.updatedAt).toLocaleString('en-GB')}.</div>}
 
+                  {/* WHAT COULD NOT BE SCHEDULED. Money with no date cannot go in a week,
+                      so it is absent from the forecast entirely - and absent silently is
+                      how 555k of debt showed as 100,885 of cash in. */}
+                  {(() => {
+                    const undatedRet = retEvents.filter(r => !r.date)
+                    const undatedInv = (data.receivables || []).filter(i => !(i.expectedDate || i.dueDate))
+                    const rSum = undatedRet.reduce((a, r) => a + r.amount, 0)
+                    const iSum = undatedInv.reduce((a, i) => a + (i.amountDue || 0), 0)
+                    if (rSum < 1 && iSum < 1) return null
+                    return (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '9px 14px', marginBottom: 14, fontSize: 12, color: '#92400e' }}>
+                        <strong>Not in the forecast - no date to schedule it against.</strong>{' '}
+                        {rSum >= 1 && <>{gbp(rSum)} of retention across {undatedRet.length} release{undatedRet.length === 1 ? '' : 's'} - set the release dates on the Retention Tracker. </>}
+                        {iSum >= 1 && <>{gbp(iSum)} of invoices across {undatedInv.length} - no due date in Xero.</>}
+                      </div>
+                    )
+                  })()}
+
                   {/* MANUAL BALANCES - the primary source. Each carries its own as-at
                       date, because a balance without one cannot be judged. */}
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18 }}>
@@ -573,6 +673,8 @@ export default function CashFlow() {
                       )}
                     </div>
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Used to estimate the VAT reclaim on future materials and overhead spend, for months with no filed return. Set to 0 to turn the estimate off.">VAT rate % (reclaim estimate)</div>
+                      <input type="number" value={finance.vatRate} onChange={e => setFinance(f => ({ ...f, vatRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
                     {/* One limit per card, from the accounts Xero returns. The pooled box
                         below stays for anything without its own limit. */}
                     {cardAccts.map(a => (
