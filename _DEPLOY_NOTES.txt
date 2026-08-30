@@ -1,7 +1,7 @@
-pkg617 - Materials: lines that were contributing ZERO, and why the dates differ
-================================================================================
+pkg618 - ONE bill was deleting the entire forecast cost for that project
+=========================================================================
 
-*** SUPERSEDES pkg591 - pkg616. Five files. ***
+*** SUPERSEDES pkg591 - pkg617. Five files. ***
 
 
 CHANGED FILES (replace)
@@ -13,58 +13,53 @@ CHANGED FILES (replace)
   pages/connect.js
 
 
-1. WHY THE DATES DO NOT MATCH - NOT A BUG
------------------------------------------
-The project forecast shows the DELIVERY date. The cash flow shows the PAYMENT
-date, computed at save time as delivery plus terms:
-
-    payDate: paymentDate(m.deliverDay, m.term || { basis: 'eom', days: 30 })
-
-Default is end of month + 30 days:
-
-    deliver 25/09, eom+30  ->  pays 30/10
-    deliver 15/10, eom+30  ->  pays 30/11
-
-So your 70k "due mid-October" is a delivery, and it pays at the end of November -
-outside the 13 weeks entirely. That is correct for a cash flow, but nothing on
-either screen said which date it was showing.
-
-
-2. MATERIAL LINES CONTRIBUTING NOTHING - THE REAL FAULT
--------------------------------------------------------
-    matItems: (fc.matItems || []).map(m => ({ date: m.payDate, amount: m.amount || 0 }))
-
-`amount` is resolved at SAVE time. A material line can be a PERCENTAGE of the
-materials budget (mode: 'pct') and only becomes a figure when saved. So:
-
-  - any line saved before `amount` existed has none, and counted as ZERO
-  - any pct line saved without a budget has none, and counted as ZERO
-  - any line with no DELIVERY date gets no payDate and never lands in a week
-
-All three were silent. On a four-line example the old code counted 65,630 where
-the true figure was 77,630, with 5,040 unplaceable.
-
-Now: falls back to `value` for a plain line, and reports what it cannot resolve
-instead of counting it as nil.
-
-
-3. THE BANNER NOW NAMES THEM
+ANSWERING THE QUESTION FIRST
 ----------------------------
-    GBP 5,040 of materials across 2 lines cannot be scheduled:
-    J246 Albert Bartlett - no delivery date; J251 Winnersh - % of budget, never
-    resolved. Materials pay on delivery date plus terms, so a line with no
-    delivery date never lands in a week.
+NO - it works on forecasts already saved. Nothing needs re-entering.
 
-That gives you the list to fix in Commercial rather than either of us guessing.
+The current save has always written `amount` onto every material line, so existing
+forecasts carry their figures. The pkg617 fallback was for edge cases only.
+
+The reason materials were not coming through is different, and worse.
 
 
-ONE THING I CANNOT FIX FROM HERE
---------------------------------
-A percentage-of-budget line with no saved amount cannot be resolved in this
-endpoint - the materials budget is not in the payload. Re-saving that period on
-the project cash flow page resolves it. If there are many, tell me and I will pull
-the budget through so they resolve automatically.
+ONE BILL KILLED EVERYTHING
+--------------------------
+    const hasBill = projNamesWithBillThisWk.has(normName(fc.projectName))
+    const mOut = hasBill ? 0 : (fc.matItems || [])...
 
-Also worth knowing: payDate is calculated at SAVE time, not read live. If you have
-changed a supplier's payment terms since, every previously saved forecast still
-carries the OLD payment date until re-saved.
+All or nothing. ONE real bill on a project - any bill, any amount - discarded
+EVERY forecast cost for that project that week. Labour and materials both.
+
+    a 600 bill on the project  ->  materials counted 0, labour counted 0
+                                   a 65,630 materials payment, gone
+
+That is why the cost columns were thin while sales ran high, and why the closing
+balance climbed to 668k. The suppression was meant to stop double counting, but it
+was throwing away the whole forecast to avoid counting a fraction of it twice.
+
+NOW THE BILL IS NETTED OFF instead:
+
+    labour 8,727   materials 65,630   (bill applied to labour first)
+
+The 600 bill is already counted in Bills out, so nothing is double counted - only
+the part of the forecast the bill actually covers is removed. Applied to labour
+first because a project bill is far more often subcontract labour than materials.
+
+
+ALSO REMOVED A DUPLICATE CALCULATION
+------------------------------------
+The same figures were being worked out twice in that loop - once for the
+breakdown and once for the totals - so the drill-down and the column could
+disagree. Now computed once and used for both.
+
+
+ALSO IN THIS PACKAGE
+--------------------
+pkg617 - materials fall back to `value` where no amount was resolved, and the
+amber banner names lines that cannot be scheduled (no delivery date, or a
+percentage-of-budget line never resolved).
+
+Worth repeating: the project forecast shows the DELIVERY date, the cash flow shows
+the PAYMENT date - delivery plus terms, eom+30 by default. Deliver 15/10 pays
+30/11. They will never show the same date, and both are right.

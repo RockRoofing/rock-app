@@ -428,8 +428,16 @@ export default function CashFlow() {
       // means as actuals arrive the forecast drops off, leaving only future periods.
       const projNosWithInvoiceThisWk = new Set((data.receivables || [])
         .filter(i => inWk(i.expectedDate || i.dueDate || '') && i.projectNo).map(i => String(i.projectNo)))
-      const projNamesWithBillThisWk = new Set((data.bills || [])
-        .filter(b => inWk((billOverrides[b.id] || b.payDate || b.dueDate) || '') && b.project).map(b => normName(b.project)))
+      // AMOUNTS per project, not just a set of names - the forecast now nets the bill off
+      // rather than discarding the whole thing, so it needs to know how much.
+      const billByProjectThisWk = {}
+      for (const b of (data.bills || [])) {
+        if (!b.project) continue
+        const d = (billOverrides[b.id] || b.payDate || b.dueDate) || ''
+        if (!inWk(d)) continue
+        const k = normName(b.project)
+        billByProjectThisWk[k] = (billByProjectThisWk[k] || 0) + Math.abs(b.amountDue || 0)
+      }
       // Labour and materials kept SEPARATE, not rolled into one cost figure. Netted into
       // a single "Project forecast" column they are invisible - and if the cost schedules
       // are empty the column shows pure income with nothing to say the costs are missing.
@@ -447,16 +455,32 @@ export default function CashFlow() {
         if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) continue
 
         const hasInvoice = fc.projectNo && projNosWithInvoiceThisWk.has(String(fc.projectNo))
-        const hasBill = fc.projectName && projNamesWithBillThisWk.has(normName(fc.projectName))
         const sIn = hasInvoice ? 0 : (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-        const lOut = hasBill ? 0 : (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-        const mOut = hasBill ? 0 : (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        // NET THE BILL OFF, do not throw the whole forecast away.
+        //
+        // hasBill was all-or-nothing: ONE real bill on a project killed every forecast
+        // cost for that project that week - labour and materials both, whatever the
+        // amounts. A 600 bill suppressed a 65,000 materials payment, and the forecast
+        // showed the income with none of the spend.
+        //
+        // The bill is real cash and is already counted in Bills out, so only the part of
+        // the forecast it covers should be removed. Anything above it is spend still to
+        // come and belongs in the forecast.
+        const billThisWk = fc.projectName ? (billByProjectThisWk[normName(fc.projectName)] || 0) : 0
+        const rawL = (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        const rawM = (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
+        // Applied to labour first, then materials - a project bill is far more often
+        // subcontract labour than a materials invoice.
+        const offL = Math.min(rawL, billThisWk)
+        const offM = Math.min(rawM, Math.max(0, billThisWk - offL))
+        const lOut = Math.max(0, rawL - offL)
+        const mOut = Math.max(0, rawM - offM)
         if (sIn || lOut || mOut) fcBreak.push({ name: fc.projectName || fc.projectKey, no: fc.projectNo, sales: sIn, labour: lOut, mat: mOut, from: fc.from, to: fc.to })
-        if (!hasInvoice) fcSalesIn += (fc.salesSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-        if (!hasBill) {
-          fcLabourOut += (fc.labourSchedule || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-          fcMatOut += (fc.matItems || []).filter(x => inWk(x.date)).reduce((a, x) => a + (x.amount || 0), 0)
-        }
+        // Use the figures already worked out above, net of any real bill. Recomputing them
+        // here is how the two got out of step - and `hasBill` no longer exists.
+        fcSalesIn += sIn
+        fcLabourOut += lOut
+        fcMatOut += mOut
       }
       const fcCostOut = fcLabourOut + fcMatOut
       const projNet = fcSalesIn - fcCostOut
