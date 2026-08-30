@@ -271,7 +271,7 @@ export default function CashFlow() {
   // cardLimits is keyed by account name, so each card carries its own limit rather than
   // one pooled figure - a card at its limit and a card with headroom net out otherwise,
   // and you cannot see which one is full.
-  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30 })
+  const [finance, setFinance] = useState({ ifLimit: '', ifDrawn: '', ccLimit: '', overdraftLimit: '', cardLimits: {}, vatRate: 20, legacyMatDays: 30, cisRate: 20, cisOnForecast: true })
   // [{ name, kind: 'bank'|'card', balance, asAt }]
   const [manualBal, setManualBal] = useState([])
   // { [key]: true }. Bills key on id, receivables on invoice number - the same key the
@@ -348,6 +348,8 @@ export default function CashFlow() {
         overdraftLimit: fc.overdraftLimit ?? '',
         vatRate: fc.vatRate ?? 20,
         legacyMatDays: fc.legacyMatDays ?? 30,
+        cisRate: fc.cisRate ?? 20,
+        cisOnForecast: fc.cisOnForecast !== false,
         cardLimits: (fc.cardLimits && typeof fc.cardLimits === 'object') ? fc.cardLimits : {},
       })
       // Seed local bill payment-date overrides from what's saved.
@@ -382,6 +384,8 @@ export default function CashFlow() {
         overdraftLimit: Number(finance.overdraftLimit) || 0,
         vatRate: Number(finance.vatRate ?? 20),
         legacyMatDays: Number(finance.legacyMatDays ?? 30),
+        cisRate: Number(finance.cisRate ?? 20),
+        cisOnForecast: finance.cisOnForecast !== false,
         cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
       }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
@@ -481,7 +485,10 @@ export default function CashFlow() {
     // NET figure paid to the subcontractor (e.g. GBP1,000 on a GBP1,250 gross bill). So the
     // bill pays its full Amount Due; the extra cash event is the 20% CIS to HMRC. From a
     // net figure, gross = net / 0.8, so CIS = gross - net = net * 0.25.
-    const cisFromNet = (net) => net * 0.25
+    // Rate is a setting - not every trade is on 20%, and a gross-status subcontractor is
+    // on nil. From a NET figure, gross = net / (1 - r), so CIS = net * r / (1 - r).
+    const cisRate = Math.min(0.99, Math.max(0, Number(finance.cisRate ?? 20) / 100))
+    const cisFromNet = (net) => cisRate > 0 ? net * (cisRate / (1 - cisRate)) : 0
 
     // CIS withheld on labour bills is paid to HMRC on the 22nd of the FOLLOWING month.
     // Group by the month the bill is paid, then schedule the HMRC payment.
@@ -493,6 +500,33 @@ export default function CashFlow() {
       const mk = pd.slice(0, 7)
       cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(i.amountDue || 0)
     }
+    // CIS ON FORECAST LABOUR.
+    //
+    // The bills above only cover invoices already IN Xero and individually ticked, so the
+    // column showed 1,031 across thirteen weeks against six figures of labour. All
+    // subcontract labour carries CIS unless the subcontractor holds gross status, so the
+    // forecast has to predict it too or the HMRC outflow is missing from the whole
+    // forward half of the plan.
+    //
+    // NO DOUBLE COUNT, two ways:
+    //   - forecast labour is already NET of any real bill on that project that week
+    //     (see the billByProjectThisWk netting), so a bill and its forecast cannot both
+    //     produce CIS on the same money;
+    //   - PAYE wages in the Budgets overheads are NOT touched. They are employees, not
+    //     subcontractors, and their PAYE is a different liability - the one being paid
+    //     down on the Balance Sheet tab.
+    const cisOnForecast = finance.cisOnForecast !== false
+    if (cisOnForecast && cisRate > 0) {
+      for (const fc of (data.projForecasts || [])) {
+        if (fc.to && fc.latestAppEnd && fc.to <= fc.latestAppEnd) continue   // superseded
+        for (const l of (fc.labourSchedule || [])) {
+          if (!l.date) continue
+          const mk = String(l.date).slice(0, 7)
+          cisByPayMonth[mk] = (cisByPayMonth[mk] || 0) + cisFromNet(l.amount || 0)
+        }
+      }
+    }
+
     // Map to actual HMRC payment dates: 22nd of the month after the pay month.
     const cisPayments = Object.entries(cisByPayMonth).map(([mk, amt]) => {
       const [yy, mm] = mk.split('-').map(Number)   // mm is 1-based
@@ -967,6 +1001,13 @@ export default function CashFlow() {
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Used to estimate the VAT reclaim on future materials and overhead spend, for months with no filed return. Set to 0 to turn the estimate off.">VAT rate % (reclaim estimate)</div>
                       <input type="number" value={finance.vatRate} onChange={e => setFinance(f => ({ ...f, vatRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Deduction rate applied to subcontract labour. Set to 0 if everyone you use holds gross status.">CIS rate %</div>
+                      <input type="number" value={finance.cisRate} onChange={e => setFinance(f => ({ ...f, cisRate: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
+                    <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Predict CIS on FORECAST labour as well as on ticked bills. Forecast labour is already net of any real bill on that project, so nothing is counted twice. PAYE wages in the Budgets overheads are never included - they are employees, not subcontractors.">CIS on forecast labour</div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, paddingTop: 4 }}>
+                        <input type="checkbox" checked={finance.cisOnForecast !== false} onChange={e => setFinance(f => ({ ...f, cisOnForecast: e.target.checked }))} />
+                        <span style={{ color: '#8a857c' }}>{finance.cisOnForecast !== false ? 'on' : 'off'}</span>
+                      </label></div>
                     <div><div style={{ fontSize: 11, color: '#888', marginBottom: 3 }} title="Older project forecasts stored only a materials DELIVERY date - the line items carrying the payment terms were never saved. This is the number of days after end of month those legacy materials are assumed to pay. Newer forecasts use each line's own term and ignore this.">Legacy materials, eom + days</div>
                       <input type="number" value={finance.legacyMatDays} onChange={e => setFinance(f => ({ ...f, legacyMatDays: e.target.value }))} style={{ ...inpS, width: 70 }} /></div>
                     {/* One limit per card, from the accounts Xero returns. The pooled box
@@ -1056,7 +1097,7 @@ export default function CashFlow() {
                     <th style={th}>Overheads out</th>
                     <th style={th} title="Cash that never touches the P&L: loan and HP CAPITAL repayments, HMRC arrears, corporation tax, dividends, plus vehicle and other recurring commitments. Set up on the Balance Sheet tab. The cost was recognised when it arose, so these reduce a liability rather than being an overhead.">Financing &amp; tax</th>
                     <th style={th} title="VAT payments at month end. A figure marked \u201cest\u201d is not a filed return. Hover the figure to see which months and which source.">VAT out</th>
-                    <th style={th}>CIS to HMRC</th>
+                    <th style={th} title="20% withheld from subcontract labour, paid to HMRC on the 22nd of the month after the labour is paid. Covers bills ticked as CIS AND forecast labour - the forecast labour is already net of any real bill on that project, so nothing is counted twice. PAYE wages in overheads are excluded: employees are not subcontractors.">CIS to HMRC</th>
                     <th style={th} title="Sales from the Commercial project cash flow forecasts, excluding any period already applied for and any project with a real invoice that week.">Project sales</th>
                     <th style={th} title="Materials payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no materials scheduled - the cash flow is then showing income with no cost against it.">Materials out</th>
                     <th style={th} title="Labour payments from the same forecasts. If this is empty while Project sales is not, the forecasts have no labour scheduled.">Labour out</th>

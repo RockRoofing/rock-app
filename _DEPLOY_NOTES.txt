@@ -1,7 +1,7 @@
-pkg636 - FIX: "getValidTokens is not defined" on the Balance Sheet read
+pkg637 - CIS predicted from forecast labour, not just from ticked bills
 ========================================================================
 
-*** SUPERSEDES pkg591 - pkg635. ***
+*** SUPERSEDES pkg591 - pkg636. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,57 +9,63 @@ pkg636 - FIX: "getValidTokens is not defined" on the Balance Sheet read
 
 CHANGED FILES (replace)
 -----------------------
-  pages/api/business-financials.js        <- the fix
+  pages/business-financials/cashflow.js       <- the change
   pages/business-financials/balance-sheet.js
+  pages/api/business-financials.js
   pages/project-cashflow.js
   pages/business-financials.js
   components/BizNav.js
   lib/xero.js
   pages/api/dashboard.js
   pages/connect.js
-  pages/business-financials/cashflow.js
   pages/business-financials/invoice-finance.js
 
 
-MY BUG
-------
-I called getValidTokens(). There is no such function in that file - every other
-handler uses getTokens(), imported from lib/db at line 2. So the call threw and
-the error came straight back to the page as the message you saw.
+WHY IT WAS 1,031
+----------------
+CIS was computed ONLY from bills already in Xero and individually ticked as CIS
+labour. Nothing predicted it. So thirteen weeks carrying 224,686 of forecast
+labour produced 1,031 of CIS.
 
-Worse, my version had NO TOKEN REFRESH. Every working handler does:
+Now it also comes off FORECAST LABOUR:
 
-    let tokens = await getTokens()
-    try { const nt = await refreshXeroToken(tokens.refresh_token)
-          if (nt?.access_token) { tokens = { ...tokens, ...nt }; await saveTokens(tokens) } } catch {}
+    net labour 25,585.57  ->  gross 31,981.96  ->  CIS  6,396.39
+    net labour  4,000.00  ->  gross  5,000.00  ->  CIS  1,000.00
 
-Without it, an access token more than about half an hour old fails on every call -
-so even with the right function name it would have worked once and then stopped.
-Now mirrors the balances handler exactly.
+    your 13 weeks: 224,686 of labour  ->  CIS 56,171.50
+    (the column was showing 1,031)
 
-A missing connection now returns 200 with ok:false, so the page shows the message
-rather than the client having to interpret a 400.
-
-I also swept the file for any other awaited call that does not resolve to an
-import or a declaration. Only a dynamic import() came back, which is a false
-positive.
+Still paid on the 22nd of the month AFTER the labour is paid, as before.
 
 
-THEN
-----
-1. Press "Read balance sheet from Xero" again.
-2. If it now says the SCOPE is missing, reconnect Xero from /connect -
-   accounting.reports.balancesheet.read does not apply to an existing connection.
-3. Track your PAYE/CIS arrears, set 5,000 a month, and it will appear in the
-   Financing & tax column - stopping automatically once the liability clears.
+NOTHING IS COUNTED TWICE - TWO WAYS
+-----------------------------------
+1. Forecast labour is ALREADY NET of any real bill on that project that week
+   (the billByProjectThisWk netting from pkg618). So a bill and its forecast
+   cannot both generate CIS on the same money.
+
+2. PAYE WAGES IN THE BUDGETS OVERHEADS ARE NOT TOUCHED. Employees are not
+   subcontractors, and their PAYE is a different liability - the one you are
+   paying down on the Balance Sheet tab at 6,000 a month. Deliberately separate.
+
+Superseded forecast periods are skipped, same as everywhere else.
 
 
-ALSO IN THIS PACKAGE
---------------------
-pkg635 - click a forecast bar on the project cash flow and the horizontal cash
-rows show that project alone. Actuals and retention are mapped across the
-different key shapes so they follow the filter too.
+TWO SETTINGS
+------------
+CIS RATE % - defaults 20. Not every trade is on 20, and a gross-status
+subcontractor is on nil. Set it to 0 and no CIS is predicted at all.
 
-pkg634 / 633 / 632 - timeline bar falls back to thisCertTotal where a stored zero
-would otherwise read as a nil period; a warning when saved and live differ; and a
-real APPLICATION is never filtered out of the prior by the period dates.
+CIS ON FORECAST LABOUR - on by default, tick off to go back to ticked bills only.
+
+The maths works from the NET figure: gross = net / (1 - r), so CIS = net * r/(1-r).
+At 20% that is net x 0.25, which is what the existing bill calculation already did.
+
+
+WORTH KNOWING
+-------------
+This will put a serious number into the forecast - roughly 56k over the thirteen
+weeks on current figures - and it is money that genuinely leaves the bank. Expect
+the closing balance to fall accordingly. If some of your subcontractors ARE gross
+status, the rate is the lever, but there is currently no per-subcontractor
+setting; say the word if that is worth building.
