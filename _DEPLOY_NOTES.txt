@@ -1,63 +1,77 @@
-pkg621 - A data check panel, because I have guessed wrong too many times
-=========================================================================
+pkg622 - Forecast: "Previously claimed" override and an over-claim warning
+===========================================================================
 
-*** SUPERSEDES pkg591 - pkg620. Five files. ***
+*** SUPERSEDES pkg591 - pkg621. SIX files - project-cashflow.js is new here. ***
 
 
 CHANGED FILES (replace)
 -----------------------
+  pages/project-cashflow.js               <- NEW in this set
   pages/business-financials/cashflow.js
+  pages/business-financials/invoice-finance.js
   pages/api/business-financials.js
   pages/api/dashboard.js
-  pages/business-financials/invoice-finance.js
   pages/connect.js
 
 
-NOTHING FOR YOU TO DO DIFFERENTLY - I HAVE BEEN GUESSING
---------------------------------------------------------
-You have refreshed both pages; that is not the problem. I have now assumed the
-shape of these forecast records four times - matItems, then amount vs value, then
-the bill suppression, then the legacy fields - and been wrong each time. The
-honest thing is to stop assuming and look.
+THE DIAGNOSIS, CONFIRMED
+------------------------
+Re-saving app 1 did not fix it, which rules out a stale grossClaimedToDate and
+leaves double counting. On save (line 1466):
 
-This package adds a panel at the top of the Cash Flow page:
+    grossClaimedToDate: sum.grossCurrent + (prevGross - priorMeasuredGross) + revUpliftGross
 
-    Forecast data check - what the saved records contain (N forecasts)
+sum.grossCurrent ALREADY contains that period's materials on site. Your app 1
+override WAS the materials on site - so the same 62,000 enters twice, and app 3
+deducts 158,000 where 96,000 has actually been claimed.
 
-Click it. For each saved forecast it shows, straight from Redis:
-
-    matItems              how many material lines, or "absent"
-    1st mat line          pay:  amt:  val:  mode:  del:
-    matDeliverDay         the legacy delivery date, if any
-    materialsThisPeriod   the legacy total, if any
-    labourSched           how many labour lines, or "absent"
-    cost-ish keys         EVERY cost-related field name actually saved
-
-That last column is the one that matters - it lists what is really in the record,
-so we stop arguing about field names.
+  contract        135,000
+  claimed         96,000   (60,000 + 36,000, which is the cash)
+  chain deducts   158,000
+  app 3 offers    -23,000  instead of 39,000
 
 
-WHAT TO SEND ME
----------------
-Open it, screenshot four or five rows for projects you KNOW have materials, and
-send them over. From that I can tell in one look which of these it is:
+1. "PREVIOUSLY CLAIMED (GROSS)" - A TYPED FIGURE WINS
+-----------------------------------------------------
+New override box beside Revenue this period. Blank follows the chain exactly as
+now; type a figure and it is used directly.
 
-  pay:NONE            the line has no payment date, so it can never land in a week
-  amt:null val:0      the figure was never resolved
-  matItems absent     legacy record - the fallback should be catching it
-  a field name I have not accounted for at all
+Put 96,000 in and app 3 gives 39,000.
 
-I would rather take one more round trip and fix it properly than ship a fifth
-guess.
+This is the honest fix. A revenue override cannot be reconstructed from
+percentages - that is what "override" means - so where the chain cannot know, you
+tell it. The applications screen already works this way.
+
+Saved with the forecast, reloaded when you edit it, and RESET when you open a
+different one - left out of the reset it would carry silently onto the next
+forecast, which is the worst kind of stale figure because it looks deliberate.
 
 
-EVERYTHING ELSE IS STILL IN
----------------------------
-pkg620 - legacy materials payment term is a setting, not a hard-coded 30, and
-estimated dates are flagged "est" in the drill-down. Lines that DO have their own
-term were always honoured.
+2. OVER-CLAIM WARNING
+---------------------
+Red banner above the summary boxes when the prior exceeds contract plus
+instructed variations:
 
-pkg619 - labour and materials fallbacks for older forecasts, matching what the
-project cash flow page already did.
+    Already claimed GBP 158,000 against a contract of GBP 135,000 - over by
+    GBP 23,000. That is why this period offers a negative figure: the excess
+    unwinds here.
 
-pkg618 - one bill no longer discards an entire project's forecast costs.
+It should never have been possible to claim more than the job is worth without
+being told. Surfacing later as a NEGATIVE revenue on the next application reads
+like a broken calculation rather than an over-claim.
+
+
+STILL OUTSTANDING - THE -160k
+-----------------------------
+Line 950 chooses the prior differently for editing and for creating:
+
+    const priors = editId ? cands.filter(c => !from || (c.end||'') < from) : cands
+
+Editing takes only certificates ending BEFORE this period; creating takes
+everything and the latest wins. I still think that is wrong - the prior should be
+the certificate immediately preceding IN SEQUENCE - but I have not touched it,
+because changing prior selection affects every forecast on every project and I
+want this fix confirmed first.
+
+Deploy, put 96,000 into Previously claimed on app 3, and tell me it reads 39,000.
+Then I will look at that one.

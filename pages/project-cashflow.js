@@ -767,6 +767,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [mosOverride, setMosOverride] = useState(null)
   // null = follow the certificate maths. Anything else is a typed figure that wins.
   const [revOverride, setRevOverride] = useState(null)
+  // null = follow the chain; a string is a typed 'previously claimed (gross)'.
+  const [prevGrossOverride, setPrevGrossOverride] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [contractTerms, setContractTerms] = useState({})  // retention / MCD from Edit Project Details
   const [appCalendar, setAppCalendar] = useState(null)    // application/valuation/payment days
@@ -790,7 +792,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -827,6 +829,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
           setRevOverride(editing.revenueOverride == null ? null : String(editing.revenueOverride))
+          setPrevGrossOverride(editing.prevGrossOverride == null ? null : String(editing.prevGrossOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
           setFrom(editing.from || ''); setTo(editing.to || '')
@@ -1011,7 +1014,20 @@ function HypAppModal({ modal, onClose, onSaved }) {
   // was overridden instead of its percentages being filled in - which is a perfectly
   // reasonable way to work, and the chain has to carry it or that money gets claimed
   // twice. A real application always measures everything, so there it is the same number.
-  const prevGross = prior && prior.grossClaimed != null ? prior.grossClaimed : priorMeasuredGross
+  const prevGrossAuto = prior && prior.grossClaimed != null ? prior.grossClaimed : priorMeasuredGross
+
+  // PREVIOUSLY CLAIMED, TYPED. Blank = use the calculation above.
+  //
+  // The automatic chain cannot always reconstruct what an earlier OVERRIDE represented.
+  // Override revenue to claim materials on site, and grossClaimedToDate is built as
+  //     sum.grossCurrent + (prevGross - priorMeasuredGross) + revUpliftGross
+  // where grossCurrent ALREADY contains that period's materials - so the same money
+  // enters twice and every later application deducts too much. On a 135k contract with
+  // 60k + 36k claimed, app 3 offered -23,000 instead of 39,000.
+  //
+  // What you know for certain is the cash claimed. This lets you say so, exactly as the
+  // applications screen already allows.
+  const prevGross = prevGrossOverride === null || prevGrossOverride === '' ? prevGrossAuto : num(prevGrossOverride)
 
   // Materials budget from rates (above-the-line materials).
   const materialsBudget = useMemo(() => {
@@ -1382,6 +1398,10 @@ function HypAppModal({ modal, onClose, onSaved }) {
     setLabourOverride(null)   // back to the calculation, or the revert would be partial
     setMosOverride(null)
     setRevOverride(null)
+    // Must reset with the others. Left out, a "previously claimed" typed on one forecast
+    // would silently carry onto the next one opened - the worst kind of stale figure,
+    // because it looks deliberate.
+    setPrevGrossOverride(null)
     setSeededFrom({ kind: 'application', label: `Application ${latestApp.appNumber || latestApp.seq || ''}`.trim(), status: latestApp.status || '' })
   }
 
@@ -1436,6 +1456,9 @@ function HypAppModal({ modal, onClose, onSaved }) {
       thisCertTotal: sum.thisCert.total,
       revenueThisPeriod,
       revenueOverride: revOverride == null ? null : num(revOverride),
+      // null = follow the chain. A number is a deliberate statement of what has been
+      // claimed, and wins over anything the chain works out.
+      prevGrossOverride: prevGrossOverride === null || prevGrossOverride === '' ? null : num(prevGrossOverride),
       // WHAT THIS FORECAST CLAIMS TO DATE, cumulative, which is NOT the same as what its
       // percentages measure whenever an override has been used. Overriding revenue rather
       // than filling in percentages is a normal way to work - but without recording it,
@@ -1543,6 +1566,27 @@ function HypAppModal({ modal, onClose, onSaved }) {
 
               {/* Summary boxes */}
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+                {/* OVER-CLAIM WARNING. It should not be possible to claim more than the
+                    job is worth, and nothing said so - it surfaced later as a NEGATIVE
+                    revenue on the next application, which reads like a broken calculation
+                    rather than an over-claim. 158,000 claimed on a 135,000 contract should
+                    have been flagged at the point it happened. */}
+                {salesBudgetTotal > 0 && prevGross > salesBudgetTotal + 1 && (
+                  <div style={{ width: '100%', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', marginBottom: 4, fontSize: 12, color: '#b91c1c' }}>
+                    <strong>Already claimed {gbp(prevGross)} against a contract of {gbp(salesBudgetTotal)}</strong> - over by {gbp(prevGross - salesBudgetTotal)}.
+                    {' '}That is why this period offers a negative figure: the excess unwinds here. Check the materials on site on the earlier application, or type what has really been claimed into &quot;Previously claimed&quot; below.
+                  </div>
+                )}
+
+                {/* PREVIOUSLY CLAIMED. Blank follows the chain; typed wins.
+                    The chain cannot reconstruct what an earlier OVERRIDE represented -
+                    override revenue to claim materials on site and that money is counted
+                    both inside grossCurrent and again as the override uplift, so every
+                    later application deducts too much. This is the escape hatch, same as
+                    the applications screen has. */}
+                <OverrideBox label="Previously claimed (gross)" calculated={prevGrossAuto} override={prevGrossOverride} setOverride={setPrevGrossOverride}
+                  colour="#334155" autoNote={`From ${priorLabel}`}
+                  sub2="Type what has actually been claimed if an earlier period's revenue was overridden" />
                 <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
                   colour="#0f766e" autoNote="Increment less MCD and retention"
                   sub2={`${gbp(Math.max(0, salesBudgetTotal - prevGross))} left after ${priorLabel}`} />
