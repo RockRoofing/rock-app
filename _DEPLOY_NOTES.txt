@@ -1,7 +1,7 @@
-pkg634 - The bar now shows the real figure, and its tooltip shows the record
-=============================================================================
+pkg635 - Click a forecast bar to see that project's cash on its own
+====================================================================
 
-*** SUPERSEDES pkg591 - pkg633. ***
+*** SUPERSEDES pkg591 - pkg634. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -24,57 +24,49 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-YOU WERE RIGHT AND MY EXPLANATION WAS WRONG
--------------------------------------------
-"Press Save" was not the answer - you had saved, the override persisted, and
-save() calls setHypApps() so the timeline updates immediately. I also checked
-gbpK: 38,125.84 renders as "£38k", so the formatter is not hiding it either.
+WHERE THE BUSINESS FINANCIALS CASH FLOW PULLS FROM
+--------------------------------------------------
+  Invoices in        unpaid Xero sales invoices, by expected date or due date
+  Retention in       the Retention Tracker's 1st/2nd release dates and values
+  VAT in / out       filed returns, else the estimate, else a forward reclaim
+  Bills out          unpaid Xero bills, by planned payment date or due date
+  Overheads out      Budgets page x the Cash Schedule
+  Financing & tax    commitments + the new Balance Sheet tab
+  Project sales /
+  Materials / Labour  the saved project forecasts - salesSchedule, matItems,
+                      labourSchedule - excluding any period already applied for
 
-So the record genuinely holds ZERO in revenueThisPeriod while holding the right
-labour (4,000) and materials (18,000) - which is why the bar reads Rev £0 next to
-Lab £4.0k and Mat £18k.
-
-The likely cause remains a save made while the prior was still wrong, when the
-increment was negative and this clamped it to nil:
-
-    const revenueThisPeriod = revOverride == null ? revenueCalculated : Math.max(0, ...)
-
-But I have guessed at this chain several times now, so rather than a fifth theory
-this package makes the record itself visible.
+The per-week drill-down added in pkg616 already shows which projects make up the
+Project sales figure, with cost % against each.
 
 
-1. THE BAR FALLS BACK TO THE CERTIFICATE VALUE
------------------------------------------------
-Where revenueThisPeriod is missing or zero but thisCertTotal is not, the bar shows
-thisCertTotal and marks it with an asterisk:
+CLICK A BAR ON THE PROJECT CASH FLOW
+------------------------------------
+That was the missing half. The forecast bars were pointerEvents:'none', so the
+only way in was the View button - and the View modal is already busy, as you say.
 
-    stored 0, cert 38,125.84    ->  £38k*
-    stored 38,125.84            ->  £38k
-    genuinely nil period        ->  £0
+Clicking a bar now limits the HORIZONTAL CASH ROWS above to that project alone:
+sales in, retention in, labour out, materials out. Click again to clear, or press
+"Show all" on the banner.
 
-So a stored zero can no longer masquerade as a nil period, and the timeline stops
-disagreeing with the modal.
+  no focus       sales in 121,560
+  focus J190     sales in 83,435   labour 25,585   materials 42,441
 
+The focused bar carries a dark outline so you can see which one you are on.
 
-2. HOVER THE BAR TO SEE WHAT IS STORED
---------------------------------------
-    Stored on this forecast:
-    revenueThisPeriod   £0.00
-    thisCertTotal       £38,125.84
-    grossClaimedToDate  £137,066.06
-    prevGrossOverride   £97,761.07
-    revenueOverride     (none)
-    saved 30/08/2026, 21:14
+ACTUALS AND RETENTION FOLLOW THE FILTER TOO. Applications are keyed by Xero id and
+retention by tracker entry, while forecasts are keyed "L:<jobNo>" - all three are
+mapped across, otherwise focusing a project would have shown its forecast cash but
+everyone else's certified cash.
 
-That settles which field is wrong and when it was written, without another round
-trip. Hover it and send me the values if the asterisk is showing.
+A BANNER SAYS IT IS FILTERED. Quietly showing one project's totals in the same
+place as the combined figure would be worse than not filtering at all.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg633 - warns in the modal when the saved figure and the live one differ.
-pkg632 - a real APPLICATION is never filtered out of the prior by the period
-dates. That is the -160k, and the reason Labour this period showed the whole
-budget on J190.
-pkg627-631 - Balance Sheet tab and Financing & tax column, Reference column, date
-pickers that commit on blur, nav order, Summary using the shared nav.
+pkg634 - the timeline bar falls back to thisCertTotal, marked with *, where a
+stored revenueThisPeriod is zero; hovering shows the stored record.
+pkg633 - warns when saved and live figures differ.
+pkg632 - a real APPLICATION is never filtered out of the prior by the period dates.
+pkg627-631 - Balance Sheet tab, Financing & tax column, and the rest.

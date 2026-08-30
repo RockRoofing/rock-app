@@ -40,6 +40,8 @@ export default function ProjectCashflow() {
   const [anchorMonday, setAnchorMonday] = useState(mondayOf(new Date()))
   const [historic, setHistoric] = useState(false)
   const [sel, setSel] = useState(null)               // { key, dates:Set<iso> }
+  // Which project the horizontal cash rows are limited to. null = everything.
+  const [focusKey, setFocusKey] = useState(null)
   const [xeroMap, setXeroMap] = useState({})         // projectNo -> xeroId (for live rates)
   const [projectNames, setProjectNames] = useState({})  // xeroId -> 'J240 - Market Drayton'
   const [retFin, setRetFin] = useState({})              // xeroId -> retention financials
@@ -152,6 +154,12 @@ export default function ProjectCashflow() {
   const labelOfXeroId = (xid) => projectNames[String(xid)] || jobNoOfXeroId[String(xid)] || String(xid).slice(0, 8)
 
   const cashByDay = useMemo(() => {
+    // FOCUS ON ONE PROJECT. Click a forecast bar and the horizontal rows above show only
+    // that project's money - sales in, retention in, labour out, materials out - so you
+    // can see where a forecast's cash actually lands without reading it out of a combined
+    // total. Click again to go back to everything.
+    const only = focusKey
+    const keep = (pk) => !only || pk === only
     const map = {}
     // salesIn stays as the combined figure so nothing downstream changes; actualIn and
     // forecastIn split the same money so the two rows can be shown separately.
@@ -190,6 +198,9 @@ export default function ProjectCashflow() {
     // Records duplicated across two Redis keys are de-duplicated server-side, so every
     // application here is counted once.
     for (const [xid, apps] of Object.entries(appActuals || {})) {
+      // Actuals are keyed by Xero id, forecasts by "L:<jobNo>" - map across so the focus
+      // filter catches both sides of the same project.
+      if (only && `L:${jobNoOfXeroId[String(xid)] || ''}` !== only) continue
       for (const a of (apps || [])) {
         if (!a.dueDate || !a.thisCert) continue
         add(a.dueDate, 'actualIn', a.thisCert)
@@ -203,6 +214,7 @@ export default function ProjectCashflow() {
       const fcLabel = pk.startsWith('L:')
         ? labelOfXeroId(xeroMap[pk.slice(2)] || '') || pk.slice(2)
         : `${pk.slice(2)} (negotiated)`
+      if (!keep(pk)) continue
       for (const fc of (list || [])) {
         // Overtaken by a real application - its cash is already in from the actual above.
         if (supersededIds.has(fc.id)) continue
@@ -225,6 +237,7 @@ export default function ProjectCashflow() {
     // when it renders and never writes them onto the entry. Reading the entry alone gave
     // zero and dropped the row silently.
     for (const e of (retention || [])) {
+      if (only && `L:${(e.xeroId && jobNoOfXeroId[String(e.xeroId)]) || e.ourRef || ''}` !== only) continue
       const fin = (e.xeroId && retFin[String(e.xeroId)]) || {}
       const fa = parseFloat(e.finalAccount || e.projectValue || fin.finalAccount || 0) || 0
       const pct = (parseFloat(e.retentionPct || fin.retentionPct || 0) || 0) / 100
@@ -241,7 +254,7 @@ export default function ProjectCashflow() {
     // month called "__detai" carrying every figure twice.
     Object.defineProperty(map, '__detail', { value: detail, enumerable: false })
     return map
-  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId, projectNames, xeroMap, retFin])
+  }, [allForecasts, retention, appActuals, supersededIds, jobNoOfXeroId, projectNames, xeroMap, retFin, focusKey])
 
   const shift = (deltaWeeks) => setAnchorMonday(m => mondayOf(addDays(m, deltaWeeks * 7)))
 
@@ -359,6 +372,19 @@ export default function ProjectCashflow() {
                     ? weekGroups.map((g, i) => <div key={i} style={{ width: g.length * CELL_W, borderLeft: '2px solid #d9d5cc', padding: '4px 6px', fontSize: 10.5, color: '#666', fontWeight: 600 }}>W/C {fmtDMY(g[0])}</div>)
                     : weekGroups.map((g, i) => <div key={i} style={{ width: 46, borderLeft: '1px solid #eee', padding: '4px 2px', fontSize: 9, color: '#666', fontWeight: 600, textAlign: 'center' }}>{fmtDMY(g[0])}</div>)}
                 </div>
+
+                {/* FOCUS BANNER. Filtering silently would be worse than not filtering at
+                    all - a total that is quietly one project's is indistinguishable from
+                    the whole picture. */}
+                {focusKey && (
+                  <div style={{ position: 'sticky', left: 0, zIndex: 6, background: '#eef4ff', border: '1px solid #c7d7f5', borderRadius: 8, padding: '6px 12px', margin: '0 0 6px', fontSize: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 10, width: 'fit-content' }}>
+                    <strong>Showing {focusKey.startsWith('L:')
+                      ? (labelOfXeroId(Object.keys(jobNoOfXeroId).find(x => jobNoOfXeroId[x] === focusKey.slice(2)) || '') || focusKey.slice(2))
+                      : `${focusKey.slice(2)} (negotiated)`} only</strong>
+                    <span style={{ color: '#5b7085' }}>Sales, retention, labour and materials below are this project alone.</span>
+                    <button onClick={() => setFocusKey(null)} style={{ background: '#fff', border: '1px solid #c7d7f5', borderRadius: 6, padding: '2px 10px', fontSize: 11.5, cursor: 'pointer' }}>Show all</button>
+                  </div>
+                )}
 
                 {/* Cash totals by stream, per column (works in day + week view). Rows are
                     sticky under the header so they stay visible when scrolling down. */}
@@ -569,8 +595,13 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
               const left = s * CELL_W, width = (e - s + 1) * CELL_W
               const matIn = fc.matDeliverDay && fc.matDeliverDay >= firstDayKey && fc.matDeliverDay <= lastDayKey
               const matLeft = matIn ? dayIndex(fc.matDeliverDay) * CELL_W : 0
+              // CLICKABLE. It was pointerEvents:'none', which is why the only way in was
+              // the View button. Clicking the bar now limits the cash rows above to this
+              // project alone - clicking again clears it.
               return (
-                <div key={fc.id} style={{ position: 'absolute', top: 3, bottom: 3, left, width, pointerEvents: 'none' }}>
+                <div key={fc.id} onClick={() => setFocusKey(k => k === pk ? null : pk)}
+                  title={focusKey === pk ? 'Showing only this project above - click to show all' : 'Click to show only this project in the cash rows above'}
+                  style={{ position: 'absolute', top: 3, bottom: 3, left, width, cursor: 'pointer', outline: focusKey === pk ? '2px solid #1a1a19' : 'none', outlineOffset: 1, borderRadius: 4 }}>
                   <div title={gone
                     ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead'
                     // Shows what is STORED on the record, so a bar disagreeing with the
