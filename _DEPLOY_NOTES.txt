@@ -1,7 +1,7 @@
-pkg629 - Reference column on Invoices owed
-===========================================
+pkg630 - Due date shown as a grey default
+==========================================
 
-*** SUPERSEDES pkg591 - pkg628. ***
+*** SUPERSEDES pkg591 - pkg629. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -23,31 +23,46 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-REFERENCE COLUMN
-----------------
-Added between Invoice and Due date. It was already on the payload
-(business-financials.js:836) and simply never shown - which is a shame, because the
-reference is usually the application or project and is what actually makes a row
-recognisable. Truncated with the full text on hover.
+YOUR QUESTION - YES, IT ALREADY WORKS THAT WAY
+----------------------------------------------
+    invoices   i.expectedDate || i.dueDate
+    bills      billOverrides[i.id] || i.payDate || i.dueDate
 
-Header, body and footer cells all checked at 7.
+Expected/planned wins; the due date is the fallback. That was already correct -
+the screen just never showed which of the two was in play.
+
+
+THE FIELD NOW SHOWS IT
+----------------------
+  nothing set, due 26/08    shows 26/08/26 in LIGHT GREY, plain border
+                            - the forecast is using the due date
+  expected set 15/09        shows 15/09/26 in normal text, amber border,
+                            with an x to clear back to the due date
+  no date at all            empty
+
+So you can see what the forecast will do without a greyed default looking like
+somebody chose it.
+
+CLICKING IN AND OUT CHANGES NOTHING. The commit only fires when the date differs
+from what the forecast is ALREADY using - otherwise merely opening the picker on a
+greyed default would have turned it into a saved override.
+
+Clearing goes back to the due date rather than to empty, which is what "clear"
+should mean here.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg628 - date pickers commit on BLUR, not on every change. The bills list sorts by
-planned payment date, so scrolling the picker from August to September re-sorted
-the table, moved the row and shut the calendar before a day had been picked. Enter
-commits, Escape abandons. Same on expected payment dates.
+pkg629 - Reference column on Invoices owed. It was already on the payload and
+never displayed.
 
-pkg627 - BALANCE SHEET TAB. Reads every account from Xero's Balance Sheet report,
-grouped by Xero's own sections, with no account codes assumed anywhere so it works
-on any chart of accounts. Track what you want, set outstanding / per month / day /
-from / to. "Clears in" turns red when the schedule will not clear the balance.
+pkg628 - date pickers commit on BLUR. The bills list sorts by payment date, so
+committing mid-edit re-sorted the table, moved the row and shut the calendar.
+Enter commits, Escape abandons.
 
-FINANCING & TAX column replaces "Vehicles / commitments" and carries both.
-Payments stop when the liability clears - 12,000 at 5,000/month gives 5,000,
-5,000, 2,000.
+pkg627 - BALANCE SHEET TAB, built for any chart of accounts - no codes assumed
+anywhere. FINANCING & TAX column carrying both commitments and balance sheet
+items, with payments stopping when the liability clears.
 
 RECONNECT XERO before the balance sheet read - it needs
 accounting.reports.balancesheet.read, which does not apply to an existing

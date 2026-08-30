@@ -30,29 +30,41 @@ const todayISO = new Date().toISOString().slice(0, 10)
 //
 // Module scope: a component declared inside another remounts on every render, which would
 // close the picker just as effectively.
-function DateCell({ value, onCommit, onClear, highlight, title }) {
-  const [draft, setDraft] = useState(value || '')
+function DateCell({ value, fallback, onCommit, onClear, title }) {
+  // `value` is what has actually been SET. `fallback` is the due date the forecast uses
+  // when nothing is set - shown in the box in light grey so you can see what will happen
+  // without it looking like somebody chose it.
+  const effective = value || fallback || ''
+  const isDefault = !value && !!fallback
+  const [draft, setDraft] = useState(effective)
   const [editing, setEditing] = useState(false)
-  // Follow the saved value when NOT editing - otherwise a save elsewhere would be
-  // overwritten by a stale draft.
-  useEffect(() => { if (!editing) setDraft(value || '') }, [value, editing])
+  useEffect(() => { if (!editing) setDraft(effective) }, [effective, editing])
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <input
         type="date"
         value={draft}
-        title={title}
+        title={title || (isDefault ? 'Using the due date. Pick another to override it.' : '')}
         onFocus={() => setEditing(true)}
         onChange={e => setDraft(e.target.value)}
-        onBlur={() => { setEditing(false); if ((draft || '') !== (value || '')) onCommit(draft) }}
+        // Commits on BLUR, and only when it differs from what the forecast is already
+        // using - so simply clicking into the box and out again does not turn a greyed
+        // default into a saved override.
+        onBlur={() => { setEditing(false); if ((draft || '') !== (effective || '')) onCommit(draft) }}
         onKeyDown={e => {
-          if (e.key === 'Enter') { e.currentTarget.blur() }
-          if (e.key === 'Escape') { setDraft(value || ''); setEditing(false); e.currentTarget.blur() }
+          if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape') { setDraft(effective); setEditing(false); e.currentTarget.blur() }
         }}
-        style={{ fontSize: 11.5, padding: '3px 5px', border: '1px solid ' + (highlight ? '#fed7aa' : '#e5e5e5'), borderRadius: 5 }}
+        style={{
+          fontSize: 11.5, padding: '3px 5px', borderRadius: 5,
+          border: '1px solid ' + (value ? '#fed7aa' : '#e5e5e5'),
+          // Light grey while it is only the due date; normal once set.
+          color: isDefault ? '#aaa' : '#333',
+          background: isDefault ? '#fcfcfc' : '#fff',
+        }}
       />
       {onClear && value && (
-        <button onClick={onClear} title="Clear" style={{ background: 'none', border: 'none', color: '#c66', cursor: 'pointer' }}>&times;</button>
+        <button onClick={onClear} title="Clear - go back to the due date" style={{ background: 'none', border: 'none', color: '#c66', cursor: 'pointer' }}>&times;</button>
       )}
     </div>
   )
@@ -1236,15 +1248,16 @@ export default function CashFlow() {
                                   invoice:meta, so the Invoices Owed page follows. */}
                               <DateCell
                                 value={r.expectedDate || ''}
-                                highlight={!!r.expectedDate}
-                                title="Expected payment date. Shared with the Invoices Owed page."
+                                fallback={r.dueDate || ''}
+                                title="Expected payment date. Grey means the forecast is using the due date; pick another to override it. Shared with the Invoices Owed page."
                                 onCommit={v => setExpectedDate(k, v)}
+                                onClear={r.expectedDate ? () => setExpectedDate(k, '') : null}
                               />
                               {isOverdue && (
                                 <span title="Past its due date with no expected date, so the forecast collects it in week 1. Set a date you actually expect."
                                   style={{ fontSize: 9.5, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap', cursor: 'help' }}>OVERDUE - confirm date</span>
                               )}
-                              {r.expectedDate && <button onClick={() => setExpectedDate(k, '')} title="Clear - use the due date" style={{ background: 'none', border: 'none', color: '#c66', cursor: 'pointer' }}>&times;</button>}
+
                             </div>
                           </td>
                           <td style={{ ...td, textAlign: 'center' }}>
@@ -1320,8 +1333,8 @@ export default function CashFlow() {
                                       day had been picked. */}
                                   <DateCell
                                     value={billOverrides[b.id] || b.payDate || ''}
-                                    highlight={overridden}
-                                    title="Planned payment date. Pick a day, then click away to save - the list re-sorts by this date."
+                                    fallback={b.dueDate || ''}
+                                    title="Planned payment date. Grey means the forecast is using the due date; pick another to override it. Click away to save - the list re-sorts by this date."
                                     onCommit={v => setBillPayDate(b.id, v)}
                                     onClear={overridden ? () => setBillPayDate(b.id, '') : null}
                                   />
