@@ -56,7 +56,7 @@ function splitCsvLine(line) {
 // Date only. This file has fmtDateTime but no fmtD, and fmtD lives on OTHER pages -
 // reaching for it here compiles cleanly then throws ReferenceError on render.
 // Must match the apiVersion returned by pages/api/business-financials.js.
-const EXPECTED_API = 'pkg605'
+const EXPECTED_API = 'pkg607'
 
 const fmtD = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 
@@ -431,6 +431,28 @@ export default function InvoiceFinance() {
   // Limits save on their own - on import, and on leaving a cell. Reads limitsRef rather
   // than the state variable: onBlur can fire in the same tick as the change, and the
   // state closure would still hold the PREVIOUS value.
+  // Publish the computed position so the Cash Flow uses THESE figures rather than its
+  // own simpler model. Fires whenever the numbers settle, not on a button - the Cash Flow
+  // must not depend on somebody remembering to press something here.
+  const publishedRef = useRef('')
+  useEffect(() => {
+    if (!ok || loading) return
+    if (!totals || !(totals.totalAdvance > 0 || totals.drawn > 0)) return
+    const sig = `${Math.round(totals.totalAdvance)}|${Math.round(totals.drawn)}|${totals.drawnAsAt || ''}`
+    if (publishedRef.current === sig) return       // only when something actually moved
+    publishedRef.current = sig
+    fetch('/api/business-financials', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        view: 'invoice-finance', action: 'publish-position',
+        position: {
+          totalAdvance: totals.totalAdvance, drawn: totals.drawn, drawnAsAt: totals.drawnAsAt,
+          approvedLedger: totals.approvedLedger, highInvolvement: totals.highInv,
+        },
+      }),
+    }).catch(() => {})
+  }, [ok, loading, totals])
+
   async function saveDrawn(remove) {
     const body = remove
       ? { view: 'invoice-finance', action: 'save-drawn', remove }

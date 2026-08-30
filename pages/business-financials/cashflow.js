@@ -8,6 +8,9 @@ const pad = (n) => String(n).padStart(2, '0')
 const normName = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/\b(ltd|limited|plc|llp|uk|co|company|the)\b/g, '').replace(/[^a-z0-9]/g, '').trim()
 const mondayOf = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); const wd = (x.getDay() + 6) % 7; return new Date(x.getTime() - wd * 86400000) }
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+// Module scope, beside the other helpers. This file has no date formatter and the ones
+// on other pages are not in scope here - reaching for one compiles and then throws.
+const fmtDMY = (iso) => { if (!iso) return '-'; const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}` }
 const monthKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`
 const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate()
 const clampDay = (y, m, day) => Math.min(day, daysInMonth(y, m))
@@ -202,7 +205,17 @@ export default function CashFlow() {
   async function saveFinance() {
     setSavingFin(true)
     try {
-      const cfg = { ifLimit: Number(finance.ifLimit) || 0, ifDrawn: Number(finance.ifDrawn) || 0, ccLimit: Number(finance.ccLimit) || 0 }
+      // The SAVE whitelists too, so the overdraft and per-card limits have to be listed
+      // here as well as on the load - otherwise they are accepted on screen and never
+      // reach Redis. ifLimit/ifDrawn are kept only as a fallback for anything saved
+      // before the figures started coming from the Invoice Finance page.
+      const cfg = {
+        ifLimit: Number(finance.ifLimit) || 0,
+        ifDrawn: Number(finance.ifDrawn) || 0,
+        ccLimit: Number(finance.ccLimit) || 0,
+        overdraftLimit: Number(finance.overdraftLimit) || 0,
+        cardLimits: Object.fromEntries(Object.entries(finance.cardLimits || {}).map(([k, v]) => [k, Number(v) || 0])),
+      }
       await fetch('/api/business-financials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ view: 'cashflow', action: 'save-finance', financeCfg: cfg }) })
     } catch {}
     setSavingFin(false)
@@ -399,9 +412,13 @@ export default function CashFlow() {
                 <>
                   {/* Balance boxes: each account, then combined + max available */}
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14, alignItems: 'stretch' }}>
-                    {bankAccts.map((a, i) => <BalBox key={'b' + i} label={a.name} value={gbp(a.balance)} color={a.balance < 0 ? '#dc2626' : INK} />)}
-                    {cardAccts.map((a, i) => <BalBox key={'c' + i} label={a.name} value={gbp(a.balance)} sub="credit card" color={a.balance < 0 ? '#dc2626' : '#16a34a'} />)}
-                    <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong />
+                    {/* Every balance carries the date it was read, so a stale figure is
+                        obvious rather than being taken as today's cash. */}
+                    {bankAccts.map((a, i) => <BalBox key={'b' + i} label={a.name} value={gbp(a.balance)} color={a.balance < 0 ? '#dc2626' : INK}
+                      sub={bal?.updatedAt ? `as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : undefined} />)}
+                    {cardAccts.map((a, i) => <BalBox key={'c' + i} label={a.name} value={gbp(a.balance)} sub={bal?.updatedAt ? `credit card - as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : 'credit card'} color={a.balance < 0 ? '#dc2626' : '#16a34a'} />)}
+                    <BalBox label="Opening cash (all bank combined)" value={gbp(bankTotal)} color={bankTotal < 0 ? '#dc2626' : INK} strong
+                      sub={bal?.updatedAt ? `as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : 'no balance date - press Refresh balances'} />
                     {cardDebt > 0 && <BalBox label="Credit card debt" value={gbp(-cardDebt)} sub="owed" color="#dc2626" />}
                     {ifCalc && <BalBox label="Invoice finance available" value={gbp(Math.max(0, ifCalc.availability))} sub={`${gbp(ifCalc.totalAdvance)} advance - ${gbp(ifCalc.drawn)} drawn`} color="#0f766e" />}
                     {odLimit > 0 && <BalBox label="Overdraft available" value={gbp(odHeadroom)} sub={odDrawn > 0 ? `${gbp(odDrawn)} of ${gbp(odLimit)} used` : `${gbp(odLimit)} limit`} color={odHeadroom > 0 ? INK : '#dc2626'} />}
@@ -416,8 +433,21 @@ export default function CashFlow() {
                   {/* Facility settings */}
                   <div style={{ background: '#fff', border: '1px solid #e6e3dc', borderRadius: 12, padding: '12px 16px', marginBottom: 18, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: INK, alignSelf: 'center' }}>Facilities (for &quot;max cash available&quot;)</div>
-                    <FinInput label="Invoice finance limit" value={finance.ifLimit} onChange={v => setFinance(f => ({ ...f, ifLimit: v }))} />
-                    <FinInput label="Invoice finance drawn" value={finance.ifDrawn} onChange={v => setFinance(f => ({ ...f, ifDrawn: v }))} />
+                    {/* NOT typed here any more. Both come from the Invoice Finance page,
+                        which holds the eligibility caps, credit limits, High Involvement
+                        and the dated drawn balance. Two editable copies of the same
+                        facility on two pages is how they end up disagreeing. */}
+                    <div style={{ minWidth: 250, background: '#f7f9fc', border: '1px dashed #cfd8e3', borderRadius: 8, padding: '6px 10px' }}>
+                      <div style={{ fontSize: 11, color: '#5b7085', fontWeight: 700 }}>Invoice finance - from the Invoice Finance page</div>
+                      {ifCalc ? (
+                        <div style={{ fontSize: 11.5, color: '#5b7085', lineHeight: 1.5 }}>
+                          Funded {gbp(ifCalc.totalAdvance)} &middot; drawn {gbp(ifCalc.drawn)}{ifCalc.drawnAsAt ? ` as at ${fmtDMY(ifCalc.drawnAsAt)}` : ''}<br />
+                          Available {gbp(Math.max(0, ifCalc.availability))}{ifCalc.asAt ? ` - updated ${fmtDMY(String(ifCalc.asAt).slice(0, 10))}` : ''}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 11.5, color: '#b45309' }}>No figures yet - open the Invoice Finance page once and they will come through.</div>
+                      )}
+                    </div>
                     <FinInput label="Overdraft limit" value={finance.overdraftLimit} onChange={v => setFinance(f => ({ ...f, overdraftLimit: v }))} />
                     {/* One limit per card, from the accounts Xero returns. The pooled box
                         below stays for anything without its own limit. */}
@@ -439,7 +469,22 @@ export default function CashFlow() {
                         <input type="number" value={startCash} onChange={e => setStartCash(e.target.value)} placeholder={String(Math.round(bankTotal))}
                           style={{ width: 150, padding: '6px 8px', border: '1px solid #ddd', borderRadius: 8, fontSize: 18, fontWeight: 700 }} />
                       </div>
-                      <div style={{ fontSize: 11, color: '#999', marginTop: 3 }}>Defaults to combined bank cash ({gbp(bankTotal)}). Override to model a scenario.</div>
+                      <div style={{ fontSize: 11, color: '#999', marginTop: 3, lineHeight: 1.5 }}>
+                        {/* What the opening figure is MADE OF, with the date each part was
+                            read. Facilities are listed but NOT added in - opening balance
+                            is cash. Fold headroom into it and the 13-week line can never
+                            go negative, which is the one thing it exists to show. */}
+                        Defaults to combined bank cash {gbp(bankTotal)}{bal?.updatedAt ? ` as at ${fmtDMY(String(bal.updatedAt).slice(0, 10))}` : ''}. Override to model a different starting point.
+                        <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px dashed #eee', color: '#8a857c' }}>
+                          <div>Bank cash{'\u00a0'}<strong>{gbp(bankTotal)}</strong></div>
+                          {cardDebt > 0 && <div>Card debt{'\u00a0'}<strong style={{ color: '#dc2626' }}>{gbp(-cardDebt)}</strong> - already owed, not cash</div>}
+                          <div style={{ marginTop: 3, color: '#aaa' }}>Available on top, not counted as opening cash:</div>
+                          <div>Invoice finance{'\u00a0'}<strong>{gbp(ifHeadroom)}</strong>{ifCalc?.drawnAsAt ? ` (drawn as at ${fmtDMY(ifCalc.drawnAsAt)})` : ''}</div>
+                          <div>Card headroom{'\u00a0'}<strong>{gbp(ccHeadroom)}</strong></div>
+                          {odLimit > 0 && <div>Overdraft{'\u00a0'}<strong>{gbp(odHeadroom)}</strong></div>}
+                          <div style={{ marginTop: 3 }}>Max cash available{'\u00a0'}<strong>{gbp(maxCash)}</strong></div>
+                        </div>
+                      </div>
                     </div>
                     <Stat label="Total money in (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyIn, 0))} color="#16a34a" />
                     <Stat label="Total money out (13wk)" value={gbp(forecast.reduce((a, r) => a + r.moneyOut, 0))} color="#dc2626" />

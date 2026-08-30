@@ -606,7 +606,7 @@ export default async function handler(req, res) {
       // one is the one that carries the fix - if only the page was deployed the symptom
       // is identical to nothing being deployed at all, and there is no way to tell them
       // apart from the screen.
-      apiVersion: 'pkg605',   // must match EXPECTED_API in invoice-finance.js
+      apiVersion: 'pkg607',   // must match EXPECTED_API in invoice-finance.js
       dashboardCacheEmpty,
       // Sorted oldest first; the LAST entry is the current drawn balance.
       drawnHistory: ifDrawnHistory,
@@ -679,6 +679,23 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
   }
 
+  // The IF page publishes its computed position here so the Cash Flow can use the SAME
+  // figures instead of keeping a second, simpler model of the facility.
+  if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'publish-position') {
+    try {
+      const p = (req.body || {}).position || {}
+      await redis.set('config:if-position', {
+        totalAdvance: Number(p.totalAdvance) || 0,
+        drawn: Number(p.drawn) || 0,
+        drawnAsAt: p.drawnAsAt || null,
+        approvedLedger: Number(p.approvedLedger) || 0,
+        highInvolvement: Number(p.highInvolvement) || 0,
+        at: new Date().toISOString(),
+      })
+      return res.json({ ok: true })
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }) }
+  }
+
   if (req.method === 'POST' && (req.body || {}).view === 'invoice-finance' && (req.body || {}).action === 'save-limits') {
     try {
       const limits = (req.body || {}).debtorLimits || {}
@@ -743,36 +760,31 @@ export default async function handler(req, res) {
     // Invoice-finance availability, matching the Invoice Finance page rules:
     // per debtor, fundable = outstanding - materials - retention%, advance = min(rate% x
     // fundable, insured limit); total capped at the facility cap; minus drawn.
+    // INVOICE FINANCE FIGURES COME FROM THE INVOICE FINANCE PAGE.
+    //
+    // What was here was a SECOND, older model of the facility - a flat 10% retention
+    // deduction, the insured limit capping the ADVANCE rather than the debt, no High
+    // Involvement, no eligibility caps, no age rule - and it read the old single `drawn`
+    // setting rather than the dated history. It could never agree with the Invoice
+    // Finance page, and two different availability figures on two pages is worse than
+    // one that is slightly wrong.
+    //
+    // The IF page now writes its computed position to config:if-position whenever it
+    // loads, and this reads it. One calculation, one answer, and the Cash Flow says
+    // where the number came from.
     let ifAvailability = null
     try {
-      const rate = (Number(ifSettings.advanceRate ?? 60) || 0) / 100
-      const retPct = (Number(ifSettings.retentionPct ?? 10) || 0) / 100
-      const cap = Number(ifSettings.facilityCap ?? 500000) || 0
-      const drawn = Number(ifSettings.drawn) || 0
-      // Use the same sales-invoice source as the page (project invoice lines).
-      const byName = {}
-      const src = (dashCache && Array.isArray(dashCache))
-        ? dashCache.flatMap(p => (p._invoiceLines || []).map(inv => ({
-            contact: inv.contact || p.customer || '',
-            amountDue: inv.amountDue != null ? inv.amountDue : ((inv.total || 0) - (inv.amountPaid || 0)),
-          }))).filter(i => i.amountDue > 0.005)
-        : (recStore.items || [])
-      for (const inv of src) {
-        const n = inv.contact || '(no name)'
-        byName[n] = (byName[n] || 0) + (inv.amountDue || 0)
+      const pos = await redis.get('config:if-position').catch(() => null)
+      if (pos && pos.totalAdvance != null) {
+        ifAvailability = {
+          totalAdvance: Math.round(Number(pos.totalAdvance) || 0),
+          drawn: Math.round(Number(pos.drawn) || 0),
+          availability: Math.round((Number(pos.totalAdvance) || 0) - (Number(pos.drawn) || 0)),
+          drawnAsAt: pos.drawnAsAt || null,
+          asAt: pos.at || null,
+          source: 'invoice-finance-page',
+        }
       }
-      let grossAdvance = 0
-      for (const [name, outstanding] of Object.entries(byName)) {
-        const lim = ifLimits[name] || {}
-        const insured = Number(lim.insuredLimit) || 0
-        if (insured <= 0) continue
-        const materials = Number(lim.materials) || 0
-        const retention = Math.max(0, outstanding * retPct)
-        const fundable = Math.max(0, outstanding - materials - retention)
-        grossAdvance += Math.min(fundable * rate, insured)
-      }
-      const totalAdvance = cap > 0 ? Math.min(grossAdvance, cap) : grossAdvance
-      ifAvailability = { totalAdvance: Math.round(totalAdvance), drawn, availability: Math.round(totalAdvance - drawn) }
     } catch { ifAvailability = null }
 
     // Prefer the live per-account balances (bank cash only) for opening cash; fall
