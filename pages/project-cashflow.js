@@ -571,10 +571,19 @@ function Row({ p, days, weekGroups, view, data, meta, countOnDay, sel, onCellDow
               const matLeft = matIn ? dayIndex(fc.matDeliverDay) * CELL_W : 0
               return (
                 <div key={fc.id} style={{ position: 'absolute', top: 3, bottom: 3, left, width, pointerEvents: 'none' }}>
-                  <div title={gone ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead' : undefined}
+                  <div title={gone
+                    ? 'Superseded - this period has been applied for, so the real application is in the cash flow instead'
+                    // Shows what is STORED on the record, so a bar disagreeing with the
+                    // modal can be settled here instead of by guesswork.
+                    : `Stored on this forecast:\nrevenueThisPeriod ${fc.revenueThisPeriod == null ? '(not set)' : gbp(fc.revenueThisPeriod)}\nthisCertTotal ${fc.thisCertTotal == null ? '(not set)' : gbp(fc.thisCertTotal)}\ngrossClaimedToDate ${fc.grossClaimedToDate == null ? '(not set)' : gbp(fc.grossClaimedToDate)}\nprevGrossOverride ${fc.prevGrossOverride == null ? '(none)' : gbp(fc.prevGrossOverride)}\nrevenueOverride ${fc.revenueOverride == null ? '(none)' : gbp(fc.revenueOverride)}\nsaved ${fc.updatedAt ? new Date(fc.updatedAt).toLocaleString('en-GB') : '-'}`}
                     style={{ position: 'absolute', inset: 0, background: gone ? '#c9c5bd' : col, opacity: gone ? 0.5 : 0.82, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', pointerEvents: gone ? 'auto' : 'none' }}>
                     <span style={{ color: '#fff', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 1px rgba(0,0,0,0.3)', padding: '0 4px', textDecoration: gone ? 'line-through' : 'none' }}>
-                      {gone ? 'Superseded' : `App ${idx + 1}`} · Rev {gbpK(fc.revenueThisPeriod)} · Lab {gbpK(fc.labourThisPeriod)}{fc.materialsThisPeriod ? ` · Mat ${gbpK(fc.materialsThisPeriod)}` : ''}
+                      {/* revenueThisPeriod is what was STORED. Where it is missing or
+                          zero but the certificate value is not, the bar falls back to
+                          thisCertTotal and marks it - a forecast saved while its prior was
+                          wrong stored 0, and the bar then read "Rev £0" for ever after,
+                          with no way to tell that from a genuine nil period. */}
+                      {gone ? 'Superseded' : `App ${idx + 1}`} · Rev {gbpK(fc.revenueThisPeriod || fc.thisCertTotal || 0)}{(!fc.revenueThisPeriod && fc.thisCertTotal) ? '*' : ''} · Lab {gbpK(fc.labourThisPeriod)}{fc.materialsThisPeriod ? ` · Mat ${gbpK(fc.materialsThisPeriod)}` : ''}
                     </span>
                   </div>
                   {matIn && <div title={`Materials delivered ${fmtDMY(parseISO(fc.matDeliverDay))} · ${gbpK(fc.materialsThisPeriod)}`}
@@ -769,6 +778,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
   const [revOverride, setRevOverride] = useState(null)
   // null = follow the chain; a string is a typed 'previously claimed (gross)'.
   const [prevGrossOverride, setPrevGrossOverride] = useState(null)
+  // The revenue figure stored on the forecast, i.e. what the timeline bar reads.
+  const [savedRevenue, setSavedRevenue] = useState(null)
   const [actuals, setActuals] = useState(null)   // real spend from Project Financials
   const [contractTerms, setContractTerms] = useState({})  // retention / MCD from Edit Project Details
   const [appCalendar, setAppCalendar] = useState(null)    // application/valuation/payment days
@@ -792,7 +803,7 @@ function HypAppModal({ modal, onClose, onSaved }) {
   }, [onClose])
 
   useEffect(() => {
-    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null)
+    setLoading(true); setErr(''); setSeededFrom(null); setLabourOverride(null); setMosOverride(null); setRevOverride(null); setPrevGrossOverride(null); setSavedRevenue(null)
     fetch(`/api/project-cashflow?projectKey=${encodeURIComponent(projectKey)}${xeroId ? `&xeroId=${encodeURIComponent(xeroId)}` : ''}`)
       .then(r => r.json()).then(d => {
         if (!d.hasRates) { setErr(d && d.contractedRates === null ? 'No contracted rates for this project yet. Upload & lock them on the Contracted Rates page first (for a live project, add it in Xero so it appears there).' : 'No contracted rates found.'); setLoading(false); return }
@@ -829,6 +840,8 @@ function HypAppModal({ modal, onClose, onSaved }) {
           setLabourOverride(editing.labourOverride == null ? null : String(editing.labourOverride))
           setMosOverride(editing.materialsOnSiteOverride == null ? null : String(editing.materialsOnSiteOverride))
           setRevOverride(editing.revenueOverride == null ? null : String(editing.revenueOverride))
+          // What the timeline bar is currently showing, so the two can be compared.
+          setSavedRevenue(editing.revenueThisPeriod == null ? null : num(editing.revenueThisPeriod))
           setPrevGrossOverride(editing.prevGrossOverride == null ? null : String(editing.prevGrossOverride))
           if (editing.salesSpread) setSalesSpread(editing.salesSpread)
           if (editing.labourSpread) setLabourSpread(editing.labourSpread)
@@ -1618,6 +1631,16 @@ function HypAppModal({ modal, onClose, onSaved }) {
                 <OverrideBox label="Previously claimed (gross)" calculated={prevGrossAuto} override={prevGrossOverride} setOverride={setPrevGrossOverride}
                   colour="#334155" autoNote={`From ${priorLabel}`}
                   sub2="Type what has actually been claimed if an earlier period's revenue was overridden" />
+                {/* SAVED vs LIVE. The bar on the timeline reads the SAVED
+                    revenueThisPeriod; this box calculates live. They drift apart the
+                    moment anything changes - and a forecast saved while the prior was
+                    wrong stored 0, so the bar showed "Rev £0" against a live figure of
+                    38,125.84 with nothing to explain the difference. */}
+                {savedRevenue != null && Math.abs(savedRevenue - revenueThisPeriod) > 1 && (
+                  <div style={{ width: '100%', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '7px 12px', marginBottom: 4, fontSize: 12, color: '#92400e' }}>
+                    <strong>Not saved yet.</strong> The timeline still shows {gbp(savedRevenue)} for this period because that is what was last saved; the figure below is {gbp(revenueThisPeriod)}. Press Save to update it.
+                  </div>
+                )}
                 <OverrideBox label="Revenue this period" calculated={revenueCalculated} override={revOverride} setOverride={setRevOverride}
                   colour="#0f766e"
                   autoNote={`${gbp(grossIncrement)} gross${num(mcdPct) > 0 ? `, less MCD ${num(mcdPct)}%` : ''}${retPctShown > 0 ? `, less retention ${retPctShown}%` : ', no retention set'}`}

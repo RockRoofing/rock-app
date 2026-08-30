@@ -1,7 +1,7 @@
-pkg632 - The prior was dropping real applications. THE -160k BUG.
-==================================================================
+pkg634 - The bar now shows the real figure, and its tooltip shows the record
+=============================================================================
 
-*** SUPERSEDES pkg591 - pkg631. ***
+*** SUPERSEDES pkg591 - pkg633. ***
 *** ONE NEW FILE - create it in GitHub:
       pages/business-financials/balance-sheet.js
 ***
@@ -9,7 +9,7 @@ pkg632 - The prior was dropping real applications. THE -160k BUG.
 
 CHANGED FILES (replace)
 -----------------------
-  pages/project-cashflow.js               <- the fix
+  pages/project-cashflow.js
   pages/business-financials.js
   components/BizNav.js
   lib/xero.js
@@ -24,57 +24,57 @@ NEW FILE (create)
   pages/business-financials/balance-sheet.js
 
 
-YOU WERE RIGHT - IT IS THE WHOLE AMOUNT
----------------------------------------
-Look at what J190 was showing:
+YOU WERE RIGHT AND MY EXPLANATION WAS WRONG
+-------------------------------------------
+"Press Save" was not the answer - you had saved, the override persisted, and
+save() calls setHypApps() so the timeline updates immediately. I also checked
+gbpK: 38,125.84 renders as "£38k", so the formatter is not hiding it either.
 
-    Previously claimed (gross)   0.00      "From the start"
-    Gross to date            401,663.50    the WHOLE contract
-    Labour this period        79,496.48    the WHOLE labour budget
+So the record genuinely holds ZERO in revenueThisPeriod while holding the right
+labour (4,000) and materials (18,000) - which is why the bar reads Rev £0 next to
+Lab £4.0k and Mat £18k.
 
-On a live job with real applications, previously claimed should never be zero.
+The likely cause remains a save made while the prior was still wrong, when the
+increment was negative and this clamped it to nil:
 
+    const revenueThisPeriod = revOverride == null ? revenueCalculated : Math.max(0, ...)
 
-THE CAUSE - line 954
---------------------
-    const priors = editId ? cands.filter(c => !from || (c.end||'') < from) : cands
-
-When EDITING, only certificates ending BEFORE this period's start counted. Your
-forecast starts 31/08 and the last application ends after that, so the application
-was filtered out entirely. No prior, previously claimed 0, and the whole contract
-offered again as this period's work - which is why labour showed the entire budget.
-
-This is the same fault behind the -160k you saw when reverting to Application 1.
-
-The comment directly above that line already said, about NEW forecasts: "money
-already claimed is already claimed - it cannot be un-claimed by choosing an earlier
-start date." That is just as true when editing. It was only ever the FORECAST chain
-that needed sequencing.
+But I have guessed at this chain several times now, so rather than a fifth theory
+this package makes the record itself visible.
 
 
-THE FIX
--------
-A real APPLICATION is never filtered out by the period dates. Only forecasts are
-sequenced, so a forecast in the middle of a chain still deducts only what came
-before it.
+1. THE BAR FALLS BACK TO THE CERTIFICATE VALUE
+-----------------------------------------------
+Where revenueThisPeriod is missing or zero but thisCertTotal is not, the bar shows
+thisCertTotal and marks it with an asterisk:
 
-  editing a forecast starting 31/08, App 3 ends 30/09
-     before   prior: none          previously claimed 0
-     after    prior: App 3         previously claimed = App 3's gross
+    stored 0, cert 38,125.84    ->  £38k*
+    stored 38,125.84            ->  £38k
+    genuinely nil period        ->  £0
 
-  editing a mid-chain forecast starting 01/07
-     prior: App 3, and a December forecast is still correctly excluded
+So a stored zero can no longer masquerade as a nil period, and the timeline stops
+disagreeing with the modal.
 
-You will see it worked because the box will read "From App 3" instead of "From the
-start", and Labour this period will drop to the increment.
+
+2. HOVER THE BAR TO SEE WHAT IS STORED
+--------------------------------------
+    Stored on this forecast:
+    revenueThisPeriod   £0.00
+    thisCertTotal       £38,125.84
+    grossClaimedToDate  £137,066.06
+    prevGrossOverride   £97,761.07
+    revenueOverride     (none)
+    saved 30/08/2026, 21:14
+
+That settles which field is wrong and when it was written, without another round
+trip. Hover it and send me the values if the asterisk is showing.
 
 
 ALSO IN THIS PACKAGE
 --------------------
-pkg631 - Balance Sheet moved before Cash Flow; the Summary page had its own stale
-five-entry tab list and now uses the shared nav.
-
-pkg630 - due date shown in light grey when nothing is set.
-
-pkg629 / 628 / 627 - Reference column; date pickers commit on blur; Balance Sheet
-tab and the Financing & tax column.
+pkg633 - warns in the modal when the saved figure and the live one differ.
+pkg632 - a real APPLICATION is never filtered out of the prior by the period
+dates. That is the -160k, and the reason Labour this period showed the whole
+budget on J190.
+pkg627-631 - Balance Sheet tab and Financing & tax column, Reference column, date
+pickers that commit on blur, nav order, Summary using the shared nav.
