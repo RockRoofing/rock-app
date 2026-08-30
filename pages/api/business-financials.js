@@ -587,7 +587,9 @@ export default async function handler(req, res) {
         mosCapPct: ifConfig.mosCapPct != null ? ifConfig.mosCapPct : 25,
         varCapPct: ifConfig.varCapPct != null ? ifConfig.varCapPct : 25,
         certCeilingPct: ifConfig.certCeilingPct != null ? ifConfig.certCeilingPct : 90,
-        highInvolvement: ifConfig.highInvolvement != null ? ifConfig.highInvolvement : '',
+        // Normalised on the way OUT too, so a 0 already sitting in Redis from the old
+        // version reads as blank without anyone having to clear it by hand.
+        highInvolvement: (ifConfig.highInvolvement == null || Number(ifConfig.highInvolvement) === 0) ? '' : ifConfig.highInvolvement,
         highInvolvementPct: ifConfig.highInvolvementPct != null ? ifConfig.highInvolvementPct : 35,
         ageDays: ifConfig.ageDays != null ? ifConfig.ageDays : 90,
       },
@@ -632,7 +634,10 @@ export default async function handler(req, res) {
         certCeilingPct: Number(s.certCeilingPct ?? 90),
         // '' must survive as '' - it means "use the calculation". Number('')||0 would
         // turn it into a deliberate zero override and kill the calculated figure.
-        highInvolvement: (s.highInvolvement === '' || s.highInvolvement == null) ? '' : Number(s.highInvolvement),
+        // Zero is stored as '' so it can never masquerade as a deliberate override. The
+        // previous version wrote `Number(x) || 0`, leaving a literal 0 on every existing
+        // record - which would suppress the calculated figure for ever.
+        highInvolvement: (s.highInvolvement === '' || s.highInvolvement == null || Number(s.highInvolvement) === 0) ? '' : Number(s.highInvolvement),
         highInvolvementPct: Number(s.highInvolvementPct ?? 35),
         ageDays: Number(s.ageDays ?? 90),
       }

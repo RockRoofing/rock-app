@@ -1,7 +1,7 @@
-pkg600 - Invoice Finance: High Involvement calculated at 35%
-=============================================================
+pkg601 - FIX: a stored zero was suppressing the High Involvement calculation
+=============================================================================
 
-*** SUPERSEDES pkg591 - pkg599. Deploy BOTH files. ***
+*** SUPERSEDES pkg591 - pkg600. Deploy BOTH files. ***
 
 
 CHANGED FILES (replace)
@@ -10,67 +10,52 @@ CHANGED FILES (replace)
   pages/business-financials/invoice-finance.js
 
 
-HIGH INVOLVEMENT - SOLVED FROM THEIR OWN FIGURES
-------------------------------------------------
-Their guide, page 12: "your debtors will be funded up to a high involvement
-percentage of the approved sales ledger" - each debtor capped at a share of the
-APPROVED ledger, the excess deducted before the advance rate. Their illustration
-uses 50%. Yours is 35%:
+IT IS A FORMULA, NOT A HARD-CODED WATES FIGURE
+----------------------------------------------
+    hiCap  = approvedDebt x hiPct%
+    hiCalc = customers.reduce((t, c) => t + Math.max(0, c.debt - hiCap), 0)
 
-    approved debt      323,029.46
-    x 35%              113,060.31   cap per debtor
-    Wates              148,129.62
-    over by             35,069.31   = their High Involvement, to the penny
+Every customer, every time. Wates only appears in my COMMENTS as the worked
+example that solved the percentage - there is no name in the code. Proved across
+four scenarios:
 
-At 50% it would be zero, at 25% it would be 67,372. Only 35% reproduces their
-figure, and Wates is the debtor - 26.7% of your ledger on its own.
+  Wates dominant           cap 113,060.31   HI 35,069.31   over: Wates
+  Wates paid down,
+  Epiphany grows           cap 121,942.45   HI 58,057.55   over: Epiphany
+  two debtors over         cap 108,500.00   HI 73,000.00   over: A and B
+  ledger evenly spread     cap 112,000.00   HI      0.00   over: none
 
-NOW CALCULATED, NOT TYPED. Everything it needs is already on the page, so it
-recalculates itself and cannot go stale between statements.
-
-The percentage is editable next to it, as you asked, with the resulting money
-beside it. Underneath: "GBP 35,069.31 - Wates over by GBP 35,069.31. Cap
-GBP 113,060.31 per debtor." So the figure is traceable to a name rather than
-being a number with nowhere to go.
-
-OVERRIDE. Leave the value box BLANK to use the calculation. Type a figure only
-when Bibby's view differs - the box goes amber and says what the calculation
-would have been, so an override never looks like the normal state.
-
-'' is preserved as '' through the save. Number('') || 0 would have turned "use
-the calculation" into a deliberate zero and silently killed the figure.
-
-0% disables the deduction entirely rather than capping every debtor at nil.
+It follows whoever is over, counts several at once, and returns nil when nobody
+is - all off the live ledger.
 
 
-VARIATIONS LEFT AT 25%, AS YOU SAID
------------------------------------
-Their guide says 10%; Holly said 25% about YOUR facility, and page 6 of the same
-guide says "Refer to your agreement for specific details". Left at 25%.
+WHY IT WAS NOT ADDING - MY BUG
+------------------------------
+pkg594 saved the field with
 
-Worth one line back to her, since it is worth real money:
-  "Your guide says variations are automatically funded to 10% of contract value;
-   you told us 25%. Which applies to our agreement?"
+    highInvolvement: Number(s.highInvolvement) || 0
 
+so Redis already holds a literal 0 on your record. pkg600 then read ANY number as
+a deliberate override - so the stored 0 forced High Involvement to nil and the
+calculation never ran. It would have looked exactly like "it isn't adding".
 
-TWO OTHER THINGS THE GUIDE CONFIRMS OR ADDS
--------------------------------------------
-90 DAYS IS CONFIRMED. Page 6 defines the "agreed approval period (90 days)",
-which independently confirms the age threshold I derived from their three age
-disapprovals.
+Zero now counts as blank, on the way in AND on the way out, so the 0 already
+sitting in Redis reads as "use the calculation" without you clearing anything.
 
-CASH CONVERSION RATE - NOT BUILT. Page 12: the CCR on every contract is 90%,
-measured on whether the customer actually PAYS at least 90% of what you apply
-for. Below that, NEW applications on that contract are not funded, though
-existing debt keeps its funding. That is a per-contract switch driven by payment
-history and is likely part of the 39,264.32 Contract Funding Disapproval. It
-needs a decision on how it is measured before I code it - say the word.
+Nothing is lost by it: an override of zero and a calculation returning zero give
+the same answer, and to switch the deduction off deliberately you set the % to 0.
+
+I also removed a stale comment block still saying the figure "is not derivable
+from anything we hold... entered from their screen rather than calculated" -
+left over from pkg594 and now the opposite of what the code does.
 
 
-ONE THING THAT DOES NOT RECONCILE
----------------------------------
-Your Xero sales invoice export totals 555,064.10 across 31 debtors. Bibby's Sales
-Ledger is 468,326.86 - 86,737 apart, far wider than the 2,249 on the earlier
-comparison. Different export, wider net; likely retention invoices and items
-never assigned. Worth knowing, because High Involvement is a percentage OF the
-approved ledger, so which total is used changes the deduction.
+WHAT YOU SHOULD SEE
+-------------------
+  High involvement %   [35]  =  [ blank ]
+  GBP 35,069.31 - Wates over by GBP 35,069.31. Cap GBP 113,060.31 per debtor.
+
+Set the 35 once. Leave the value box EMPTY. It recalculates on every load.
+
+Type in the value box only when Bibby's figure disagrees - it turns amber and
+tells you what the calculation would have been.

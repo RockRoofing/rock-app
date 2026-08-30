@@ -255,11 +255,6 @@ export default function InvoiceFinance() {
   const totals = useMemo(() => {
     const fundable = customers.reduce((s, c) => s + c.fundable, 0)
     // HIGH INVOLVEMENT - a concentration deduction Bibby take off APPROVED DEBT before
-    // applying the advance rate. Reverse-engineered from their own summary:
-    //   (Approved Debt - High Involvement) x 60% = Approved Funding
-    //   (323,029.46 - 35,069.31) x 60% = 172,776.09   exactly.
-    // It is not derivable from anything we hold - it depends on their view of debtor
-    // concentration - so it is entered from their screen rather than calculated.
     // HIGH INVOLVEMENT - now CALCULATED, not typed.
     //
     // Their guide, page 12: "your debtors will be funded up to a high involvement
@@ -278,9 +273,19 @@ export default function InvoiceFinance() {
     const hiCalc = hiPct > 0
       ? customers.reduce((t, c) => t + Math.max(0, (c.insurable != null ? c.insurable : c.fundable) - hiCap), 0)
       : 0
-    // Blank means "use the calculation". A typed 0 is a real instruction and is honoured.
+    // BLANK OR ZERO means "use the calculation".
+    //
+    // Zero has to count as blank, not as a deliberate override. The earlier version of
+    // this field saved with `Number(s.highInvolvement) || 0`, so Redis already holds a
+    // literal 0 for it - and treating that as an override forces High Involvement to
+    // nil and the calculation never runs. Which is exactly what "it doesn't seem to be
+    // adding" looks like.
+    //
+    // Nothing is lost by it: an override of zero and the calculation returning zero give
+    // the same answer, and to switch the deduction off deliberately you set the % to 0.
     const hiOverride = settings.highInvolvement
-    const highInv = (hiOverride === '' || hiOverride == null) ? hiCalc : (Number(hiOverride) || 0)
+    const hiOverridden = !(hiOverride === '' || hiOverride == null || Number(hiOverride) === 0)
+    const highInv = hiOverridden ? (Number(hiOverride) || 0) : hiCalc
     // Who is over, so the figure is traceable rather than a number with nowhere to go.
     const hiWho = hiPct > 0
       ? customers.filter(c => ((c.insurable != null ? c.insurable : c.fundable) - hiCap) > 1)
@@ -297,7 +302,7 @@ export default function InvoiceFinance() {
     const drawnAsAt = latest ? latest.date : null
     const availability = totalAdvance - drawn
     const noLimit = customers.filter(c => !c.hasLimit && c.fundable > 0)
-    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden: !(hiOverride === '' || hiOverride == null),
+    return { fundable, grossAdvance, totalAdvance, cap, cappedByFacility, drawn, drawnAsAt, availability, highInv, hiCalc, hiCap, hiPct, hiWho, hiOverridden,
       noLimitCount: noLimit.length, noLimitValue: noLimit.reduce((s, c) => s + c.fundable, 0) }
   }, [customers, settings.drawn, settings.facilityCap, settings.highInvolvement, settings.highInvolvementPct, settings.advanceRate, drawnHistory])
 
